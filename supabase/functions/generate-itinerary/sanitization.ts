@@ -1,6 +1,6 @@
 /**
  * Sanitization utilities for AI-generated itinerary content.
- * Strips CJK artifacts, schema-leak fragments, system annotations, and garbled text.
+ * Strips CJK artifacts, schema-leak fragments, and garbled text.
  */
 
 // =============================================================================
@@ -59,51 +59,11 @@ export function sanitizeOptionFields(obj: any): any {
 const CJK_ARTIFACTS = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F]+/g;
 const TEXT_SCHEMA_LEAK = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
 
-// System instruction patterns that should NEVER appear in customer-facing text
-const SYSTEM_ANNOTATION_PATTERNS: RegExp[] = [
-  /user[- ]specified must[- ]do activity\.?\s*/gi,
-  /DO NOT modify\.?\s*/gi,
-  /must[- ]do activity\.?\s*/gi,
-  /user'?s?\s+scheduled\s+event\s+for\s+this\s+day\.?\s*/gi,
-  /tickets?\/advance\s+booking\s+required\.?\s*/gi,
-  /MUST END before \d{1,2}:\d{2}\s*[-–—]\s*must[- ]do activity requires departure by this time\.?\s*/gi,
-  /this is your dedicated\s+.+?\s+day\.?\s*/gi,
-  /\[LOCKED\]\s*/gi,
-  /\[MUST[- ]DO\]\s*/gi,
-  /\[USER[- ]CONSTRAINT\]\s*/gi,
-  /\[SYSTEM\]\s*/gi,
-  /- user's scheduled event.*?(?:\.|$)/gi,
-  /Arrive early to get settled and enjoy the full experience\.?\s*/gi,
-  // Broader patterns for AI prompt echoes (Fix 23M)
-  /&?\s*this is the traveler'?s?\s+(?:must-do|preserve|prebooked).*?\.?\s*/gi,
-  /preserve (?:exactly|the title|the time|as given).*?\.?\s*/gi,
-  /\[SYSTEM[- ]INSTRUCTION\].*?\.?\s*/gi,
-  /MUST END before \d{1,2}:\d{2}.*?(?:\.|$)/gi,
-  /must[- ]do activity requires? departure.*?(?:\.|$)/gi,
-  /requires? departure by this time.*?\.?\s*/gi,
-  /this is your dedicated\s+.+?\s+(?:day|activity|event)\.?\s*/gi,
-  /^&\s+/i,
-  // Fix 23L: broader patterns for new prompt tags and AI parroting
-  /this is (?:your|the traveler'?s?) (?:dedicated|special|main).*?(?:day|experience)\.?\s*/gi,
-  /fill this slot.*?\.?\s*/gi,
-  /find (?:a|an) (?:morning|afternoon|evening|late) (?:activity|spot|restaurant)\.?\s*/gi,
-  /\[CONFIRMED\]\s*/gi,
-  /\[SUGGESTED\]\s*/gi,
-];
-
 export function sanitizeAITextField(text: string | undefined | null): string {
   if (!text || typeof text !== 'string') return '';
-  let cleaned = text
+  return text
     .replace(CJK_ARTIFACTS, '')
-    .replace(TEXT_SCHEMA_LEAK, '');
-
-  // Strip system annotation patterns
-  for (const pattern of SYSTEM_ANNOTATION_PATTERNS) {
-    pattern.lastIndex = 0;
-    cleaned = cleaned.replace(pattern, '');
-  }
-
-  return cleaned
+    .replace(TEXT_SCHEMA_LEAK, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
@@ -149,28 +109,8 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number): any {
       const cleanActName = sanitizeAITextField(act.name);
       act.title = cleanActTitle || cleanActName || `Activity ${idx + 1}`;
       act.name = act.title;
-      if (act.description) {
-        act.description = sanitizeAITextField(act.description) || undefined;
-        // If description is just the title repeated (AI parroting), clear it
-        if (act.description && act.title) {
-          const descNorm = act.description.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-          const titleNorm = act.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-          if (descNorm === titleNorm || (descNorm.startsWith(titleNorm + ' ') && descNorm.length < titleNorm.length + 15)) {
-            act.description = undefined;
-          }
-        }
-      }
-      if (typeof act.tips === 'string') {
-        act.tips = sanitizeAITextField(act.tips) || undefined;
-        // If tip is just restating the activity title/description, clear it
-        if (act.tips && act.title) {
-          const tipNorm = act.tips.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-          const titleNorm = act.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-          if (tipNorm.includes(titleNorm) && tipNorm.length < titleNorm.length + 30) {
-            act.tips = undefined;
-          }
-        }
-      }
+      if (act.description) act.description = sanitizeAITextField(act.description) || undefined;
+      if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips) || undefined;
       if (act.location && typeof act.location === 'object') {
         if (act.location.name) act.location.name = sanitizeAITextField(act.location.name) || act.location.name;
         if (act.location.address) act.location.address = sanitizeAITextField(act.location.address) || act.location.address;

@@ -66,7 +66,6 @@ import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelV
 import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
 import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
 import { injectHotelActivitiesIntoDays, injectMultiHotelActivities } from '@/utils/injectHotelActivities';
-import { injectFlightActivitiesIntoDays } from '@/utils/injectFlightActivities';
 import { cn } from '@/lib/utils';
 import { JourneyBreadcrumb } from '@/components/trips/JourneyBreadcrumb';
 import { JourneyUpNext } from '@/components/trips/JourneyUpNext';
@@ -2337,13 +2336,6 @@ export default function TripDetail() {
                               if (hotels.length > 0) {
                                 injectedDays = injectHotelActivitiesIntoDays(injectedDays as any[], hotels[0]) as typeof injectedDays;
                               }
-                            }
-
-                            // --- Inject flight arrival/departure activities ---
-                            const flightRaw = updatedTrip.flight_selection;
-                            if (flightRaw) {
-                              const destination = updatedTrip.destination as string | undefined;
-                              injectedDays = injectFlightActivitiesIntoDays(injectedDays as any[], flightRaw, destination) as typeof injectedDays;
                             }
 
                             // Save injected days back if they changed

@@ -923,8 +923,7 @@ export function buildArrivalDayPrompt(
   flight: FlightData,
   hotel: HotelData,
   dna: TravelerDNA,
-  tripContext: TripContext,
-  arrivalRouting?: { strategy: 'hotel-first' | 'venue-first'; firstMustDoName?: string; estimatedAirportToVenueMinutes?: number; estimatedAirportToHotelMinutes?: number }
+  tripContext: TripContext
 ): DayConstraints {
   const arrivalWindow = flight.arrivalTimeMins !== undefined 
     ? categorizeArrivalWindow(flight.arrivalTimeMins)
@@ -938,45 +937,24 @@ export function buildArrivalDayPrompt(
   const energyLevel = determineEnergyLevel(dna, true, false, arrivalWindow);
   const activityTypes = suggestActivityTypes(dna, energyLevel, true);
   
-  // Build required sequence based on routing strategy
+  // Build required sequence based on what data we have
   const requiredSequence: string[] = [];
   
-  if (arrivalRouting?.strategy === 'venue-first' && arrivalRouting.firstMustDoName) {
-    // Venue-first: transport → venue → hotel after
-    requiredSequence.push('transport_to_venue');
-    requiredSequence.push('venue_bag_drop');
-    requiredSequence.push('must_do_activity');
-    requiredSequence.push('transport_to_hotel');
+  // airport_arrival removed — handled by Arrival Game Plan UI component
+  
+  if (hotel.hasHotel) {
     requiredSequence.push('hotel_check_in');
-  } else {
-    // Hotel-first (default)
-    if (hotel.hasHotel) {
-      requiredSequence.push('hotel_check_in');
-      if (dna.traits.pace <= -3 || dna.jetLagSensitivity === 'high') {
-        requiredSequence.push('settle_in_rest');
-      }
+    if (dna.traits.pace <= -3 || dna.jetLagSensitivity === 'high') {
+      requiredSequence.push('settle_in_rest');
     }
   }
   
   // Build constraint text
   const lines: string[] = [];
   lines.push(`${'='.repeat(60)}`);
-  lines.push(`📅 DAY 1 CONSTRAINTS - ARRIVAL DAY${arrivalRouting?.strategy === 'venue-first' ? ' (VENUE-FIRST ROUTING)' : ''}`);
+  lines.push(`📅 DAY 1 CONSTRAINTS - ARRIVAL DAY`);
   lines.push(`${'='.repeat(60)}`);
   lines.push('');
-
-  // Venue-first routing banner
-  if (arrivalRouting?.strategy === 'venue-first' && arrivalRouting.firstMustDoName) {
-    lines.push(`🚨 VENUE-FIRST ROUTING ACTIVE`);
-    lines.push(`${'─'.repeat(40)}`);
-    lines.push(`   ${arrivalRouting.firstMustDoName} is ~${arrivalRouting.estimatedAirportToVenueMinutes} min from airport`);
-    lines.push(`   Hotel is ~${arrivalRouting.estimatedAirportToHotelMinutes} min from airport`);
-    lines.push(`   → Go DIRECTLY to ${arrivalRouting.firstMustDoName} from airport`);
-    lines.push(`   → Store luggage at venue lockers/bag check`);
-    lines.push(`   → Hotel check-in happens AFTER the must-do activity`);
-    lines.push(`   → DO NOT route to hotel before the must-do`);
-    lines.push('');
-  }
   
   // Flight status
   if (flight.hasOutboundFlight) {
@@ -1024,16 +1002,9 @@ export function buildArrivalDayPrompt(
   if (requiredSequence.length > 0) {
     lines.push(`📋 REQUIRED SEQUENCE (in order)`);
     lines.push(`${'─'.repeat(40)}`);
-    const venueName = arrivalRouting?.firstMustDoName || 'Must-Do Venue';
     const seqLabels: Record<string, string> = {
-      'hotel_check_in': arrivalRouting?.strategy === 'venue-first'
-        ? `${requiredSequence.indexOf('hotel_check_in') + 1}. Hotel Check-in & Freshen Up (category: accommodation) — AFTER the must-do activity`
-        : '1. Hotel Check-in & Refresh (category: accommodation)',
-      'settle_in_rest': '2. Rest & Refresh (category: downtime)',
-      'transport_to_venue': `1. Transport to ${venueName} (~${arrivalRouting?.estimatedAirportToVenueMinutes || 15} min, category: transport)`,
-      'venue_bag_drop': `2. Bag Drop / Locker at ${venueName} (15 min, category: logistics)`,
-      'must_do_activity': `3. ${venueName} — the must-do activity`,
-      'transport_to_hotel': `4. Transport to Hotel (category: transport)`,
+      'hotel_check_in': '1. Hotel Check-in & Refresh (category: accommodation)',
+      'settle_in_rest': '2. Rest & Refresh (category: downtime)'
     };
     for (const step of requiredSequence) {
       lines.push(`   ${seqLabels[step] || step}`);
@@ -1478,8 +1449,7 @@ export function buildDayPrompt(
   hotel: HotelData,
   dna: TravelerDNA,
   tripContext: TripContext,
-  dayNumber: number,
-  arrivalRouting?: { strategy: 'hotel-first' | 'venue-first'; firstMustDoName?: string; estimatedAirportToVenueMinutes?: number; estimatedAirportToHotelMinutes?: number }
+  dayNumber: number
 ): { personaPrompt: string; dayConstraints: DayConstraints } {
   const isFirstDay = dayNumber === 1;
   const isLastDay = dayNumber === tripContext.totalDays;
@@ -1502,7 +1472,7 @@ export function buildDayPrompt(
   if (isDepartureTravelDay) {
     dayConstraints = buildOutboundTravelDayPrompt(flight, hotel, dna, tripContext);
   } else if (isFirstDay) {
-    dayConstraints = buildArrivalDayPrompt(flight, hotel, dna, tripContext, arrivalRouting);
+    dayConstraints = buildArrivalDayPrompt(flight, hotel, dna, tripContext);
   } else if (isLastDay) {
     dayConstraints = buildDepartureDayPrompt(flight, hotel, dna, tripContext, dayNumber);
   } else {

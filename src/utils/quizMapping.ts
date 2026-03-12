@@ -6,7 +6,6 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getTypeRarity } from '@/config/typeRarity';
-import { getPatternGroupForArchetype } from '@/config/archetype-group-mapping';
 import type { Json } from '@/integrations/supabase/types';
 
 // ============================================================================
@@ -1049,7 +1048,6 @@ export async function submitQuizComplete(
         .update({ 
           quiz_completed: true,
           travel_dna: travelDnaJson as unknown as Json,
-          pattern_group: getPatternGroupForArchetype(dna.primary_archetype_name || ''),
           // travel_dna_overrides: preserved (not touched)
         })
         .eq('id', userId);
@@ -1327,10 +1325,7 @@ export async function recalculateDNAFromPreferences(
       
       await supabase
         .from('profiles')
-        .update({ 
-          travel_dna: travelDnaJson as unknown as Json,
-          pattern_group: getPatternGroupForArchetype(dna.primary_archetype_name || ''),
-        })
+        .update({ travel_dna: travelDnaJson as unknown as Json })
         .eq('id', userId);
     } catch (profileErr) {
       console.error('Error updating profile travel_dna:', profileErr);

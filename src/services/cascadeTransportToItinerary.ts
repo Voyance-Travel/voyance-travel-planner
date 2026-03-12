@@ -123,35 +123,14 @@ function truncateDayBefore(
     }
   }
 
-  // Add departure block — check for existing placeholder first
-  const existingDepartureIdx = kept.findIndex((act: any) => {
-    if (act.id.startsWith('flight-departure-') || act.id.startsWith('transport-depart-')) return true;
-    const title = (act.title || '').toLowerCase();
-    const cat = (act.category || '').toLowerCase();
-    if (cat === 'departure') return true;
-    if ((cat === 'transport' || cat === 'transit') && (title.includes('depart') || title.includes('airport') || title.includes('head to'))) return true;
-    return false;
-  });
-
-  if (existingDepartureIdx >= 0) {
-    // Update existing placeholder in place
-    kept[existingDepartureIdx] = {
-      ...kept[existingDepartureIdx],
-      startTime: formatTime(cutoffMinutes),
-      endTime: formatTime(cutoffMinutes + 30),
-      durationMinutes: 30,
-      category: 'departure',
-      description: `Leave for ${stationLabel} to catch your transport.`,
-    };
-    change.shiftedActivities.push(kept[existingDepartureIdx].name || kept[existingDepartureIdx].title || 'Departure');
-  } else {
-    const departureBlock = {
-      id: `transport-depart-${day.dayNumber}`,
-      name: `Head to ${stationLabel}`,
-      title: `Head to ${stationLabel}`,
-      description: `Leave for ${stationLabel} to catch your transport.`,
-      category: 'departure',
-      categoryIcon: 'plane',
+  // Add departure block
+  const departureBlock = {
+    id: `transport-depart-${day.dayNumber}`,
+    name: `Head to ${stationLabel}`,
+    title: `Head to ${stationLabel}`,
+    description: `Leave for ${stationLabel} to catch your transport.`,
+    category: 'transport',
+    categoryIcon: 'car',
     startTime: formatTime(cutoffMinutes),
     endTime: formatTime(cutoffMinutes + 30),
     durationMinutes: 30,
@@ -160,9 +139,8 @@ function truncateDayBefore(
     location: { name: stationLabel, address: stationLabel },
     cost: { amount: 0, currency: 'USD' },
   };
-    kept.push(departureBlock);
-    change.addedBlocks.push(`Head to ${stationLabel}`);
-  }
+  kept.push(departureBlock);
+  change.addedBlocks.push(`Head to ${stationLabel}`);
 
   day.activities = kept;
   return change;
@@ -187,40 +165,26 @@ function shiftDayAfter(
 
   const activities = [...(day.activities || [])];
   
-  // Check if an arrival placeholder already exists in the day
-  const existingArrivalIdx = (day.activities || []).findIndex((act: any) => {
-    if (act.id.startsWith('flight-arrival-') || act.id.startsWith('transport-arrive-')) return true;
-    const title = (act.title || '').toLowerCase();
-    const cat = (act.category || '').toLowerCase();
-    if (cat === 'arrival') return true;
-    if ((cat === 'transport' || cat === 'transit') && (title.includes('arrive') || title.includes('arrival') || title.includes('land'))) return true;
-    if (act.category === 'accommodation' && (title.includes('check in') || title.includes('check-in') || title.includes('checkin'))) return true;
-    if (act.isTransportBlock) return true;
-    return false;
-  });
-
+  // Check if a check-in or arrival activity already exists in the day
   const arrivalBlocks: any[] = [];
-  
-  if (existingArrivalIdx >= 0) {
-    // Update existing placeholder in place
-    const existing = (day.activities || [])[existingArrivalIdx];
-    (day.activities || [])[existingArrivalIdx] = {
-      ...existing,
-      startTime: formatTime(earliestMinutes - 45),
-      endTime: formatTime(earliestMinutes),
-      durationMinutes: 45,
-      category: 'arrival',
-    };
-    change.shiftedActivities.push(existing.name || existing.title || 'Arrival');
-  } else if (arrivalLabel) {
-    // No placeholder found — create new arrival block
-    const arrivalBlock = {
+  const existingCheckin = (day.activities || []).find((act: any) =>
+    act.title?.toLowerCase().includes('check in') ||
+    act.title?.toLowerCase().includes('check-in') ||
+    act.title?.toLowerCase().includes('checkin') ||
+    act.title?.toLowerCase().includes('arrive') ||
+    act.category === 'accommodation' ||
+    act.isTransportBlock
+  );
+
+  if (arrivalLabel && !existingCheckin) {
+    // Only add generic check-in block if one doesn't already exist
+    const checkinBlock = {
       id: `transport-arrive-${day.dayNumber}`,
       name: `Arrive & Check In`,
       title: `Arrive & Check In`,
       description: `Arrive at hotel, check in, and freshen up.`,
-      category: 'arrival',
-      categoryIcon: 'plane',
+      category: 'transport',
+      categoryIcon: 'hotel',
       startTime: formatTime(earliestMinutes - 45),
       endTime: formatTime(earliestMinutes),
       durationMinutes: 45,
@@ -229,7 +193,7 @@ function shiftDayAfter(
       location: { name: arrivalLabel, address: arrivalLabel },
       cost: { amount: 0, currency: 'USD' },
     };
-    arrivalBlocks.push(arrivalBlock);
+    arrivalBlocks.push(checkinBlock);
     change.addedBlocks.push('Arrive & Check In');
   }
 

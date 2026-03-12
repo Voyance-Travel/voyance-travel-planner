@@ -511,12 +511,6 @@ export function parseItineraryDays(
   rawData: unknown,
   tripStartDate?: string
 ): ParsedDay[] {
-  // Handle corrupted format where itinerary_data is a raw array
-  if (Array.isArray(rawData)) {
-    console.warn('[itineraryParser] itinerary_data is a raw array — treating as days');
-    return parseItineraryDays({ days: rawData }, tripStartDate);
-  }
-
   // Validate top-level structure
   if (!rawData || typeof rawData !== 'object') {
     if (rawData !== null && rawData !== undefined) {
@@ -557,42 +551,25 @@ export function parseItineraryDays(
     })
     .map((day, idx) => parseSingleDay(day, idx, tripStartDate));
   
-  // === LAYER 2: DEDUPLICATION — re-number duplicates instead of dropping ===
+  // === LAYER 2: HARD DEDUPLICATION — by dayNumber AND by date ===
   
-  // Step 1: Deduplicate by dayNumber — re-assign duplicates to next available slot
+  // Step 1: Deduplicate by dayNumber — keep entry with more activities
   const byDayNumber = new Map<number, ParsedDay>();
   for (const day of parsedDays) {
     const existing = byDayNumber.get(day.dayNumber);
-    if (!existing) {
+    if (!existing || (day.activities?.length || 0) > (existing.activities?.length || 0)) {
       byDayNumber.set(day.dayNumber, day);
-    } else {
-      // Two days share the same dayNumber — re-number instead of dropping
-      console.warn(
-        `[itineraryParser] Duplicate dayNumber ${day.dayNumber}: "${existing.title}" (${existing.activities?.length || 0} activities) vs "${day.title}" (${day.activities?.length || 0} activities)`
-      );
-      const maxDayNumber = Math.max(...Array.from(byDayNumber.keys()));
-      const reassignedNumber = maxDayNumber + 1;
-      console.warn(`[itineraryParser] Re-assigning duplicate to dayNumber ${reassignedNumber} instead of dropping`);
-      day.dayNumber = reassignedNumber;
-      byDayNumber.set(reassignedNumber, day);
     }
   }
   let deduped = Array.from(byDayNumber.values());
   
-  // Step 2: Deduplicate by date — keep both days with unique keys instead of dropping
+  // Step 2: Deduplicate by date — if two days share the same date, keep the one with more activities
   const byDate = new Map<string, ParsedDay>();
   for (const day of deduped) {
     const dateKey = day.date || `fallback-day-${day.dayNumber}`;
     const existing = byDate.get(dateKey);
-    if (!existing) {
+    if (!existing || (day.activities?.length || 0) > (existing.activities?.length || 0)) {
       byDate.set(dateKey, day);
-    } else {
-      console.warn(
-        `[itineraryParser] Duplicate date "${dateKey}": "${existing.title}" vs "${day.title}" — keeping both`
-      );
-      // Keep both — use a unique key for the duplicate
-      const uniqueKey = `${dateKey}-dup-${day.dayNumber}`;
-      byDate.set(uniqueKey, day);
     }
   }
   deduped = Array.from(byDate.values());
@@ -604,9 +581,7 @@ export function parseItineraryDays(
   });
   
   if (deduped.length < parsedDays.length) {
-    console.error(
-      `[itineraryParser] DAY COUNT MISMATCH: Started with ${parsedDays.length} days, ended with ${deduped.length} after deduplication. This is a bug!`
-    );
+    console.warn(`[itineraryParser] Deduplicated ${parsedDays.length - deduped.length} duplicate day(s)`);
   }
   
   // Step 4: Re-assign sequential dayNumbers and authoritative dates

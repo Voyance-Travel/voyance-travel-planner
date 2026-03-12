@@ -45,13 +45,6 @@ export function sanitizeActivityName(name: string | undefined | null): string {
   // Strip stray CJK characters injected by AI models (e.g. 旋)
   let sanitized = name.replace(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g, '').trim();
   
-  // Strip system constraint annotations that may leak into titles
-  sanitized = sanitized.replace(/user[- ]specified must[- ]do activity\.?\s*/gi, '');
-  sanitized = sanitized.replace(/DO NOT modify\.?\s*/gi, '');
-  sanitized = sanitized.replace(/\[LOCKED\]\s*/gi, '');
-  sanitized = sanitized.replace(/\[MUST[- ]DO\]\s*/gi, '');
-  sanitized = sanitized.replace(/\[SYSTEM\]\s*/gi, '');
-  
   // Strip any system prefixes
   for (const prefix of SYSTEM_PREFIXES) {
     if (sanitized.startsWith(prefix)) {

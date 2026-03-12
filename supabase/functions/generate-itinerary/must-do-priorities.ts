@@ -49,8 +49,6 @@ export interface MustDoPriority {
   explicitStartTime?: string;
   /** Explicit end time parsed from user text (e.g., "9am-5pm" → "17:00") */
   explicitEndTime?: string;
-  /** Whether this is a generic activity type (e.g., "dinner") vs a specific venue (e.g., "Gramercy Tavern") */
-  isGenericIntent?: boolean;
 }
 
 export interface ScheduledMustDo {
@@ -237,38 +235,6 @@ function extractExplicitTimeRange(text: string): { startTime: string; endTime: s
 }
 
 // =============================================================================
-// COMPOUND ACTIVITY SPLITTING — "dinner and comedy show" → 2 items
-// =============================================================================
-
-const COMPOUND_CONJUNCTIONS = /\b(?:and\s+then|then|followed\s+by|after\s+that)\b/i;
-const BARE_AND = /\band\b/i;
-
-const GENERIC_ACTIVITY_KEYWORDS = [
-  'dinner', 'lunch', 'breakfast', 'brunch', 'meal', 'nice dinner', 'light dinner',
-  'comedy', 'comedy show', 'stand-up', 'standup', 'improv',
-  'rooftop', 'rooftop bar', 'drinks', 'cocktails', 'bar', 'pub crawl',
-  'show', 'broadway', 'theater', 'theatre', 'musical', 'concert',
-  'museum', 'gallery', 'exhibit', 'exhibition',
-  'shopping', 'spa', 'massage', 'yoga', 'wellness',
-  'nightclub', 'club', 'dancing', 'jazz', 'jazz club', 'live music',
-  'coffee', 'dessert', 'ice cream', 'pastry', 'bakery',
-  'sightseeing', 'walking tour', 'food tour', 'boat tour', 'bike tour',
-  'hike', 'hiking', 'beach', 'pool', 'swim',
-];
-
-export function isGenericActivityDescription(text: string): boolean {
-  const lower = text.toLowerCase().trim();
-  // It's generic if it matches a known activity keyword
-  if (GENERIC_ACTIVITY_KEYWORDS.some(k => lower === k || lower === `a ${k}` || lower === `some ${k}`)) return true;
-  // Also generic if it contains a keyword and starts with an article / qualifier
-  if (/^(?:a\s+|some\s+|maybe\s+|nice\s+|good\s+|great\s+|late\s*night\s+)/i.test(lower)) {
-    return GENERIC_ACTIVITY_KEYWORDS.some(k => lower.includes(k));
-  }
-  // Check for bare keyword match (e.g., "comedy show" inside "comedy show on friday")
-  return GENERIC_ACTIVITY_KEYWORDS.some(k => lower === k);
-}
-
-// =============================================================================
 // PARSING USER INPUT
 // =============================================================================
 
@@ -387,38 +353,7 @@ export function parseMustDoInput(
     }
   }
 
-  // ── Compound activity splitting: "dinner and comedy show" → 2 items ──
-  const compoundExpanded: typeof expandedItems = [];
   for (const item of expandedItems) {
-    // Try structured conjunctions first ("and then", "followed by", etc.)
-    let didSplit = false;
-    if (COMPOUND_CONJUNCTIONS.test(item.text)) {
-      const parts = item.text.split(COMPOUND_CONJUNCTIONS).map(p => p.trim()).filter(Boolean);
-      if (parts.length > 1 && parts.every(p => isGenericActivityDescription(p))) {
-        console.log(`[MustDo] Splitting compound: "${item.text}" → ${parts.map(p => `"${p}"`).join(', ')}`);
-        for (const part of parts) {
-          compoundExpanded.push({ ...item, text: part });
-        }
-        didSplit = true;
-      }
-    }
-    // Try bare "and" only when both sides are generic
-    if (!didSplit && BARE_AND.test(item.text)) {
-      const parts = item.text.split(BARE_AND).map(p => p.trim()).filter(Boolean);
-      if (parts.length === 2 && parts.every(p => isGenericActivityDescription(p))) {
-        console.log(`[MustDo] Splitting compound (bare 'and'): "${item.text}" → ${parts.map(p => `"${p}"`).join(', ')}`);
-        for (const part of parts) {
-          compoundExpanded.push({ ...item, text: part });
-        }
-        didSplit = true;
-      }
-    }
-    if (!didSplit) {
-      compoundExpanded.push(item);
-    }
-  }
-
-  for (const item of compoundExpanded) {
     const priority = parseItem(item.text, destination);
     if (!priority) continue;
 
@@ -556,7 +491,6 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
     explicitStartTime: explicitTimes?.startTime,
     explicitEndTime: explicitTimes?.endTime,
     location: matchedLandmark?.neighborhood,
-    isGenericIntent: isGenericActivityDescription(item),
   };
 }
 

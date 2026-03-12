@@ -5059,7 +5059,6 @@ export type Database = {
           id: string
           last_name: string | null
           onboarding_state: Json | null
-          pattern_group: string | null
           preferred_currency: string | null
           preferred_language: string | null
           quiz_completed: boolean | null
@@ -5079,7 +5078,6 @@ export type Database = {
           id: string
           last_name?: string | null
           onboarding_state?: Json | null
-          pattern_group?: string | null
           preferred_currency?: string | null
           preferred_language?: string | null
           quiz_completed?: boolean | null
@@ -5099,7 +5097,6 @@ export type Database = {
           id?: string
           last_name?: string | null
           onboarding_state?: Json | null
-          pattern_group?: string | null
           preferred_currency?: string | null
           preferred_language?: string | null
           quiz_completed?: boolean | null

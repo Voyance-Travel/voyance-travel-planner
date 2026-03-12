@@ -1,7 +1,6 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import type { EditorialDay, EditorialActivity } from '@/components/itinerary/EditorialItinerary';
-import { cleanSystemAnnotations } from '@/utils/textSanitizer';
 
 /**
  * Trip PDF Generator for Travel Agents
@@ -314,7 +313,7 @@ export async function generateTripPdf(data: TripPdfData): Promise<void> {
             pdf.setFontSize(9);
             pdf.setFont('helvetica', 'normal');
             pdf.setTextColor(...COLORS.muted);
-            const descLines = pdf.splitTextToSize(cleanSystemAnnotations(activity.description), contentWidth - 25);
+            const descLines = pdf.splitTextToSize(activity.description, contentWidth - 25);
             pdf.text(descLines.slice(0, 2), margin + (timeStr ? 25 : 0), y);
             y += Math.min(descLines.length, 2) * 4;
           }

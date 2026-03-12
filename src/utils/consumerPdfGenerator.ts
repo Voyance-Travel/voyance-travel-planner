@@ -8,7 +8,6 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
-import { cleanSystemAnnotations } from '@/utils/textSanitizer';
 
 export interface ConsumerTripPdfData {
   tripName?: string;
@@ -313,7 +312,7 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
           if (act.cost?.amount) metaParts.push(`${act.cost.currency || '$'}${act.cost.amount}`);
 
           // Estimate activity height
-          const descLines = act.description ? wrapText(cleanSystemAnnotations(act.description), CW - 30, 9) : [];
+          const descLines = act.description ? wrapText(act.description, CW - 30, 9) : [];
           const tipLines = act.tips ? wrapText(`Tip: ${act.tips}`, CW - 36, 8.5, 'italic') : [];
           let actH = 8; // title
           actH += descLines.length * 4;

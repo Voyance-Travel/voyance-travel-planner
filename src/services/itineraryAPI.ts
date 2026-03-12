@@ -415,38 +415,6 @@ export async function generateItinerary(
     }
   }
   
-  // Day count validation + recovery from itinerary_days table
-  console.log(`[ItineraryAPI] Generated ${days.length} days for trip ${tripId} (expected: ${totalDays})`);
-  
-  if (days.length < totalDays) {
-    console.error(
-      `[ItineraryAPI] DAY COUNT SHORTAGE: Only generated ${days.length}/${totalDays} days. Attempting recovery from itinerary_days table.`
-    );
-    
-    const { data: savedDays } = await supabase
-      .from('itinerary_days')
-      .select('*')
-      .eq('trip_id', tripId)
-      .order('day_number', { ascending: true });
-    
-    if (savedDays && savedDays.length > days.length) {
-      console.log(`[ItineraryAPI] Recovered ${savedDays.length} days from itinerary_days table (had ${days.length} in memory)`);
-      for (const savedDay of savedDays) {
-        const existsInMemory = days.find((d: any) => d.dayNumber === savedDay.day_number);
-        if (!existsInMemory) {
-          days.push({
-            dayNumber: savedDay.day_number,
-            date: savedDay.date ?? undefined,
-            theme: savedDay.theme || '',
-            activities: (savedDay as any).activities || [],
-          } as ItineraryDay);
-        }
-      }
-      days.sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
-      console.log(`[ItineraryAPI] After recovery: ${days.length} days`);
-    }
-  }
-  
   // Build complete itinerary
   const tripName = isMultiCity && tripCities.length > 0
     ? tripCities.map(c => c.city_name).join(' → ')
@@ -615,15 +583,6 @@ export async function regenerateDay(
   }
   
   updatedDays.sort((a, b) => a.dayNumber - b.dayNumber);
-
-  // Safety: ensure we haven't lost any days during regeneration
-  const expectedDays = totalDays || existingItinerary.days.length;
-  if (updatedDays.length < expectedDays) {
-    console.error(
-      `[regenerateDay] Day count mismatch! Expected ${expectedDays} but have ${updatedDays.length}. Aborting save.`
-    );
-    throw new Error(`Day count mismatch: expected ${expectedDays}, got ${updatedDays.length}`);
-  }
   
   const updatedItinerary = { ...existingItinerary, days: updatedDays };
   await supabase

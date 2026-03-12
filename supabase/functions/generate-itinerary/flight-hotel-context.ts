@@ -8,15 +8,6 @@
 // Types
 // =============================================================================
 
-export interface ArrivalRoutingDecision {
-  strategy: 'hotel-first' | 'venue-first';
-  reason: string;
-  firstMustDoName?: string;
-  firstMustDoStartTime?: string;
-  estimatedAirportToVenueMinutes?: number;
-  estimatedAirportToHotelMinutes?: number;
-}
-
 export interface FlightHotelContextResult {
   context: string;
   arrivalTime?: string;
@@ -31,7 +22,6 @@ export interface FlightHotelContextResult {
   rawFlightSelection?: unknown;
   rawHotelSelection?: unknown;
   rawFlightIntelligence?: unknown;
-  arrivalRouting?: ArrivalRoutingDecision;
 }
 
 export interface AirportTransferFare {
@@ -176,203 +166,10 @@ export async function getAirportTransferTime(supabase: any, destination: string)
 }
 
 // =============================================================================
-// Airport-to-Area Travel Estimates (minutes)
-// Used for venue-first vs hotel-first routing decisions on Day 1
-// =============================================================================
-
-const AIRPORT_AREA_ESTIMATES: Record<string, Record<string, number>> = {
-  'LGA': {
-    'flushing': 15, 'corona': 15, 'usta': 15, 'us open': 15, 'citi field': 15,
-    'astoria': 10, 'jackson heights': 15, 'long island city': 15,
-    'midtown': 30, 'manhattan': 35, 'times square': 35, 'theater district': 35,
-    'upper east side': 25, 'upper west side': 30, 'central park': 30,
-    'chelsea': 35, 'soho': 40, 'tribeca': 40, 'financial district': 45,
-    'brooklyn': 40, 'williamsburg': 35, 'dumbo': 40,
-    'yankee stadium': 25, 'bronx': 20, 'msg': 35, 'madison square garden': 35,
-    'barclays': 40, 'garden': 35,
-  },
-  'JFK': {
-    'flushing': 25, 'corona': 25, 'usta': 25, 'us open': 25,
-    'midtown': 50, 'manhattan': 55, 'times square': 55,
-    'brooklyn': 30, 'williamsburg': 35, 'dumbo': 35, 'barclays': 35,
-    'long island city': 35, 'astoria': 40,
-    'chelsea': 50, 'soho': 45, 'tribeca': 45, 'financial district': 45,
-    'msg': 50, 'madison square garden': 50,
-  },
-  'EWR': {
-    'midtown': 40, 'manhattan': 45, 'times square': 45,
-    'chelsea': 40, 'soho': 40, 'tribeca': 40, 'financial district': 35,
-    'brooklyn': 50, 'jersey city': 15, 'hoboken': 20,
-    'msg': 40, 'madison square garden': 40,
-    'flushing': 60, 'usta': 60, 'us open': 60,
-  },
-  'LAX': {
-    'santa monica': 20, 'venice': 15, 'beverly hills': 25, 'hollywood': 30,
-    'downtown': 35, 'dtla': 35, 'koreatown': 30, 'west hollywood': 30,
-    'malibu': 40, 'pasadena': 45, 'burbank': 40,
-    'anaheim': 40, 'disneyland': 40, 'long beach': 25,
-    'sofi': 10, 'sofi stadium': 10, 'inglewood': 10, 'the forum': 10,
-  },
-  'ORD': {
-    'downtown': 35, 'loop': 35, 'magnificent mile': 30, 'river north': 30,
-    'wicker park': 25, 'lincoln park': 25, 'wrigleyville': 20, 'wrigley field': 20,
-    'hyde park': 45, 'south loop': 35, 'soldier field': 35,
-    'united center': 30, 'guaranteed rate field': 40,
-  },
-  'MDW': {
-    'downtown': 25, 'loop': 25, 'magnificent mile': 30,
-    'wrigleyville': 35, 'wrigley field': 35, 'hyde park': 20,
-    'soldier field': 25, 'united center': 20,
-  },
-  'SFO': {
-    'downtown': 30, 'union square': 30, 'fishermans wharf': 35, 'north beach': 35,
-    'mission': 25, 'castro': 25, 'haight': 30, 'marina': 35,
-    'palo alto': 20, 'stanford': 20, 'san jose': 35,
-    'oracle park': 25, 'chase center': 25,
-  },
-  'MIA': {
-    'south beach': 25, 'miami beach': 25, 'downtown': 15, 'brickell': 15,
-    'wynwood': 15, 'little havana': 15, 'coconut grove': 20,
-    'coral gables': 20, 'key biscayne': 25, 'hard rock stadium': 30,
-  },
-  'DCA': {
-    'national mall': 10, 'downtown': 10, 'georgetown': 15, 'dupont circle': 15,
-    'capitol hill': 10, 'white house': 12, 'adams morgan': 15,
-    'arlington': 5, 'pentagon': 5, 'alexandria': 15,
-  },
-  'IAD': {
-    'downtown': 45, 'national mall': 45, 'georgetown': 45,
-    'tysons': 20, 'reston': 15, 'dulles': 5,
-  },
-  'BOS': {
-    'downtown': 15, 'back bay': 20, 'beacon hill': 15, 'north end': 15,
-    'cambridge': 25, 'harvard': 25, 'fenway': 20, 'fenway park': 20,
-    'seaport': 10, 'south boston': 10,
-  },
-  'ATL': {
-    'downtown': 15, 'midtown': 20, 'buckhead': 25, 'decatur': 25,
-    'little five points': 20, 'ponce city market': 20,
-  },
-  'DEN': {
-    'downtown': 35, 'lodo': 35, 'rino': 35, 'capitol hill': 35,
-    'boulder': 60, 'golden': 50, 'coors field': 35,
-  },
-  'SEA': {
-    'downtown': 25, 'pike place': 25, 'capitol hill': 25, 'fremont': 30,
-    'ballard': 35, 'university district': 30, 't-mobile park': 25,
-  },
-};
-
-/**
- * Determine whether Day 1 should route airport→venue or airport→hotel first.
- * 
- * Uses a static lookup of airport-to-area estimates. If the first must-do
- * activity is closer to the airport than the hotel AND the time window is
- * too tight for a hotel detour, returns 'venue-first'.
- */
-export function determineArrivalRouting(
-  arrivalAirport: string | undefined,
-  arrivalTime24: string | undefined,
-  firstMustDo: { name: string; startTime?: string; location?: string } | null,
-  hotelAddress: string | undefined
-): ArrivalRoutingDecision {
-  if (!firstMustDo || !arrivalAirport || !arrivalTime24) {
-    return { strategy: 'hotel-first', reason: 'Missing arrival airport, time, or must-do activity' };
-  }
-
-  const airportCode = arrivalAirport.toUpperCase().replace(/[^A-Z]/g, '').substring(0, 3);
-  const airportEstimates = AIRPORT_AREA_ESTIMATES[airportCode];
-  if (!airportEstimates) {
-    return { strategy: 'hotel-first', reason: `No transit estimates for airport ${airportCode}` };
-  }
-
-  // Match venue against known areas
-  const venueLower = (firstMustDo.name + ' ' + (firstMustDo.location || '')).toLowerCase();
-  let airportToVenue = -1;
-  for (const [keyword, minutes] of Object.entries(airportEstimates)) {
-    if (venueLower.includes(keyword)) {
-      airportToVenue = minutes;
-      break;
-    }
-  }
-  if (airportToVenue < 0) {
-    return { strategy: 'hotel-first', reason: `Cannot estimate transit to "${firstMustDo.name}" from ${airportCode}` };
-  }
-
-  // Match hotel against known areas
-  const hotelLower = (hotelAddress || '').toLowerCase();
-  let airportToHotel = -1;
-  for (const [keyword, minutes] of Object.entries(airportEstimates)) {
-    if (hotelLower.includes(keyword)) {
-      airportToHotel = minutes;
-      break;
-    }
-  }
-  if (airportToHotel < 0) {
-    // Default hotel estimate: 45 min (conservative)
-    airportToHotel = 45;
-  }
-
-  // If venue is NOT closer than hotel, always hotel-first
-  if (airportToVenue >= airportToHotel) {
-    return {
-      strategy: 'hotel-first',
-      reason: `${firstMustDo.name} (~${airportToVenue} min) is not closer than hotel (~${airportToHotel} min)`,
-    };
-  }
-
-  // Venue IS closer — check if time window allows hotel detour
-  const arrivalMins = parseTimeToMinutes(arrivalTime24);
-  const mustDoStartTime = firstMustDo.startTime;
-  const mustDoMins = mustDoStartTime ? parseTimeToMinutes(mustDoStartTime) : null;
-
-  const deplaneBuffer = 30; // deplane + exit airport
-  const hotelDetourTotal = airportToHotel + 30 + airportToHotel; // to hotel + drop bags + back to venue area
-
-  if (mustDoMins !== null && arrivalMins !== null) {
-    const timeWindow = mustDoMins - arrivalMins;
-    if (timeWindow < hotelDetourTotal + deplaneBuffer) {
-      return {
-        strategy: 'venue-first',
-        reason: `${firstMustDo.name} is ${airportToVenue} min from ${airportCode} vs ${airportToHotel} min to hotel. Only ${timeWindow} min before it starts — hotel detour would take ${hotelDetourTotal + deplaneBuffer}+ min.`,
-        firstMustDoName: firstMustDo.name,
-        firstMustDoStartTime: mustDoStartTime,
-        estimatedAirportToVenueMinutes: airportToVenue,
-        estimatedAirportToHotelMinutes: airportToHotel,
-      };
-    }
-    return {
-      strategy: 'hotel-first',
-      reason: `Enough time (${timeWindow} min window) for hotel stop before ${firstMustDo.name}`,
-    };
-  }
-
-  // No explicit start time — if venue is significantly closer, go venue-first
-  if (airportToVenue <= airportToHotel * 0.5) {
-    return {
-      strategy: 'venue-first',
-      reason: `${firstMustDo.name} is much closer (~${airportToVenue} min vs ~${airportToHotel} min to hotel) and no explicit start time — routing direct.`,
-      firstMustDoName: firstMustDo.name,
-      estimatedAirportToVenueMinutes: airportToVenue,
-      estimatedAirportToHotelMinutes: airportToHotel,
-    };
-  }
-
-  return {
-    strategy: 'hotel-first',
-    reason: `Venue is closer but not significantly (${airportToVenue} vs ${airportToHotel} min) — defaulting to hotel-first`,
-  };
-}
-
-// =============================================================================
 // Main: getFlightHotelContext
 // =============================================================================
 
-export async function getFlightHotelContext(
-  supabase: any,
-  tripId: string,
-  mustDoData?: { name: string; startTime?: string; location?: string } | null
-): Promise<FlightHotelContextResult> {
+export async function getFlightHotelContext(supabase: any, tripId: string): Promise<FlightHotelContextResult> {
   console.log(`[FlightHotel] ============ CHECKING FLIGHT & HOTEL DATA ============`);
   console.log(`[FlightHotel] Trip ID: ${tripId}`);
   
@@ -631,16 +428,6 @@ export async function getFlightHotelContext(
       console.log(`[FlightHotel] Raw hotel_selection value:`, JSON.stringify(hotelRaw));
     }
 
-    // Determine arrival routing decision
-    const arrivalAirportCode = (flightRaw?.arrivalAirport as string) || undefined;
-    const arrivalRouting = determineArrivalRouting(
-      arrivalAirportCode,
-      arrivalTime24,
-      mustDoData || null,
-      hotelAddress || (hotel?.neighborhood) || (hotel?.address)
-    );
-    console.log(`[FlightHotel] Arrival routing: ${arrivalRouting.strategy} — ${arrivalRouting.reason}`);
-
     return {
       context: sections.join('\n'),
       arrivalTime: arrivalTimeStr,
@@ -651,11 +438,10 @@ export async function getFlightHotelContext(
       latestLastActivityTime: latestLastActivity,
       hotelName,
       hotelAddress,
-      arrivalAirport: arrivalAirportCode,
+      arrivalAirport: (flightRaw?.arrivalAirport as string) || undefined,
       rawFlightSelection: trip.flight_selection,
       rawHotelSelection: trip.hotel_selection,
       rawFlightIntelligence: trip.flight_intelligence,
-      arrivalRouting,
     };
   } catch (e) {
     console.error('[FlightHotel] Error:', e);

@@ -12,7 +12,6 @@ import { ActivityFeedbackModal } from './ActivityFeedbackModal';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { useActivityFeedback, type FeedbackRating } from '@/services/activityFeedbackAPI';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
-import { cleanSystemAnnotations } from '@/utils/textSanitizer';
 
 type ActivityStatus = 'upcoming' | 'current' | 'completed' | 'skipped';
 
@@ -174,7 +173,7 @@ export function LiveActivityCard({
             
             {activity.description && (
               <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                {cleanSystemAnnotations(activity.description)}
+                {activity.description}
               </p>
             )}
 

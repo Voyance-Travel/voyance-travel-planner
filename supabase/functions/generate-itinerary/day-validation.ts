@@ -323,7 +323,7 @@ export function validateGeneratedDay(
 /**
  * POST-VALIDATION: Strip duplicate activities from a day.
  */
-export function deduplicateActivities(day: StrictDayMinimal, mustDoActivities: string[] = []): { day: StrictDayMinimal; removed: string[] } {
+export function deduplicateActivities(day: StrictDayMinimal): { day: StrictDayMinimal; removed: string[] } {
   if (!day.activities || day.activities.length <= 1) {
     return { day, removed: [] };
   }
@@ -357,12 +357,6 @@ export function deduplicateActivities(day: StrictDayMinimal, mustDoActivities: s
   for (const act of day.activities) {
     const category = (act.category || '').toLowerCase();
     if (repeatableCategories.includes(category)) {
-      kept.push(act);
-      continue;
-    }
-
-    // Skip dedup for user-requested recurring activities (e.g. "US Open both days", "beach twice")
-    if (mustDoActivities.length > 0 && isRecurringEvent(act, mustDoActivities)) {
       kept.push(act);
       continue;
     }

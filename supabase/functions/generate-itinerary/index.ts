@@ -1504,8 +1504,7 @@ async function generateSingleDayWithRetry(
       hotelData,
       context.travelerDNA,
       tripCtx,
-      dayNumber,
-      (context as any)._arrivalRouting
+      dayNumber
     );
     
     dnaPromptSection = personaPrompt;
@@ -1528,24 +1527,7 @@ async function generateSingleDayWithRetry(
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
-    isFirstDay ? (() => {
-      const routing = (context as any)._arrivalRouting;
-      if (routing?.strategy === 'venue-first') {
-        return `12. **DAY 1 ARRIVAL STRUCTURE — VENUE-FIRST ROUTING (CRITICAL)**:
-       The traveler's first must-do activity (${routing.firstMustDoName}) is only ~${routing.estimatedAirportToVenueMinutes} min from the airport, while the hotel is ~${routing.estimatedAirportToHotelMinutes} min away.
-       Day 1 MUST follow this sequence:
-       (a) "Hotel Check-in & Refresh" is SKIPPED at the start — do NOT go to hotel first
-       (b) First activity: "Transport to ${routing.firstMustDoName}" (~${routing.estimatedAirportToVenueMinutes} min by car, category: transport)
-       (c) "Bag Drop / Locker" at the venue (15 min, category: logistics) — if applicable
-       (d) "${routing.firstMustDoName}" (the must-do activity)
-       (e) AFTER the must-do ends: "Transport to Hotel" (category: transport)
-       (f) "Hotel Check-in & Freshen Up" (~45 min, category: accommodation)
-       (g) Evening activities (dinner, entertainment — each as SEPARATE activities)
-       DO NOT route to hotel first. DO NOT generate "Private Transfer to Midtown" or any hotel area transfer before the must-do.
-       DO NOT combine dinner and evening entertainment into one activity.`;
-      }
-      return `12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with "Hotel Check-in & Refresh" (category: accommodation) as the FIRST activity. Do NOT include an "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" activity — arrival logistics are handled by a separate UI component. Start the day with hotel check-in, then proceed to real activities.`;
-    })() : '',
+    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with "Hotel Check-in & Refresh" (category: accommodation) as the FIRST activity. Do NOT include an "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" activity — arrival logistics are handled by a separate UI component. Start the day with hotel check-in, then proceed to real activities.' : '',
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
   ].filter(Boolean).join('\n');
 
@@ -2730,7 +2712,7 @@ Generate activities for this day following ALL constraints above.`;
       const smartFinishBlocksReturn = context.isSmartFinish && hasHardErrors;
       if (validation.isValid || (isLastAttempt && !smartFinishBlocksReturn)) {
         // POST-VALIDATION: Strip any duplicate activities that slipped through
-        const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(generatedDay, mustDoActivities || []);
+        const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(generatedDay);
         if (removedDupes.length > 0) {
           console.warn(`[Stage 2] Day ${dayNumber}: Removed ${removedDupes.length} duplicate(s): ${removedDupes.join(', ')}`);
           generatedDay = dedupedDay;
@@ -4118,23 +4100,11 @@ async function verifyTripAccess(
 // =============================================================================
 
 serve(async (req) => {
-  // Global safety net — guarantees CORS headers even on catastrophic errors
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
-    if (req.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
-    }
-
-    // Extract tripId early for error recovery — peek at the body without consuming it
-    let earlyTripId: string | null = null;
-    try {
-      const peekReq = req.clone();
-      const peekBody = await peekReq.json();
-      earlyTripId = peekBody?.tripId || null;
-    } catch {
-      // Body might not be JSON — that's fine
-    }
-
-    try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
@@ -4490,31 +4460,7 @@ serve(async (req) => {
       // FLIGHT & HOTEL CONTEXT - Use booked flight/hotel in itinerary planning
       // =======================================================================
       console.log("[Stage 1.4] Fetching flight and hotel context...");
-      // Extract first Day 1 must-do for arrival routing decision
-      const firstMustDoForRouting = (() => {
-        const mustDoRaw = context.mustDoActivities;
-        if (!mustDoRaw) return null;
-        try {
-          const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
-          const parsed = parseMustDoInput(mustDoRaw, context.destination, forceAllMust, context.startDate, context.totalDays);
-          // Find first must-do assigned to Day 1 (or no day assignment = defaults to Day 1)
-          const day1MustDo = parsed.find(m => 
-            (m.preferredDay === 1 || !m.preferredDay) && m.priority === 'must'
-          );
-          if (day1MustDo) {
-            return {
-              name: day1MustDo.activityName,
-              startTime: day1MustDo.explicitStartTime || undefined,
-              location: day1MustDo.venueName || day1MustDo.location || undefined,
-            };
-          }
-        } catch (e) {
-          console.warn('[Stage 1.4] Failed to parse must-do for routing:', e);
-        }
-        return null;
-      })();
-      
-      let flightHotelResult = await getFlightHotelContext(supabase, tripId, firstMustDoForRouting);
+      let flightHotelResult = await getFlightHotelContext(supabase, tripId);
       
       // IMPORTANT: Use tripData.arrivalTime/departureTime as fallback when DB doesn't have flight data
       // This handles the case where user entered times in ItineraryContextForm but hasn't saved flight_selection
@@ -4589,8 +4535,6 @@ serve(async (req) => {
       context.travelerDNA = promptTravelerDNA;
       context.flightData = promptFlightData;
       context.hotelData = promptHotelData;
-      // Store arrival routing decision for Day 1 constraint generation
-      (context as any)._arrivalRouting = flightHotelResult.arrivalRouting;
       
       // ─── Cross-day flight detection ───
       // If the outbound flight arrives on a date AFTER the trip start_date,
@@ -5434,52 +5378,12 @@ ${'='.repeat(60)}
         if (mustDoAnalysis.length > 0) {
           const scheduled = scheduleMustDos(mustDoAnalysis, context.totalDays);
           userResearchPrompt = scheduled.promptSection;
-          
-          // Partition into specific venues vs generic activity intents
-          const genericIntents = mustDoAnalysis.filter(m => m.isGenericIntent);
-          const specificVenues = mustDoAnalysis.filter(m => !m.isGenericIntent);
-          
-          if (genericIntents.length > 0) {
-            userResearchPrompt += `\n## 🎯 USER'S ACTIVITY REQUESTS (AI must suggest specific venues)\nThe traveler wants these types of activities. YOU must suggest specific restaurants, bars, venues, etc. based on the traveler's profile, budget tier, and location.\n\n`;
-            for (const intent of genericIntents) {
-              userResearchPrompt += `- ${intent.activityName}`;
-              if (intent.preferredTime && intent.preferredTime !== 'any') userResearchPrompt += ` (preferred time: ${intent.preferredTime})`;
-              if (intent.preferredDay) userResearchPrompt += ` (Day ${intent.preferredDay})`;
-              userResearchPrompt += ` — Suggest a SPECIFIC venue name, address, cost estimate, and description. Do NOT just echo "${intent.activityName}" as the activity title.\n`;
-            }
-            console.log(`[Stage 1.999] ✓ ${genericIntents.length} generic activity intents detected — AI will suggest specific venues`);
-          }
-          
           const eventCount = mustDoAnalysis.filter(m => m.activityType === 'all_day_event' || m.activityType === 'half_day_event').length;
-          console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items (forceAllMust=${forceAllMust}), ${scheduled.scheduled.length} scheduled, ${eventCount} classified as events, ${specificVenues.length} specific, ${genericIntents.length} generic`);
+          console.log(`[Stage 1.999] ✓ User research notes parsed: ${mustDoAnalysis.length} items (forceAllMust=${forceAllMust}), ${scheduled.scheduled.length} scheduled, ${eventCount} classified as events`);
         } else {
-          // Raw text fallback — attempt parsing for generic/specific split
-          const { parseMustDoInput: parseMustDoFallback, isGenericActivityDescription: isGenericFallback } = await import('./must-do-priorities.ts');
-          const fallbackParsed = parseMustDoFallback(context.mustDoActivities, context.destination, false, context.startDate, context.totalDays);
-          const fallbackGeneric = fallbackParsed.filter(m => m.isGenericIntent);
-          const fallbackSpecific = fallbackParsed.filter(m => !m.isGenericIntent);
-          
-          if (fallbackSpecific.length > 0) {
-            userResearchPrompt = `\n## 🚨 USER'S SPECIFIC VENUES (MANDATORY — include exactly as named)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary. These are NON-NEGOTIABLE.\n\n`;
-            for (const venue of fallbackSpecific) {
-              userResearchPrompt += `- "${venue.activityName}"${venue.preferredDay ? ` (Day ${venue.preferredDay})` : ''}\n`;
-            }
-          }
-          if (fallbackGeneric.length > 0) {
-            userResearchPrompt += `\n## 🎯 USER'S ACTIVITY REQUESTS (AI must suggest specific venues)\nThe traveler wants these types of activities. YOU must suggest specific restaurants, bars, venues, etc.\n\n`;
-            for (const intent of fallbackGeneric) {
-              userResearchPrompt += `- ${intent.activityName}`;
-              if (intent.preferredTime && intent.preferredTime !== 'any') userResearchPrompt += ` (preferred time: ${intent.preferredTime})`;
-              if (intent.preferredDay) userResearchPrompt += ` (Day ${intent.preferredDay})`;
-              userResearchPrompt += ` — Suggest a SPECIFIC venue name, address, cost estimate. Do NOT echo "${intent.activityName}" as the title.\n`;
-            }
-          }
-          if (fallbackSpecific.length === 0 && fallbackGeneric.length === 0) {
-            // True raw fallback
-            userResearchPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary.\n\n"${context.mustDoActivities.trim()}"\n`;
-          }
-          userResearchPrompt += `\n## 🧭 SMART FINISH ENRICHMENT — ADD VALUE\nThe user's list is a STARTING POINT. You MUST add significant value:\n- Add exact street addresses, opening hours, booking URLs for every venue\n- Add transit directions between activities (walk/metro/taxi with duration & cost)\n- Fill ALL meal gaps (breakfast, lunch, dinner, coffee stops)\n- Add 2-4 DNA-matched activities per day between user venues\n- Add insider tips for each user-specified venue\n`;
-          console.log(`[Stage 1.999] ✓ User research notes: fallback parse found ${fallbackSpecific.length} specific + ${fallbackGeneric.length} generic (${context.mustDoActivities.length} chars)`);
+          // Raw text fallback — inject as-is with MANDATORY + ENRICHMENT language
+          userResearchPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has PERSONALLY RESEARCHED and CHOSEN these specific venues. You MUST include ALL of them in the itinerary. These are NON-NEGOTIABLE. Do NOT substitute your own recommendations for these.\n\n"${context.mustDoActivities.trim()}"\n\nRULES:\n- EVERY venue/restaurant listed above MUST appear by name in the final itinerary\n- Only add AI recommendations to fill REMAINING empty meal/activity slots\n- If a user-specified venue conflicts with another, keep the user's venue and move the other\n- Respect any "skip" or "avoid" requests\n- If the user mentions a FULL-DAY EVENT (e.g., "whole day at the U.S. Open"), do NOT plan other activities around it. That day has ONE purpose.\n- If the user mentions FLIGHT DETAILS, account for arrival/departure times on first/last days\n- If the user mentions SPECIFIC TIMES (e.g., "dinner at 7:30"), those times are LOCKED\n- User preferences like "authentic sushi" or "no tourist traps" apply to ALL venue selections\n\n## 🧭 SMART FINISH ENRICHMENT — ADD VALUE\nThe user's list is a STARTING POINT. You MUST add significant value:\n- Add exact street addresses, opening hours, booking URLs for every venue\n- Add transit directions between activities (walk/metro/taxi with duration & cost)\n- Fill ALL meal gaps (breakfast, lunch, dinner, coffee stops)\n- Add 2-4 DNA-matched activities per day between user venues\n- Add insider tips for each user-specified venue\n- Flag any activity that doesn't match the traveler's DNA with a "dnaFlag" field\n`;
+          console.log(`[Stage 1.999] ✓ User research notes injected as raw text with MANDATORY enforcement (${context.mustDoActivities.length} chars)`);
         }
       }
       
@@ -6027,8 +5931,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
           coordinates: act.location?.coordinates,
           neighborhood: act.location?.address?.split(',')[0],
           isLocked: (act as any).isLocked || false,
-          category: act.category,
-          startTime: (act as any).startTime || act.timeSlot?.split('-')[0],
+          category: act.category
         }));
         
         // Determine day anchor
@@ -6413,7 +6316,6 @@ If the purpose is a specific event, plan at least ONE full day around that event
       }
 
 
-
       // =======================================================================
       // TRANSITION DAY RESOLVER: Determine if this day is a transition day
       // Uses explicit params from frontend, or resolves from trip_cities DB
@@ -6783,24 +6685,9 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
             mustDoPrompt += 'Keep today\'s schedule compatible with the overall trip plan.\n';
           }
         } else {
-          // Raw text fallback — attempt generic/specific split for per-day generation
-          const { parseMustDoInput: parseMustDoDay, isGenericActivityDescription: isGenericDay } = await import('./must-do-priorities.ts');
-          const dayFallbackParsed = parseMustDoDay(mustDoActivities, destination, false);
-          const dayGeneric = dayFallbackParsed.filter(m => m.isGenericIntent);
-          const daySpecific = dayFallbackParsed.filter(m => !m.isGenericIntent);
-          
-          if (daySpecific.length > 0) {
-            mustDoPrompt = `\n## 🚨 USER'S SPECIFIC VENUES (MANDATORY)\nInclude these exactly as named:\n`;
-            for (const v of daySpecific) mustDoPrompt += `- "${v.activityName}"\n`;
-          }
-          if (dayGeneric.length > 0) {
-            mustDoPrompt += `\n## 🎯 ACTIVITY REQUESTS (suggest specific venues)\n`;
-            for (const g of dayGeneric) mustDoPrompt += `- ${g.activityName} — suggest a SPECIFIC venue name, not just "${g.activityName}"\n`;
-          }
-          if (daySpecific.length === 0 && dayGeneric.length === 0) {
-            mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible:\n"${mustDoActivities.trim()}"\n`;
-          }
-          console.log(`[generate-day] Must-do fallback: ${daySpecific.length} specific + ${dayGeneric.length} generic (${mustDoActivities.length} chars)`);
+          // Raw text fallback
+          mustDoPrompt = `\n## 🚨 USER'S RESEARCHED RESTAURANTS & VENUES (MANDATORY)\n\nThe traveler has researched these specific venues. Include as many as possible in the itinerary:\n"${mustDoActivities.trim()}"\n`;
+          console.log(`[generate-day] Must-do raw text injected (${mustDoActivities.length} chars)`);
         }
       }
 
@@ -8087,351 +7974,12 @@ Generate activities following ALL constraints above.
 IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repeat.`;
 
       // ==========================================================================
-      // SCHEMA-DRIVEN GENERATION — FEATURE FLAG BRANCH (Fix 22C/22F)
-      // ==========================================================================
-      // When USE_SCHEMA_GENERATION is true, the schema compiler builds the prompt
-      // instead of the freeform prompt sections above. Currently OFF.
-      //
-      // The schema compiler modules are co-located in ./schema/ with Deno-compatible
-      // relative imports. Source of truth remains in src/lib/schema-compiler/.
-      //
-      // To activate: set USE_SCHEMA_GENERATION = true in schema/feature-flags.ts
-      // ==========================================================================
-      // @ts-ignore — Deno imports with .ts extension
-      const { USE_SCHEMA_GENERATION } = await import('./schema/index.ts');
-
-      let finalSystemPrompt = systemPrompt;
-      let finalUserPrompt = userPrompt;
-      let compiledSchema: any = null;
-      let compileStart: number = 0;
-      let compileMs: number = 0;
-
-      if (USE_SCHEMA_GENERATION) {
-        // NEW PATH — Schema-driven generation (Fix 22G wiring)
-        try {
-          // @ts-ignore — Deno imports with .ts extension
-          const { compileDaySchema, serializeSchemaToPrompt } = await import('./schema/index.ts');
-
-          // Build CompilerInput from existing variables in scope
-          // Fix 22L: Wire ALL data flows including mustDos, preBooked, multi-city, keepActivities
-          const compilerInput = {
-            dayNumber,
-            totalDays,
-            destination: resolvedDestination,
-            date,
-            archetypeName: primaryArchetype,
-            // Flight data (if available)
-            arrivalFlight: flightContext.arrivalTime ? {
-              arrivalTime: flightContext.arrivalTime,
-              airportName: flightContext.arrivalAirport || 'Airport',
-              airportCode: flightContext.arrivalAirportCode || '',
-            } : undefined,
-            departureFlight: flightContext.departureTime ? {
-              departureTime: flightContext.departureTime,
-              airportName: flightContext.departureAirport || 'Airport',
-              airportCode: flightContext.departureAirportCode || '',
-              isDomestic: !!flightContext.isDomestic,
-            } : undefined,
-            // Hotel data
-            hotel: flightContext.hotelName ? {
-              name: flightContext.hotelName,
-              address: flightContext.hotelAddress || '',
-              checkInTime: flightContext.checkInTime,
-              checkOutTime: flightContext.checkOutTime,
-            } : undefined,
-            travelers: [{ id: userId || 'primary', name: 'Traveler' }],
-            // Fix 22G fields
-            userConstraints: metadata?.userConstraints
-              ? JSON.stringify(metadata.userConstraints)
-              : undefined,
-            generationRules: genRules?.length > 0 ? {
-              otherRules: genRules.map((r: any) => `${r.type}: ${r.description || r.reason || r.text || JSON.stringify(r)}`),
-            } : undefined,
-            additionalNotes: additionalNotes || undefined,
-            interestCategories: interestCategories?.length > 0 ? interestCategories : undefined,
-            mustHaves: metadata?.mustHaves
-              ? (metadata.mustHaves as Array<{label: string; notes?: string}>).map(
-                  (mh: any) => mh.notes ? `${mh.label} (${mh.notes})` : mh.label
-                )
-              : undefined,
-            isFirstTimeVisitor: effectiveIsFirstTimeVisitor,
-            previousDayActivities: previousDayActivities?.length > 0
-              ? previousDayActivities.map((title: string) => ({ title, category: 'unknown' }))
-              : undefined,
-            preferredArrivalTime: preferences?.arrivalTime || undefined,
-            preferredDepartureTime: preferences?.departureTime || undefined,
-            pacingOverride: effectivePacing as 'relaxed' | 'balanced' | 'packed' | undefined,
-
-            // === Fix 22L: Must-Do Activities ===
-            // Re-derive must-do items for this day from the already-parsed mustDoActivities text
-            mustDos: (() => {
-              if (!mustDoActivities?.trim()) return undefined;
-              try {
-                const forceAll = !!isSmartFinish || !!smartFinishRequested;
-                const analysis = parseMustDoInput(mustDoActivities, destination, forceAll, preferences?.startDate || date?.split('T')[0], totalDays);
-                if (analysis.length === 0) return undefined;
-                const sched = scheduleMustDos(analysis, totalDays);
-                const dayItems = sched.scheduled.filter((s: any) => s.assignedDay === dayNumber);
-                if (dayItems.length === 0) return undefined;
-                return dayItems.map((item: any) => ({
-                  title: item.priority.activityName || item.priority.title,
-                  startTime: item.priority.explicitStartTime || undefined,
-                  endTime: item.priority.explicitEndTime || undefined,
-                  location: item.priority.venueName || item.priority.location || undefined,
-                }));
-              } catch (e) {
-                console.warn('[schema-generation] Must-do parsing for compiler failed:', e);
-                return undefined;
-              }
-            })(),
-
-            // === Fix 22L: Pre-Booked Commitments ===
-            preBookedCommitments: (() => {
-              const preBookedRaw = (metadata?.preBookedCommitments as any[]) || [];
-              if (preBookedRaw.length === 0) return undefined;
-              // Filter to commitments relevant to this day by date
-              const dayDate = date?.split('T')[0] || '';
-              return preBookedRaw
-                .filter((c: any) => {
-                  if (!c.date && !c.startDate) return true; // no date = applies to all days
-                  const cDate = (c.date || c.startDate || '').split('T')[0];
-                  return cDate === dayDate;
-                })
-                .map((c: any) => ({
-                  title: c.title || c.name || 'Commitment',
-                  startTime: c.startTime || c.start_time || '09:00',
-                  endTime: c.endTime || c.end_time || '10:00',
-                  location: c.location || c.venue || undefined,
-                  category: c.category || 'event',
-                  cost: c.cost || c.price || undefined,
-                }));
-            })(),
-
-            // === Fix 22L: Multi-City / Transition Day ===
-            isMultiCity: resolvedIsMultiCity || undefined,
-            isTransitionDay: resolvedIsTransitionDay || undefined,
-            transitionFrom: resolvedIsTransitionDay ? resolvedTransitionFrom : undefined,
-            transitionTo: resolvedIsTransitionDay ? resolvedTransitionTo : undefined,
-            transitionMode: resolvedIsTransitionDay ? (resolvedTransportMode as 'flight' | 'train' | 'drive' | 'ferry' | undefined) : undefined,
-            transitionDepartureTime: resolvedIsTransitionDay && resolvedTransportDetails?.departureTime
-              ? resolvedTransportDetails.departureTime : undefined,
-            transitionArrivalTime: resolvedIsTransitionDay && resolvedTransportDetails?.arrivalTime
-              ? resolvedTransportDetails.arrivalTime : undefined,
-
-            // === Fix 22O: Wire destinationHotel for transition days ===
-            destinationHotel: (() => {
-              if (!resolvedIsTransitionDay) return undefined;
-              const transitionHotelName = flightContext?.hotelName;
-              if (!transitionHotelName) return undefined;
-              return {
-                name: transitionHotelName,
-                address: flightContext?.hotelAddress || '',
-                checkInTime: undefined, // default 15:00 handled by constraint filler
-              };
-            })(),
-
-            // === Fix 22L: Keep Activities (Regeneration) ===
-            keepActivities: lockedActivities.length > 0
-              ? lockedActivities.map((a: any) => ({
-                  title: a.title || a.name || 'Activity',
-                  startTime: a.startTime || '09:00',
-                  endTime: a.endTime || '10:00',
-                  category: a.category || 'activity',
-                  location: a.location?.address || a.location?.name || undefined,
-                  cost: a.cost?.amount || undefined,
-                  bookingRequired: a.bookingRequired || undefined,
-                  tips: a.tips || undefined,
-                }))
-              : undefined,
-          };
-
-          compileStart = Date.now();
-          compiledSchema = compileDaySchema(compilerInput);
-          compileMs = Date.now() - compileStart;
-
-          // Build SerializerContext from existing prompt variables
-          // Fix 22M + Gap Analysis: Enrich with ALL old-path prompt sections
-          const isFullDay = !isFirstDay && !isLastDay;
-          const dateObj = new Date(date);
-          const DAY_NAMES_SCHEMA = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-          const dayOfWeekName = DAY_NAMES_SCHEMA[dateObj.getDay()];
-
-          // Build destination essentials prompt (DB-driven)
-          let schemaDestEssentials = '';
-          const PERPLEXITY_API_KEY_SCHEMA = Deno.env.get("PERPLEXITY_API_KEY");
-          try {
-            schemaDestEssentials = await buildDestinationEssentialsPromptWithDB(
-              supabase, resolvedDestination, totalDays, effectiveIsFirstTimeVisitor, PERPLEXITY_API_KEY_SCHEMA
-            ) || buildDestinationEssentialsPrompt(resolvedDestination, totalDays, effectiveIsFirstTimeVisitor);
-          } catch (e) {
-            console.warn('[schema-generation] Destination essentials fetch failed:', e);
-          }
-
-          // Build banned experience types
-          const schemaBannedTypes: string[] = [];
-          if (previousDayActivities?.length > 0) {
-            const prevTitles = previousDayActivities.map((t: string) => t.toLowerCase());
-            if (prevTitles.some((t: string) => /\b(class|workshop|lesson|masterclass)\b/.test(t) && /\b(cook|bake|pastry|culinary|food)\b/.test(t))) {
-              schemaBannedTypes.push('cooking classes', 'baking classes', 'culinary workshops', 'pastry classes', 'food classes');
-            }
-            if (prevTitles.some((t: string) => /\b(wine|tasting|vineyard)\b/.test(t))) {
-              schemaBannedTypes.push('wine tastings', 'vineyard tours', 'winery visits');
-            }
-          }
-
-          // Build multi-city context
-          let schemaMultiCityContext = '';
-          if (resolvedIsMultiCity) {
-            const visitorLabel = effectiveIsFirstTimeVisitor ? 'FIRST-TIME visitor' : 'RETURNING visitor';
-            schemaMultiCityContext = `🌍 This day is in **${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}**. ALL activities MUST be located in ${resolvedDestination}.\n👤 VISITOR STATUS: Traveler is a ${visitorLabel}.${effectiveIsFirstTimeVisitor ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems and local favorites.'}`;
-            if (flightContext?.hotelName) {
-              schemaMultiCityContext += `\n🏨 ACCOMMODATION: ${flightContext.hotelName}${flightContext.hotelAddress ? ` (${flightContext.hotelAddress})` : ''}. Start/end each day near the hotel.`;
-            }
-          }
-
-          // Build venue hours context
-          let venueHoursContext = '';
-          try {
-            const { data: venueRows } = await supabase
-              .from('verified_venues')
-              .select('name, opening_hours')
-              .ilike('destination', `%${resolvedDestination.split(',')[0].trim()}%`)
-              .not('opening_hours', 'is', null)
-              .limit(40);
-            if (venueRows?.length) {
-              const relevantHours = venueRows
-                .map((v: any) => {
-                  const entry = v.opening_hours?.find((h: string) => h.toLowerCase().startsWith(dayOfWeekName.toLowerCase()));
-                  return entry ? `  • ${v.name}: ${entry}` : null;
-                })
-                .filter(Boolean)
-                .slice(0, 30);
-              if (relevantHours.length > 0) {
-                venueHoursContext = `📋 KNOWN VENUE HOURS FOR ${dayOfWeekName.toUpperCase()} (MUST RESPECT):\n${relevantHours.join('\n')}`;
-              }
-            }
-          } catch (e) {
-            console.warn('[schema-generation] Venue hours fetch failed:', e);
-          }
-
-          // Budget-down rewrite detection
-          let budgetDownRewrite = '';
-          const focusText = (preferences?.dayFocus || preferences?.rewriteInstructions || '').toLowerCase();
-          if (/cheap|budget|afford|save money|less expensive|lower cost|reduce.*cost|cut.*spending|frugal/i.test(focusText) && currentActivities?.length) {
-            const currentCosts = currentActivities.map((a: any) => a.cost?.amount ?? a.estimatedCost ?? 0);
-            const maxCurrent = Math.max(...currentCosts);
-            const avgCurrent = currentCosts.reduce((s: number, c: number) => s + c, 0) / (currentCosts.length || 1);
-            budgetDownRewrite = `🚨 BUDGET-DOWN REWRITE — HARD CONSTRAINT:\nThe user explicitly asked for CHEAPER options. Every replacement MUST cost LESS.\nCurrent avg: ~$${Math.round(avgCurrent)}. Max: ~$${Math.round(maxCurrent)}.\nTarget: BELOW $${Math.round(avgCurrent * 0.5)} per activity. Prefer FREE alternatives.`;
-          }
-
-          const serializerContext = {
-            archetypeDescription: archetypeContext?.promptBlocks?.persona || `Archetype: ${primaryArchetype}`,
-            archetypeAvoidList: archetypeContext?.definition?.avoidList || profile.avoidList || [],
-            experiencePriorities: archetypeContext?.promptBlocks?.affinity
-              ? [archetypeContext.promptBlocks.affinity]
-              : [],
-            destinationContext: archetypeContext?.promptBlocks?.destination || '',
-            budgetTier: effectiveBudgetTier,
-            budgetConstraints: actualDailyBudgetPerPerson != null
-              ? `Hard cap: ~$${actualDailyBudgetPerPerson}/day per person`
-              : '',
-            bookingRules: `When to mark bookingRequired: true:
-- Restaurants with limited seating (fine dining, omakase, tasting menus)
-- Popular attractions with timed-entry tickets
-- Tours, shows, and experiences that sell out
-- Any activity where walk-ins are unreliable
-Conservative default: if unsure, mark bookingRequired: true with a note.`,
-            tipInstructions: `Every "tips" field must be:
-- 30+ characters, specific and actionable
-- Include insider knowledge (best entrance, skip-the-line tricks, photo spots)
-- For lunch/dinner: include 1 alternative restaurant with name and price
-- For last activity: include next morning preview
-- Reference specific timing, booking, or crowd tips
-- Never generic ("enjoy the experience" = REJECTED)`,
-            personalizationInstructions: `For each activity, include a "personalization" object with:
-- "whyThisFits": 1-2 sentences referencing specific traveler traits/preferences
-- Reference the archetype's values, not just the archetype name
-- Connect the activity to the traveler's interests, pace, or budget preferences`,
-            hiddenGemInstructions: `Hidden gem criteria:
-- NOT in top 10 TripAdvisor/Google results for the city
-- Known primarily to locals or repeat visitors
-- At least 1-2 per day must be isHiddenGem: true
-- A famous landmark is NEVER a hidden gem
-- Street food stalls, neighborhood bars, local markets, artisan workshops qualify
-- Mark hasTimingHack: true on 2-3 activities per day where the time slot gives an advantage`,
-            isGroupTrip: !!collaboratorAttributionPrompt,
-            allTravelerIds: userId || '',
-            // Fix 22G fields
-            userConstraintsText: metadata?.userConstraints
-              ? JSON.stringify(metadata.userConstraints, null, 2)
-              : undefined,
-            visitorGuidance: effectiveIsFirstTimeVisitor
-              ? 'This is the traveler\'s FIRST TIME visiting this destination. Prioritize iconic landmarks, famous attractions, and must-see sights that define the city. Include popular spots even if they\'re touristy — first-timers want the classics.'
-              : 'The traveler has VISITED this destination before. Skip the obvious tourist spots. Focus on hidden gems, local favorites, off-the-beaten-path experiences, and neighborhoods most tourists miss.',
-            tripPurpose: additionalNotes?.trim() || undefined,
-            interestWeighting: interestCategories?.length > 0
-              ? `The traveler is especially interested in: ${interestCategories.join(', ')}. Weight activity selection toward these categories when possible.`
-              : undefined,
-            mustHavesText: metadata?.mustHaves
-              ? (metadata.mustHaves as Array<{label: string; notes?: string}>)
-                  .map((item: any, i: number) => `${i + 1}. ${item.label}${item.notes ? ` — ${item.notes}` : ''}`)
-                  .join('\n')
-              : undefined,
-            skipList: previousDayActivities?.length > 0
-              ? previousDayActivities.map((title: string) => `- ${title}`).join('\n')
-              : undefined,
-            // Fix 22M: Additional rich context from existing pipeline
-            transportPreferences: transportPreferencePrompt || undefined,
-            voyancePicks: voyancePicksPrompt || undefined,
-            tripTypeContext: tripTypePrompt || undefined,
-            collaboratorAttribution: collaboratorAttributionPrompt || undefined,
-
-            // === Gap Analysis Fix: New fields ported from old path ===
-            generationHierarchy: generationHierarchy || undefined,
-            timingInstructions: timingInstructions || undefined,
-            destinationEssentials: schemaDestEssentials || undefined,
-            activityCountLimits: `ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} per day (HARD LIMITS). ⚠️ MINIMUM ${minActivitiesFromArchetype} activities required. Going UNDER = FAILURE. Going OVER ${maxActivitiesFromArchetype} = FAILURE.`,
-            dayOfWeek: dayOfWeekName,
-            isFullDay,
-            travelerCount: travelers || 1,
-            dailyBudgetPerPerson: actualDailyBudgetPerPerson,
-            isSmartFinish: !!isSmartFinish || !!smartFinishRequested,
-            budgetDownRewrite: budgetDownRewrite || undefined,
-            bannedExperienceTypes: schemaBannedTypes.length > 0
-              ? `🚫 BANNED (already done on previous days — DO NOT INCLUDE): ${schemaBannedTypes.join(', ')}`
-              : undefined,
-            multiCityContext: schemaMultiCityContext || undefined,
-            operatingHoursContext: venueHoursContext || undefined,
-          };
-
-          const serialized = serializeSchemaToPrompt(compiledSchema, serializerContext);
-          finalSystemPrompt = serialized.systemPrompt;
-          finalUserPrompt = serialized.userPrompt;
-
-          // Append locked slots + voyance picks as raw sections (already structured in serializer but these have special formatting)
-          const richSections: string[] = [];
-          if (lockedActivities.length > 0) richSections.push(lockedSlotsInstruction);
-          if (richSections.length > 0) {
-            finalSystemPrompt += '\n\n' + richSections.join('\n\n');
-          }
-
-          console.log(`[schema-generation] Schema path active. Compile: ${compileMs}ms, System: ${finalSystemPrompt.length} chars, User: ${finalUserPrompt.length} chars`);
-          console.log(`[schema-generation] compilerInput wiring: mustDos=${compilerInput.mustDos?.length || 0}, preBooked=${compilerInput.preBookedCommitments?.length || 0}, isTransition=${!!compilerInput.isTransitionDay}, keepActivities=${compilerInput.keepActivities?.length || 0}`);
-        } catch (schemaErr) {
-          console.error('[schema-generation] Schema compilation failed, falling back to existing prompts:', schemaErr);
-          // Fall through — finalSystemPrompt/finalUserPrompt retain old values
-        }
-      }
-      // else: OLD PATH — use systemPrompt and userPrompt as-is (DEFAULT)
-
-      // ==========================================================================
       // Log Full Prompt Lengths before AI call
       // ==========================================================================
-      console.log(`[generate-day] System prompt: ${finalSystemPrompt.length} chars, User prompt: ${finalUserPrompt.length} chars`);
+      console.log(`[generate-day] System prompt: ${systemPrompt.length} chars, User prompt: ${userPrompt.length} chars`);
       console.log(`[generate-day] Experience guidance included: ${archetypeContext.promptBlocks.affinity.length > 0 ? 'YES' : 'NO'} (${archetypeContext.promptBlocks.affinity.length} chars)`);
       console.log(`[generate-day] Destination guidance included: ${archetypeContext.promptBlocks.destination.length > 0 ? 'YES' : 'NO'} (${archetypeContext.promptBlocks.destination.length} chars)`);
 
-      const aiCallStart = Date.now();
       try {
         let data: any = null;
         const maxAttempts = 5;
@@ -8450,8 +7998,8 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             body: JSON.stringify({
               model,
               messages: [
-                { role: "system", content: finalSystemPrompt },
-                { role: "user", content: finalUserPrompt }
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
               ],
               tools: [{
                 type: "function",
@@ -8467,7 +8015,6 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
                       title: { type: "string", description: "Day title like 'Arrival Day' or 'Historic Exploration'" },
                       activities: {
                         type: "array",
-                        minItems: 3,
                         items: {
                           type: "object",
                           properties: {
@@ -8483,50 +8030,14 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
                               type: "object",
                               properties: {
                                 name: { type: "string" },
-                                address: { type: "string" },
-                                coordinates: {
-                                  type: "object",
-                                  properties: { lat: { type: "number" }, lng: { type: "number" } },
-                                  required: ["lat", "lng"]
-                                }
-                              },
-                              required: ["name", "address"]
-                            },
-                            estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"], description: "per_person = price per traveler, flat = total price for the group/vehicle, per_room = per room per night" } } },
-                            cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"] } }, required: ["amount", "currency"] },
-                            bookingRequired: { type: "boolean" },
-                            tags: { type: "array", items: { type: "string" }, minItems: 5, description: "5+ keyword tags for filtering/search (e.g. outdoor, romantic, family-friendly, historic, waterfront)" },
-                            transportation: {
-                              type: "object",
-                              description: "How to get here from the previous activity. COST RULES: walk/walking → estimatedCost.amount MUST be 0. metro/subway → 1-5. bus → 1-4. taxi/uber/rideshare → use realistic local rates.",
-                              properties: {
-                                method: { type: "string" },
-                                duration: { type: "string" },
-                                estimatedCost: {
-                                  type: "object",
-                                  properties: { amount: { type: "number" }, currency: { type: "string" } }
-                                },
-                                instructions: { type: "string" }
+                                address: { type: "string" }
                               }
                             },
-                            contextualTips: {
-                              type: "array",
-                              items: {
-                                type: "object",
-                                properties: {
-                                  type: { type: "string", enum: ["timing", "booking", "money_saving", "transit", "cultural", "safety", "hidden_gem", "weather", "general"] },
-                                  text: { type: "string" }
-                                },
-                                required: ["type", "text"]
-                              },
-                              description: "1-4 typed contextual tips"
-                            },
-                            rating: {
-                              type: "object",
-                              properties: { value: { type: "number" }, totalReviews: { type: "number" } }
-                            },
-                            website: { type: "string" },
+                            estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"], description: "per_person = price per traveler, flat = total price for the group/vehicle, per_room = per room per night" } } },
+                            cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"] } } },
+                            bookingRequired: { type: "boolean" },
                             tips: { type: "string", description: "Insider tip for this activity (must be specific, actionable, 30+ chars)" },
+                            coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
                             type: { type: "string" },
                             suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity (group trips)" },
                             isHiddenGem: { type: "boolean", description: "true if this is a hidden gem discovered through deep research. NOT for mainstream tourist attractions." },
@@ -8545,57 +8056,11 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
                               required: ["tags", "whyThisFits", "confidence"]
                             }
                           },
-                          required: ["title", "category", "startTime", "endTime", "location", "cost", "tags", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
+                          required: ["title", "category", "startTime", "endTime", "location", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
                         }
                       },
                       accommodationNotes: { type: "array", items: { type: "string" }, description: "2-3 accommodation tips for this destination" },
                       practicalTips: { type: "array", items: { type: "string" }, description: "3-4 practical travel tips for this destination" },
-                      transportComparison: {
-                        type: "array",
-                        description: "Transport options for transition days between cities. Required when isTransitionDay is true.",
-                        items: {
-                          type: "object",
-                          properties: {
-                            id: { type: "string" },
-                            mode: { type: "string", enum: ["train", "flight", "bus", "car", "ferry"] },
-                            operator: { type: "string" },
-                            inTransitDuration: { type: "string" },
-                            doorToDoorDuration: { type: "string" },
-                            cost: {
-                              type: "object",
-                              properties: {
-                                perPerson: { type: "number" },
-                                total: { type: "number" },
-                                currency: { type: "string" },
-                                includesTransfers: { type: "boolean" }
-                              },
-                              required: ["perPerson", "total", "currency"]
-                            },
-                            departure: {
-                              type: "object",
-                              properties: {
-                                point: { type: "string" },
-                                neighborhood: { type: "string" }
-                              }
-                            },
-                            arrival: {
-                              type: "object",
-                              properties: {
-                                point: { type: "string" },
-                                neighborhood: { type: "string" }
-                              }
-                            },
-                            pros: { type: "array", items: { type: "string" } },
-                            cons: { type: "array", items: { type: "string" } },
-                            bookingTip: { type: "string" },
-                            scenicOpportunities: { type: "array", items: { type: "string" } },
-                            isRecommended: { type: "boolean" },
-                            recommendationReason: { type: "string" }
-                          },
-                          required: ["id", "mode", "operator", "inTransitDuration", "doorToDoorDuration", "cost", "departure", "arrival", "pros", "cons", "isRecommended"]
-                        }
-                      },
-                      selectedTransportId: { type: "string", description: "ID of the recommended transport option" },
                       narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
                     },
                     required: ["dayNumber", "date", "theme", "activities"]
@@ -8694,76 +8159,6 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           throw new Error("Invalid AI response format");
         }
 
-        // =======================================================================
-        // Fix 22N: Schema-Aware Validation & Logging (when schema path was used)
-        // =======================================================================
-        if (USE_SCHEMA_GENERATION) {
-          try {
-            // @ts-ignore — Deno imports with .ts extension
-            const { validateAgainstSchema, buildGenerationLog, formatLogForConsole } = await import('./schema/index.ts');
-
-            const aiCallMs = Date.now() - aiCallStart;
-            const valStart = Date.now();
-            const validationResult = validateAgainstSchema(
-              compiledSchema,
-              generatedDay.activities || []
-            );
-            const validationMs = Date.now() - valStart;
-
-            const genLog = buildGenerationLog({
-              tripId: tripId || 'unknown',
-              schema: compiledSchema,
-              aiResponse: generatedDay,
-              validationResults: validationResult.validations,
-              overrides: validationResult.overrides,
-              retries: 0,
-              timing: {
-                compileMs: compileMs || 0,
-                aiCallMs,
-                validationMs,
-              },
-            });
-
-            console.log(formatLogForConsole(genLog));
-
-            if (!validationResult.passed) {
-              console.warn(`[schema-generation] Validation ${validationResult.severity}: ${validationResult.summary}`);
-              // If HIGH severity (e.g. AI returned far too few activities), log for awareness
-              // Future: could trigger a targeted retry here
-            }
-
-            // Apply auto-corrections (locked slot integrity, time overwrites, group attribution)
-            if (validationResult.overrides.length > 0 && validationResult.correctedActivities?.length > 0) {
-              console.log(`[schema-generation] Applying ${validationResult.overrides.length} auto-corrections to ${validationResult.correctedActivities.length} activities`);
-              for (const corrected of validationResult.correctedActivities) {
-                const matchIdx = generatedDay.activities.findIndex((a: any) =>
-                  (a.title === corrected.title || a.startTime === corrected.startTime) &&
-                  a.title !== undefined
-                );
-                if (matchIdx !== -1) {
-                  for (const override of validationResult.overrides) {
-                    if (override.field === 'title' && corrected.title) {
-                      generatedDay.activities[matchIdx].title = corrected.title;
-                    }
-                    if (override.field === 'time') {
-                      generatedDay.activities[matchIdx].startTime = corrected.startTime;
-                      generatedDay.activities[matchIdx].endTime = corrected.endTime;
-                    }
-                    if (override.field === 'cost' && corrected.cost !== undefined) {
-                      generatedDay.activities[matchIdx].cost = corrected.cost;
-                    }
-                    if (override.field === 'suggestedFor' && corrected.suggestedFor) {
-                      generatedDay.activities[matchIdx].suggestedFor = corrected.suggestedFor;
-                    }
-                  }
-                }
-              }
-            }
-          } catch (valErr) {
-            console.warn('[schema-generation] Validation/logging failed (non-blocking):', valErr);
-          }
-        }
-
         // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
         // This ensures AI knows to skip those time slots, saving money and guaranteeing locks work
 
@@ -8812,47 +8207,6 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           return normalized;
         });
 
-        // =======================================================================
-        // GAP 2: HOTEL ADDRESS CORRECTION (ported from old path lines 2341-2368)
-        // Overwrite AI-hallucinated hotel addresses with actual booking data
-        // =======================================================================
-        {
-          const actualHotelName = flightContext?.hotelName;
-          const actualHotelAddress = flightContext?.hotelAddress;
-          if (actualHotelName || actualHotelAddress) {
-            const hotelKeywords = ['hotel', 'check-in', 'check in', 'checkout', 'check-out', 'check out', 'freshen up', 'rest & recharge', 'rest and recharge', 'return to', 'settle in', 'wind down', "dad's", "mom's", "parent", "home base", 'airbnb', 'vacation rental'];
-            for (const act of normalizedActivities) {
-              const cat = ((act as any).category || '').toLowerCase();
-              const title = ((act as any).title || '').toLowerCase();
-              const isAccommodationActivity = cat === 'accommodation' || cat === 'relaxation' ||
-                hotelKeywords.some((kw: string) => title.includes(kw));
-              
-              if (isAccommodationActivity && (cat === 'accommodation' || cat === 'relaxation' || title.includes('hotel') || title.includes('home') || title.includes('airbnb') || title.includes('return') || title.includes('check'))) {
-                if (actualHotelName && (act as any).location && typeof (act as any).location === 'object') {
-                  (act as any).location.name = actualHotelName;
-                }
-                if (actualHotelAddress && (act as any).location && typeof (act as any).location === 'object') {
-                  (act as any).location.address = actualHotelAddress;
-                }
-                if (!(act as any).location && (actualHotelName || actualHotelAddress)) {
-                  (act as any).location = {
-                    name: actualHotelName || 'Accommodation',
-                    address: actualHotelAddress || '',
-                  };
-                }
-              }
-            }
-          }
-        }
-
-        // Force 24-hour HH:MM time format (some AI outputs include AM/PM)
-        for (const act of normalizedActivities) {
-          const parsedStart = parseTimeToMinutes((act as any).startTime || '');
-          if (parsedStart !== null) (act as any).startTime = minutesToHHMM(parsedStart);
-          const parsedEnd = parseTimeToMinutes((act as any).endTime || '');
-          if (parsedEnd !== null) (act as any).endTime = minutesToHHMM(parsedEnd);
-        }
-
         // CRITICAL: Filter out activities that occur BEFORE arrival time on Day 1
         // This is a safety net in case the AI ignores the prompt constraints
         if (isFirstDay && flightContext.arrivalTime24) {
@@ -8878,30 +8232,6 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             if (normalizedActivities.length < beforeFilter) {
               console.log(`[generate-day] Removed ${beforeFilter - normalizedActivities.length} pre-arrival activities on Day 1`);
             }
-          }
-        }
-
-        // =======================================================================
-        // GAP 5: ARRIVAL DAY TITLE STRIPPING (ported from old path lines 2574-2591)
-        // Strip "Arrival at Airport" / "Baggage Claim" activities on Day 1
-        // These are handled by the Arrival Game Plan UI
-        // =======================================================================
-        if (isFirstDay && normalizedActivities.length > 0) {
-          const beforeArrivalStrip = normalizedActivities.length;
-          normalizedActivities = normalizedActivities.filter((a: any) => {
-            const t = (a.title || '').toLowerCase();
-            const isArrivalActivity =
-              (t.includes('arrival at') && (t.includes('airport') || t.includes('baggage'))) ||
-              t.includes('baggage claim') ||
-              t.includes('airport arrival') ||
-              t.includes('arrive at airport') ||
-              t.includes('land at') ||
-              (a.category === 'transport' && t.includes('airport') && !t.includes('transfer'));
-            return !isArrivalActivity;
-          });
-          const removedArrival = beforeArrivalStrip - normalizedActivities.length;
-          if (removedArrival > 0) {
-            console.log(`[generate-day] Day 1: Stripped ${removedArrival} arrival/baggage activities (handled by Arrival Game Plan UI)`);
           }
         }
 
@@ -8962,433 +8292,8 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           
           console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
         }
-
         // =======================================================================
-        // GAP 3: DEPARTURE DAY SEQUENCE FIX (ported from old path lines 2468-2538)
-        // Ensure checkout comes BEFORE airport transfer on the last day
-        // =======================================================================
-        if (isLastDay && normalizedActivities.length > 1) {
-          const checkoutIndex = normalizedActivities.findIndex((a: any) => 
-            (a.title || '').toLowerCase().includes('checkout') || 
-            (a.title || '').toLowerCase().includes('check-out') ||
-            (a.title || '').toLowerCase().includes('check out')
-          );
-          const airportIndex = normalizedActivities.findIndex((a: any) => 
-            (((a.title || '').toLowerCase().includes('airport') || 
-             (a.title || '').toLowerCase().includes('departure transfer')) &&
-            (a.category === 'transport' || (a.title || '').toLowerCase().includes('transfer')))
-          );
-          
-          if (checkoutIndex !== -1 && airportIndex !== -1 && checkoutIndex > airportIndex) {
-            console.log(`[generate-day] Fixing departure sequence: checkout (${checkoutIndex}) before airport transfer (${airportIndex})`);
-            
-            const checkoutActivity = normalizedActivities[checkoutIndex];
-            const airportActivity = normalizedActivities[airportIndex];
-            
-            const checkoutDuration = Math.max(
-              5,
-              calculateDuration(checkoutActivity.startTime, checkoutActivity.endTime) || 15
-            );
-            const transferDuration = Math.max(
-              10,
-              calculateDuration(airportActivity.startTime, airportActivity.endTime) || 60
-            );
-
-            let anchorStart = airportActivity.startTime;
-            try {
-              const sortedForAnchor = [...normalizedActivities].sort((a: any, b: any) => {
-                const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
-                const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
-                return ta - tb;
-              });
-              const airportPos = sortedForAnchor.findIndex((a: any) => a.id === airportActivity.id);
-              if (airportPos > 0) {
-                const prev = sortedForAnchor[airportPos - 1];
-                const prevEndMins = parseTimeToMinutes(prev?.endTime || '') ?? null;
-                const airportStartMins = parseTimeToMinutes(airportActivity.startTime || '') ?? null;
-                if (prevEndMins !== null && airportStartMins !== null && prevEndMins > airportStartMins) {
-                  anchorStart = minutesToHHMM(prevEndMins);
-                }
-              }
-            } catch { /* Non-fatal */ }
-
-            checkoutActivity.startTime = anchorStart;
-            checkoutActivity.endTime = addMinutesToHHMM(anchorStart, checkoutDuration);
-            airportActivity.startTime = checkoutActivity.endTime;
-            airportActivity.endTime = addMinutesToHHMM(airportActivity.startTime, transferDuration);
-            
-            normalizedActivities[airportIndex] = checkoutActivity;
-            normalizedActivities[checkoutIndex] = airportActivity;
-            
-            normalizedActivities.sort((a: any, b: any) => {
-              const timeA = parseTimeToMinutes(a.startTime || '') ?? 99999;
-              const timeB = parseTimeToMinutes(b.startTime || '') ?? 99999;
-              return timeA - timeB;
-            });
-          }
-        }
-
-        // =======================================================================
-        // GAP 4: DEPARTURE DAY DEDUP (ported from old path lines 2540-2568)
-        // Remove duplicate airport/transfer/departure activities
-        // =======================================================================
-        if (isLastDay && normalizedActivities.length > 2) {
-          const airportKeywords = ['airport', 'departure transfer', 'flight departure', 'depart from'];
-          const airportActivities = normalizedActivities.filter((a: any) => {
-            const t = (a.title || '').toLowerCase();
-            return airportKeywords.some(kw => t.includes(kw));
-          });
-
-          if (airportActivities.length > 2) {
-            const toRemoveIds = new Set<string>();
-            const airportToKeep = airportActivities.slice(-2);
-            for (const act of airportActivities) {
-              if (!airportToKeep.includes(act)) {
-                toRemoveIds.add(act.id);
-              }
-            }
-            if (toRemoveIds.size > 0) {
-              const removedTitles = normalizedActivities
-                .filter((a: any) => toRemoveIds.has(a.id))
-                .map((a: any) => a.title);
-              console.log(`[generate-day] Day ${dayNumber}: Removing ${toRemoveIds.size} duplicate airport activities: ${removedTitles.join(', ')}`);
-              normalizedActivities = normalizedActivities.filter((a: any) => !toRemoveIds.has(a.id));
-            }
-          }
-        }
-
-        // =======================================================================
-        // STEP: POST-GENERATION GAP FILLER
-        // Detect gaps > 90 min and inject transport/hotel/dinner activities
-        // =======================================================================
-        try {
-          // @ts-ignore — Deno imports with .ts extension
-          const { detectAndFillGaps } = await import('./schema/gap-filler.ts');
-
-          // Map budgetTier to gap-filler's expected values
-          const rawBudget = effectiveBudgetTier || 'standard';
-          const gapBudgetTier = rawBudget === 'luxury' ? 'luxury' : rawBudget === 'budget' ? 'budget' : 'mid';
-
-          const { fillerActivities, gaps } = detectAndFillGaps(normalizedActivities, {
-            minGapMinutes: 90,
-            hotelName: flightContext?.hotelName || undefined,
-            hotelLocation: flightContext?.hotelAddress || undefined,
-            budgetTier: gapBudgetTier as 'budget' | 'mid' | 'luxury',
-            transportMinutes: 30,
-          });
-
-          if (fillerActivities.length > 0) {
-            console.log(`[gap-filler] Found ${gaps.length} gaps, inserting ${fillerActivities.length} filler activities`);
-            gaps.forEach(g => console.log(`  Gap: ${g.gapStartTime}-${g.gapEndTime} (${g.gapMinutes}min) between "${g.afterActivity}" and "${g.beforeActivity}"`));
-            normalizedActivities.push(...fillerActivities);
-            normalizedActivities.sort((a: { startTime?: string }, b: { startTime?: string }) => {
-              const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-              const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-              return aTime - bTime;
-            });
-          }
-        } catch (gapErr) {
-          console.warn(`[gap-filler] Non-critical error, skipping:`, gapErr);
-        }
-
-        // =======================================================================
-        // STEP: DEPARTURE TIMELINE VALIDATION (last day only)
-        // Ensures boarding is before flight, removes post-cutoff activities
-        // =======================================================================
-        if (isLastDay && flightContext.returnDepartureTime24) {
-          try {
-            // @ts-ignore — Deno imports with .ts extension
-            const { validateDepartureTimeline } = await import('./schema/departure-validator.ts');
-            const departureFlightTime = flightContext.returnDepartureTime24;
-            // Re-derive airport transfer minutes (originally computed at ~7123)
-            const depTransferMins = destination ? await getAirportTransferMinutes(supabase, destination) : 60;
-            const { validated, warnings } = validateDepartureTimeline(
-              normalizedActivities,
-              departureFlightTime,
-              depTransferMins
-            );
-            if (warnings.length > 0) {
-              console.warn(`[departure-validator] Fixed ${warnings.length} issues:`, warnings);
-            }
-            normalizedActivities = validated;
-          } catch (depErr) {
-            console.warn(`[departure-validator] Non-critical error, skipping:`, depErr);
-          }
-        }
-
-        // =======================================================================
-        // GAP 8: TRANSIT-TIME ENFORCEMENT (replaces static 15-min buffer)
-        // Uses each activity's transportation.duration field + venue-type buffers
-        // Ported from old path lines 2379-2466
-        // =======================================================================
-        try {
-          // Sort by start time first
-          normalizedActivities.sort((a: any, b: any) => {
-            const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
-            const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
-            return ta - tb;
-          });
-
-          let shifted = false;
-          for (let i = 0; i < normalizedActivities.length - 1; i++) {
-            const current = normalizedActivities[i] as any;
-            const next = normalizedActivities[i + 1] as any;
-
-            const currentEndMins = parseTimeToMinutes(current.endTime || '');
-            const nextStartMins = parseTimeToMinutes(next.startTime || '');
-            if (currentEndMins === null || nextStartMins === null) continue;
-
-            // Skip if next is locked/must-do and current is not — preserve locked times
-            const isNextLocked = next.isLocked || next.isMustDo;
-            const isCurrentLocked = current.isLocked || current.isMustDo;
-
-            // Determine if current activity IS a transport/transit activity
-            const currentIsTransport = ['transport', 'transportation', 'transit'].includes(
-              (current.category || '').toLowerCase()
-            ) || /\b(stroll|walk|taxi|uber|metro|bus|train|cab|ride|transfer)\b/i.test(current.title || '');
-
-            // Parse the NEXT activity's transportation.duration (e.g., "25 min", "1h 30m")
-            let requiredTransitMins = 0;
-            const transitDur = next.transportation?.duration;
-            if (transitDur && typeof transitDur === 'string') {
-              const hMatch = transitDur.match(/(\d+)\s*h/i);
-              const mMatch = transitDur.match(/(\d+)\s*m/i);
-              if (hMatch) requiredTransitMins += parseInt(hMatch[1], 10) * 60;
-              if (mMatch) requiredTransitMins += parseInt(mMatch[1], 10);
-            }
-            // Also check distanceKm as fallback
-            if (requiredTransitMins === 0 && next.transportation?.distanceKm) {
-              const dist = next.transportation.distanceKm;
-              if (dist <= 1) requiredTransitMins = 10;
-              else if (dist <= 5) requiredTransitMins = 20;
-              else if (dist <= 15) requiredTransitMins = 35;
-              else requiredTransitMins = 45;
-            }
-
-            // When current IS a transport activity, apply venue-type arrival buffers
-            if (currentIsTransport) {
-              const nextCat = (next.category || '').toLowerCase();
-              const nextTitle = (next.title || '').toLowerCase();
-              let arrivalBuffer = 10;
-              if (nextCat === 'accommodation' || /hotel|check.?in/i.test(nextTitle)) {
-                arrivalBuffer = 15;
-              } else if (nextCat === 'dining' || /restaurant|cafe|lunch|dinner|breakfast|brunch/i.test(nextTitle)) {
-                arrivalBuffer = 10;
-              } else if (/museum|gallery|palace|castle|cathedral/i.test(nextTitle)) {
-                arrivalBuffer = 10;
-              }
-              requiredTransitMins = Math.max(requiredTransitMins, arrivalBuffer);
-            }
-
-            // Absolute minimum: 10 min (even for adjacent venues)
-            if (requiredTransitMins < 10) requiredTransitMins = 10;
-
-            const actualGap = nextStartMins - currentEndMins;
-            if (actualGap < requiredTransitMins) {
-              // Respect locked activities
-              if (isNextLocked && !isCurrentLocked) {
-                // Shorten current to create buffer
-                const newEndMins = nextStartMins - requiredTransitMins;
-                const currentStartMins = parseTimeToMinutes(current.startTime || '00:00') ?? 0;
-                if (newEndMins > currentStartMins + 15) {
-                  current.endTime = minutesToHHMM(newEndMins);
-                  current.duration = `${newEndMins - currentStartMins} minutes`;
-                  shifted = true;
-                }
-              } else if (!isNextLocked) {
-                // Shift next and all subsequent activities forward
-                const deficit = requiredTransitMins - actualGap;
-                for (let j = i + 1; j < normalizedActivities.length; j++) {
-                  const act = normalizedActivities[j] as any;
-                  if (act.isLocked || act.isMustDo) continue; // Don't shift locked
-                  const s = parseTimeToMinutes(act.startTime || '');
-                  const e = parseTimeToMinutes(act.endTime || '');
-                  if (s !== null) act.startTime = minutesToHHMM(s + deficit);
-                  if (e !== null) act.endTime = minutesToHHMM(e + deficit);
-                }
-                shifted = true;
-              }
-            }
-          }
-          if (shifted) {
-            console.log(`[transit-enforcement] Adjusted activity times to respect transportation durations`);
-          }
-        } catch (transitErr) {
-          console.warn(`[transit-enforcement] Non-critical error, skipping:`, transitErr);
-        }
-
-        // =======================================================================
-        // STEP: MEAL DEDUPLICATION — Safety net for duplicate dining (Fix 23L)
-        // =======================================================================
-        try {
-          const isDiningActivity = (act: any) => {
-            const cat = (act.category || '').toLowerCase();
-            const title = (act.title || '').toLowerCase();
-            const desc = (act.description || '').toLowerCase();
-            if (cat === 'dining' || cat === 'restaurant' || cat === 'food') return true;
-            // Also catch dining mis-categorized as 'activity' or other categories
-            if (/\b(dinner|lunch|breakfast|brunch|bistro|steakhouse|trattoria|restaurant|café|eatery|dining|supper|pizzeria|brasserie|tavern|gastropub|food\s*hall|food\s*market)\b/i.test(title)) return true;
-            if (/\b(dinner|lunch|breakfast|brunch|restaurant|dining|supper)\b/i.test(desc)) return true;
-            return false;
-          };
-
-          const mealWindows = [
-            { name: 'breakfast', min: 0, max: 660, filled: false },
-            { name: 'lunch', min: 660, max: 960, filled: false },
-            { name: 'dinner', min: 960, max: 1440, filled: false },
-          ];
-
-          const toRemove = new Set<number>();
-
-          for (let i = 0; i < normalizedActivities.length; i++) {
-            const act = normalizedActivities[i];
-            if (!isDiningActivity(act)) continue;
-            if (act.isLocked || act.isMustDo || act.source === 'must_do') continue;
-
-            const mins = parseTimeToMinutes(act.startTime || '12:00') ?? 720;
-            const window = mealWindows.find(w => mins >= w.min && mins < w.max);
-            if (!window) continue;
-
-            if (window.filled) {
-              console.log(`[meal-dedup] Removing duplicate ${window.name}: "${act.title}" at ${act.startTime}`);
-              toRemove.add(i);
-            } else {
-              window.filled = true;
-            }
-          }
-
-          // Back-to-back dining check
-          for (let i = 1; i < normalizedActivities.length; i++) {
-            if (toRemove.has(i) || toRemove.has(i - 1)) continue;
-            const prev = normalizedActivities[i - 1];
-            const curr = normalizedActivities[i];
-            if (isDiningActivity(prev) && isDiningActivity(curr)) {
-              if (!curr.isLocked && !curr.isMustDo && curr.source !== 'must_do') {
-                console.log(`[meal-dedup] Removing back-to-back dining: "${curr.title}" after "${prev.title}"`);
-                toRemove.add(i);
-              }
-            }
-          }
-
-          if (toRemove.size > 0) {
-            normalizedActivities = normalizedActivities.filter((_: any, i: number) => !toRemove.has(i));
-            console.log(`[meal-dedup] Removed ${toRemove.size} excess dining activities`);
-          }
-        } catch (mealErr) {
-          console.warn('[meal-dedup] Non-critical error, skipping:', mealErr);
-        }
-
-        // =======================================================================
-        // GAP 6: ACTIVITY DEDUPLICATION (ported from old path lines 2731-2737)
-        // Strip same-title/near-identical activities, respecting user-requested repeats
-        // =======================================================================
-        try {
-          const mustDoListForDedup = (mustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
-          const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(
-            { activities: normalizedActivities } as any,
-            mustDoListForDedup
-          );
-          if (removedDupes.length > 0) {
-            console.warn(`[generate-day] Day ${dayNumber}: Removed ${removedDupes.length} duplicate(s): ${removedDupes.join(', ')}`);
-            normalizedActivities = dedupedDay.activities;
-          }
-        } catch (dedupErr) {
-          console.warn('[activity-dedup] Non-critical error, skipping:', dedupErr);
-        }
-
-        // =======================================================================
-        // GAP 7: USER PREFERENCE VALIDATION (ported from old path lines 2620-2685)
-        // Validates user-requested activities, budget, light-dining honored
-        // Logs warnings for now (no retry loop yet — see Gap 1)
-        // =======================================================================
-        try {
-          const userNotes = (preferenceContext || '').toLowerCase();
-          const allActivityText = normalizedActivities.map((a: any) => 
-            `${(a.title || '')} ${(a.description || '')}`
-          ).join(' ').toLowerCase();
-
-          const ACTIVITY_KEYWORDS: Record<string, string[]> = {
-            'skiing': ['ski', 'snow', 'slopes', 'big snow', 'mountain creek', 'ski resort'],
-            'surfing': ['surf', 'beach break', 'waves', 'surf lesson'],
-            'hiking': ['hike', 'trail', 'trek', 'summit'],
-            'museum': ['museum', 'gallery', 'exhibit'],
-            'shopping': ['shop', 'mall', 'boutique', 'market'],
-            'spa': ['spa', 'massage', 'wellness', 'sauna'],
-            'snorkeling': ['snorkel', 'reef', 'underwater'],
-            'diving': ['dive', 'scuba', 'underwater'],
-          };
-
-          for (const [activity, keywords] of Object.entries(ACTIVITY_KEYWORDS)) {
-            if (userNotes.includes(activity)) {
-              const dayHasThis = keywords.some(kw => allActivityText.includes(kw));
-              if (!dayHasThis && !isLastDay) {
-                console.warn(`[preference-validation] User requested "${activity}" but Day ${dayNumber} has no matching activities`);
-              }
-            }
-          }
-
-          // Check for "light dining" preference violations
-          const wantsLightDining = userNotes.includes('light dinner') || userNotes.includes('light meal') || userNotes.includes('casual dinner') || userNotes.includes('simple dinner') || userNotes.includes('quick bite');
-          if (wantsLightDining) {
-            for (const act of normalizedActivities) {
-              const isDining = ((act as any).category || '').toLowerCase() === 'dining';
-              const cost = (act as any).cost?.amount || 0;
-              if (isDining && cost > 50) {
-                console.warn(`[preference-validation] User requested light dining but got "${(act as any).title}" at $${cost}`);
-              }
-            }
-          }
-
-          // Check for budget preference violations
-          const wantsBudget = userNotes.includes('budget') || userNotes.includes('cheap') || userNotes.includes('affordable') || userNotes.includes('save money') || userNotes.includes('low cost');
-          if (wantsBudget) {
-            const expensiveActivities = normalizedActivities.filter((a: any) => {
-              const cost = (a as any).cost?.amount || 0;
-              return cost > 75;
-            });
-            if (expensiveActivities.length > 0) {
-              const names = expensiveActivities.map((a: any) => `"${a.title}" ($${(a as any).cost?.amount})`).join(', ');
-              console.warn(`[preference-validation] User wants budget trip but Day ${dayNumber} has expensive activities: ${names}`);
-            }
-          }
-        } catch (prefErr) {
-          console.warn('[preference-validation] Non-critical error, skipping:', prefErr);
-        }
-
-        // =======================================================================
-        // GAP 1 (PARTIAL): MINIMUM REAL ACTIVITY COUNT VALIDATION
-        // Ported from old path lines 2600-2618. Logs warnings.
-        // Full retry loop deferred to avoid massive refactor risk.
-        // =======================================================================
-        {
-          const realActivities = (normalizedActivities || []).filter((a: any) => {
-            const title = (a.title || '').toLowerCase();
-            const category = (a.category || '').toLowerCase();
-            const isLogistics = category === 'transport' || category === 'accommodation' || category === 'downtime' ||
-              title.includes('head to airport') || title.includes('check-in') || title.includes('check-out') ||
-              title.includes('checkout') || title.includes('transfer') || title.includes('arrival at');
-            return !isLogistics;
-          });
-          const minimumRealActivities = isLastDay ? 1 : 2;
-          if (realActivities.length < minimumRealActivities) {
-            console.warn(`[generate-day] ⚠️ Day ${dayNumber} has only ${realActivities.length} real activities (minimum: ${minimumRealActivities}). This day may feel sparse.`);
-          }
-        }
-
-        // =======================================================================
-        // STEP: FINAL CHRONOLOGICAL SORT (Fix 23L)
-        // =======================================================================
-        try {
-          normalizedActivities.sort((a: any, b: any) => {
-            const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-            const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-            return aM - bM;
-          });
-        } catch (sortErr) {
-          console.warn('[final-sort] Non-critical error, skipping:', sortErr);
-        }
-
-
+        // STEP: ENRICH NEW ACTIVITIES (ratings, photos, coordinates)
         // This ensures regenerated activities have the same rich data as initial generation
         // =======================================================================
         const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
@@ -9921,32 +8826,16 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
               }
 
               // 2) Upsert external-id based activities (newly generated)
-              // Split into rows with valid external_id (can upsert) and rows without (must insert)
               let persistedExternal: Array<{ id: string; external_id: string | null; is_locked: boolean | null }> = [];
-              const rowsWithExtId = externalRows.filter((r: any) => r.external_id != null && r.external_id !== '');
-              const rowsWithoutExtId = externalRows.filter((r: any) => r.external_id == null || r.external_id === '');
-
-              if (rowsWithExtId.length > 0) {
+              if (externalRows.length > 0) {
                 const { data, error: extErr } = await supabase
                   .from('itinerary_activities')
-                  .upsert(rowsWithExtId, { onConflict: 'trip_id,itinerary_day_id,external_id' })
+                  .upsert(externalRows, { onConflict: 'trip_id,itinerary_day_id,external_id' })
                   .select('id, external_id, is_locked');
                 if (extErr) {
                   console.error('[generate-day] Failed to upsert external-id activities:', extErr);
                 } else {
                   persistedExternal = (data || []) as any;
-                }
-              }
-
-              if (rowsWithoutExtId.length > 0) {
-                const { data, error: insertErr } = await supabase
-                  .from('itinerary_activities')
-                  .insert(rowsWithoutExtId)
-                  .select('id, external_id, is_locked');
-                if (insertErr) {
-                  console.error('[generate-day] Failed to insert activities without external_id:', insertErr);
-                } else {
-                  persistedExternal = [...persistedExternal, ...((data || []) as any)];
                 }
               }
 
@@ -11114,9 +10003,8 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         totalDays,
       });
 
-      // Retry loop with exponential backoff
-      const maxRetries = 5;
-      let initialChainSuccess = false;
+      // Retry loop with exponential backoff for intermittent 403 errors
+      const maxRetries = 3;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const response = await fetch(generateUrl, {
@@ -11127,36 +10015,14 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             },
             body: initialChainBody,
           });
-          if (response.ok) {
-            initialChainSuccess = true;
-            console.log(`[generate-trip] Initial chain to day ${effectiveStartDay} succeeded on attempt ${attempt}`);
-            break;
-          }
-          const errBody = await response.text().catch(() => '(no body)');
-          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} failed: HTTP ${response.status} — ${errBody.slice(0, 200)}`);
+          if (response.ok || response.status < 500) break;
+          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
         } catch (err) {
           console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} error:`, err);
         }
         if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 3000 * attempt));
+          await new Promise(r => setTimeout(r, 2000 * attempt));
         }
-      }
-
-      if (!initialChainSuccess) {
-        console.error(`[generate-trip] All ${maxRetries} initial chain attempts failed — marking trip as failed`);
-        await supabase.from('trips').update({
-          itinerary_status: 'failed',
-          metadata: {
-            ...existingMeta,
-            generation_error: 'Failed to start day generation after all retries',
-            generation_failed_at: new Date().toISOString(),
-            chain_broken_at_day: 0,
-          },
-        }).eq('id', tripId);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Failed to start generation', code: 'CHAIN_START_FAILED' }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
       }
 
       // Return immediately — generation continues server-side via self-chaining
@@ -11575,8 +10441,8 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           totalDays,
         });
 
-        // Retry loop with exponential backoff
-        const maxRetries = 5;
+        // Retry loop with exponential backoff for intermittent 403 errors
+        const maxRetries = 3;
         let chainSuccess = false;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
@@ -11588,21 +10454,16 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
               },
               body: chainBody,
             });
-            if (response.ok) {
-              // Only 2xx means the next day was actually accepted
+            if (response.ok || response.status < 500) {
               chainSuccess = true;
-              console.log(`[generate-trip-day] Chain to day ${dayNumber + 1} succeeded on attempt ${attempt}`);
               break;
             }
-            // Log the actual status and body for debugging
-            const errBody = await response.text().catch(() => '(no body)');
-            console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} failed: HTTP ${response.status} — ${errBody.slice(0, 200)}`);
+            console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
           } catch (err) {
             console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} error:`, err);
           }
           if (attempt < maxRetries) {
-            // Exponential backoff: 3s, 6s, 9s, 12s
-            await new Promise(r => setTimeout(r, 3000 * attempt));
+            await new Promise(r => setTimeout(r, 2000 * attempt));
           }
         }
         if (!chainSuccess) {
@@ -11630,33 +10491,6 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           } catch (metaErr) {
             console.error('[generate-trip-day] Failed to update chain failure metadata:', metaErr);
           }
-
-          // SELF-HEAL ATTEMPT: Wait briefly and try one final time with a fresh fetch
-          console.log(`[generate-trip-day] Attempting self-heal for day ${dayNumber + 1} after 10s cooldown...`);
-          await new Promise(r => setTimeout(r, 10000));
-          try {
-            const healResp = await fetch(generateUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${serviceKey}`,
-              },
-              body: chainBody,
-            });
-            if (healResp.ok) {
-              console.log(`[generate-trip-day] Self-heal succeeded for day ${dayNumber + 1}`);
-              // Clear the chain_broken metadata since we recovered
-              const { data: healTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
-              const healMeta = (healTrip?.metadata as Record<string, unknown>) || {};
-              delete (healMeta as any).chain_broken_at_day;
-              delete (healMeta as any).chain_error;
-              await supabase.from('trips').update({ metadata: healMeta }).eq('id', tripId);
-            } else {
-              console.error(`[generate-trip-day] Self-heal also failed: HTTP ${healResp.status}`);
-            }
-          } catch (healErr) {
-            console.error(`[generate-trip-day] Self-heal error:`, healErr);
-          }
         }
 
         return new Response(
@@ -11671,38 +10505,22 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
-    } catch (error) {
-      console.error("[generate-itinerary] Error:", error);
+  } catch (error) {
+    console.error("[generate-itinerary] Error:", error);
 
-      // Best-effort: mark trip as failed so the frontend stops showing infinite spinner
-      const failTripId = (typeof params !== 'undefined' && params?.tripId) || earlyTripId;
-      if (failTripId) {
-        try {
-          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-          const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-          const failSupa = createClient(supabaseUrl, supabaseKey);
-          await failSupa.from('trips').update({ itinerary_status: 'failed' }).eq('id', failTripId);
-          console.log(`[generate-itinerary] Marked trip ${failTripId} as failed`);
-        } catch (statusErr) {
-          console.error("[generate-itinerary] Failed to set itinerary_status=failed:", statusErr);
-        }
+    // Best-effort: mark trip as failed so the frontend stops showing infinite spinner
+    try {
+      const failTripId = typeof params === 'object' && params?.tripId;
+      if (failTripId && typeof supabase !== 'undefined') {
+        await supabase.from('trips').update({ itinerary_status: 'failed' }).eq('id', failTripId);
+        console.log(`[generate-itinerary] Marked trip ${failTripId} as failed`);
       }
-
-      return new Response(
-        JSON.stringify({ success: false, error: "Itinerary generation failed", code: "GENERATE_ERROR" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    } catch (statusErr) {
+      console.error("[generate-itinerary] Failed to set itinerary_status=failed:", statusErr);
     }
-  } catch (catastrophicError) {
-    // This catches errors that occur OUTSIDE the inner try/catch,
-    // such as during req.clone(), req.json(), or middleware failures
-    console.error("[generate-itinerary] CATASTROPHIC ERROR (outside main try/catch):", catastrophicError);
+
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Itinerary generation encountered an unexpected error",
-        code: "CATASTROPHIC_ERROR"
-      }),
+      JSON.stringify({ success: false, error: "Itinerary generation failed", code: "GENERATE_ERROR" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

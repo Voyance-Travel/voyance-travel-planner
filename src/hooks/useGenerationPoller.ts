@@ -9,11 +9,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-/** Stale threshold: if no heartbeat for 3 minutes, generation is considered dead */
-const STALE_THRESHOLD_MS = 3 * 60 * 1000;
+/** Stale threshold: if no heartbeat for 5 minutes, generation is considered dead */
+const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 
-/** Stall threshold for itinerary_days: if no new day in 3 minutes */
-const DAY_STALL_THRESHOLD_MS = 3 * 60 * 1000;
+/** Stall threshold for itinerary_days: if no new day in 5 minutes */
+const DAY_STALL_THRESHOLD_MS = 5 * 60 * 1000;
 
 export interface GeneratedDaySummary {
   day_number: number;
@@ -84,7 +84,7 @@ export function useGenerationPoller({
   // Track whether we already fired onStalled / attempted auto-resume
   const stalledFiredRef = useRef(false);
   const autoResumeCountRef = useRef(0);
-  const MAX_AUTO_RESUME_ATTEMPTS = 5;
+  const MAX_AUTO_RESUME_ATTEMPTS = 3;
   // Guard: only fire onReady once per generation cycle
   const onReadyCalledRef = useRef(false);
   // High-water mark: completedDays should never decrease during a generation cycle
