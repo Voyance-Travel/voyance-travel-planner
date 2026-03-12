@@ -8492,6 +8492,7 @@ function ActivityRow({
   swapCapInfo,
   onMove,
   onMoveToDay,
+  onCopyToDay,
   onRemove,
   onTimeEdit,
   onEdit,
