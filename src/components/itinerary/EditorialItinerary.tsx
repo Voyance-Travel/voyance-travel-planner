@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
 import { toFriendlyError } from '@/utils/friendlyErrors';
+import { enrichAttraction, lookupActivityUrl } from '@/services/enrichmentService';
 import { useCredits } from '@/hooks/useCredits';
 import { CREDIT_COSTS, formatCredits } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
@@ -2543,7 +2544,27 @@ export function EditorialItinerary({
     setSwapTarget(null);
     setSwapDrawerActivity(null);
     toast.success('Activity swapped!');
-  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days, syncBudgetFromDays]);
+
+    // Background-enrich the swapped activity to get website/maps link
+    const swappedTitle = newActivity.title;
+    const swappedId = newActivity.id;
+    if (swappedTitle && destination) {
+      Promise.all([
+        lookupActivityUrl(swappedTitle, destination, newActivity.type),
+        enrichAttraction(swappedTitle, destination),
+      ]).then(([urlResult, attractionResult]) => {
+        const website = urlResult?.url || attractionResult?.data?.website || attractionResult?.data?.bookingUrl;
+        if (website) {
+          setDays(prev => prev.map(day => ({
+            ...day,
+            activities: day.activities.map(a =>
+              a.id === swappedId ? { ...a, website: website || a.website } : a
+            ),
+          })));
+        }
+      }).catch(() => { /* enrichment is best-effort */ });
+    }
+  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days, syncBudgetFromDays, destination]);
 
   // Supports both database trips and localStorage demo trips
   useEffect(() => {
@@ -3267,6 +3288,56 @@ export function EditorialItinerary({
     setNeedsOptimization(true);
     toast.success(`Moved to Day ${toDayIndex + 1}`);
   }, [syncBudgetFromDays]);
+
+  // Copy/duplicate activity to a different day
+  const handleCopyToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
+    if (fromDayIndex === toDayIndex) return;
+
+    setDays(prev => {
+      const activity = prev[fromDayIndex]?.activities.find(a => a.id === activityId);
+      if (!activity) return prev;
+
+      const copiedActivity: EditorialActivity = {
+        ...activity,
+        id: `${activity.id}-copy-${Date.now()}`,
+        isLocked: false,
+      };
+
+      const parseTimeToMinutes = (time?: string): number => {
+        if (!time) return Infinity;
+        const match = time.match(/^(\d{1,2}):(\d{2})/);
+        if (!match) return Infinity;
+        let hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const ampm = time.match(/(AM|PM)/i);
+        if (ampm) {
+          const period = ampm[1].toUpperCase();
+          if (period === 'PM' && hours !== 12) hours += 12;
+          if (period === 'AM' && hours === 12) hours = 0;
+        }
+        return hours * 60 + minutes;
+      };
+
+      const activityTime = parseTimeToMinutes(copiedActivity.startTime || copiedActivity.time);
+
+      return prev.map((day, idx) => {
+        if (idx !== toDayIndex) return day;
+        const newActivities = [...day.activities];
+        let insertIndex = newActivities.length;
+        for (let i = 0; i < newActivities.length; i++) {
+          const existingTime = parseTimeToMinutes(newActivities[i].startTime || newActivities[i].time);
+          if (activityTime < existingTime) {
+            insertIndex = i;
+            break;
+          }
+        }
+        newActivities.splice(insertIndex, 0, copiedActivity);
+        return { ...day, activities: newActivities };
+      });
+    });
+    setHasChanges(true);
+    toast.success(`Copied to Day ${toDayIndex + 1}`);
+  }, []);
 
   const handleActivityRemove = useCallback(async (dayIndex: number, activityId: string) => {
     // Save version snapshot before delete for undo
@@ -4960,6 +5031,7 @@ export function EditorialItinerary({
                           onActivityMove={handleActivityMove}
                           onActivityReorder={(reordered) => handleActivityReorder(selectedDayIndex, reordered)}
                           onMoveToDay={handleMoveToDay}
+                          onCopyToDay={handleCopyToDay}
                           onActivityRemove={handleActivityRemove}
                           onDayLock={handleDayLock}
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
@@ -7588,6 +7660,7 @@ interface DayCardProps {
   onActivityLock: (dayIndex: number, activityId: string) => void;
   onActivityMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onMoveToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
+  onCopyToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
   onActivityRemove: (dayIndex: number, activityId: string) => void;
   onActivityReorder?: (activities: EditorialActivity[]) => void; // Drag-and-drop reorder
   onDayLock: (dayIndex: number) => void;
@@ -7651,6 +7724,7 @@ function DayCard({
   onActivityLock,
   onActivityMove,
   onMoveToDay,
+  onCopyToDay,
   onActivityRemove,
   onActivityReorder,
   onDayLock,
@@ -8118,6 +8192,7 @@ function DayCard({
                           swapCapInfo={swapCapInfo}
                           onMove={onActivityMove}
                           onMoveToDay={onMoveToDay}
+                          onCopyToDay={onCopyToDay}
                           onRemove={onActivityRemove}
                           onTimeEdit={onTimeEdit}
                           onEdit={onActivityEdit}
@@ -8163,6 +8238,7 @@ function DayCard({
                         swapCapInfo={swapCapInfo}
                         onMove={onActivityMove}
                         onMoveToDay={onMoveToDay}
+                        onCopyToDay={onCopyToDay}
                         onRemove={onActivityRemove}
                         onTimeEdit={onTimeEdit}
                         onEdit={onActivityEdit}
@@ -8367,6 +8443,7 @@ interface ActivityRowProps {
   swapCapInfo?: { isFree: boolean; usedCount: number; freeRemaining: number; cap: number; creditCost: number; isLoading: boolean };
   onMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onMoveToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
+  onCopyToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
   onRemove: (dayIndex: number, activityId: string) => void;
   onTimeEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
   onEdit: (dayIndex: number, activityIndex: number, activity: EditorialActivity) => void;
@@ -8416,6 +8493,7 @@ function ActivityRow({
   swapCapInfo,
   onMove,
   onMoveToDay,
+  onCopyToDay,
   onRemove,
   onTimeEdit,
   onEdit,
@@ -9261,6 +9339,27 @@ function ActivityRow({
                                 <DropdownMenuItem
                                   key={targetDay}
                                   onClick={() => onMoveToDay(dayIndex, activity.id, targetDay)}
+                                  className="cursor-pointer"
+                                >
+                                  Day {targetDay + 1}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                        </>
+                      )}
+                      {totalDays > 1 && onCopyToDay && (
+                        <>
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger className="gap-2">
+                              <Copy className="h-4 w-4" />
+                              Copy to day
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent className="bg-background border shadow-lg">
+                              {Array.from({ length: totalDays }, (_, i) => i).filter(i => i !== dayIndex).map(targetDay => (
+                                <DropdownMenuItem
+                                  key={targetDay}
+                                  onClick={() => onCopyToDay(dayIndex, activity.id, targetDay)}
                                   className="cursor-pointer"
                                 >
                                   Day {targetDay + 1}
