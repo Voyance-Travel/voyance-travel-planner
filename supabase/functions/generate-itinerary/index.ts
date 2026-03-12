@@ -8882,6 +8882,30 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           }
         }
 
+        // =======================================================================
+        // GAP 5: ARRIVAL DAY TITLE STRIPPING (ported from old path lines 2574-2591)
+        // Strip "Arrival at Airport" / "Baggage Claim" activities on Day 1
+        // These are handled by the Arrival Game Plan UI
+        // =======================================================================
+        if (isFirstDay && normalizedActivities.length > 0) {
+          const beforeArrivalStrip = normalizedActivities.length;
+          normalizedActivities = normalizedActivities.filter((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            const isArrivalActivity =
+              (t.includes('arrival at') && (t.includes('airport') || t.includes('baggage'))) ||
+              t.includes('baggage claim') ||
+              t.includes('airport arrival') ||
+              t.includes('arrive at airport') ||
+              t.includes('land at') ||
+              (a.category === 'transport' && t.includes('airport') && !t.includes('transfer'));
+            return !isArrivalActivity;
+          });
+          const removedArrival = beforeArrivalStrip - normalizedActivities.length;
+          if (removedArrival > 0) {
+            console.log(`[generate-day] Day 1: Stripped ${removedArrival} arrival/baggage activities (handled by Arrival Game Plan UI)`);
+          }
+        }
+
         if (lockedActivities.length > 0) {
           // Remove any generated activities that conflict with locked activity times
           for (const locked of lockedActivities) {
