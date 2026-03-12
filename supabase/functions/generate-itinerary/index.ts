@@ -8250,7 +8250,83 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           compileMs = Date.now() - compileStart;
 
           // Build SerializerContext from existing prompt variables
-          // Fix 22M: Enrich with rich prompt sections from the existing pipeline
+          // Fix 22M + Gap Analysis: Enrich with ALL old-path prompt sections
+          const isFullDay = !isFirstDay && !isLastDay;
+          const dateObj = new Date(date);
+          const DAY_NAMES_SCHEMA = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          const dayOfWeekName = DAY_NAMES_SCHEMA[dateObj.getDay()];
+
+          // Build destination essentials prompt (DB-driven)
+          let schemaDestEssentials = '';
+          try {
+            schemaDestEssentials = await buildDestinationEssentialsPromptWithDB(
+              supabase, resolvedDestination, totalDays, effectiveIsFirstTimeVisitor, PERPLEXITY_API_KEY
+            ) || buildDestinationEssentialsPrompt(resolvedDestination, totalDays, effectiveIsFirstTimeVisitor);
+          } catch (e) {
+            console.warn('[schema-generation] Destination essentials fetch failed:', e);
+          }
+
+          // Build banned experience types
+          const schemaBannedTypes: string[] = [];
+          if (previousDayActivities?.length > 0) {
+            const prevTitles = previousDayActivities.map((t: string) => t.toLowerCase());
+            if (prevTitles.some((t: string) => /\b(class|workshop|lesson|masterclass)\b/.test(t) && /\b(cook|bake|pastry|culinary|food)\b/.test(t))) {
+              schemaBannedTypes.push('cooking classes', 'baking classes', 'culinary workshops', 'pastry classes', 'food classes');
+            }
+            if (prevTitles.some((t: string) => /\b(wine|tasting|vineyard)\b/.test(t))) {
+              schemaBannedTypes.push('wine tastings', 'vineyard tours', 'winery visits');
+            }
+          }
+
+          // Build multi-city context
+          let schemaMultiCityContext = '';
+          if (resolvedIsMultiCity) {
+            const dayCity = multiCityDayMap?.[dayNumber - 1];
+            if (dayCity) {
+              const cityFirstTime = firstTimePerCity?.[resolvedDestination] ?? effectiveIsFirstTimeVisitor;
+              const visitorLabel = cityFirstTime ? 'FIRST-TIME visitor' : 'RETURNING visitor';
+              schemaMultiCityContext = `🌍 This day is in **${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}**. ALL activities MUST be located in ${resolvedDestination}.\n👤 VISITOR STATUS: Traveler is a ${visitorLabel}.${cityFirstTime ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems and local favorites.'}`;
+              if (dayCity.hotelName) {
+                schemaMultiCityContext += `\n🏨 ACCOMMODATION: ${dayCity.hotelName}${dayCity.hotelAddress ? ` (${dayCity.hotelAddress})` : ''}. Start/end each day near the hotel.`;
+              }
+            }
+          }
+
+          // Build venue hours context
+          let venueHoursContext = '';
+          try {
+            const { data: venueRows } = await supabase
+              .from('verified_venues')
+              .select('name, opening_hours')
+              .ilike('destination', `%${resolvedDestination.split(',')[0].trim()}%`)
+              .not('opening_hours', 'is', null)
+              .limit(40);
+            if (venueRows?.length) {
+              const relevantHours = venueRows
+                .map((v: any) => {
+                  const entry = v.opening_hours?.find((h: string) => h.toLowerCase().startsWith(dayOfWeekName.toLowerCase()));
+                  return entry ? `  • ${v.name}: ${entry}` : null;
+                })
+                .filter(Boolean)
+                .slice(0, 30);
+              if (relevantHours.length > 0) {
+                venueHoursContext = `📋 KNOWN VENUE HOURS FOR ${dayOfWeekName.toUpperCase()} (MUST RESPECT):\n${relevantHours.join('\n')}`;
+              }
+            }
+          } catch (e) {
+            console.warn('[schema-generation] Venue hours fetch failed:', e);
+          }
+
+          // Budget-down rewrite detection
+          let budgetDownRewrite = '';
+          const focusText = (preferences?.dayFocus || preferences?.rewriteInstructions || '').toLowerCase();
+          if (/cheap|budget|afford|save money|less expensive|lower cost|reduce.*cost|cut.*spending|frugal/i.test(focusText) && currentActivities?.length) {
+            const currentCosts = currentActivities.map((a: any) => a.cost?.amount ?? a.estimatedCost ?? 0);
+            const maxCurrent = Math.max(...currentCosts);
+            const avgCurrent = currentCosts.reduce((s: number, c: number) => s + c, 0) / (currentCosts.length || 1);
+            budgetDownRewrite = `🚨 BUDGET-DOWN REWRITE — HARD CONSTRAINT:\nThe user explicitly asked for CHEAPER options. Every replacement MUST cost LESS.\nCurrent avg: ~$${Math.round(avgCurrent)}. Max: ~$${Math.round(maxCurrent)}.\nTarget: BELOW $${Math.round(avgCurrent * 0.5)} per activity. Prefer FREE alternatives.`;
+          }
+
           const serializerContext = {
             archetypeDescription: archetypeContext?.promptBlocks?.persona || `Archetype: ${primaryArchetype}`,
             archetypeAvoidList: archetypeContext?.definition?.avoidList || profile.avoidList || [],
@@ -8262,7 +8338,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             budgetConstraints: actualDailyBudgetPerPerson != null
               ? `Hard cap: ~$${actualDailyBudgetPerPerson}/day per person`
               : '',
-            // Fix 22M: Wire rich prompt sections instead of empty strings
             bookingRules: `When to mark bookingRequired: true:
 - Restaurants with limited seating (fine dining, omakase, tasting menus)
 - Popular attractions with timed-entry tickets
@@ -8313,18 +8388,31 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             voyancePicks: voyancePicksPrompt || undefined,
             tripTypeContext: tripTypePrompt || undefined,
             collaboratorAttribution: collaboratorAttributionPrompt || undefined,
+
+            // === Gap Analysis Fix: New fields ported from old path ===
+            generationHierarchy: generationHierarchy || undefined,
+            timingInstructions: timingInstructions || undefined,
+            destinationEssentials: schemaDestEssentials || undefined,
+            activityCountLimits: `ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} per day (HARD LIMITS). ⚠️ MINIMUM ${minActivitiesFromArchetype} activities required. Going UNDER = FAILURE. Going OVER ${maxActivitiesFromArchetype} = FAILURE.`,
+            dayOfWeek: dayOfWeekName,
+            isFullDay,
+            travelerCount: travelers || 1,
+            dailyBudgetPerPerson: actualDailyBudgetPerPerson,
+            isSmartFinish: !!isSmartFinish || !!smartFinishRequested,
+            budgetDownRewrite: budgetDownRewrite || undefined,
+            bannedExperienceTypes: schemaBannedTypes.length > 0
+              ? `🚫 BANNED (already done on previous days — DO NOT INCLUDE): ${schemaBannedTypes.join(', ')}`
+              : undefined,
+            multiCityContext: schemaMultiCityContext || undefined,
+            operatingHoursContext: venueHoursContext || undefined,
           };
 
           const serialized = serializeSchemaToPrompt(compiledSchema, serializerContext);
           finalSystemPrompt = serialized.systemPrompt;
           finalUserPrompt = serialized.userPrompt;
 
-          // Fix 22M: Append rich prompt sections that aren't part of the schema serializer yet
-          // These are injected directly since they're free-form prompt text from the existing pipeline
+          // Append locked slots + voyance picks as raw sections (already structured in serializer but these have special formatting)
           const richSections: string[] = [];
-          if (transportPreferencePrompt) richSections.push(transportPreferencePrompt);
-          if (voyancePicksPrompt) richSections.push(voyancePicksPrompt);
-          if (collaboratorAttributionPrompt) richSections.push(collaboratorAttributionPrompt);
           if (lockedActivities.length > 0) richSections.push(lockedSlotsInstruction);
           if (richSections.length > 0) {
             finalSystemPrompt += '\n\n' + richSections.join('\n\n');
