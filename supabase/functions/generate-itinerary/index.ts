@@ -9919,16 +9919,32 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
               }
 
               // 2) Upsert external-id based activities (newly generated)
+              // Split into rows with valid external_id (can upsert) and rows without (must insert)
               let persistedExternal: Array<{ id: string; external_id: string | null; is_locked: boolean | null }> = [];
-              if (externalRows.length > 0) {
+              const rowsWithExtId = externalRows.filter((r: any) => r.external_id != null && r.external_id !== '');
+              const rowsWithoutExtId = externalRows.filter((r: any) => r.external_id == null || r.external_id === '');
+
+              if (rowsWithExtId.length > 0) {
                 const { data, error: extErr } = await supabase
                   .from('itinerary_activities')
-                  .upsert(externalRows, { onConflict: 'trip_id,itinerary_day_id,external_id' })
+                  .upsert(rowsWithExtId, { onConflict: 'trip_id,itinerary_day_id,external_id' })
                   .select('id, external_id, is_locked');
                 if (extErr) {
                   console.error('[generate-day] Failed to upsert external-id activities:', extErr);
                 } else {
                   persistedExternal = (data || []) as any;
+                }
+              }
+
+              if (rowsWithoutExtId.length > 0) {
+                const { data, error: insertErr } = await supabase
+                  .from('itinerary_activities')
+                  .insert(rowsWithoutExtId)
+                  .select('id, external_id, is_locked');
+                if (insertErr) {
+                  console.error('[generate-day] Failed to insert activities without external_id:', insertErr);
+                } else {
+                  persistedExternal = [...persistedExternal, ...((data || []) as any)];
                 }
               }
 
