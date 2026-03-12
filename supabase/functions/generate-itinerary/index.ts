@@ -278,6 +278,8 @@ interface MultiCityDayInfo {
   hotelName?: string;
   hotelAddress?: string;
   hotelNeighborhood?: string;
+  hotelCheckIn?: string;
+  hotelCheckOut?: string;
   isFirstDayInCity?: boolean;
   isLastDayInCity?: boolean;
 }
