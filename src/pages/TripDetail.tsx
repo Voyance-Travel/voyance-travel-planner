@@ -2339,6 +2339,13 @@ export default function TripDetail() {
                               }
                             }
 
+                            // --- Inject flight arrival/departure activities ---
+                            const flightRaw = updatedTrip.flight_selection;
+                            if (flightRaw) {
+                              const destination = updatedTrip.destination as string | undefined;
+                              injectedDays = injectFlightActivitiesIntoDays(injectedDays as any[], flightRaw, destination) as typeof injectedDays;
+                            }
+
                             // Save injected days back if they changed
                             if (JSON.stringify(injectedDays) !== JSON.stringify(currentDays)) {
                               const newItData = { ...(itData || {}), days: injectedDays, savedAt: new Date().toISOString() };
