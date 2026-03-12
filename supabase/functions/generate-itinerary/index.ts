@@ -6412,67 +6412,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
         console.log(`[generate-day] ✓ Using authenticated userId: ${userId} (no tripId to verify)`);
       }
 
-        // =======================================================================
-        // STEP: FINAL CHRONOLOGICAL SORT + TRANSPORT→VENUE LOGICAL ORDER (Fix 23L)
-        // =======================================================================
-        try {
-          // Step A: Sort by startTime
-          normalizedActivities.sort((a: any, b: any) => {
-            const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-            const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-            return aM - bM;
-          });
-
-          // Step B: Detect transport→venue pairs where venue starts BEFORE its transport
-          const TRANSPORT_PATTERNS = /^(transport|transfer|taxi|uber|ride|drive|car|shuttle|lirr|metro|subway|bus)\s+(to|from)/i;
-          let reorderFixes = 0;
-
-          for (let i = 0; i < normalizedActivities.length; i++) {
-            const act = normalizedActivities[i];
-            const isTransport = TRANSPORT_PATTERNS.test(act.title || '') ||
-              (act.category || '').toLowerCase() === 'transport';
-            if (!isTransport) continue;
-
-            const title = (act.title || '').toLowerCase();
-            const toMatch = title.match(/(?:to|towards?)\s+(.+)/i);
-            if (!toMatch) continue;
-            const transportDest = toMatch[1].trim();
-
-            for (let j = 0; j < i; j++) {
-              const venue = normalizedActivities[j];
-              const venueTitle = (venue.title || '').toLowerCase();
-              const venueLoc = typeof venue.location === 'string'
-                ? venue.location.toLowerCase()
-                : (venue.location?.name || '').toLowerCase();
-
-              if (!venueTitle.includes(transportDest) && !venueLoc.includes(transportDest)) continue;
-
-              const transportEnd = parseTimeToMinutes(act.endTime || act.startTime || '00:00');
-              if (transportEnd !== null) {
-                const venueDuration = (parseTimeToMinutes(venue.endTime || '00:00') ?? 0) -
-                  (parseTimeToMinutes(venue.startTime || '00:00') ?? 0);
-                venue.startTime = act.endTime || act.startTime;
-                if (venueDuration > 0) {
-                  venue.endTime = minutesToTime(transportEnd + Math.max(venueDuration, 60));
-                }
-                reorderFixes++;
-                console.log(`[chronological-fix] Moved "${venue.title}" to start after "${act.title}" (${venue.startTime})`);
-              }
-              break;
-            }
-          }
-
-          if (reorderFixes > 0) {
-            normalizedActivities.sort((a: any, b: any) => {
-              const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-              const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-              return aM - bM;
-            });
-            console.log(`[chronological-fix] Fixed ${reorderFixes} transport→venue ordering issues`);
-          }
-        } catch (chronErr) {
-          console.warn(`[chronological-fix] Non-critical error, skipping:`, chronErr);
-        }
+        // (Fix 23L: misplaced sort removed — moved to post-buffer-enforcement step)
 
 
       // =======================================================================
