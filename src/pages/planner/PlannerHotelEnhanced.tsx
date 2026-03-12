@@ -524,9 +524,20 @@ export default function PlannerHotelEnhanced() {
 
     // Immediately save to database (incremental persistence)
     try {
-      const tripId = await saveTrip();
-      if (tripId) {
-        // Hotel selection saved to database
+      if (isMultiCity && multiCityCityId) {
+        // Multi-city: save to the specific trip_cities row, not trips.hotel_selection
+        const pricePerNight = room?.pricePerNight || hotel.pricePerNight || 0;
+        await updateCityHotel(
+          multiCityCityId,
+          hotelSelection as Record<string, unknown>,
+          Math.round(pricePerNight * 100)
+        );
+      } else {
+        // Single-city: save via TripPlannerContext (writes to trips.hotel_selection)
+        const tripId = await saveTrip();
+        if (tripId) {
+          // Hotel selection saved to database
+        }
       }
     } catch (err) {
       console.warn('[PlannerHotel] Incremental save failed:', err);
