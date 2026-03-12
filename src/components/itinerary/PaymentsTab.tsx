@@ -401,20 +401,24 @@ export function PaymentsTab({
     return items;
   }, [flightSelection, hotelSelection, days, payments]);
 
-  // ─── Canonical totals from activity_costs table (single source of truth) ───
+  // ─── Canonical totals from activity_costs table + budget ledger ───
   const [canonicalSummary, setCanonicalSummary] = useState<PaymentsSummary | null>(null);
   const [ledgerPlannedCents, setLedgerPlannedCents] = useState<number | null>(null);
+  const [ledgerCommittedCents, setLedgerCommittedCents] = useState<number | null>(null);
   const fetchSummary = useCallback(async () => {
     const [summary] = await Promise.all([
       getPaymentsSummary(tripId),
       supabase
         .from('trip_budget_summary')
-        .select('planned_total_cents')
+        .select('planned_total_cents, total_committed_cents')
         .eq('trip_id', tripId)
         .maybeSingle()
         .then(({ data }) => {
           if (data?.planned_total_cents) {
             setLedgerPlannedCents(data.planned_total_cents);
+          }
+          if ((data as any)?.total_committed_cents) {
+            setLedgerCommittedCents((data as any).total_committed_cents);
           }
         }),
     ]);
@@ -423,16 +427,25 @@ export function PaymentsTab({
 
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
-  // Calculate totals — prefer ledger planned total (same source as Budget tab),
-  // then canonical view, then JS fallback
+  // Calculate totals using payableItems as the single source of truth.
+  // This ensures the total always matches what the user sees in the list
+  // (which correctly includes flights, hotels, AND activities).
   const fallbackTotal = payableItems.reduce((sum, item) => sum + item.amountCents, 0);
-  const estimatedTotal = ledgerPlannedCents && ledgerPlannedCents > 0
-    ? ledgerPlannedCents
-    : canonicalSummary
-      ? Math.round((canonicalSummary.total_estimated_usd || 0) * 100)
-      : fallbackTotal;
-  const paidAmount = canonicalSummary
+  const estimatedTotal = fallbackTotal;
+
+  // For paid amount: prefer canonical summary for activity costs,
+  // but add in any paid flights/hotels/manual items from trip_payments
+  const activityPaidAmount = canonicalSummary
     ? Math.round((canonicalSummary.total_paid_usd || 0) * 100)
+    : 0;
+  const essentialPaidAmount = payableItems
+    .filter(item => (item.type === 'flight' || item.type === 'hotel') && item.payment?.status === 'paid')
+    .reduce((sum, item) => sum + item.amountCents, 0);
+  const manualPaidAmount = payableItems
+    .filter(item => item.id.startsWith('manual-') && item.payment?.status === 'paid')
+    .reduce((sum, item) => sum + item.amountCents, 0);
+  const paidAmount = canonicalSummary
+    ? activityPaidAmount + essentialPaidAmount + manualPaidAmount
     : payableItems
         .filter(item => item.payment?.status === 'paid')
         .reduce((sum, item) => sum + item.amountCents, 0);

@@ -394,6 +394,43 @@ export function ItineraryAssistant({
               queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
             })
             .catch(err => console.error('[ItineraryAssistant] Budget sync failed:', err));
+
+          // Also sync to activity_costs table for payments tracking
+          import('@/services/activityCostService').then(({ syncActivitiesToCostTable }) => {
+            const activitiesForCostTable: Array<{
+              id: string;
+              dayNumber: number;
+              category: string;
+              costPerPersonUsd: number;
+              numTravelers?: number;
+              source?: string;
+            }> = [];
+
+            for (const day of sortedDays) {
+              for (const act of day.activities) {
+                const costVal = act.cost
+                  ? (typeof act.cost === 'number'
+                    ? act.cost
+                    : (act.cost as any).amount || (act.cost as any).total || (act.cost as any).perPerson || 0)
+                  : 0;
+                if (costVal > 0) {
+                  activitiesForCostTable.push({
+                    id: act.id,
+                    dayNumber: day.dayNumber,
+                    category: String(act.category || act.type || 'activities'),
+                    costPerPersonUsd: costVal,
+                    numTravelers: 1,
+                    source: 'chat-sync',
+                  });
+                }
+              }
+            }
+
+            if (activitiesForCostTable.length > 0) {
+              syncActivitiesToCostTable(tripId, activitiesForCostTable)
+                .catch(err => console.error('[ItineraryAssistant] Activity cost sync failed:', err));
+            }
+          });
         }
 
         toast.success('Action applied', {

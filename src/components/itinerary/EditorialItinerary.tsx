@@ -1234,8 +1234,20 @@ export function EditorialItinerary({
     if (!budgetSyncedRef.current && rawDays.length > 0 && tripId) {
       budgetSyncedRef.current = true;
       syncBudgetFromDays(rawDays);
+
+      // Also ensure flight/hotel committed costs are in the budget ledger
+      import('@/services/budgetLedgerSync').then(({ syncFlightToLedger, syncHotelToLedger }) => {
+        if (flightSelection) {
+          syncFlightToLedger(tripId, flightSelection)
+            .catch(err => console.error('[EditorialItinerary] Flight ledger sync failed:', err));
+        }
+        if (hotelSelection) {
+          syncHotelToLedger(tripId, hotelSelection)
+            .catch(err => console.error('[EditorialItinerary] Hotel ledger sync failed:', err));
+        }
+      });
     }
-  }, [rawDays.length, tripId, syncBudgetFromDays]);
+  }, [rawDays.length, tripId, syncBudgetFromDays, flightSelection, hotelSelection]);
 
   // Inject synthetic travel activity cards on transition days:
   // Check-out → Head to transport → Transport (seat/ticket) → Arrival → Check-in
