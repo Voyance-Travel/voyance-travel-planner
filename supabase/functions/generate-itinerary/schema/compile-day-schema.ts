@@ -178,6 +178,9 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
 
   const resolvedSlots = resolveConflicts(filledSlots, groupConfig);
 
+  // Sort slots chronologically by actual time
+  const sortedSlots = sortSlotsByTime(resolvedSlots);
+
   const schema: DaySchema = {
     dayNumber: input.dayNumber,
     dayType,
@@ -185,7 +188,7 @@ export function compileDaySchema(input: CompilerInput): DaySchema {
     archetypeName: input.archetypeName,
     destination: input.destination,
     date: input.date,
-    slots: resolvedSlots,
+    slots: sortedSlots,
     constraints: {
       dayStartTime: groupConfig.dayStartTime,
       dayEndTime: groupConfig.dayEndTime,
@@ -287,4 +290,19 @@ function toHHMM(decimalHour: number): string {
   const h = Math.floor(decimalHour);
   const m = Math.round((decimalHour - h) * 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function sortSlotsByTime(slots: DaySlot[]): DaySlot[] {
+  const getSlotTime = (slot: DaySlot): number => {
+    if (slot.status === 'filled' && slot.filledData?.startTime) {
+      return parseHour(slot.filledData.startTime);
+    }
+    if (slot.timeWindow?.earliest) {
+      return parseHour(slot.timeWindow.earliest);
+    }
+    return 99;
+  };
+
+  const sorted = [...slots].sort((a, b) => getSlotTime(a) - getSlotTime(b));
+  return sorted.map((slot, idx) => ({ ...slot, position: idx }));
 }

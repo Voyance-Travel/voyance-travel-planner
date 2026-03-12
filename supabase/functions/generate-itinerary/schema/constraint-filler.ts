@@ -79,28 +79,80 @@ export function fillFlightAndHotelSlots(
     });
   }
 
-  // Fill hotel check-in slot
+  // Fill hotel check-in slot — time-aware based on must-dos
   if (input.hotel) {
-    filled = filled.map(slot => {
-      if (slot.slotType === 'hotel_checkin') {
-        const checkInTime = input.hotel!.checkInTime || '15:00';
-        return {
-          ...slot,
-          status: 'filled' as const,
-          filledData: {
-            title: `Check in at ${input.hotel!.name}`,
-            category: 'hotel',
-            startTime: checkInTime,
-            endTime: addMinutes(checkInTime, 30),
-            location: input.hotel!.address,
-            cost: 0,
-            source: 'hotel_data' as const,
-            notes: 'Check in and freshen up.',
-          },
-        };
-      }
-      return slot;
+    const checkInTime = input.hotel.checkInTime || '15:00';
+    const checkInMinutes = parseTimeToMinutes(checkInTime);
+
+    const earlyMustDo = input.mustDos?.find(md => {
+      if (!md.startTime) return false;
+      return parseTimeToMinutes(md.startTime) < checkInMinutes;
     });
+
+    if (earlyMustDo && effectiveArrival) {
+      const transportEndTime = addMinutes(effectiveArrival.arrivalTime, 60);
+      filled = filled.map(slot => {
+        if (slot.slotType === 'hotel_checkin') {
+          return {
+            ...slot,
+            status: 'filled' as const,
+            filledData: {
+              title: `Bag drop at ${input.hotel!.name}`,
+              category: 'hotel',
+              startTime: transportEndTime,
+              endTime: addMinutes(transportEndTime, 15),
+              location: input.hotel!.address,
+              cost: 0,
+              source: 'hotel_data' as const,
+              notes: 'Quick bag drop at the bell desk — full check-in later today.',
+            },
+          };
+        }
+        return slot;
+      });
+
+      const mustDoEnd = earlyMustDo.endTime ? parseTimeToMinutes(earlyMustDo.endTime) : checkInMinutes;
+      const deferredTime = minutesToTime(Math.max(checkInMinutes, mustDoEnd + 15));
+      const deferredSlot: DaySlot = {
+        slotId: 'hotel_checkin_deferred',
+        slotType: 'hotel_checkin',
+        status: 'filled',
+        required: true,
+        position: filled.length,
+        timeWindow: null,
+        filledData: {
+          title: `Check in at ${input.hotel!.name}`,
+          category: 'hotel',
+          startTime: deferredTime,
+          endTime: addMinutes(deferredTime, 30),
+          location: input.hotel!.address,
+          cost: 0,
+          source: 'hotel_data' as const,
+          notes: 'Full check-in and freshen up.',
+        },
+      };
+      filled.push(deferredSlot);
+    } else {
+      filled = filled.map(slot => {
+        if (slot.slotType === 'hotel_checkin') {
+          return {
+            ...slot,
+            status: 'filled' as const,
+            filledData: {
+              title: `Check in at ${input.hotel!.name}`,
+              category: 'hotel',
+              startTime: checkInTime,
+              endTime: addMinutes(checkInTime, 30),
+              location: input.hotel!.address,
+              cost: 0,
+              source: 'hotel_data' as const,
+              notes: 'Check in and freshen up.',
+            },
+          };
+        }
+        return slot;
+      });
+    }
   }
 
   // Fill hotel checkout slot (departure day)

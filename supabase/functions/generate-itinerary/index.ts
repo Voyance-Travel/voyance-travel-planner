@@ -8870,8 +8870,11 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           const isDiningActivity = (act: any) => {
             const cat = (act.category || '').toLowerCase();
             const title = (act.title || '').toLowerCase();
+            const desc = (act.description || '').toLowerCase();
             if (cat === 'dining' || cat === 'restaurant' || cat === 'food') return true;
-            if (/\b(dinner|lunch|breakfast|brunch|bistro|steakhouse|trattoria|restaurant|café|eatery)\b/i.test(title)) return true;
+            // Also catch dining mis-categorized as 'activity' or other categories
+            if (/\b(dinner|lunch|breakfast|brunch|bistro|steakhouse|trattoria|restaurant|café|eatery|dining|supper|pizzeria|brasserie|tavern|gastropub|food\s*hall|food\s*market)\b/i.test(title)) return true;
+            if (/\b(dinner|lunch|breakfast|brunch|restaurant|dining|supper)\b/i.test(desc)) return true;
             return false;
           };
 
