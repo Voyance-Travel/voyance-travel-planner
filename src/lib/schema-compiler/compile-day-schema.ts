@@ -351,3 +351,22 @@ function toHHMM(decimalHour: number): string {
   const m = Math.round((decimalHour - h) * 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
+
+/**
+ * Sort slots by their actual time (filled startTime or timeWindow.earliest).
+ * This ensures the AI sees the day in chronological order, not insertion order.
+ */
+function sortSlotsByTime(slots: DaySlot[]): DaySlot[] {
+  const getSlotTime = (slot: DaySlot): number => {
+    if (slot.status === 'filled' && slot.filledData?.startTime) {
+      return parseHour(slot.filledData.startTime);
+    }
+    if (slot.timeWindow?.earliest) {
+      return parseHour(slot.timeWindow.earliest);
+    }
+    return 99; // no time info → push to end
+  };
+
+  const sorted = [...slots].sort((a, b) => getSlotTime(a) - getSlotTime(b));
+  return sorted.map((slot, idx) => ({ ...slot, position: idx }));
+}

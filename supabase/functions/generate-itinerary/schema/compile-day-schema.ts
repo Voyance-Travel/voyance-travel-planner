@@ -291,3 +291,18 @@ function toHHMM(decimalHour: number): string {
   const m = Math.round((decimalHour - h) * 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
+
+function sortSlotsByTime(slots: DaySlot[]): DaySlot[] {
+  const getSlotTime = (slot: DaySlot): number => {
+    if (slot.status === 'filled' && slot.filledData?.startTime) {
+      return parseHour(slot.filledData.startTime);
+    }
+    if (slot.timeWindow?.earliest) {
+      return parseHour(slot.timeWindow.earliest);
+    }
+    return 99;
+  };
+
+  const sorted = [...slots].sort((a, b) => getSlotTime(a) - getSlotTime(b));
+  return sorted.map((slot, idx) => ({ ...slot, position: idx }));
+}

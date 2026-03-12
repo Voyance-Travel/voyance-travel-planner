@@ -150,17 +150,23 @@ SUGGESTED items: These are recommendations for the flow of the day. Fill them wi
 - Skip an optional suggestion if the day is already full
 - But do NOT skip required meals (breakfast, lunch, dinner) — every day needs proper meals at sensible times
 
-OUTPUT FORMAT — every activity must include:
+OUTPUT FORMAT — every activity must include these fields (use EXACTLY this structure):
 - id (unique string)
 - title (specific real place name — never generic like "A Restaurant" or "Afternoon Activity")
-- startTime and endTime (HH:MM format)
-- category (dining, sightseeing, entertainment, nightlife, relaxation, shopping, transport, hotel, arrival, departure, free_time)
-- location (real address or well-known location name)
-- cost (number, per person, in USD)
+- startTime and endTime (HH:MM 24-hour format)
+- category (one of: "sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity")
+  • Use "dining" for ALL meals, restaurants, cafés, food halls, brunch spots
+  • Use "accommodation" for hotel check-in, check-out, bag drops
+  • Use "transport" for taxis, trains, airport transfers
+  • Use "activity" for generic activities, tours, shows, nightlife, entertainment
+  • Use "cultural" for museums, galleries, historical sites, temples
+- location: { name: "Place Name", address: "Full street address" }
+- cost: { amount: number, currency: "USD", basis: "per_person" | "flat" | "per_room" }
+  • amount is per person in USD. Use 0 for free activities.
 - bookingRequired (boolean)
-- personalization (1-2 sentences explaining why this fits the traveler)
+- personalization: { tags: ["tag1", "tag2"], whyThisFits: "1-2 sentences why this fits the traveler", confidence: 0.0-1.0, matchedInputs: ["input1"] }
 - tips (1-2 practical, specific tips — real local knowledge, not generic advice)
-- crowdLevel (low, moderate, high)
+- crowdLevel ("low", "moderate", or "high")
 - isHiddenGem (boolean)
 - hasTimingHack (boolean)
 
