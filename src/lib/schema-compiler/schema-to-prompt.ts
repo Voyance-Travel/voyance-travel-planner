@@ -275,12 +275,11 @@ ${ctx.hiddenGemInstructions}`);
 
 /**
  * Build the user prompt — the schema with slots to fill.
- * This REPLACES the existing ~16 user prompt sections.
  */
 function buildUserPrompt(schema: DaySchema): string {
   const lines: string[] = [];
 
-  lines.push(`Fill this schema for Day ${schema.dayNumber} in ${schema.destination} on ${schema.date}.`);
+  lines.push(`Plan Day ${schema.dayNumber} in ${schema.destination} on ${schema.date}.`);
 
   if (schema.dayType === 'transition') {
     lines.push('');
@@ -288,6 +287,7 @@ function buildUserPrompt(schema: DaySchema): string {
   }
 
   lines.push('');
+  lines.push(`Here's the suggested structure. CONFIRMED items are locked (real bookings/flight data). SUGGESTED items are yours to fill with great, specific recommendations. Use common sense — if the order below doesn't work for this traveler's situation, adjust it.`);
   lines.push('');
 
   for (const slot of schema.slots) {
@@ -296,9 +296,7 @@ function buildUserPrompt(schema: DaySchema): string {
   }
 
   lines.push('');
-  lines.push(`Return a JSON array of ALL ${schema.slots.length} slots (both filled and empty-now-filled) in order, using the create_day_itinerary tool.`);
-  lines.push('');
-  lines.push('IMPORTANT: Return EXACTLY the same number of activities as there are slots. Do not add extra activities. Do not skip slots.');
+  lines.push(`Return ALL activities for this day as a JSON array using the create_day_itinerary tool. Include every CONFIRMED item exactly as shown, plus your recommendations for the SUGGESTED slots. Activities must be in chronological order.`);
 
   return lines.join('\n');
 }
@@ -310,45 +308,35 @@ function serializeSlot(slot: DaySlot): string {
   const lines: string[] = [];
 
   const typeLabel = slot.mealType
-    ? `${slot.slotType.toUpperCase()}: ${slot.mealType.toUpperCase()}`
-    : slot.slotType.toUpperCase();
-
-  lines.push(`SLOT ${slot.position}: [${typeLabel}] — ${slot.status.toUpperCase()}`);
+    ? `${slot.slotType} (${slot.mealType})`
+    : slot.slotType;
 
   if (slot.status === 'filled' && slot.filledData) {
-    lines.push('  LOCKED — DO NOT MODIFY');
-    lines.push(`  Title: ${slot.filledData.title}`);
-    lines.push(`  Time: ${slot.filledData.startTime} - ${slot.filledData.endTime}`);
-    lines.push(`  Category: ${slot.filledData.category}`);
+    lines.push(`${slot.position + 1}. [CONFIRMED] ${typeLabel}`);
+    lines.push(`   ${slot.filledData.title}`);
+    lines.push(`   Time: ${slot.filledData.startTime} - ${slot.filledData.endTime}`);
+    lines.push(`   Category: ${slot.filledData.category}`);
     if (slot.filledData.location) {
-      lines.push(`  Location: ${slot.filledData.location}`);
+      lines.push(`   Location: ${slot.filledData.location}`);
     }
     if (slot.filledData.cost !== undefined) {
-      lines.push(`  Cost: $${slot.filledData.cost}`);
-    }
-    if (slot.filledData.source === 'must_do') {
-      lines.push('  ⚠ [SYSTEM-INSTRUCTION] This is the traveler\'s must-do. Preserve the title, time, and location exactly as given.');
+      lines.push(`   Cost: $${slot.filledData.cost}`);
     }
     if (slot.filledData.notes) {
-      lines.push(`  Notes: ${slot.filledData.notes}`);
+      lines.push(`   ${slot.filledData.notes}`);
     }
   } else {
-    lines.push('  FILL THIS SLOT');
-    lines.push(`  Type: ${typeLabel}`);
+    const reqLabel = slot.required ? '' : ' (optional)';
+    lines.push(`${slot.position + 1}. [SUGGESTED] ${typeLabel}${reqLabel}`);
     if (slot.timeWindow) {
-      lines.push(`  Time window: ${slot.timeWindow.earliest} - ${slot.timeWindow.latest}`);
-      lines.push(`  Duration: ${slot.timeWindow.duration.min}-${slot.timeWindow.duration.max} minutes`);
-    }
-    if (slot.required) {
-      lines.push('  Required: YES — this slot must be filled');
-    } else {
-      lines.push('  Required: OPTIONAL — fill if the day has room');
+      lines.push(`   Suggested time: ${slot.timeWindow.earliest} - ${slot.timeWindow.latest}`);
+      lines.push(`   Duration: ${slot.timeWindow.duration.min}-${slot.timeWindow.duration.max} min`);
     }
     if (slot.aiInstruction) {
-      lines.push(`  Instruction: ${slot.aiInstruction}`);
+      lines.push(`   ${slot.aiInstruction}`);
     }
     if (slot.mealInstruction) {
-      lines.push(`  Meal guidance: ${slot.mealInstruction}`);
+      lines.push(`   ${slot.mealInstruction}`);
     }
   }
 
