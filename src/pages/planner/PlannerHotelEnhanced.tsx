@@ -524,13 +524,16 @@ export default function PlannerHotelEnhanced() {
     // Immediately save to database (incremental persistence)
     try {
       if (isMultiCity && multiCityCityId) {
-        // Multi-city: save to the specific trip_cities row, not trips.hotel_selection
+        // Multi-city: save to the specific trip_cities row as an array (consistent with AddBookingInline)
         const pricePerNight = room?.pricePerNight || hotel.pricePerNight || 0;
-        await updateCityHotel(
-          multiCityCityId,
-          hotelSelection as Record<string, unknown>,
-          Math.round(pricePerNight * 100)
-        );
+        const hotelArray = [hotelSelection];
+        await supabase
+          .from('trip_cities')
+          .update({
+            hotel_selection: JSON.parse(JSON.stringify(hotelArray)),
+            hotel_cost_cents: Math.round(pricePerNight * 100),
+          } as any)
+          .eq('id', multiCityCityId);
       } else {
         // Single-city: save via TripPlannerContext (writes to trips.hotel_selection)
         const tripId = await saveTrip();
