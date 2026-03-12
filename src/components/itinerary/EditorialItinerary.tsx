@@ -2544,7 +2544,27 @@ export function EditorialItinerary({
     setSwapTarget(null);
     setSwapDrawerActivity(null);
     toast.success('Activity swapped!');
-  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days, syncBudgetFromDays]);
+
+    // Background-enrich the swapped activity to get website/maps link
+    const swappedTitle = newActivity.title || newActivity.name;
+    const swappedId = newActivity.id;
+    if (swappedTitle && destination) {
+      Promise.all([
+        lookupActivityUrl(swappedTitle, destination, newActivity.type),
+        enrichAttraction(swappedTitle, destination),
+      ]).then(([urlResult, attractionResult]) => {
+        const website = urlResult?.url || attractionResult?.data?.website || attractionResult?.data?.bookingUrl;
+        if (website) {
+          setDays(prev => prev.map(day => ({
+            ...day,
+            activities: day.activities.map(a =>
+              a.id === swappedId ? { ...a, website: website || a.website } : a
+            ),
+          })));
+        }
+      }).catch(() => { /* enrichment is best-effort */ });
+    }
+  }, [swapTarget, tripCurrency, isPaid, spendCredits, tripId, days, syncBudgetFromDays, destination]);
 
   // Supports both database trips and localStorage demo trips
   useEffect(() => {
