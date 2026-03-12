@@ -1417,18 +1417,26 @@ export function EditorialItinerary({
   const handleApplyRefreshChanges = useCallback((dayIndex: number, changes: ProposedChange[]) => {
     setDays(prev => prev.map((day, dIdx) => {
       if (dIdx !== dayIndex) return day;
-      return {
-        ...day,
-        activities: day.activities.map(activity => {
-          const change = changes.find(c => c.activityId === activity.id && c.patch);
-          if (!change?.patch) return activity;
-          return {
-            ...activity,
-            ...(change.patch.startTime ? { startTime: change.patch.startTime as string, time: change.patch.startTime as string } : {}),
-            ...(change.patch.endTime ? { endTime: change.patch.endTime as string } : {}),
-          };
-        }),
-      };
+      const patchedActivities = day.activities.map(activity => {
+        const change = changes.find(c => c.activityId === activity.id && c.patch);
+        if (!change?.patch) return activity;
+        return {
+          ...activity,
+          ...(change.patch.startTime ? { startTime: change.patch.startTime as string, time: change.patch.startTime as string } : {}),
+          ...(change.patch.endTime ? { endTime: change.patch.endTime as string } : {}),
+        };
+      });
+      // Sort chronologically after applying time patches
+      patchedActivities.sort((a, b) => {
+        const parseMin = (t?: string) => {
+          if (!t) return 9999;
+          const parts = t.match(/(\d{1,2}):(\d{2})/);
+          if (!parts) return 9999;
+          return parseInt(parts[1]) * 60 + parseInt(parts[2]);
+        };
+        return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
+      });
+      return { ...day, activities: patchedActivities };
     }));
     setHasChanges(true);
     // Clear refresh results for this day
@@ -3688,17 +3696,27 @@ export function EditorialItinerary({
   const handleUpdateActivity = useCallback((dayIndex: number, activityIndex: number, updates: Partial<EditorialActivity>) => {
     setDays(prev => prev.map((day, dIdx) => {
       if (dIdx !== dayIndex) return day;
-      return {
-        ...day,
-        activities: day.activities.map((activity, aIdx) => {
-          if (aIdx !== activityIndex) return activity;
-          return {
-            ...activity,
-            ...updates,
-            time: updates.startTime || activity.startTime || activity.time,
+      const updatedActivities = day.activities.map((activity, aIdx) => {
+        if (aIdx !== activityIndex) return activity;
+        return {
+          ...activity,
+          ...updates,
+          time: updates.startTime || activity.startTime || activity.time,
+        };
+      });
+      // Auto-sort chronologically when a time changes
+      if (updates.startTime || updates.endTime) {
+        updatedActivities.sort((a, b) => {
+          const parseMin = (t?: string) => {
+            if (!t) return 9999;
+            const parts = t.match(/(\d{1,2}):(\d{2})/);
+            if (!parts) return 9999;
+            return parseInt(parts[1]) * 60 + parseInt(parts[2]);
           };
-        }),
-      };
+          return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
+        });
+      }
+      return { ...day, activities: updatedActivities };
     }));
     setHasChanges(true);
     setEditActivityModal(null);
