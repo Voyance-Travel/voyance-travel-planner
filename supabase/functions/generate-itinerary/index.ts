@@ -8813,6 +8813,48 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           return normalized;
         });
 
+        // =======================================================================
+        // GAP 2: HOTEL ADDRESS CORRECTION (ported from old path lines 2341-2368)
+        // Overwrite AI-hallucinated hotel addresses with actual booking data
+        // =======================================================================
+        {
+          const schemaDayCityHotel = multiCityDayMap?.[dayNumber - 1];
+          const actualHotelName = schemaDayCityHotel?.hotelName || flightContext?.hotelName;
+          const actualHotelAddress = schemaDayCityHotel?.hotelAddress || flightContext?.hotelAddress;
+          if (actualHotelName || actualHotelAddress) {
+            const hotelKeywords = ['hotel', 'check-in', 'check in', 'checkout', 'check-out', 'check out', 'freshen up', 'rest & recharge', 'rest and recharge', 'return to', 'settle in', 'wind down', "dad's", "mom's", "parent", "home base", 'airbnb', 'vacation rental'];
+            for (const act of normalizedActivities) {
+              const cat = ((act as any).category || '').toLowerCase();
+              const title = ((act as any).title || '').toLowerCase();
+              const isAccommodationActivity = cat === 'accommodation' || cat === 'relaxation' ||
+                hotelKeywords.some((kw: string) => title.includes(kw));
+              
+              if (isAccommodationActivity && (cat === 'accommodation' || cat === 'relaxation' || title.includes('hotel') || title.includes('home') || title.includes('airbnb') || title.includes('return') || title.includes('check'))) {
+                if (actualHotelName && (act as any).location && typeof (act as any).location === 'object') {
+                  (act as any).location.name = actualHotelName;
+                }
+                if (actualHotelAddress && (act as any).location && typeof (act as any).location === 'object') {
+                  (act as any).location.address = actualHotelAddress;
+                }
+                if (!(act as any).location && (actualHotelName || actualHotelAddress)) {
+                  (act as any).location = {
+                    name: actualHotelName || 'Accommodation',
+                    address: actualHotelAddress || '',
+                  };
+                }
+              }
+            }
+          }
+        }
+
+        // Force 24-hour HH:MM time format (some AI outputs include AM/PM)
+        for (const act of normalizedActivities) {
+          const parsedStart = parseTimeToMinutes((act as any).startTime || '');
+          if (parsedStart !== null) (act as any).startTime = minutesToHHMM(parsedStart);
+          const parsedEnd = parseTimeToMinutes((act as any).endTime || '');
+          if (parsedEnd !== null) (act as any).endTime = minutesToHHMM(parsedEnd);
+        }
+
         // CRITICAL: Filter out activities that occur BEFORE arrival time on Day 1
         // This is a safety net in case the AI ignores the prompt constraints
         if (isFirstDay && flightContext.arrivalTime24) {
@@ -8838,6 +8880,30 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
             if (normalizedActivities.length < beforeFilter) {
               console.log(`[generate-day] Removed ${beforeFilter - normalizedActivities.length} pre-arrival activities on Day 1`);
             }
+          }
+        }
+
+        // =======================================================================
+        // GAP 5: ARRIVAL DAY TITLE STRIPPING (ported from old path lines 2574-2591)
+        // Strip "Arrival at Airport" / "Baggage Claim" activities on Day 1
+        // These are handled by the Arrival Game Plan UI
+        // =======================================================================
+        if (isFirstDay && normalizedActivities.length > 0) {
+          const beforeArrivalStrip = normalizedActivities.length;
+          normalizedActivities = normalizedActivities.filter((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            const isArrivalActivity =
+              (t.includes('arrival at') && (t.includes('airport') || t.includes('baggage'))) ||
+              t.includes('baggage claim') ||
+              t.includes('airport arrival') ||
+              t.includes('arrive at airport') ||
+              t.includes('land at') ||
+              (a.category === 'transport' && t.includes('airport') && !t.includes('transfer'));
+            return !isArrivalActivity;
+          });
+          const removedArrival = beforeArrivalStrip - normalizedActivities.length;
+          if (removedArrival > 0) {
+            console.log(`[generate-day] Day 1: Stripped ${removedArrival} arrival/baggage activities (handled by Arrival Game Plan UI)`);
           }
         }
 
@@ -8900,6 +8966,100 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         }
 
         // =======================================================================
+        // GAP 3: DEPARTURE DAY SEQUENCE FIX (ported from old path lines 2468-2538)
+        // Ensure checkout comes BEFORE airport transfer on the last day
+        // =======================================================================
+        if (isLastDay && normalizedActivities.length > 1) {
+          const checkoutIndex = normalizedActivities.findIndex((a: any) => 
+            (a.title || '').toLowerCase().includes('checkout') || 
+            (a.title || '').toLowerCase().includes('check-out') ||
+            (a.title || '').toLowerCase().includes('check out')
+          );
+          const airportIndex = normalizedActivities.findIndex((a: any) => 
+            (((a.title || '').toLowerCase().includes('airport') || 
+             (a.title || '').toLowerCase().includes('departure transfer')) &&
+            (a.category === 'transport' || (a.title || '').toLowerCase().includes('transfer')))
+          );
+          
+          if (checkoutIndex !== -1 && airportIndex !== -1 && checkoutIndex > airportIndex) {
+            console.log(`[generate-day] Fixing departure sequence: checkout (${checkoutIndex}) before airport transfer (${airportIndex})`);
+            
+            const checkoutActivity = normalizedActivities[checkoutIndex];
+            const airportActivity = normalizedActivities[airportIndex];
+            
+            const checkoutDuration = Math.max(
+              5,
+              calculateDuration(checkoutActivity.startTime, checkoutActivity.endTime) || 15
+            );
+            const transferDuration = Math.max(
+              10,
+              calculateDuration(airportActivity.startTime, airportActivity.endTime) || 60
+            );
+
+            let anchorStart = airportActivity.startTime;
+            try {
+              const sortedForAnchor = [...normalizedActivities].sort((a: any, b: any) => {
+                const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+                const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+                return ta - tb;
+              });
+              const airportPos = sortedForAnchor.findIndex((a: any) => a.id === airportActivity.id);
+              if (airportPos > 0) {
+                const prev = sortedForAnchor[airportPos - 1];
+                const prevEndMins = parseTimeToMinutes(prev?.endTime || '') ?? null;
+                const airportStartMins = parseTimeToMinutes(airportActivity.startTime || '') ?? null;
+                if (prevEndMins !== null && airportStartMins !== null && prevEndMins > airportStartMins) {
+                  anchorStart = minutesToHHMM(prevEndMins);
+                }
+              }
+            } catch { /* Non-fatal */ }
+
+            checkoutActivity.startTime = anchorStart;
+            checkoutActivity.endTime = addMinutesToHHMM(anchorStart, checkoutDuration);
+            airportActivity.startTime = checkoutActivity.endTime;
+            airportActivity.endTime = addMinutesToHHMM(airportActivity.startTime, transferDuration);
+            
+            normalizedActivities[airportIndex] = checkoutActivity;
+            normalizedActivities[checkoutIndex] = airportActivity;
+            
+            normalizedActivities.sort((a: any, b: any) => {
+              const timeA = parseTimeToMinutes(a.startTime || '') ?? 99999;
+              const timeB = parseTimeToMinutes(b.startTime || '') ?? 99999;
+              return timeA - timeB;
+            });
+          }
+        }
+
+        // =======================================================================
+        // GAP 4: DEPARTURE DAY DEDUP (ported from old path lines 2540-2568)
+        // Remove duplicate airport/transfer/departure activities
+        // =======================================================================
+        if (isLastDay && normalizedActivities.length > 2) {
+          const airportKeywords = ['airport', 'departure transfer', 'flight departure', 'depart from'];
+          const airportActivities = normalizedActivities.filter((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            return airportKeywords.some(kw => t.includes(kw));
+          });
+
+          if (airportActivities.length > 2) {
+            const toRemoveIds = new Set<string>();
+            const airportToKeep = airportActivities.slice(-2);
+            for (const act of airportActivities) {
+              if (!airportToKeep.includes(act)) {
+                toRemoveIds.add(act.id);
+              }
+            }
+            if (toRemoveIds.size > 0) {
+              const removedTitles = normalizedActivities
+                .filter((a: any) => toRemoveIds.has(a.id))
+                .map((a: any) => a.title);
+              console.log(`[generate-day] Day ${dayNumber}: Removing ${toRemoveIds.size} duplicate airport activities: ${removedTitles.join(', ')}`);
+              normalizedActivities = normalizedActivities.filter((a: any) => !toRemoveIds.has(a.id));
+            }
+          }
+        }
+
+        // =======================================================================
         // STEP: POST-GENERATION GAP FILLER
         // Detect gaps > 90 min and inject transport/hotel/dinner activities
         // =======================================================================
@@ -8959,79 +9119,104 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         }
 
         // =======================================================================
-        // STEP: BUFFER ENFORCEMENT BETWEEN ACTIVITIES (Fix 23F)
-        // Ensures minimum transition time between consecutive activities
+        // GAP 8: TRANSIT-TIME ENFORCEMENT (replaces static 15-min buffer)
+        // Uses each activity's transportation.duration field + venue-type buffers
+        // Ported from old path lines 2379-2466
         // =======================================================================
         try {
-          const TRANSPORT_CATS = ['transport', 'transit', 'transfer', 'taxi', 'commute'];
-
-          const isTransportAct = (act: any) => {
-            const cat = (act.category || '').toLowerCase();
-            const title = (act.title || '').toLowerCase();
-            return TRANSPORT_CATS.some(t => cat.includes(t) || title.includes(t));
-          };
-
-          const sameLocationCheck = (a: any, b: any) => {
-            if (!a.location || !b.location) return false;
-            const locA = (typeof a.location === 'string' ? a.location : a.location?.name || '').toLowerCase();
-            const locB = (typeof b.location === 'string' ? b.location : b.location?.name || '').toLowerCase();
-            if (!locA || !locB) return false;
-            return locA === locB || locA.includes(locB) || locB.includes(locA);
-          };
-
-          const bufferMins = 15; // minimum buffer between activities
-          const sorted = [...normalizedActivities].sort((a: any, b: any) => {
-            const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-            const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-            return aM - bM;
+          // Sort by start time first
+          normalizedActivities.sort((a: any, b: any) => {
+            const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+            const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+            return ta - tb;
           });
 
-          let bufferFixes = 0;
-          for (let i = 0; i < sorted.length - 1; i++) {
-            const current = sorted[i];
-            const next = sorted[i + 1];
+          let shifted = false;
+          for (let i = 0; i < normalizedActivities.length - 1; i++) {
+            const current = normalizedActivities[i] as any;
+            const next = normalizedActivities[i + 1] as any;
 
-            if (isTransportAct(current) || isTransportAct(next)) continue;
-            if (sameLocationCheck(current, next)) continue;
-
-            const currentEndMins = parseTimeToMinutes(current.endTime || current.startTime || '00:00');
-            const nextStartMins = parseTimeToMinutes(next.startTime || '00:00');
+            const currentEndMins = parseTimeToMinutes(current.endTime || '');
+            const nextStartMins = parseTimeToMinutes(next.startTime || '');
             if (currentEndMins === null || nextStartMins === null) continue;
 
-            const gap = nextStartMins - currentEndMins;
-            if (gap >= bufferMins) continue;
-
+            // Skip if next is locked/must-do and current is not — preserve locked times
             const isNextLocked = next.isLocked || next.isMustDo;
             const isCurrentLocked = current.isLocked || current.isMustDo;
 
-            if (isNextLocked && !isCurrentLocked) {
-              // Shorten current to create buffer
-              const newEndMins = nextStartMins - bufferMins;
-              const currentStartMins = parseTimeToMinutes(current.startTime || '00:00') ?? 0;
-              if (newEndMins > currentStartMins + 15) {
-                current.endTime = minutesToTime(newEndMins);
-                current.duration = `${newEndMins - currentStartMins} minutes`;
-                bufferFixes++;
+            // Determine if current activity IS a transport/transit activity
+            const currentIsTransport = ['transport', 'transportation', 'transit'].includes(
+              (current.category || '').toLowerCase()
+            ) || /\b(stroll|walk|taxi|uber|metro|bus|train|cab|ride|transfer)\b/i.test(current.title || '');
+
+            // Parse the NEXT activity's transportation.duration (e.g., "25 min", "1h 30m")
+            let requiredTransitMins = 0;
+            const transitDur = next.transportation?.duration;
+            if (transitDur && typeof transitDur === 'string') {
+              const hMatch = transitDur.match(/(\d+)\s*h/i);
+              const mMatch = transitDur.match(/(\d+)\s*m/i);
+              if (hMatch) requiredTransitMins += parseInt(hMatch[1], 10) * 60;
+              if (mMatch) requiredTransitMins += parseInt(mMatch[1], 10);
+            }
+            // Also check distanceKm as fallback
+            if (requiredTransitMins === 0 && next.transportation?.distanceKm) {
+              const dist = next.transportation.distanceKm;
+              if (dist <= 1) requiredTransitMins = 10;
+              else if (dist <= 5) requiredTransitMins = 20;
+              else if (dist <= 15) requiredTransitMins = 35;
+              else requiredTransitMins = 45;
+            }
+
+            // When current IS a transport activity, apply venue-type arrival buffers
+            if (currentIsTransport) {
+              const nextCat = (next.category || '').toLowerCase();
+              const nextTitle = (next.title || '').toLowerCase();
+              let arrivalBuffer = 10;
+              if (nextCat === 'accommodation' || /hotel|check.?in/i.test(nextTitle)) {
+                arrivalBuffer = 15;
+              } else if (nextCat === 'dining' || /restaurant|cafe|lunch|dinner|breakfast|brunch/i.test(nextTitle)) {
+                arrivalBuffer = 10;
+              } else if (/museum|gallery|palace|castle|cathedral/i.test(nextTitle)) {
+                arrivalBuffer = 10;
               }
-            } else if (!isNextLocked) {
-              // Shift next forward
-              const newStart = currentEndMins + bufferMins;
-              const oldEnd = parseTimeToMinutes(next.endTime || '00:00');
-              const dur = oldEnd !== null ? oldEnd - nextStartMins : 0;
-              next.startTime = minutesToTime(newStart);
-              if (next.endTime && dur > 0) {
-                next.endTime = minutesToTime(newStart + dur);
+              requiredTransitMins = Math.max(requiredTransitMins, arrivalBuffer);
+            }
+
+            // Absolute minimum: 10 min (even for adjacent venues)
+            if (requiredTransitMins < 10) requiredTransitMins = 10;
+
+            const actualGap = nextStartMins - currentEndMins;
+            if (actualGap < requiredTransitMins) {
+              // Respect locked activities
+              if (isNextLocked && !isCurrentLocked) {
+                // Shorten current to create buffer
+                const newEndMins = nextStartMins - requiredTransitMins;
+                const currentStartMins = parseTimeToMinutes(current.startTime || '00:00') ?? 0;
+                if (newEndMins > currentStartMins + 15) {
+                  current.endTime = minutesToHHMM(newEndMins);
+                  current.duration = `${newEndMins - currentStartMins} minutes`;
+                  shifted = true;
+                }
+              } else if (!isNextLocked) {
+                // Shift next and all subsequent activities forward
+                const deficit = requiredTransitMins - actualGap;
+                for (let j = i + 1; j < normalizedActivities.length; j++) {
+                  const act = normalizedActivities[j] as any;
+                  if (act.isLocked || act.isMustDo) continue; // Don't shift locked
+                  const s = parseTimeToMinutes(act.startTime || '');
+                  const e = parseTimeToMinutes(act.endTime || '');
+                  if (s !== null) act.startTime = minutesToHHMM(s + deficit);
+                  if (e !== null) act.endTime = minutesToHHMM(e + deficit);
+                }
+                shifted = true;
               }
-              bufferFixes++;
             }
           }
-
-          if (bufferFixes > 0) {
-            console.log(`[buffer-enforcement] Fixed ${bufferFixes} activities with insufficient buffer time`);
+          if (shifted) {
+            console.log(`[transit-enforcement] Adjusted activity times to respect transportation durations`);
           }
-          normalizedActivities = sorted;
-        } catch (bufferErr) {
-          console.warn(`[buffer-enforcement] Non-critical error, skipping:`, bufferErr);
+        } catch (transitErr) {
+          console.warn(`[transit-enforcement] Non-critical error, skipping:`, transitErr);
         }
 
         // =======================================================================
@@ -9093,6 +9278,103 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           }
         } catch (mealErr) {
           console.warn('[meal-dedup] Non-critical error, skipping:', mealErr);
+        }
+
+        // =======================================================================
+        // GAP 6: ACTIVITY DEDUPLICATION (ported from old path lines 2731-2737)
+        // Strip same-title/near-identical activities, respecting user-requested repeats
+        // =======================================================================
+        try {
+          const mustDoListForDedup = (mustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+          const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(
+            { activities: normalizedActivities } as any,
+            mustDoListForDedup
+          );
+          if (removedDupes.length > 0) {
+            console.warn(`[generate-day] Day ${dayNumber}: Removed ${removedDupes.length} duplicate(s): ${removedDupes.join(', ')}`);
+            normalizedActivities = dedupedDay.activities;
+          }
+        } catch (dedupErr) {
+          console.warn('[activity-dedup] Non-critical error, skipping:', dedupErr);
+        }
+
+        // =======================================================================
+        // GAP 7: USER PREFERENCE VALIDATION (ported from old path lines 2620-2685)
+        // Validates user-requested activities, budget, light-dining honored
+        // Logs warnings for now (no retry loop yet — see Gap 1)
+        // =======================================================================
+        try {
+          const userNotes = (preferenceContext || '').toLowerCase();
+          const allActivityText = normalizedActivities.map((a: any) => 
+            `${(a.title || '')} ${(a.description || '')}`
+          ).join(' ').toLowerCase();
+
+          const ACTIVITY_KEYWORDS: Record<string, string[]> = {
+            'skiing': ['ski', 'snow', 'slopes', 'big snow', 'mountain creek', 'ski resort'],
+            'surfing': ['surf', 'beach break', 'waves', 'surf lesson'],
+            'hiking': ['hike', 'trail', 'trek', 'summit'],
+            'museum': ['museum', 'gallery', 'exhibit'],
+            'shopping': ['shop', 'mall', 'boutique', 'market'],
+            'spa': ['spa', 'massage', 'wellness', 'sauna'],
+            'snorkeling': ['snorkel', 'reef', 'underwater'],
+            'diving': ['dive', 'scuba', 'underwater'],
+          };
+
+          for (const [activity, keywords] of Object.entries(ACTIVITY_KEYWORDS)) {
+            if (userNotes.includes(activity)) {
+              const dayHasThis = keywords.some(kw => allActivityText.includes(kw));
+              if (!dayHasThis && !isLastDay) {
+                console.warn(`[preference-validation] User requested "${activity}" but Day ${dayNumber} has no matching activities`);
+              }
+            }
+          }
+
+          // Check for "light dining" preference violations
+          const wantsLightDining = userNotes.includes('light dinner') || userNotes.includes('light meal') || userNotes.includes('casual dinner') || userNotes.includes('simple dinner') || userNotes.includes('quick bite');
+          if (wantsLightDining) {
+            for (const act of normalizedActivities) {
+              const isDining = ((act as any).category || '').toLowerCase() === 'dining';
+              const cost = (act as any).cost?.amount || 0;
+              if (isDining && cost > 50) {
+                console.warn(`[preference-validation] User requested light dining but got "${(act as any).title}" at $${cost}`);
+              }
+            }
+          }
+
+          // Check for budget preference violations
+          const wantsBudget = userNotes.includes('budget') || userNotes.includes('cheap') || userNotes.includes('affordable') || userNotes.includes('save money') || userNotes.includes('low cost');
+          if (wantsBudget) {
+            const expensiveActivities = normalizedActivities.filter((a: any) => {
+              const cost = (a as any).cost?.amount || 0;
+              return cost > 75;
+            });
+            if (expensiveActivities.length > 0) {
+              const names = expensiveActivities.map((a: any) => `"${a.title}" ($${(a as any).cost?.amount})`).join(', ');
+              console.warn(`[preference-validation] User wants budget trip but Day ${dayNumber} has expensive activities: ${names}`);
+            }
+          }
+        } catch (prefErr) {
+          console.warn('[preference-validation] Non-critical error, skipping:', prefErr);
+        }
+
+        // =======================================================================
+        // GAP 1 (PARTIAL): MINIMUM REAL ACTIVITY COUNT VALIDATION
+        // Ported from old path lines 2600-2618. Logs warnings.
+        // Full retry loop deferred to avoid massive refactor risk.
+        // =======================================================================
+        {
+          const realActivities = (normalizedActivities || []).filter((a: any) => {
+            const title = (a.title || '').toLowerCase();
+            const category = (a.category || '').toLowerCase();
+            const isLogistics = category === 'transport' || category === 'accommodation' || category === 'downtime' ||
+              title.includes('head to airport') || title.includes('check-in') || title.includes('check-out') ||
+              title.includes('checkout') || title.includes('transfer') || title.includes('arrival at');
+            return !isLogistics;
+          });
+          const minimumRealActivities = isLastDay ? 1 : 2;
+          if (realActivities.length < minimumRealActivities) {
+            console.warn(`[generate-day] ⚠️ Day ${dayNumber} has only ${realActivities.length} real activities (minimum: ${minimumRealActivities}). This day may feel sparse.`);
+          }
         }
 
         // =======================================================================
