@@ -459,7 +459,8 @@ export async function syncItineraryToBudget(
   
   for (const day of days) {
     for (const activity of day.activities) {
-      if (activity.cost?.amount && activity.cost.amount > 0) {
+      const costAmount = activity.cost?.amount || (activity.cost as any)?.total || (activity.cost as any)?.perPerson || 0;
+      if (costAmount > 0) {
         // Skip non-payable activities (free time, downtime, transfers)
         const titleLower = (activity.title || '').toLowerCase();
         const catLower = (activity.category || '').toLowerCase();
@@ -481,7 +482,7 @@ export async function syncItineraryToBudget(
           trip_id: tripId,
           category: budgetCategory,
           entry_type: 'planned',
-          amount_cents: Math.round(activity.cost.amount * 100), // Convert to cents
+          amount_cents: Math.round(costAmount * 100), // Convert to cents
           currency: activity.cost.currency || 'USD',
           description: activity.title,
           day_number: day.dayNumber,

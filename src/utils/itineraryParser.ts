@@ -301,8 +301,9 @@ function parseCost(raw: unknown): ParsedCost | undefined {
   
   if (typeof raw === 'object' && raw !== null) {
     const cost = raw as Record<string, unknown>;
+    const amount = extractNumber(cost, ['amount', 'value', 'price', 'total', 'perPerson', 'per_person']);
     return {
-      amount: extractNumber(cost, ['amount', 'value', 'price']),
+      amount,
       currency: extractString(cost, ['currency']),
     };
   }
