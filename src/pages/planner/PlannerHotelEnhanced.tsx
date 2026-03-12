@@ -150,6 +150,11 @@ export default function PlannerHotelEnhanced() {
   const [holdingHotelId, setHoldingHotelId] = useState<string | null>(null);
   const [showSkipModal, setShowSkipModal] = useState(false);
   
+  // Multi-city state: which trip_cities row this hotel belongs to
+  const cityIdFromUrl = searchParams.get('cityId') || null;
+  const [multiCityCityId, setMultiCityCityId] = useState<string | null>(cityIdFromUrl);
+  const [isMultiCity, setIsMultiCity] = useState(false);
+
   // User preferences state
   const [userPreferences, setUserPreferences] = useState<UserHotelPreferences | null>(null);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
