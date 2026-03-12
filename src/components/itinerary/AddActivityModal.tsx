@@ -157,7 +157,7 @@ export function AddActivityModal({ isOpen, onClose, onAdd, currency = 'USD', des
         : undefined;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Add Activity</DialogTitle>

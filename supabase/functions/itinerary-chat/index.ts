@@ -574,7 +574,13 @@ ${itineraryDescription}
     
     const choice = data.choices?.[0];
     const toolCalls = choice?.message?.tool_calls || [];
-    const textContent = choice?.message?.content || "";
+    let textContent = choice?.message?.content || "";
+    // If the AI returned JSON as its text content (happens when tool calls fail),
+    // replace it with a user-friendly message
+    if (textContent.trim().startsWith('{') || textContent.trim().startsWith('[')) {
+      console.warn('[itinerary-chat] AI returned JSON as text content — sanitizing');
+      textContent = "I'm working on updating your itinerary. Let me try that again.";
+    }
 
     const actions: Array<{
       type: string;
@@ -590,7 +596,13 @@ ${itineraryDescription}
 
     for (const toolCall of toolCalls) {
       const fnName = toolCall.function?.name;
-      const args = JSON.parse(toolCall.function?.arguments || "{}");
+      let args: Record<string, any> = {};
+      try {
+        args = JSON.parse(toolCall.function?.arguments || "{}");
+      } catch (parseErr) {
+        console.error(`[itinerary-chat] Failed to parse tool arguments for ${fnName}:`, parseErr);
+        continue;
+      }
 
       if (fnName === "capture_preference") {
         capturedPreferences.push({
@@ -668,7 +680,14 @@ ${itineraryDescription}
   } catch (error) {
     log("Error", { message: error instanceof Error ? error.message : String(error) });
     return new Response(
-      JSON.stringify({ success: false, error: "Chat processing failed", code: "CHAT_ERROR" }),
+      JSON.stringify({
+        success: false,
+        error: "Chat processing failed",
+        code: "CHAT_ERROR",
+        message: "Sorry, I ran into an issue processing that request. Could you try again?",
+        actions: [],
+        capturedPreferences: [],
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
