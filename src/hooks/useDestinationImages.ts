@@ -1,11 +1,18 @@
 /**
  * Hook to fetch a single destination hero image.
  * The mid-page "second image" was removed to cut costs and fix consistency issues.
+ *
+ * Priority chain:
+ * 1. Hardcoded curated images (instant, no network)
+ * 2. DB curated images (admin-managed via curated_images table)
+ * 3. API fetch via edge function (Google Places, etc.)
+ * 4. Gradient fallback
  */
 
 import { useState, useEffect, useMemo } from 'react';
 import { getDestinationImages as getCuratedImages, hasCuratedImages } from '@/utils/destinationImages';
 import { getDestinationImages as getAPIImages } from '@/services/destinationImagesAPI';
+import { supabase } from '@/integrations/supabase/client';
 
 interface DestinationImagesResult {
   heroImage: string | null;
@@ -96,6 +103,31 @@ function rotateDeterministic<T>(arr: T[], seed: string): T[] {
   return [...arr.slice(start), ...arr.slice(0, start)];
 }
 
+/**
+ * Fetch hero image URLs from the curated_images DB table (admin-managed).
+ * Returns null if no results found.
+ */
+async function getDbCuratedHeroUrl(destination: string): Promise<string | null> {
+  try {
+    const normalizedKey = destination.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
+    const { data, error } = await supabase
+      .from('curated_images')
+      .select('image_url')
+      .eq('entity_type', 'destination')
+      .eq('entity_key', normalizedKey)
+      .eq('is_blacklisted', false)
+      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+      .order('vote_score', { ascending: false, nullsFirst: false })
+      .order('quality_score', { ascending: false, nullsFirst: false })
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    return (data[0] as any).image_url || null;
+  } catch {
+    return null;
+  }
+}
+
 export function useDestinationImages(
   destination: string,
   destinationCountry?: string,
@@ -123,7 +155,7 @@ export function useDestinationImages(
       try {
         const seed = seedKey || `${queryDestination}|default`;
 
-        // Try curated images first
+        // TIER 1: Hardcoded curated images (instant, no network)
         if (hasCuratedImages(cleanDestination)) {
           const curatedUrls = getCuratedImages(cleanDestination, 4);
           const ordered = rotateDeterministic(curatedUrls, seed);
@@ -134,12 +166,19 @@ export function useDestinationImages(
               return;
             }
           }
-          // All curated failed — gradient
-          if (!cancelled) setHeroImage(generateGradientDataUrl(cleanDestination, 0));
-          return;
+          // All curated failed — fall through to DB
         }
 
-        // Non-curated: single API image for hero
+        // TIER 2: DB curated images (admin-managed via curated_images table)
+        const dbUrl = await getDbCuratedHeroUrl(cleanDestination);
+        if (dbUrl && !cancelled) {
+          if (await isUrlLoadable(dbUrl)) {
+            setHeroImage(dbUrl);
+            return;
+          }
+        }
+
+        // TIER 3: API fetch (Google Places via edge function)
         const images = await getAPIImages({
           destination: queryDestination,
           imageType: 'hero',
