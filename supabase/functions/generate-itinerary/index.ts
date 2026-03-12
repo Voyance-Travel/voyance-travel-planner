@@ -5800,7 +5800,121 @@ If the purpose is a specific event, plan at least ONE full day around that event
       }
 
       // =======================================================================
-      // STAGE 2.6: Personalization Validation (Phase 3)
+      // STAGE 2.56: Guarantee Day 1 Hotel Check-in
+      // If Day 1 doesn't have a check-in activity, inject one.
+      // The AI sometimes omits it despite prompt instructions.
+      // =======================================================================
+      if (aiResult.days.length > 0) {
+        const day1_56 = aiResult.days[0];
+        if (day1_56.activities && day1_56.activities.length > 0) {
+          const hasCheckIn = day1_56.activities.some((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            const cat = (a.category || '').toLowerCase();
+            return (
+              cat === 'accommodation' && (
+                t.includes('check-in') || t.includes('check in') ||
+                t.includes('checkin') || t.includes('settle in') ||
+                t.includes('refresh') || t.includes('hotel')
+              )
+            );
+          });
+
+          if (!hasCheckIn) {
+            const day1City_56 = context.multiCityDayMap?.[0];
+            const hotelName_56 = day1City_56?.hotelName || flightHotelResult?.hotelName || 'Hotel';
+            const hotelAddress_56 = day1City_56?.hotelAddress || flightHotelResult?.hotelAddress || '';
+
+            const firstActivity_56 = day1_56.activities[0];
+            const firstStartMin_56 = parseTimeToMinutes(firstActivity_56?.startTime || '15:00') || (15 * 60);
+            const checkInStartMin_56 = Math.max(12 * 60, firstStartMin_56 - 45);
+            const checkInEndMin_56 = checkInStartMin_56 + 30;
+            const checkInStart_56 = minutesToHHMM(checkInStartMin_56);
+            const checkInEnd_56 = minutesToHHMM(checkInEndMin_56);
+
+            const checkInActivity_56 = {
+              id: `day1-checkin-${Date.now()}`,
+              title: 'Hotel Check-in & Refresh',
+              name: 'Hotel Check-in & Refresh',
+              description: 'Check in, freshen up, and get oriented to the area',
+              startTime: checkInStart_56,
+              endTime: checkInEnd_56,
+              category: 'accommodation',
+              type: 'accommodation',
+              location: { name: hotelName_56, address: hotelAddress_56 },
+              cost: { amount: 0, currency: 'USD' },
+              bookingRequired: false,
+              isLocked: false,
+              durationMinutes: 30,
+            };
+
+            day1_56.activities.unshift(checkInActivity_56);
+            aiResult.days[0] = day1_56;
+            console.log(`[Stage 2.56] ✓ Injected missing Hotel Check-in at ${checkInStart_56}-${checkInEnd_56} (hotel: ${hotelName_56})`);
+          } else {
+            console.log(`[Stage 2.56] Day 1 already has check-in activity — no injection needed`);
+          }
+        }
+
+        // Also check multi-city transition days (first day in each new city)
+        if (context.multiCityDayMap && aiResult.days.length > 1) {
+          let prevDestination_56 = '';
+          for (let dIdx = 1; dIdx < aiResult.days.length; dIdx++) {
+            const dayCity_56 = context.multiCityDayMap[dIdx];
+            const currentDest_56 = dayCity_56?.destination || '';
+
+            if (currentDest_56 && currentDest_56 !== prevDestination_56 && prevDestination_56 !== '') {
+              const transDay_56 = aiResult.days[dIdx];
+              if (!transDay_56.activities || transDay_56.activities.length === 0) {
+                prevDestination_56 = currentDest_56;
+                continue;
+              }
+
+              const hasTransCheckIn = transDay_56.activities.some((a: any) => {
+                const t = (a.title || '').toLowerCase();
+                const cat = (a.category || '').toLowerCase();
+                return cat === 'accommodation' && (
+                  t.includes('check-in') || t.includes('check in') ||
+                  t.includes('checkin') || t.includes('settle in') ||
+                  t.includes('hotel')
+                );
+              });
+
+              if (!hasTransCheckIn) {
+                const transHotelName = dayCity_56?.hotelName || 'Hotel';
+                const transHotelAddress = dayCity_56?.hotelAddress || '';
+                const firstAct_56 = transDay_56.activities[0];
+                const firstMin_56 = parseTimeToMinutes(firstAct_56?.startTime || '15:00') || (15 * 60);
+                const ciStartMin_56 = Math.max(12 * 60, firstMin_56 - 45);
+                const ciStart_56 = minutesToHHMM(ciStartMin_56);
+                const ciEnd_56 = minutesToHHMM(ciStartMin_56 + 30);
+
+                const ciActivity_56 = {
+                  id: `day${dIdx + 1}-checkin-${Date.now()}`,
+                  title: `Hotel Check-in – ${currentDest_56}`,
+                  name: `Hotel Check-in – ${currentDest_56}`,
+                  description: `Check in to hotel in ${currentDest_56}, freshen up after travel`,
+                  startTime: ciStart_56,
+                  endTime: ciEnd_56,
+                  category: 'accommodation',
+                  type: 'accommodation',
+                  location: { name: transHotelName, address: transHotelAddress },
+                  cost: { amount: 0, currency: 'USD' },
+                  bookingRequired: false,
+                  isLocked: false,
+                  durationMinutes: 30,
+                };
+
+                transDay_56.activities.unshift(ciActivity_56);
+                aiResult.days[dIdx] = transDay_56;
+                console.log(`[Stage 2.56] ✓ Injected missing Hotel Check-in for ${currentDest_56} on Day ${dIdx + 1} at ${ciStart_56}-${ciEnd_56}`);
+              }
+            }
+            prevDestination_56 = currentDest_56;
+          }
+        }
+      }
+
+      // =======================================================================
       // Validate itinerary against user preferences before saving
       // =======================================================================
       console.log("[Stage 2.6] Validating personalization compliance...");
