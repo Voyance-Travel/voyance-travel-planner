@@ -8221,11 +8221,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             // === Fix 22O: Wire destinationHotel for transition days ===
             destinationHotel: (() => {
               if (!resolvedIsTransitionDay) return undefined;
-              const schemaDayCity = context.multiCityDayMap?.[dayNumber - 1];
-              if (!schemaDayCity?.hotelName) return undefined;
+              const transitionHotelName = flightContext?.hotelName;
+              if (!transitionHotelName) return undefined;
               return {
-                name: schemaDayCity.hotelName,
-                address: schemaDayCity.hotelAddress || '',
+                name: transitionHotelName,
+                address: flightContext?.hotelAddress || '',
                 checkInTime: undefined, // default 15:00 handled by constraint filler
               };
             })(),
@@ -8281,14 +8281,10 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           // Build multi-city context
           let schemaMultiCityContext = '';
           if (resolvedIsMultiCity) {
-            const dayCity = context.multiCityDayMap?.[dayNumber - 1];
-            if (dayCity) {
-              const cityFirstTime = context.firstTimePerCity?.[resolvedDestination] ?? effectiveIsFirstTimeVisitor;
-              const visitorLabel = cityFirstTime ? 'FIRST-TIME visitor' : 'RETURNING visitor';
-              schemaMultiCityContext = `🌍 This day is in **${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}**. ALL activities MUST be located in ${resolvedDestination}.\n👤 VISITOR STATUS: Traveler is a ${visitorLabel}.${cityFirstTime ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems and local favorites.'}`;
-              if (dayCity.hotelName) {
-                schemaMultiCityContext += `\n🏨 ACCOMMODATION: ${dayCity.hotelName}${dayCity.hotelAddress ? ` (${dayCity.hotelAddress})` : ''}. Start/end each day near the hotel.`;
-              }
+            const visitorLabel = effectiveIsFirstTimeVisitor ? 'FIRST-TIME visitor' : 'RETURNING visitor';
+            schemaMultiCityContext = `🌍 This day is in **${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}**. ALL activities MUST be located in ${resolvedDestination}.\n👤 VISITOR STATUS: Traveler is a ${visitorLabel}.${effectiveIsFirstTimeVisitor ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems and local favorites.'}`;
+            if (flightContext?.hotelName) {
+              schemaMultiCityContext += `\n🏨 ACCOMMODATION: ${flightContext.hotelName}${flightContext.hotelAddress ? ` (${flightContext.hotelAddress})` : ''}. Start/end each day near the hotel.`;
             }
           }
 
@@ -8818,9 +8814,8 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         // Overwrite AI-hallucinated hotel addresses with actual booking data
         // =======================================================================
         {
-          const schemaDayCityHotel = context.multiCityDayMap?.[dayNumber - 1];
-          const actualHotelName = schemaDayCityHotel?.hotelName || flightContext?.hotelName;
-          const actualHotelAddress = schemaDayCityHotel?.hotelAddress || flightContext?.hotelAddress;
+          const actualHotelName = flightContext?.hotelName;
+          const actualHotelAddress = flightContext?.hotelAddress;
           if (actualHotelName || actualHotelAddress) {
             const hotelKeywords = ['hotel', 'check-in', 'check in', 'checkout', 'check-out', 'check out', 'freshen up', 'rest & recharge', 'rest and recharge', 'return to', 'settle in', 'wind down', "dad's", "mom's", "parent", "home base", 'airbnb', 'vacation rental'];
             for (const act of normalizedActivities) {
@@ -9068,7 +9063,7 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
           const { detectAndFillGaps } = await import('./schema/gap-filler.ts');
 
           // Map budgetTier to gap-filler's expected values
-          const rawBudget = context?.budgetTier || 'standard';
+          const rawBudget = effectiveBudgetTier || 'standard';
           const gapBudgetTier = rawBudget === 'luxury' ? 'luxury' : rawBudget === 'budget' ? 'budget' : 'mid';
 
           const { fillerActivities, gaps } = detectAndFillGaps(normalizedActivities, {
