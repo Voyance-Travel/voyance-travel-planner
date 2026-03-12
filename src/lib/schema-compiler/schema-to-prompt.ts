@@ -165,6 +165,12 @@ OUTPUT FORMAT — every activity must include these fields (use EXACTLY this str
   • amount is per person in USD. Use 0 for free activities.
 - bookingRequired (boolean)
 - personalization: { tags: ["tag1", "tag2"], whyThisFits: "1-2 sentences why this fits the traveler", confidence: 0.0-1.0, matchedInputs: ["input1"] }
+- tags (array of 5+ keyword strings for filtering — e.g. "outdoor", "romantic", "family-friendly", "historic", "waterfront")
+- transportation: { method: "walk"|"metro"|"taxi"|"bus"|"rideshare", duration: "10 min", estimatedCost: { amount: number, currency: "USD" }, instructions: "Take the 6 train northbound" }
+  • How to get here from the previous activity. Walking cost MUST be 0.
+- contextualTips: array of 1-4 objects { type: "timing"|"booking"|"money_saving"|"transit"|"cultural"|"safety"|"hidden_gem"|"weather"|"general", text: "specific tip" }
+- rating: { value: number (e.g. 4.5), totalReviews: number }
+- website (URL string, if known)
 - tips (1-2 practical, specific tips — real local knowledge, not generic advice)
 - crowdLevel ("low", "moderate", or "high")
 - isHiddenGem (boolean)
