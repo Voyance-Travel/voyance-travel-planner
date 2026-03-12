@@ -8777,7 +8777,6 @@ function ActivityRow({
         onEdit={onEdit}
         onMove={onMove}
         onMoveToDay={onMoveToDay}
-        onCopyToDay={onCopyToDay}
         onRemove={onRemove}
         totalActivities={totalActivities}
         totalDays={totalDays}
