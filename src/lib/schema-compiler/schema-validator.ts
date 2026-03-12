@@ -132,9 +132,25 @@ function checkFilledSlotIntegrity(
 
   for (const slot of filledSlots) {
     const data = slot.filledData!;
-    const matchIdx = corrected.findIndex(
-      a => a.title === data.title || a.startTime === data.startTime
+    // Match by title first (exact or substring) to avoid false matches when
+    // two activities share the same startTime (e.g. breakfast and a must-do both at 09:00).
+    let matchIdx = corrected.findIndex(
+      a => a.title != null && data.title != null &&
+        a.title.toLowerCase() === data.title.toLowerCase()
     );
+    if (matchIdx === -1) {
+      // Fuzzy title match — first 15 chars
+      const prefix = (data.title || '').toLowerCase().substring(0, 15);
+      if (prefix.length > 3) {
+        matchIdx = corrected.findIndex(
+          a => a.title?.toLowerCase().includes(prefix)
+        );
+      }
+    }
+    if (matchIdx === -1) {
+      // Fallback: match by startTime only if title didn't match
+      matchIdx = corrected.findIndex(a => a.startTime === data.startTime);
+    }
 
     if (matchIdx === -1) {
       validations.push({

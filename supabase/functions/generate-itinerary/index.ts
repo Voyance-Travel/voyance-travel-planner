@@ -8728,6 +8728,8 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
 
             if (!validationResult.passed) {
               console.warn(`[schema-generation] Validation ${validationResult.severity}: ${validationResult.summary}`);
+              // If HIGH severity (e.g. AI returned far too few activities), log for awareness
+              // Future: could trigger a targeted retry here
             }
 
             // Apply auto-corrections (locked slot integrity, time overwrites, group attribution)
