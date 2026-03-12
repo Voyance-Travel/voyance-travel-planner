@@ -8965,6 +8965,100 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         }
 
         // =======================================================================
+        // GAP 3: DEPARTURE DAY SEQUENCE FIX (ported from old path lines 2468-2538)
+        // Ensure checkout comes BEFORE airport transfer on the last day
+        // =======================================================================
+        if (isLastDay && normalizedActivities.length > 1) {
+          const checkoutIndex = normalizedActivities.findIndex((a: any) => 
+            (a.title || '').toLowerCase().includes('checkout') || 
+            (a.title || '').toLowerCase().includes('check-out') ||
+            (a.title || '').toLowerCase().includes('check out')
+          );
+          const airportIndex = normalizedActivities.findIndex((a: any) => 
+            (((a.title || '').toLowerCase().includes('airport') || 
+             (a.title || '').toLowerCase().includes('departure transfer')) &&
+            (a.category === 'transport' || (a.title || '').toLowerCase().includes('transfer')))
+          );
+          
+          if (checkoutIndex !== -1 && airportIndex !== -1 && checkoutIndex > airportIndex) {
+            console.log(`[generate-day] Fixing departure sequence: checkout (${checkoutIndex}) before airport transfer (${airportIndex})`);
+            
+            const checkoutActivity = normalizedActivities[checkoutIndex];
+            const airportActivity = normalizedActivities[airportIndex];
+            
+            const checkoutDuration = Math.max(
+              5,
+              calculateDuration(checkoutActivity.startTime, checkoutActivity.endTime) || 15
+            );
+            const transferDuration = Math.max(
+              10,
+              calculateDuration(airportActivity.startTime, airportActivity.endTime) || 60
+            );
+
+            let anchorStart = airportActivity.startTime;
+            try {
+              const sortedForAnchor = [...normalizedActivities].sort((a: any, b: any) => {
+                const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+                const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+                return ta - tb;
+              });
+              const airportPos = sortedForAnchor.findIndex((a: any) => a.id === airportActivity.id);
+              if (airportPos > 0) {
+                const prev = sortedForAnchor[airportPos - 1];
+                const prevEndMins = parseTimeToMinutes(prev?.endTime || '') ?? null;
+                const airportStartMins = parseTimeToMinutes(airportActivity.startTime || '') ?? null;
+                if (prevEndMins !== null && airportStartMins !== null && prevEndMins > airportStartMins) {
+                  anchorStart = minutesToHHMM(prevEndMins);
+                }
+              }
+            } catch { /* Non-fatal */ }
+
+            checkoutActivity.startTime = anchorStart;
+            checkoutActivity.endTime = addMinutesToHHMM(anchorStart, checkoutDuration);
+            airportActivity.startTime = checkoutActivity.endTime;
+            airportActivity.endTime = addMinutesToHHMM(airportActivity.startTime, transferDuration);
+            
+            normalizedActivities[airportIndex] = checkoutActivity;
+            normalizedActivities[checkoutIndex] = airportActivity;
+            
+            normalizedActivities.sort((a: any, b: any) => {
+              const timeA = parseTimeToMinutes(a.startTime || '') ?? 99999;
+              const timeB = parseTimeToMinutes(b.startTime || '') ?? 99999;
+              return timeA - timeB;
+            });
+          }
+        }
+
+        // =======================================================================
+        // GAP 4: DEPARTURE DAY DEDUP (ported from old path lines 2540-2568)
+        // Remove duplicate airport/transfer/departure activities
+        // =======================================================================
+        if (isLastDay && normalizedActivities.length > 2) {
+          const airportKeywords = ['airport', 'departure transfer', 'flight departure', 'depart from'];
+          const airportActivities = normalizedActivities.filter((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            return airportKeywords.some(kw => t.includes(kw));
+          });
+
+          if (airportActivities.length > 2) {
+            const toRemoveIds = new Set<string>();
+            const airportToKeep = airportActivities.slice(-2);
+            for (const act of airportActivities) {
+              if (!airportToKeep.includes(act)) {
+                toRemoveIds.add(act.id);
+              }
+            }
+            if (toRemoveIds.size > 0) {
+              const removedTitles = normalizedActivities
+                .filter((a: any) => toRemoveIds.has(a.id))
+                .map((a: any) => a.title);
+              console.log(`[generate-day] Day ${dayNumber}: Removing ${toRemoveIds.size} duplicate airport activities: ${removedTitles.join(', ')}`);
+              normalizedActivities = normalizedActivities.filter((a: any) => !toRemoveIds.has(a.id));
+            }
+          }
+        }
+
+        // =======================================================================
         // STEP: POST-GENERATION GAP FILLER
         // Detect gaps > 90 min and inject transport/hotel/dinner activities
         // =======================================================================
