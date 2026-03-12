@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBudgetAlerts } from '@/hooks/useBudgetAlerts';
+import { getTripCities, updateCityHotel } from '@/services/tripCitiesService';
 
 import {
   useHotelSearch,
@@ -148,6 +149,11 @@ export default function PlannerHotelEnhanced() {
   const [holdingHotelId, setHoldingHotelId] = useState<string | null>(null);
   const [showSkipModal, setShowSkipModal] = useState(false);
   
+  // Multi-city state: which trip_cities row this hotel belongs to
+  const cityIdFromUrl = searchParams.get('cityId') || null;
+  const [multiCityCityId, setMultiCityCityId] = useState<string | null>(cityIdFromUrl);
+  const [isMultiCity, setIsMultiCity] = useState(false);
+
   // User preferences state
   const [userPreferences, setUserPreferences] = useState<UserHotelPreferences | null>(null);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
@@ -210,6 +216,39 @@ export default function PlannerHotelEnhanced() {
       loadTrip(tripIdFromUrl);
     }
   }, [searchParams, plannerState.tripId, plannerState.basics.destination, loadTrip]);
+
+  // Detect multi-city: check if trip_cities exist for this trip
+  useEffect(() => {
+    const tripId = searchParams.get('tripId') || plannerState.tripId;
+    if (!tripId) return;
+
+    getTripCities(tripId).then(cities => {
+      if (cities.length > 1) {
+        setIsMultiCity(true);
+        if (!cityIdFromUrl) {
+          const matchingCity = cities.find(c =>
+            c.city_name?.toLowerCase() === destination.toLowerCase()
+          );
+          if (matchingCity) setMultiCityCityId(matchingCity.id);
+        }
+        const targetCityId = cityIdFromUrl || cities.find(c =>
+          c.city_name?.toLowerCase() === destination.toLowerCase()
+        )?.id;
+        if (targetCityId) {
+          const city = cities.find(c => c.id === targetCityId);
+          if (city?.hotel_selection) {
+            const hotelRaw = city.hotel_selection as any;
+            const hotelData = Array.isArray(hotelRaw) && hotelRaw.length > 0 ? hotelRaw[0] : hotelRaw;
+            if (hotelData?.name) {
+              setHotel(hotelData);
+              setSelectedHotelId(hotelData.id || null);
+            }
+          }
+        }
+      }
+    }).catch(err => console.warn('[PlannerHotel] Failed to check trip_cities:', err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plannerState.tripId, destination]);
 
   useEffect(() => {
     if (!plannerState.basics.destination || plannerState.basics.destination !== destination) {
@@ -484,9 +523,20 @@ export default function PlannerHotelEnhanced() {
 
     // Immediately save to database (incremental persistence)
     try {
-      const tripId = await saveTrip();
-      if (tripId) {
-        // Hotel selection saved to database
+      if (isMultiCity && multiCityCityId) {
+        // Multi-city: save to the specific trip_cities row, not trips.hotel_selection
+        const pricePerNight = room?.pricePerNight || hotel.pricePerNight || 0;
+        await updateCityHotel(
+          multiCityCityId,
+          hotelSelection as Record<string, unknown>,
+          Math.round(pricePerNight * 100)
+        );
+      } else {
+        // Single-city: save via TripPlannerContext (writes to trips.hotel_selection)
+        const tripId = await saveTrip();
+        if (tripId) {
+          // Hotel selection saved to database
+        }
       }
     } catch (err) {
       console.warn('[PlannerHotel] Incremental save failed:', err);
@@ -558,8 +608,7 @@ export default function PlannerHotelEnhanced() {
 
   const handleManualHotelSubmit = async (data: { hotel?: ManualHotelData }) => {
     if (data.hotel) {
-      // Store manual hotel as a special selection
-      setHotel({
+      const manualHotel = {
         id: 'manual',
         name: data.hotel.name || 'Manual Entry',
         location: data.hotel.neighborhood || destination,
@@ -571,7 +620,20 @@ export default function PlannerHotelEnhanced() {
         amenities: [],
         checkIn: data.hotel.checkInTime,
         checkOut: data.hotel.checkOutTime,
-      });
+      };
+
+      // Store in context for summary/booking
+      setHotel(manualHotel);
+
+      // Multi-city: also persist to trip_cities
+      if (isMultiCity && multiCityCityId) {
+        try {
+          await updateCityHotel(multiCityCityId, manualHotel as Record<string, unknown>, 0);
+        } catch (err) {
+          console.warn('[PlannerHotel] Failed to save manual hotel to trip_cities:', err);
+        }
+      }
+
       toast.success('Hotel details saved');
     }
     
