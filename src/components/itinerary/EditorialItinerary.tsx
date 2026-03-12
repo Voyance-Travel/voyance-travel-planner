@@ -3068,6 +3068,22 @@ export function EditorialItinerary({
     } catch (err) {
       console.error('Optimize error:', err);
       toast.error('Failed to optimize itinerary');
+      // Refund credits if paid optimization failed
+      if (!routeOptCost.isFirstTrip && routeOptCost.cost > 0) {
+        try {
+          await supabase.functions.invoke('spend-credits', {
+            body: {
+              action: 'REFUND',
+              tripId,
+              creditsAmount: routeOptCost.cost,
+              metadata: { reason: 'optimize_runtime_failure' },
+            },
+          });
+          console.log('[optimize] Refunded credits after optimization failure');
+        } catch (refundErr) {
+          console.error('[optimize] Failed to refund credits after failure:', refundErr);
+        }
+      }
     } finally {
       setIsOptimizing(false);
     }
