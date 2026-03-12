@@ -182,30 +182,46 @@ function normalizeImageUrl(url?: string | null): string {
 
 /**
  * Get destination images with fallback chain:
- * Database → Google Places → Gradient
+ * DB cache → Hardcoded curated (+ seed DB) → Edge function → Gradient
  */
 export async function getDestinationImages(
   params: GetImagesParams = {}
 ): Promise<DestinationImage[]> {
   const normalizedDestination = normalizeDestinationQuery(params.destination);
 
-  // For hero/gallery, ALWAYS prefer curated images if available (any destination)
-  // This ensures reliable, high-quality images without unpredictable API results
+  // For hero/gallery requests, check DB cache first, then hardcoded curated
   if (
     normalizedDestination &&
-    (params.imageType === 'hero' || params.imageType === 'gallery' || params.imageType === 'all') &&
-    hasCuratedImages(normalizedDestination)
+    (params.imageType === 'hero' || params.imageType === 'gallery' || params.imageType === 'all')
   ) {
     const type = (params.imageType === 'gallery' ? 'gallery' : 'hero') as DestinationImage['type'];
     const limit = params.limit ?? (params.imageType === 'gallery' ? 6 : 1);
-    const urls = getCuratedDestinationImages(normalizedDestination, limit);
-    return urls.map((url, i) => ({
-      id: `curated-local-${type}-${i}`,
-      url: normalizeImageUrl(url),
-      alt: `${normalizedDestination} photo ${i + 1}`,
-      type,
-      source: 'database',
-    }));
+
+    // TIER 1: Check curated_images DB table (fast, indexed query)
+    const dbImages = await getDbCachedImages(normalizedDestination, limit);
+    if (dbImages && dbImages.length > 0) {
+      console.log('[Images] DB cache hit for:', normalizedDestination, dbImages.length, 'images');
+      return dbImages;
+    }
+
+    // TIER 2: Fall back to hardcoded curated images + seed DB for next time
+    if (hasCuratedImages(normalizedDestination)) {
+      const urls = getCuratedDestinationImages(normalizedDestination, limit);
+      // Fire-and-forget: seed the DB so next request hits TIER 1
+      seedDbFromCurated(normalizedDestination, urls);
+      return urls.map((url, i) => ({
+        id: `curated-local-${type}-${i}`,
+        url: normalizeImageUrl(url),
+        alt: `${normalizedDestination} photo ${i + 1}`,
+        type,
+        source: 'database' as const,
+      }));
+    }
+
+    // TIER 2b: For curated-only destinations with no hardcoded images, don't call API
+    if (isCuratedOnlyDestination(normalizedDestination)) {
+      return [];
+    }
   }
 
   // Call backend function via POST body for reliability (no querystring invoke)

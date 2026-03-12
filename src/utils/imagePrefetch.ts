@@ -3,7 +3,8 @@
  * Preloads destination images before they're needed to avoid loading delays.
  *
  * Note: We persist cache to localStorage so moving between slides/pages doesn't
- * trigger redundant image fetches.
+ * trigger redundant image fetches. Also seeds the curated_images DB table
+ * so repeated trips to the same destination use DB cache instead of hardcoded.
  */
 
 import { supabase } from '@/integrations/supabase/client';
