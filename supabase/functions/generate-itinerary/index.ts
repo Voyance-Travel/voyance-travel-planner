@@ -9357,6 +9357,26 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         }
 
         // =======================================================================
+        // GAP 1 (PARTIAL): MINIMUM REAL ACTIVITY COUNT VALIDATION
+        // Ported from old path lines 2600-2618. Logs warnings.
+        // Full retry loop deferred to avoid massive refactor risk.
+        // =======================================================================
+        {
+          const realActivities = (normalizedActivities || []).filter((a: any) => {
+            const title = (a.title || '').toLowerCase();
+            const category = (a.category || '').toLowerCase();
+            const isLogistics = category === 'transport' || category === 'accommodation' || category === 'downtime' ||
+              title.includes('head to airport') || title.includes('check-in') || title.includes('check-out') ||
+              title.includes('checkout') || title.includes('transfer') || title.includes('arrival at');
+            return !isLogistics;
+          });
+          const minimumRealActivities = isLastDay ? 1 : 2;
+          if (realActivities.length < minimumRealActivities) {
+            console.warn(`[generate-day] ⚠️ Day ${dayNumber} has only ${realActivities.length} real activities (minimum: ${minimumRealActivities}). This day may feel sparse.`);
+          }
+        }
+
+        // =======================================================================
         // STEP: FINAL CHRONOLOGICAL SORT (Fix 23L)
         // =======================================================================
         try {
