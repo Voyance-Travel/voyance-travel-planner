@@ -1896,7 +1896,11 @@ These help the traveler prepare for their trip.
         // Inject per-city hotel context for geographic anchoring
         if (dayCity.hotelName) {
           const hotelArea = dayCity.hotelNeighborhood || dayCity.hotelAddress || '';
-          multiCityPrompt += `\n🏨 ACCOMMODATION in ${dayDestination}: ${dayCity.hotelName}${hotelArea ? ` (${hotelArea})` : ''}.`;
+          const checkInTime = dayCity.hotelCheckIn || '15:00';
+          const checkOutTime = dayCity.hotelCheckOut || '11:00';
+          multiCityPrompt += `\n🏨 ACCOMMODATION in ${dayDestination}: "${dayCity.hotelName}"${hotelArea ? ` — Address: ${hotelArea}` : ''}.`;
+          multiCityPrompt += `\n   Check-in: ${checkInTime}, Check-out: ${checkOutTime}.`;
+          multiCityPrompt += `\n   🚫 CRITICAL: The user has ALREADY SELECTED this hotel. Use "${dayCity.hotelName}" for ALL accommodation references (check-in, return to hotel, freshen up, etc.). Do NOT invent, suggest, or substitute a different hotel.`;
           multiCityPrompt += `\n   ⚠️ Start each day from this hotel area and plan return in the evening.`;
           
           if (dayCity.isFirstDayInCity && !dayCity.isTransitionDay) {
