@@ -369,7 +369,7 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
     }
     
     // Multi-city fallback
-    if (!hotel && trip.is_multi_city) {
+    if (trip.is_multi_city) {
       try {
         const { data: tripCities } = await supabase
           .from('trip_cities')
