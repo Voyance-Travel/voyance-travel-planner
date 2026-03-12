@@ -54,6 +54,6 @@ export function useTripViewMode({ isOwner }: UseTripViewModeOptions) {
     setMode,
     isPreviewMode: mode === 'preview',
     isEditMode: mode === 'edit',
-    canToggle: isOwner,
+    canToggle: PREVIEW_MODE_ENABLED && isOwner,
   };
 }
