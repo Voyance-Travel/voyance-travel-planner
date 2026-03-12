@@ -577,7 +577,7 @@ export default function TripDetail() {
         .eq('journey_order', prevOrder)
         .single();
 
-      if (prevLeg && (prevLeg.itinerary_status === 'ready' || prevLeg.itinerary_status === 'complete') && !cancelled) {
+      if (prevLeg && (prevLeg.itinerary_status === 'ready' || (prevLeg.itinerary_status as string) === 'complete') && !cancelled) {
         console.log(`[TripDetail] Previous leg (order ${prevOrder}) is ready — triggering generation for ${trip.id}`);
         // Kick off generation for this leg
         try {
