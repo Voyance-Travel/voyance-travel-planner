@@ -323,7 +323,7 @@ export function validateGeneratedDay(
 /**
  * POST-VALIDATION: Strip duplicate activities from a day.
  */
-export function deduplicateActivities(day: StrictDayMinimal): { day: StrictDayMinimal; removed: string[] } {
+export function deduplicateActivities(day: StrictDayMinimal, mustDoActivities: string[] = []): { day: StrictDayMinimal; removed: string[] } {
   if (!day.activities || day.activities.length <= 1) {
     return { day, removed: [] };
   }
