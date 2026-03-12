@@ -3879,6 +3879,7 @@ export function EditorialItinerary({
             {[
               { id: 'itinerary', label: 'Itinerary', fullLabel: 'Itinerary', icon: <Calendar className="h-4 w-4" /> },
               { id: 'budget', label: 'Budget', fullLabel: 'Budget', icon: <Wallet className="h-4 w-4" /> },
+              { id: 'payments', label: 'Payments', fullLabel: 'Payments', icon: <CreditCard className="h-4 w-4" /> },
               { id: 'details', label: 'Details', fullLabel: 'Flights & Hotels', icon: <Plane className="h-4 w-4" /> },
               { id: 'needtoknow', label: 'Need to Know', fullLabel: 'Need to Know', icon: <Shield className="h-4 w-4" />, mobileOverflow: true },
               ...(collaborators.length > 0 ? [{ id: 'collab', label: 'Group', fullLabel: 'Group Chat & Vote', icon: <MessageCircle className="h-4 w-4" /> }] : []),
