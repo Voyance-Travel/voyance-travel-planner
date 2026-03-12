@@ -7659,6 +7659,7 @@ interface DayCardProps {
   onActivityLock: (dayIndex: number, activityId: string) => void;
   onActivityMove: (dayIndex: number, activityId: string, direction: 'up' | 'down') => void;
   onMoveToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
+  onCopyToDay?: (fromDayIndex: number, activityId: string, toDayIndex: number) => void;
   onActivityRemove: (dayIndex: number, activityId: string) => void;
   onActivityReorder?: (activities: EditorialActivity[]) => void; // Drag-and-drop reorder
   onDayLock: (dayIndex: number) => void;
