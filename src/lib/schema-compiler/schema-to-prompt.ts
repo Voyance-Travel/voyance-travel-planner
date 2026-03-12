@@ -307,7 +307,7 @@ function serializeSlot(slot: DaySlot): string {
       lines.push(`  Cost: $${slot.filledData.cost}`);
     }
     if (slot.filledData.source === 'must_do') {
-      lines.push('  ⚠ This is the traveler\'s must-do activity. Preserve exactly.');
+      lines.push('  ⚠ [SYSTEM-INSTRUCTION] This is the traveler\'s must-do. Preserve the title, time, and location exactly as given.');
     }
     if (slot.filledData.notes) {
       lines.push(`  Notes: ${slot.filledData.notes}`);

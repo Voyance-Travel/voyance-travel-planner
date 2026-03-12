@@ -6412,6 +6412,68 @@ If the purpose is a specific event, plan at least ONE full day around that event
         console.log(`[generate-day] ✓ Using authenticated userId: ${userId} (no tripId to verify)`);
       }
 
+        // =======================================================================
+        // STEP: FINAL CHRONOLOGICAL SORT + TRANSPORT→VENUE LOGICAL ORDER (Fix 23L)
+        // =======================================================================
+        try {
+          // Step A: Sort by startTime
+          normalizedActivities.sort((a: any, b: any) => {
+            const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+            const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+            return aM - bM;
+          });
+
+          // Step B: Detect transport→venue pairs where venue starts BEFORE its transport
+          const TRANSPORT_PATTERNS = /^(transport|transfer|taxi|uber|ride|drive|car|shuttle|lirr|metro|subway|bus)\s+(to|from)/i;
+          let reorderFixes = 0;
+
+          for (let i = 0; i < normalizedActivities.length; i++) {
+            const act = normalizedActivities[i];
+            const isTransport = TRANSPORT_PATTERNS.test(act.title || '') ||
+              (act.category || '').toLowerCase() === 'transport';
+            if (!isTransport) continue;
+
+            const title = (act.title || '').toLowerCase();
+            const toMatch = title.match(/(?:to|towards?)\s+(.+)/i);
+            if (!toMatch) continue;
+            const transportDest = toMatch[1].trim();
+
+            for (let j = 0; j < i; j++) {
+              const venue = normalizedActivities[j];
+              const venueTitle = (venue.title || '').toLowerCase();
+              const venueLoc = typeof venue.location === 'string'
+                ? venue.location.toLowerCase()
+                : (venue.location?.name || '').toLowerCase();
+
+              if (!venueTitle.includes(transportDest) && !venueLoc.includes(transportDest)) continue;
+
+              const transportEnd = parseTimeToMinutes(act.endTime || act.startTime || '00:00');
+              if (transportEnd !== null) {
+                const venueDuration = (parseTimeToMinutes(venue.endTime || '00:00') ?? 0) -
+                  (parseTimeToMinutes(venue.startTime || '00:00') ?? 0);
+                venue.startTime = act.endTime || act.startTime;
+                if (venueDuration > 0) {
+                  venue.endTime = minutesToTime(transportEnd + Math.max(venueDuration, 60));
+                }
+                reorderFixes++;
+                console.log(`[chronological-fix] Moved "${venue.title}" to start after "${act.title}" (${venue.startTime})`);
+              }
+              break;
+            }
+          }
+
+          if (reorderFixes > 0) {
+            normalizedActivities.sort((a: any, b: any) => {
+              const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+              const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+              return aM - bM;
+            });
+            console.log(`[chronological-fix] Fixed ${reorderFixes} transport→venue ordering issues`);
+          }
+        } catch (chronErr) {
+          console.warn(`[chronological-fix] Non-critical error, skipping:`, chronErr);
+        }
+
 
       // =======================================================================
       // TRANSITION DAY RESOLVER: Determine if this day is a transition day
@@ -8561,11 +8623,32 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
               console.warn(`[schema-generation] Validation ${validationResult.severity}: ${validationResult.summary}`);
             }
 
-            // Apply auto-corrections if any
-            if (validationResult.correctedActivities?.length > 0) {
-              console.log(`[schema-generation] Applied ${validationResult.overrides.length} auto-corrections`);
-              // Note: correctedActivities only contains corrections; merge with original
-              // For now, log but don't override — the existing pipeline's post-processing handles most issues
+            // Apply auto-corrections (locked slot integrity, time overwrites, group attribution)
+            if (validationResult.overrides.length > 0 && validationResult.correctedActivities?.length > 0) {
+              console.log(`[schema-generation] Applying ${validationResult.overrides.length} auto-corrections to ${validationResult.correctedActivities.length} activities`);
+              for (const corrected of validationResult.correctedActivities) {
+                const matchIdx = generatedDay.activities.findIndex((a: any) =>
+                  (a.title === corrected.title || a.startTime === corrected.startTime) &&
+                  a.title !== undefined
+                );
+                if (matchIdx !== -1) {
+                  for (const override of validationResult.overrides) {
+                    if (override.field === 'title' && corrected.title) {
+                      generatedDay.activities[matchIdx].title = corrected.title;
+                    }
+                    if (override.field === 'time') {
+                      generatedDay.activities[matchIdx].startTime = corrected.startTime;
+                      generatedDay.activities[matchIdx].endTime = corrected.endTime;
+                    }
+                    if (override.field === 'cost' && corrected.cost !== undefined) {
+                      generatedDay.activities[matchIdx].cost = corrected.cost;
+                    }
+                    if (override.field === 'suggestedFor' && corrected.suggestedFor) {
+                      generatedDay.activities[matchIdx].suggestedFor = corrected.suggestedFor;
+                    }
+                  }
+                }
+              }
             }
           } catch (valErr) {
             console.warn('[schema-generation] Validation/logging failed (non-blocking):', valErr);
