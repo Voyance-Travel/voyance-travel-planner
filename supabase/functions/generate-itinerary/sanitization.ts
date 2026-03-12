@@ -143,8 +143,28 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number): any {
       const cleanActName = sanitizeAITextField(act.name);
       act.title = cleanActTitle || cleanActName || `Activity ${idx + 1}`;
       act.name = act.title;
-      if (act.description) act.description = sanitizeAITextField(act.description) || undefined;
-      if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips) || undefined;
+      if (act.description) {
+        act.description = sanitizeAITextField(act.description) || undefined;
+        // If description is just the title repeated (AI parroting), clear it
+        if (act.description && act.title) {
+          const descNorm = act.description.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+          const titleNorm = act.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+          if (descNorm === titleNorm || (descNorm.startsWith(titleNorm + ' ') && descNorm.length < titleNorm.length + 15)) {
+            act.description = undefined;
+          }
+        }
+      }
+      if (typeof act.tips === 'string') {
+        act.tips = sanitizeAITextField(act.tips) || undefined;
+        // If tip is just restating the activity title/description, clear it
+        if (act.tips && act.title) {
+          const tipNorm = act.tips.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+          const titleNorm = act.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+          if (tipNorm.includes(titleNorm) && tipNorm.length < titleNorm.length + 30) {
+            act.tips = undefined;
+          }
+        }
+      }
       if (act.location && typeof act.location === 'object') {
         if (act.location.name) act.location.name = sanitizeAITextField(act.location.name) || act.location.name;
         if (act.location.address) act.location.address = sanitizeAITextField(act.location.address) || act.location.address;

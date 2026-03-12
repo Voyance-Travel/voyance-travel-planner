@@ -297,16 +297,16 @@ function reverseScheduleTransport(
 
       // For filled slots before transport, add a note about the time constraint
       if (slot.status === 'filled' && slot.filledData) {
-        const existingNotes = slot.filledData.notes || '';
-        if (!existingNotes.includes('MUST END')) {
-          slots[i] = {
-            ...slot,
-            filledData: {
-              ...slot.filledData,
-              notes: `${existingNotes} MUST END before ${departureTime} — must-do activity requires departure by this time.`.trim(),
-            },
-          };
-        }
+        // Store departure constraint as a schema-level hint, NOT in the visible notes field.
+        // The notes field flows through to the final output and should only contain user-facing text.
+        slots[i] = {
+          ...slot,
+          departureConstraint: `Must end before ${departureTime}`,
+          filledData: {
+            ...slot.filledData,
+            // Preserve existing notes without injecting system text
+          },
+        };
       }
     }
   }
