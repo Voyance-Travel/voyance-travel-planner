@@ -486,7 +486,7 @@ export async function syncItineraryToBudget(
           category: budgetCategory,
           entry_type: 'planned',
           amount_cents: Math.round(costAmount * 100), // Convert to cents
-          currency: activity.cost.currency || 'USD',
+          currency: (typeof rawCost === 'object' && rawCost?.currency) ? rawCost.currency : 'USD',
           description: activity.title,
           day_number: day.dayNumber,
           activity_id: activity.id,
