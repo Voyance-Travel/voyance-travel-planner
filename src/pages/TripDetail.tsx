@@ -2334,6 +2334,7 @@ export default function TripDetail() {
                       })),
                     } : null);
                   }}
+                  onActiveDayChange={setActiveDayNumber}
                   onBookingAdded={async () => {
                     // Refetch trip_cities AND trip to pick up hotel/transfer/flight changes
                     try {
