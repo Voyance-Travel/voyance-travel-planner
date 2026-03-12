@@ -8281,14 +8281,10 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           // Build multi-city context
           let schemaMultiCityContext = '';
           if (resolvedIsMultiCity) {
-            const dayCity = context.multiCityDayMap?.[dayNumber - 1];
-            if (dayCity) {
-              const cityFirstTime = context.firstTimePerCity?.[resolvedDestination] ?? effectiveIsFirstTimeVisitor;
-              const visitorLabel = cityFirstTime ? 'FIRST-TIME visitor' : 'RETURNING visitor';
-              schemaMultiCityContext = `🌍 This day is in **${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}**. ALL activities MUST be located in ${resolvedDestination}.\n👤 VISITOR STATUS: Traveler is a ${visitorLabel}.${cityFirstTime ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems and local favorites.'}`;
-              if (dayCity.hotelName) {
-                schemaMultiCityContext += `\n🏨 ACCOMMODATION: ${dayCity.hotelName}${dayCity.hotelAddress ? ` (${dayCity.hotelAddress})` : ''}. Start/end each day near the hotel.`;
-              }
+            const visitorLabel = effectiveIsFirstTimeVisitor ? 'FIRST-TIME visitor' : 'RETURNING visitor';
+            schemaMultiCityContext = `🌍 This day is in **${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}**. ALL activities MUST be located in ${resolvedDestination}.\n👤 VISITOR STATUS: Traveler is a ${visitorLabel}.${effectiveIsFirstTimeVisitor ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems and local favorites.'}`;
+            if (flightContext?.hotelName) {
+              schemaMultiCityContext += `\n🏨 ACCOMMODATION: ${flightContext.hotelName}${flightContext.hotelAddress ? ` (${flightContext.hotelAddress})` : ''}. Start/end each day near the hotel.`;
             }
           }
 
