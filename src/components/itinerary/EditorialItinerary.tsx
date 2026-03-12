@@ -1180,6 +1180,8 @@ export function EditorialItinerary({
         cost: act.cost ? (typeof act.cost === 'number' ? { amount: act.cost, currency: 'USD' } : { amount: (act.cost as any).amount || (act.cost as any).total || (act.cost as any).perPerson || 0, currency: (act.cost as any).currency || 'USD' }) : undefined,
       })),
     }));
+
+    // Sync to budget ledger (planned entries)
     syncItineraryToBudget(tripId, daysForSync)
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
@@ -1187,7 +1189,44 @@ export function EditorialItinerary({
         queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
       })
       .catch(err => console.error('[EditorialItinerary] Budget sync failed:', err));
-  }, [tripId, queryClient]);
+
+    // Also sync to activity_costs table so v_payments_summary stays in sync
+    import('@/services/activityCostService').then(({ syncActivitiesToCostTable }) => {
+      const activitiesForCostTable: Array<{
+        id: string;
+        dayNumber: number;
+        category: string;
+        costPerPersonUsd: number;
+        numTravelers?: number;
+        source?: string;
+      }> = [];
+
+      for (const day of currentDays) {
+        for (const act of day.activities) {
+          const costVal = act.cost
+            ? (typeof act.cost === 'number'
+              ? act.cost
+              : (act.cost as any).amount || (act.cost as any).total || (act.cost as any).perPerson || 0)
+            : 0;
+          if (costVal > 0) {
+            activitiesForCostTable.push({
+              id: act.id,
+              dayNumber: day.dayNumber,
+              category: act.category || act.type || 'activities',
+              costPerPersonUsd: costVal / (travelers || 1),
+              numTravelers: travelers || 1,
+              source: 'itinerary-sync',
+            });
+          }
+        }
+      }
+
+      if (activitiesForCostTable.length > 0) {
+        syncActivitiesToCostTable(tripId, activitiesForCostTable)
+          .catch(err => console.error('[EditorialItinerary] Activity cost sync failed:', err));
+      }
+    });
+  }, [tripId, queryClient, travelers]);
 
   // Auto-sync budget ledger on initial load so stale planned entries are replaced
   const budgetSyncedRef = useRef(false);
