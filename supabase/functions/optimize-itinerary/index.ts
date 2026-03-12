@@ -2331,6 +2331,7 @@ serve(async (req) => {
             transportCalculated++;
           }
         }
+      }
 
       // Step 8: Photo enrichment - REMOVED per user feedback (unreliable, expensive)
 
