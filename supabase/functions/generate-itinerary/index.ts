@@ -9280,6 +9280,83 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         }
 
         // =======================================================================
+        // GAP 6: ACTIVITY DEDUPLICATION (ported from old path lines 2731-2737)
+        // Strip same-title/near-identical activities, respecting user-requested repeats
+        // =======================================================================
+        try {
+          const mustDoListForDedup = (mustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+          const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(
+            { activities: normalizedActivities } as any,
+            mustDoListForDedup
+          );
+          if (removedDupes.length > 0) {
+            console.warn(`[generate-day] Day ${dayNumber}: Removed ${removedDupes.length} duplicate(s): ${removedDupes.join(', ')}`);
+            normalizedActivities = dedupedDay.activities;
+          }
+        } catch (dedupErr) {
+          console.warn('[activity-dedup] Non-critical error, skipping:', dedupErr);
+        }
+
+        // =======================================================================
+        // GAP 7: USER PREFERENCE VALIDATION (ported from old path lines 2620-2685)
+        // Validates user-requested activities, budget, light-dining honored
+        // Logs warnings for now (no retry loop yet — see Gap 1)
+        // =======================================================================
+        try {
+          const userNotes = (preferenceContext || '').toLowerCase();
+          const allActivityText = normalizedActivities.map((a: any) => 
+            `${(a.title || '')} ${(a.description || '')}`
+          ).join(' ').toLowerCase();
+
+          const ACTIVITY_KEYWORDS: Record<string, string[]> = {
+            'skiing': ['ski', 'snow', 'slopes', 'big snow', 'mountain creek', 'ski resort'],
+            'surfing': ['surf', 'beach break', 'waves', 'surf lesson'],
+            'hiking': ['hike', 'trail', 'trek', 'summit'],
+            'museum': ['museum', 'gallery', 'exhibit'],
+            'shopping': ['shop', 'mall', 'boutique', 'market'],
+            'spa': ['spa', 'massage', 'wellness', 'sauna'],
+            'snorkeling': ['snorkel', 'reef', 'underwater'],
+            'diving': ['dive', 'scuba', 'underwater'],
+          };
+
+          for (const [activity, keywords] of Object.entries(ACTIVITY_KEYWORDS)) {
+            if (userNotes.includes(activity)) {
+              const dayHasThis = keywords.some(kw => allActivityText.includes(kw));
+              if (!dayHasThis && !isLastDay) {
+                console.warn(`[preference-validation] User requested "${activity}" but Day ${dayNumber} has no matching activities`);
+              }
+            }
+          }
+
+          // Check for "light dining" preference violations
+          const wantsLightDining = userNotes.includes('light dinner') || userNotes.includes('light meal') || userNotes.includes('casual dinner') || userNotes.includes('simple dinner') || userNotes.includes('quick bite');
+          if (wantsLightDining) {
+            for (const act of normalizedActivities) {
+              const isDining = ((act as any).category || '').toLowerCase() === 'dining';
+              const cost = (act as any).cost?.amount || 0;
+              if (isDining && cost > 50) {
+                console.warn(`[preference-validation] User requested light dining but got "${(act as any).title}" at $${cost}`);
+              }
+            }
+          }
+
+          // Check for budget preference violations
+          const wantsBudget = userNotes.includes('budget') || userNotes.includes('cheap') || userNotes.includes('affordable') || userNotes.includes('save money') || userNotes.includes('low cost');
+          if (wantsBudget) {
+            const expensiveActivities = normalizedActivities.filter((a: any) => {
+              const cost = (a as any).cost?.amount || 0;
+              return cost > 75;
+            });
+            if (expensiveActivities.length > 0) {
+              const names = expensiveActivities.map((a: any) => `"${a.title}" ($${(a as any).cost?.amount})`).join(', ');
+              console.warn(`[preference-validation] User wants budget trip but Day ${dayNumber} has expensive activities: ${names}`);
+            }
+          }
+        } catch (prefErr) {
+          console.warn('[preference-validation] Non-critical error, skipping:', prefErr);
+        }
+
+        // =======================================================================
         // STEP: FINAL CHRONOLOGICAL SORT (Fix 23L)
         // =======================================================================
         try {
