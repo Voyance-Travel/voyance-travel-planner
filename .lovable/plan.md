@@ -186,3 +186,34 @@ Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts
 1. **`must-do-priorities.ts`** — Added `COMPOUND_CONJUNCTIONS`, `GENERIC_ACTIVITY_KEYWORDS`, `isGenericActivityDescription()` helper. Compound splitting in `parseMustDoInput()` splits "dinner and comedy show" into two items when both sides are generic. Added `isGenericIntent` field to `MustDoPriority` interface, set in `parseItem()`.
 2. **`index.ts`** (Stage 1.999) — Partitions must-dos into specific venues vs generic intents. Generic intents get "AI must suggest specific venues" prompt language instead of "MANDATORY — include exactly as named". Raw text fallback also attempts parsing for generic/specific split.
 3. **`index.ts`** (per-day generation ~line 6732) — Same generic/specific split for per-day raw text fallback.
+
+---
+
+## Fix 24: Port 8 Critical Post-Generation Safeguards to Schema Path ✅ COMPLETE
+
+### Problem
+The schema path (`USE_SCHEMA_GENERATION = true`) was missing 8 post-generation safeguards from the old path that prevent weird/broken itineraries.
+
+### Safeguards Ported to Schema Path in `index.ts`:
+
+1. **Gap 2 — Hotel Address Correction** ✅: Overwrites AI-hallucinated hotel addresses with actual booking data from multi-city day map or flight context.
+
+2. **Gap 5 — Arrival Day Title Stripping** ✅: Strips "Arrival at Airport" / "Baggage Claim" activities by title on Day 1 (handled by Arrival Game Plan UI).
+
+3. **Gap 3 — Departure Day Sequence Fix** ✅: Ensures checkout comes BEFORE airport transfer on last day. Swaps and re-anchors times if wrong order.
+
+4. **Gap 4 — Departure Day Dedup** ✅: Removes duplicate airport/transfer/departure activities (AI sometimes generates 3+ airport blocks).
+
+5. **Gap 8 — Transit-Time Enforcement** ✅: Replaced static 15-min buffer with smart logic that uses each activity's `transportation.duration` field and applies venue-type-specific arrival buffers (hotel=15min, restaurant/museum=10min).
+
+6. **Gap 6 — Activity Deduplication** ✅: Calls `deduplicateActivities()` with `mustDoActivities` to strip same-title/near-identical activities while preserving user-requested repeats.
+
+7. **Gap 7 — User Preference Validation** ✅: Validates user-requested activities (skiing, surfing, etc.), budget, and light-dining preferences. Logs warnings (no retry loop).
+
+8. **Gap 1 — Minimum Activity Count Validation** ✅ (partial): Validates minimum real activity count (2 for standard days, 1 for departure). Logs warnings. Full retry loop deferred due to architectural complexity.
+
+### Also Added:
+- **Time format normalization**: Forces 24-hour HH:MM format after hotel address correction (catches AM/PM from AI)
+
+### Dedup Fix (separate commit):
+- `deduplicateActivities()` now accepts `mustDoActivities` parameter and skips dedup for user-requested repeats via `isRecurringEvent()` check
