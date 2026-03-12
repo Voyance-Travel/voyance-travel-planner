@@ -2546,7 +2546,7 @@ export function EditorialItinerary({
     toast.success('Activity swapped!');
 
     // Background-enrich the swapped activity to get website/maps link
-    const swappedTitle = newActivity.title || newActivity.name;
+    const swappedTitle = newActivity.title;
     const swappedId = newActivity.id;
     if (swappedTitle && destination) {
       Promise.all([
