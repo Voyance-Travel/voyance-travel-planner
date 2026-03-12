@@ -7723,6 +7723,7 @@ function DayCard({
   onActivityLock,
   onActivityMove,
   onMoveToDay,
+  onCopyToDay,
   onActivityRemove,
   onActivityReorder,
   onDayLock,
