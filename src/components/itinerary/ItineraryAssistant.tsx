@@ -235,9 +235,9 @@ export function ItineraryAssistant({
       const assistantMessage: ChatMessage = {
         id: `msg_${Date.now()}_assistant`,
         role: 'assistant',
-        content: (response.message && !response.message.trim().startsWith('{'))
+        content: (response.message && !response.message.trim().startsWith('{') && !response.message.trim().startsWith('['))
           ? response.message
-          : (response.error ? 'Sorry, something went wrong. Please try again.' : ''),
+          : 'Sorry, something went wrong. Please try again.',
         actions: response.actions?.map(a => ({
           type: a.type as ItineraryAction['type'],
           params: a.params,
