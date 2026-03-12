@@ -8258,9 +8258,10 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
           // Build destination essentials prompt (DB-driven)
           let schemaDestEssentials = '';
+          const PERPLEXITY_API_KEY_SCHEMA = Deno.env.get("PERPLEXITY_API_KEY");
           try {
             schemaDestEssentials = await buildDestinationEssentialsPromptWithDB(
-              supabase, resolvedDestination, totalDays, effectiveIsFirstTimeVisitor, PERPLEXITY_API_KEY
+              supabase, resolvedDestination, totalDays, effectiveIsFirstTimeVisitor, PERPLEXITY_API_KEY_SCHEMA
             ) || buildDestinationEssentialsPrompt(resolvedDestination, totalDays, effectiveIsFirstTimeVisitor);
           } catch (e) {
             console.warn('[schema-generation] Destination essentials fetch failed:', e);
