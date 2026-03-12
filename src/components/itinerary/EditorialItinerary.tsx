@@ -8192,6 +8192,7 @@ function DayCard({
                           swapCapInfo={swapCapInfo}
                           onMove={onActivityMove}
                           onMoveToDay={onMoveToDay}
+                          onCopyToDay={onCopyToDay}
                           onRemove={onActivityRemove}
                           onTimeEdit={onTimeEdit}
                           onEdit={onActivityEdit}
