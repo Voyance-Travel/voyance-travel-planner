@@ -278,6 +278,8 @@ interface MultiCityDayInfo {
   hotelName?: string;
   hotelAddress?: string;
   hotelNeighborhood?: string;
+  hotelCheckIn?: string;
+  hotelCheckOut?: string;
   isFirstDayInCity?: boolean;
   isLastDayInCity?: boolean;
 }
@@ -1331,10 +1333,14 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
           const nights = city.nights || city.days_total || 1;
           
           // Extract per-city hotel info
-          const cityHotel = city.hotel_selection as Record<string, unknown> | null;
+          // hotel_selection can be an array [{name:...}] or a plain object {name:...}
+          const rawHotel = city.hotel_selection as any;
+          const cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : rawHotel;
           const hotelName = cityHotel?.name as string | undefined;
           const hotelAddress = cityHotel?.address as string | undefined;
           const hotelNeighborhood = (cityHotel?.neighborhood as string) || hotelAddress;
+          const hotelCheckIn = (cityHotel?.checkIn || cityHotel?.checkInTime || cityHotel?.check_in) as string | undefined;
+          const hotelCheckOut = (cityHotel?.checkOut || cityHotel?.checkOutTime || cityHotel?.check_out) as string | undefined;
           
           for (let n = 0; n < nights; n++) {
             const isTransition = n === 0 && i > 0;
@@ -1354,6 +1360,8 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
               hotelName,
               hotelAddress,
               hotelNeighborhood,
+              hotelCheckIn,
+              hotelCheckOut,
               isFirstDayInCity: n === 0,
               isLastDayInCity: n === nights - 1,
             });
@@ -1529,6 +1537,7 @@ async function generateSingleDayWithRetry(
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
     isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with "Hotel Check-in & Refresh" (category: accommodation) as the FIRST activity. Do NOT include an "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" activity — arrival logistics are handled by a separate UI component. Start the day with hotel check-in, then proceed to real activities.' : '',
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
+    '13. **HOTEL FIDELITY — CRITICAL**: If a specific hotel name and address are provided in the accommodation section, you MUST use that EXACT hotel name for ALL accommodation activities (check-in, return to hotel, freshen up, checkout, etc.). Do NOT invent, substitute, or suggest a different hotel. The user has already booked their accommodation.',
   ].filter(Boolean).join('\n');
 
   // Build list of previous experience types for stricter rejection
@@ -1888,7 +1897,11 @@ These help the traveler prepare for their trip.
         // Inject per-city hotel context for geographic anchoring
         if (dayCity.hotelName) {
           const hotelArea = dayCity.hotelNeighborhood || dayCity.hotelAddress || '';
-          multiCityPrompt += `\n🏨 ACCOMMODATION in ${dayDestination}: ${dayCity.hotelName}${hotelArea ? ` (${hotelArea})` : ''}.`;
+          const checkInTime = dayCity.hotelCheckIn || '15:00';
+          const checkOutTime = dayCity.hotelCheckOut || '11:00';
+          multiCityPrompt += `\n🏨 ACCOMMODATION in ${dayDestination}: "${dayCity.hotelName}"${hotelArea ? ` — Address: ${hotelArea}` : ''}.`;
+          multiCityPrompt += `\n   Check-in: ${checkInTime}, Check-out: ${checkOutTime}.`;
+          multiCityPrompt += `\n   🚫 CRITICAL: The user has ALREADY SELECTED this hotel. Use "${dayCity.hotelName}" for ALL accommodation references (check-in, return to hotel, freshen up, etc.). Do NOT invent, suggest, or substitute a different hotel.`;
           multiCityPrompt += `\n   ⚠️ Start each day from this hotel area and plan return in the evening.`;
           
           if (dayCity.isFirstDayInCity && !dayCity.isTransitionDay) {
@@ -5723,8 +5736,10 @@ If the purpose is a specific event, plan at least ONE full day around that event
             const checkInStart = minutesToHHMM(startMin);
             const checkInEnd = minutesToHHMM(startMin + 30);
             
-            const hotelN = flightHotelResult?.hotelName || 'Hotel';
-            const hotelA = flightHotelResult?.hotelAddress || '';
+            // Prefer multi-city hotel data, fall back to single-city flightHotelResult
+            const day1City = context.multiCityDayMap?.[0];
+            const hotelN = day1City?.hotelName || flightHotelResult?.hotelName || 'Hotel';
+            const hotelA = day1City?.hotelAddress || flightHotelResult?.hotelAddress || '';
             
             console.log(`[Stage 2.55] Replacing combined arrival block: "${combined.title}" with Hotel Check-in only (arrival handled by UI)`);
             
