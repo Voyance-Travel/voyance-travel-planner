@@ -8864,7 +8864,77 @@ Conservative default: if unsure, mark bookingRequired: true with a note.`,
         }
 
         // =======================================================================
-        // STEP: ENRICH NEW ACTIVITIES (ratings, photos, coordinates)
+        // STEP: MEAL DEDUPLICATION — Safety net for duplicate dining (Fix 23L)
+        // =======================================================================
+        try {
+          const isDiningActivity = (act: any) => {
+            const cat = (act.category || '').toLowerCase();
+            const title = (act.title || '').toLowerCase();
+            if (cat === 'dining' || cat === 'restaurant' || cat === 'food') return true;
+            if (/\b(dinner|lunch|breakfast|brunch|bistro|steakhouse|trattoria|restaurant|café|eatery)\b/i.test(title)) return true;
+            return false;
+          };
+
+          const mealWindows = [
+            { name: 'breakfast', min: 0, max: 660, filled: false },
+            { name: 'lunch', min: 660, max: 960, filled: false },
+            { name: 'dinner', min: 960, max: 1440, filled: false },
+          ];
+
+          const toRemove = new Set<number>();
+
+          for (let i = 0; i < normalizedActivities.length; i++) {
+            const act = normalizedActivities[i];
+            if (!isDiningActivity(act)) continue;
+            if (act.isLocked || act.isMustDo || act.source === 'must_do') continue;
+
+            const mins = parseTimeToMinutes(act.startTime || '12:00') ?? 720;
+            const window = mealWindows.find(w => mins >= w.min && mins < w.max);
+            if (!window) continue;
+
+            if (window.filled) {
+              console.log(`[meal-dedup] Removing duplicate ${window.name}: "${act.title}" at ${act.startTime}`);
+              toRemove.add(i);
+            } else {
+              window.filled = true;
+            }
+          }
+
+          // Back-to-back dining check
+          for (let i = 1; i < normalizedActivities.length; i++) {
+            if (toRemove.has(i) || toRemove.has(i - 1)) continue;
+            const prev = normalizedActivities[i - 1];
+            const curr = normalizedActivities[i];
+            if (isDiningActivity(prev) && isDiningActivity(curr)) {
+              if (!curr.isLocked && !curr.isMustDo && curr.source !== 'must_do') {
+                console.log(`[meal-dedup] Removing back-to-back dining: "${curr.title}" after "${prev.title}"`);
+                toRemove.add(i);
+              }
+            }
+          }
+
+          if (toRemove.size > 0) {
+            normalizedActivities = normalizedActivities.filter((_: any, i: number) => !toRemove.has(i));
+            console.log(`[meal-dedup] Removed ${toRemove.size} excess dining activities`);
+          }
+        } catch (mealErr) {
+          console.warn('[meal-dedup] Non-critical error, skipping:', mealErr);
+        }
+
+        // =======================================================================
+        // STEP: FINAL CHRONOLOGICAL SORT (Fix 23L)
+        // =======================================================================
+        try {
+          normalizedActivities.sort((a: any, b: any) => {
+            const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+            const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+            return aM - bM;
+          });
+        } catch (sortErr) {
+          console.warn('[final-sort] Non-critical error, skipping:', sortErr);
+        }
+
+
         // This ensures regenerated activities have the same rich data as initial generation
         // =======================================================================
         const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
