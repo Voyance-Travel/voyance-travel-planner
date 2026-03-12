@@ -2209,7 +2209,6 @@ serve(async (req) => {
 
           // SMART CHECK: If the NEXT activity is itself a transport/transfer block,
           // we don't need to show "transportation to next" - that would be redundant.
-          // Example: Arrival at Airport → Airport Transfer (the transfer IS the transport)
           const toCategory = (to.category || to.type || '').toLowerCase();
           const toTitle = (to.title || '').toLowerCase();
           const isNextTransportBlock =
@@ -2230,99 +2229,108 @@ serve(async (req) => {
             continue;
           }
 
-          const originCoords = getCoordinates(from.location);
-          const destCoords = getCoordinates(to.location);
+          // Leg-level fault isolation: wrap each leg in try/catch so one bad segment
+          // doesn't crash the entire optimization
+          try {
+            const originCoords = getCoordinates(from.location);
+            const destCoords = getCoordinates(to.location);
 
-          const seed = `${tripId}|day:${day.dayNumber}|from:${from.id}|to:${to.id}`;
+            const seed = `${tripId}|day:${day.dayNumber}|from:${from.id}|to:${to.id}`;
 
-          // Prefer real routing when possible:
-          // 1) coords -> best
-          // 2) address strings -> still lets Directions API return transit line + stop details
-          // 3) activity title + destination as last-resort address for transit details
-          let originRouting: GoogleLocationInput | null = originCoords || getRoutingAddress(from.location, destination);
-          let destRouting: GoogleLocationInput | null = destCoords || getRoutingAddress(to.location, destination);
+            // Prefer real routing when possible:
+            // 1) coords -> best
+            // 2) address strings -> still lets Directions API return transit line + stop details
+            // 3) activity title + destination as last-resort address for transit details
+            let originRouting: GoogleLocationInput | null = originCoords || getRoutingAddress(from.location, destination);
+            let destRouting: GoogleLocationInput | null = destCoords || getRoutingAddress(to.location, destination);
 
-          // Last-resort: use activity title + destination city as an address query
-          // This allows Google Routes API to still return detailed transit line/stop info
-          if (!originRouting) {
-            const fromTitle = from.location?.name || from.title;
-            if (fromTitle) {
-              originRouting = `${fromTitle}, ${destination}`;
-              console.log(`[optimize-itinerary] Using title-based address for origin: "${originRouting}"`);
+            // Last-resort: use activity title + destination city as an address query
+            if (!originRouting) {
+              const fromTitleAddr = from.location?.name || from.title;
+              if (fromTitleAddr) {
+                originRouting = `${fromTitleAddr}, ${destination}`;
+                console.log(`[optimize-itinerary] Using title-based address for origin: "${originRouting}"`);
+              }
             }
-          }
-          if (!destRouting) {
-            const toTitle = to.location?.name || to.title;
-            if (toTitle) {
-              destRouting = `${toTitle}, ${destination}`;
-              console.log(`[optimize-itinerary] Using title-based address for dest: "${destRouting}"`);
+            if (!destRouting) {
+              const toTitleAddr = to.location?.name || to.title;
+              if (toTitleAddr) {
+                destRouting = `${toTitleAddr}, ${destination}`;
+                console.log(`[optimize-itinerary] Using title-based address for dest: "${destRouting}"`);
+              }
             }
-          }
 
-          if (originRouting && destRouting) {
-            const transport = await getOptimalTransport(originRouting, destRouting, to.location?.name || to.title);
+            if (originRouting && destRouting) {
+              const transport = await getOptimalTransport(originRouting, destRouting, to.location?.name || to.title);
 
-            if (!transport) {
+              if (!transport) {
+                activities[i] = {
+                  ...from,
+                  transportation: estimateNoCoords(from, to, seed),
+                };
+                transportCalculated++;
+                console.log(`[optimize-itinerary] No route data for leg "${from.title}" → "${to.title}", using estimated transport`);
+              } else {
+                // Check if the returned mode is allowed by user preferences
+                if (!isModeAllowed(transport.method)) {
+                  console.log(`[optimize-itinerary] Mode "${transport.method}" not allowed for leg "${from.title}" → "${to.title}", using estimated transport`);
+                  activities[i] = {
+                    ...from,
+                    transportation: estimateNoCoords(from, to, seed),
+                  };
+                  transportCalculated++;
+                } else {
+                  // Format distance in user's preferred unit
+                  const formattedDistance = transport.distanceMeters 
+                    ? formatDistance(transport.distanceMeters)
+                    : transport.distance;
+
+                  activities[i] = {
+                    ...from,
+                    transportation: {
+                      method: transport.method,
+                      duration: transport.duration,
+                      durationMinutes: transport.durationMinutes,
+                      distance: formattedDistance,
+                      distanceMeters: transport.distanceMeters,
+                      estimatedCost: transport.estimatedCost,
+                      instructions: transport.instructions,
+                    },
+                  };
+                  transportCalculated++;
+                }
+              }
+            } else {
               activities[i] = {
                 ...from,
                 transportation: estimateNoCoords(from, to, seed),
               };
               transportCalculated++;
-              console.log(`[optimize-itinerary] No route data for leg "${from.title}" → "${to.title}", using estimated transport`);
-              continue;
+              console.log(`[optimize-itinerary] No routing info at all for leg "${from.title}" → "${to.title}", using estimated transport`);
             }
 
-            // Check if the returned mode is allowed by user preferences
-            if (!isModeAllowed(transport.method)) {
-              console.log(`[optimize-itinerary] Mode "${transport.method}" not allowed for leg "${from.title}" → "${to.title}", using estimated transport`);
+            // Safety: walking is always free, regardless of data source (INSIDE loop, not after)
+            const finalMethod = (activities[i].transportation?.method || '').toLowerCase();
+            if ((finalMethod === 'walk' || finalMethod === 'walking') && activities[i].transportation?.estimatedCost) {
               activities[i] = {
-                ...from,
-                transportation: estimateNoCoords(from, to, seed),
+                ...activities[i],
+                transportation: {
+                  ...activities[i].transportation!,
+                  estimatedCost: { amount: 0, currency: activities[i].transportation!.estimatedCost?.currency || 'USD' },
+                },
               };
-              transportCalculated++;
-              continue;
             }
-
-            // Format distance in user's preferred unit
-            const formattedDistance = transport.distanceMeters 
-              ? formatDistance(transport.distanceMeters)
-              : transport.distance;
-
-            activities[i] = {
-              ...from,
-              transportation: {
-                method: transport.method,
-                duration: transport.duration,
-                durationMinutes: transport.durationMinutes,
-                distance: formattedDistance,
-                distanceMeters: transport.distanceMeters,
-                estimatedCost: transport.estimatedCost,
-                instructions: transport.instructions,
-              },
-            };
-            transportCalculated++;
-          } else {
+          } catch (legErr) {
+            // Fault isolation: log and fall back to estimated transport for this leg
+            console.warn(`[optimize-itinerary] Leg error "${from.title}" → "${to.title}":`, legErr instanceof Error ? legErr.message : legErr);
+            const seed = `${tripId}|day:${day.dayNumber}|from:${from.id}|to:${to.id}`;
             activities[i] = {
               ...from,
               transportation: estimateNoCoords(from, to, seed),
             };
             transportCalculated++;
-            console.log(`[optimize-itinerary] No routing info at all for leg "${from.title}" → "${to.title}", using estimated transport`);
           }
         }
-
-        // Safety: walking is always free, regardless of data source
-        const finalMethod = (activities[i].transportation?.method || '').toLowerCase();
-        if ((finalMethod === 'walk' || finalMethod === 'walking') && activities[i].transportation?.estimatedCost) {
-          activities[i] = {
-            ...activities[i],
-            transportation: {
-              ...activities[i].transportation!,
-              estimatedCost: { amount: 0, currency: activities[i].transportation!.estimatedCost?.currency || 'USD' },
-            },
-          };
-        }
-      }
 
       // Step 8: Photo enrichment - REMOVED per user feedback (unreliable, expensive)
 
