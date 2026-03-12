@@ -160,8 +160,9 @@ function truncateDayBefore(
     location: { name: stationLabel, address: stationLabel },
     cost: { amount: 0, currency: 'USD' },
   };
-  kept.push(departureBlock);
-  change.addedBlocks.push(`Head to ${stationLabel}`);
+    kept.push(departureBlock);
+    change.addedBlocks.push(`Head to ${stationLabel}`);
+  }
 
   day.activities = kept;
   return change;
