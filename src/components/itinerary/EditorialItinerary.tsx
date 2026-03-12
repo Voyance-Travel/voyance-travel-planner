@@ -1304,6 +1304,15 @@ export function EditorialItinerary({
     });
     return todayIndex >= 0 ? todayIndex : 0;
   });
+
+  // Notify parent when active day changes (for chat context)
+  useEffect(() => {
+    const dayNum = days[selectedDayIndex]?.dayNumber;
+    if (dayNum && onActiveDayChange) {
+      onActiveDayChange(dayNum);
+    }
+  }, [selectedDayIndex, days, onActiveDayChange]);
+
   const { user } = useAuth();
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
   const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
