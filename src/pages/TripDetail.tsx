@@ -1614,7 +1614,7 @@ export default function TripDetail() {
         />
       )}
 
-      <section className="pb-16 pt-8 sm:pt-10 relative z-10">
+      <section className="pb-16 pt-8 sm:pt-10 relative z-10 overflow-x-hidden">
         <div className="max-w-4xl mx-auto px-4">
           {(() => {
             const isPastTrip = isAfter(new Date(), parseLocalDate(effectiveEndDate));
@@ -1631,7 +1631,7 @@ export default function TripDetail() {
             };
 
             return (
-              <div className="flex items-center gap-2 mb-4 sm:mb-6">
+              <div className="flex items-center gap-2 mb-4 sm:mb-6 min-w-0">
                 <h1 className="text-xl sm:text-2xl font-serif font-bold truncate">{trip.name}</h1>
                 {!isPreviewMode && canToggleStatus ? (
                   <button

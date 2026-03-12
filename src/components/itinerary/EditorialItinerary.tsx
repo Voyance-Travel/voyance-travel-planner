@@ -4025,7 +4025,7 @@ export function EditorialItinerary({
 
 
        {/* Navigation Tabs - Hidden in clean preview mode */}
-       {!isCleanPreview && <div className="sticky top-0 z-30 bg-background sm:relative sm:z-auto">
+       {!isCleanPreview && <div className="sticky top-0 z-30 bg-background sm:relative sm:z-auto overflow-x-hidden">
         <div 
           className="border-b border-border overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0"
           ref={(el) => {
@@ -4124,11 +4124,11 @@ export function EditorialItinerary({
              {!isCleanPreview && <div data-tour="value-header" className="rounded-xl border border-border bg-card overflow-hidden">
 
               {/* ROW 1: Trip Total + Currency Toggle + Meta */}
-              <div className="px-4 sm:px-6 py-4 border-b border-border/50">
+              <div className="px-4 sm:px-6 py-4 border-b border-border/50 overflow-hidden">
                 <div className="flex items-center justify-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">Trip Total</span>
-                    <span className="text-2xl font-bold text-foreground">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-sm text-muted-foreground shrink-0">Trip Total</span>
+                    <span className="text-2xl font-bold text-foreground truncate">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
                   </div>
                   {localCurrency !== 'USD' && (
                     <Tooltip delayDuration={200}>
@@ -4162,7 +4162,7 @@ export function EditorialItinerary({
               </div>
 
               {/* ROW 2: Action Buttons */}
-              <div className="px-4 sm:px-6 py-3 border-b border-border/50" data-tour="trip-actions">
+              <div className="px-4 sm:px-6 py-3 border-b border-border/50 overflow-hidden" data-tour="trip-actions">
                 <div className="flex items-center justify-center gap-3 flex-wrap">
                   <Button variant="outline" size="sm" onClick={() => setShowShareModal(true)} className="gap-2">
                     <Share2 className="h-4 w-4" />
@@ -4337,7 +4337,7 @@ export function EditorialItinerary({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-b border-border/50">
-                      <p className="text-xs text-muted-foreground text-center pt-3 pb-1">
+                      <p className="text-xs text-muted-foreground text-center pt-3 pb-1 px-4 truncate">
                         Your {destination} trip{style ? ` · ${style} style` : ''}
                       </p>
                       <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/50">
