@@ -628,10 +628,17 @@ export default function PlannerHotelEnhanced() {
       // Store in context for summary/booking
       setHotel(manualHotel);
 
-      // Multi-city: also persist to trip_cities
+      // Multi-city: also persist to trip_cities as an array
       if (isMultiCity && multiCityCityId) {
         try {
-          await updateCityHotel(multiCityCityId, manualHotel as Record<string, unknown>, 0);
+          const hotelArray = [manualHotel];
+          await supabase
+            .from('trip_cities')
+            .update({
+              hotel_selection: JSON.parse(JSON.stringify(hotelArray)),
+              hotel_cost_cents: 0,
+            } as any)
+            .eq('id', multiCityCityId);
         } catch (err) {
           console.warn('[PlannerHotel] Failed to save manual hotel to trip_cities:', err);
         }

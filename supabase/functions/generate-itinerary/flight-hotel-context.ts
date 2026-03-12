@@ -388,6 +388,8 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
             .filter((c: any) => c._hotel?.name);
           if (citiesWithHotels.length > 0) {
             hotel = citiesWithHotels[0]._hotel as HotelInfo;
+            hotelName = (hotel as any)?.name || '';
+            hotelAddress = (hotel as any)?.address || '';
             console.log(`[FlightHotel] Parsed hotel from trip_cities (${citiesWithHotels[0].city_name}): ${hotel?.name || 'No name'}`);
             
             if (citiesWithHotels.length > 1) {
