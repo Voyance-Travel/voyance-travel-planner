@@ -9170,6 +9170,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
+      // Trigger next journey leg if applicable
+      await triggerNextJourneyLeg(supabase, tripId);
+
       return new Response(
         JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
