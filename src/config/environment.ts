@@ -45,7 +45,7 @@ export const FRONTEND_CONFIG = {
   ENABLE_EXPLORE_GENERATOR: true,
   USE_ADVANCED_ARCHETYPES: true,
   USE_AMADEUS_API: false, // Removed Feb 2026 — hotels now credit-gated AI feature
-  USE_STRICT_GENERATOR: true,
+  USE_STRICT_GENERATOR: false,  // Disabled — using legacy generation path
   
   // Debug/Dev Settings
   NODE_ENV: (import.meta.env.PROD ? 'production' : 'development') as 'development' | 'production',
