@@ -6375,21 +6375,25 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       .eq('id', nextLeg.id);
 
     // Invoke generate-itinerary for the next leg
+    // MUST await — fire-and-forget fetch gets killed when the Deno isolate shuts down
     const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    fetch(generateUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ tripId: nextLeg.id }),
-    }).then(res => {
+    try {
+      const res = await fetch(generateUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({ tripId: nextLeg.id }),
+      });
       console.log(`[triggerNextJourneyLeg] Next leg ${nextLeg.id} invoke status: ${res.status}`);
-    }).catch(err => {
-      console.error(`[triggerNextJourneyLeg] Failed to invoke next leg ${nextLeg.id}:`, err);
-    });
+    } catch (fetchErr) {
+      console.error(`[triggerNextJourneyLeg] Failed to invoke next leg ${nextLeg.id}:`, fetchErr);
+      // Reset status so the frontend fallback can retry
+      await supabase.from('trips').update({ itinerary_status: 'queued' }).eq('id', nextLeg.id);
+    }
   } catch (err) {
     console.error('[triggerNextJourneyLeg] Error:', err);
   }
