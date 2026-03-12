@@ -4337,7 +4337,7 @@ export function EditorialItinerary({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-b border-border/50">
-                      <p className="text-xs text-muted-foreground text-center pt-3 pb-1">
+                      <p className="text-xs text-muted-foreground text-center pt-3 pb-1 px-4 truncate">
                         Your {destination} trip{style ? ` · ${style} style` : ''}
                       </p>
                       <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-border/50">
