@@ -482,7 +482,7 @@ export async function syncItineraryToBudget(
           trip_id: tripId,
           category: budgetCategory,
           entry_type: 'planned',
-          amount_cents: Math.round(activity.cost.amount * 100), // Convert to cents
+          amount_cents: Math.round(costAmount * 100), // Convert to cents
           currency: activity.cost.currency || 'USD',
           description: activity.title,
           day_number: day.dayNumber,
