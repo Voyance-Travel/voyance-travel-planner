@@ -2602,13 +2602,48 @@ Generate activities for this day following ALL constraints above.`;
             title.includes('checkout') || title.includes('transfer') || title.includes('arrival at');
           return !isLogistics;
         });
-        const minimumRealActivities = isLastDay ? 1 : 2;
+        const minimumRealActivities = isLastDay ? 1 : (isFirstDay ? 3 : 5);
         if (realActivities.length < minimumRealActivities) {
           console.warn(`[Stage 2] Day ${dayNumber} has only ${realActivities.length} real activities (minimum: ${minimumRealActivities}) — triggering retry`);
           validation.errors.push(
             `Day ${dayNumber} has only ${realActivities.length} real activities (transport/accommodation don't count). Minimum is ${minimumRealActivities}. Add more sightseeing, dining, or experience activities.`
           );
           validation.isValid = false;
+        }
+      }
+
+      // ==========================================================================
+      // GAP DETECTION: Retry if there are gaps > 3 hours between activities
+      // ==========================================================================
+      if (!isLastDay && generatedDay.activities.length >= 2) {
+        const sorted = [...generatedDay.activities]
+          .filter((a: any) => a.startTime)
+          .sort((a: any, b: any) => {
+            const parseMin = (t: string) => {
+              const m = t.match(/(\d{1,2}):(\d{2})/);
+              return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
+            };
+            return parseMin(a.startTime) - parseMin(b.startTime);
+          });
+
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const currentEnd = sorted[i].endTime || sorted[i].startTime;
+          const nextStart = sorted[i + 1].startTime;
+          if (currentEnd && nextStart) {
+            const parseMin = (t: string) => {
+              const m = t.match(/(\d{1,2}):(\d{2})/);
+              return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
+            };
+            const gap = parseMin(nextStart) - parseMin(currentEnd);
+            if (gap > 180) {
+              console.warn(`[Stage 2] Day ${dayNumber} has a ${Math.round(gap / 60)}h gap between "${sorted[i].title}" (ends ${currentEnd}) and "${sorted[i + 1].title}" (starts ${nextStart}) — triggering retry`);
+              validation.errors.push(
+                `There is a ${Math.round(gap / 60)}-hour gap between "${sorted[i].title}" (ends ${currentEnd}) and "${sorted[i + 1].title}" (starts ${nextStart}). Fill this gap with activities, meals, or experiences. A full day should have no gaps longer than 2 hours unless it's intentional free time.`
+              );
+              validation.isValid = false;
+              break;
+            }
+          }
         }
       }
 
