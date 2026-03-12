@@ -171,7 +171,7 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          target_day: { type: "number", description: "Day number (1-indexed)" },
+          target_day: { type: "number", description: "Day number (1-indexed). If the user says 'this day', 'today', or doesn't specify a number, use the CURRENT VIEWING DAY from the context above. Never guess — always use the explicitly provided current day number." },
           instructions: { 
             type: "string", 
             description: "Detailed natural language instructions for how to rewrite this day. Be VERY specific: what to remove, what to add, how to adjust timing, meal changes, transit adjustments, pacing changes. Example: 'Remove the afternoon museum visit. Add a 2-hour spa session at 11 AM. Push lunch to 1:30 PM. Add a leisurely park walk from 3-4 PM. Keep dinner but move it to 7 PM instead of 8 PM. Add a jazz club suggestion for 9:30 PM.'"
