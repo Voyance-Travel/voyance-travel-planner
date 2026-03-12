@@ -51,6 +51,7 @@ interface ItineraryAssistantProps {
   destination: string;
   startDate: string;
   endDate: string;
+  currentDayNumber?: number;
   days: ItineraryDay[];
   isLocalTrip?: boolean;
   onItineraryUpdate?: (updatedDays: ItineraryDay[]) => void;
@@ -71,6 +72,7 @@ export function ItineraryAssistant({
   destination,
   startDate,
   endDate,
+  currentDayNumber,
   days,
   isLocalTrip = false,
   onItineraryUpdate,
@@ -113,6 +115,7 @@ export function ItineraryAssistant({
     destination,
     startDate,
     endDate,
+    currentDayNumber,
     days: currentDays.map(d => ({
       dayNumber: d.dayNumber,
       date: d.date,

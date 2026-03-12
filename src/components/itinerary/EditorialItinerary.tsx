@@ -439,6 +439,8 @@ export interface EditorialItineraryProps {
   parsedMetadata?: { accommodationNotes?: string[]; practicalTips?: string[]; unparsed?: string[]; source?: string };
   /** Called whenever the local days state changes (swaps, locks, reorders, etc.) so parent can stay in sync */
   onDaysChange?: (days: EditorialDay[]) => void;
+  /** Called when the user switches to a different day (for chat context) */
+  onActiveDayChange?: (dayNumber: number) => void;
   /** Expose a way for parent to programmatically switch to the details tab and scroll to a section */
   navigateToSection?: string | null;
   /** Raw itinerary_data object so we can restore optionSelections on page load */
@@ -1128,6 +1130,7 @@ export function EditorialItinerary({
   onUnlockComplete,
   parsedMetadata,
   onDaysChange,
+  onActiveDayChange,
   navigateToSection,
   initialItineraryData,
   itineraryStatus,
@@ -1301,6 +1304,15 @@ export function EditorialItinerary({
     });
     return todayIndex >= 0 ? todayIndex : 0;
   });
+
+  // Notify parent when active day changes (for chat context)
+  useEffect(() => {
+    const dayNum = days[selectedDayIndex]?.dayNumber;
+    if (dayNum && onActiveDayChange) {
+      onActiveDayChange(dayNum);
+    }
+  }, [selectedDayIndex, days, onActiveDayChange]);
+
   const { user } = useAuth();
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
   const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);

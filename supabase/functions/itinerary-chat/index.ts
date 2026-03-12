@@ -127,7 +127,19 @@ Each action has a credit cost. Before suggesting changes, briefly mention what y
 - NEVER suggest activities in a different city just because they are popular or well-known.
 
 ## CONTEXT
-You have the current itinerary structure. Match references like "Day 2" or "the museum" to the provided activities.`;
+You have the current itinerary structure. Match references like "Day 2" or "the museum" to the provided activities.
+
+## CRITICAL TIME ORDERING RULES FOR DAY REWRITES
+When using rewrite_day, your instructions MUST respect these timing rules:
+- Breakfast/brunch: 7:00 AM – 10:30 AM. NEVER schedule breakfast after 11:00 AM.
+- Morning activities: 9:00 AM – 12:00 PM.
+- Lunch: 11:30 AM – 1:30 PM.
+- Afternoon activities: 1:00 PM – 5:00 PM.
+- Happy hour/aperitif: 4:30 PM – 6:30 PM.
+- Dinner: 6:00 PM – 9:30 PM. NEVER schedule dinner before 5:00 PM.
+- Evening activities/nightlife: 7:00 PM – 11:00 PM.
+- Nightcap/late night: 9:00 PM – midnight. NEVER schedule a nightcap before 8:00 PM.
+- ALL activities MUST be in strict chronological order by startTime.`;
 
 const BLOCKED_PATTERNS = [
   /how (was|is) (this|the) (site|app|website) (built|made|created)/i,
@@ -159,7 +171,7 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          target_day: { type: "number", description: "Day number (1-indexed)" },
+          target_day: { type: "number", description: "Day number (1-indexed). If the user says 'this day', 'today', or doesn't specify a number, use the CURRENT VIEWING DAY from the context above. Never guess — always use the explicitly provided current day number." },
           instructions: { 
             type: "string", 
             description: "Detailed natural language instructions for how to rewrite this day. Be VERY specific: what to remove, what to add, how to adjust timing, meal changes, transit adjustments, pacing changes. Example: 'Remove the afternoon museum visit. Add a 2-hour spa session at 11 AM. Push lunch to 1:30 PM. Add a leisurely park walk from 3-4 PM. Keep dinner but move it to 7 PM instead of 8 PM. Add a jazz club suggestion for 9:30 PM.'"
@@ -488,6 +500,7 @@ ${profiles.map(p => `- ${p.name} (${p.isOwner ? 'Trip Owner' : 'Companion'}, arc
 Trip to ${itineraryContext.destination}
 Dates: ${itineraryContext.startDate} to ${itineraryContext.endDate}
 Total days: ${(itineraryContext.days || []).length}
+${itineraryContext.currentDayNumber ? `\n⚠️ THE USER IS CURRENTLY VIEWING: Day ${itineraryContext.currentDayNumber}. When they say "this day", "today", or don't specify a day number, they mean Day ${itineraryContext.currentDayNumber}.` : ''}
 ${tripType ? `Trip occasion: ${tripType}` : ''}${accommodationNote}
 
 ${itineraryDescription}

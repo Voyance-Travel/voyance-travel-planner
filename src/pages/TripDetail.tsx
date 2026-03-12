@@ -120,6 +120,7 @@ export default function TripDetail() {
   const [showDebriefModal, setShowDebriefModal] = useState(false);
   const [liveTripViewMode, setLiveTripViewMode] = useState<'active' | 'edit'>('active');
   const [hasCollaborators, setHasCollaborators] = useState(false);
+  const [activeDayNumber, setActiveDayNumber] = useState<number>(1);
   const [conflictState, setConflictState] = useState<{
     open: boolean;
     localData: Record<string, unknown> | null;
@@ -2333,6 +2334,7 @@ export default function TripDetail() {
                       })),
                     } : null);
                   }}
+                  onActiveDayChange={setActiveDayNumber}
                   onBookingAdded={async () => {
                     // Refetch trip_cities AND trip to pick up hotel/transfer/flight changes
                     try {
@@ -2472,6 +2474,7 @@ export default function TripDetail() {
           destination={trip.destination}
           startDate={trip.start_date}
           endDate={effectiveEndDate}
+          currentDayNumber={activeDayNumber}
           isLocalTrip={trip.user_id === 'local'}
           days={parseAssistantDays(trip.itinerary_data, trip.start_date)}
           accommodationInfo={(() => {

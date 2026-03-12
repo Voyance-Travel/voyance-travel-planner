@@ -28,6 +28,7 @@ export interface ItineraryContext {
   destination: string;
   startDate: string;
   endDate: string;
+  currentDayNumber?: number;
   days: Array<{
     dayNumber: number;
     date: string;
