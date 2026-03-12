@@ -1242,7 +1242,7 @@ export function EditorialItinerary({
             .catch(err => console.error('[EditorialItinerary] Flight ledger sync failed:', err));
         }
         if (hotelSelection) {
-          syncHotelToLedger(tripId, hotelSelection)
+          syncHotelToLedger(tripId, hotelSelection as any)
             .catch(err => console.error('[EditorialItinerary] Hotel ledger sync failed:', err));
         }
       });
