@@ -653,8 +653,79 @@ export default function TripDetail() {
     };
   }, [isQueuedJourneyLeg, trip?.id, trip?.journey_id, trip?.journey_order, queryClient]);
 
-
+  // ── Stuck journey leg self-heal ──
+  // If a journey leg shows itinerary_status='generating' but has no heartbeat,
+  // no generation_started_at, and no saved days, it's stuck from a failed handoff.
+  // Auto-recover by re-triggering generate-trip with full payload.
+  const stuckHealAttempted = useRef(false);
   useEffect(() => {
+    if (!trip?.journey_id || !trip?.id || stuckHealAttempted.current) return;
+    if (trip.itinerary_status !== 'generating') return;
+
+    const meta = (trip.metadata as Record<string, unknown>) || {};
+    const heartbeat = meta.generation_heartbeat as string | undefined;
+    const startedAt = meta.generation_started_at as string | undefined;
+    const completedDays = (meta.generation_completed_days as number) || 0;
+
+    // Check staleness: no heartbeat or heartbeat older than 3 minutes, no completed days
+    const isStale = !heartbeat || (Date.now() - new Date(heartbeat).getTime() > 3 * 60 * 1000);
+    const hasNoProgress = completedDays === 0 && !startedAt;
+
+    if (!isStale && !hasNoProgress) return;
+
+    // Extra guard: check if there are any itinerary_days saved
+    (async () => {
+      const { count } = await supabase
+        .from('itinerary_days')
+        .select('id', { count: 'exact', head: true })
+        .eq('trip_id', trip.id);
+
+      if ((count ?? 0) > 0) return; // Has progress, not stuck
+
+      stuckHealAttempted.current = true;
+      console.log(`[TripDetail] Detected stuck journey leg ${trip.id} — attempting self-heal`);
+
+      try {
+        const { data: fullTrip } = await supabase
+          .from('trips')
+          .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
+          .eq('id', trip.id)
+          .single();
+
+        if (!fullTrip) return;
+
+        const { error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'generate-trip',
+            tripId: trip.id,
+            userId: fullTrip.user_id,
+            destination: fullTrip.destination,
+            destinationCountry: fullTrip.destination_country || '',
+            startDate: fullTrip.start_date,
+            endDate: fullTrip.end_date,
+            travelers: fullTrip.travelers || 1,
+            tripType: fullTrip.trip_type || 'vacation',
+            budgetTier: fullTrip.budget_tier || 'moderate',
+            isMultiCity: fullTrip.is_multi_city || false,
+            creditsCharged: 0,
+          },
+        });
+
+        if (invokeErr) {
+          console.error('[TripDetail] Stuck-leg self-heal invoke failed:', invokeErr);
+          return;
+        }
+
+        console.log(`[TripDetail] Stuck-leg self-heal triggered for ${trip.id}`);
+        queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        handleShowGenerator(true);
+      } catch (err) {
+        console.error('[TripDetail] Stuck-leg self-heal error:', err);
+      }
+    })();
+  }, [trip?.id, trip?.journey_id, trip?.itinerary_status, trip?.metadata, queryClient]);
+
+
     if (
       shouldAutoGenerate && 
       trip && 
