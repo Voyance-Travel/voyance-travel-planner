@@ -1059,40 +1059,51 @@ function TodayView({
                     isCompleted && 'opacity-60',
                     !isCurrent && !isCompleted && 'bg-card border-border/50'
                   )}>
-                    {/* Time + status badges */}
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className={cn(
-                        'text-xs font-medium',
-                        isCurrent ? 'text-primary' : 'text-muted-foreground'
-                      )}>
-                        {activity.startTime || '--:--'}
-                      </span>
-                      {isCurrent && (
-                        <Badge className="bg-primary text-primary-foreground text-[9px] h-4 px-1.5">
-                          NOW
-                        </Badge>
-                      )}
-                      {isNext && !isCurrent && (
-                        <Badge variant="outline" className="text-[9px] h-4 px-1.5">
-                          NEXT
-                        </Badge>
-                      )}
-                      {activity.duration && (
-                        <span className="text-[10px] text-muted-foreground">
-                          {activity.duration < 60
-                            ? `${activity.duration}m`
-                            : `${Math.floor(activity.duration / 60)}h${activity.duration % 60 ? ` ${activity.duration % 60}m` : ''}`}
-                        </span>
-                      )}
-                    </div>
+                    <div className="flex gap-3">
+                      {/* Activity thumbnail */}
+                      <ActivityImageThumb
+                        name={activity.name}
+                        category={activity.category}
+                        imageUrl={activity.imageUrl}
+                        destination={trip.destination}
+                      />
+                      <div className="flex-1 min-w-0">
+                        {/* Time + status badges */}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className={cn(
+                            'text-xs font-medium',
+                            isCurrent ? 'text-primary' : 'text-muted-foreground'
+                          )}>
+                            {activity.startTime || '--:--'}
+                          </span>
+                          {isCurrent && (
+                            <Badge className="bg-primary text-primary-foreground text-[9px] h-4 px-1.5">
+                              NOW
+                            </Badge>
+                          )}
+                          {isNext && !isCurrent && (
+                            <Badge variant="outline" className="text-[9px] h-4 px-1.5">
+                              NEXT
+                            </Badge>
+                          )}
+                          {activity.duration && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {activity.duration < 60
+                                ? `${activity.duration}m`
+                                : `${Math.floor(activity.duration / 60)}h${activity.duration % 60 ? ` ${activity.duration % 60}m` : ''}`}
+                            </span>
+                          )}
+                        </div>
 
-                    {/* Activity name — serif editorial */}
-                    <h4 className={cn(
-                      'font-serif text-base font-semibold leading-snug',
-                      isCompleted && 'line-through text-muted-foreground'
-                    )}>
-                      {activity.name}
-                    </h4>
+                        {/* Activity name — serif editorial */}
+                        <h4 className={cn(
+                          'font-serif text-base font-semibold leading-snug',
+                          isCompleted && 'line-through text-muted-foreground'
+                        )}>
+                          {activity.name}
+                        </h4>
+                      </div>
+                    </div>
 
                     {activity.location?.address && (
                       <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
