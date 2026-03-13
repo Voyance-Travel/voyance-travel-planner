@@ -188,3 +188,16 @@ Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts
 - Photo grids per activity
 - "Custom Tips" section at bottom for non-itinerary recommendations
 - "Voyance Tip" callout for activities without user experience text
+
+---
+
+## Fix: City-Boundary Checkout/Check-in in generate-day Handler ✅ COMPLETE
+
+### Problem
+`generate-day` action extracted `paramIsFirstDayInCity` and `paramIsLastDayInCity` but never used them. Mid-journey city boundaries got no checkout/check-in constraints.
+
+### Change
+- **`supabase/functions/generate-itinerary/index.ts`** — Inserted multi-city boundary block after the Day 1/Last Day decision tree:
+  - `paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay` → appends CITY ARRIVAL check-in constraints
+  - `paramIsLastDayInCity && !isLastDay` → appends CITY DEPARTURE checkout constraints
+  - Reinforces correct hotel name on all multi-city days
