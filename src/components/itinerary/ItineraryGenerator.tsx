@@ -27,7 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
 import { generateFullPreview, type FullPreview, type PreviewDay } from '@/services/fullPreviewService';
 import { convertPreviewToGeneratedDays, createLockedPlaceholderDays } from '@/utils/previewConverter';
-import { calculateTripCredits } from '@/lib/tripCostCalculator';
+import { calculateTripCredits, calculateMultiCityFee, roundUpTo10, BASE_RATE_PER_DAY } from '@/lib/tripCostCalculator';
 import { useTripCities } from '@/hooks/useTripCities';
 import { useCredits } from '@/hooks/useCredits';
 import { formatCredits } from '@/config/pricing';
@@ -295,10 +295,17 @@ export function ItineraryGenerator({
     } catch { return 1; }
   }, [startDate, endDate]);
   
+  const tripCityNames = useMemo(() => {
+    if (!isMultiCity) return [destination];
+    if (tripCitiesData && tripCitiesData.length > 0) {
+      return tripCitiesData.map(c => c.city_name).filter(Boolean) as string[];
+    }
+    return [destination]; // fallback
+  }, [isMultiCity, tripCitiesData, destination]);
+
   const costEstimate = useMemo(() => {
-    const cities = isMultiCity ? [] : [destination];
-    return calculateTripCredits({ days: totalDaysEstimate, cities });
-  }, [totalDaysEstimate, destination, isMultiCity]);
+    return calculateTripCredits({ days: totalDaysEstimate, cities: tripCityNames });
+  }, [totalDaysEstimate, tripCityNames]);
 
 
   // Keep the pre-generation experience on screen until the first day is ready,
@@ -465,7 +472,7 @@ export function ItineraryGenerator({
 
     // Calculate trip days for the gate
     const totalDays = differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1;
-    const cities = isMultiCity ? [] : [destination]; // Multi-city cities resolved inside gate if needed
+    const cities = tripCityNames; // Uses resolved city list (includes multi-city)
 
     // ── Fetch journey info if this is a journey leg ──
     let journeyId: string | undefined;
@@ -491,13 +498,20 @@ export function ItineraryGenerator({
         .order('journey_order', { ascending: true });
 
       if (allLegs && allLegs.length > 1) {
+        const allCityNames = allLegs.map(l => l.destination);
+        const multiCityFee = calculateMultiCityFee(allCityNames.length);
         const breakdown = allLegs.map(leg => {
           const legDays = Math.max(1, Math.ceil(
             (new Date(leg.end_date).getTime() - new Date(leg.start_date).getTime()) / (1000 * 60 * 60 * 24)
           ) + 1);
-          const legEst = calculateTripCredits({ days: legDays, cities: [leg.destination] });
-          return { city: leg.destination, days: legDays, cost: legEst.totalCredits };
+          // Per-leg base cost (no multi-city fee per leg)
+          const legBaseCost = roundUpTo10(legDays * BASE_RATE_PER_DAY);
+          return { city: leg.destination, days: legDays, cost: legBaseCost };
         });
+        // Add multi-city fee to first leg's display so total is correct
+        if (breakdown.length > 0) {
+          breakdown[0].cost += multiCityFee;
+        }
         setJourneyLegs(breakdown);
       } else {
         setJourneyLegs([]);
