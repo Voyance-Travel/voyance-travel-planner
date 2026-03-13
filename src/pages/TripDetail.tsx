@@ -2087,7 +2087,7 @@ export default function TripDetail() {
           ) : (
             /* Editorial Itinerary - Same design as SampleItinerary with editing */
             (() => {
-              // Use centralized safe parser for editorial days — memoization handled by React via trip reference stability
+              // Use centralized safe parser for editorial days
               const editorDays: EditorialDay[] = parseEditorialDays(trip.itinerary_data, trip.start_date) as EditorialDay[];
 
               // Normalize flight_selection using the unified normalizer
