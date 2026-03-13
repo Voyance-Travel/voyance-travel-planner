@@ -76,12 +76,12 @@ export function ActiveTripStats({
   }, [itinerary, completedActivities, currentDayNumber, memories.length, travelers]);
 
   const statItems = [
-    { icon: CheckCircle2, label: 'Activities', value: `${stats.completedCount}/${stats.totalActivities}`, sub: `${stats.completionRate}% complete` },
-    { icon: Footprints, label: 'Walking', value: `${Math.round(stats.estimatedSteps / 1000)}k steps`, sub: `~${stats.walkingKm} km` },
-    { icon: Camera, label: 'Memories', value: String(stats.photosCount), sub: stats.photosCount === 0 ? 'Start capturing!' : `${Math.round(stats.photosCount / currentDayNumber)}/day` },
-    { icon: Clock, label: 'Exploring', value: `${stats.hoursExploring}h`, sub: `across ${stats.completedCount} activities` },
-    { icon: Utensils, label: 'Meals', value: String(stats.mealsEstimate), sub: `~${Math.round(stats.mealsEstimate / currentDayNumber)}/day` },
-    { icon: MapPin, label: 'Categories', value: String(stats.categories), sub: 'types of experiences' },
+    { icon: CheckCircle2, label: 'Activities', value: `${stats.completedCount}/${stats.totalActivities}`, sub: `${stats.completionRate}% complete`, color: 'text-primary' },
+    { icon: Footprints, label: 'Walking', value: `${Math.round(stats.estimatedSteps / 1000)}k steps`, sub: `~${stats.walkingKm} km`, color: 'text-emerald-500' },
+    { icon: Camera, label: 'Memories', value: String(stats.photosCount), sub: stats.photosCount === 0 ? 'Start capturing!' : `${Math.round(stats.photosCount / currentDayNumber)}/day`, color: 'text-pink-500' },
+    { icon: Clock, label: 'Exploring', value: `${stats.hoursExploring}h`, sub: `across ${stats.completedCount} activities`, color: 'text-blue-500' },
+    { icon: Utensils, label: 'Meals', value: String(stats.mealsEstimate), sub: `~${Math.round(stats.mealsEstimate / currentDayNumber)}/day`, color: 'text-amber-500' },
+    { icon: MapPin, label: 'Categories', value: String(stats.categories), sub: 'types of experiences', color: 'text-violet-500' },
   ];
 
   // Inject budget if set
