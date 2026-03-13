@@ -1801,8 +1801,7 @@ export function EditorialItinerary({
     await Promise.resolve(onBookingAdded?.());
   }, [flightSelection, tripId, onBookingAdded]);
 
-// ── Context: Resolved activity images (batch-fetched once, read by all ActivityRows) ──
-const ItineraryImageContext = React.createContext<Map<string, string>>(new Map());
+
 
   // Handle transport mode change for a specific activity route segment
   const handleTransportModeChange = useCallback(async (dayIndex: number, activityId: string, newMode: string) => {
