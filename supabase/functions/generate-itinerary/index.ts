@@ -4315,13 +4315,27 @@ serve(async (req) => {
         }
 
         // Build collaborator traveler list for suggestedFor attribution
-        const { data: collabRows } = await supabase
-          .from('trip_collaborators')
-          .select('user_id')
-          .eq('trip_id', tripId)
-          .eq('include_preferences', true);
+        // Query BOTH trip_collaborators AND trip_members
+        const [{ data: collabRows }, { data: memberRows }] = await Promise.all([
+          supabase
+            .from('trip_collaborators')
+            .select('user_id')
+            .eq('trip_id', tripId)
+            .eq('include_preferences', true),
+          supabase
+            .from('trip_members')
+            .select('user_id')
+            .eq('trip_id', tripId)
+            .not('user_id', 'is', null),
+        ]);
 
-        const allUserIds = [userId, ...(collabRows || []).map((c: any) => c.user_id)].filter(Boolean);
+        // Merge unique participant IDs from both tables
+        const participantIds = new Set<string>();
+        (collabRows || []).forEach((c: any) => { if (c.user_id) participantIds.add(c.user_id); });
+        (memberRows || []).forEach((m: any) => { if (m.user_id) participantIds.add(m.user_id); });
+        participantIds.delete(userId || ''); // Remove owner, we'll prepend
+
+        const allUserIds = [userId, ...Array.from(participantIds)].filter(Boolean);
         const { data: profileRows } = await supabase
           .from('profiles')
           .select('id, display_name, handle')
@@ -4333,7 +4347,7 @@ serve(async (req) => {
           userId: uid!,
           name: profileMap.get(uid!) || 'Traveler',
         }));
-        console.log(`[Stage 1.2] Attribution travelers: ${context.collaboratorTravelers.map(t => `${t.name}(${t.userId.slice(0,8)})`).join(', ')}`);
+        console.log(`[Stage 1.2] Attribution travelers: ${context.collaboratorTravelers.map(t => `${t.name}(${t.userId.slice(0,8)})`).join(', ')} (collabs: ${(collabRows || []).length}, members: ${(memberRows || []).length})`);
 
         // =======================================================================
         // STAGE 1.2.1: ARCHETYPE-LEVEL GROUP BLENDING
