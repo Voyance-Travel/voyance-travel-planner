@@ -17,7 +17,7 @@ import {
   Route as RouteIcon, ChevronDown
 } from 'lucide-react';
 import { useActivityImage } from '@/hooks/useActivityImage';
-import { SafeImage } from '@/components/common/SafeImage';
+import SafeImage from '@/components/SafeImage';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
