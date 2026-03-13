@@ -1,24 +1,22 @@
 
 
-## Verification: Multi-City Generation Progress UI
+## Fix: Disable Drag in Preview Mode
 
-### Finding: Already Implemented
+### Problem
+`DraggableActivityList` at line 8122 uses `disabled={!isEditable}`, but Preview mode doesn't set `isEditable` to false — it's a separate flag (`isPreview`). So cards remain draggable in Preview mode.
 
-After investigating the full pipeline, the multi-city progress display is already fully wired end-to-end:
+### Change
 
-**Backend** (`generate-itinerary/index.ts`):
-- Writes `generation_current_city`, `generation_current_day`, `generation_completed_days` to trip metadata on every day chain step
-- Updates `trip_cities.generation_status` to `'generating'` when entering a city, `'generated'` when leaving
+**File: `src/components/itinerary/EditorialItinerary.tsx`** — Line 8122
 
-**Frontend poller** (`useGenerationPoller.ts`):
-- Reads `currentCity`, `completedDays`, `totalDays` from metadata every poll cycle
+Change:
+```typescript
+disabled={!isEditable}
+```
+To:
+```typescript
+disabled={!isEditable || isPreview}
+```
 
-**UI** (`GenerationPhases.tsx`):
-- Header shows: **"Building Day 4 of 7 · Marrakech"**
-- Progress bar shows: **"3/7 days"** with percentage
-- Multi-city checklist shows per-city status with spinners (generating) and checkmarks (complete)
-
-### Conclusion
-
-No code changes required. The loading UI already shows per-city progress with day counts and city names. The perceived delay between legs is inherent to the sequential architecture, but users get continuous feedback throughout.
+`isPreview` is already destructured in the `DayCard` component props (line 7787), so it's in scope. Single-line fix.
 
