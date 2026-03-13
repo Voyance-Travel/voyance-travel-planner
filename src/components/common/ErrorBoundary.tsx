@@ -20,8 +20,9 @@ export default class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(_error: Error, _errorInfo: unknown): void {
-    // Can log to error reporting service here
+  componentDidCatch(error: Error, errorInfo: unknown): void {
+    console.error('[ErrorBoundary] Caught error:', error.message, error.stack);
+    console.error('[ErrorBoundary] Component stack:', errorInfo);
   }
 
   render(): ReactNode {
