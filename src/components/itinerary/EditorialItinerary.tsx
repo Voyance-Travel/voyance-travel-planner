@@ -172,6 +172,9 @@ function BoardingPassViewButton({ storagePath }: { storagePath: string }) {
   );
 }
 
+// ── Context: Resolved activity images (batch-fetched once, read by all ActivityRows) ──
+const ItineraryImageContext = createContext<Map<string, string>>(new Map());
+
 // =============================================================================
 // TYPES
 // =============================================================================
