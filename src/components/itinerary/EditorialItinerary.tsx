@@ -59,7 +59,8 @@ import { format, parseISO, isToday, addDays, isPast, startOfDay } from 'date-fns
 import { safeFormatDate, parseLocalDate } from '@/utils/dateUtils';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
-import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
+import { getActivityPlaceholder } from '@/hooks/useActivityImage';
+import { useItineraryImages, extractImageSpecs } from '@/hooks/useItineraryImages';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
