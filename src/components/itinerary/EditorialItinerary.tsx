@@ -8715,13 +8715,23 @@ function ActivityRow({
   const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
   const shouldFetchRealPhoto = canViewPremium && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
   
+  // Memoize hook arguments to prevent unstable references triggering re-renders
+  const stableTitle = useMemo(
+    () => isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
+    [isHotelActivity, hasHotelName, hotelName, effectiveSearchTerm]
+  );
+  const stableDestination = useMemo(
+    () => shouldFetchRealPhoto ? destination : undefined,
+    [shouldFetchRealPhoto, destination]
+  );
+
   const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
-    isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
+    stableTitle,
     effectiveCategory,
     existingPhoto,
-    shouldFetchRealPhoto ? destination : undefined,
+    stableDestination,
     activity.id,
-    activity.id  // activityId — for DB write-back of fetched photo URLs
+    activity.id
   );
 
   const thumbnailUrl = fetchedImageUrl;
