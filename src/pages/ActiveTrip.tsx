@@ -1181,7 +1181,7 @@ function TodayView({
                               address: activity.location?.address,
                               lat: activity.location?.lat,
                               lng: activity.location?.lng,
-                            });
+                            }, 'auto', toTravelMode(activity.transportationMethod));
                           }}>
                             <Navigation className="w-3 h-3" />
                             Directions
