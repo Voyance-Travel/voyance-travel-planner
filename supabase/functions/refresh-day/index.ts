@@ -372,7 +372,7 @@ Deno.serve(async (req: Request) => {
         type: 'reorder',
         activityId: sorted[checkoutIdx].id,
         activityTitle: 'Checkout/Airport sequence',
-        icon: '🔄',
+        icon: 'arrow-up-down',
         description: 'Swap checkout and airport transfer order',
         patch: {},
       });
