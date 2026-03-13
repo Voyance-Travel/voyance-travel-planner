@@ -10414,8 +10414,13 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             },
             body: initialChainBody,
           });
-          if (response.ok || response.status < 500) break;
-          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} failed: ${response.status}`);
+          if (response.ok) break;
+          const respText = await response.text().catch(() => '(no body)');
+          console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} returned ${response.status}: ${respText.slice(0, 200)}`);
+          if (response.status >= 400 && response.status < 500) {
+            console.error(`[generate-trip] Client error ${response.status} — not retrying`);
+            break;
+          }
         } catch (err) {
           console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} error:`, err);
         }
