@@ -9396,12 +9396,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
             // Determine checkout time
             let checkoutStartMin: number;
-            if (isLastDay && flightContext.leaveHotelByMins) {
-              // 2 hours before leave-hotel-by time, minimum 07:00
-              checkoutStartMin = Math.max(7 * 60, flightContext.leaveHotelByMins - 120);
-            } else if (isLastDay && flightContext.returnDepartureTimeMins) {
+            const returnDep24 = flightContext.returnDepartureTime24 || (flightContext.returnDepartureTime ? normalizeTo24h(flightContext.returnDepartureTime) : null);
+            const returnDepMins = returnDep24 ? (parseTimeToMinutes(returnDep24) ?? null) : null;
+            if (isLastDay && returnDepMins !== null) {
               // 3.5 hours before flight, minimum 07:00
-              checkoutStartMin = Math.max(7 * 60, flightContext.returnDepartureTimeMins - 210);
+              checkoutStartMin = Math.max(7 * 60, returnDepMins - 210);
             } else {
               // Default: 11:00 AM for intermediate city departures or no-flight last day
               checkoutStartMin = 11 * 60;
