@@ -580,10 +580,42 @@ export default function TripDetail() {
 
       if (prevLeg && (prevLeg.itinerary_status === 'ready' || (prevLeg.itinerary_status as string) === 'complete') && !cancelled) {
         console.log(`[TripDetail] Previous leg (order ${prevOrder}) is ready — triggering generation for ${trip.id}`);
-        // Kick off generation for this leg
+        // Kick off generation with full payload so the backend can route to generate-trip
         try {
-          await supabase.from('trips').update({ itinerary_status: 'generating' }).eq('id', trip.id);
-          await supabase.functions.invoke('generate-itinerary', { body: { tripId: trip.id } });
+          const { data: fullTrip } = await supabase
+            .from('trips')
+            .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
+            .eq('id', trip.id)
+            .single();
+
+          if (!fullTrip) {
+            console.error('[TripDetail] Could not fetch full trip data for queued leg');
+            return;
+          }
+
+          // Don't pre-set status to 'generating' — let the backend set canonical state
+          const { error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
+            body: {
+              action: 'generate-trip',
+              tripId: trip.id,
+              userId: fullTrip.user_id,
+              destination: fullTrip.destination,
+              destinationCountry: fullTrip.destination_country || '',
+              startDate: fullTrip.start_date,
+              endDate: fullTrip.end_date,
+              travelers: fullTrip.travelers || 1,
+              tripType: fullTrip.trip_type || 'vacation',
+              budgetTier: fullTrip.budget_tier || 'moderate',
+              isMultiCity: fullTrip.is_multi_city || false,
+              creditsCharged: 0, // Already charged on leg 1
+            },
+          });
+
+          if (invokeErr) {
+            console.error('[TripDetail] Failed to trigger queued leg generation:', invokeErr);
+            return;
+          }
+
           queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
           handleShowGenerator(true);
         } catch (err) {
