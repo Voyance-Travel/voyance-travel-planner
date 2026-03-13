@@ -81,6 +81,7 @@ interface ItineraryActivity {
   voucherUrl?: string;
   bookingRequired?: boolean;
   reservationTime?: string;
+  transportationMethod?: string;
 }
 
 interface ItineraryDay {
