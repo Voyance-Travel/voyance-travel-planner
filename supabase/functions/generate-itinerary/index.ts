@@ -9627,6 +9627,45 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       //   - useUnlockDay.ts (per-day increment)
       // Do NOT set it here — doing so creates a race condition with the client's write.
       // See src/lib/voyanceFlowController.ts computeUnlockedDayCount() for the canonical logic.
+
+      // ── NO-SHRINK GUARD ──────────────────────────────────────────────
+      // Prevent accidental truncation: if the incoming itinerary has fewer days
+      // than the canonical existing count (max of itinerary_data.days and itinerary_days rows),
+      // block the write unless the caller explicitly opts in with allowShrink.
+      const allowShrink = params.allowShrink === true;
+      const incomingDays: unknown[] = Array.isArray((itinerary as any)?.days) ? (itinerary as any).days : [];
+      const incomingCount = incomingDays.length;
+
+      // Read current canonical day counts
+      const { data: currentTrip } = await supabase
+        .from('trips')
+        .select('itinerary_data')
+        .eq('id', tripId)
+        .single();
+      const existingJsonDays: unknown[] = Array.isArray((currentTrip?.itinerary_data as any)?.days)
+        ? (currentTrip!.itinerary_data as any).days
+        : [];
+
+      const { count: existingTableRows } = await supabase
+        .from('itinerary_days')
+        .select('id', { count: 'exact', head: true })
+        .eq('trip_id', tripId);
+
+      const canonicalExisting = Math.max(existingJsonDays.length, existingTableRows || 0);
+
+      if (!allowShrink && incomingCount > 0 && canonicalExisting > 0 && incomingCount < canonicalExisting) {
+        console.warn(
+          `[save-itinerary] 🛡️ SHRINK BLOCKED: tripId=${tripId}, ` +
+          `incoming=${incomingCount}, canonical=${canonicalExisting} ` +
+          `(json=${existingJsonDays.length}, table=${existingTableRows || 0}). ` +
+          `Returning success without writing to prevent data loss.`
+        );
+        return new Response(
+          JSON.stringify({ success: true, shrinkBlocked: true, incomingCount, canonicalExisting }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const updatePayload: Record<string, any> = {
         itinerary_data: itinerary,
         itinerary_status: 'ready',
@@ -10897,6 +10936,29 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       if (updatedDays.length !== candidateDays.length) {
         console.warn(`[generate-trip-day] Day deduplication removed ${candidateDays.length - updatedDays.length} duplicate(s)`);
       }
+
+      // ── NO-SHRINK GUARD (chain save) ──────────────────────────────────
+      // After deduplication, ensure we never save fewer days than we started with.
+      // If dedup accidentally removed non-duplicate days, fall back to the larger set.
+      if (updatedDays.length < existingDays.length) {
+        console.error(
+          `[generate-trip-day] 🛡️ SHRINK BLOCKED in chain: updatedDays=${updatedDays.length} < existingDays=${existingDays.length}. ` +
+          `Falling back to existingDays + new day to prevent data loss.`
+        );
+        // Safe fallback: keep all existing days, replace only the current dayNumber
+        const safeDays = existingDays
+          .filter((d: any) => d?.dayNumber !== dayNumber)
+          .concat([dayResult])
+          .sort((a: any, b: any) => {
+            const dateA = a.date ? new Date(a.date).getTime() : (a.dayNumber || 0);
+            const dateB = b.date ? new Date(b.date).getTime() : (b.dayNumber || 0);
+            return dateA - dateB;
+          })
+          .map((d: any, idx: number) => ({ ...d, dayNumber: idx + 1 }));
+        updatedDays.length = 0;
+        updatedDays.push(...safeDays);
+      }
+
       const partialItinerary = {
         days: updatedDays,
         status: dayNumber >= totalDays ? 'ready' : 'generating',
