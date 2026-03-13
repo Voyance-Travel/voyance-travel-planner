@@ -7769,6 +7769,8 @@ interface DayCardProps {
    isPastTrip?: boolean;
    /** Clean preview mode — hides all builder tools */
    isCleanPreview?: boolean;
+   /** Whether an edit modal is currently open — disables drag */
+   isModalEditing?: boolean;
 }
 
 function DayCard({
