@@ -13,7 +13,7 @@ import { openMapLocation } from '@/utils/mapNavigation';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ChevronRight, Sun, Moon,
   Coffee, Sunrise, Sunset, Navigation, Ticket, Bookmark,
-  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil
+  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil, Map
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
@@ -38,6 +38,8 @@ import { VoiceNotePlayer } from '@/components/memories/VoiceNotePlayer';
 import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
 import { ActiveTripStats } from '@/components/trips/ActiveTripStats';
+import { ActiveTripNotes } from '@/components/trips/ActiveTripNotes';
+import { DayRouteMap } from '@/components/itinerary/DayRouteMap';
 import TripChat from '@/components/chat/TripChat';
 import { MidTripDNA as DailyBriefing } from '@/components/trips/MidTripDNA';
 import type { ItineraryActivity as DrawerItineraryActivity } from '@/types/itinerary';
@@ -698,12 +700,12 @@ function TodayView({
   // Swap drawer state
   const [swapDrawerOpen, setSwapDrawerOpen] = useState(false);
   const [swapTargetActivity, setSwapTargetActivity] = useState<DrawerItineraryActivity | null>(null);
+  const [showMap, setShowMap] = useState(true);
 
   const handleSwapRequest = useCallback((activityId: string) => {
     const activity = todaysItinerary?.activities.find(a => a.id === activityId);
     if (!activity) return;
     
-    // Convert to drawer's ItineraryActivity type
     const drawerActivity: DrawerItineraryActivity = {
       id: activity.id,
       title: activity.name,
@@ -729,8 +731,6 @@ function TodayView({
   const handleAlternativeSelected = useCallback((newActivity: DrawerItineraryActivity) => {
     setSwapDrawerOpen(false);
     setSwapTargetActivity(null);
-    // The drawer handles the toast and tracking. In a full implementation,
-    // this would update the itinerary data. For now, trigger the parent swap handler.
     onSwapActivity();
   }, [onSwapActivity]);
 
@@ -748,6 +748,43 @@ function TodayView({
   }, [todaysItinerary]);
 
   const proximity = useProximityCheckIn(venues, completedActivities, !!todaysItinerary);
+
+  // Group activities by time-of-day
+  const timeGroups = useMemo(() => {
+    if (!todaysItinerary) return [];
+    const groups: { label: string; activities: ItineraryActivity[] }[] = [];
+    let currentGroup = '';
+    
+    for (const activity of todaysItinerary.activities) {
+      const hour = activity.startTime ? parseInt(activity.startTime.split(':')[0], 10) : 9;
+      let group: string;
+      if (hour < 12) group = 'Morning';
+      else if (hour < 17) group = 'Afternoon';
+      else group = 'Evening';
+      
+      if (group !== currentGroup) {
+        currentGroup = group;
+        groups.push({ label: group, activities: [] });
+      }
+      groups[groups.length - 1].activities.push(activity);
+    }
+    return groups;
+  }, [todaysItinerary]);
+
+  // Route map activities
+  const routeMapActivities = useMemo(() => {
+    if (!todaysItinerary) return [];
+    return todaysItinerary.activities.map(a => ({
+      id: a.id,
+      title: a.name,
+      location: a.location ? {
+        name: a.location.name,
+        address: a.location.address,
+        lat: a.location.lat,
+        lng: a.location.lng,
+      } : undefined,
+    }));
+  }, [todaysItinerary]);
 
   if (!todaysItinerary) {
     return (
@@ -774,7 +811,7 @@ function TodayView({
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
-      className="space-y-6"
+      className="space-y-8"
     >
       {/* Daily Progress Bar */}
       <DailyProgressBar
@@ -786,69 +823,96 @@ function TodayView({
         isLastDay={tripContext.isLastDay}
       />
 
-      {/* NOW Context Card */}
-      <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
-        <CardContent className="p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-sm font-semibold text-primary uppercase tracking-wide">NOW</span>
+      {/* Editorial Day Header */}
+      <div className="space-y-2">
+        <div className="flex items-baseline gap-3">
+          <span className="font-serif text-4xl font-bold text-primary/20">
+            {String(tripContext.currentDayNumber).padStart(2, '0')}
+          </span>
+          <div>
+            <h2 className="font-serif text-xl font-semibold leading-tight">
+              {todaysItinerary.theme || `Day ${tripContext.currentDayNumber}`}
+            </h2>
+            {todaysItinerary.description && (
+              <p className="font-serif text-sm italic text-muted-foreground mt-0.5">
+                {todaysItinerary.description}
+              </p>
+            )}
           </div>
-
-          {nowContext?.currentActivity ? (
-            <div>
-              <h3 className="text-lg font-semibold">{nowContext.currentActivity.name}</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                {nowContext.currentActivity.location?.address || nowContext.currentActivity.location?.name}
-              </p>
-              {nowContext.currentActivity.tips?.[0] && (
-                <div className="flex items-start gap-2 mt-3 p-3 bg-amber-500/10 rounded-lg">
-                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
-                    {nowContext.currentActivity.tips[0]}
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : nowContext?.isFreeTime ? (
-            <div>
-              <h3 className="text-lg font-semibold">
-                Free time until {nowContext.freeUntil && format(nowContext.freeUntil, 'h:mm a')}
-              </h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                You're near {trip.destination}. Some ideas:
-              </p>
-              <div className="flex gap-2 mt-3">
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <Coffee className="w-3.5 h-3.5" />
-                  Coffee
-                </Button>
-                <Button variant="outline" size="sm">
-                  Quick bite
-                </Button>
-                <Button variant="outline" size="sm">
-                  Wander
-                </Button>
-              </div>
-            </div>
-          ) : nowContext?.isDayComplete ? (
-            <div>
-              <h3 className="text-lg font-semibold">Day complete! 🎉</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                {tripContext.isLastDay 
-                  ? "Last day of your trip. Make the most of it!"
-                  : `${tripContext.daysRemaining} day${tripContext.daysRemaining > 1 ? 's' : ''} to go.`}
-              </p>
-            </div>
-          ) : (
-            <div>
-              <h3 className="text-lg font-semibold">Day is starting</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                {todaysItinerary.theme || `Day ${tripContext.currentDayNumber} in ${trip.destination}`}
-              </p>
-            </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-[10px] font-medium">
+            {format(parseLocalDate(todaysItinerary.date), 'EEEE, MMMM d')}
+          </Badge>
+          {todaysItinerary.weather?.condition && (
+            <Badge variant="outline" className="text-[10px]">
+              {todaysItinerary.weather.condition}
+              {todaysItinerary.weather.high && ` · ${todaysItinerary.weather.high}°`}
+            </Badge>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* NOW Context — editorial styled */}
+      <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-primary/70">Now</span>
+        </div>
+
+        {nowContext?.currentActivity ? (
+          <div>
+            <h3 className="font-serif text-lg font-semibold">{nowContext.currentActivity.name}</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {nowContext.currentActivity.location?.address || nowContext.currentActivity.location?.name}
+            </p>
+            {nowContext.currentActivity.tips?.[0] && (
+              <div className="mt-3 pl-3 border-l-2 border-primary/30">
+                <p className="font-serif text-sm italic text-muted-foreground">
+                  {nowContext.currentActivity.tips[0]}
+                </p>
+              </div>
+            )}
+          </div>
+        ) : nowContext?.isFreeTime ? (
+          <div>
+            <h3 className="font-serif text-lg font-semibold">
+              Free time until {nowContext.freeUntil && format(nowContext.freeUntil, 'h:mm a')}
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              You're near {trip.destination}. Some ideas:
+            </p>
+            <div className="flex gap-2 mt-3">
+              <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
+                <Coffee className="w-3.5 h-3.5" />
+                Coffee
+              </Button>
+              <Button variant="outline" size="sm" className="rounded-full">
+                Quick bite
+              </Button>
+              <Button variant="outline" size="sm" className="rounded-full">
+                Wander
+              </Button>
+            </div>
+          </div>
+        ) : nowContext?.isDayComplete ? (
+          <div>
+            <h3 className="font-serif text-lg font-semibold">Day complete! 🎉</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {tripContext.isLastDay 
+                ? "Last day of your trip. Make the most of it!"
+                : `${tripContext.daysRemaining} day${tripContext.daysRemaining > 1 ? 's' : ''} to go.`}
+            </p>
+          </div>
+        ) : (
+          <div>
+            <h3 className="font-serif text-lg font-semibold">Day is starting</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {todaysItinerary.theme || `Day ${tripContext.currentDayNumber} in ${trip.destination}`}
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Trip Rescue Banner — only for today */}
       {!isPastDay && sentiment.needsRescue && !rescueDismissed && (
@@ -898,204 +962,259 @@ function TodayView({
         </div>
       )}
 
-      <div className="space-y-3">
-        <h3 className="font-semibold text-muted-foreground text-sm uppercase tracking-wide">
-          {nowContext?.currentActivity ? 'Coming Up' : 'Today\'s Schedule'}
-        </h3>
+      {/* Route Map (collapsible) */}
+      <div>
+        <button
+          onClick={() => setShowMap(!showMap)}
+          className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-2"
+        >
+          <Map className="w-3.5 h-3.5" />
+          {showMap ? 'Hide route' : "Today's route"}
+          <ChevronRight className={cn('w-3 h-3 transition-transform', showMap && 'rotate-90')} />
+        </button>
+        <AnimatePresence>
+          {showMap && (
+            <DayRouteMap activities={routeMapActivities} />
+          )}
+        </AnimatePresence>
+      </div>
 
-        {todaysItinerary.activities.map((activity, idx) => {
-          const isCompleted = completedActivities.has(activity.id);
-          const isCurrent = nowContext?.currentActivity?.id === activity.id;
-          const isNext = nowContext?.nextActivity?.id === activity.id;
+      {/* Activities — grouped by time of day with editorial timeline */}
+      <div className="space-y-6">
+        {timeGroups.map((group) => (
+          <div key={group.label} className="space-y-4">
+            {/* Time-of-day section header */}
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary/60">
+                {group.label}
+              </span>
+              <div className="flex-1 h-px bg-gradient-to-r from-primary/20 to-transparent" />
+            </div>
 
-          return (
-            <motion.div
-              key={activity.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.05 }}
-            >
-              <Card className={cn(
-                'transition-all',
-                isCurrent && 'ring-2 ring-primary border-primary',
-                isCompleted && 'opacity-60'
-              )}>
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    {/* Time */}
-                    <div className="text-center min-w-[50px]">
-                      <p className={cn(
-                        'text-lg font-bold',
-                        isCurrent && 'text-primary'
+            {/* Activities with timeline */}
+            {group.activities.map((activity, idx) => {
+              const isCompleted = completedActivities.has(activity.id);
+              const isCurrent = nowContext?.currentActivity?.id === activity.id;
+              const isNext = nowContext?.nextActivity?.id === activity.id;
+              const isLast = idx === group.activities.length - 1;
+
+              return (
+                <motion.div
+                  key={activity.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.04 }}
+                  className="flex gap-3"
+                >
+                  {/* Timeline column */}
+                  <div className="flex flex-col items-center pt-1.5">
+                    <div className={cn(
+                      'w-3 h-3 rounded-full border-2 shrink-0',
+                      isCurrent
+                        ? 'bg-primary border-primary shadow-[0_0_8px_hsl(var(--primary)/0.4)]'
+                        : isCompleted
+                          ? 'bg-primary/50 border-primary/50'
+                          : 'bg-background border-border'
+                    )} />
+                    {!isLast && (
+                      <div className={cn(
+                        'w-px flex-1 mt-1',
+                        isCompleted ? 'bg-primary/30' : 'bg-border/60'
+                      )} />
+                    )}
+                  </div>
+
+                  {/* Activity card */}
+                  <div className={cn(
+                    'flex-1 min-w-0 rounded-xl border p-4 transition-all',
+                    isCurrent && 'ring-1 ring-primary/40 border-primary/30 bg-primary/[0.03]',
+                    isCompleted && 'opacity-60',
+                    !isCurrent && !isCompleted && 'bg-card border-border/50'
+                  )}>
+                    {/* Time + status badges */}
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={cn(
+                        'text-xs font-medium',
+                        isCurrent ? 'text-primary' : 'text-muted-foreground'
                       )}>
                         {activity.startTime || '--:--'}
-                      </p>
+                      </span>
                       {isCurrent && (
-                        <Badge className="bg-primary text-primary-foreground text-[10px] mt-1">
+                        <Badge className="bg-primary text-primary-foreground text-[9px] h-4 px-1.5">
                           NOW
                         </Badge>
                       )}
                       {isNext && !isCurrent && (
-                        <Badge variant="outline" className="text-[10px] mt-1">
+                        <Badge variant="outline" className="text-[9px] h-4 px-1.5">
                           NEXT
                         </Badge>
                       )}
+                      {activity.duration && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {activity.duration < 60
+                            ? `${activity.duration}m`
+                            : `${Math.floor(activity.duration / 60)}h${activity.duration % 60 ? ` ${activity.duration % 60}m` : ''}`}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <h4 className={cn(
-                        'font-semibold',
-                        isCompleted && 'line-through text-muted-foreground'
-                      )}>
-                        {activity.name}
-                      </h4>
-                      
-                      {activity.location?.address && (
-                        <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {activity.location.address}
-                        </p>
-                      )}
+                    {/* Activity name — serif editorial */}
+                    <h4 className={cn(
+                      'font-serif text-base font-semibold leading-snug',
+                      isCompleted && 'line-through text-muted-foreground'
+                    )}>
+                      {activity.name}
+                    </h4>
 
-                      {/* Tips */}
-                      {activity.tips && activity.tips.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {activity.tips.slice(0, 2).map((tip, i) => (
-                            <p key={i} className="text-sm flex items-start gap-1.5">
-                              <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                              <span className="text-muted-foreground">{tip}</span>
-                            </p>
-                          ))}
-                        </div>
-                      )}
+                    {activity.location?.address && (
+                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                        <MapPin className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{activity.location.address}</span>
+                      </p>
+                    )}
 
-                      {/* Confirmation / Actions */}
-                      {activity.confirmationNumber && (
-                        <div className="flex items-center gap-2 mt-3 p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
-                          <Ticket className="w-4 h-4 text-emerald-600" />
-                          <code className="text-xs font-mono flex-1 truncate text-emerald-700">
-                            {activity.confirmationNumber}
-                          </code>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6"
-                            onClick={() => onCopy(activity.id, activity.confirmationNumber!)}
-                          >
-                            {copiedId === activity.id ? (
-                              <Check className="w-3 h-3 text-emerald-500" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
+                    {/* Tips — editorial pull-quote style */}
+                    {activity.tips && activity.tips.length > 0 && (
+                      <div className="mt-3 pl-3 border-l-2 border-primary/20 space-y-1">
+                        {activity.tips.slice(0, 2).map((tip, i) => (
+                          <p key={i} className="text-xs font-serif italic text-muted-foreground leading-relaxed">
+                            {tip}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Confirmation number */}
+                    {activity.confirmationNumber && (
+                      <div className="flex items-center gap-2 mt-3 p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
+                        <Ticket className="w-3.5 h-3.5 text-emerald-600" />
+                        <code className="text-[11px] font-mono flex-1 truncate text-emerald-700">
+                          {activity.confirmationNumber}
+                        </code>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => onCopy(activity.id, activity.confirmationNumber!)}
+                        >
+                          {copiedId === activity.id ? (
+                            <Check className="w-3 h-3 text-emerald-500" />
+                          ) : (
+                            <Copy className="w-3 h-3" />
+                          )}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Post-Activity Nudge */}
+                    {!isPastDay && isCompleted && !feedbackByActivity.has(activity.id) && (
+                      <div className="mt-3">
+                        <PostActivityNudge
+                          activityId={activity.id}
+                          activityName={activity.name}
+                          tripId={trip.id}
+                          destination={trip.destination}
+                          activityType={activity.type}
+                          activityCategory={activity.category}
+                          isCompleted={isCompleted}
+                          hasRating={feedbackByActivity.has(activity.id)}
+                        />
+                      </div>
+                    )}
+
+                    {/* Inline Rating + Guide Bookmark — today only */}
+                    {!isPastDay && (
+                      <div className="mt-3 pt-2 border-t border-border/30 flex items-center justify-between">
+                        <InlineActivityRating
+                          activityId={activity.id}
+                          tripId={trip.id}
+                          activityType={activity.type}
+                          activityCategory={activity.category}
+                          destination={trip.destination}
+                          existingRating={feedbackByActivity.get(activity.id)?.rating as any || null}
+                          onVoicePress={() => onVoicePress(activity.id, activity.name)}
+                          compact
+                        />
+                        <GuideBookmarkButton
+                          activityId={activity.id}
+                          activityName={activity.name}
+                          tripId={trip.id}
+                          compact
+                        />
+                      </div>
+                    )}
+
+                    {/* Voice note indicator */}
+                    {feedbackByActivity.get(activity.id)?.personalization_tags?.includes('has_voice_note') && (
+                      <VoiceNotePlayer tripId={trip.id} activityId={activity.id} />
+                    )}
+
+                    {/* Action Buttons — today only */}
+                    {!isPastDay && (
+                      <div className="flex items-center gap-2 mt-3">
+                        {activity.location && (
+                          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full" onClick={() => {
+                            openMapLocation({
+                              name: activity.location?.name || activity.name,
+                              address: activity.location?.address,
+                              lat: activity.location?.lat,
+                              lng: activity.location?.lng,
+                            });
+                          }}>
+                            <Navigation className="w-3 h-3" />
+                            Directions
                           </Button>
-                        </div>
-                      )}
-
-                      {/* Post-Activity Nudge (for completed, unrated activities — today only) */}
-                      {!isPastDay && isCompleted && !feedbackByActivity.has(activity.id) && (
-                        <div className="mt-3">
-                          <PostActivityNudge
+                        )}
+                        {activity.voucherUrl && (
+                          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full">
+                            <QrCode className="w-3 h-3" />
+                            Tickets
+                          </Button>
+                        )}
+                        <MemoryUploadButton
+                          tripId={trip.id}
+                          activityId={activity.id}
+                          activityName={activity.name}
+                          locationName={activity.location?.name}
+                          dayNumber={tripContext.currentDayNumber}
+                          variant="icon"
+                        />
+                        <div className="ml-auto">
+                          <CheckInButton
                             activityId={activity.id}
                             activityName={activity.name}
                             tripId={trip.id}
                             destination={trip.destination}
                             activityType={activity.type}
                             activityCategory={activity.category}
-                            isCompleted={isCompleted}
-                            hasRating={feedbackByActivity.has(activity.id)}
+                            isCheckedIn={isCompleted}
+                            isNearby={proximity.nearbyActivityId === activity.id}
+                            distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
+                            onCheckIn={onActivityComplete}
                           />
                         </div>
-                      )}
-
-                      {/* Inline Rating + Guide Bookmark — today only */}
-                      {!isPastDay && (
-                        <div className="mt-3 pt-2 border-t border-border/30 flex items-center justify-between">
-                          <InlineActivityRating
-                            activityId={activity.id}
-                            tripId={trip.id}
-                            activityType={activity.type}
-                            activityCategory={activity.category}
-                            destination={trip.destination}
-                            existingRating={feedbackByActivity.get(activity.id)?.rating as any || null}
-                            onVoicePress={() => onVoicePress(activity.id, activity.name)}
-                            compact
-                          />
-                          <GuideBookmarkButton
-                            activityId={activity.id}
-                            activityName={activity.name}
-                            tripId={trip.id}
-                            compact
-                          />
-                        </div>
-                      )}
-
-                      {/* Voice note indicator */}
-                      {feedbackByActivity.get(activity.id)?.personalization_tags?.includes('has_voice_note') && (
-                        <VoiceNotePlayer tripId={trip.id} activityId={activity.id} />
-                      )}
-
-                      {/* Action Buttons — today only */}
-                      {!isPastDay && (
-                        <div className="flex items-center gap-2 mt-3">
-                          {activity.location && (
-                            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => {
-                              openMapLocation({
-                                name: activity.location?.name || activity.name,
-                                address: activity.location?.address,
-                                lat: activity.location?.lat,
-                                lng: activity.location?.lng,
-                              });
-                            }}>
-                              <Navigation className="w-3.5 h-3.5" />
-                              Directions
-                            </Button>
-                          )}
-                          {activity.voucherUrl && (
-                            <Button size="sm" variant="outline" className="h-8 gap-1.5">
-                              <QrCode className="w-3.5 h-3.5" />
-                              Show tickets
-                            </Button>
-                          )}
-                          <MemoryUploadButton
-                            tripId={trip.id}
-                            activityId={activity.id}
-                            activityName={activity.name}
-                            locationName={activity.location?.name}
-                            dayNumber={tripContext.currentDayNumber}
-                            variant="icon"
-                          />
-                          <div className="ml-auto">
-                            <CheckInButton
-                              activityId={activity.id}
-                              activityName={activity.name}
-                              tripId={trip.id}
-                              destination={trip.destination}
-                              activityType={activity.type}
-                              activityCategory={activity.category}
-                              isCheckedIn={isCompleted}
-                              isNearby={proximity.nearbyActivityId === activity.id}
-                              distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
-                              onCheckIn={onActivityComplete}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          );
-        })}
+                </motion.div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Inline Notes */}
+      <div className="pt-2">
+        <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-6" />
+        <ActiveTripNotes tripId={tripId} dayNumber={tripContext.currentDayNumber} />
       </div>
 
       {/* Footer Navigation */}
       <div className="flex justify-center gap-4 pt-4">
-        <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="sm" className="font-serif italic text-muted-foreground">
           View full day
         </Button>
-        <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="sm" className="font-serif italic text-muted-foreground">
           Tomorrow →
         </Button>
       </div>
