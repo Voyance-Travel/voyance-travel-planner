@@ -4187,7 +4187,7 @@ serve(async (req) => {
       const clonedReq = req.clone();
       const peekBody = await clonedReq.json();
       
-      const allowedServiceRoleActions = ['generate-trip-day', 'generate-day', 'regenerate-day'];
+      const allowedServiceRoleActions = ['generate-trip', 'generate-trip-day', 'generate-day', 'regenerate-day'];
       if (allowedServiceRoleActions.includes(peekBody.action) && peekBody.userId) {
         // Trusted internal call — skip user-auth, use provided userId
         authResult = { userId: peekBody.userId };
