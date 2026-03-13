@@ -295,10 +295,17 @@ export function ItineraryGenerator({
     } catch { return 1; }
   }, [startDate, endDate]);
   
+  const tripCityNames = useMemo(() => {
+    if (!isMultiCity) return [destination];
+    if (tripCitiesData && tripCitiesData.length > 0) {
+      return tripCitiesData.map(c => c.city_name).filter(Boolean) as string[];
+    }
+    return [destination]; // fallback
+  }, [isMultiCity, tripCitiesData, destination]);
+
   const costEstimate = useMemo(() => {
-    const cities = isMultiCity ? [] : [destination];
-    return calculateTripCredits({ days: totalDaysEstimate, cities });
-  }, [totalDaysEstimate, destination, isMultiCity]);
+    return calculateTripCredits({ days: totalDaysEstimate, cities: tripCityNames });
+  }, [totalDaysEstimate, tripCityNames]);
 
 
   // Keep the pre-generation experience on screen until the first day is ready,
