@@ -3942,6 +3942,7 @@ export function EditorialItinerary({
   // ===========================================================================
 
   return (
+    <ItineraryImageContext.Provider value={resolvedImageMap}>
     <div className="space-y-6">
       {/* Onboarding Tour for first-time visitors */}
       <ItineraryOnboardingTour tripId={tripId} />
