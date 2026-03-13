@@ -8722,26 +8722,11 @@ function ActivityRow({
   const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
   const shouldFetchRealPhoto = canViewPremium && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
   
-  // Memoize hook arguments to prevent unstable references triggering re-renders
-  const stableTitle = useMemo(
-    () => isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
-    [isHotelActivity, hasHotelName, hotelName, effectiveSearchTerm]
-  );
-  const stableDestination = useMemo(
-    () => shouldFetchRealPhoto ? destination : undefined,
-    [shouldFetchRealPhoto, destination]
-  );
-
-  const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
-    stableTitle,
-    effectiveCategory,
-    existingPhoto,
-    stableDestination,
-    activity.id,
-    activity.id
-  );
-
-  const thumbnailUrl = fetchedImageUrl;
+  // Read resolved image from batch context (no per-row hooks — prevents React Error #310)
+  const resolvedImageMap = React.useContext(ItineraryImageContext);
+  const resolvedUrl = resolvedImageMap.get(activity.id);
+  const thumbnailUrl = resolvedUrl || existingPhoto || getActivityPlaceholder(effectiveCategory);
+  const imageLoading = !resolvedUrl && !existingPhoto;
   const [thumbnailError, setThumbnailError] = useState(false);
   // Library modal state removed - agent features disabled
 
