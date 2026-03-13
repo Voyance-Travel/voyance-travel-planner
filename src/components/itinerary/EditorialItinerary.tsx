@@ -1404,6 +1404,10 @@ export function EditorialItinerary({
     }
   }, [daysFingerprint, days, onDaysChange]);
 
+  // ── Batch image resolution: resolve all activity images ONCE to prevent per-row hooks ──
+  const imageSpecs = useMemo(() => extractImageSpecs(days), [daysFingerprint]);
+  const resolvedImageMap = useItineraryImages(imageSpecs, destination);
+
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number; afterIndex?: number } | null>(null);
   const [importModal, setImportModal] = useState<{ dayIndex: number } | null>(null);
 
