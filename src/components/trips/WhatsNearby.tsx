@@ -1,29 +1,16 @@
 /**
- * What's Nearby Component
- * 
- * Location-based archetype-filtered suggestions for active trips.
- * Categories: coffee, food, wander, drinks, snacks
+ * What's Nearby — Editorial
+ * Location-based archetype-filtered suggestions with magazine aesthetic
  */
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Coffee, 
-  Utensils, 
-  Compass, 
-  Wine, 
-  Cookie,
-  MapPin,
-  Navigation,
-  Star,
-  Clock,
-  Loader2,
-  RefreshCw,
-  AlertCircle,
-  ChevronRight
+  Coffee, Utensils, Compass, Wine, Cookie,
+  MapPin, Navigation, Star, Clock,
+  Loader2, RefreshCw, AlertCircle, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useGeolocation } from '@/hooks/useGeolocation';
@@ -59,65 +46,64 @@ function SuggestionCard({ suggestion, index }: { suggestion: NearbySuggestion; i
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.1 }}
+      transition={{ delay: index * 0.08 }}
+      className="group"
     >
-      <Card className="hover:shadow-md transition-shadow cursor-pointer group">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h4 className="font-medium text-sm truncate">{suggestion.name}</h4>
-                {suggestion.isOpen !== undefined && (
-                  <Badge 
-                    variant={suggestion.isOpen ? "default" : "secondary"}
-                    className={cn(
-                      "text-[10px] px-1.5 py-0",
-                      suggestion.isOpen 
-                        ? "bg-green-500/10 text-green-600 border-green-500/20" 
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {suggestion.isOpen ? 'Open' : 'Closed'}
-                  </Badge>
-                )}
-              </div>
-              
-              <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                {suggestion.description}
-              </p>
-              
-              {/* Why for you - archetype-specific */}
-              <div className="bg-primary/5 rounded-md px-2 py-1.5 mb-2">
-                <p className="text-xs text-primary italic">
-                  "{suggestion.whyForYou}"
-                </p>
-              </div>
-              
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Navigation className="w-3 h-3" />
-                  {suggestion.distance}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {suggestion.walkTime}
-                </span>
-                {suggestion.rating && (
-                  <span className="flex items-center gap-1">
-                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                    {suggestion.rating}
-                  </span>
-                )}
-                {priceDisplay && (
-                  <span className="text-muted-foreground/70">{priceDisplay}</span>
-                )}
-              </div>
+      <div className="py-4 border-b border-border/30 last:border-b-0">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="font-serif text-base font-semibold truncate">{suggestion.name}</h4>
+              {suggestion.isOpen !== undefined && (
+                <Badge 
+                  variant={suggestion.isOpen ? "default" : "secondary"}
+                  className={cn(
+                    "text-[10px] px-1.5 py-0",
+                    suggestion.isOpen 
+                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" 
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {suggestion.isOpen ? 'Open' : 'Closed'}
+                </Badge>
+              )}
             </div>
             
-            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+            <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
+              {suggestion.description}
+            </p>
+            
+            {/* Why for you — pull-quote */}
+            <div className="pl-3 border-l-2 border-primary/20 mb-3">
+              <p className="font-serif text-xs italic text-primary/80">
+                "{suggestion.whyForYou}"
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Navigation className="w-3 h-3" />
+                {suggestion.distance}
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {suggestion.walkTime}
+              </span>
+              {suggestion.rating && (
+                <span className="flex items-center gap-1">
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  {suggestion.rating}
+                </span>
+              )}
+              {priceDisplay && (
+                <span className="text-muted-foreground/70">{priceDisplay}</span>
+              )}
+            </div>
           </div>
-        </CardContent>
-      </Card>
+          
+          <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-primary transition-colors shrink-0 mt-1" />
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -135,37 +121,18 @@ export default function WhatsNearby({ archetype, className }: WhatsNearbyProps) 
     }
 
     setSelectedCategory(category);
-    await fetchSuggestions(
-      position.lat,
-      position.lng,
-      category,
-      archetype,
-      getTimeOfDay()
-    );
+    await fetchSuggestions(position.lat, position.lng, category, archetype, getTimeOfDay());
   };
 
-  // Fetch when position becomes available after category selection
   useEffect(() => {
     if (position && selectedCategory && suggestions.length === 0 && !suggestionsLoading) {
-      fetchSuggestions(
-        position.lat,
-        position.lng,
-        selectedCategory,
-        archetype,
-        getTimeOfDay()
-      );
+      fetchSuggestions(position.lat, position.lng, selectedCategory, archetype, getTimeOfDay());
     }
   }, [position, selectedCategory, suggestions.length, suggestionsLoading, fetchSuggestions, archetype]);
 
   const handleRefresh = () => {
     if (position && selectedCategory) {
-      fetchSuggestions(
-        position.lat,
-        position.lng,
-        selectedCategory,
-        archetype,
-        getTimeOfDay()
-      );
+      fetchSuggestions(position.lat, position.lng, selectedCategory, archetype, getTimeOfDay());
     }
   };
 
@@ -177,41 +144,36 @@ export default function WhatsNearby({ archetype, className }: WhatsNearbyProps) 
   const isLoading = locationLoading || suggestionsLoading;
 
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("space-y-6", className)}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MapPin className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold">What's Nearby</h3>
+          <h3 className="font-serif text-xl font-semibold">What's Nearby</h3>
         </div>
         {selectedCategory && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleRefresh}
-            disabled={isLoading}
-          >
+          <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={isLoading}>
             <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
           </Button>
         )}
       </div>
 
-      {/* Permission denied state */}
+      {/* Permission denied */}
       {permissionDenied && (
-        <Card className="border-yellow-500/30 bg-yellow-500/5">
-          <CardContent className="p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0" />
+        <div className="pl-4 border-l-2 border-amber-500/30 py-2">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium">Location access needed</p>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Enable location in your browser settings to see nearby places.
               </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      {/* Category selector */}
+      {/* Category pills */}
       <AnimatePresence mode="wait">
         {!selectedCategory ? (
           <motion.div
@@ -219,24 +181,32 @@ export default function WhatsNearby({ archetype, className }: WhatsNearbyProps) 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="grid grid-cols-5 gap-2"
+            className="space-y-4"
           >
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => handleCategorySelect(cat.id)}
-                disabled={permissionDenied}
-                className={cn(
-                  "flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all",
-                  "bg-muted/50 hover:bg-muted border border-transparent",
-                  "hover:border-primary/20 hover:shadow-sm",
-                  "disabled:opacity-50 disabled:cursor-not-allowed"
-                )}
-              >
-                <span className="text-muted-foreground">{cat.icon}</span>
-                <span className="text-xs font-medium">{cat.label}</span>
-              </button>
-            ))}
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-primary/60">
+                Curated for You
+              </span>
+              <div className="flex-1 h-px bg-gradient-to-r from-primary/20 to-transparent" />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => handleCategorySelect(cat.id)}
+                  disabled={permissionDenied}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2.5 rounded-full transition-all",
+                    "border border-border/50 hover:border-primary/30",
+                    "hover:bg-primary/5 hover:shadow-sm",
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                  )}
+                >
+                  <span className="text-muted-foreground">{cat.icon}</span>
+                  <span className="text-sm font-medium">{cat.label}</span>
+                </button>
+              ))}
+            </div>
           </motion.div>
         ) : (
           <motion.div
@@ -244,55 +214,46 @@ export default function WhatsNearby({ archetype, className }: WhatsNearbyProps) 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="space-y-3"
+            className="space-y-4"
           >
-            {/* Back button + category indicator */}
+            {/* Back + category */}
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={handleBack}>
+              <Button variant="ghost" size="sm" onClick={handleBack} className="font-serif italic text-muted-foreground">
                 ← Back
               </Button>
-              <Badge variant="secondary" className="flex items-center gap-1.5">
+              <Badge variant="secondary" className="flex items-center gap-1.5 rounded-full">
                 {CATEGORIES.find(c => c.id === selectedCategory)?.icon}
                 {CATEGORIES.find(c => c.id === selectedCategory)?.label}
               </Badge>
             </div>
 
-            {/* Loading state */}
+            {/* Loading */}
             {isLoading && (
-              <div className="flex items-center justify-center py-8">
+              <div className="flex items-center justify-center py-12">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-sm">
+                  <span className="text-sm font-serif italic">
                     {locationLoading ? 'Getting your location...' : 'Finding nearby places...'}
                   </span>
                 </div>
               </div>
             )}
 
-            {/* Suggestions list */}
+            {/* Results */}
             {!isLoading && suggestions.length > 0 && (
-              <div className="space-y-2">
+              <div>
                 {suggestions.map((suggestion, index) => (
-                  <SuggestionCard 
-                    key={suggestion.id} 
-                    suggestion={suggestion} 
-                    index={index}
-                  />
+                  <SuggestionCard key={suggestion.id} suggestion={suggestion} index={index} />
                 ))}
               </div>
             )}
 
-            {/* Empty state */}
+            {/* Empty */}
             {!isLoading && suggestions.length === 0 && !locationError && (
-              <div className="text-center py-8 text-muted-foreground">
-                <Compass className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No places found nearby</p>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleRefresh}
-                  className="mt-2"
-                >
+              <div className="text-center py-12 text-muted-foreground">
+                <Compass className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                <p className="font-serif text-sm italic">No places found nearby</p>
+                <Button variant="ghost" size="sm" onClick={handleRefresh} className="mt-3 font-serif italic">
                   Try again
                 </Button>
               </div>

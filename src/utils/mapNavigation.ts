@@ -179,6 +179,10 @@ export function openMapLocation(
     } else if (location.address || location.name) {
       params.set('q', location.address || location.name || '');
     }
+    if (travelMode) {
+      const dirflgMap: Record<TravelMode, string> = { driving: 'd', walking: 'w', transit: 'r', bicycling: 'b' };
+      params.set('dirflg', dirflgMap[travelMode] || 'd');
+    }
     url = `https://maps.apple.com/?${params.toString()}`;
   } else {
     const params = new URLSearchParams();
@@ -187,6 +191,9 @@ export function openMapLocation(
       params.set('query', `${location.lat},${location.lng}`);
     } else if (location.address || location.name) {
       params.set('query', location.address || location.name || '');
+    }
+    if (travelMode) {
+      params.set('travelmode', travelMode);
     }
     url = `https://www.google.com/maps/search/?${params.toString()}`;
   }
