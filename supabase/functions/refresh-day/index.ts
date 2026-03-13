@@ -127,16 +127,17 @@ function checkOperatingHours(
 // ─── Buffer Requirements ───────────────────────────────────────────────────────
 
 function getMinBufferMinutes(fromCategory?: string, toCategory?: string): number {
-  const diningCats = ['dining', 'food', 'restaurant', 'cafe', 'breakfast', 'lunch', 'dinner'];
   const transitCats = ['transportation', 'transit', 'transfer', 'taxi', 'transport', 'commute', 'travel'];
+  const accommodationCats = ['accommodation', 'hotel', 'lodging'];
 
   const fromLower = fromCategory?.toLowerCase() || '';
   const toLower = toCategory?.toLowerCase() || '';
 
+  // No buffer needed to/from transit or accommodation (check-in flows directly into next activity)
   if (transitCats.some(t => fromLower.includes(t)) || transitCats.some(t => toLower.includes(t))) return 0;
-  if (diningCats.includes(fromLower)) return 10;
-  if (diningCats.includes(toLower)) return 10;
-  return 5;
+  if (accommodationCats.some(t => fromLower.includes(t)) || accommodationCats.some(t => toLower.includes(t))) return 5;
+  // All other activity pairs: 15 min minimum buffer
+  return 15;
 }
 
 // ─── Haversine ─────────────────────────────────────────────────────────────────
