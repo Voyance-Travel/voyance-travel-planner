@@ -107,7 +107,7 @@ export function useGenerationGate() {
       params.dna
     );
 
-    // ── JOURNEY MODE: Sum costs across all legs ──
+    // ── JOURNEY MODE: Canonical cost across all legs ──
     let journeySiblings: Array<{ id: string; start_date: string; end_date: string; destination: string; journey_order: number }> = [];
     let totalJourneyCost = 0;
 
@@ -122,18 +122,20 @@ export function useGenerationGate() {
 
       if (!siblingError && siblings && siblings.length > 1) {
         journeySiblings = siblings;
-        // Sum credit cost across all legs
-        for (const leg of siblings) {
+        // Canonical journey cost: sum all days + all unique cities for proper multi-city fee
+        const totalJourneyDays = siblings.reduce((sum, leg) => {
           const legDays = Math.max(1, Math.ceil(
             (new Date(leg.end_date).getTime() - new Date(leg.start_date).getTime()) / (1000 * 60 * 60 * 24)
           ) + 1);
-          const legEstimate = calculateTripCredits({
-            days: legDays,
-            cities: [leg.destination],
-          });
-          totalJourneyCost += legEstimate.totalCredits;
-        }
-        console.log(`[GenerationGate] Journey mode: ${siblings.length} legs, total cost: ${totalJourneyCost} credits`);
+          return sum + legDays;
+        }, 0);
+        const allCities = Array.from(new Set(siblings.map(s => s.destination).filter(Boolean)));
+        const journeyEstimate = calculateTripCredits({
+          days: totalJourneyDays,
+          cities: allCities,
+        });
+        totalJourneyCost = journeyEstimate.totalCredits;
+        console.log(`[GenerationGate] Journey mode: ${siblings.length} legs, ${totalJourneyDays} days, ${allCities.length} cities, total cost: ${totalJourneyCost} credits`);
       }
     }
 

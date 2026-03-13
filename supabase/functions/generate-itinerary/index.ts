@@ -4187,7 +4187,7 @@ serve(async (req) => {
       const clonedReq = req.clone();
       const peekBody = await clonedReq.json();
       
-      const allowedServiceRoleActions = ['generate-trip-day', 'generate-day', 'regenerate-day'];
+      const allowedServiceRoleActions = ['generate-trip', 'generate-trip-day', 'generate-day', 'regenerate-day'];
       if (allowedServiceRoleActions.includes(peekBody.action) && peekBody.userId) {
         // Trusted internal call — skip user-auth, use provided userId
         authResult = { userId: peekBody.userId };
@@ -6503,10 +6503,10 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
 
     const nextOrder = currentTrip.journey_order + 1;
 
-    // Find the next queued leg
+    // Find the next queued leg WITH full trip fields needed for generate-trip
     const { data: nextLeg } = await supabase
       .from('trips')
-      .select('id, itinerary_status')
+      .select('id, itinerary_status, destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
       .eq('journey_id', currentTrip.journey_id)
       .eq('journey_order', nextOrder)
       .single();
@@ -6516,16 +6516,9 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       return;
     }
 
-    console.log(`[triggerNextJourneyLeg] Triggering generation for next leg ${nextLeg.id} (order ${nextOrder})`);
+    console.log(`[triggerNextJourneyLeg] Triggering generation for next leg ${nextLeg.id} (order ${nextOrder}, dest: ${nextLeg.destination})`);
 
-    // Mark it as generating
-    await supabase
-      .from('trips')
-      .update({ itinerary_status: 'generating', updated_at: new Date().toISOString() })
-      .eq('id', nextLeg.id);
-
-    // Invoke generate-itinerary for the next leg
-    // MUST await — fire-and-forget fetch gets killed when the Deno isolate shuts down
+    // Invoke generate-itinerary with full generate-trip payload
     const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -6536,13 +6529,47 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${serviceKey}`,
         },
-        body: JSON.stringify({ tripId: nextLeg.id }),
+        body: JSON.stringify({
+          action: 'generate-trip',
+          tripId: nextLeg.id,
+          userId: nextLeg.user_id,
+          destination: nextLeg.destination,
+          destinationCountry: nextLeg.destination_country || '',
+          startDate: nextLeg.start_date,
+          endDate: nextLeg.end_date,
+          travelers: nextLeg.travelers || 1,
+          tripType: nextLeg.trip_type || 'vacation',
+          budgetTier: nextLeg.budget_tier || 'moderate',
+          isMultiCity: nextLeg.is_multi_city || false,
+          creditsCharged: 0, // Already charged on leg 1
+        }),
       });
+
+      if (!res.ok) {
+        const errorBody = await res.text().catch(() => 'no body');
+        console.error(`[triggerNextJourneyLeg] Non-2xx response for leg ${nextLeg.id}: ${res.status} — ${errorBody}`);
+        // Reset to queued so frontend fallback can retry
+        await supabase.from('trips').update({
+          itinerary_status: 'queued',
+          metadata: {
+            chain_error: `Backend returned ${res.status}`,
+            chain_error_at: new Date().toISOString(),
+          },
+        }).eq('id', nextLeg.id);
+        return;
+      }
+
       console.log(`[triggerNextJourneyLeg] Next leg ${nextLeg.id} invoke status: ${res.status}`);
     } catch (fetchErr) {
       console.error(`[triggerNextJourneyLeg] Failed to invoke next leg ${nextLeg.id}:`, fetchErr);
       // Reset status so the frontend fallback can retry
-      await supabase.from('trips').update({ itinerary_status: 'queued' }).eq('id', nextLeg.id);
+      await supabase.from('trips').update({
+        itinerary_status: 'queued',
+        metadata: {
+          chain_error: String(fetchErr),
+          chain_error_at: new Date().toISOString(),
+        },
+      }).eq('id', nextLeg.id);
     }
   } catch (err) {
     console.error('[triggerNextJourneyLeg] Error:', err);
