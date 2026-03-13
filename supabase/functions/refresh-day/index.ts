@@ -299,7 +299,7 @@ Deno.serve(async (req: Request) => {
               type: 'time_shift',
               activityId: next.id,
               activityTitle: next.title,
-              icon: '✏️',
+              icon: 'alert-triangle',
               description: `${next.title}: ${next.startTime} → ${fixedStart} (resolve overlap)`,
               oldValue: `${next.startTime}–${next.endTime || '?'}`,
               newValue: `${fixedStart}–${fixedEnd}`,
