@@ -726,7 +726,7 @@ export default function TripDetail() {
   }, [trip?.id, trip?.journey_id, trip?.itinerary_status, trip?.metadata, queryClient]);
 
   useEffect(() => {
-      shouldAutoGenerate && 
+    if (
       trip && 
       !loading && 
       !autoGenerateTriggered.current &&
