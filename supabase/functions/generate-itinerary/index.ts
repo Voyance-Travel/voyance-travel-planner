@@ -10516,6 +10516,13 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               transitionFrom: cityInfo?.transitionFrom,
               transitionTo: cityInfo?.transitionTo,
               transitionMode: cityInfo?.transportType,
+              // Per-city hotel override for multi-city trips
+              hotelOverride: cityInfo?.hotelName ? {
+                name: cityInfo.hotelName,
+                address: cityInfo.hotelAddress || '',
+              } : undefined,
+              isFirstDayInCity: cityInfo ? (dayNumber === 1 || dayCityMap![dayNumber - 2]?.cityName !== cityInfo.cityName) : false,
+              isLastDayInCity: cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false,
             }),
           });
 
