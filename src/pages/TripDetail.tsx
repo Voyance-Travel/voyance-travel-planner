@@ -1740,14 +1740,12 @@ export default function TripDetail() {
       {/* Hero Destination Image — compact on mobile, taller on desktop */}
       <div className="relative h-40 sm:h-56 md:h-72 -mt-16 overflow-hidden">
         <ErrorBoundary>
-        <DynamicDestinationPhotos
-          destination={trip.destination}
-          startDate={trip.start_date}
-          endDate={effectiveEndDate}
-          travelers={trip.travelers || 1}
-          variant="hero"
-          hideOverlayText
-          className="!rounded-none"
+        <img
+          src={heroImageUrl}
+          alt={trip.destination || 'Trip destination'}
+          onError={onHeroError}
+          onLoad={onHeroLoad}
+          className="w-full h-full object-cover !rounded-none"
         />
         </ErrorBoundary>
         {/* Back Button - icon only so hero image stays text-free */}
