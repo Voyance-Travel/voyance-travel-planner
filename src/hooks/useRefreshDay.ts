@@ -36,10 +36,21 @@ export interface ProposedChange {
   patch?: Record<string, unknown>;
 }
 
+export interface BufferInfo {
+  fromId: string;
+  fromTitle: string;
+  toId: string;
+  toTitle: string;
+  bufferMinutes: number;
+  requiredMinutes: number;
+  isInsufficient: boolean;
+}
+
 export interface RefreshResult {
   issues: RefreshIssue[];
   proposedChanges: ProposedChange[];
   transitEstimates: RefreshTransitEstimate[];
+  buffers: BufferInfo[];
   totalCost: number;
   activitiesValidated: number;
   dayNumber: number;
