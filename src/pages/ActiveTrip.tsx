@@ -13,7 +13,7 @@ import { openMapLocation } from '@/utils/mapNavigation';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ChevronRight, Sun, Moon,
   Coffee, Sunrise, Sunset, Navigation, Ticket, Bookmark,
-  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil
+  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil, Map
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
