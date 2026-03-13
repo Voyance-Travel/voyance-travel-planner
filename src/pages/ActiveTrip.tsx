@@ -13,8 +13,12 @@ import { openMapLocation, toTravelMode } from '@/utils/mapNavigation';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ChevronRight, Sun, Moon,
   Coffee, Sunrise, Sunset, Navigation, Ticket, Bookmark,
-  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil, Map
+  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil, Map,
+  Route as RouteIcon, ChevronDown
 } from 'lucide-react';
+import { useActivityImage } from '@/hooks/useActivityImage';
+import SafeImage from '@/components/SafeImage';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
@@ -98,6 +102,119 @@ interface ItineraryDay {
 }
 
 type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats' | 'chat' | 'dna';
+
+// ── Sub-component: Activity thumbnail (hook wrapper) ──────────────────────
+function ActivityImageThumb({ name, category, imageUrl, destination }: {
+  name: string; category?: string; imageUrl?: string; destination?: string;
+}) {
+  const { imageUrl: resolvedUrl } = useActivityImage(name, category, imageUrl, destination);
+  return (
+    <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-muted">
+      <SafeImage
+        src={resolvedUrl || ''}
+        alt={name}
+        className="w-full h-full object-cover"
+        fallbackCategory={category}
+      />
+    </div>
+  );
+}
+
+// ── Sub-component: Inline route directions ────────────────────────────────
+function InlineRouteDetails({ activity, previousActivity }: {
+  activity: ItineraryActivity;
+  previousActivity: ItineraryActivity | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [steps, setSteps] = useState<any[] | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeMeta, setRouteMeta] = useState<{ duration: string; distance: string } | null>(null);
+
+  const mode = activity.transportationMethod || 'walk';
+
+  const fetchRoute = useCallback(async () => {
+    if (steps) return; // already fetched
+    if (!previousActivity?.location?.lat || !activity.location?.lat) return;
+    setRouteLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('route-details', {
+        body: {
+          origin: { lat: previousActivity.location.lat, lng: previousActivity.location.lng },
+          destination: { lat: activity.location!.lat, lng: activity.location!.lng },
+          travelMode: mode.toUpperCase(),
+        },
+      });
+      if (error) throw error;
+      const route = data?.routes?.[0] || data?.route;
+      if (route) {
+        const leg = route.legs?.[0] || route;
+        setSteps(leg.steps || []);
+        setRouteMeta({
+          duration: leg.duration?.text || leg.localizedValues?.duration?.text || '',
+          distance: leg.distance?.text || leg.localizedValues?.distance?.text || '',
+        });
+      }
+    } catch (err) {
+      console.error('[InlineRouteDetails] fetch error:', err);
+    } finally {
+      setRouteLoading(false);
+    }
+  }, [activity, previousActivity, mode, steps]);
+
+  if (!previousActivity?.location?.lat) return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen);
+      if (isOpen) fetchRoute();
+    }}>
+      <CollapsibleTrigger asChild>
+        <button className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground mt-2 transition-colors">
+          <RouteIcon className="w-3 h-3" />
+          <span className="capitalize">{mode}</span> route
+          {routeMeta && <span className="text-primary">· {routeMeta.duration}</span>}
+          <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 pl-4 border-l-2 border-primary/15 space-y-1.5">
+          {routeLoading && (
+            <div className="space-y-1 animate-pulse">
+              <div className="h-3 bg-muted rounded w-3/4" />
+              <div className="h-3 bg-muted rounded w-1/2" />
+            </div>
+          )}
+          {steps && steps.length > 0 && (
+            <>
+              {routeMeta && (
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1">
+                  {routeMeta.distance} · {routeMeta.duration}
+                </p>
+              )}
+              {steps.slice(0, 5).map((step: any, i: number) => (
+                <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                  <span className="text-primary/60 font-medium mr-1">{i + 1}.</span>
+                  {step.navigationInstruction?.instructions || step.htmlInstructions || step.instruction || 'Continue'}
+                  {(step.localizedValues?.distance?.text || step.distance?.text) && (
+                    <span className="text-muted-foreground/50 ml-1">
+                      ({step.localizedValues?.distance?.text || step.distance?.text})
+                    </span>
+                  )}
+                </p>
+              ))}
+              {steps.length > 5 && (
+                <p className="text-[11px] text-primary font-medium">+ {steps.length - 5} more steps</p>
+              )}
+            </>
+          )}
+          {steps && steps.length === 0 && !routeLoading && (
+            <p className="text-xs text-muted-foreground italic">No detailed route available</p>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 // Get time of day greeting and icon
 function getTimeContext() {
@@ -852,11 +969,13 @@ function TodayView({
             {String(tripContext.currentDayNumber).padStart(2, '0')}
           </span>
           <div>
-            <h2 className="font-serif text-xl font-semibold leading-tight">
-              {todaysItinerary.theme || `Day ${tripContext.currentDayNumber}`}
-            </h2>
+            <span className="inline-block bg-gradient-to-r from-primary/15 to-primary/5 px-3 py-1 rounded-full">
+              <h2 className="font-serif text-xl font-semibold leading-tight text-foreground">
+                {todaysItinerary.theme || `Day ${tripContext.currentDayNumber}`}
+              </h2>
+            </span>
             {todaysItinerary.description && (
-              <p className="font-serif text-sm italic text-muted-foreground mt-0.5">
+              <p className="font-serif text-sm italic text-muted-foreground mt-1">
                 {todaysItinerary.description}
               </p>
             )}
@@ -1053,40 +1172,51 @@ function TodayView({
                     isCompleted && 'opacity-60',
                     !isCurrent && !isCompleted && 'bg-card border-border/50'
                   )}>
-                    {/* Time + status badges */}
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className={cn(
-                        'text-xs font-medium',
-                        isCurrent ? 'text-primary' : 'text-muted-foreground'
-                      )}>
-                        {activity.startTime || '--:--'}
-                      </span>
-                      {isCurrent && (
-                        <Badge className="bg-primary text-primary-foreground text-[9px] h-4 px-1.5">
-                          NOW
-                        </Badge>
-                      )}
-                      {isNext && !isCurrent && (
-                        <Badge variant="outline" className="text-[9px] h-4 px-1.5">
-                          NEXT
-                        </Badge>
-                      )}
-                      {activity.duration && (
-                        <span className="text-[10px] text-muted-foreground">
-                          {activity.duration < 60
-                            ? `${activity.duration}m`
-                            : `${Math.floor(activity.duration / 60)}h${activity.duration % 60 ? ` ${activity.duration % 60}m` : ''}`}
-                        </span>
-                      )}
-                    </div>
+                    <div className="flex gap-3">
+                      {/* Activity thumbnail */}
+                      <ActivityImageThumb
+                        name={activity.name}
+                        category={activity.category}
+                        imageUrl={activity.imageUrl}
+                        destination={trip.destination}
+                      />
+                      <div className="flex-1 min-w-0">
+                        {/* Time + status badges */}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className={cn(
+                            'text-xs font-medium',
+                            isCurrent ? 'text-primary' : 'text-muted-foreground'
+                          )}>
+                            {activity.startTime || '--:--'}
+                          </span>
+                          {isCurrent && (
+                            <Badge className="bg-primary text-primary-foreground text-[9px] h-4 px-1.5">
+                              NOW
+                            </Badge>
+                          )}
+                          {isNext && !isCurrent && (
+                            <Badge variant="outline" className="text-[9px] h-4 px-1.5">
+                              NEXT
+                            </Badge>
+                          )}
+                          {activity.duration && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {activity.duration < 60
+                                ? `${activity.duration}m`
+                                : `${Math.floor(activity.duration / 60)}h${activity.duration % 60 ? ` ${activity.duration % 60}m` : ''}`}
+                            </span>
+                          )}
+                        </div>
 
-                    {/* Activity name — serif editorial */}
-                    <h4 className={cn(
-                      'font-serif text-base font-semibold leading-snug',
-                      isCompleted && 'line-through text-muted-foreground'
-                    )}>
-                      {activity.name}
-                    </h4>
+                        {/* Activity name — serif editorial */}
+                        <h4 className={cn(
+                          'font-serif text-base font-semibold leading-snug',
+                          isCompleted && 'line-through text-muted-foreground'
+                        )}>
+                          {activity.name}
+                        </h4>
+                      </div>
+                    </div>
 
                     {activity.location?.address && (
                       <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
@@ -1173,49 +1303,59 @@ function TodayView({
 
                     {/* Action Buttons — today only */}
                     {!isPastDay && (
-                      <div className="flex items-center gap-2 mt-3">
-                        {activity.location && (
-                          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full" onClick={() => {
-                            openMapLocation({
-                              name: activity.location?.name || activity.name,
-                              address: activity.location?.address,
-                              lat: activity.location?.lat,
-                              lng: activity.location?.lng,
-                            }, 'auto', toTravelMode(activity.transportationMethod));
-                          }}>
-                            <Navigation className="w-3 h-3" />
-                            Directions
-                          </Button>
-                        )}
-                        {activity.voucherUrl && (
-                          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full">
-                            <QrCode className="w-3 h-3" />
-                            Tickets
-                          </Button>
-                        )}
-                        <MemoryUploadButton
-                          tripId={trip.id}
-                          activityId={activity.id}
-                          activityName={activity.name}
-                          locationName={activity.location?.name}
-                          dayNumber={tripContext.currentDayNumber}
-                          variant="icon"
-                        />
-                        <div className="ml-auto">
-                          <CheckInButton
+                      <>
+                        <div className="flex items-center gap-2 mt-3">
+                          {activity.location && (
+                            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full" onClick={() => {
+                              openMapLocation({
+                                name: activity.location?.name || activity.name,
+                                address: activity.location?.address,
+                                lat: activity.location?.lat,
+                                lng: activity.location?.lng,
+                              }, 'auto', toTravelMode(activity.transportationMethod));
+                            }}>
+                              <Navigation className="w-3 h-3" />
+                              Directions
+                            </Button>
+                          )}
+                          {activity.voucherUrl && (
+                            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full">
+                              <QrCode className="w-3 h-3" />
+                              Tickets
+                            </Button>
+                          )}
+                          <MemoryUploadButton
+                            tripId={trip.id}
                             activityId={activity.id}
                             activityName={activity.name}
-                            tripId={trip.id}
-                            destination={trip.destination}
-                            activityType={activity.type}
-                            activityCategory={activity.category}
-                            isCheckedIn={isCompleted}
-                            isNearby={proximity.nearbyActivityId === activity.id}
-                            distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
-                            onCheckIn={onActivityComplete}
+                            locationName={activity.location?.name}
+                            dayNumber={tripContext.currentDayNumber}
+                            variant="icon"
                           />
+                          <div className="ml-auto">
+                            <CheckInButton
+                              activityId={activity.id}
+                              activityName={activity.name}
+                              tripId={trip.id}
+                              destination={trip.destination}
+                              activityType={activity.type}
+                              activityCategory={activity.category}
+                              isCheckedIn={isCompleted}
+                              isNearby={proximity.nearbyActivityId === activity.id}
+                              distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
+                              onCheckIn={onActivityComplete}
+                            />
+                          </div>
                         </div>
-                      </div>
+
+                        {/* Inline Route Details */}
+                        {activity.location && (
+                          <InlineRouteDetails
+                            activity={activity}
+                            previousActivity={idx > 0 ? group.activities[idx - 1] : null}
+                          />
+                        )}
+                      </>
                     )}
                   </div>
                 </motion.div>

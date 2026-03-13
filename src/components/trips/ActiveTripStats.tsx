@@ -76,12 +76,12 @@ export function ActiveTripStats({
   }, [itinerary, completedActivities, currentDayNumber, memories.length, travelers]);
 
   const statItems = [
-    { icon: CheckCircle2, label: 'Activities', value: `${stats.completedCount}/${stats.totalActivities}`, sub: `${stats.completionRate}% complete` },
-    { icon: Footprints, label: 'Walking', value: `${Math.round(stats.estimatedSteps / 1000)}k steps`, sub: `~${stats.walkingKm} km` },
-    { icon: Camera, label: 'Memories', value: String(stats.photosCount), sub: stats.photosCount === 0 ? 'Start capturing!' : `${Math.round(stats.photosCount / currentDayNumber)}/day` },
-    { icon: Clock, label: 'Exploring', value: `${stats.hoursExploring}h`, sub: `across ${stats.completedCount} activities` },
-    { icon: Utensils, label: 'Meals', value: String(stats.mealsEstimate), sub: `~${Math.round(stats.mealsEstimate / currentDayNumber)}/day` },
-    { icon: MapPin, label: 'Categories', value: String(stats.categories), sub: 'types of experiences' },
+    { icon: CheckCircle2, label: 'Activities', value: `${stats.completedCount}/${stats.totalActivities}`, sub: `${stats.completionRate}% complete`, color: 'text-primary' },
+    { icon: Footprints, label: 'Walking', value: `${Math.round(stats.estimatedSteps / 1000)}k steps`, sub: `~${stats.walkingKm} km`, color: 'text-emerald-500' },
+    { icon: Camera, label: 'Memories', value: String(stats.photosCount), sub: stats.photosCount === 0 ? 'Start capturing!' : `${Math.round(stats.photosCount / currentDayNumber)}/day`, color: 'text-pink-500' },
+    { icon: Clock, label: 'Exploring', value: `${stats.hoursExploring}h`, sub: `across ${stats.completedCount} activities`, color: 'text-blue-500' },
+    { icon: Utensils, label: 'Meals', value: String(stats.mealsEstimate), sub: `~${Math.round(stats.mealsEstimate / currentDayNumber)}/day`, color: 'text-amber-500' },
+    { icon: MapPin, label: 'Categories', value: String(stats.categories), sub: 'types of experiences', color: 'text-violet-500' },
   ];
 
   // Inject budget if set
@@ -93,6 +93,7 @@ export function ActiveTripStats({
       label: 'Budget',
       value: new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(stats.totalSpentEstimate),
       sub: `of ${new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(budget)} (${budgetUsedPercent}%)`,
+      color: 'text-teal-500',
     });
   }
 
@@ -110,18 +111,37 @@ export function ActiveTripStats({
         </p>
       </div>
 
-      {/* Overall progress — borderless */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Trip Completion</span>
-          <span className="font-serif text-2xl font-bold text-primary">{stats.completionRate}%</span>
+      {/* Overall progress — editorial with ring */}
+      <div className="flex items-center gap-6">
+        {/* Progress ring */}
+        <div className="relative w-20 h-20 shrink-0">
+          <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+            <circle cx="40" cy="40" r="34" fill="none" stroke="hsl(var(--border))" strokeWidth="4" opacity="0.3" />
+            <circle
+              cx="40" cy="40" r="34" fill="none"
+              stroke="hsl(var(--primary))"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 34}`}
+              strokeDashoffset={`${2 * Math.PI * 34 * (1 - stats.completionRate / 100)}`}
+              className="transition-all duration-700"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="font-serif text-xl font-bold text-primary">{stats.completionRate}%</span>
+          </div>
         </div>
-        <Progress value={stats.completionRate} className="h-1.5" />
-        <p className="text-xs text-muted-foreground mt-2">
-          {stats.completedCount} of {stats.totalActivities} activities completed
-        </p>
-        <div className="h-px bg-gradient-to-r from-primary/20 via-border/50 to-transparent mt-6" />
+        <div className="flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Trip Completion</p>
+          <p className="font-serif text-base font-medium mt-0.5">
+            {stats.completedCount} of {stats.totalActivities} activities
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Day {currentDayNumber} of {totalDays}
+          </p>
+        </div>
       </div>
+      <div className="h-px bg-gradient-to-r from-primary/20 via-border/50 to-transparent" />
 
       {/* Stats — editorial list */}
       <div className="space-y-0">
@@ -135,7 +155,7 @@ export function ActiveTripStats({
               transition={{ delay: idx * 0.05 }}
               className="flex items-center gap-4 py-4 border-b border-border/30 last:border-b-0"
             >
-              <Icon className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+              <Icon className={cn('w-4 h-4 shrink-0', (item as any).color || 'text-muted-foreground/50')} />
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
                   {item.label}
