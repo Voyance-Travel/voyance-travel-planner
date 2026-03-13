@@ -309,7 +309,7 @@ export default function ActiveTrip() {
   // Get existing feedback for inline ratings
   const { data: tripFeedback = [] } = useTripFeedback(tripId || null);
   const feedbackByActivity = useMemo(() => {
-    const map = new Map<string, { rating: string; personalization_tags?: string[] | null }>();
+    const map: globalThis.Map<string, { rating: string; personalization_tags?: string[] | null }> = new globalThis.Map();
     tripFeedback.forEach(f => map.set(f.activity_id, { rating: f.rating, personalization_tags: f.personalization_tags }));
     return map;
   }, [tripFeedback]);
