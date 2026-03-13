@@ -700,12 +700,12 @@ function TodayView({
   // Swap drawer state
   const [swapDrawerOpen, setSwapDrawerOpen] = useState(false);
   const [swapTargetActivity, setSwapTargetActivity] = useState<DrawerItineraryActivity | null>(null);
+  const [showMap, setShowMap] = useState(true);
 
   const handleSwapRequest = useCallback((activityId: string) => {
     const activity = todaysItinerary?.activities.find(a => a.id === activityId);
     if (!activity) return;
     
-    // Convert to drawer's ItineraryActivity type
     const drawerActivity: DrawerItineraryActivity = {
       id: activity.id,
       title: activity.name,
@@ -731,8 +731,6 @@ function TodayView({
   const handleAlternativeSelected = useCallback((newActivity: DrawerItineraryActivity) => {
     setSwapDrawerOpen(false);
     setSwapTargetActivity(null);
-    // The drawer handles the toast and tracking. In a full implementation,
-    // this would update the itinerary data. For now, trigger the parent swap handler.
     onSwapActivity();
   }, [onSwapActivity]);
 
@@ -750,6 +748,43 @@ function TodayView({
   }, [todaysItinerary]);
 
   const proximity = useProximityCheckIn(venues, completedActivities, !!todaysItinerary);
+
+  // Group activities by time-of-day
+  const timeGroups = useMemo(() => {
+    if (!todaysItinerary) return [];
+    const groups: { label: string; activities: ItineraryActivity[] }[] = [];
+    let currentGroup = '';
+    
+    for (const activity of todaysItinerary.activities) {
+      const hour = activity.startTime ? parseInt(activity.startTime.split(':')[0], 10) : 9;
+      let group: string;
+      if (hour < 12) group = 'Morning';
+      else if (hour < 17) group = 'Afternoon';
+      else group = 'Evening';
+      
+      if (group !== currentGroup) {
+        currentGroup = group;
+        groups.push({ label: group, activities: [] });
+      }
+      groups[groups.length - 1].activities.push(activity);
+    }
+    return groups;
+  }, [todaysItinerary]);
+
+  // Route map activities
+  const routeMapActivities = useMemo(() => {
+    if (!todaysItinerary) return [];
+    return todaysItinerary.activities.map(a => ({
+      id: a.id,
+      title: a.name,
+      location: a.location ? {
+        name: a.location.name,
+        address: a.location.address,
+        lat: a.location.lat,
+        lng: a.location.lng,
+      } : undefined,
+    }));
+  }, [todaysItinerary]);
 
   if (!todaysItinerary) {
     return (
@@ -770,43 +805,6 @@ function TodayView({
   // Determine if the displayed day is in the past (not today)
   const dayDate = parseLocalDate(todaysItinerary.date);
   const isPastDay = isBefore(dayDate, new Date()) && !isToday(dayDate);
-
-  // --- Helper: group activities by time-of-day ---
-  const timeGroups = useMemo(() => {
-    const groups: { label: string; activities: typeof todaysItinerary.activities }[] = [];
-    let currentGroup = '';
-    
-    for (const activity of todaysItinerary.activities) {
-      const hour = activity.startTime ? parseInt(activity.startTime.split(':')[0], 10) : 9;
-      let group: string;
-      if (hour < 12) group = 'Morning';
-      else if (hour < 17) group = 'Afternoon';
-      else group = 'Evening';
-      
-      if (group !== currentGroup) {
-        currentGroup = group;
-        groups.push({ label: group, activities: [] });
-      }
-      groups[groups.length - 1].activities.push(activity);
-    }
-    return groups;
-  }, [todaysItinerary.activities]);
-
-  // Route map activities
-  const routeMapActivities = useMemo(() => {
-    return todaysItinerary.activities.map(a => ({
-      id: a.id,
-      title: a.name,
-      location: a.location ? {
-        name: a.location.name,
-        address: a.location.address,
-        lat: a.location.lat,
-        lng: a.location.lng,
-      } : undefined,
-    }));
-  }, [todaysItinerary.activities]);
-
-  const [showMap, setShowMap] = useState(true);
 
   return (
     <motion.div
