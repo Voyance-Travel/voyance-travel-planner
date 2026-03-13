@@ -13,8 +13,12 @@ import { openMapLocation, toTravelMode } from '@/utils/mapNavigation';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ChevronRight, Sun, Moon,
   Coffee, Sunrise, Sunset, Navigation, Ticket, Bookmark,
-  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil, Map
+  QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil, Map,
+  Route as RouteIcon, ChevronDown
 } from 'lucide-react';
+import { useActivityImage } from '@/hooks/useActivityImage';
+import { SafeImage } from '@/components/common/SafeImage';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { Button } from '@/components/ui/button';
