@@ -252,7 +252,7 @@ Deno.serve(async (req: Request) => {
               type: 'time_shift',
               activityId: act.id,
               activityTitle: act.title,
-              icon: '✏️',
+              icon: 'clock',
               description: `${act.title}: ${act.startTime} → ${newStart} (opens at ${hoursCheck.opens})`,
               oldValue: `${act.startTime}–${act.endTime || '?'}`,
               newValue: `${newStart}–${newEnd}`,
