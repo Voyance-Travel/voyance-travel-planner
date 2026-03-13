@@ -16,7 +16,6 @@ import {
   QrCode, Copy, Check, ExternalLink, Sparkles, AlertCircle, Pencil, Map,
   Route as RouteIcon, ChevronDown
 } from 'lucide-react';
-import { useActivityImage } from '@/hooks/useActivityImage';
 import SafeImage from '@/components/SafeImage';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import MainLayout from '@/components/layout/MainLayout';
@@ -103,15 +102,16 @@ interface ItineraryDay {
 
 type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats' | 'chat' | 'dna';
 
-// ── Sub-component: Activity thumbnail (hook wrapper) ──────────────────────
-function ActivityImageThumb({ name, category, imageUrl, destination }: {
-  name: string; category?: string; imageUrl?: string; destination?: string;
+// ── Sub-component: Activity thumbnail (safe renderer) ─────────────────────
+function ActivityImageThumb({ name, category, imageUrl }: {
+  name: string; category?: string; imageUrl?: string;
 }) {
-  const { imageUrl: resolvedUrl } = useActivityImage(name, category, imageUrl, destination);
+  const safeSrc = typeof imageUrl === 'string' ? imageUrl : '';
+
   return (
     <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-muted">
       <SafeImage
-        src={resolvedUrl || ''}
+        src={safeSrc}
         alt={name}
         className="w-full h-full object-cover"
         fallbackCategory={category}
@@ -130,7 +130,9 @@ function InlineRouteDetails({ activity, previousActivity }: {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeMeta, setRouteMeta] = useState<{ duration: string; distance: string } | null>(null);
 
-  const mode = activity.transportationMethod || 'walk';
+  const mode = typeof activity.transportationMethod === 'string' && activity.transportationMethod.trim().length > 0
+    ? activity.transportationMethod
+    : 'walk';
 
   const fetchRoute = useCallback(async () => {
     if (steps) return; // already fetched
@@ -1178,7 +1180,6 @@ function TodayView({
                         name={activity.name}
                         category={activity.category}
                         imageUrl={activity.imageUrl}
-                        destination={trip.destination}
                       />
                       <div className="flex-1 min-w-0">
                         {/* Time + status badges */}
