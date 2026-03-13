@@ -530,36 +530,7 @@ export function ItineraryGenerator({
       // Only do journey costing on the FIRST leg
       journeyId = tripRow.journey_id;
       journeyTotalLegs = tripRow.journey_total_legs ?? undefined;
-
-      // Fetch all legs for cost breakdown display
-      const { data: allLegs } = await supabase
-        .from('trips')
-        .select('destination, start_date, end_date')
-        .eq('journey_id', journeyId)
-        .neq('status', 'cancelled')
-        .order('journey_order', { ascending: true });
-
-      if (allLegs && allLegs.length > 1) {
-        const allCityNames = allLegs.map(l => l.destination);
-        const multiCityFee = calculateMultiCityFee(allCityNames.length);
-        const breakdown = allLegs.map(leg => {
-          const legDays = Math.max(1, Math.ceil(
-            (new Date(leg.end_date).getTime() - new Date(leg.start_date).getTime()) / (1000 * 60 * 60 * 24)
-          ) + 1);
-          // Per-leg base cost (no multi-city fee per leg)
-          const legBaseCost = roundUpTo10(legDays * BASE_RATE_PER_DAY);
-          return { city: leg.destination, days: legDays, cost: legBaseCost };
-        });
-        // Add multi-city fee to first leg's display so total is correct
-        if (breakdown.length > 0) {
-          breakdown[0].cost += multiCityFee;
-        }
-        setJourneyLegs(breakdown);
-      } else {
-        setJourneyLegs([]);
-      }
-    } else {
-      setJourneyLegs([]);
+      // journeyLegs already populated by handleGenerateClick — no need to re-fetch
     }
 
     // PRE-AUTHORIZE: Check credits and deduct if affordable
