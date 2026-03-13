@@ -4356,7 +4356,7 @@ serve(async (req) => {
         console.log("[Stage 1.2.1] Loading companion archetypes for group blending...");
         try {
           // Load companion DNA profiles
-          const companionUserIds = (collabRows || []).map((c: any) => c.user_id).filter(Boolean);
+          const companionUserIds = Array.from(participantIds).filter(Boolean);
           const { data: companionDnaRows } = await supabase
             .from('travel_dna_profiles')
             .select('user_id, primary_archetype_name, trait_scores, travel_dna_v2')
