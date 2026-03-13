@@ -472,7 +472,7 @@ export function ItineraryGenerator({
 
     // Calculate trip days for the gate
     const totalDays = differenceInCalendarDays(parseLocalDate(endDate), parseLocalDate(startDate)) + 1;
-    const cities = isMultiCity ? [] : [destination]; // Multi-city cities resolved inside gate if needed
+    const cities = tripCityNames; // Uses resolved city list (includes multi-city)
 
     // ── Fetch journey info if this is a journey leg ──
     let journeyId: string | undefined;
