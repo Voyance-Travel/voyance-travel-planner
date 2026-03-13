@@ -9188,6 +9188,95 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           }
         }
 
+        // =====================================================================
+        // POST-GENERATION: Guarantee Hotel Check-in (mirrors Stage 2.56)
+        // If this is Day 1 or a multi-city transition day, ensure check-in exists
+        // =====================================================================
+        const normalizedActivities2 = generatedDay?.activities || [];
+        const needsCheckInGuarantee = dayNumber === 1 || resolvedIsTransitionDay;
+
+        if (needsCheckInGuarantee && normalizedActivities2.length > 0) {
+          const hasCheckIn = normalizedActivities2.some((a: any) => {
+            const t = (a.title || a.name || '').toLowerCase();
+            const cat = (a.category || '').toLowerCase();
+            return (
+              cat === 'accommodation' && (
+                t.includes('check-in') || t.includes('check in') ||
+                t.includes('checkin') || t.includes('settle in') ||
+                t.includes('refresh') || t.includes('hotel')
+              )
+            );
+          });
+
+          if (!hasCheckIn) {
+            // Resolve hotel name: multi-city first, then flightContext
+            let hotelName = flightContext.hotelName || 'Hotel';
+            let hotelAddress = flightContext.hotelAddress || '';
+
+            // For multi-city, try to load hotel from trip_cities
+            if (tripId && resolvedIsMultiCity) {
+              try {
+                const { data: tripCitiesForHotel } = await supabase
+                  .from('trip_cities')
+                  .select('city_name, hotel_selection, city_order, nights, days_total')
+                  .eq('trip_id', tripId)
+                  .order('city_order', { ascending: true });
+
+                if (tripCitiesForHotel && tripCitiesForHotel.length > 0) {
+                  let dc = 0;
+                  for (const city of tripCitiesForHotel) {
+                    const cityNights = (city as any).nights || (city as any).days_total || 1;
+                    for (let n = 0; n < cityNights; n++) {
+                      dc++;
+                      if (dc === dayNumber) {
+                        const rawHotel = city.hotel_selection as any;
+                        const cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : rawHotel;
+                        if (cityHotel?.name) hotelName = cityHotel.name;
+                        if (cityHotel?.address) hotelAddress = cityHotel.address;
+                        break;
+                      }
+                    }
+                    if (dc >= dayNumber) break;
+                  }
+                }
+              } catch (e) {
+                console.warn('[generate-day] Could not resolve multi-city hotel for check-in:', e);
+              }
+            }
+
+            // Determine check-in time: 45 min before first activity, minimum 12:00
+            const firstAct = normalizedActivities2[0];
+            const firstStartMin = parseTimeToMinutes(firstAct?.startTime || '15:00') || (15 * 60);
+            const checkInStartMin = Math.max(12 * 60, firstStartMin - 45);
+            const checkInStart = minutesToHHMM(checkInStartMin);
+            const checkInEnd = minutesToHHMM(checkInStartMin + 30);
+
+            const checkInActivity = {
+              id: `day${dayNumber}-checkin-regen-${Date.now()}`,
+              title: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination}`,
+              name: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination}`,
+              description: dayNumber === 1
+                ? 'Check in, freshen up, and get oriented to the area'
+                : `Check in to hotel in ${resolvedDestination}, freshen up after travel`,
+              startTime: checkInStart,
+              endTime: checkInEnd,
+              category: 'accommodation',
+              type: 'accommodation',
+              location: { name: hotelName, address: hotelAddress },
+              cost: { amount: 0, currency: 'USD' },
+              bookingRequired: false,
+              isLocked: false,
+              durationMinutes: 30,
+            };
+
+            normalizedActivities2.unshift(checkInActivity);
+            generatedDay.activities = normalizedActivities2;
+            console.log(`[generate-day] ✓ Injected missing Hotel Check-in at ${checkInStart}-${checkInEnd} (hotel: ${hotelName}) for Day ${dayNumber}`);
+          } else {
+            console.log(`[generate-day] Day ${dayNumber} already has check-in activity — no injection needed`);
+          }
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
