@@ -103,6 +103,119 @@ interface ItineraryDay {
 
 type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats' | 'chat' | 'dna';
 
+// ── Sub-component: Activity thumbnail (hook wrapper) ──────────────────────
+function ActivityImageThumb({ name, category, imageUrl, destination }: {
+  name: string; category?: string; imageUrl?: string; destination?: string;
+}) {
+  const { imageUrl: resolvedUrl } = useActivityImage(name, category, imageUrl, destination);
+  return (
+    <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-muted">
+      <SafeImage
+        src={resolvedUrl || ''}
+        alt={name}
+        className="w-full h-full object-cover"
+        fallbackCategory={category}
+      />
+    </div>
+  );
+}
+
+// ── Sub-component: Inline route directions ────────────────────────────────
+function InlineRouteDetails({ activity, previousActivity }: {
+  activity: ItineraryActivity;
+  previousActivity: ItineraryActivity | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [steps, setSteps] = useState<any[] | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeMeta, setRouteMeta] = useState<{ duration: string; distance: string } | null>(null);
+
+  const mode = activity.transportationMethod || 'walk';
+
+  const fetchRoute = useCallback(async () => {
+    if (steps) return; // already fetched
+    if (!previousActivity?.location?.lat || !activity.location?.lat) return;
+    setRouteLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('route-details', {
+        body: {
+          origin: { lat: previousActivity.location.lat, lng: previousActivity.location.lng },
+          destination: { lat: activity.location!.lat, lng: activity.location!.lng },
+          travelMode: mode.toUpperCase(),
+        },
+      });
+      if (error) throw error;
+      const route = data?.routes?.[0] || data?.route;
+      if (route) {
+        const leg = route.legs?.[0] || route;
+        setSteps(leg.steps || []);
+        setRouteMeta({
+          duration: leg.duration?.text || leg.localizedValues?.duration?.text || '',
+          distance: leg.distance?.text || leg.localizedValues?.distance?.text || '',
+        });
+      }
+    } catch (err) {
+      console.error('[InlineRouteDetails] fetch error:', err);
+    } finally {
+      setRouteLoading(false);
+    }
+  }, [activity, previousActivity, mode, steps]);
+
+  if (!previousActivity?.location?.lat) return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen);
+      if (isOpen) fetchRoute();
+    }}>
+      <CollapsibleTrigger asChild>
+        <button className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground mt-2 transition-colors">
+          <RouteIcon className="w-3 h-3" />
+          <span className="capitalize">{mode}</span> route
+          {routeMeta && <span className="text-primary">· {routeMeta.duration}</span>}
+          <ChevronDown className={cn('w-3 h-3 transition-transform', open && 'rotate-180')} />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 pl-4 border-l-2 border-primary/15 space-y-1.5">
+          {routeLoading && (
+            <div className="space-y-1 animate-pulse">
+              <div className="h-3 bg-muted rounded w-3/4" />
+              <div className="h-3 bg-muted rounded w-1/2" />
+            </div>
+          )}
+          {steps && steps.length > 0 && (
+            <>
+              {routeMeta && (
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-1">
+                  {routeMeta.distance} · {routeMeta.duration}
+                </p>
+              )}
+              {steps.slice(0, 5).map((step: any, i: number) => (
+                <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                  <span className="text-primary/60 font-medium mr-1">{i + 1}.</span>
+                  {step.navigationInstruction?.instructions || step.htmlInstructions || step.instruction || 'Continue'}
+                  {(step.localizedValues?.distance?.text || step.distance?.text) && (
+                    <span className="text-muted-foreground/50 ml-1">
+                      ({step.localizedValues?.distance?.text || step.distance?.text})
+                    </span>
+                  )}
+                </p>
+              ))}
+              {steps.length > 5 && (
+                <p className="text-[11px] text-primary font-medium">+ {steps.length - 5} more steps</p>
+              )}
+            </>
+          )}
+          {steps && steps.length === 0 && !routeLoading && (
+            <p className="text-xs text-muted-foreground italic">No detailed route available</p>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 // Get time of day greeting and icon
 function getTimeContext() {
   const hour = new Date().getHours();
