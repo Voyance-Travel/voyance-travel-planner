@@ -1087,9 +1087,11 @@ function getActivityReviewCount(activity: EditorialActivity): number | null {
 function getActivityPhoto(activity: EditorialActivity): string | null {
   if (!activity.photos || activity.photos.length === 0) return null;
   const photo = activity.photos[0];
-  if (typeof photo === 'string') return photo;
-  if (typeof photo === 'object' && photo.url) return photo.url;
-  return null;
+  const url = typeof photo === 'string' ? photo : (typeof photo === 'object' && photo.url ? photo.url : null);
+  if (!url) return null;
+  // Reject dead Unsplash CDN URLs — these frequently 404
+  if (/images\.unsplash\.com/i.test(url) || /source\.unsplash\.com/i.test(url)) return null;
+  return url;
 }
 
 function getDayTotalCost(

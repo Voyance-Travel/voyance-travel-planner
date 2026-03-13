@@ -163,40 +163,50 @@ export function useItineraryImages(
         });
       }
 
-      // Phase 2: Fetch missing images (batched with small delays to avoid hammering)
-      for (let i = 0; i < toFetch.length; i++) {
-        if (currentRun !== runIdRef.current) return; // cancelled
+      // Phase 2: Fetch missing images in parallel, then apply as single batch update
+      if (toFetch.length > 0) {
+        const batchResults: Array<[string, string]> = [];
 
-        const activity = toFetch[i];
-        const searchTerm = activity.locationName && activity.locationName.length > 3
-          ? activity.locationName
-          : activity.title;
-        const cacheKey = getCacheKey(searchTerm, destination);
+        // Process with concurrency limit of 4 to avoid hammering
+        const CONCURRENCY = 4;
+        for (let i = 0; i < toFetch.length; i += CONCURRENCY) {
+          if (currentRun !== runIdRef.current) return;
 
-        const url = await fetchImageFromBackend(
-          searchTerm,
-          activity.category || 'activity',
-          destination
-        );
+          const chunk = toFetch.slice(i, i + CONCURRENCY);
+          const results = await Promise.all(
+            chunk.map(async (activity) => {
+              const searchTerm = activity.locationName && activity.locationName.length > 3
+                ? activity.locationName
+                : activity.title;
+              const cacheKey = getCacheKey(searchTerm, destination);
 
-        if (currentRun !== runIdRef.current) return; // cancelled
+              const url = await fetchImageFromBackend(
+                searchTerm,
+                activity.category || 'activity',
+                destination
+              );
 
-        const finalUrl = url || getActivityFallbackImage(activity.category, activity.title);
+              const finalUrl = url || getActivityFallbackImage(activity.category, activity.title);
+              if (url) setLocalCache(cacheKey, url, 'google_places');
+              resolvedRef.current.add(activity.id);
+              return [activity.id, finalUrl] as [string, string];
+            })
+          );
+          batchResults.push(...results);
 
-        if (url) {
-          setLocalCache(cacheKey, url, 'google_places');
+          // Small delay between chunks
+          if (i + CONCURRENCY < toFetch.length) {
+            await new Promise(r => setTimeout(r, 100));
+          }
         }
 
-        resolvedRef.current.add(activity.id);
-        setImageMap(prev => {
-          const next = new Map(prev);
-          next.set(activity.id, finalUrl);
-          return next;
-        });
-
-        // Small delay between fetches to avoid rate limiting
-        if (i < toFetch.length - 1) {
-          await new Promise(r => setTimeout(r, 80 + Math.random() * 120));
+        // Single state update for all Phase 2 results
+        if (currentRun === runIdRef.current && batchResults.length > 0) {
+          setImageMap(prev => {
+            const next = new Map(prev);
+            for (const [id, url] of batchResults) next.set(id, url);
+            return next;
+          });
         }
       }
     }
