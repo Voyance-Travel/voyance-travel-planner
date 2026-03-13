@@ -11,7 +11,7 @@
  * - Save changes
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo, createContext, useContext } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -59,7 +59,8 @@ import { format, parseISO, isToday, addDays, isPast, startOfDay } from 'date-fns
 import { safeFormatDate, parseLocalDate } from '@/utils/dateUtils';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
-import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
+import { getActivityPlaceholder } from '@/hooks/useActivityImage';
+import { useItineraryImages, extractImageSpecs } from '@/hooks/useItineraryImages';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
@@ -170,6 +171,9 @@ function BoardingPassViewButton({ storagePath }: { storagePath: string }) {
     </button>
   );
 }
+
+// ── Context: Resolved activity images (batch-fetched once, read by all ActivityRows) ──
+const ItineraryImageContext = createContext<Map<string, string>>(new Map());
 
 // =============================================================================
 // TYPES
@@ -1403,6 +1407,10 @@ export function EditorialItinerary({
     }
   }, [daysFingerprint, days, onDaysChange]);
 
+  // ── Batch image resolution: resolve all activity images ONCE to prevent per-row hooks ──
+  const imageSpecs = useMemo(() => extractImageSpecs(days), [daysFingerprint]);
+  const resolvedImageMap = useItineraryImages(imageSpecs, destination);
+
   const [addActivityModal, setAddActivityModal] = useState<{ dayIndex: number; afterIndex?: number } | null>(null);
   const [importModal, setImportModal] = useState<{ dayIndex: number } | null>(null);
 
@@ -1795,6 +1803,7 @@ export function EditorialItinerary({
     toast.success('Flight order updated');
     await Promise.resolve(onBookingAdded?.());
   }, [flightSelection, tripId, onBookingAdded]);
+
 
 
   // Handle transport mode change for a specific activity route segment
@@ -3933,6 +3942,7 @@ export function EditorialItinerary({
   // ===========================================================================
 
   return (
+    <ItineraryImageContext.Provider value={resolvedImageMap}>
     <div className="space-y-6">
       {/* Onboarding Tour for first-time visitors */}
       <ItineraryOnboardingTour tripId={tripId} />
@@ -6478,6 +6488,7 @@ export function EditorialItinerary({
 
       
     </div>
+    </ItineraryImageContext.Provider>
   );
 }
 
@@ -8715,26 +8726,11 @@ function ActivityRow({
   const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
   const shouldFetchRealPhoto = canViewPremium && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
   
-  // Memoize hook arguments to prevent unstable references triggering re-renders
-  const stableTitle = useMemo(
-    () => isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
-    [isHotelActivity, hasHotelName, hotelName, effectiveSearchTerm]
-  );
-  const stableDestination = useMemo(
-    () => shouldFetchRealPhoto ? destination : undefined,
-    [shouldFetchRealPhoto, destination]
-  );
-
-  const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
-    stableTitle,
-    effectiveCategory,
-    existingPhoto,
-    stableDestination,
-    activity.id,
-    activity.id
-  );
-
-  const thumbnailUrl = fetchedImageUrl;
+  // Read resolved image from batch context (no per-row hooks — prevents React Error #310)
+  const resolvedImageMap = useContext(ItineraryImageContext);
+  const resolvedUrl = resolvedImageMap.get(activity.id);
+  const thumbnailUrl = resolvedUrl || existingPhoto || getActivityPlaceholder(effectiveCategory);
+  const imageLoading = !resolvedUrl && !existingPhoto;
   const [thumbnailError, setThumbnailError] = useState(false);
   // Library modal state removed - agent features disabled
 

@@ -79,6 +79,7 @@ interface ItineraryActivity {
     lng?: number;
   };
   imageUrl?: string;
+  photos?: Array<{ url: string } | string>;
   tips?: string[];
   confirmationNumber?: string;
   voucherUrl?: string;
@@ -103,15 +104,24 @@ interface ItineraryDay {
 type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats' | 'chat' | 'dna';
 
 // ── Sub-component: Activity thumbnail (safe renderer) ─────────────────────
-function ActivityImageThumb({ name, category, imageUrl }: {
-  name: string; category?: string; imageUrl?: string;
+function ActivityImageThumb({ name, category, imageUrl, photos }: {
+  name: string; category?: string; imageUrl?: string; photos?: Array<{ url: string } | string>;
 }) {
-  const safeSrc = typeof imageUrl === 'string' ? imageUrl : '';
+  // Prefer resolved photos from itinerary_data, fall back to imageUrl
+  let src = imageUrl || '';
+  if (photos && photos.length > 0) {
+    const p = photos[0];
+    const photoUrl = typeof p === 'string' ? p : p?.url;
+    // Skip dead Unsplash URLs
+    if (photoUrl && !/images\.unsplash\.com/i.test(photoUrl)) {
+      src = photoUrl;
+    }
+  }
 
   return (
     <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-muted">
       <SafeImage
-        src={safeSrc}
+        src={src}
         alt={name}
         className="w-full h-full object-cover"
         fallbackCategory={category}
@@ -1186,6 +1196,7 @@ function TodayView({
                         name={activity.name}
                         category={activity.category}
                         imageUrl={activity.imageUrl}
+                        photos={activity.photos}
                       />
                       <div className="flex-1 min-w-0">
                         {/* Time + status badges */}
