@@ -3,13 +3,44 @@
  * Editorial daily intel for active trips: weather, schedule, local highlights, don't-miss tips
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Sun, RefreshCw, MapPin, Clock, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+// ── localStorage cache for daily briefing ──────────────────────────────────
+const BRIEFING_CACHE_PREFIX = 'voyance_briefing_';
+
+function getBriefingCacheKey(tripId: string): string {
+  const today = new Date().toISOString().slice(0, 10);
+  return `${BRIEFING_CACHE_PREFIX}${tripId}_${today}`;
+}
+
+function getCachedBriefing(tripId: string): DailyBriefingData | null {
+  try {
+    const key = getBriefingCacheKey(tripId);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function setCachedBriefing(tripId: string, data: DailyBriefingData): void {
+  try {
+    // Clean up old entries
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith(BRIEFING_CACHE_PREFIX) && k !== getBriefingCacheKey(tripId)) {
+        localStorage.removeItem(k);
+      }
+    });
+    localStorage.setItem(getBriefingCacheKey(tripId), JSON.stringify(data));
+  } catch {}
+}
 
 interface DailyBriefingData {
   weather: {
@@ -41,9 +72,9 @@ interface DailyBriefingProps {
 }
 
 export function MidTripDNA({ tripId, className }: DailyBriefingProps) {
-  const [briefing, setBriefing] = useState<DailyBriefingData | null>(null);
+  const [briefing, setBriefing] = useState<DailyBriefingData | null>(() => getCachedBriefing(tripId));
   const [loading, setLoading] = useState(false);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(() => !!getCachedBriefing(tripId));
 
   const fetchBriefing = useCallback(async () => {
     setLoading(true);
@@ -60,6 +91,9 @@ export function MidTripDNA({ tripId, className }: DailyBriefingProps) {
 
       setBriefing(data.briefing);
       setHasLoaded(true);
+      if (data.briefing) {
+        setCachedBriefing(tripId, data.briefing);
+      }
     } catch (err) {
       console.error('Failed to fetch daily briefing:', err);
       toast.error("Could not load today's briefing");
