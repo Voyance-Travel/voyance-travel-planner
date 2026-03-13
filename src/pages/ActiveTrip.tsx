@@ -806,6 +806,10 @@ function TodayView({
   const dayDate = parseLocalDate(todaysItinerary.date);
   const isPastDay = isBefore(dayDate, new Date()) && !isToday(dayDate);
 
+  // Get hero image for Today tab
+  const seededHero = (trip.metadata as Record<string, unknown>)?.hero_image;
+  const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
@@ -813,6 +817,23 @@ function TodayView({
       exit={{ opacity: 0, x: 20 }}
       className="space-y-8"
     >
+      {/* Hero Image */}
+      {seededHeroUrl && (
+        <div className="relative h-48 rounded-xl overflow-hidden">
+          <img
+            src={seededHeroUrl}
+            alt={trip.destination}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent" />
+          <div className="absolute bottom-3 left-4">
+            <p className="font-serif text-lg font-semibold text-white drop-shadow-md">
+              {todaysItinerary.theme || `Day ${tripContext.currentDayNumber}`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Daily Progress Bar */}
       <DailyProgressBar
         completedCount={completedActivities.size}
