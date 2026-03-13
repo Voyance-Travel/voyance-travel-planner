@@ -340,7 +340,7 @@ Deno.serve(async (req: Request) => {
                   type: 'buffer_added',
                   activityId: next.id,
                   activityTitle: next.title,
-                  icon: '⏱️',
+                  icon: 'timer',
                   description: `Added ${totalNeeded - gap} min buffer before "${next.title}" (${transit.durationMinutes} min ${transit.method})`,
                   oldValue: next.startTime,
                   newValue: bufferedStart,
