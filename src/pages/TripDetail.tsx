@@ -984,9 +984,9 @@ export default function TripDetail() {
                   updated_at: new Date().toISOString(),
                 }).eq('id', tripId);
 
-                // Update local state
-                tripData = { ...tripData, itinerary_data: healedItinerary as any };
-                setTrip(tripData);
+                // Update local state with healed data
+                const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
+                setTrip(healedTripData);
               }
             } catch (healErr) {
               console.error('[TripDetail] Self-heal rebuild failed:', healErr);
