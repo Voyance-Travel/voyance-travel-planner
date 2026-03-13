@@ -252,7 +252,7 @@ Deno.serve(async (req: Request) => {
               type: 'time_shift',
               activityId: act.id,
               activityTitle: act.title,
-              icon: '✏️',
+              icon: 'clock',
               description: `${act.title}: ${act.startTime} → ${newStart} (opens at ${hoursCheck.opens})`,
               oldValue: `${act.startTime}–${act.endTime || '?'}`,
               newValue: `${newStart}–${newEnd}`,
@@ -299,7 +299,7 @@ Deno.serve(async (req: Request) => {
               type: 'time_shift',
               activityId: next.id,
               activityTitle: next.title,
-              icon: '✏️',
+              icon: 'alert-triangle',
               description: `${next.title}: ${next.startTime} → ${fixedStart} (resolve overlap)`,
               oldValue: `${next.startTime}–${next.endTime || '?'}`,
               newValue: `${fixedStart}–${fixedEnd}`,
@@ -340,7 +340,7 @@ Deno.serve(async (req: Request) => {
                   type: 'buffer_added',
                   activityId: next.id,
                   activityTitle: next.title,
-                  icon: '⏱️',
+                  icon: 'timer',
                   description: `Added ${totalNeeded - gap} min buffer before "${next.title}" (${transit.durationMinutes} min ${transit.method})`,
                   oldValue: next.startTime,
                   newValue: bufferedStart,
@@ -372,7 +372,7 @@ Deno.serve(async (req: Request) => {
         type: 'reorder',
         activityId: sorted[checkoutIdx].id,
         activityTitle: 'Checkout/Airport sequence',
-        icon: '🔄',
+        icon: 'arrow-up-down',
         description: 'Swap checkout and airport transfer order',
         patch: {},
       });
@@ -386,8 +386,8 @@ Deno.serve(async (req: Request) => {
           type: 'no_change',
           activityId: act.id,
           activityTitle: act.title,
-          icon: '✅',
-          description: `${act.title} — no changes needed`,
+          icon: 'check',
+          description: act.title,
         });
       }
     }
