@@ -1733,6 +1733,14 @@ export default function TripDetail() {
   })();
   const isPastTripView = isAfter(new Date(), parseLocalDate(effectiveEndDate));
 
+  // Hero image — uses persistent fallback chain (seeded → curated → DB → API → gradient)
+  const seededHero = (trip.metadata as Record<string, unknown>)?.hero_image;
+  const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
+  const { imageUrl: heroImageUrl, onError: onHeroError, onLoad: onHeroLoad } = useTripHeroImage({
+    destination: trip.destination,
+    seededHeroUrl,
+    tripId: trip.id,
+  });
   return (
     <MainLayout>
       <Head title={`${trip.name} | Voyance`} />
