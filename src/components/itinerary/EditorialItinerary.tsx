@@ -5120,7 +5120,8 @@ export function EditorialItinerary({
                           }}
                            compactCards={isManualMode || creationSource === 'smart_finish'}
                            isPastTrip={isPastTrip}
-                           isCleanPreview={isCleanPreview}
+                            isCleanPreview={isCleanPreview}
+                            isModalEditing={!!editActivityModal || !!timeEditModal}
                           onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
                           isRefreshingDay={refreshingDayNumber === selectedDay.dayNumber}
                           refreshResult={refreshResults[selectedDay.dayNumber] || null}
@@ -7769,6 +7770,8 @@ interface DayCardProps {
    isPastTrip?: boolean;
    /** Clean preview mode — hides all builder tools */
    isCleanPreview?: boolean;
+   /** Whether an edit modal is currently open — disables drag */
+   isModalEditing?: boolean;
 }
 
 function DayCard({
@@ -7827,6 +7830,7 @@ function DayCard({
   compactCards = false,
   isPastTrip = false,
   isCleanPreview = false,
+  isModalEditing = false,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -8119,7 +8123,7 @@ function DayCard({
                 items={day.activities}
                 onReorder={(reordered) => onActivityReorder?.(reordered)}
                 highlightedIds={highlightedActivityIds}
-                disabled={!isEditable || isPreview}
+                disabled={!isEditable || isPreview || isModalEditing}
                 renderItem={(activity, activityIndex, isDragging, isHighlighted) => {
                   // Collapse option groups to one curated activity in default view (no radio choices)
                   let activityToRender = activity;
