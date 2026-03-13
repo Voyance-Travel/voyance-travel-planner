@@ -134,15 +134,21 @@ function InlineRouteDetails({ activity, previousActivity }: {
     ? activity.transportationMethod
     : 'walk';
 
+  // Extract stable primitive values to avoid re-creating callback on every render
+  const originLat = previousActivity?.location?.lat;
+  const originLng = previousActivity?.location?.lng;
+  const destLat = activity.location?.lat;
+  const destLng = activity.location?.lng;
+
   const fetchRoute = useCallback(async () => {
     if (steps) return; // already fetched
-    if (!previousActivity?.location?.lat || !activity.location?.lat) return;
+    if (!originLat || !destLat) return;
     setRouteLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('route-details', {
         body: {
-          origin: { lat: previousActivity.location.lat, lng: previousActivity.location.lng },
-          destination: { lat: activity.location!.lat, lng: activity.location!.lng },
+          origin: { lat: originLat, lng: originLng },
+          destination: { lat: destLat, lng: destLng },
           travelMode: mode.toUpperCase(),
         },
       });
@@ -161,7 +167,7 @@ function InlineRouteDetails({ activity, previousActivity }: {
     } finally {
       setRouteLoading(false);
     }
-  }, [activity, previousActivity, mode, steps]);
+  }, [originLat, originLng, destLat, destLng, mode, steps]);
 
   if (!previousActivity?.location?.lat) return null;
 
