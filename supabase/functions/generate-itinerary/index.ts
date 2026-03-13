@@ -6577,59 +6577,6 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
 }
 
 
-      // ===== MULTI-CITY: Per-City Boundary Constraints =====
-      if (paramIsMultiCity) {
-        const mcHotelName = paramHotelOverride?.name || flightContext.hotelName || 'Hotel';
-
-        if (paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay) {
-          dayConstraints += `\n\n🏨 CITY ARRIVAL — CHECK-IN DAY:
-- This is the first day in ${destination}. The traveler needs to check into "${mcHotelName}".
-- REQUIRED: Include a "Hotel Check-in & Refresh" activity (typically 30-60 min).
-- Plan afternoon/evening activities after check-in, clustered near the hotel area.
-- Use "${mcHotelName}" for ALL hotel references. Do NOT invent a different hotel.`;
-        }
-
-        if (paramIsLastDayInCity && !isLastDay) {
-          dayConstraints += `\n\n🏨 CITY DEPARTURE — CHECKOUT DAY:
-- This is the LAST DAY in ${destination}. The traveler leaves this city tomorrow.
-- REQUIRED: Include "Hotel Checkout" activity in the morning (typically by 11:00 AM).
-- Plan morning activities around checkout. Luggage storage may be needed.
-- End the day early enough for evening packing/preparation.
-- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.`;
-        }
-
-        if (mcHotelName && mcHotelName !== 'Hotel') {
-          dayConstraints += `\n\n🏨 ACCOMMODATION: "${mcHotelName}" — use this name for ALL hotel references. Do NOT substitute a different hotel name.`;
-        }
-      }
-
-      // ===== MULTI-CITY: Per-City Boundary Constraints =====
-      if (paramIsMultiCity) {
-        const mcHotelName = paramHotelOverride?.name || flightContext.hotelName || 'Hotel';
-
-        if (paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay) {
-          dayConstraints += `\n\n🏨 CITY ARRIVAL — CHECK-IN DAY:
-- This is the first day in ${destination}. The traveler needs to check into "${mcHotelName}".
-- REQUIRED: Include a "Hotel Check-in & Refresh" activity (typically 30-60 min).
-- Plan afternoon/evening activities after check-in, clustered near the hotel area.
-- Use "${mcHotelName}" for ALL hotel references. Do NOT invent a different hotel.`;
-        }
-
-        if (paramIsLastDayInCity && !isLastDay) {
-          dayConstraints += `\n\n🏨 CITY DEPARTURE — CHECKOUT DAY:
-- This is the LAST DAY in ${destination}. The traveler leaves this city tomorrow.
-- REQUIRED: Include "Hotel Checkout" activity in the morning (typically by 11:00 AM).
-- Plan morning activities around checkout. Luggage storage may be needed.
-- End the day early enough for evening packing/preparation.
-- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.`;
-        }
-
-        if (mcHotelName && mcHotelName !== 'Hotel') {
-          dayConstraints += `\n\n🏨 ACCOMMODATION: "${mcHotelName}" — use this name for ALL hotel references. Do NOT substitute a different hotel name.`;
-        }
-      }
-
-
       // =======================================================================
       // TRANSITION DAY RESOLVER: Determine if this day is a transition day
       // Uses explicit params from frontend, or resolves from trip_cities DB
