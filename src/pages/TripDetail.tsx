@@ -57,7 +57,7 @@ import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration'
 import { enrichHotel } from '@/services/hotelAPI';
 import { usePaymentVerification } from '@/hooks/usePaymentVerification';
 import { useStalePendingChargeRefund } from '@/hooks/useStalePendingChargeRefund';
-import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
+import { useTripHeroImage } from '@/hooks/useTripHeroImage';
 import TripPhotoGallery from '@/components/trip/TripPhotoGallery';
 import { getDestinationByCity, type Destination } from '@/services/supabase/destinations';
 import { initiateBooking } from '@/services/tripPaymentsAPI';
@@ -1733,6 +1733,14 @@ export default function TripDetail() {
   })();
   const isPastTripView = isAfter(new Date(), parseLocalDate(effectiveEndDate));
 
+  // Hero image — uses persistent fallback chain (seeded → curated → DB → API → gradient)
+  const seededHero = (trip.metadata as Record<string, unknown>)?.hero_image;
+  const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
+  const { imageUrl: heroImageUrl, onError: onHeroError, onLoad: onHeroLoad } = useTripHeroImage({
+    destination: trip.destination,
+    seededHeroUrl,
+    tripId: trip.id,
+  });
   return (
     <MainLayout>
       <Head title={`${trip.name} | Voyance`} />
@@ -1740,14 +1748,12 @@ export default function TripDetail() {
       {/* Hero Destination Image — compact on mobile, taller on desktop */}
       <div className="relative h-40 sm:h-56 md:h-72 -mt-16 overflow-hidden">
         <ErrorBoundary>
-        <DynamicDestinationPhotos
-          destination={trip.destination}
-          startDate={trip.start_date}
-          endDate={effectiveEndDate}
-          travelers={trip.travelers || 1}
-          variant="hero"
-          hideOverlayText
-          className="!rounded-none"
+        <img
+          src={heroImageUrl}
+          alt={trip.destination || 'Trip destination'}
+          onError={onHeroError}
+          onLoad={onHeroLoad}
+          className="w-full h-full object-cover !rounded-none"
         />
         </ErrorBoundary>
         {/* Back Button - icon only so hero image stays text-free */}

@@ -9,7 +9,7 @@
  * 5. Gradient fallback (deterministic, always works)
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   getDestinationImage, 
   getDestinationImages as getCuratedImages,
@@ -174,6 +174,42 @@ export function useTripHeroImage({
 
   const { url: imageUrl, source } = getImageUrl();
 
+  // Write-back: persist resolved hero URL to trip metadata so it's stable on future visits
+  const persistedRef = useRef(false);
+  useEffect(() => {
+    if (
+      persistedRef.current ||
+      !tripId ||
+      !imageUrl ||
+      source === 'seeded' ||
+      source === 'gradient' ||
+      imageUrl.startsWith('data:')
+    ) return;
+
+    persistedRef.current = true;
+
+    // Fire-and-forget: merge hero_image into existing metadata JSONB
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('trips')
+          .select('metadata')
+          .eq('id', tripId)
+          .single();
+
+        const existing = (data?.metadata as Record<string, unknown>) || {};
+        // Don't overwrite if already set
+        if (existing.hero_image) return;
+
+        await supabase
+          .from('trips')
+          .update({ metadata: { ...existing, hero_image: imageUrl } } as any)
+          .eq('id', tripId);
+      } catch {
+        // Non-critical, silently ignore
+      }
+    })();
+  }, [tripId, imageUrl, source]);
   const handleFallback = useCallback(() => {
     // Handle seeded image failure
     if (seededHeroUrl && !seededFailed) {
