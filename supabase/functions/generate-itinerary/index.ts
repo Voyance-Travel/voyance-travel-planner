@@ -10397,7 +10397,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       }
 
       // Resolve multi-city mapping
-      let dayCityMap: Array<{ cityName: string; country?: string; isTransitionDay: boolean; transitionFrom?: string; transitionTo?: string; transportType?: string }> | null = null;
+      let dayCityMap: Array<{ cityName: string; country?: string; isTransitionDay: boolean; transitionFrom?: string; transitionTo?: string; transportType?: string; hotelName?: string; hotelAddress?: string }> | null = null;
       if (isMultiCity) {
         try {
           const { data: tripCities } = await supabase
