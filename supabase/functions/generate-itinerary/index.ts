@@ -4315,13 +4315,27 @@ serve(async (req) => {
         }
 
         // Build collaborator traveler list for suggestedFor attribution
-        const { data: collabRows } = await supabase
-          .from('trip_collaborators')
-          .select('user_id')
-          .eq('trip_id', tripId)
-          .eq('include_preferences', true);
+        // Query BOTH trip_collaborators AND trip_members
+        const [{ data: collabRows }, { data: memberRows }] = await Promise.all([
+          supabase
+            .from('trip_collaborators')
+            .select('user_id')
+            .eq('trip_id', tripId)
+            .eq('include_preferences', true),
+          supabase
+            .from('trip_members')
+            .select('user_id')
+            .eq('trip_id', tripId)
+            .not('user_id', 'is', null),
+        ]);
 
-        const allUserIds = [userId, ...(collabRows || []).map((c: any) => c.user_id)].filter(Boolean);
+        // Merge unique participant IDs from both tables
+        const participantIds = new Set<string>();
+        (collabRows || []).forEach((c: any) => { if (c.user_id) participantIds.add(c.user_id); });
+        (memberRows || []).forEach((m: any) => { if (m.user_id) participantIds.add(m.user_id); });
+        participantIds.delete(userId || ''); // Remove owner, we'll prepend
+
+        const allUserIds = [userId, ...Array.from(participantIds)].filter(Boolean);
         const { data: profileRows } = await supabase
           .from('profiles')
           .select('id, display_name, handle')
@@ -4333,7 +4347,7 @@ serve(async (req) => {
           userId: uid!,
           name: profileMap.get(uid!) || 'Traveler',
         }));
-        console.log(`[Stage 1.2] Attribution travelers: ${context.collaboratorTravelers.map(t => `${t.name}(${t.userId.slice(0,8)})`).join(', ')}`);
+        console.log(`[Stage 1.2] Attribution travelers: ${context.collaboratorTravelers.map(t => `${t.name}(${t.userId.slice(0,8)})`).join(', ')} (collabs: ${(collabRows || []).length}, members: ${(memberRows || []).length})`);
 
         // =======================================================================
         // STAGE 1.2.1: ARCHETYPE-LEVEL GROUP BLENDING
@@ -4342,7 +4356,7 @@ serve(async (req) => {
         console.log("[Stage 1.2.1] Loading companion archetypes for group blending...");
         try {
           // Load companion DNA profiles
-          const companionUserIds = (collabRows || []).map((c: any) => c.user_id).filter(Boolean);
+          const companionUserIds = Array.from(participantIds).filter(Boolean);
           const { data: companionDnaRows } = await supabase
             .from('travel_dna_profiles')
             .select('user_id, primary_archetype_name, trait_scores, travel_dna_v2')
@@ -8088,15 +8102,32 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
       // COLLABORATOR ATTRIBUTION: Load collaborators for suggestedFor coloring
       // ==========================================================================
       let collaboratorAttributionPrompt = '';
+      let allUserIdsForAttribution: string[] = [];
       if (tripId) {
-        const { data: collabRows } = await supabase
-          .from('trip_collaborators')
-          .select('user_id')
-          .eq('trip_id', tripId)
-          .eq('include_preferences', true);
+        // Query BOTH trip_collaborators AND trip_members to capture all participants
+        const [{ data: collabRows }, { data: memberRows }] = await Promise.all([
+          supabase
+            .from('trip_collaborators')
+            .select('user_id')
+            .eq('trip_id', tripId)
+            .eq('include_preferences', true),
+          supabase
+            .from('trip_members')
+            .select('user_id')
+            .eq('trip_id', tripId)
+            .not('user_id', 'is', null),
+        ]);
 
-        if (collabRows && collabRows.length > 0) {
-          const allUserIds = [userId, ...collabRows.map((c: any) => c.user_id)].filter(Boolean);
+        // Merge unique participant IDs from both tables
+        const participantIds = new Set<string>();
+        (collabRows || []).forEach((c: any) => { if (c.user_id) participantIds.add(c.user_id); });
+        (memberRows || []).forEach((m: any) => { if (m.user_id) participantIds.add(m.user_id); });
+        // Remove owner since we'll prepend them
+        participantIds.delete(userId);
+
+        if (participantIds.size > 0) {
+          const allUserIds = [userId, ...Array.from(participantIds)].filter(Boolean);
+          allUserIdsForAttribution = allUserIds;
           const { data: profileRows } = await supabase
             .from('profiles')
             .select('id, display_name, handle')
@@ -8120,7 +8151,7 @@ Rules:
 - Use the primary planner's ID ("${userId}") ONLY when it specifically matches their profile, NOT as a default
 - EVERY activity MUST have a suggestedFor value — no exceptions
 `;
-          console.log(`[generate-day] Attribution prompt injected for ${allUserIds.length} travelers`);
+          console.log(`[generate-day] Attribution prompt injected for ${allUserIds.length} travelers (collabs: ${(collabRows || []).length}, members: ${(memberRows || []).length})`);
         }
       }
 
@@ -9441,6 +9472,30 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             console.log(`[generate-day] ✓ Injected missing Hotel Checkout at ${checkoutStart}-${checkoutEnd} (hotel: ${checkoutHotelName}) for Day ${dayNumber}`);
           } else {
             console.log(`[generate-day] Day ${dayNumber} already has checkout activity — no injection needed`);
+          }
+        }
+
+        // ====================================================================
+        // SUGGESTED-FOR GUARANTEE: Backfill missing suggestedFor for group trips
+        // ====================================================================
+        if (allUserIdsForAttribution.length > 1 && generatedDay?.activities?.length) {
+          let backfilledCount = 0;
+          const transportCategories = ['transport', 'transit', 'transfer', 'transportation', 'flight', 'travel'];
+          generatedDay.activities.forEach((act: any, idx: number) => {
+            if (!act.suggestedFor) {
+              const cat = (act.category || '').toLowerCase();
+              if (transportCategories.includes(cat)) {
+                // Transport is shared — assign all travelers
+                act.suggestedFor = allUserIdsForAttribution.join(',');
+              } else {
+                // Round-robin assignment across travelers
+                act.suggestedFor = allUserIdsForAttribution[idx % allUserIdsForAttribution.length];
+              }
+              backfilledCount++;
+            }
+          });
+          if (backfilledCount > 0) {
+            console.log(`[generate-day] ✓ Backfilled suggestedFor on ${backfilledCount}/${generatedDay.activities.length} activities for Day ${dayNumber}`);
           }
         }
 
