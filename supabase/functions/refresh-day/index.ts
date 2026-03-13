@@ -395,10 +395,41 @@ Deno.serve(async (req: Request) => {
 
     const totalCost = activities.reduce((sum, a) => sum + (a.cost?.amount || 0), 0);
 
+    // Build buffer summary between consecutive activities
+    const buffers: Array<{
+      fromId: string;
+      fromTitle: string;
+      toId: string;
+      toTitle: string;
+      bufferMinutes: number;
+      requiredMinutes: number;
+      isInsufficient: boolean;
+    }> = [];
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const curr = sorted[i];
+      const next = sorted[i + 1];
+      const currEnd = parseTime(curr.endTime);
+      const nextStart = parseTime(next.startTime);
+      if (currEnd !== null && nextStart !== null) {
+        const gap = nextStart - currEnd;
+        const required = getMinBufferMinutes(curr.category, next.category);
+        buffers.push({
+          fromId: curr.id,
+          fromTitle: curr.title,
+          toId: next.id,
+          toTitle: next.title,
+          bufferMinutes: Math.max(0, gap),
+          requiredMinutes: required,
+          isInsufficient: gap < required,
+        });
+      }
+    }
+
     return new Response(JSON.stringify({
       issues,
       proposedChanges,
       transitEstimates,
+      buffers,
       totalCost,
       activitiesValidated: sorted.length,
       dayNumber,
