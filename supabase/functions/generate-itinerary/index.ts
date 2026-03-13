@@ -9475,6 +9475,30 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           }
         }
 
+        // ====================================================================
+        // SUGGESTED-FOR GUARANTEE: Backfill missing suggestedFor for group trips
+        // ====================================================================
+        if (allUserIdsForAttribution.length > 1 && generatedDay?.activities?.length) {
+          let backfilledCount = 0;
+          const transportCategories = ['transport', 'transit', 'transfer', 'transportation', 'flight', 'travel'];
+          generatedDay.activities.forEach((act: any, idx: number) => {
+            if (!act.suggestedFor) {
+              const cat = (act.category || '').toLowerCase();
+              if (transportCategories.includes(cat)) {
+                // Transport is shared — assign all travelers
+                act.suggestedFor = allUserIdsForAttribution.join(',');
+              } else {
+                // Round-robin assignment across travelers
+                act.suggestedFor = allUserIdsForAttribution[idx % allUserIdsForAttribution.length];
+              }
+              backfilledCount++;
+            }
+          });
+          if (backfilledCount > 0) {
+            console.log(`[generate-day] ✓ Backfilled suggestedFor on ${backfilledCount}/${generatedDay.activities.length} activities for Day ${dayNumber}`);
+          }
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
