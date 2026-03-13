@@ -8725,7 +8725,7 @@ function ActivityRow({
   const shouldFetchRealPhoto = canViewPremium && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
   
   // Read resolved image from batch context (no per-row hooks — prevents React Error #310)
-  const resolvedImageMap = React.useContext(ItineraryImageContext);
+  const resolvedImageMap = useContext(ItineraryImageContext);
   const resolvedUrl = resolvedImageMap.get(activity.id);
   const thumbnailUrl = resolvedUrl || existingPhoto || getActivityPlaceholder(effectiveCategory);
   const imageLoading = !resolvedUrl && !existingPhoto;
