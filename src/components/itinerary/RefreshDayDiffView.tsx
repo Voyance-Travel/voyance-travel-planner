@@ -4,17 +4,37 @@
  */
 
 import { useState } from 'react';
-import { CheckCircle, AlertTriangle, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, AlertTriangle, X, ChevronDown, ChevronUp, Clock, Timer, ArrowUpDown, Check, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ProposedChange, RefreshIssue, RefreshTransitEstimate } from '@/hooks/useRefreshDay';
+
+// Map icon-name strings from edge function to Lucide components
+const iconMap: Record<string, React.ReactNode> = {
+  'clock': <Clock className="h-4 w-4" />,
+  'alert-triangle': <AlertTriangle className="h-4 w-4" />,
+  'timer': <Timer className="h-4 w-4" />,
+  'arrow-up-down': <ArrowUpDown className="h-4 w-4" />,
+  'check': <Check className="h-4 w-4" />,
+};
+
+interface BufferInfo {
+  fromId: string;
+  fromTitle: string;
+  toId: string;
+  toTitle: string;
+  bufferMinutes: number;
+  requiredMinutes: number;
+  isInsufficient: boolean;
+}
 
 interface RefreshDayDiffViewProps {
   dayNumber: number;
   proposedChanges: ProposedChange[];
   issues: RefreshIssue[];
   transitEstimates: RefreshTransitEstimate[];
+  buffers?: BufferInfo[];
   onAcceptAll: (changes: ProposedChange[]) => void;
   onAcceptSelected: (changes: ProposedChange[]) => void;
   onDismiss: () => void;
@@ -26,6 +46,7 @@ export function RefreshDayDiffView({
   proposedChanges,
   issues,
   transitEstimates,
+  buffers = [],
   onAcceptAll,
   onAcceptSelected,
   onDismiss,
@@ -40,6 +61,7 @@ export function RefreshDayDiffView({
     () => new Set(actionableChanges.map(c => c.id))
   );
   const [showUnchanged, setShowUnchanged] = useState(false);
+  const [showBuffers, setShowBuffers] = useState(true);
 
   const toggleChange = (id: string) => {
     setAccepted(prev => {
@@ -61,6 +83,7 @@ export function RefreshDayDiffView({
 
   const errorCount = issues.filter(i => i.severity === 'error').length;
   const warnCount = issues.filter(i => i.severity === 'warning').length;
+  const insufficientBuffers = buffers.filter(b => b.isInsufficient).length;
 
   return (
     <motion.div
@@ -86,7 +109,7 @@ export function RefreshDayDiffView({
           )}
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-foreground truncate">
-              Refresh Day {dayNumber}: {hasActionableChanges ? 'Proposed Changes' : 'All Good!'}
+              Day {dayNumber}: {hasActionableChanges ? 'Proposed Changes' : 'All Good'}
             </h3>
             {hasActionableChanges && (
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -105,7 +128,7 @@ export function RefreshDayDiffView({
       {/* No changes needed */}
       {!hasActionableChanges && (
         <p className="text-sm text-muted-foreground">
-          No timing issues, closures, or buffer problems detected. Your day looks great!
+          No timing issues or buffer problems detected. Your day looks great!
         </p>
       )}
 
@@ -141,8 +164,10 @@ export function RefreshDayDiffView({
                 </button>
               )}
 
-              {/* Icon */}
-              <span className="text-base shrink-0 mt-0.5 leading-none">{change.icon}</span>
+              {/* Icon — Lucide component instead of emoji */}
+              <span className="shrink-0 mt-0.5 text-muted-foreground">
+                {iconMap[change.icon] || <Clock className="h-4 w-4" />}
+              </span>
 
               {/* Content */}
               <div className="flex-1 min-w-0">
@@ -150,13 +175,60 @@ export function RefreshDayDiffView({
                 {change.oldValue && change.newValue && change.type !== 'no_change' && (
                   <div className="flex items-center gap-2 mt-1 text-xs">
                     <span className="text-destructive/70 line-through">{change.oldValue}</span>
-                    <span className="text-muted-foreground">→</span>
+                    <ArrowRight className="h-3 w-3 text-muted-foreground" />
                     <span className="text-primary font-medium">{change.newValue}</span>
                   </div>
                 )}
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Buffer summary */}
+      {buffers.length > 0 && (
+        <div>
+          <button
+            onClick={() => setShowBuffers(!showBuffers)}
+            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showBuffers ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            <Timer className="h-3 w-3" />
+            Buffers between activities
+            {insufficientBuffers > 0 && (
+              <span className="text-destructive">({insufficientBuffers} too short)</span>
+            )}
+          </button>
+          <AnimatePresence>
+            {showBuffers && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-2 space-y-1">
+                  {buffers.map((b, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-xs py-1 px-2">
+                      <Clock className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground truncate">{b.fromTitle}</span>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground truncate">{b.toTitle}</span>
+                      <span className={cn(
+                        'font-medium ml-auto shrink-0',
+                        b.isInsufficient ? 'text-destructive' : 'text-muted-foreground'
+                      )}>
+                        {b.bufferMinutes} min
+                      </span>
+                      {b.isInsufficient && (
+                        <span className="text-destructive text-[10px] shrink-0">(need {b.requiredMinutes})</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
@@ -181,8 +253,8 @@ export function RefreshDayDiffView({
                 <div className="mt-2 space-y-1">
                   {unchangedActivities.map((c) => (
                     <div key={c.id} className="flex items-center gap-2 text-xs text-muted-foreground py-1 px-2">
-                      <span>{c.icon}</span>
-                      <span>{c.activityTitle}, no changes needed</span>
+                      <Check className="h-3 w-3 shrink-0" />
+                      <span>{c.activityTitle}</span>
                     </div>
                   ))}
                 </div>
@@ -197,54 +269,25 @@ export function RefreshDayDiffView({
         <div className="flex items-center gap-2 pt-1 border-t border-border/50">
           {mode === 'summary' ? (
             <>
-              <Button
-                size="sm"
-                onClick={handleAcceptAll}
-                className="text-xs"
-              >
+              <Button size="sm" onClick={handleAcceptAll} className="text-xs">
                 Accept All
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setMode('review')}
-                className="text-xs"
-              >
+              <Button variant="outline" size="sm" onClick={() => setMode('review')} className="text-xs">
                 Review Each
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onDismiss}
-                className="text-xs text-muted-foreground ml-auto"
-              >
+              <Button variant="ghost" size="sm" onClick={onDismiss} className="text-xs text-muted-foreground ml-auto">
                 Cancel
               </Button>
             </>
           ) : (
             <>
-              <Button
-                size="sm"
-                onClick={handleAcceptSelected}
-                disabled={accepted.size === 0}
-                className="text-xs"
-              >
+              <Button size="sm" onClick={handleAcceptSelected} disabled={accepted.size === 0} className="text-xs">
                 Apply {accepted.size} Change{accepted.size !== 1 ? 's' : ''}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setMode('summary')}
-                className="text-xs"
-              >
+              <Button variant="outline" size="sm" onClick={() => setMode('summary')} className="text-xs">
                 Back
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onDismiss}
-                className="text-xs text-muted-foreground ml-auto"
-              >
+              <Button variant="ghost" size="sm" onClick={onDismiss} className="text-xs text-muted-foreground ml-auto">
                 Cancel
               </Button>
             </>
