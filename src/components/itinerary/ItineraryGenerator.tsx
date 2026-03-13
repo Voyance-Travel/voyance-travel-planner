@@ -27,7 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useGenerationGate, type GateResult } from '@/hooks/useGenerationGate';
 import { generateFullPreview, type FullPreview, type PreviewDay } from '@/services/fullPreviewService';
 import { convertPreviewToGeneratedDays, createLockedPlaceholderDays } from '@/utils/previewConverter';
-import { calculateTripCredits } from '@/lib/tripCostCalculator';
+import { calculateTripCredits, calculateMultiCityFee, roundUpTo10, BASE_RATE_PER_DAY } from '@/lib/tripCostCalculator';
 import { useTripCities } from '@/hooks/useTripCities';
 import { useCredits } from '@/hooks/useCredits';
 import { formatCredits } from '@/config/pricing';
