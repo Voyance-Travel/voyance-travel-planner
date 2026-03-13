@@ -10413,6 +10413,10 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               for (let n = 0; n < cityNights; n++) {
                 const isTransition = n === 0 && city.city_order > 0 && (city as any).transition_day_mode !== 'skip';
                 const prevCity = city.city_order > 0 ? tripCities.find(c => c.city_order === city.city_order - 1) : null;
+                // Extract per-city hotel data
+                const rawHotel = (city as any).hotel_selection;
+                const cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : (rawHotel && typeof rawHotel === 'object' ? rawHotel : null);
+
                 map.push({
                   cityName: city.city_name || destination,
                   country: (city as any).country || destinationCountry,
@@ -10420,6 +10424,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                   transitionFrom: isTransition ? prevCity?.city_name : undefined,
                   transitionTo: isTransition ? city.city_name : undefined,
                   transportType: isTransition ? (city.transport_type || undefined) : undefined,
+                  hotelName: cityHotel?.name || cityHotel?.hotel_name || undefined,
+                  hotelAddress: cityHotel?.address || undefined,
                 });
               }
             }
