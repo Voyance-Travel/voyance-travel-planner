@@ -10402,7 +10402,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         try {
           const { data: tripCities } = await supabase
             .from('trip_cities')
-            .select('city_name, country, city_order, nights, days_total, transition_day_mode, transport_type')
+            .select('city_name, country, city_order, nights, days_total, transition_day_mode, transport_type, hotel_selection')
             .eq('trip_id', tripId)
             .order('city_order', { ascending: true });
 
