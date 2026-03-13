@@ -130,7 +130,9 @@ function InlineRouteDetails({ activity, previousActivity }: {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeMeta, setRouteMeta] = useState<{ duration: string; distance: string } | null>(null);
 
-  const mode = activity.transportationMethod || 'walk';
+  const mode = typeof activity.transportationMethod === 'string' && activity.transportationMethod.trim().length > 0
+    ? activity.transportationMethod
+    : 'walk';
 
   const fetchRoute = useCallback(async () => {
     if (steps) return; // already fetched
