@@ -57,7 +57,7 @@ import type { GeneratedDay, TripOverview } from '@/hooks/useItineraryGeneration'
 import { enrichHotel } from '@/services/hotelAPI';
 import { usePaymentVerification } from '@/hooks/usePaymentVerification';
 import { useStalePendingChargeRefund } from '@/hooks/useStalePendingChargeRefund';
-import DynamicDestinationPhotos from '@/components/planner/shared/DynamicDestinationPhotos';
+import { useTripHeroImage } from '@/hooks/useTripHeroImage';
 import TripPhotoGallery from '@/components/trip/TripPhotoGallery';
 import { getDestinationByCity, type Destination } from '@/services/supabase/destinations';
 import { initiateBooking } from '@/services/tripPaymentsAPI';
