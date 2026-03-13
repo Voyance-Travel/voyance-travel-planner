@@ -190,6 +190,7 @@ export interface ActiveTripDay {
     voucherUrl?: string;
     bookingRequired?: boolean;
     reservationTime?: string;
+    transportationMethod?: string;
   }[];
   weather?: ParsedWeather;
 }
@@ -624,6 +625,7 @@ export function parseActiveTripDays(
       voucherUrl: a.voucherUrl,
       bookingRequired: a.bookingRequired,
       reservationTime: a.reservationTime,
+      transportationMethod: a.transportation?.method,
     })),
     weather: day.weather,
   }));

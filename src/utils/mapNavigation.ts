@@ -142,9 +142,28 @@ export function openMapNavigation(
 /**
  * Opens map to show a single location (not directions)
  */
+export type TravelMode = 'driving' | 'walking' | 'transit' | 'bicycling';
+
+/**
+ * Maps internal transport mode names to TravelMode
+ */
+export function toTravelMode(mode?: string): TravelMode | undefined {
+  if (!mode) return undefined;
+  const m = mode.toLowerCase();
+  if (['walk', 'walking'].includes(m)) return 'walking';
+  if (['bus', 'train', 'metro', 'transit', 'public_transport', 'subway'].includes(m)) return 'transit';
+  if (['taxi', 'rideshare', 'car', 'drive', 'driving'].includes(m)) return 'driving';
+  if (['bike', 'bicycle', 'bicycling', 'cycling'].includes(m)) return 'bicycling';
+  return undefined;
+}
+
+/**
+ * Opens map to show a single location (not directions)
+ */
 export function openMapLocation(
   location: MapLocation,
-  provider: MapProvider = 'auto'
+  provider: MapProvider = 'auto',
+  travelMode?: TravelMode
 ): void {
   if (provider === 'auto') {
     provider = isIOS() ? 'apple' : 'google';
@@ -160,6 +179,10 @@ export function openMapLocation(
     } else if (location.address || location.name) {
       params.set('q', location.address || location.name || '');
     }
+    if (travelMode) {
+      const dirflgMap: Record<TravelMode, string> = { driving: 'd', walking: 'w', transit: 'r', bicycling: 'b' };
+      params.set('dirflg', dirflgMap[travelMode] || 'd');
+    }
     url = `https://maps.apple.com/?${params.toString()}`;
   } else {
     const params = new URLSearchParams();
@@ -168,6 +191,9 @@ export function openMapLocation(
       params.set('query', `${location.lat},${location.lng}`);
     } else if (location.address || location.name) {
       params.set('query', location.address || location.name || '');
+    }
+    if (travelMode) {
+      params.set('travelmode', travelMode);
     }
     url = `https://www.google.com/maps/search/?${params.toString()}`;
   }
