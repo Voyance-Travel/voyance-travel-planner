@@ -8469,6 +8469,7 @@ function DayCard({
                   proposedChanges={refreshResult.proposedChanges || []}
                   issues={refreshResult.issues}
                   transitEstimates={refreshResult.transitEstimates}
+                  buffers={refreshResult.buffers || []}
                   onAcceptAll={(changes) => onApplyRefreshChanges?.(changes)}
                   onAcceptSelected={(changes) => onApplyRefreshChanges?.(changes)}
                   onDismiss={() => onDismissRefresh?.()}
