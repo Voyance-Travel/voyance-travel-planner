@@ -183,28 +183,76 @@ export default function AgentHotelSearch({
             
             <div>
               <Label>Check-in</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  value={checkIn}
-                  onChange={(e) => setCheckIn(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !checkIn && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {checkIn
+                      ? parseLocalDate(checkIn).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : 'Pick date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={checkIn ? parseLocalDate(checkIn) : undefined}
+                    onSelect={(day) => {
+                      if (day) {
+                        const y = day.getFullYear();
+                        const m = String(day.getMonth() + 1).padStart(2, '0');
+                        const d = String(day.getDate()).padStart(2, '0');
+                        setCheckIn(`${y}-${m}-${d}`);
+                      }
+                    }}
+                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             
             <div>
               <Label>Check-out</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  value={checkOut}
-                  onChange={(e) => setCheckOut(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !checkOut && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {checkOut
+                      ? parseLocalDate(checkOut).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : 'Pick date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={checkOut ? parseLocalDate(checkOut) : undefined}
+                    onSelect={(day) => {
+                      if (day) {
+                        const y = day.getFullYear();
+                        const m = String(day.getMonth() + 1).padStart(2, '0');
+                        const d = String(day.getDate()).padStart(2, '0');
+                        setCheckOut(`${y}-${m}-${d}`);
+                      }
+                    }}
+                    disabled={(date) => date < (checkIn ? parseLocalDate(checkIn) : new Date(new Date().setHours(0, 0, 0, 0)))}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             
             <div>
