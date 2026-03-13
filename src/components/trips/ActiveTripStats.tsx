@@ -111,18 +111,37 @@ export function ActiveTripStats({
         </p>
       </div>
 
-      {/* Overall progress — borderless */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Trip Completion</span>
-          <span className="font-serif text-2xl font-bold text-primary">{stats.completionRate}%</span>
+      {/* Overall progress — editorial with ring */}
+      <div className="flex items-center gap-6">
+        {/* Progress ring */}
+        <div className="relative w-20 h-20 shrink-0">
+          <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+            <circle cx="40" cy="40" r="34" fill="none" stroke="hsl(var(--border))" strokeWidth="4" opacity="0.3" />
+            <circle
+              cx="40" cy="40" r="34" fill="none"
+              stroke="hsl(var(--primary))"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 34}`}
+              strokeDashoffset={`${2 * Math.PI * 34 * (1 - stats.completionRate / 100)}`}
+              className="transition-all duration-700"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="font-serif text-xl font-bold text-primary">{stats.completionRate}%</span>
+          </div>
         </div>
-        <Progress value={stats.completionRate} className="h-1.5" />
-        <p className="text-xs text-muted-foreground mt-2">
-          {stats.completedCount} of {stats.totalActivities} activities completed
-        </p>
-        <div className="h-px bg-gradient-to-r from-primary/20 via-border/50 to-transparent mt-6" />
+        <div className="flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Trip Completion</p>
+          <p className="font-serif text-base font-medium mt-0.5">
+            {stats.completedCount} of {stats.totalActivities} activities
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Day {currentDayNumber} of {totalDays}
+          </p>
+        </div>
       </div>
+      <div className="h-px bg-gradient-to-r from-primary/20 via-border/50 to-transparent" />
 
       {/* Stats — editorial list */}
       <div className="space-y-0">
