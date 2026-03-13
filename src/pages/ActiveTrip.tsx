@@ -1196,6 +1196,7 @@ function TodayView({
                         name={activity.name}
                         category={activity.category}
                         imageUrl={activity.imageUrl}
+                        photos={activity.photos}
                       />
                       <div className="flex-1 min-w-0">
                         {/* Time + status badges */}
