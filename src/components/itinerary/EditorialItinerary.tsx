@@ -8122,7 +8122,7 @@ function DayCard({
                 items={day.activities}
                 onReorder={(reordered) => onActivityReorder?.(reordered)}
                 highlightedIds={highlightedActivityIds}
-                disabled={!isEditable || isPreview || !!editActivityModal || !!timeEditModal}
+                disabled={!isEditable || isPreview || isModalEditing}
                 renderItem={(activity, activityIndex, isDragging, isHighlighted) => {
                   // Collapse option groups to one curated activity in default view (no radio choices)
                   let activityToRender = activity;
