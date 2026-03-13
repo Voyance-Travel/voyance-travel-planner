@@ -9627,6 +9627,45 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       //   - useUnlockDay.ts (per-day increment)
       // Do NOT set it here — doing so creates a race condition with the client's write.
       // See src/lib/voyanceFlowController.ts computeUnlockedDayCount() for the canonical logic.
+
+      // ── NO-SHRINK GUARD ──────────────────────────────────────────────
+      // Prevent accidental truncation: if the incoming itinerary has fewer days
+      // than the canonical existing count (max of itinerary_data.days and itinerary_days rows),
+      // block the write unless the caller explicitly opts in with allowShrink.
+      const allowShrink = params.allowShrink === true;
+      const incomingDays: unknown[] = Array.isArray((itinerary as any)?.days) ? (itinerary as any).days : [];
+      const incomingCount = incomingDays.length;
+
+      // Read current canonical day counts
+      const { data: currentTrip } = await supabase
+        .from('trips')
+        .select('itinerary_data')
+        .eq('id', tripId)
+        .single();
+      const existingJsonDays: unknown[] = Array.isArray((currentTrip?.itinerary_data as any)?.days)
+        ? (currentTrip!.itinerary_data as any).days
+        : [];
+
+      const { count: existingTableRows } = await supabase
+        .from('itinerary_days')
+        .select('id', { count: 'exact', head: true })
+        .eq('trip_id', tripId);
+
+      const canonicalExisting = Math.max(existingJsonDays.length, existingTableRows || 0);
+
+      if (!allowShrink && incomingCount > 0 && canonicalExisting > 0 && incomingCount < canonicalExisting) {
+        console.warn(
+          `[save-itinerary] 🛡️ SHRINK BLOCKED: tripId=${tripId}, ` +
+          `incoming=${incomingCount}, canonical=${canonicalExisting} ` +
+          `(json=${existingJsonDays.length}, table=${existingTableRows || 0}). ` +
+          `Returning success without writing to prevent data loss.`
+        );
+        return new Response(
+          JSON.stringify({ success: true, shrinkBlocked: true, incomingCount, canonicalExisting }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const updatePayload: Record<string, any> = {
         itinerary_data: itinerary,
         itinerary_status: 'ready',
