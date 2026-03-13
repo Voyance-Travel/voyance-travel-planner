@@ -102,15 +102,16 @@ interface ItineraryDay {
 
 type ViewType = 'today' | 'overview' | 'nearby' | 'memories' | 'stats' | 'chat' | 'dna';
 
-// ── Sub-component: Activity thumbnail (hook wrapper) ──────────────────────
-function ActivityImageThumb({ name, category, imageUrl, destination }: {
-  name: string; category?: string; imageUrl?: string; destination?: string;
+// ── Sub-component: Activity thumbnail (safe renderer) ─────────────────────
+function ActivityImageThumb({ name, category, imageUrl }: {
+  name: string; category?: string; imageUrl?: string;
 }) {
-  const { imageUrl: resolvedUrl } = useActivityImage(name, category, imageUrl, destination);
+  const safeSrc = typeof imageUrl === 'string' ? imageUrl : '';
+
   return (
     <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-muted">
       <SafeImage
-        src={resolvedUrl || ''}
+        src={safeSrc}
         alt={name}
         className="w-full h-full object-cover"
         fallbackCategory={category}
