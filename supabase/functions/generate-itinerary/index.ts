@@ -7021,6 +7021,16 @@ If the purpose is a specific event, plan at least ONE full day around that event
 
       // CRITICAL: Fetch flight/hotel context for Day 1 and last day timing
       let flightContext = tripId ? await getFlightHotelContext(supabase, tripId) : { context: '' };
+
+      // For multi-city trips, override the hotel data with per-city hotel from generate-trip-day chain
+      if (paramHotelOverride && paramHotelOverride.name) {
+        flightContext = {
+          ...flightContext,
+          hotelName: paramHotelOverride.name,
+          hotelAddress: paramHotelOverride.address || flightContext.hotelAddress,
+        };
+        console.log(`[generate-day] Hotel override applied: "${paramHotelOverride.name}" (from per-city data)`);
+      }
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
       
