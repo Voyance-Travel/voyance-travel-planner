@@ -5120,7 +5120,8 @@ export function EditorialItinerary({
                           }}
                            compactCards={isManualMode || creationSource === 'smart_finish'}
                            isPastTrip={isPastTrip}
-                           isCleanPreview={isCleanPreview}
+                            isCleanPreview={isCleanPreview}
+                            isModalEditing={!!editActivityModal || !!timeEditModal}
                           onRefreshDay={() => handleRefreshDay(selectedDayIndex)}
                           isRefreshingDay={refreshingDayNumber === selectedDay.dayNumber}
                           refreshResult={refreshResults[selectedDay.dayNumber] || null}
