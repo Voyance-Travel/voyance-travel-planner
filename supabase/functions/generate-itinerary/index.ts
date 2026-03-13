@@ -10936,6 +10936,29 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       if (updatedDays.length !== candidateDays.length) {
         console.warn(`[generate-trip-day] Day deduplication removed ${candidateDays.length - updatedDays.length} duplicate(s)`);
       }
+
+      // ── NO-SHRINK GUARD (chain save) ──────────────────────────────────
+      // After deduplication, ensure we never save fewer days than we started with.
+      // If dedup accidentally removed non-duplicate days, fall back to the larger set.
+      if (updatedDays.length < existingDays.length) {
+        console.error(
+          `[generate-trip-day] 🛡️ SHRINK BLOCKED in chain: updatedDays=${updatedDays.length} < existingDays=${existingDays.length}. ` +
+          `Falling back to existingDays + new day to prevent data loss.`
+        );
+        // Safe fallback: keep all existing days, replace only the current dayNumber
+        const safeDays = existingDays
+          .filter((d: any) => d?.dayNumber !== dayNumber)
+          .concat([dayResult])
+          .sort((a: any, b: any) => {
+            const dateA = a.date ? new Date(a.date).getTime() : (a.dayNumber || 0);
+            const dateB = b.date ? new Date(b.date).getTime() : (b.dayNumber || 0);
+            return dateA - dateB;
+          })
+          .map((d: any, idx: number) => ({ ...d, dayNumber: idx + 1 }));
+        updatedDays.length = 0;
+        updatedDays.push(...safeDays);
+      }
+
       const partialItinerary = {
         days: updatedDays,
         status: dayNumber >= totalDays ? 'ready' : 'generating',

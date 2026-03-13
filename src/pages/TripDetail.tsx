@@ -908,9 +908,11 @@ export default function TripDetail() {
         // Self-heal: detect corrupted ready+partial state
         // If itinerary_status is 'ready' but day count < expected, trigger stalled/resume
         // Also correct inflated metadata.generation_total_days from canonical dates
+        // AND rebuild itinerary_data.days from itinerary_days if JSON is truncated
         if (tripData.itinerary_status === 'ready' || (tripData.itinerary_status as string) === 'generated') {
-          const itinData = tripData.itinerary_data as { days?: unknown[] } | null;
-          const actualDays = Math.max(itinData?.days?.length ?? 0, itineraryDaysDbCount);
+          const itinData = tripData.itinerary_data as { days?: unknown[]; [key: string]: unknown } | null;
+          const jsonDayCount = itinData?.days?.length ?? 0;
+          const actualDays = Math.max(jsonDayCount, itineraryDaysDbCount);
           const meta = (tripData.metadata as Record<string, unknown>) || {};
           // Always recompute from canonical dates first
           let expectedTotal = 0;
@@ -934,6 +936,63 @@ export default function TripDetail() {
               metadata: { ...meta, generation_total_days: expectedTotal },
             }).eq('id', tripId).then(() => {});
           }
+
+          // ── SELF-HEAL: Rebuild itinerary_data.days from itinerary_days table ──
+          // If itinerary_data.days is truncated but itinerary_days has the full set,
+          // rebuild the JSON from the table to recover lost days.
+          if (jsonDayCount > 0 && itineraryDaysDbCount > jsonDayCount && tripId) {
+            console.warn(
+              `[TripDetail] Self-heal: itinerary_data.days (${jsonDayCount}) < itinerary_days table (${itineraryDaysDbCount}). Rebuilding from table.`
+            );
+            try {
+              const { data: fullDayRows } = await supabase
+                .from('itinerary_days')
+                .select('day_number, date, title, theme, description, weather_data, activities_data')
+                .eq('trip_id', tripId)
+                .order('day_number');
+
+              if (fullDayRows && fullDayRows.length > jsonDayCount) {
+                // Build a lookup from existing JSON days for enrichment metadata (photos, coords, etc.)
+                const jsonDaysByNumber = new Map<number, any>();
+                for (const d of (itinData?.days || []) as any[]) {
+                  if (d?.dayNumber) jsonDaysByNumber.set(d.dayNumber, d);
+                }
+
+                const rebuiltDays = fullDayRows.map((row: any) => {
+                  const existingJsonDay = jsonDaysByNumber.get(row.day_number);
+                  // If we have a rich JSON day, prefer it; otherwise build from table row
+                  if (existingJsonDay) return existingJsonDay;
+                  return {
+                    dayNumber: row.day_number,
+                    date: row.date,
+                    theme: row.theme || row.title || `Day ${row.day_number}`,
+                    description: row.description || '',
+                    weather: row.weather_data || undefined,
+                    activities: Array.isArray(row.activities_data) ? row.activities_data : [],
+                  };
+                });
+
+                const healedItinerary = {
+                  ...(itinData || {}),
+                  days: rebuiltDays,
+                };
+
+                // Persist healed data back (only when we have MORE days)
+                console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount})`);
+                await supabase.from('trips').update({
+                  itinerary_data: healedItinerary as any,
+                  updated_at: new Date().toISOString(),
+                }).eq('id', tripId);
+
+                // Update local state
+                tripData = { ...tripData, itinerary_data: healedItinerary as any };
+                setTrip(tripData);
+              }
+            } catch (healErr) {
+              console.error('[TripDetail] Self-heal rebuild failed:', healErr);
+            }
+          }
+
           if (expectedTotal > 0 && actualDays > 0 && actualDays < expectedTotal) {
             console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. Triggering resume.`);
             setGenerationStalled(true);
