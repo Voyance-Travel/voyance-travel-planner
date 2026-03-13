@@ -38,6 +38,8 @@ import { VoiceNotePlayer } from '@/components/memories/VoiceNotePlayer';
 import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { MemoriesTimeline } from '@/components/memories/MemoriesTimeline';
 import { ActiveTripStats } from '@/components/trips/ActiveTripStats';
+import { ActiveTripNotes } from '@/components/trips/ActiveTripNotes';
+import { DayRouteMap } from '@/components/itinerary/DayRouteMap';
 import TripChat from '@/components/chat/TripChat';
 import { MidTripDNA as DailyBriefing } from '@/components/trips/MidTripDNA';
 import type { ItineraryActivity as DrawerItineraryActivity } from '@/types/itinerary';
