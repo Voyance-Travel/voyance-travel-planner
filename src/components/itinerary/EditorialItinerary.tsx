@@ -6488,6 +6488,7 @@ export function EditorialItinerary({
 
       
     </div>
+    </ItineraryImageContext.Provider>
   );
 }
 
