@@ -1,22 +1,22 @@
 /**
  * TripCostEstimate - Shows estimated credit cost before trip creation.
  * Displays as a subtle info card below the date picker area.
+ * Now uses calculateTripCredits for accurate multi-city fees.
  */
 
 import { Coins, Sparkles, Info } from 'lucide-react';
 import { useCredits } from '@/hooks/useCredits';
 import { useEntitlements, type EntitlementsResponse } from '@/hooks/useEntitlements';
-import { CREDIT_COSTS } from '@/config/pricing';
+import { calculateTripCredits, BASE_RATE_PER_DAY } from '@/lib/tripCostCalculator';
 import { cn } from '@/lib/utils';
-
-const BASE_RATE_PER_DAY = CREDIT_COSTS.UNLOCK_DAY; // 60 credits/day
 
 interface TripCostEstimateProps {
   tripDays: number;
+  cities?: string[];
   className?: string;
 }
 
-export function TripCostEstimate({ tripDays, className }: TripCostEstimateProps) {
+export function TripCostEstimate({ tripDays, cities = ['single'], className }: TripCostEstimateProps) {
   const { data: creditData, isLoading: creditsLoading } = useCredits();
   const { data: entitlementsData, isLoading: entitlementsLoading } = useEntitlements();
 
@@ -27,7 +27,8 @@ export function TripCostEstimate({ tripDays, className }: TripCostEstimateProps)
 
   const freeDays = isFirstTrip ? 2 : 0;
   const paidDays = Math.max(0, tripDays - freeDays);
-  const estimatedCost = paidDays * BASE_RATE_PER_DAY;
+  const estimate = calculateTripCredits({ days: paidDays, cities });
+  const estimatedCost = estimate.totalCredits;
   const shortfall = Math.max(0, estimatedCost - totalCredits);
 
   if (isFirstTrip) {
@@ -62,11 +63,13 @@ export function TripCostEstimate({ tripDays, className }: TripCostEstimateProps)
         <p className="text-sm text-foreground">
           This {tripDays}-day trip will use approximately{' '}
           <span className="font-semibold">{estimatedCost} credits</span>
+          {estimate.multiCityFee > 0 && (
+            <span className="text-muted-foreground text-xs ml-1">(incl. multi-city fee)</span>
+          )}
         </p>
       </div>
       <p className="text-xs text-muted-foreground pl-6">
         You have {totalCredits} credits available
-        {isFirstTrip && freeDays > 0 && ` (Days 1–${freeDays} are free on your first trip)`}
       </p>
       {shortfall > 0 && (
         <div className="flex items-start gap-2 pl-6">
