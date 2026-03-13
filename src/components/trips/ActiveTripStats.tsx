@@ -93,6 +93,7 @@ export function ActiveTripStats({
       label: 'Budget',
       value: new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(stats.totalSpentEstimate),
       sub: `of ${new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(budget)} (${budgetUsedPercent}%)`,
+      color: 'text-teal-500',
     });
   }
 
