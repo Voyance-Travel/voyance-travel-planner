@@ -79,6 +79,7 @@ interface ItineraryActivity {
     lng?: number;
   };
   imageUrl?: string;
+  photos?: Array<{ url: string } | string>;
   tips?: string[];
   confirmationNumber?: string;
   voucherUrl?: string;
