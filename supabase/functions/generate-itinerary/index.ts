@@ -9339,6 +9339,111 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           }
         }
 
+        // =====================================================================
+        // POST-GENERATION: Guarantee Hotel Checkout (mirrors check-in guarantee)
+        // If this is the last day of the trip OR last day in a city, ensure checkout exists
+        // =====================================================================
+        const activitiesForCheckout = generatedDay?.activities || [];
+        const needsCheckoutGuarantee = isLastDay || (paramIsLastDayInCity && !resolvedIsTransitionDay);
+
+        if (needsCheckoutGuarantee && activitiesForCheckout.length > 0) {
+          const hasCheckout = activitiesForCheckout.some((a: any) => {
+            const t = (a.title || a.name || '').toLowerCase();
+            const cat = (a.category || '').toLowerCase();
+            return (
+              cat === 'accommodation' && (
+                t.includes('check-out') || t.includes('check out') ||
+                t.includes('checkout')
+              )
+            );
+          });
+
+          if (!hasCheckout) {
+            // Resolve hotel name
+            let checkoutHotelName = paramHotelOverride?.name || flightContext.hotelName || 'Hotel';
+            let checkoutHotelAddress = paramHotelOverride?.address || flightContext.hotelAddress || '';
+
+            // For multi-city, try to load hotel from trip_cities (reuse same logic as check-in)
+            if (tripId && resolvedIsMultiCity && checkoutHotelName === 'Hotel') {
+              try {
+                const { data: tripCitiesForCheckout } = await supabase
+                  .from('trip_cities')
+                  .select('city_name, hotel_selection, city_order, nights, days_total')
+                  .eq('trip_id', tripId)
+                  .order('city_order', { ascending: true });
+
+                if (tripCitiesForCheckout && tripCitiesForCheckout.length > 0) {
+                  let dc = 0;
+                  for (const city of tripCitiesForCheckout) {
+                    const cityNights = (city as any).nights || (city as any).days_total || 1;
+                    for (let n = 0; n < cityNights; n++) {
+                      dc++;
+                      if (dc === dayNumber) {
+                        const rawHotel = city.hotel_selection as any;
+                        const cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : rawHotel;
+                        if (cityHotel?.name) checkoutHotelName = cityHotel.name;
+                        if (cityHotel?.address) checkoutHotelAddress = cityHotel.address;
+                        break;
+                      }
+                    }
+                    if (dc >= dayNumber) break;
+                  }
+                }
+              } catch (e) {
+                console.warn('[generate-day] Could not resolve multi-city hotel for checkout:', e);
+              }
+            }
+
+            // Determine checkout time
+            let checkoutStartMin: number;
+            const returnDep24 = flightContext.returnDepartureTime24 || (flightContext.returnDepartureTime ? normalizeTo24h(flightContext.returnDepartureTime) : null);
+            const returnDepMins = returnDep24 ? (parseTimeToMinutes(returnDep24) ?? null) : null;
+            if (isLastDay && returnDepMins !== null) {
+              // 3.5 hours before flight, minimum 07:00
+              checkoutStartMin = Math.max(7 * 60, returnDepMins - 210);
+            } else {
+              // Default: 11:00 AM for intermediate city departures or no-flight last day
+              checkoutStartMin = 11 * 60;
+            }
+
+            const checkoutStart = minutesToHHMM(checkoutStartMin);
+            const checkoutEnd = minutesToHHMM(checkoutStartMin + 30);
+
+            const checkoutActivity = {
+              id: `day${dayNumber}-checkout-guarantee-${Date.now()}`,
+              title: `Hotel Checkout from ${checkoutHotelName}`,
+              name: `Hotel Checkout from ${checkoutHotelName}`,
+              description: isLastDay
+                ? 'Check out, collect luggage, and prepare for departure.'
+                : `Check out from ${checkoutHotelName}. Store luggage if needed before continuing your day.`,
+              startTime: checkoutStart,
+              endTime: checkoutEnd,
+              category: 'accommodation',
+              type: 'accommodation',
+              location: { name: checkoutHotelName, address: checkoutHotelAddress },
+              cost: { amount: 0, currency: 'USD' },
+              bookingRequired: false,
+              isLocked: false,
+              durationMinutes: 30,
+            };
+
+            // Insert chronologically
+            let insertIdx = activitiesForCheckout.length;
+            for (let i = 0; i < activitiesForCheckout.length; i++) {
+              const actStart = parseTimeToMinutes(activitiesForCheckout[i].startTime || '') ?? 99999;
+              if (checkoutStartMin <= actStart) {
+                insertIdx = i;
+                break;
+              }
+            }
+            activitiesForCheckout.splice(insertIdx, 0, checkoutActivity);
+            generatedDay.activities = activitiesForCheckout;
+            console.log(`[generate-day] ✓ Injected missing Hotel Checkout at ${checkoutStart}-${checkoutEnd} (hotel: ${checkoutHotelName}) for Day ${dayNumber}`);
+          } else {
+            console.log(`[generate-day] Day ${dayNumber} already has checkout activity — no injection needed`);
+          }
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
