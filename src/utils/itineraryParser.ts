@@ -190,6 +190,7 @@ export interface ActiveTripDay {
     voucherUrl?: string;
     bookingRequired?: boolean;
     reservationTime?: string;
+    transportationMethod?: string;
   }[];
   weather?: ParsedWeather;
 }
