@@ -72,9 +72,9 @@ interface DailyBriefingProps {
 }
 
 export function MidTripDNA({ tripId, className }: DailyBriefingProps) {
-  const [briefing, setBriefing] = useState<DailyBriefingData | null>(null);
+  const [briefing, setBriefing] = useState<DailyBriefingData | null>(() => getCachedBriefing(tripId));
   const [loading, setLoading] = useState(false);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(() => !!getCachedBriefing(tripId));
 
   const fetchBriefing = useCallback(async () => {
     setLoading(true);
@@ -91,6 +91,9 @@ export function MidTripDNA({ tripId, className }: DailyBriefingProps) {
 
       setBriefing(data.briefing);
       setHasLoaded(true);
+      if (data.briefing) {
+        setCachedBriefing(tripId, data.briefing);
+      }
     } catch (err) {
       console.error('Failed to fetch daily briefing:', err);
       toast.error("Could not load today's briefing");

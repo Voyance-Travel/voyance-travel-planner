@@ -155,7 +155,7 @@ export function ActiveTripStats({
               transition={{ delay: idx * 0.05 }}
               className="flex items-center gap-4 py-4 border-b border-border/30 last:border-b-0"
             >
-              <Icon className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+              <Icon className={cn('w-4 h-4 shrink-0', (item as any).color || 'text-muted-foreground/50')} />
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
                   {item.label}

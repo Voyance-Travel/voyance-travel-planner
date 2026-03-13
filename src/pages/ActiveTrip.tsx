@@ -1190,49 +1190,59 @@ function TodayView({
 
                     {/* Action Buttons — today only */}
                     {!isPastDay && (
-                      <div className="flex items-center gap-2 mt-3">
-                        {activity.location && (
-                          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full" onClick={() => {
-                            openMapLocation({
-                              name: activity.location?.name || activity.name,
-                              address: activity.location?.address,
-                              lat: activity.location?.lat,
-                              lng: activity.location?.lng,
-                            }, 'auto', toTravelMode(activity.transportationMethod));
-                          }}>
-                            <Navigation className="w-3 h-3" />
-                            Directions
-                          </Button>
-                        )}
-                        {activity.voucherUrl && (
-                          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full">
-                            <QrCode className="w-3 h-3" />
-                            Tickets
-                          </Button>
-                        )}
-                        <MemoryUploadButton
-                          tripId={trip.id}
-                          activityId={activity.id}
-                          activityName={activity.name}
-                          locationName={activity.location?.name}
-                          dayNumber={tripContext.currentDayNumber}
-                          variant="icon"
-                        />
-                        <div className="ml-auto">
-                          <CheckInButton
+                      <>
+                        <div className="flex items-center gap-2 mt-3">
+                          {activity.location && (
+                            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full" onClick={() => {
+                              openMapLocation({
+                                name: activity.location?.name || activity.name,
+                                address: activity.location?.address,
+                                lat: activity.location?.lat,
+                                lng: activity.location?.lng,
+                              }, 'auto', toTravelMode(activity.transportationMethod));
+                            }}>
+                              <Navigation className="w-3 h-3" />
+                              Directions
+                            </Button>
+                          )}
+                          {activity.voucherUrl && (
+                            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs rounded-full">
+                              <QrCode className="w-3 h-3" />
+                              Tickets
+                            </Button>
+                          )}
+                          <MemoryUploadButton
+                            tripId={trip.id}
                             activityId={activity.id}
                             activityName={activity.name}
-                            tripId={trip.id}
-                            destination={trip.destination}
-                            activityType={activity.type}
-                            activityCategory={activity.category}
-                            isCheckedIn={isCompleted}
-                            isNearby={proximity.nearbyActivityId === activity.id}
-                            distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
-                            onCheckIn={onActivityComplete}
+                            locationName={activity.location?.name}
+                            dayNumber={tripContext.currentDayNumber}
+                            variant="icon"
                           />
+                          <div className="ml-auto">
+                            <CheckInButton
+                              activityId={activity.id}
+                              activityName={activity.name}
+                              tripId={trip.id}
+                              destination={trip.destination}
+                              activityType={activity.type}
+                              activityCategory={activity.category}
+                              isCheckedIn={isCompleted}
+                              isNearby={proximity.nearbyActivityId === activity.id}
+                              distanceMeters={proximity.nearbyActivityId === activity.id ? proximity.distanceMeters : null}
+                              onCheckIn={onActivityComplete}
+                            />
+                          </div>
                         </div>
-                      </div>
+
+                        {/* Inline Route Details */}
+                        {activity.location && (
+                          <InlineRouteDetails
+                            activity={activity}
+                            previousActivity={idx > 0 ? group.activities[idx - 1] : null}
+                          />
+                        )}
+                      </>
                     )}
                   </div>
                 </motion.div>
