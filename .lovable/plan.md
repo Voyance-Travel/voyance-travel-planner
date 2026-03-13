@@ -1,26 +1,46 @@
 
 
-## Already Fixed — No Changes Needed
+## Fix: 4xx Treated as Success in Day-Chain
 
-The bug you identified (`cities = isMultiCity ? [] : [destination]`) was already fixed in the previous round of changes. Here's the current code at lines 298-308:
+**Problem**: Two locations in `generate-itinerary/index.ts` use `response.ok || response.status < 500` which treats 4xx errors (403, 400, 404) as success, silently killing the generation chain.
 
+**Changes** — single file: `supabase/functions/generate-itinerary/index.ts`
+
+### Location 1: Initial chain call (line 10417)
+
+Replace `if (response.ok || response.status < 500) break;` with:
 ```typescript
-const tripCityNames = useMemo(() => {
-  if (!isMultiCity) return [destination];
-  if (tripCitiesData && tripCitiesData.length > 0) {
-    return tripCitiesData.map(c => c.city_name).filter(Boolean) as string[];
-  }
-  return [destination]; // fallback
-}, [isMultiCity, tripCitiesData, destination]);
-
-const costEstimate = useMemo(() => {
-  return calculateTripCredits({ days: totalDaysEstimate, cities: tripCityNames });
-}, [totalDaysEstimate, tripCityNames]);
+if (response.ok) break;
+const respText = await response.text().catch(() => '(no body)');
+console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} returned ${response.status}: ${respText.slice(0, 200)}`);
+if (response.status >= 400 && response.status < 500) {
+  console.error(`[generate-trip] Client error ${response.status} — not retrying`);
+  break;
+}
 ```
 
-**ItineraryGenerator.tsx**: `tripCityNames` correctly pulls from `tripCitiesData` for multi-city trips, falling back to `[destination]`. The empty array bug is gone.
+### Location 2: Day-to-day chain call (lines 10872-10875)
 
-**useGenerationGate.ts**: Also already fixed — it builds `allCities` from journey sibling destinations and passes the full array to `calculateTripCredits`.
+Replace:
+```typescript
+if (response.ok || response.status < 500) {
+  chainSuccess = true;
+  break;
+}
+```
+With:
+```typescript
+if (response.ok) {
+  chainSuccess = true;
+  break;
+}
+const respText = await response.text().catch(() => '(no body)');
+console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} returned ${response.status}: ${respText.slice(0, 200)}`);
+if (response.status >= 400 && response.status < 500) {
+  console.error(`[generate-trip-day] Client error ${response.status} — not retrying`);
+  break;
+}
+```
 
-Both files were updated in the earlier "Fix multi-city generation + pricing" implementation. No further changes required.
+This ensures 4xx errors are logged and immediately break the retry loop (they won't succeed on retry), 5xx errors still retry with backoff, and failed chains correctly write error metadata so the frontend can detect and recover.
 
