@@ -856,11 +856,13 @@ function TodayView({
             {String(tripContext.currentDayNumber).padStart(2, '0')}
           </span>
           <div>
-            <h2 className="font-serif text-xl font-semibold leading-tight">
-              {todaysItinerary.theme || `Day ${tripContext.currentDayNumber}`}
-            </h2>
+            <span className="inline-block bg-gradient-to-r from-primary/15 to-primary/5 px-3 py-1 rounded-full">
+              <h2 className="font-serif text-xl font-semibold leading-tight text-foreground">
+                {todaysItinerary.theme || `Day ${tripContext.currentDayNumber}`}
+              </h2>
+            </span>
             {todaysItinerary.description && (
-              <p className="font-serif text-sm italic text-muted-foreground mt-0.5">
+              <p className="font-serif text-sm italic text-muted-foreground mt-1">
                 {todaysItinerary.description}
               </p>
             )}
