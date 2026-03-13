@@ -1178,7 +1178,6 @@ function TodayView({
                         name={activity.name}
                         category={activity.category}
                         imageUrl={activity.imageUrl}
-                        destination={trip.destination}
                       />
                       <div className="flex-1 min-w-0">
                         {/* Time + status badges */}
