@@ -625,6 +625,7 @@ export function parseActiveTripDays(
       voucherUrl: a.voucherUrl,
       bookingRequired: a.bookingRequired,
       reservationTime: a.reservationTime,
+      transportationMethod: a.transportation?.method,
     })),
     weather: day.weather,
   }));
