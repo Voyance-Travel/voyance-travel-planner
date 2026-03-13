@@ -6574,6 +6574,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
   } catch (err) {
     console.error('[triggerNextJourneyLeg] Error:', err);
   }
+}
 
 
       // =======================================================================
