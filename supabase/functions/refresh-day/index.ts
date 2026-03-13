@@ -386,8 +386,8 @@ Deno.serve(async (req: Request) => {
           type: 'no_change',
           activityId: act.id,
           activityTitle: act.title,
-          icon: '✅',
-          description: `${act.title} — no changes needed`,
+          icon: 'check',
+          description: act.title,
         });
       }
     }
