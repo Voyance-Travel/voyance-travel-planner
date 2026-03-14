@@ -1190,16 +1190,7 @@ export function EditorialItinerary({
       })),
     }));
 
-    // Sync to budget ledger (planned entries)
-    syncItineraryToBudget(tripId, daysForSync, travelers)
-      .then(() => {
-        queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
-        queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
-        queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
-      })
-      .catch(err => console.error('[EditorialItinerary] Budget sync failed:', err));
-
-    // Also sync to activity_costs table so v_payments_summary stays in sync
+    // Sync to activity_costs table (single source of truth for all cost totals)
     import('@/services/activityCostService').then(({ syncActivitiesToCostTable }) => {
       const activitiesForCostTable: Array<{
         id: string;
