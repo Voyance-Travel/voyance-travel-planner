@@ -464,13 +464,23 @@ export async function syncItineraryToBudget(
       // Determine cost amount and whether it's already a group total
       let costAmount: number;
       let isGroupTotal = false;
+      let isPerPerson = false;
       if (typeof rawCost === 'number') {
         costAmount = rawCost;
+        isGroupTotal = true; // plain number = UI-visible amount, treat as group total
       } else if (rawCost?.total) {
         costAmount = rawCost.total;
         isGroupTotal = true; // .total already accounts for all travelers
+      } else if (rawCost?.perPerson) {
+        costAmount = rawCost.perPerson;
+        isPerPerson = true;
+      } else if (rawCost?.basis === 'per_person' && rawCost?.amount) {
+        costAmount = rawCost.amount;
+        isPerPerson = true;
       } else {
-        costAmount = rawCost?.amount || rawCost?.perPerson || 0;
+        costAmount = rawCost?.amount || 0;
+        // Unknown basis: treat as group total to avoid surprise inflation
+        isGroupTotal = true;
       }
       if (costAmount > 0) {
         // Skip non-payable activities (free time, downtime, transfers)
