@@ -296,6 +296,14 @@ export function useGenerationPoller({
               throw new Error('Trip not found');
             }
 
+            // Compute canonical total for requestedDays to prevent backend re-inflation
+            let resumeTotalDays = totalDays;
+            if (tripData.start_date && tripData.end_date) {
+              const rs = new Date(tripData.start_date as string);
+              const re = new Date(tripData.end_date as string);
+              resumeTotalDays = Math.ceil((re.getTime() - rs.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            }
+
             const { error: resumeError } = await supabase.functions.invoke('generate-itinerary', {
               body: {
                 action: 'generate-trip',
@@ -309,6 +317,7 @@ export function useGenerationPoller({
                 budgetTier: tripData.budget_tier,
                 isMultiCity: !!tripData.is_multi_city,
                 creditsCharged: 0,
+                requestedDays: resumeTotalDays,
                 resumeFromDay: completedDays + 1,
                 isResume: true,
               },

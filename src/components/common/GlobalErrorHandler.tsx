@@ -14,6 +14,13 @@ export function GlobalErrorHandler() {
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      // Suppress browser extension message-port errors (not from app code)
+      const msg = event.reason instanceof Error ? event.reason.message : String(event.reason || '');
+      if (msg.includes('message channel closed') || msg.includes('message port closed')) {
+        event.preventDefault();
+        return;
+      }
+
       console.error('Unhandled Promise Rejection:', event.reason);
 
       if (isSuppressedRoute()) {
