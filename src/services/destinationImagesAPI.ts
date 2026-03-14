@@ -226,6 +226,11 @@ export async function getDestinationImages(
     }
   }
 
+  // Guard: don't call backend without a destination or ID
+  if (!normalizedDestination && !params.destinationId) {
+    return [];
+  }
+
   // Call backend function via POST body for reliability (no querystring invoke)
   const { data, error } = await supabase.functions.invoke('destination-images', {
     body: {
