@@ -120,7 +120,6 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1546874177-9e664107314e?w=1200',
   ],
   'busan': [
-    'https://images.unsplash.com/photo-1578037571214-25e07a2f91ef?w=1200', // Gamcheon Culture Village
     'https://images.unsplash.com/photo-1596422846543-75c6fc197f11?w=1200', // Busan coastal view
   ],
   'jeju': [
