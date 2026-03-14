@@ -1177,7 +1177,15 @@ export function EditorialItinerary({
         id: act.id,
         title: act.title || 'Activity',
         category: act.category || act.type || 'activities',
-        cost: act.cost ? (typeof act.cost === 'number' ? { amount: act.cost, currency: 'USD' } : { amount: (act.cost as any).amount || (act.cost as any).total || (act.cost as any).perPerson || 0, currency: (act.cost as any).currency || 'USD' }) : undefined,
+        cost: act.cost ? (typeof act.cost === 'number'
+          ? { amount: act.cost, currency: 'USD' }
+          : {
+              amount: (act.cost as any).amount,
+              total: (act.cost as any).total,
+              perPerson: (act.cost as any).perPerson,
+              basis: (act.cost as any).basis,
+              currency: (act.cost as any).currency || 'USD',
+            }) : undefined,
       })),
     }));
 

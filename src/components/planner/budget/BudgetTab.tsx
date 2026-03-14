@@ -204,12 +204,18 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       dayNumber: day.dayNumber,
       date: day.date || '',
       activities: day.activities.map(act => {
-        // Normalize cost to { amount, currency } format
-        let costObj: { amount: number; currency: string } | undefined;
+        // Preserve full cost semantics for syncItineraryToBudget
+        let costObj: { amount?: number; total?: number; perPerson?: number; basis?: string; currency?: string } | undefined;
         if (typeof act.cost === 'number') {
           costObj = { amount: act.cost, currency: 'USD' };
         } else if (act.cost && typeof act.cost === 'object') {
-          costObj = act.cost;
+          costObj = {
+            amount: (act.cost as any).amount,
+            total: (act.cost as any).total,
+            perPerson: (act.cost as any).perPerson,
+            basis: (act.cost as any).basis,
+            currency: (act.cost as any).currency || 'USD',
+          };
         }
         
         return {
