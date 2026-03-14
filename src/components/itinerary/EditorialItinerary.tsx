@@ -2361,25 +2361,35 @@ export function EditorialItinerary({
     }
   }, [tripId]);
 
-  // ─── Canonical trip total from activity_costs table (single source of truth) ───
-  const [canonicalTripTotal, setCanonicalTripTotal] = useState<number | null>(null);
-  useEffect(() => {
-    import('@/services/activityCostService').then(({ getTripTotal }) => {
-      getTripTotal(tripId).then(data => {
-        if (data && data.total_all_travelers_usd > 0) {
-          setCanonicalTripTotal(data.total_all_travelers_usd);
-        }
-      });
-    });
-  }, [tripId, days]); // re-fetch when days change
-
+  // ─── Canonical trip total from useTripFinancialSnapshot (single source of truth) ───
+  const financialSnapshot = useTripFinancialSnapshot(tripId);
+  
   // Calculate totals with smart estimation using destination-aware pricing
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry), 0);
   const flightCost = allFlightLegs.reduce((sum, leg) => sum + (leg.price || 0), 0);
-  const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
-  // Prefer canonical total from activity_costs table when available
+  const hotelCost = (() => {
+    // Multi-hotel: sum totalPrice (or pricePerNight * nights) across all hotels
+    if (allHotels && allHotels.length > 0) {
+      return allHotels.reduce((sum, h) => {
+        if (h.totalPrice) return sum + h.totalPrice;
+        if (h.pricePerNight && h.checkInDate && h.checkOutDate) {
+          const nights = Math.max(1, Math.ceil(
+            (parseLocalDate(h.checkOutDate).getTime() - parseLocalDate(h.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
+          ));
+          return sum + h.pricePerNight * nights;
+        }
+        return sum;
+      }, 0);
+    }
+    // Legacy single hotel
+    if (hotelSelection?.totalPrice) return hotelSelection.totalPrice;
+    return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
+  })();
+  
+  // Use financial snapshot as the canonical total when available (matches Expected Spend exactly)
   const jsTotalCost = totalActivityCost + flightCost + hotelCost;
-  const totalCost = canonicalTripTotal !== null ? (canonicalTripTotal + flightCost + hotelCost) : jsTotalCost;
+  const snapshotTotalUsd = financialSnapshot.tripTotalCents / 100;
+  const totalCost = !financialSnapshot.loading && snapshotTotalUsd > 0 ? snapshotTotalUsd : jsTotalCost;
   
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
