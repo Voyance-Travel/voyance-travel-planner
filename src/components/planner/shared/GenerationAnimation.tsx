@@ -73,8 +73,9 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
 
           {/* Background glow */}
           <motion.circle
-            cx="100" cy="100" r="48"
+            cx="100" cy="100"
             className="fill-primary/5"
+            initial={{ r: 48, opacity: 0.06 }}
             animate={{ r: [48, 52, 48], opacity: [0.06, 0.12, 0.06] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           />
