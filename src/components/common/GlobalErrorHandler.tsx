@@ -8,9 +8,8 @@ import toast from '@/utils/simpleToast';
 export function GlobalErrorHandler() {
   useEffect(() => {
     const isSuppressedRoute = () => {
-      const path = window.location.pathname.toLowerCase();
       const query = window.location.search.toLowerCase();
-      return path.includes('/itinerary') || query.includes('generate=true');
+      return query.includes('generate=true');
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
