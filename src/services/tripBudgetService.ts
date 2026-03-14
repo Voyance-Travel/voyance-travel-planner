@@ -438,7 +438,7 @@ export async function syncItineraryToBudget(
       id: string;
       title: string;
       category: string;
-      cost?: { amount?: number; total?: number; perPerson?: number; currency?: string } | number;
+      cost?: { amount?: number; total?: number; perPerson?: number; currency?: string; basis?: string } | number;
     }>;
   }>,
   travelers: number = 1
