@@ -1039,7 +1039,7 @@ export default function TripDetail() {
             try {
               const { data: fullDayRows } = await supabase
                 .from('itinerary_days')
-                .select('day_number, date, title, theme, description, weather_data, activities_data')
+                .select('day_number, date, title, theme, description, weather, activities')
                 .eq('trip_id', tripId)
                 .order('day_number');
 
