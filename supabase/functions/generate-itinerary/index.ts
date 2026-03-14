@@ -7773,12 +7773,17 @@ Add your flight and hotel details for a more complete last day.`;
         }
 
         if (paramIsLastDayInCity && !isLastDay) {
+          const nextTransport = resolvedNextLegTransport || 'flight';
+          const nextCity = resolvedNextLegCity || 'the next destination';
+          const transportLabel = nextTransport.toUpperCase();
+          const isNonFlight = nextTransport !== 'flight';
           dayConstraints += `\n\n🏨 CITY DEPARTURE — CHECKOUT DAY:
-- This is the LAST DAY in ${destination}. The traveler leaves this city tomorrow.
+- This is the LAST DAY in ${destination}. Tomorrow the traveler takes a ${transportLabel} to ${nextCity}.
 - REQUIRED: Include "Hotel Checkout" activity in the morning (typically by 11:00 AM).
 - Plan morning activities around checkout. Luggage storage may be needed.
 - End the day early enough for evening packing/preparation.
-- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.`;
+- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.${isNonFlight ? `
+- ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabel}.${nextTransport === 'train' ? ' If mentioning departure logistics, reference the train station instead.' : ''}${nextTransport === 'bus' ? ' If mentioning departure logistics, reference the bus station instead.' : ''}${nextTransport === 'car' ? ' The traveler is driving to the next destination.' : ''}${nextTransport === 'ferry' ? ' If mentioning departure logistics, reference the ferry terminal instead.' : ''}` : ''}`;
         }
 
         if (mcHotelName && mcHotelName !== 'Hotel') {
