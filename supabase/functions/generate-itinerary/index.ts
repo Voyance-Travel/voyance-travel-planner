@@ -6625,6 +6625,15 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                 if (dayCounter === dayNumber) {
                   resolvedDestination = city.city_name || destination;
                   resolvedCountry = (city as any).country || destinationCountry;
+                  // Check if this is the last day in this city — capture next leg transport
+                  if (n === cityNights - 1) {
+                    const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
+                    if (nextCity) {
+                      const isSameCountry = nextCity.country === city.country;
+                      resolvedNextLegTransport = (nextCity as any).transport_type || (isSameCountry ? 'train' : 'flight');
+                      resolvedNextLegCity = nextCity.city_name || '';
+                    }
+                  }
                   if (n === 0 && city.city_order > 0 && (city as any).transition_day_mode !== 'skip') {
                     resolvedIsTransitionDay = true;
                     const prevCity = tripCities.find((c: any) => c.city_order === city.city_order - 1);
