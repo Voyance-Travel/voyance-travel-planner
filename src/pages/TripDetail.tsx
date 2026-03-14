@@ -167,6 +167,16 @@ export default function TripDetail() {
   // Stale pending charge safety net — auto-refund failed Smart Finish charges
   useStalePendingChargeRefund(tripId);
 
+  // Hero image — MUST be called unconditionally (before any early returns) to avoid
+  // React hooks-order violation (#310). Uses safe defaults when trip hasn't loaded yet.
+  const seededHero = (trip?.metadata as Record<string, unknown>)?.hero_image;
+  const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
+  const { imageUrl: heroImageUrl, onError: onHeroError, onLoad: onHeroLoad } = useTripHeroImage({
+    destination: trip?.destination || '',
+    seededHeroUrl,
+    tripId: trip?.id,
+  });
+
   // =========================================================================
   // SERVER-SIDE GENERATION: Poll for background generation progress
   // =========================================================================
