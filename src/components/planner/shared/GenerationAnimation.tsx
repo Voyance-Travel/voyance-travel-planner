@@ -137,13 +137,12 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
               <motion.circle
                 key={`p-${i}`}
                 cx={cx}
-                cy={cy}
-                r={2}
                 className="fill-primary/30"
+                initial={{ cy, opacity: 0, r: 1 }}
                 animate={{
                   cy: [cy, cy - 12, cy],
                   opacity: [0, 0.7, 0],
-                  scale: [0.5, 1, 0.5],
+                  r: [1, 2, 1],
                 }}
                 transition={{
                   duration: p.duration,
