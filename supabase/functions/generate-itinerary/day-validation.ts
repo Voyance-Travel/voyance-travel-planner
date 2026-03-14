@@ -241,8 +241,20 @@ export function validateGeneratedDay(
       const actType = getExperienceType(act);
       const actTitle = (act.title || '').toLowerCase();
 
-      if (actType === 'transport' || actType === 'accommodation' || actType === 'dining') continue;
+      if (actType === 'transport' || actType === 'accommodation') continue;
       if (LOGISTICAL_PATTERNS.test(actTitle)) continue;
+
+      // Meal-specific dedup: flag if same restaurant name appears on previous days
+      if (actType === 'dining') {
+        for (const prevConcept of previousConcepts) {
+          if (conceptSimilarity(actConcept, prevConcept)) {
+            if (isRecurringEvent(act, mustDoActivities)) continue;
+            errors.push(`MEAL REPEAT: "${act.title}" is too similar to a meal from a previous day. Each day should feature DIFFERENT restaurants.`);
+            break;
+          }
+        }
+        continue; // Skip non-meal dedup checks for dining
+      }
 
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
