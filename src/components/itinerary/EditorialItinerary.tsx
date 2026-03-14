@@ -81,6 +81,7 @@ import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripBudget } from '@/hooks/useTripBudget';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 import { syncItineraryToBudget } from '@/services/tripBudgetService';
+import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
 import { LockedField } from './LockedField';
