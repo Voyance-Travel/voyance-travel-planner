@@ -551,36 +551,66 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
   const remaining = summary.remainingCents;
   const allocations = settings.budget_allocations;
   
-  return [
+  const budgetTotal = summary.budgetTotalCents || 0;
+  const result: CategoryAllocation[] = [];
+
+  // Add hotel/flight as committed categories when included
+  if (settings.budget_include_hotel && summary.committedHotelCents > 0) {
+    const hotelPercent = budgetTotal > 0 ? Math.round((summary.committedHotelCents / budgetTotal) * 100) : 0;
+    result.push({
+      category: 'hotel',
+      allocatedCents: summary.committedHotelCents,
+      usedCents: summary.committedHotelCents,
+      remainingCents: 0,
+      percent: hotelPercent,
+    });
+  }
+
+  if (settings.budget_include_flight && summary.committedFlightCents > 0) {
+    const flightPercent = budgetTotal > 0 ? Math.round((summary.committedFlightCents / budgetTotal) * 100) : 0;
+    result.push({
+      category: 'flight',
+      allocatedCents: summary.committedFlightCents,
+      usedCents: summary.committedFlightCents,
+      remainingCents: 0,
+      percent: flightPercent,
+    });
+  }
+
+  // Discretionary categories use remaining budget after committed costs
+  const safeRemaining = Math.max(remaining, 0);
+  result.push(
     {
       category: 'food',
-      allocatedCents: Math.round(remaining * (allocations.food_percent / 100)),
+      allocatedCents: Math.round(safeRemaining * (allocations.food_percent / 100)),
       usedCents: summary.plannedFoodCents,
-      remainingCents: Math.round(remaining * (allocations.food_percent / 100)) - summary.plannedFoodCents,
+      remainingCents: Math.round(safeRemaining * (allocations.food_percent / 100)) - summary.plannedFoodCents,
       percent: allocations.food_percent,
     },
     {
       category: 'activities',
-      allocatedCents: Math.round(remaining * (allocations.activities_percent / 100)),
+      allocatedCents: Math.round(safeRemaining * (allocations.activities_percent / 100)),
       usedCents: summary.plannedActivitiesCents,
-      remainingCents: Math.round(remaining * (allocations.activities_percent / 100)) - summary.plannedActivitiesCents,
+      remainingCents: Math.round(safeRemaining * (allocations.activities_percent / 100)) - summary.plannedActivitiesCents,
       percent: allocations.activities_percent,
     },
     {
       category: 'transit',
-      allocatedCents: Math.round(remaining * (allocations.transit_percent / 100)),
+      allocatedCents: Math.round(safeRemaining * (allocations.transit_percent / 100)),
       usedCents: summary.plannedTransitCents,
-      remainingCents: Math.round(remaining * (allocations.transit_percent / 100)) - summary.plannedTransitCents,
+      remainingCents: Math.round(safeRemaining * (allocations.transit_percent / 100)) - summary.plannedTransitCents,
       percent: allocations.transit_percent,
     },
     {
       category: 'misc',
-      allocatedCents: Math.round(remaining * (allocations.misc_percent / 100)),
+      allocatedCents: Math.round(safeRemaining * (allocations.misc_percent / 100)),
       usedCents: 0,
-      remainingCents: Math.round(remaining * (allocations.misc_percent / 100)),
+      remainingCents: Math.round(safeRemaining * (allocations.misc_percent / 100)),
       percent: allocations.misc_percent,
     },
-  ];
+  );
+
+  return result;
 }
 
 // =============================================================================

@@ -433,7 +433,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              ≈ {formatCurrency(Math.round((summary?.remainingCents || 0) / totalDays))}/day
+              ≈ {formatCurrency(Math.round((summary?.remainingCents || 0) / Math.max(totalDays, 1)))}/day
             </p>
           </CardContent>
         </Card>
