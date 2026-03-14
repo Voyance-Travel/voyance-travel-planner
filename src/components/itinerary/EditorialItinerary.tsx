@@ -5220,6 +5220,7 @@ export function EditorialItinerary({
               const newCostWhole = Math.round(suggestion.new_cost / 100);
 
               let applied = false;
+              let updatedDays: typeof days = [];
               setDays(prev => {
                 const updated = prev.map(day => {
                   if (day.dayNumber !== suggestion.day_number) return day;
