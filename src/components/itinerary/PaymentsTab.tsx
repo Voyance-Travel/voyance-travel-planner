@@ -776,18 +776,32 @@ export function PaymentsTab({
         assigned_member_id: realMemberId,
       }));
 
-      const { error } = await supabase.from('trip_payments').insert(rows);
+      const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id' });
       if (error) throw error;
 
       toast.success(validResolvedIds.length > 1 
         ? `Split between ${validResolvedIds.length} members` 
         : 'Assignment updated'
       );
+
+      // Optimistic local state update for instant UI feedback
+      const optimisticRows: TripPayment[] = rows.map((r, i) => ({
+        ...r,
+        id: `optimistic-${Date.now()}-${i}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as TripPayment));
+      setPayments(prev => [
+        ...prev.filter(p => !(p.item_type === assigningItem.type && p.item_id === assigningItem.id)),
+        ...optimisticRows,
+      ]);
+
       setAssigningItem(null);
       setAssignMemberId('');
       setAssignMemberIds([]);
-      await fetchPayments(150);
-      await fetchSummary();
+      // Background sync (no await, no artificial delay)
+      fetchPayments(0);
+      fetchSummary();
     } catch (err) {
       console.error('Error assigning member:', err);
       toast.error(`Failed to assign: ${err instanceof Error ? err.message : 'Unknown error'}`);
