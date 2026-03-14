@@ -245,6 +245,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   }, [tripId, hasBudget]);
 
   const formatCurrency = useCallback((cents: number) => {
+    if (!isFinite(cents)) return '$0';
     const currency = settings?.budget_currency || 'USD';
     const amount = cents / 100;
     return new Intl.NumberFormat('en-US', {
