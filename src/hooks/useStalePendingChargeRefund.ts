@@ -85,6 +85,7 @@ export function useStalePendingChargeRefund(tripId: string | undefined) {
               body: {
                 action: 'REFUND',
                 tripId,
+                creditsAmount: charge.credits_amount,
                 metadata: {
                   reason: 'stale_pending_charge_auto_refund',
                   originalAction: charge.action,

@@ -1059,8 +1059,8 @@ export default function TripDetail() {
                     date: row.date,
                     theme: row.theme || row.title || `Day ${row.day_number}`,
                     description: row.description || '',
-                    weather: row.weather_data || undefined,
-                    activities: Array.isArray(row.activities_data) ? row.activities_data : [],
+                    weather: row.weather || undefined,
+                    activities: Array.isArray(row.activities) ? row.activities : [],
                   };
                 });
 
