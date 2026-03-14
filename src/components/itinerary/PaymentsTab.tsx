@@ -410,7 +410,8 @@ export function PaymentsTab({
   // so Payments matches Itinerary header and Budget tab exactly.
   const financialSnapshot = useTripFinancialSnapshot(tripId);
   const estimatedTotal = financialSnapshot.tripTotalCents;
-  const paidAmount = financialSnapshot.paidCents;
+  // "Paid so far" reflects actual recorded payments from trip_payments
+  const paidAmount = totals.paid;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
@@ -529,8 +530,10 @@ export function PaymentsTab({
         updated_at: new Date().toISOString(),
       } as TripPayment;
       setPayments(prev => [...prev, optimisticPayment]);
-      // Optimistic summary update for instant UI feedback
-      // Summary will update on next snapshot refetch
+      setTotals(prev => ({
+        ...prev,
+        paid: prev.paid + markPaidModal.amountCents,
+      }));
 
       toast.success('Marked as paid');
       setMarkPaidModal(null);
@@ -605,6 +608,15 @@ export function PaymentsTab({
       
       if (idsToDelete.length === 0) return;
 
+      const removedPaidCents = (item.allPayments.length > 0
+        ? item.allPayments
+        : item.payment
+          ? [item.payment]
+          : []
+      )
+        .filter(p => p.status === 'paid')
+        .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0);
+
       const { error } = await supabase
         .from('trip_payments')
         .delete()
@@ -619,6 +631,11 @@ export function PaymentsTab({
         .update({ is_paid: false, paid_amount_usd: 0, paid_at: null })
         .eq('trip_id', tripId)
         .eq('activity_id', realItemId);
+
+      setTotals(prev => ({
+        ...prev,
+        paid: Math.max(0, prev.paid - removedPaidCents),
+      }));
 
       toast.success('Payment unmarked');
       await fetchPayments(150);
