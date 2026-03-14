@@ -92,6 +92,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       plannedUnpaidCents: toBePaid,
       paidPercent: Math.min(paidPct, 100),
       loading,
+      refetch,
     };
-  }, [tripTotalCents, paidCents, budgetTotalCents, loading]);
+  }, [tripTotalCents, paidCents, budgetTotalCents, loading, refetch]);
 }
