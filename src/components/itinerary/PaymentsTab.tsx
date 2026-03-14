@@ -606,7 +606,7 @@ export function PaymentsTab({
 
       toast.success('Payment unmarked');
       await fetchPayments(150);
-      await fetchSummary();
+      
     } catch (err) {
       console.error('Error unmarking payment:', err);
       toast.error('Failed to update');
