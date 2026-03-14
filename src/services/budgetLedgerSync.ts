@@ -1,93 +1,118 @@
 /**
- * Budget Ledger Sync
+ * Budget Ledger Sync → activity_costs
  * 
- * Syncs flight and hotel prices to the trip_budget_ledger as committed entries.
- * When a user saves/updates their flight or hotel, this upserts the corresponding
- * ledger entry so the budget summary reflects logistics costs.
+ * Syncs flight and hotel prices into the activity_costs table so the
+ * v_trip_total and v_payments_summary views include them automatically.
+ * This is the SINGLE source of truth for all trip cost totals.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import type { FlightSelection, HotelSelection } from '@/types/trip';
 
-const FLIGHT_LEDGER_KEY = 'logistics-flight';
-const HOTEL_LEDGER_KEY = 'logistics-hotel';
+/** UUID regex for activity_id validation */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
 
 /**
- * Upsert a committed ledger entry for a logistics category.
- * Uses external_booking_id as a stable key to avoid duplicates.
+ * Generate a deterministic UUID v4-like ID from trip + category.
+ * We use a fixed namespace so upserts always find the same row.
  */
-async function upsertLogisticsEntry(
-  tripId: string,
-  category: 'flight' | 'hotel',
-  amountCents: number,
-  description: string,
-  externalKey: string,
-) {
-  if (amountCents <= 0) return;
+function logisticsActivityId(tripId: string, category: 'hotel' | 'flight'): string {
+  // Use a simple deterministic transform: take tripId UUID and flip a known byte
+  // to create a unique but stable ID per category.
+  const base = tripId.replace(/-/g, '');
+  const suffix = category === 'hotel' ? 'a' : 'b';
+  const modified = suffix + base.slice(1, 8) + '-' + base.slice(8, 12) + '-4' + base.slice(13, 15) + suffix + '-' + base.slice(16, 20) + '-' + base.slice(20, 32);
+  return modified;
+}
 
-  // Check if entry already exists
+/**
+ * Upsert a logistics cost row (hotel or flight) into activity_costs.
+ * Uses trip_id + category + day_number=0 to find existing rows.
+ */
+async function upsertLogisticsCost(
+  tripId: string,
+  category: 'hotel' | 'flight',
+  totalUsd: number,
+  description: string,
+  numTravelers: number = 1,
+) {
+  if (totalUsd <= 0) return;
+
+  const activityId = logisticsActivityId(tripId, category);
+  const costPerPerson = totalUsd / Math.max(numTravelers, 1);
+
+  // Check if row exists
   const { data: existing } = await supabase
-    .from('trip_budget_ledger')
+    .from('activity_costs')
     .select('id')
     .eq('trip_id', tripId)
     .eq('category', category)
-    .eq('external_booking_id', externalKey)
+    .eq('day_number', 0)
     .maybeSingle();
 
   if (existing) {
-    // Update amount if changed
     await supabase
-      .from('trip_budget_ledger')
+      .from('activity_costs')
       .update({
-        amount_cents: amountCents,
-        description,
+        cost_per_person_usd: costPerPerson,
+        total_cost_usd: totalUsd,
+        num_travelers: numTravelers,
+        notes: description,
+        source: 'logistics-sync',
         updated_at: new Date().toISOString(),
       })
       .eq('id', existing.id);
   } else {
     await supabase
-      .from('trip_budget_ledger')
+      .from('activity_costs')
       .insert({
         trip_id: tripId,
+        activity_id: activityId,
+        day_number: 0,
         category,
-        entry_type: 'committed',
-        amount_cents: amountCents,
-        currency: 'USD',
-        description,
+        cost_per_person_usd: costPerPerson,
+        total_cost_usd: totalUsd,
+        num_travelers: numTravelers,
+        source: 'logistics-sync',
         confidence: 'high',
-        external_booking_id: externalKey,
+        is_paid: false,
+        notes: description,
       });
   }
 }
 
 /**
- * Sync flight selection price to budget ledger.
- * Captures outbound + return flight total.
+ * Remove a logistics cost row when the selection is cleared.
+ */
+async function removeLogisticsCost(tripId: string, category: 'hotel' | 'flight') {
+  await supabase
+    .from('activity_costs')
+    .delete()
+    .eq('trip_id', tripId)
+    .eq('category', category)
+    .eq('day_number', 0);
+}
+
+/**
+ * Sync flight selection price to activity_costs.
  */
 export async function syncFlightToLedger(
   tripId: string,
   flight: FlightSelection | null,
 ) {
   if (!flight?.price || flight.price <= 0) {
-    // Remove existing flight entry if price cleared
-    await supabase
-      .from('trip_budget_ledger')
-      .delete()
-      .eq('trip_id', tripId)
-      .eq('category', 'flight')
-      .eq('external_booking_id', FLIGHT_LEDGER_KEY);
+    await removeLogisticsCost(tripId, 'flight');
     return;
   }
 
-  const totalCents = Math.round(flight.price * 100);
   const parts = [flight.airline, flight.flightNumber].filter(Boolean).join(' ');
   const description = parts ? `Flight: ${parts}` : 'Flight';
 
-  await upsertLogisticsEntry(tripId, 'flight', totalCents, description, FLIGHT_LEDGER_KEY);
+  await upsertLogisticsCost(tripId, 'flight', flight.price, description);
 }
 
 /**
- * Sync hotel selection price to budget ledger.
+ * Sync hotel selection price to activity_costs.
  * Uses totalPrice if available, otherwise pricePerNight × nights.
  */
 export async function syncHotelToLedger(
@@ -95,12 +120,7 @@ export async function syncHotelToLedger(
   hotel: HotelSelection | null,
 ) {
   if (!hotel) {
-    await supabase
-      .from('trip_budget_ledger')
-      .delete()
-      .eq('trip_id', tripId)
-      .eq('category', 'hotel')
-      .eq('external_booking_id', HOTEL_LEDGER_KEY);
+    await removeLogisticsCost(tripId, 'hotel');
     return;
   }
 
@@ -119,18 +139,11 @@ export async function syncHotelToLedger(
   }
 
   if (!totalUsd || totalUsd <= 0) {
-    // No price data — remove any existing entry
-    await supabase
-      .from('trip_budget_ledger')
-      .delete()
-      .eq('trip_id', tripId)
-      .eq('category', 'hotel')
-      .eq('external_booking_id', HOTEL_LEDGER_KEY);
+    await removeLogisticsCost(tripId, 'hotel');
     return;
   }
 
-  const totalCents = Math.round(totalUsd * 100);
   const description = hotel.name ? `Hotel: ${hotel.name}` : 'Hotel';
 
-  await upsertLogisticsEntry(tripId, 'hotel', totalCents, description, HOTEL_LEDGER_KEY);
+  await upsertLogisticsCost(tripId, 'hotel', totalUsd, description);
 }
