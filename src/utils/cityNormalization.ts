@@ -173,7 +173,7 @@ export function resolveCities(
       const parts = destination
         .split(SEPARATOR_PATTERN)
         .map(cleanCandidate)
-        .filter((p) => p.length > 1 && p.length < 50 && !/^\d+$/.test(p));
+        .filter((p) => p.length > 1 && p.length < 50 && !/^\d+$/.test(p) && looksLikeCityName(p));
       if (parts.length > 1) candidates.push(...parts);
     }
     
