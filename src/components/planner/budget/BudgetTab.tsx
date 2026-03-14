@@ -231,26 +231,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     });
   }, [itineraryDays, hasBudget, syncFromItinerary]);
 
-  // Sync hotel/flight committed costs to budget ledger on mount
-  useEffect(() => {
-    if (!hasBudget || !tripId) return;
-    (async () => {
-      try {
-        const { data: trip } = await supabase
-          .from('trips')
-          .select('hotel_selection, flight_selection')
-          .eq('id', tripId)
-          .single();
-        if (!trip) return;
-        const hotel = trip.hotel_selection as any;
-        const flight = trip.flight_selection as any;
-        if (hotel) await syncHotelToLedger(tripId, hotel);
-        if (flight) await syncFlightToLedger(tripId, flight);
-      } catch (err) {
-        console.error('[BudgetTab] Failed to sync hotel/flight to ledger:', err);
-      }
-    })();
-  }, [tripId, hasBudget]);
+  // Hotel/flight costs are now synced to activity_costs via budgetLedgerSync
+  // when they are saved — no separate ledger sync needed here.
 
   const formatCurrency = useCallback((cents: number) => {
     if (!isFinite(cents)) return '$0';

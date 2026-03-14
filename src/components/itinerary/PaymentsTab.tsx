@@ -402,31 +402,7 @@ export function PaymentsTab({
     return items;
   }, [flightSelection, hotelSelection, days, payments]);
 
-  // ─── Canonical totals from activity_costs table + budget ledger ───
-  const [canonicalSummary, setCanonicalSummary] = useState<PaymentsSummary | null>(null);
-  const [ledgerPlannedCents, setLedgerPlannedCents] = useState<number | null>(null);
-  const [ledgerCommittedCents, setLedgerCommittedCents] = useState<number | null>(null);
-  const fetchSummary = useCallback(async () => {
-    const [summary] = await Promise.all([
-      getPaymentsSummary(tripId),
-      supabase
-        .from('trip_budget_summary')
-        .select('planned_total_cents, total_committed_cents')
-        .eq('trip_id', tripId)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data?.planned_total_cents) {
-            setLedgerPlannedCents(data.planned_total_cents);
-          }
-          if ((data as any)?.total_committed_cents) {
-            setLedgerCommittedCents((data as any).total_committed_cents);
-          }
-        }),
-    ]);
-    setCanonicalSummary(summary);
-  }, [tripId]);
-
-  useEffect(() => { fetchSummary(); }, [fetchSummary]);
+  // All totals now come from the unified financial snapshot (activity_costs views)
 
   // Use the unified financial snapshot as the canonical "Trip Total"
   // so Payments matches Itinerary header and Budget tab exactly.

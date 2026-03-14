@@ -397,15 +397,7 @@ export function ItineraryAssistant({
                   }) : undefined,
             })),
           }));
-          syncItineraryToBudget(tripId, daysForSync, travelers)
-            .then(() => {
-              queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
-              queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
-              queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
-            })
-            .catch(err => console.error('[ItineraryAssistant] Budget sync failed:', err));
-
-          // Also sync to activity_costs table for payments tracking
+          // Sync to activity_costs table (single source of truth)
           import('@/services/activityCostService').then(({ syncActivitiesToCostTable }) => {
             const activitiesForCostTable: Array<{
               id: string;

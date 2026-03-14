@@ -1235,15 +1235,15 @@ export function EditorialItinerary({
       budgetSyncedRef.current = true;
       syncBudgetFromDays(rawDays);
 
-      // Also ensure flight/hotel committed costs are in the budget ledger
+      // Sync flight/hotel costs to activity_costs table
       import('@/services/budgetLedgerSync').then(({ syncFlightToLedger, syncHotelToLedger }) => {
         if (flightSelection) {
           syncFlightToLedger(tripId, flightSelection as any)
-            .catch(err => console.error('[EditorialItinerary] Flight ledger sync failed:', err));
+            .catch(err => console.error('[EditorialItinerary] Flight cost sync failed:', err));
         }
         if (hotelSelection) {
           syncHotelToLedger(tripId, hotelSelection as any)
-            .catch(err => console.error('[EditorialItinerary] Hotel ledger sync failed:', err));
+            .catch(err => console.error('[EditorialItinerary] Hotel cost sync failed:', err));
         }
       });
     }
