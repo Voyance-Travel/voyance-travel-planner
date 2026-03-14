@@ -154,7 +154,7 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
   
   // Sync from itinerary mutation
   const syncMutation = useMutation({
-    mutationFn: (days: any[]) => syncItineraryToBudget(tripId, days),
+    mutationFn: (days: any[]) => syncItineraryToBudget(tripId, days, settings?.travelers || 1),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
       queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });

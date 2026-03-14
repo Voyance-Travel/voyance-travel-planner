@@ -54,6 +54,7 @@ interface ItineraryAssistantProps {
   currentDayNumber?: number;
   days: ItineraryDay[];
   isLocalTrip?: boolean;
+  travelers?: number;
   onItineraryUpdate?: (updatedDays: ItineraryDay[]) => void;
   accommodationInfo?: {
     name: string;
@@ -75,6 +76,7 @@ export function ItineraryAssistant({
   currentDayNumber,
   days,
   isLocalTrip = false,
+  travelers = 1,
   onItineraryUpdate,
   accommodationInfo,
   blendedDna,
@@ -387,7 +389,7 @@ export function ItineraryAssistant({
               cost: act.cost ? (typeof act.cost === 'number' ? { amount: act.cost, currency: 'USD' } : { amount: act.cost.amount ?? 0, currency: act.cost.currency ?? 'USD' }) : undefined,
             })),
           }));
-          syncItineraryToBudget(tripId, daysForSync)
+          syncItineraryToBudget(tripId, daysForSync, travelers)
             .then(() => {
               queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
               queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
