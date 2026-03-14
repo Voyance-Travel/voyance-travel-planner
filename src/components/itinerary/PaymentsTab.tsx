@@ -410,7 +410,8 @@ export function PaymentsTab({
   // so Payments matches Itinerary header and Budget tab exactly.
   const financialSnapshot = useTripFinancialSnapshot(tripId);
   const estimatedTotal = financialSnapshot.tripTotalCents;
-  const paidAmount = financialSnapshot.paidCents;
+  // "Paid so far" reflects actual recorded payments from trip_payments
+  const paidAmount = totals.paid;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
