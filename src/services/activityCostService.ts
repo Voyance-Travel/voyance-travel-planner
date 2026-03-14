@@ -341,9 +341,11 @@ export async function syncActivitiesToCostTable(
     costReferenceId?: string | null;
   }>
 ): Promise<number> {
-  if (!activities.length) return 0;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
+  const validActivities = activities.filter((a) => UUID_RE.test(a.id));
+  if (!validActivities.length) return 0;
 
-  const rows = activities.map((a) => ({
+  const rows = validActivities.map((a) => ({
     trip_id: tripId,
     activity_id: a.id,
     day_number: a.dayNumber,
