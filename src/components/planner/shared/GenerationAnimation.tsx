@@ -55,24 +55,27 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
 
           {/* Pulse rings */}
           <motion.circle
-            cx="100" cy="100" r="52"
+            cx="100" cy="100"
             className="fill-none stroke-primary/15"
             strokeWidth="1"
+            initial={{ r: 52, opacity: 0.4 }}
             animate={{ r: [52, 72], opacity: [0.4, 0] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: 'easeOut' }}
           />
           <motion.circle
-            cx="100" cy="100" r="52"
+            cx="100" cy="100"
             className="fill-none stroke-primary/10"
             strokeWidth="1"
+            initial={{ r: 52, opacity: 0.3 }}
             animate={{ r: [52, 80], opacity: [0.3, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeOut', delay: 0.8 }}
           />
 
           {/* Background glow */}
           <motion.circle
-            cx="100" cy="100" r="48"
+            cx="100" cy="100"
             className="fill-primary/5"
+            initial={{ r: 48, opacity: 0.06 }}
             animate={{ r: [48, 52, 48], opacity: [0.06, 0.12, 0.06] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           />
@@ -134,13 +137,12 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
               <motion.circle
                 key={`p-${i}`}
                 cx={cx}
-                cy={cy}
-                r={2}
                 className="fill-primary/30"
+                initial={{ cy, opacity: 0, r: 1 }}
                 animate={{
                   cy: [cy, cy - 12, cy],
                   opacity: [0, 0.7, 0],
-                  scale: [0.5, 1, 0.5],
+                  r: [1, 2, 1],
                 }}
                 transition={{
                   duration: p.duration,
