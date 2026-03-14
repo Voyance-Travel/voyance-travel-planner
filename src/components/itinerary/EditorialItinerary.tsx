@@ -2961,8 +2961,6 @@ export function EditorialItinerary({
       }
 
       setRegenerationProgress(100);
-      // Immediately clear canonical total so JS-calculated total takes over
-      setCanonicalTripTotal(null);
       await refetchItineraryFromDb();
       // Sync budget from regenerated days and invalidate all budget queries
       syncBudgetFromDays(generatedDays);
