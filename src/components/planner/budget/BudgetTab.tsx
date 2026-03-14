@@ -389,35 +389,35 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           </CardContent>
         </Card>
 
-        {/* Paid so far Card — paid-only from trip_payments */}
+        {/* Expected Spend Card — total expected cost from all sources */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4" />
-              Paid so far
+              Expected Spend
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className={cn(
                 "text-2xl font-bold",
-                snapshot.paidCents > (settings?.budget_total_cents || Infinity) ? "text-destructive" : "text-foreground"
+                snapshot.tripTotalCents > (settings?.budget_total_cents || Infinity) ? "text-destructive" : "text-foreground"
               )}>
-                {formatCurrency(snapshot.paidCents)}
+                {formatCurrency(snapshot.tripTotalCents)}
               </span>
               {(settings?.budget_total_cents || 0) > 0 && (
                 <span className="text-xs text-muted-foreground">
-                  ({Math.round((snapshot.paidCents / (settings?.budget_total_cents || 1)) * 100)}%)
+                  ({Math.round((snapshot.tripTotalCents / (settings?.budget_total_cents || 1)) * 100)}%)
                 </span>
               )}
             </div>
             <Progress 
-              value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.paidCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)} 
+              value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.tripTotalCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)} 
               className="h-2 mt-3"
             />
-            {tripExpensesCents > snapshot.paidCents && (
+            {snapshot.paidCents > 0 && (
               <p className="text-xs text-muted-foreground mt-2">
-                Planned but unpaid: {formatCurrency(tripExpensesCents - snapshot.paidCents)}
+                Paid: {formatCurrency(snapshot.paidCents)}
               </p>
             )}
           </CardContent>
