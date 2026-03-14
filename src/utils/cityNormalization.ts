@@ -54,6 +54,22 @@ function isRegionNotCity(name: string): boolean {
   return COUNTRY_HINTS.has(lower) || STATE_HINTS.has(lower);
 }
 
+/** Descriptive words that indicate a phrase is NOT a city name */
+const DESCRIPTIVE_TERMS = new Set([
+  'trip', 'focused', 'partying', 'letting', 'vacation', 'adventure',
+  'exploring', 'relaxing', 'style', 'vibe', 'itinerary', 'plan',
+  'budget', 'experience', 'holiday', 'getaway', 'weekend', 'loose',
+  'energy', 'downtime', 'recovery', 'relaxed', 'packed', 'chill',
+  'romantic', 'solo', 'group', 'family', 'honeymoon', 'backpacking',
+]);
+
+/** Returns false if a candidate clearly isn't a city name */
+function looksLikeCityName(candidate: string): boolean {
+  const words = candidate.trim().split(/\s+/);
+  if (words.length >= 6) return false;
+  return !words.some((w) => DESCRIPTIVE_TERMS.has(w.toLowerCase()));
+}
+
 /** Remove filler words, brackets, trailing punctuation from a candidate city name */
 function cleanCandidate(value: string): string {
   return value
