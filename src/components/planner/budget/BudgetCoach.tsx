@@ -252,6 +252,17 @@ export function BudgetCoach({
   const handleApply = (suggestion: BudgetSuggestion) => {
     setAppliedIds((prev) => new Set(prev).add(suggestion.activity_id));
     onApplySuggestion?.(suggestion);
+
+    // Remove applied suggestion from list and cache so it doesn't reappear
+    setSuggestions((prev) => prev.filter((s) => s.activity_id !== suggestion.activity_id));
+    const cached = suggestionsCache.get(tripId);
+    if (cached) {
+      suggestionsCache.set(tripId, {
+        ...cached,
+        suggestions: cached.suggestions.filter((s) => s.activity_id !== suggestion.activity_id),
+      });
+    }
+
     if (remainingGap - suggestion.savings <= 0) {
       toast.success("You're on target! Budget balanced.");
     } else {
