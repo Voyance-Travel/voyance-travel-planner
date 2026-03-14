@@ -3043,6 +3043,38 @@ export default function Start() {
                           }
                         }
 
+                        // Journey split for multi-city chat trips (mirrors form path)
+                        if (isChatMultiCity && chatCities.length >= 2) {
+                          try {
+                            const totalChatDays = Math.ceil((chatEndDate.getTime() - chatStartDate.getTime()) / 86400000);
+                            if (totalChatDays >= 8) {
+                              const splitResult = await splitJourneyIfNeeded(
+                                trip.id,
+                                chatCities.map((c) => ({
+                                  city: c.name,
+                                  country: c.country || '',
+                                  nights: c.nights,
+                                })),
+                                (details.cityTransports || []).map((t: string, i: number) => ({
+                                  type: t,
+                                  fromCity: chatCities[i]?.name,
+                                  toCity: chatCities[i + 1]?.name,
+                                })),
+                                format(chatStartDate, 'yyyy-MM-dd'),
+                                format(chatEndDate, 'yyyy-MM-dd'),
+                              );
+
+                              if (splitResult.didSplit) {
+                                toast.success(`Journey created: ${splitResult.legCount} legs`);
+                                navigate(`/trip/${splitResult.firstLegTripId}?generate=true`);
+                                return;
+                              }
+                            }
+                          } catch (splitErr) {
+                            console.warn('[Start] Chat journey split failed, proceeding as single trip:', splitErr);
+                          }
+                        }
+
                         navigate(`/trip/${trip.id}?generate=true`);
                       } catch (err) {
                         console.error('Error creating chat trip:', err);
