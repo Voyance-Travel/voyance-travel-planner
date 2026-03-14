@@ -182,7 +182,7 @@ export function resolveCities(
       const weakParts = destination
         .split(WEAK_SEPARATOR_PATTERN)
         .map(cleanCandidate)
-        .filter((p) => p.length > 1 && p.length < 50 && !/^\d+$/.test(p));
+        .filter((p) => p.length > 1 && p.length < 50 && !/^\d+$/.test(p) && looksLikeCityName(p));
 
       if (weakParts.length > 2) {
         // 3+ parts — very likely multi-city even with weak separators
