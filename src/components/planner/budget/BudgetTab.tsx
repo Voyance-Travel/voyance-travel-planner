@@ -579,54 +579,18 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           <CardHeader>
             <CardTitle className="text-base font-medium flex items-center gap-2">
               <Calendar className="h-4 w-4" />
-              All Costs
+              All Costs ({ledger.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {ledger.slice(0, 10).map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between py-2 border-b border-border last:border-0"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-8 h-8 rounded flex items-center justify-center",
-                      categoryColors[entry.category as BudgetCategory] || 'bg-muted'
-                    )}>
-                      <span className="text-white text-sm">
-                        {categoryIcons[entry.category as BudgetCategory] || <DollarSign className="h-4 w-4" />}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{entry.description}</p>
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {entry.category} • {entry.entry_type === 'committed' ? 'Committed' : 'Planned'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{formatCurrency(entry.amount_cents)}</span>
-                    {!entry.external_booking_id && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => {
-                          // If this is a planned entry linked to an itinerary activity, notify parent
-                          if (entry.entry_type === 'planned' && entry.activity_id && onActivityRemove) {
-                            onActivityRemove(entry.activity_id);
-                          }
-                          removeEntry(entry.id);
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CostsList
+              ledger={ledger}
+              formatCurrency={formatCurrency}
+              categoryColors={categoryColors}
+              categoryIcons={categoryIcons}
+              onActivityRemove={onActivityRemove}
+              removeEntry={removeEntry}
+            />
           </CardContent>
         </Card>
       )}
