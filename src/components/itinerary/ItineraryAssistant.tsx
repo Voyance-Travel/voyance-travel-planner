@@ -76,6 +76,7 @@ export function ItineraryAssistant({
   currentDayNumber,
   days,
   isLocalTrip = false,
+  travelers = 1,
   onItineraryUpdate,
   accommodationInfo,
   blendedDna,
