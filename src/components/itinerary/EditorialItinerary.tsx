@@ -2971,16 +2971,9 @@ export function EditorialItinerary({
       toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
 
       // Async rebuild activity_costs so DB stays in sync for future page loads
-      import('@/services/activityCostService').then(({ repairTripCosts, getTripTotal }) => {
-        repairTripCosts(tripId).then((result) => {
-          if (result.success) {
-            getTripTotal(tripId).then((data) => {
-              if (data && data.total_all_travelers_usd > 0) {
-                setCanonicalTripTotal(data.total_all_travelers_usd);
-              }
-            });
-          }
-        }).catch(err => console.error('[Regeneration] repair-trip-costs failed:', err));
+      import('@/services/activityCostService').then(({ repairTripCosts }) => {
+        repairTripCosts(tripId)
+          .catch(err => console.error('[Regeneration] repair-trip-costs failed:', err));
       });
     } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);
