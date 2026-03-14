@@ -10648,6 +10648,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         requestedDays: requestedDays || totalDays,
         dayNumber: effectiveStartDay,
         totalDays,
+        generationRunId,
       });
 
       // Retry loop with exponential backoff for intermittent 403 errors

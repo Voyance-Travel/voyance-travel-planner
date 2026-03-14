@@ -571,13 +571,103 @@ export default function TripDetail() {
 
   // Auto-trigger generation when ?generate=true is in URL
   // Poll for queued → generating transition (journey legs)
+  // FIX: Poll BOTH the previous leg readiness AND current leg status continuously
+  const queuedLegInvokedRef = useRef(false);
   useEffect(() => {
     if (!isQueuedJourneyLeg || !trip?.id || !trip?.journey_id) return;
+    // Reset invoke guard when trip id changes
+    queuedLegInvokedRef.current = false;
 
     let cancelled = false;
 
-    // On first load, check if the previous leg is already done — if so, kick off generation immediately
-    const checkPreviousLeg = async () => {
+    const triggerGeneration = async () => {
+      if (queuedLegInvokedRef.current || cancelled) return;
+      queuedLegInvokedRef.current = true;
+
+      console.log(`[TripDetail] Previous leg ready — triggering generation for ${trip.id}`);
+      try {
+        const { data: fullTrip } = await supabase
+          .from('trips')
+          .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
+          .eq('id', trip.id)
+          .single();
+
+        if (!fullTrip) {
+          console.error('[TripDetail] Could not fetch full trip data for queued leg');
+          queuedLegInvokedRef.current = false;
+          return;
+        }
+
+        const { error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'generate-trip',
+            tripId: trip.id,
+            userId: fullTrip.user_id,
+            destination: fullTrip.destination,
+            destinationCountry: fullTrip.destination_country || '',
+            startDate: fullTrip.start_date,
+            endDate: fullTrip.end_date,
+            travelers: fullTrip.travelers || 1,
+            tripType: fullTrip.trip_type || 'vacation',
+            budgetTier: fullTrip.budget_tier || 'moderate',
+            isMultiCity: fullTrip.is_multi_city || false,
+            creditsCharged: 0, // Already charged on leg 1
+          },
+        });
+
+        if (invokeErr) {
+          console.error('[TripDetail] Failed to trigger queued leg generation:', invokeErr);
+          queuedLegInvokedRef.current = false;
+          return;
+        }
+
+        // Direct local state refresh from DB
+        const { data: refreshedTrip } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('id', trip.id)
+          .single();
+        if (refreshedTrip && !cancelled) {
+          setTrip(refreshedTrip as Trip);
+        }
+        queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        handleShowGenerator(true);
+      } catch (err) {
+        console.error('[TripDetail] Failed to trigger queued leg generation:', err);
+        queuedLegInvokedRef.current = false;
+      }
+    };
+
+    // Poll both previous leg AND current leg status every 5 seconds
+    const pollInterval = setInterval(async () => {
+      if (cancelled) return;
+
+      // 1) Check if current leg is no longer queued (backend may have started it via triggerNextJourneyLeg)
+      const { data: currentLeg } = await supabase
+        .from('trips')
+        .select('itinerary_status')
+        .eq('id', trip.id)
+        .single();
+
+      if (currentLeg && currentLeg.itinerary_status !== 'queued') {
+        console.log(`[TripDetail] Queued leg ${trip.id} status changed to: ${currentLeg.itinerary_status}`);
+        // Direct local state refresh
+        const { data: refreshedTrip } = await supabase
+          .from('trips')
+          .select('*')
+          .eq('id', trip.id)
+          .single();
+        if (refreshedTrip && !cancelled) {
+          setTrip(refreshedTrip as Trip);
+        }
+        queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        if (currentLeg.itinerary_status === 'generating') {
+          handleShowGenerator(true);
+        }
+        return;
+      }
+
+      // 2) Check if previous leg is ready — if so, trigger generation ourselves
       const prevOrder = (trip.journey_order || 1) - 1;
       if (prevOrder < 1) return;
 
@@ -588,78 +678,31 @@ export default function TripDetail() {
         .eq('journey_order', prevOrder)
         .single();
 
-      if (prevLeg && (prevLeg.itinerary_status === 'ready' || (prevLeg.itinerary_status as string) === 'complete') && !cancelled) {
-        console.log(`[TripDetail] Previous leg (order ${prevOrder}) is ready — triggering generation for ${trip.id}`);
-        // Kick off generation with full payload so the backend can route to generate-trip
-        try {
-          const { data: fullTrip } = await supabase
-            .from('trips')
-            .select('destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city, user_id')
-            .eq('id', trip.id)
-            .single();
-
-          if (!fullTrip) {
-            console.error('[TripDetail] Could not fetch full trip data for queued leg');
-            return;
-          }
-
-          // Don't pre-set status to 'generating' — let the backend set canonical state
-          const { error: invokeErr } = await supabase.functions.invoke('generate-itinerary', {
-            body: {
-              action: 'generate-trip',
-              tripId: trip.id,
-              userId: fullTrip.user_id,
-              destination: fullTrip.destination,
-              destinationCountry: fullTrip.destination_country || '',
-              startDate: fullTrip.start_date,
-              endDate: fullTrip.end_date,
-              travelers: fullTrip.travelers || 1,
-              tripType: fullTrip.trip_type || 'vacation',
-              budgetTier: fullTrip.budget_tier || 'moderate',
-              isMultiCity: fullTrip.is_multi_city || false,
-              creditsCharged: 0, // Already charged on leg 1
-            },
-          });
-
-          if (invokeErr) {
-            console.error('[TripDetail] Failed to trigger queued leg generation:', invokeErr);
-            return;
-          }
-
-          queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
-          handleShowGenerator(true);
-        } catch (err) {
-          console.error('[TripDetail] Failed to trigger queued leg generation:', err);
-        }
-        return;
+      if (prevLeg && (prevLeg.itinerary_status === 'ready' || (prevLeg.itinerary_status as string) === 'complete' || (prevLeg.itinerary_status as string) === 'generated')) {
+        await triggerGeneration();
       }
-    };
+    }, 5000);
 
-    checkPreviousLeg();
+    // Immediate check on mount
+    (async () => {
+      const prevOrder = (trip.journey_order || 1) - 1;
+      if (prevOrder < 1) return;
 
-    // Continue polling for status changes as fallback
-    const interval = setInterval(async () => {
-      const { data } = await supabase
+      const { data: prevLeg } = await supabase
         .from('trips')
         .select('itinerary_status')
-        .eq('id', trip.id)
+        .eq('journey_id', trip.journey_id!)
+        .eq('journey_order', prevOrder)
         .single();
 
-      if (data && data.itinerary_status !== 'queued') {
-        // Status changed — reload the trip data to trigger re-render
-        console.log(`[TripDetail] Queued leg ${trip.id} status changed to: ${data.itinerary_status}`);
-        // Force a refetch of trip data
-        queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
-        // If it's now generating, show the generator
-        if (data.itinerary_status === 'generating') {
-          handleShowGenerator(true);
-        }
+      if (prevLeg && (prevLeg.itinerary_status === 'ready' || (prevLeg.itinerary_status as string) === 'complete' || (prevLeg.itinerary_status as string) === 'generated')) {
+        await triggerGeneration();
       }
-    }, 5000); // Poll every 5 seconds
+    })();
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      clearInterval(pollInterval);
     };
   }, [isQueuedJourneyLeg, trip?.id, trip?.journey_id, trip?.journey_order, queryClient]);
 
