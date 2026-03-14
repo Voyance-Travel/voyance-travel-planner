@@ -2727,6 +2727,7 @@ export default function TripDetail() {
           endDate={effectiveEndDate}
           currentDayNumber={activeDayNumber}
           isLocalTrip={trip.user_id === 'local'}
+          travelers={trip.travelers || 1}
           days={parseAssistantDays(trip.itinerary_data, trip.start_date)}
           accommodationInfo={(() => {
             const hotels = normalizeLegacyHotelSelection(
