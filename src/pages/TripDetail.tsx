@@ -183,7 +183,15 @@ export default function TripDetail() {
   const [itineraryDaysCount, setItineraryDaysCount] = useState<number>(0);
   const [itineraryDaysSummaries, setItineraryDaysSummaries] = useState<Array<{ day_number: number; title: string; theme: string }>>([]);
   const isQueuedJourneyLeg = trip?.itinerary_status === 'queued' && !!trip?.journey_id;
-  const isServerGenerating = trip?.itinerary_status === 'generating' || (!isQueuedJourneyLeg && trip?.itinerary_status === 'queued') || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated');
+  // Guard: don't treat as generating if itinerary_data already has days (stale status)
+  const hasCompletedItineraryData = (() => {
+    if (!trip?.itinerary_data) return false;
+    const itinData = trip.itinerary_data as { days?: unknown[] };
+    return Array.isArray(itinData?.days) && itinData.days.length > 0;
+  })();
+  const isServerGenerating = !hasCompletedItineraryData && (
+    trip?.itinerary_status === 'generating' || (!isQueuedJourneyLeg && trip?.itinerary_status === 'queued') || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated')
+  );
   const [generationStalled, setGenerationStalled] = useState(false);
   const [showStalledUI, setShowStalledUI] = useState(false);
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
