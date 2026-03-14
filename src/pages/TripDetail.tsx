@@ -980,6 +980,23 @@ export default function TripDetail() {
           console.warn('[TripDetail] itinerary_days check failed:', e);
         }
 
+        // Self-heal: auto-correct stale 'generating' status if itinerary_data is complete
+        if (tripData.itinerary_status === 'generating') {
+          const staleItinData = tripData.itinerary_data as { days?: unknown[] } | null;
+          const staleJsonDays = Array.isArray(staleItinData?.days) ? staleItinData!.days.length : 0;
+          if (staleJsonDays > 0 && (staleJsonDays >= itineraryDaysDbCount || itineraryDaysDbCount === 0)) {
+            console.warn(`[TripDetail] Self-heal: status is 'generating' but itinerary_data has ${staleJsonDays} days — correcting to 'ready'`);
+            if (tripId) {
+              supabase.from('trips').update({
+                itinerary_status: 'ready',
+                updated_at: new Date().toISOString(),
+              }).eq('id', tripId).then(() => {});
+            }
+            tripData = { ...tripData, itinerary_status: 'ready' };
+            setTrip(tripData);
+          }
+        }
+
         // Self-heal: detect corrupted ready+partial state
         // If itinerary_status is 'ready' but day count < expected, trigger stalled/resume
         // Also correct inflated metadata.generation_total_days from canonical dates
