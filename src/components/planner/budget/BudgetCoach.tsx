@@ -427,7 +427,7 @@ export function BudgetCoach({
                           <Button
                             variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : 'default'}
                             size="sm"
-                            disabled={isApplied || isDeemphasized}
+                            disabled={isApplied}
                             onClick={() => handleApply(s)}
                             className={cn(
                               'flex-shrink-0',

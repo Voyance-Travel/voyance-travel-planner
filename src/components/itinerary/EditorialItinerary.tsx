@@ -5255,16 +5255,23 @@ export function EditorialItinerary({
                 setHasChanges(true);
                 // Write the new cost to activity_costs table (single source of truth)
                 try {
-                  const { upsertActivityCost } = await import('@/services/activityCostService');
-                  await upsertActivityCost({
-                    trip_id: tripId,
-                    activity_id: suggestion.activity_id,
-                    day_number: suggestion.day_number,
-                    cost_per_person_usd: newCostWhole,
-                    num_travelers: travelers,
-                    category: 'activity', // Budget coach swaps are always activities
-                    source: 'reference',
-                  });
+                  // Only upsert to activity_costs if the ID is a valid UUID
+                  // AI-generated slug IDs (e.g. "breakfast-w-rome") will fail the UUID column constraint
+                  const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(suggestion.activity_id);
+                  if (isValidUuid) {
+                    const { upsertActivityCost } = await import('@/services/activityCostService');
+                    await upsertActivityCost({
+                      trip_id: tripId,
+                      activity_id: suggestion.activity_id,
+                      day_number: suggestion.day_number,
+                      cost_per_person_usd: newCostWhole,
+                      num_travelers: travelers,
+                      category: 'activity',
+                      source: 'reference',
+                    });
+                  } else {
+                    console.info('Skipping activity_costs upsert — non-UUID activity_id:', suggestion.activity_id);
+                  }
                 } catch (e) {
                   console.warn('Failed to write swap cost to activity_costs:', e);
                 }
