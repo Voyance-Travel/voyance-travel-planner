@@ -9,8 +9,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { FlightSelection, HotelSelection } from '@/types/trip';
 
-/** UUID regex for activity_id validation */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
+// activity_id is now TEXT — no UUID validation needed
 
 /**
  * Generate a deterministic UUID v4-like ID from trip + category.

@@ -1,0 +1,1 @@
+ALTER TABLE public.activity_costs ALTER COLUMN activity_id TYPE text;

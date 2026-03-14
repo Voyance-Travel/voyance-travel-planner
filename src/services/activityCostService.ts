@@ -343,8 +343,8 @@ export async function syncActivitiesToCostTable(
     costReferenceId?: string | null;
   }>
 ): Promise<number> {
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
-  const validActivities = activities.filter((a) => UUID_RE.test(a.id));
+  // activity_id is now TEXT — accept all IDs
+  const validActivities = activities.filter((a) => a.id);
   if (!validActivities.length) return 0;
 
   const rows = validActivities.map((a) => ({
