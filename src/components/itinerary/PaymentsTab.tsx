@@ -506,7 +506,9 @@ export function PaymentsTab({
       if (error) throw error;
 
       // Sync activity_costs.is_paid so v_payments_summary reflects the payment
-      await markActivityPaid(tripId, markPaidModal.id, markPaidModal.amountCents / 100);
+      // Strip composite suffix (_dN) to get the real activity_id stored in activity_costs
+      const realActivityId = markPaidModal.id.replace(/_d\d+$/, '');
+      await markActivityPaid(tripId, realActivityId, markPaidModal.amountCents / 100);
 
       // Optimistic update — immediately reflect in the UI
       const optimisticPayment: TripPayment = {
