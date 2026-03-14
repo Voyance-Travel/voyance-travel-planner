@@ -1286,9 +1286,9 @@ export function buildRegularDayPrompt(
   lines.push('');
 
   lines.push(`   MEAL REQUIREMENTS (3 per full day):`);
-  lines.push(`   - BREAKFAST: Real restaurant/café name, walk time from hotel, ~price`);
-  lines.push(`   - LUNCH: Restaurant near previous activity, ~price, 1 alternative option in tips`);
-  lines.push(`   - DINNER: Restaurant with price range, cuisine type, reservation needed?`);
+  lines.push(`   - BREAKFAST: Real restaurant/café name, walk time from hotel, ~price — MUST BE DIFFERENT from any previous day's breakfast`);
+  lines.push(`   - LUNCH: Restaurant near previous activity, ~price, 1 alternative option in tips — MUST BE DIFFERENT from any previous day's lunch`);
+  lines.push(`   - DINNER: Restaurant with price range, cuisine type, reservation needed? — MUST BE DIFFERENT from any previous day's dinner`);
   lines.push(`     Include dress code if relevant. Add 1 alternative in tips field.`);
   lines.push('');
 
