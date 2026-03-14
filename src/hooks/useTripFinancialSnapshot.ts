@@ -25,6 +25,7 @@ export interface FinancialSnapshot {
   plannedUnpaidCents: number;
   paidPercent: number;
   loading: boolean;
+  refetch: () => void;
 }
 
 export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
