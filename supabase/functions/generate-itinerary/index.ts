@@ -11002,10 +11002,24 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
       // ── NO-SHRINK GUARD (chain save) ──────────────────────────────────
       // After deduplication, ensure we never save fewer days than we started with.
-      // If dedup accidentally removed non-duplicate days, fall back to the larger set.
-      if (updatedDays.length < existingDays.length) {
+      // Compare against BOTH in-memory existingDays AND canonical itinerary_days table count.
+      let canonicalCount = existingDays.length;
+      try {
+        const { count: tableRowCount } = await supabase
+          .from('itinerary_days')
+          .select('id', { count: 'exact', head: true })
+          .eq('trip_id', tripId);
+        if (tableRowCount && tableRowCount > canonicalCount) {
+          console.log(`[generate-trip-day] Canonical count elevated: JSON=${existingDays.length}, table=${tableRowCount}`);
+          canonicalCount = tableRowCount;
+        }
+      } catch (e) {
+        console.warn('[generate-trip-day] Could not query itinerary_days count:', e);
+      }
+
+      if (updatedDays.length < canonicalCount) {
         console.error(
-          `[generate-trip-day] 🛡️ SHRINK BLOCKED in chain: updatedDays=${updatedDays.length} < existingDays=${existingDays.length}. ` +
+          `[generate-trip-day] 🛡️ SHRINK BLOCKED in chain: updatedDays=${updatedDays.length} < canonical=${canonicalCount}. ` +
           `Falling back to existingDays + new day to prevent data loss.`
         );
         // Safe fallback: keep all existing days, replace only the current dayNumber
@@ -11020,6 +11034,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           .map((d: any, idx: number) => ({ ...d, dayNumber: idx + 1 }));
         updatedDays.length = 0;
         updatedDays.push(...safeDays);
+      }
+
+      // ── RUN ID CHECK BEFORE WRITE ──────────────────────────────────
+      // Re-verify run ID is still current before persisting to prevent stale overwrites
+      if (generationRunId) {
+        const { data: preWriteTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+        const preWriteMeta = (preWriteTrip?.metadata as Record<string, unknown>) || {};
+        const currentRunId = preWriteMeta.generation_run_id as string | undefined;
+        if (currentRunId && currentRunId !== generationRunId) {
+          console.log(`[generate-trip-day] Stale run at write time: this=${generationRunId}, current=${currentRunId}. Aborting write.`);
+          return new Response(
+            JSON.stringify({ status: 'stale_run', dayNumber, message: 'A newer generation run has started' }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
       const partialItinerary = {
