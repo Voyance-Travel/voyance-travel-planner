@@ -1913,7 +1913,16 @@ These help the traveler prepare for their trip.
           }
           
           if (dayCity.isLastDayInCity) {
-            multiCityPrompt += `\n   📍 CHECKOUT DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). Plan morning around checkout — breakfast at/near hotel, pack and check out, then activities before departing.`;
+            // Look ahead to find the next city's transport mode
+            const nextDayInfo = context.multiCityDayMap?.[dayNumber];
+            const nextLegTransport = nextDayInfo?.transportType || 'flight';
+            const nextLegCity = nextDayInfo?.cityName || 'the next destination';
+            const isNonFlightFullGen = nextLegTransport !== 'flight';
+            const transportLabelFullGen = nextLegTransport.toUpperCase();
+            multiCityPrompt += `\n   📍 CHECKOUT DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). Tomorrow the traveler takes a ${transportLabelFullGen} to ${nextLegCity}. Plan morning around checkout — breakfast at/near hotel, pack and check out, then activities before departing.`;
+            if (isNonFlightFullGen) {
+              multiCityPrompt += `\n   ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabelFullGen}.`;
+            }
           }
         }
         
@@ -6600,6 +6609,8 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       let resolvedTransitionTo = paramTransitionTo || '';
       let resolvedTransportMode = paramTransitionMode || '';
       let resolvedTransportDetails: any = null;
+      let resolvedNextLegTransport = '';
+      let resolvedNextLegCity = '';
       let resolvedIsMultiCity = !!paramIsMultiCity;
       let resolvedDestination = destination;
       let resolvedCountry = destinationCountry;
@@ -6623,6 +6634,15 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                 if (dayCounter === dayNumber) {
                   resolvedDestination = city.city_name || destination;
                   resolvedCountry = (city as any).country || destinationCountry;
+                  // Check if this is the last day in this city — capture next leg transport
+                  if (n === cityNights - 1) {
+                    const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
+                    if (nextCity) {
+                      const isSameCountry = nextCity.country === city.country;
+                      resolvedNextLegTransport = (nextCity as any).transport_type || (isSameCountry ? 'train' : 'flight');
+                      resolvedNextLegCity = nextCity.city_name || '';
+                    }
+                  }
                   if (n === 0 && city.city_order > 0 && (city as any).transition_day_mode !== 'skip') {
                     resolvedIsTransitionDay = true;
                     const prevCity = tripCities.find((c: any) => c.city_order === city.city_order - 1);
@@ -7762,12 +7782,17 @@ Add your flight and hotel details for a more complete last day.`;
         }
 
         if (paramIsLastDayInCity && !isLastDay) {
+          const nextTransport = resolvedNextLegTransport || 'flight';
+          const nextCity = resolvedNextLegCity || 'the next destination';
+          const transportLabel = nextTransport.toUpperCase();
+          const isNonFlight = nextTransport !== 'flight';
           dayConstraints += `\n\n🏨 CITY DEPARTURE — CHECKOUT DAY:
-- This is the LAST DAY in ${destination}. The traveler leaves this city tomorrow.
+- This is the LAST DAY in ${destination}. Tomorrow the traveler takes a ${transportLabel} to ${nextCity}.
 - REQUIRED: Include "Hotel Checkout" activity in the morning (typically by 11:00 AM).
 - Plan morning activities around checkout. Luggage storage may be needed.
 - End the day early enough for evening packing/preparation.
-- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.`;
+- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.${isNonFlight ? `
+- ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabel}.${nextTransport === 'train' ? ' If mentioning departure logistics, reference the train station instead.' : ''}${nextTransport === 'bus' ? ' If mentioning departure logistics, reference the bus station instead.' : ''}${nextTransport === 'car' ? ' The traveler is driving to the next destination.' : ''}${nextTransport === 'ferry' ? ' If mentioning departure logistics, reference the ferry terminal instead.' : ''}` : ''}`;
         }
 
         if (mcHotelName && mcHotelName !== 'Hotel') {
