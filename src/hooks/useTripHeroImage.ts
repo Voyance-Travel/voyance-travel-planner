@@ -114,7 +114,7 @@ export function useTripHeroImage({
       dbCuratedFetched && !dbCuratedUrl &&
       !apiFetched;
 
-    if (!shouldFetch) return;
+    if (!shouldFetch || !destination) return;
 
     let cancelled = false;
     setIsLoading(true);
