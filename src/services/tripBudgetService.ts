@@ -440,7 +440,8 @@ export async function syncItineraryToBudget(
       category: string;
       cost?: { amount?: number; total?: number; perPerson?: number; currency?: string } | number;
     }>;
-  }>
+  }>,
+  travelers: number = 1
 ): Promise<boolean> {
   // First, delete all existing planned entries for this trip
   const { error: deleteError } = await supabase
