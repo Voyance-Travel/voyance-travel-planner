@@ -992,12 +992,7 @@ export function PaymentsTab({
           </div>
           <div className="text-right">
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
-            <p className="text-xs text-muted-foreground">
-              {budgetLimitCents && budgetLimitCents > 0 
-                ? `of ${formatCurrency(budgetLimitCents)} budget`
-                : 'Total estimated'
-              }
-            </p>
+            <p className="text-xs text-muted-foreground">Trip Total</p>
           </div>
         </div>
         
@@ -1029,7 +1024,7 @@ export function PaymentsTab({
             </div>
             <div>
               <p className="text-sm font-medium">{formatCurrency(paidAmount)}</p>
-              <p className="text-xs text-muted-foreground">Paid</p>
+              <p className="text-xs text-muted-foreground">Paid so far</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1038,7 +1033,7 @@ export function PaymentsTab({
             </div>
             <div>
               <p className="text-sm font-medium">{formatCurrency(unpaidAmount)}</p>
-              <p className="text-xs text-muted-foreground">Remaining</p>
+              <p className="text-xs text-muted-foreground">Remaining to pay</p>
             </div>
           </div>
         </div>

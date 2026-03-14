@@ -47,6 +47,7 @@ import type { BudgetCategory } from '@/services/tripBudgetService';
 import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
 import { syncHotelToLedger, syncFlightToLedger } from '@/services/budgetLedgerSync';
 import { supabase } from '@/integrations/supabase/client';
+import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 
 interface ItineraryActivity {
   id: string;
@@ -182,6 +183,13 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     syncFromItinerary,
     refetch,
   } = useTripBudget({ tripId, totalDays, enabled: true });
+
+  // ─── Paid-only snapshot: "Spent" = only what's actually paid ───
+  const tripExpensesCents = (summary?.totalCommittedCents || 0) + (summary?.plannedTotalCents || 0);
+  const snapshot = useTripFinancialSnapshot({
+    tripId,
+    tripTotalCents: tripExpensesCents,
+  });
 
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
@@ -385,55 +393,64 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           </CardContent>
         </Card>
 
-        {/* Spent Card */}
+        {/* Paid so far Card — paid-only from trip_payments */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4" />
-              Spent
+              Paid so far
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className={cn(
                 "text-2xl font-bold",
-                isOverBudget ? "text-destructive" : "text-foreground"
+                snapshot.paidCents > (settings?.budget_total_cents || Infinity) ? "text-destructive" : "text-foreground"
               )}>
-                {formatCurrency((summary?.totalCommittedCents || 0) + (summary?.plannedTotalCents || 0))}
+                {formatCurrency(snapshot.paidCents)}
               </span>
-              <span className="text-xs text-muted-foreground">
-                ({Math.round(summary?.usedPercent || 0)}%)
-              </span>
+              {(settings?.budget_total_cents || 0) > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  ({Math.round((snapshot.paidCents / (settings?.budget_total_cents || 1)) * 100)}%)
+                </span>
+              )}
             </div>
             <Progress 
-              value={Math.min(summary?.usedPercent || 0, 100)} 
+              value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.paidCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)} 
               className="h-2 mt-3"
             />
+            {tripExpensesCents > snapshot.paidCents && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Planned but unpaid: {formatCurrency(tripExpensesCents - snapshot.paidCents)}
+              </p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Remaining Card */}
+        {/* Budget Remaining Card — budget minus paid only */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingDown className="h-4 w-4" />
-              Remaining
+              Budget Remaining
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className={cn(
                 "text-2xl font-bold",
-                (summary?.remainingCents || 0) < 0 ? "text-destructive" : "text-emerald-600"
+                snapshot.budgetRemainingCents < 0 ? "text-destructive" : "text-emerald-600"
               )}>
-                {formattedRemaining}
+                {formatCurrency(snapshot.budgetRemainingCents)}
               </span>
-              <span className="text-xs text-muted-foreground">
-                ({Math.round(remainingPercent)}%)
-              </span>
+              {(settings?.budget_total_cents || 0) > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  ({Math.round(Math.max(0, 100 - (snapshot.paidCents / (settings?.budget_total_cents || 1)) * 100))}%)
+                </span>
+              )}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              ≈ {formatCurrency(Math.round((summary?.remainingCents || 0) / Math.max(totalDays, 1)))}/day
+              ≈ {formatCurrency(Math.round(Math.max(0, snapshot.budgetRemainingCents) / Math.max(totalDays, 1)))}/day
             </p>
           </CardContent>
         </Card>
