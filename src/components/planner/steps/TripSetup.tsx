@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Users, Plane } from 'lucide-react';
+import { MapPin, CalendarIcon, Users, Plane } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getLocalToday } from '@/utils/dateUtils';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { getLocalToday, parseLocalDate } from '@/utils/dateUtils';
 
 interface TripSetupProps {
   formData: {
