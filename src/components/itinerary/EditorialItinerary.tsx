@@ -2379,10 +2379,13 @@ export function EditorialItinerary({
     return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
   })();
   
-  // Use financial snapshot as the canonical total when available (matches Expected Spend exactly)
+  // Use financial snapshot as the canonical total (matches Budget & Payments exactly)
+  // jsTotalCost is per-person; snapshot is all-travelers — always prefer snapshot for consistency
   const jsTotalCost = totalActivityCost + flightCost + hotelCost;
   const snapshotTotalUsd = financialSnapshot.tripTotalCents / 100;
-  const totalCost = !financialSnapshot.loading && snapshotTotalUsd > 0 ? snapshotTotalUsd : jsTotalCost;
+  const totalCost = !financialSnapshot.loading && snapshotTotalUsd > 0
+    ? snapshotTotalUsd
+    : jsTotalCost * (travelers || 1);
   
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
