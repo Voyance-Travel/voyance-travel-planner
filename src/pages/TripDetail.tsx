@@ -183,7 +183,15 @@ export default function TripDetail() {
   const [itineraryDaysCount, setItineraryDaysCount] = useState<number>(0);
   const [itineraryDaysSummaries, setItineraryDaysSummaries] = useState<Array<{ day_number: number; title: string; theme: string }>>([]);
   const isQueuedJourneyLeg = trip?.itinerary_status === 'queued' && !!trip?.journey_id;
-  const isServerGenerating = trip?.itinerary_status === 'generating' || (!isQueuedJourneyLeg && trip?.itinerary_status === 'queued') || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated');
+  // Guard: don't treat as generating if itinerary_data already has days (stale status)
+  const hasCompletedItineraryData = (() => {
+    if (!trip?.itinerary_data) return false;
+    const itinData = trip.itinerary_data as { days?: unknown[] };
+    return Array.isArray(itinData?.days) && itinData.days.length > 0;
+  })();
+  const isServerGenerating = !hasCompletedItineraryData && (
+    trip?.itinerary_status === 'generating' || (!isQueuedJourneyLeg && trip?.itinerary_status === 'queued') || (itineraryDaysCount > 0 && !trip?.itinerary_data && trip?.itinerary_status !== 'ready' && (trip?.itinerary_status as string) !== 'generated')
+  );
   const [generationStalled, setGenerationStalled] = useState(false);
   const [showStalledUI, setShowStalledUI] = useState(false);
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -733,7 +741,21 @@ export default function TripDetail() {
         .select('id', { count: 'exact', head: true })
         .eq('trip_id', trip.id);
 
-      if ((count ?? 0) > 0) return; // Has progress, not stuck
+      if ((count ?? 0) > 0) {
+        // Has days in table — check if itinerary_data also has days (generation completed but status stuck)
+        const itinData = (trip.itinerary_data as { days?: unknown[] }) || {};
+        if (Array.isArray(itinData.days) && itinData.days.length > 0) {
+          // Generation completed, just fix the stale status
+          console.log(`[TripDetail] Stuck-heal: itinerary_data has ${itinData.days.length} days but status is 'generating' — correcting to 'ready'`);
+          stuckHealAttempted.current = true;
+          await supabase.from('trips').update({
+            itinerary_status: 'ready',
+            updated_at: new Date().toISOString(),
+          }).eq('id', trip.id);
+          queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        }
+        return; // Has progress, not stuck
+      }
 
       stuckHealAttempted.current = true;
       console.log(`[TripDetail] Detected stuck journey leg ${trip.id} — attempting self-heal`);
@@ -899,7 +921,7 @@ export default function TripDetail() {
         setError(null);
 
         // Fetch trip details (don't use .single() to avoid hard failure on 0 rows)
-        const { data: tripData, error: tripError } = await supabase
+        let { data: tripData, error: tripError } = await supabase
           .from('trips')
           .select('*')
           .eq('id', tripId)
@@ -956,6 +978,23 @@ export default function TripDetail() {
           })));
         } catch (e) {
           console.warn('[TripDetail] itinerary_days check failed:', e);
+        }
+
+        // Self-heal: auto-correct stale 'generating' status if itinerary_data is complete
+        if (tripData.itinerary_status === 'generating') {
+          const staleItinData = tripData.itinerary_data as { days?: unknown[] } | null;
+          const staleJsonDays = Array.isArray(staleItinData?.days) ? staleItinData!.days.length : 0;
+          if (staleJsonDays > 0 && (staleJsonDays >= itineraryDaysDbCount || itineraryDaysDbCount === 0)) {
+            console.warn(`[TripDetail] Self-heal: status is 'generating' but itinerary_data has ${staleJsonDays} days — correcting to 'ready'`);
+            if (tripId) {
+              supabase.from('trips').update({
+                itinerary_status: 'ready',
+                updated_at: new Date().toISOString(),
+              }).eq('id', tripId).then(() => {});
+            }
+            tripData = { ...tripData, itinerary_status: 'ready' };
+            setTrip(tripData);
+          }
         }
 
         // Self-heal: detect corrupted ready+partial state
