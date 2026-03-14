@@ -38,7 +38,7 @@ import {
   type ItineraryDay,
   type DiffEntry,
 } from '@/services/itineraryActionExecutor';
-import { syncItineraryToBudget } from '@/services/tripBudgetService';
+
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { useEntitlements } from '@/hooks/useEntitlements';
