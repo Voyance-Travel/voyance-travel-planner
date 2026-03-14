@@ -1365,11 +1365,11 @@ export function PaymentsTab({
                                     status: 'pending' as const,
                                     assigned_member_id: realMemberId,
                                   }));
-                                  const { error } = await supabase.from('trip_payments').insert(rows);
+                                  const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id' });
                                   if (error) console.error('Failed to assign item:', item.name, error);
                                 }
                                 toast.success(`Split ${unassigned.items.length} items evenly among ${resolvedIds.length} members`);
-                                await fetchPayments(200);
+                                await fetchPayments(0);
                               } catch (err) {
                                 console.error('Error splitting all:', err);
                                 toast.error('Failed to split items');
