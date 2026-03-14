@@ -927,7 +927,7 @@ export function PaymentsTab({
               className="h-7 w-7 text-muted-foreground hover:text-primary"
               onClick={() => {
                 setAssigningItem(item);
-                setAssignMemberId(item.assignedMemberId || '');
+                setAssignMemberId(String(item.assignedMemberId ?? ''));
                 // Convert real DB IDs back to synthetic member IDs for the UI checkboxes
                 const syntheticIds = item.assignedMemberIds
                   .map(id => realIdToSyntheticId.get(id) || id)
