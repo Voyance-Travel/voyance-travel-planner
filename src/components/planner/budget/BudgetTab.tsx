@@ -45,8 +45,6 @@ import { useTripMembers } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BudgetCategory } from '@/services/tripBudgetService';
 import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
-import { syncHotelToLedger, syncFlightToLedger } from '@/services/budgetLedgerSync';
-import { supabase } from '@/integrations/supabase/client';
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 
 interface ItineraryActivity {
