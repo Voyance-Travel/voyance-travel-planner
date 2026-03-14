@@ -2,15 +2,15 @@
  * useTripFinancialSnapshot
  * 
  * Single source of truth for trip financial numbers across all tabs.
- * "Spent" always means "paid only" — amounts with status='paid' in trip_payments.
+ * Fetches all cost sources internally: activity_costs, hotel, flight, and payments.
  * 
  * Outputs (all in cents):
- *   - tripTotalCents:       Total expected cost (itinerary + flights + hotel + manual)
+ *   - tripTotalCents:       Total expected cost (activities + flights + hotel)
  *   - paidCents:            Sum of trip_payments with status='paid'
  *   - toBePaidCents:        tripTotalCents - paidCents (clamped >= 0)
  *   - budgetTotalCents:     User-set budget from trip settings
- *   - budgetRemainingCents: budgetTotalCents - paidCents
- *   - plannedUnpaidCents:   tripTotalCents - paidCents (same as toBePaidCents, for label clarity)
+ *   - budgetRemainingCents: budgetTotalCents - tripTotalCents
+ *   - plannedUnpaidCents:   tripTotalCents - paidCents (same as toBePaidCents)
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -27,26 +27,18 @@ export interface FinancialSnapshot {
   loading: boolean;
 }
 
-interface UseTripFinancialSnapshotOptions {
-  tripId: string;
-  /** 
-   * The computed trip total in cents from the parent component.
-   * This should include itinerary activities + flights + hotel + manual expenses.
-   * By accepting this as a prop we avoid duplicating the complex payableItems logic.
-   */
-  tripTotalCents: number;
-}
-
-export function useTripFinancialSnapshot({ tripId, tripTotalCents }: UseTripFinancialSnapshotOptions): FinancialSnapshot {
+export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   const [paidCents, setPaidCents] = useState(0);
   const [budgetTotalCents, setBudgetTotalCents] = useState(0);
+  const [activityTotalCents, setActivityTotalCents] = useState(0);
+  const [hotelCents, setHotelCents] = useState(0);
+  const [flightCents, setFlightCents] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
     
-    // Fetch paid payments and budget settings in parallel
-    const [paymentsResult, budgetResult] = await Promise.all([
+    const [paymentsResult, tripResult, activityResult] = await Promise.all([
       supabase
         .from('trip_payments')
         .select('amount_cents, quantity, status')
@@ -54,9 +46,14 @@ export function useTripFinancialSnapshot({ tripId, tripTotalCents }: UseTripFina
         .eq('status', 'paid'),
       supabase
         .from('trips')
-        .select('budget_total_cents')
+        .select('budget_total_cents, hotel_selection, flight_selection')
         .eq('id', tripId)
         .single(),
+      supabase
+        .from('v_trip_total')
+        .select('total_all_travelers_usd')
+        .eq('trip_id', tripId)
+        .maybeSingle(),
     ]);
 
     // Sum paid amounts
@@ -67,7 +64,31 @@ export function useTripFinancialSnapshot({ tripId, tripTotalCents }: UseTripFina
     setPaidCents(paid);
 
     // Budget
-    setBudgetTotalCents(budgetResult.data?.budget_total_cents || 0);
+    setBudgetTotalCents(tripResult.data?.budget_total_cents || 0);
+
+    // Activity costs from v_trip_total (USD → cents)
+    const actCents = Math.round((activityResult.data?.total_all_travelers_usd || 0) * 100);
+    setActivityTotalCents(actCents);
+
+    // Hotel total from selection JSON
+    const hotel = tripResult.data?.hotel_selection as any;
+    if (hotel) {
+      let hTotal = hotel.totalPrice || 0;
+      if (!hTotal && hotel.pricePerNight && hotel.checkIn && hotel.checkOut) {
+        const nights = Math.max(1, Math.ceil(
+          (new Date(hotel.checkOut).getTime() - new Date(hotel.checkIn).getTime()) / (1000 * 60 * 60 * 24)
+        ));
+        hTotal = hotel.pricePerNight * nights;
+      }
+      setHotelCents(Math.round(hTotal * 100));
+    } else {
+      setHotelCents(0);
+    }
+
+    // Flight total from selection JSON
+    const flight = tripResult.data?.flight_selection as any;
+    setFlightCents(flight?.price ? Math.round(flight.price * 100) : 0);
+
     setLoading(false);
   }, [tripId]);
 
@@ -76,8 +97,9 @@ export function useTripFinancialSnapshot({ tripId, tripTotalCents }: UseTripFina
   }, [fetchData]);
 
   return useMemo(() => {
+    const tripTotalCents = activityTotalCents + hotelCents + flightCents;
     const toBePaid = Math.max(0, tripTotalCents - paidCents);
-    const budgetRemaining = budgetTotalCents - paidCents;
+    const budgetRemaining = budgetTotalCents - tripTotalCents;
     const paidPct = tripTotalCents > 0 ? (paidCents / tripTotalCents) * 100 : 0;
 
     return {
@@ -90,5 +112,5 @@ export function useTripFinancialSnapshot({ tripId, tripTotalCents }: UseTripFina
       paidPercent: Math.min(paidPct, 100),
       loading,
     };
-  }, [tripTotalCents, paidCents, budgetTotalCents, loading]);
+  }, [activityTotalCents, hotelCents, flightCents, paidCents, budgetTotalCents, loading]);
 }
