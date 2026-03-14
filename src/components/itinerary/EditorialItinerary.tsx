@@ -1182,7 +1182,7 @@ export function EditorialItinerary({
     }));
 
     // Sync to budget ledger (planned entries)
-    syncItineraryToBudget(tripId, daysForSync)
+    syncItineraryToBudget(tripId, daysForSync, travelers)
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
         queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
