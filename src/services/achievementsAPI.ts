@@ -396,7 +396,7 @@ export async function syncRetroactiveAchievements(): Promise<number> {
       .from('trips')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
-      .not('itinerary', 'is', null);
+      .not('itinerary_data', 'is', null);
 
     if (itinCount && itinCount > 0) {
       const r = await unlockAchievement('first_itinerary', { retroactive: true });
