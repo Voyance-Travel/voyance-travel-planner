@@ -741,7 +741,21 @@ export default function TripDetail() {
         .select('id', { count: 'exact', head: true })
         .eq('trip_id', trip.id);
 
-      if ((count ?? 0) > 0) return; // Has progress, not stuck
+      if ((count ?? 0) > 0) {
+        // Has days in table — check if itinerary_data also has days (generation completed but status stuck)
+        const itinData = (trip.itinerary_data as { days?: unknown[] }) || {};
+        if (Array.isArray(itinData.days) && itinData.days.length > 0) {
+          // Generation completed, just fix the stale status
+          console.log(`[TripDetail] Stuck-heal: itinerary_data has ${itinData.days.length} days but status is 'generating' — correcting to 'ready'`);
+          stuckHealAttempted.current = true;
+          await supabase.from('trips').update({
+            itinerary_status: 'ready',
+            updated_at: new Date().toISOString(),
+          }).eq('id', trip.id);
+          queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        }
+        return; // Has progress, not stuck
+      }
 
       stuckHealAttempted.current = true;
       console.log(`[TripDetail] Detected stuck journey leg ${trip.id} — attempting self-heal`);
