@@ -102,7 +102,7 @@ export function useGenerationPoller({
       const [tripResult, daysResult] = await Promise.all([
         supabase
           .from('trips')
-          .select('itinerary_status, itinerary_data, metadata')
+          .select('itinerary_status, itinerary_data, metadata, start_date, end_date')
           .eq('id', tripId)
           .single(),
         supabase
@@ -118,8 +118,19 @@ export function useGenerationPoller({
       const itineraryStatus = data.itinerary_status as string;
       const meta = (data.metadata as Record<string, unknown>) || {};
       const metaCompletedDays = (meta.generation_completed_days as number) || 0;
-      const totalDays = (meta.generation_total_days as number) || 0;
+      const metaTotalDays = (meta.generation_total_days as number) || 0;
       const currentCity = (meta.generation_current_city as string) || null;
+
+      // Compute canonical total days from date span — this is the source of truth.
+      // Metadata can be inflated from legacy multi-city sum-of-days_total.
+      let canonicalTotalDays = 0;
+      if (data.start_date && data.end_date) {
+        const s = new Date(data.start_date as string);
+        const e = new Date(data.end_date as string);
+        canonicalTotalDays = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      }
+      // Use canonical when available; fall back to metadata only if dates missing
+      const totalDays = canonicalTotalDays > 0 ? canonicalTotalDays : metaTotalDays;
 
       // Extract partial days from itinerary_data
       const itineraryData = (data.itinerary_data as Record<string, unknown>) || {};
@@ -285,6 +296,14 @@ export function useGenerationPoller({
               throw new Error('Trip not found');
             }
 
+            // Compute canonical total for requestedDays to prevent backend re-inflation
+            let resumeTotalDays = totalDays;
+            if (tripData.start_date && tripData.end_date) {
+              const rs = new Date(tripData.start_date as string);
+              const re = new Date(tripData.end_date as string);
+              resumeTotalDays = Math.ceil((re.getTime() - rs.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            }
+
             const { error: resumeError } = await supabase.functions.invoke('generate-itinerary', {
               body: {
                 action: 'generate-trip',
@@ -298,6 +317,7 @@ export function useGenerationPoller({
                 budgetTier: tripData.budget_tier,
                 isMultiCity: !!tripData.is_multi_city,
                 creditsCharged: 0,
+                requestedDays: resumeTotalDays,
                 resumeFromDay: completedDays + 1,
                 isResume: true,
               },

@@ -10542,13 +10542,20 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
       }
 
-      // Calculate total days — for multi-city, prefer sum of nights from trip_cities
+      // Calculate total days from canonical date span (inclusive end date).
+      // This is the single source of truth — never override with sum of city days_total
+      // because summing per-city inclusive counts double-counts transition days.
       const sDate = new Date(startDate);
       const eDate = new Date(endDate);
       let totalDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-      // For multi-city trips, override totalDays with sum of city nights to prevent
-      // date-arithmetic mismatches from producing extra/missing days
+      // If frontend provided requestedDays (e.g. from a resume with canonical count), honor it
+      if (requestedDays && requestedDays > 0 && requestedDays !== totalDays) {
+        console.log(`[generate-trip] Using requestedDays=${requestedDays} (date-based=${totalDays})`);
+        totalDays = requestedDays;
+      }
+
+      // Log multi-city city-sum for diagnostics only (never override totalDays)
       if (isMultiCity) {
         try {
           const { data: tripCitiesForCount } = await supabase
@@ -10556,21 +10563,17 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             .select('nights, days_total')
             .eq('trip_id', tripId);
           if (tripCitiesForCount && tripCitiesForCount.length > 0) {
-            // days_total now stores inclusive day count; fall back to nights+1 for legacy rows
             const sumDays = tripCitiesForCount.reduce((sum: number, c: any) => {
               const dt = (c as any).days_total;
               const n = (c as any).nights;
-              // If days_total is set, trust it (already inclusive after fix).
-              // Otherwise derive from nights + 1.
               return sum + (dt || ((n || 1) + 1));
             }, 0);
-            if (sumDays > 0 && sumDays !== totalDays) {
-              console.log(`[generate-trip] Multi-city totalDays corrected: date-based=${totalDays}, city-days-sum=${sumDays}`);
-              totalDays = sumDays;
+            if (sumDays !== totalDays) {
+              console.log(`[generate-trip] Multi-city diagnostic: date-based totalDays=${totalDays}, city-days-sum=${sumDays} (using date-based)`);
             }
           }
         } catch (e) {
-          console.warn('[generate-trip] Could not query trip_cities for totalDays correction:', e);
+          console.warn('[generate-trip] Could not query trip_cities for diagnostics:', e);
         }
       }
 

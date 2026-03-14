@@ -984,11 +984,25 @@ export default function TripDetail() {
         if (tripData.itinerary_status === 'generating') {
           const staleItinData = tripData.itinerary_data as { days?: unknown[] } | null;
           const staleJsonDays = Array.isArray(staleItinData?.days) ? staleItinData!.days.length : 0;
-          if (staleJsonDays > 0 && (staleJsonDays >= itineraryDaysDbCount || itineraryDaysDbCount === 0)) {
-            console.warn(`[TripDetail] Self-heal: status is 'generating' but itinerary_data has ${staleJsonDays} days — correcting to 'ready'`);
+          // Compute canonical expected days from trip dates
+          let canonicalExpected = 0;
+          if (tripData.start_date && tripData.end_date) {
+            try {
+              canonicalExpected = differenceInDays(
+                parseLocalDate(tripData.end_date),
+                parseLocalDate(tripData.start_date)
+              ) + 1;
+            } catch { canonicalExpected = 0; }
+          }
+          const effectiveExpected = canonicalExpected > 0 ? canonicalExpected : ((tripData.metadata as any)?.generation_total_days || 0);
+          // Only mark ready if we have ALL expected days (not just "some days exist")
+          const bestDayCount = Math.max(staleJsonDays, itineraryDaysDbCount);
+          if (effectiveExpected > 0 && bestDayCount >= effectiveExpected) {
+            console.warn(`[TripDetail] Self-heal: status is 'generating' but ${bestDayCount} days exist (expected ${effectiveExpected}) — correcting to 'ready'`);
             if (tripId) {
               supabase.from('trips').update({
                 itinerary_status: 'ready',
+                metadata: { ...(tripData.metadata as any || {}), generation_total_days: effectiveExpected },
                 updated_at: new Date().toISOString(),
               }).eq('id', tripId).then(() => {});
             }
