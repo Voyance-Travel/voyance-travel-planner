@@ -428,29 +428,12 @@ export function PaymentsTab({
 
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
-  // Calculate totals using payableItems as the single source of truth.
-  // This ensures the total always matches what the user sees in the list
-  // (which correctly includes flights, hotels, AND activities).
-  const fallbackTotal = payableItems.reduce((sum, item) => sum + item.amountCents, 0);
-  const estimatedTotal = fallbackTotal;
-
-  // For paid amount: prefer canonical summary for activity costs,
-  // but add in any paid flights/hotels/manual items from trip_payments
-  const activityPaidAmount = canonicalSummary
-    ? Math.round((canonicalSummary.total_paid_usd || 0) * 100)
-    : 0;
-  const essentialPaidAmount = payableItems
-    .filter(item => (item.type === 'flight' || item.type === 'hotel') && item.payment?.status === 'paid')
-    .reduce((sum, item) => sum + item.amountCents, 0);
-  const manualPaidAmount = payableItems
-    .filter(item => item.id.startsWith('manual-') && item.payment?.status === 'paid')
-    .reduce((sum, item) => sum + item.amountCents, 0);
-  const paidAmount = canonicalSummary
-    ? activityPaidAmount + essentialPaidAmount + manualPaidAmount
-    : payableItems
-        .filter(item => item.payment?.status === 'paid')
-        .reduce((sum, item) => sum + item.amountCents, 0);
-  const unpaidAmount = estimatedTotal - paidAmount;
+  // Use the unified financial snapshot as the canonical "Trip Total"
+  // so Payments matches Itinerary header and Budget tab exactly.
+  const financialSnapshot = useTripFinancialSnapshot(tripId);
+  const estimatedTotal = financialSnapshot.tripTotalCents;
+  const paidAmount = financialSnapshot.paidCents;
+  const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
   // Group items by category
