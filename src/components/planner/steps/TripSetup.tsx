@@ -26,8 +26,11 @@ interface TripSetupProps {
 
 export default function TripSetup({ formData, updateFormData, onContinue }: TripSetupProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [startOpen, setStartOpen] = useState(false);
+  const [endOpen, setEndOpen] = useState(false);
 
   const today = getLocalToday();
+  const todayDate = parseLocalDate(today);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
