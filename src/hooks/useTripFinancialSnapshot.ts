@@ -25,6 +25,7 @@ export interface FinancialSnapshot {
   plannedUnpaidCents: number;
   paidPercent: number;
   loading: boolean;
+  refetch: () => void;
 }
 
 export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
@@ -75,6 +76,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     fetchData();
   }, [fetchData]);
 
+  const refetch = useCallback(() => fetchData(), [fetchData]);
+
   return useMemo(() => {
     const toBePaid = Math.max(0, tripTotalCents - paidCents);
     const budgetRemaining = budgetTotalCents - tripTotalCents;
@@ -89,6 +92,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       plannedUnpaidCents: toBePaid,
       paidPercent: Math.min(paidPct, 100),
       loading,
+      refetch,
     };
-  }, [tripTotalCents, paidCents, budgetTotalCents, loading]);
+  }, [tripTotalCents, paidCents, budgetTotalCents, loading, refetch]);
 }

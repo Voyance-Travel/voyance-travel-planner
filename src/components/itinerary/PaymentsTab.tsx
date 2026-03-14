@@ -34,6 +34,7 @@ import {
   type TripPayment,
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
+import { markActivityPaid } from '@/services/activityCostService';
 import { useTripMembers, addTripMember, type TripMember } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import { toast } from 'sonner';
@@ -503,6 +504,9 @@ export function PaymentsTab({
 
       if (error) throw error;
 
+      // Sync activity_costs.is_paid so v_payments_summary reflects the payment
+      await markActivityPaid(tripId, markPaidModal.id, markPaidModal.amountCents / 100);
+
       // Optimistic update — immediately reflect in the UI
       const optimisticPayment: TripPayment = {
         id: `optimistic-${Date.now()}`,
@@ -531,6 +535,7 @@ export function PaymentsTab({
       setSelectedMemberId('');
       // Background refetch to sync real IDs and summary
       fetchPayments(300);
+      financialSnapshot.refetch();
     } catch (err) {
       console.error('Error marking paid:', err);
       toast.error('Failed to update');
@@ -604,8 +609,16 @@ export function PaymentsTab({
 
       if (error) throw error;
 
+      // Reset activity_costs.is_paid so financial snapshot updates
+      await supabase
+        .from('activity_costs')
+        .update({ is_paid: false, paid_amount_usd: 0, paid_at: null })
+        .eq('trip_id', tripId)
+        .eq('activity_id', item.id);
+
       toast.success('Payment unmarked');
       await fetchPayments(150);
+      financialSnapshot.refetch();
       
     } catch (err) {
       console.error('Error unmarking payment:', err);
