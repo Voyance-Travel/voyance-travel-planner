@@ -5262,11 +5262,14 @@ export function EditorialItinerary({
                   };
                 });
 
-                if (applied) {
-                  syncBudgetFromDays(updated);
-                }
+                updatedDays = updated;
                 return updated;
               });
+
+              // Sync activity_costs outside of setDays updater
+              if (updatedDays.length > 0) {
+                syncBudgetFromDays(updatedDays);
+              }
 
               if (applied) {
                 setHasChanges(true);
