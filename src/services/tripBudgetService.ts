@@ -461,9 +461,17 @@ export async function syncItineraryToBudget(
   for (const day of days) {
     for (const activity of day.activities) {
       const rawCost = activity.cost;
-      const costAmount = typeof rawCost === 'number'
-        ? rawCost
-        : (rawCost?.amount || rawCost?.total || rawCost?.perPerson || 0);
+      // Determine cost amount and whether it's already a group total
+      let costAmount: number;
+      let isGroupTotal = false;
+      if (typeof rawCost === 'number') {
+        costAmount = rawCost;
+      } else if (rawCost?.total) {
+        costAmount = rawCost.total;
+        isGroupTotal = true; // .total already accounts for all travelers
+      } else {
+        costAmount = rawCost?.amount || rawCost?.perPerson || 0;
+      }
       if (costAmount > 0) {
         // Skip non-payable activities (free time, downtime, transfers)
         const titleLower = (activity.title || '').toLowerCase();
@@ -484,11 +492,15 @@ export async function syncItineraryToBudget(
           budgetCategory = 'hotel';
         }
         
+        // Multiply per-person costs by traveler count; skip if already a group total
+        const baseCents = Math.round(costAmount * 100);
+        const totalCents = isGroupTotal ? baseCents : baseCents * Math.max(travelers, 1);
+        
         entries.push({
           trip_id: tripId,
           category: budgetCategory,
           entry_type: 'planned',
-          amount_cents: Math.round(costAmount * 100), // Convert to cents
+          amount_cents: totalCents,
           currency: (typeof rawCost === 'object' && rawCost?.currency) ? rawCost.currency : 'USD',
           description: activity.title,
           day_number: day.dayNumber,
