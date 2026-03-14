@@ -81,6 +81,7 @@ import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripBudget } from '@/hooks/useTripBudget';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 import { syncItineraryToBudget } from '@/services/tripBudgetService';
+import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
 import { LockedField } from './LockedField';
@@ -1177,7 +1178,15 @@ export function EditorialItinerary({
         id: act.id,
         title: act.title || 'Activity',
         category: act.category || act.type || 'activities',
-        cost: act.cost ? (typeof act.cost === 'number' ? { amount: act.cost, currency: 'USD' } : { amount: (act.cost as any).amount || (act.cost as any).total || (act.cost as any).perPerson || 0, currency: (act.cost as any).currency || 'USD' }) : undefined,
+        cost: act.cost ? (typeof act.cost === 'number'
+          ? { amount: act.cost, currency: 'USD' }
+          : {
+              amount: (act.cost as any).amount,
+              total: (act.cost as any).total,
+              perPerson: (act.cost as any).perPerson,
+              basis: (act.cost as any).basis,
+              currency: (act.cost as any).currency || 'USD',
+            }) : undefined,
       })),
     }));
 
@@ -2352,25 +2361,37 @@ export function EditorialItinerary({
     }
   }, [tripId]);
 
-  // ─── Canonical trip total from activity_costs table (single source of truth) ───
-  const [canonicalTripTotal, setCanonicalTripTotal] = useState<number | null>(null);
-  useEffect(() => {
-    import('@/services/activityCostService').then(({ getTripTotal }) => {
-      getTripTotal(tripId).then(data => {
-        if (data && data.total_all_travelers_usd > 0) {
-          setCanonicalTripTotal(data.total_all_travelers_usd);
-        }
-      });
-    });
-  }, [tripId, days]); // re-fetch when days change
-
+  // ─── Canonical trip total from useTripFinancialSnapshot (single source of truth) ───
+  const financialSnapshot = useTripFinancialSnapshot(tripId);
+  
   // Calculate totals with smart estimation using destination-aware pricing
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry), 0);
   const flightCost = allFlightLegs.reduce((sum, leg) => sum + (leg.price || 0), 0);
-  const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
-  // Prefer canonical total from activity_costs table when available
+  const hotelCost = (() => {
+    // Multi-hotel: sum totalPrice (or pricePerNight * nights) across all hotels
+    if (allHotels && allHotels.length > 0) {
+      return allHotels.reduce((sum, h) => {
+        const hotel = h.hotel;
+        if (!hotel) return sum;
+        if (hotel.totalPrice) return sum + hotel.totalPrice;
+        if (hotel.pricePerNight && h.checkInDate && h.checkOutDate) {
+          const nights = Math.max(1, Math.ceil(
+            (parseLocalDate(h.checkOutDate).getTime() - parseLocalDate(h.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
+          ));
+          return sum + hotel.pricePerNight * nights;
+        }
+        return sum;
+      }, 0);
+    }
+    // Legacy single hotel
+    if (hotelSelection?.totalPrice) return hotelSelection.totalPrice;
+    return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
+  })();
+  
+  // Use financial snapshot as the canonical total when available (matches Expected Spend exactly)
   const jsTotalCost = totalActivityCost + flightCost + hotelCost;
-  const totalCost = canonicalTripTotal !== null ? (canonicalTripTotal + flightCost + hotelCost) : jsTotalCost;
+  const snapshotTotalUsd = financialSnapshot.tripTotalCents / 100;
+  const totalCost = !financialSnapshot.loading && snapshotTotalUsd > 0 ? snapshotTotalUsd : jsTotalCost;
   
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
@@ -2942,8 +2963,6 @@ export function EditorialItinerary({
       }
 
       setRegenerationProgress(100);
-      // Immediately clear canonical total so JS-calculated total takes over
-      setCanonicalTripTotal(null);
       await refetchItineraryFromDb();
       // Sync budget from regenerated days and invalidate all budget queries
       syncBudgetFromDays(generatedDays);
@@ -2954,16 +2973,9 @@ export function EditorialItinerary({
       toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
 
       // Async rebuild activity_costs so DB stays in sync for future page loads
-      import('@/services/activityCostService').then(({ repairTripCosts, getTripTotal }) => {
-        repairTripCosts(tripId).then((result) => {
-          if (result.success) {
-            getTripTotal(tripId).then((data) => {
-              if (data && data.total_all_travelers_usd > 0) {
-                setCanonicalTripTotal(data.total_all_travelers_usd);
-              }
-            });
-          }
-        }).catch(err => console.error('[Regeneration] repair-trip-costs failed:', err));
+      import('@/services/activityCostService').then(({ repairTripCosts }) => {
+        repairTripCosts(tripId)
+          .catch(err => console.error('[Regeneration] repair-trip-costs failed:', err));
       });
     } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);

@@ -386,7 +386,15 @@ export function ItineraryAssistant({
               id: act.id,
               title: act.title || act.name || 'Activity',
               category: String(act.category || act.type || 'activities'),
-              cost: act.cost ? (typeof act.cost === 'number' ? { amount: act.cost, currency: 'USD' } : { amount: act.cost.amount ?? 0, currency: act.cost.currency ?? 'USD' }) : undefined,
+              cost: act.cost ? (typeof act.cost === 'number'
+                ? { amount: act.cost, currency: 'USD' }
+                : {
+                    amount: act.cost.amount,
+                    total: (act.cost as any).total,
+                    perPerson: (act.cost as any).perPerson,
+                    basis: (act.cost as any).basis,
+                    currency: act.cost.currency ?? 'USD',
+                  }) : undefined,
             })),
           }));
           syncItineraryToBudget(tripId, daysForSync, travelers)

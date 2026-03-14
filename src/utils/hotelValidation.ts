@@ -150,6 +150,8 @@ function normalizeHotel(
     rating: hotel.rating as number | undefined,
     isManualEntry: hotel.isManualEntry as boolean | undefined,
     isEnriched: hotel.isEnriched as boolean | undefined,
+    totalPrice: hotel.totalPrice as number | undefined,
+    pricePerNight: hotel.pricePerNight as number | undefined,
   };
 }
 
