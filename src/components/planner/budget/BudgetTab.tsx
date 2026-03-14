@@ -423,7 +423,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           </CardContent>
         </Card>
 
-        {/* Budget Remaining Card — budget minus paid only */}
+        {/* Budget Remaining Card — budget minus expected spend */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -441,7 +441,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               </span>
               {(settings?.budget_total_cents || 0) > 0 && (
                 <span className="text-xs text-muted-foreground">
-                  ({Math.round(Math.max(0, 100 - (snapshot.paidCents / (settings?.budget_total_cents || 1)) * 100))}%)
+                  ({Math.round(Math.max(0, 100 - (snapshot.tripTotalCents / (settings?.budget_total_cents || 1)) * 100))}%)
                 </span>
               )}
             </div>
