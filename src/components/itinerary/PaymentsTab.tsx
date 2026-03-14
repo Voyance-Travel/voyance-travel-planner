@@ -756,7 +756,7 @@ export function PaymentsTab({
       setAssignMemberIds([]);
       // Background sync (no await, no artificial delay)
       fetchPayments(0);
-      fetchSummary();
+      
     } catch (err) {
       console.error('Error assigning member:', err);
       toast.error(`Failed to assign: ${err instanceof Error ? err.message : 'Unknown error'}`);
