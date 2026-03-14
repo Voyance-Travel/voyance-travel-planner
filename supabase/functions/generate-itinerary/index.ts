@@ -10691,7 +10691,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     // The chain continues server-side even if the user closes their browser.
     // ==========================================================================
     if (action === 'generate-trip-day') {
-      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays } = params;
+      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId } = params;
 
       if (!tripId || !dayNumber || !totalDays) {
         return new Response(
@@ -10700,9 +10700,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
-      console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId}`);
+      console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'})`);
 
-      // Guard: check trip is still in "generating" state (user might have cancelled)
+      // Guard: check trip is still in "generating" state AND run ID matches (user might have cancelled or a new run started)
       const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data').eq('id', tripId).single();
       if (!tripCheck || tripCheck.itinerary_status === 'cancelled' || tripCheck.itinerary_status === 'ready') {
         console.log(`[generate-trip-day] Trip ${tripId} status is ${tripCheck?.itinerary_status}, stopping chain`);
@@ -10710,6 +10710,19 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           JSON.stringify({ status: tripCheck?.itinerary_status || 'cancelled', dayNumber }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+
+      // Run ID idempotency guard: abort if a newer run has started
+      if (generationRunId) {
+        const tripMeta = (tripCheck.metadata as Record<string, unknown>) || {};
+        const currentRunId = tripMeta.generation_run_id as string | undefined;
+        if (currentRunId && currentRunId !== generationRunId) {
+          console.log(`[generate-trip-day] Stale run detected: this=${generationRunId}, current=${currentRunId}. Aborting.`);
+          return new Response(
+            JSON.stringify({ status: 'stale_run', dayNumber, message: 'A newer generation run has started' }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
       // Resolve multi-city mapping
