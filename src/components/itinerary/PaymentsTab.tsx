@@ -504,6 +504,9 @@ export function PaymentsTab({
 
       if (error) throw error;
 
+      // Sync activity_costs.is_paid so v_payments_summary reflects the payment
+      await markActivityPaid(tripId, markPaidModal.id, markPaidModal.amountCents / 100);
+
       // Optimistic update — immediately reflect in the UI
       const optimisticPayment: TripPayment = {
         id: `optimistic-${Date.now()}`,
