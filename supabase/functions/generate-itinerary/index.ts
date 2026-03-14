@@ -1986,6 +1986,7 @@ ${(() => {
   if (recurringPrevious.length > 0) {
     lines += `THESE ARE MULTI-DAY EVENTS the traveler is attending across multiple days. CREATE A FULL ATTENDANCE ACTIVITY for each (not just a transfer to the venue): ${recurringPrevious.join(', ')}\n`;
   }
+  lines += `\n🍽️ MEAL VARIETY RULE: Every breakfast, lunch, and dinner MUST be at a DIFFERENT restaurant/café than any previous day. Never recommend the same venue twice across the trip. Variety in cuisine type is also encouraged.\n`;
   return lines;
 })()}
 NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style.
