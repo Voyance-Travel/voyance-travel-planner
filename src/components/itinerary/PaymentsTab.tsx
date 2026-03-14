@@ -523,10 +523,7 @@ export function PaymentsTab({
       } as TripPayment;
       setPayments(prev => [...prev, optimisticPayment]);
       // Optimistic summary update for instant UI feedback
-      setCanonicalSummary(prev => prev ? {
-        ...prev,
-        total_paid_usd: (prev.total_paid_usd || 0) + markPaidModal.amountCents / 100,
-      } : null);
+      // Summary will update on next snapshot refetch
 
       toast.success('Marked as paid');
       setMarkPaidModal(null);
