@@ -11124,6 +11124,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             generation_heartbeat: new Date().toISOString(),
             generation_total_days: totalDays,
             generation_current_city: null,
+            chain_broken_at_day: null,
+            chain_error: null,
           },
         }).eq('id', tripId);
 
