@@ -608,6 +608,15 @@ export function PaymentsTab({
       
       if (idsToDelete.length === 0) return;
 
+      const removedPaidCents = (item.allPayments.length > 0
+        ? item.allPayments
+        : item.payment
+          ? [item.payment]
+          : []
+      )
+        .filter(p => p.status === 'paid')
+        .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0);
+
       const { error } = await supabase
         .from('trip_payments')
         .delete()
@@ -622,6 +631,11 @@ export function PaymentsTab({
         .update({ is_paid: false, paid_amount_usd: 0, paid_at: null })
         .eq('trip_id', tripId)
         .eq('activity_id', realItemId);
+
+      setTotals(prev => ({
+        ...prev,
+        paid: Math.max(0, prev.paid - removedPaidCents),
+      }));
 
       toast.success('Payment unmarked');
       await fetchPayments(150);
