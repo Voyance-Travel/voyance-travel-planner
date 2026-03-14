@@ -504,7 +504,7 @@ export async function syncItineraryToBudget(
         
         // Multiply per-person costs by traveler count; skip if already a group total
         const baseCents = Math.round(costAmount * 100);
-        const totalCents = isGroupTotal ? baseCents : baseCents * Math.max(travelers, 1);
+        const totalCents = isPerPerson ? baseCents * Math.max(travelers, 1) : baseCents;
         
         entries.push({
           trip_id: tripId,
