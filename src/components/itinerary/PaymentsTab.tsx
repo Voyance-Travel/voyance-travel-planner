@@ -530,8 +530,10 @@ export function PaymentsTab({
         updated_at: new Date().toISOString(),
       } as TripPayment;
       setPayments(prev => [...prev, optimisticPayment]);
-      // Optimistic summary update for instant UI feedback
-      // Summary will update on next snapshot refetch
+      setTotals(prev => ({
+        ...prev,
+        paid: prev.paid + markPaidModal.amountCents,
+      }));
 
       toast.success('Marked as paid');
       setMarkPaidModal(null);
