@@ -54,6 +54,7 @@ interface ItineraryAssistantProps {
   currentDayNumber?: number;
   days: ItineraryDay[];
   isLocalTrip?: boolean;
+  travelers?: number;
   onItineraryUpdate?: (updatedDays: ItineraryDay[]) => void;
   accommodationInfo?: {
     name: string;
