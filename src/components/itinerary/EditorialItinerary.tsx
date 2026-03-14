@@ -80,7 +80,7 @@ import { BudgetTab } from '@/components/planner/budget/BudgetTab';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripBudget } from '@/hooks/useTripBudget';
 import { useTripMembers } from '@/services/tripBudgetAPI';
-import { syncItineraryToBudget } from '@/services/tripBudgetService';
+
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
@@ -1190,16 +1190,7 @@ export function EditorialItinerary({
       })),
     }));
 
-    // Sync to budget ledger (planned entries)
-    syncItineraryToBudget(tripId, daysForSync, travelers)
-      .then(() => {
-        queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
-        queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
-        queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
-      })
-      .catch(err => console.error('[EditorialItinerary] Budget sync failed:', err));
-
-    // Also sync to activity_costs table so v_payments_summary stays in sync
+    // Sync to activity_costs table (single source of truth for all cost totals)
     import('@/services/activityCostService').then(({ syncActivitiesToCostTable }) => {
       const activitiesForCostTable: Array<{
         id: string;
@@ -1244,15 +1235,15 @@ export function EditorialItinerary({
       budgetSyncedRef.current = true;
       syncBudgetFromDays(rawDays);
 
-      // Also ensure flight/hotel committed costs are in the budget ledger
+      // Sync flight/hotel costs to activity_costs table
       import('@/services/budgetLedgerSync').then(({ syncFlightToLedger, syncHotelToLedger }) => {
         if (flightSelection) {
           syncFlightToLedger(tripId, flightSelection as any)
-            .catch(err => console.error('[EditorialItinerary] Flight ledger sync failed:', err));
+            .catch(err => console.error('[EditorialItinerary] Flight cost sync failed:', err));
         }
         if (hotelSelection) {
           syncHotelToLedger(tripId, hotelSelection as any)
-            .catch(err => console.error('[EditorialItinerary] Hotel ledger sync failed:', err));
+            .catch(err => console.error('[EditorialItinerary] Hotel cost sync failed:', err));
         }
       });
     }

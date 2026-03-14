@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getAppUrl } from '@/utils/getAppUrl';
 import { estimateCostSync } from '@/lib/cost-estimation';
-import { getPaymentsSummary, type PaymentsSummary } from '@/services/activityCostService';
+
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JourneySpendingSummary } from './JourneySpendingSummary';
@@ -402,31 +402,7 @@ export function PaymentsTab({
     return items;
   }, [flightSelection, hotelSelection, days, payments]);
 
-  // ─── Canonical totals from activity_costs table + budget ledger ───
-  const [canonicalSummary, setCanonicalSummary] = useState<PaymentsSummary | null>(null);
-  const [ledgerPlannedCents, setLedgerPlannedCents] = useState<number | null>(null);
-  const [ledgerCommittedCents, setLedgerCommittedCents] = useState<number | null>(null);
-  const fetchSummary = useCallback(async () => {
-    const [summary] = await Promise.all([
-      getPaymentsSummary(tripId),
-      supabase
-        .from('trip_budget_summary')
-        .select('planned_total_cents, total_committed_cents')
-        .eq('trip_id', tripId)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data?.planned_total_cents) {
-            setLedgerPlannedCents(data.planned_total_cents);
-          }
-          if ((data as any)?.total_committed_cents) {
-            setLedgerCommittedCents((data as any).total_committed_cents);
-          }
-        }),
-    ]);
-    setCanonicalSummary(summary);
-  }, [tripId]);
-
-  useEffect(() => { fetchSummary(); }, [fetchSummary]);
+  // All totals now come from the unified financial snapshot (activity_costs views)
 
   // Use the unified financial snapshot as the canonical "Trip Total"
   // so Payments matches Itinerary header and Budget tab exactly.
@@ -547,10 +523,7 @@ export function PaymentsTab({
       } as TripPayment;
       setPayments(prev => [...prev, optimisticPayment]);
       // Optimistic summary update for instant UI feedback
-      setCanonicalSummary(prev => prev ? {
-        ...prev,
-        total_paid_usd: (prev.total_paid_usd || 0) + markPaidModal.amountCents / 100,
-      } : null);
+      // Summary will update on next snapshot refetch
 
       toast.success('Marked as paid');
       setMarkPaidModal(null);
@@ -558,7 +531,6 @@ export function PaymentsTab({
       setSelectedMemberId('');
       // Background refetch to sync real IDs and summary
       fetchPayments(300);
-      fetchSummary();
     } catch (err) {
       console.error('Error marking paid:', err);
       toast.error('Failed to update');
@@ -607,7 +579,6 @@ export function PaymentsTab({
       setNewExpenseAmount('');
       setNewExpenseType('flight');
       await fetchPayments(150);
-      await fetchSummary();
     } catch (err) {
       console.error('Error adding expense:', err);
       toast.error('Failed to add expense');
@@ -635,7 +606,7 @@ export function PaymentsTab({
 
       toast.success('Payment unmarked');
       await fetchPayments(150);
-      await fetchSummary();
+      
     } catch (err) {
       console.error('Error unmarking payment:', err);
       toast.error('Failed to update');
@@ -785,7 +756,7 @@ export function PaymentsTab({
       setAssignMemberIds([]);
       // Background sync (no await, no artificial delay)
       fetchPayments(0);
-      fetchSummary();
+      
     } catch (err) {
       console.error('Error assigning member:', err);
       toast.error(`Failed to assign: ${err instanceof Error ? err.message : 'Unknown error'}`);

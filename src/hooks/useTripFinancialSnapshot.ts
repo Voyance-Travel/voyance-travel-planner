@@ -2,11 +2,11 @@
  * useTripFinancialSnapshot
  * 
  * Single source of truth for trip financial numbers across all tabs.
- * Fetches all cost sources internally: activity_costs, hotel, flight, and payments.
+ * Reads from activity_costs via v_trip_total and v_payments_summary views.
  * 
  * Outputs (all in cents):
- *   - tripTotalCents:       Total expected cost (activities + flights + hotel)
- *   - paidCents:            Sum of trip_payments with status='paid'
+ *   - tripTotalCents:       Total expected cost from activity_costs (activities + flights + hotel)
+ *   - paidCents:            Sum of paid amounts in activity_costs (is_paid = true)
  *   - toBePaidCents:        tripTotalCents - paidCents (clamped >= 0)
  *   - budgetTotalCents:     User-set budget from trip settings
  *   - budgetRemainingCents: budgetTotalCents - tripTotalCents
@@ -36,65 +36,38 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   const fetchData = useCallback(async () => {
     if (!tripId) return;
     
-    const [paymentsResult, tripResult, summaryResult] = await Promise.all([
+    const [tripTotalResult, paymentsSummaryResult, tripResult] = await Promise.all([
+      // v_trip_total: total_all_travelers_usd from activity_costs
       supabase
-        .from('trip_payments')
-        .select('amount_cents, quantity, status')
-        .eq('trip_id', tripId)
-        .eq('status', 'paid'),
-      supabase
-        .from('trips')
-        .select('budget_total_cents, hotel_selection, flight_selection')
-        .eq('id', tripId)
-        .single(),
-      supabase
-        .from('trip_budget_summary')
-        .select('planned_total_cents, total_committed_cents, committed_hotel_cents, committed_flight_cents')
+        .from('v_trip_total')
+        .select('total_all_travelers_usd')
         .eq('trip_id', tripId)
         .maybeSingle(),
+      // v_payments_summary: paid/unpaid from activity_costs
+      supabase
+        .from('v_payments_summary')
+        .select('total_paid_usd')
+        .eq('trip_id', tripId)
+        .maybeSingle(),
+      // Budget setting from trips table
+      supabase
+        .from('trips')
+        .select('budget_total_cents')
+        .eq('id', tripId)
+        .single(),
     ]);
 
-    // Sum paid amounts
-    const paid = (paymentsResult.data || []).reduce(
-      (sum, p) => sum + ((p.amount_cents || 0) * (p.quantity || 1)),
-      0,
-    );
-    setPaidCents(paid);
+    // Trip total from activity_costs view (USD → cents)
+    const totalUsd = Number(tripTotalResult.data?.total_all_travelers_usd) || 0;
+    setTripTotalCents(Math.round(totalUsd * 100));
+
+    // Paid from activity_costs view (USD → cents)
+    const paidUsd = Number(paymentsSummaryResult.data?.total_paid_usd) || 0;
+    setPaidCents(Math.round(paidUsd * 100));
 
     // Budget
     setBudgetTotalCents(tripResult.data?.budget_total_cents || 0);
 
-    // Ledger totals (includes activities, transport, food, and synced hotel/flight)
-    const plannedCents = summaryResult.data?.planned_total_cents || 0;
-    const committedCents = summaryResult.data?.total_committed_cents || 0;
-    const ledgerHotelCents = summaryResult.data?.committed_hotel_cents || 0;
-    const ledgerFlightCents = summaryResult.data?.committed_flight_cents || 0;
-    let total = plannedCents + committedCents;
-
-    // Add hotel from JSON if not already in ledger
-    if (ledgerHotelCents === 0) {
-      const hotel = tripResult.data?.hotel_selection as any;
-      if (hotel) {
-        let hTotal = hotel.totalPrice || 0;
-        if (!hTotal && hotel.pricePerNight && hotel.checkIn && hotel.checkOut) {
-          const nights = Math.max(1, Math.ceil(
-            (new Date(hotel.checkOut).getTime() - new Date(hotel.checkIn).getTime()) / (1000 * 60 * 60 * 24)
-          ));
-          hTotal = hotel.pricePerNight * nights;
-        }
-        total += Math.round(hTotal * 100);
-      }
-    }
-
-    // Add flight from JSON if not already in ledger
-    if (ledgerFlightCents === 0) {
-      const flight = tripResult.data?.flight_selection as any;
-      if (flight?.price) {
-        total += Math.round(flight.price * 100);
-      }
-    }
-
-    setTripTotalCents(total);
     setLoading(false);
   }, [tripId]);
 
