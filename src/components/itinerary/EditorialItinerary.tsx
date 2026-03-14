@@ -1213,7 +1213,7 @@ export function EditorialItinerary({
               id: act.id,
               dayNumber: day.dayNumber,
               category: act.category || act.type || 'activities',
-              costPerPersonUsd: costVal / (travelers || 1),
+              costPerPersonUsd: costVal,
               numTravelers: travelers || 1,
               source: 'itinerary-sync',
             });
