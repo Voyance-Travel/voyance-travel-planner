@@ -2720,9 +2720,15 @@ export default function Start() {
                         // Use shared city normalization (single source of truth)
                         const chatCities = resolveCities(details, chatStartDate, chatEndDate);
                         const isChatMultiCity = chatCities.length > 1;
+
+                        // Prefer AI-extracted city names over raw destination (which may contain descriptive text)
+                        const rawCityList = Array.isArray(details.cities) ? details.cities : [];
+                        const primaryCityName = rawCityList.length > 0 ? String(rawCityList[0].name || '').trim() : '';
+                        const cleanDest = primaryCityName || dest;
+
                         const destinationSummary = isChatMultiCity
                           ? chatCities.map((city) => city.name).join(', ')
-                          : dest;
+                          : cleanDest;
 
                         logger.info('[Start] Chat trip city resolution:', {
                           cityCount: chatCities.length,
@@ -2769,8 +2775,8 @@ export default function Start() {
                           .from('trips')
                           .insert({
                             user_id: user.id,
-                            name: isChatMultiCity ? `Trip to ${destinationSummary}` : `Trip to ${dest}`,
-                            destination: isChatMultiCity ? chatCities[0].name : dest,
+                            name: isChatMultiCity ? `Trip to ${destinationSummary}` : `Trip to ${cleanDest}`,
+                            destination: isChatMultiCity ? chatCities[0].name : cleanDest,
                             start_date: format(chatStartDate, 'yyyy-MM-dd'),
                             end_date: format(chatEndDate, 'yyyy-MM-dd'),
                             travelers: chatTravelers,
