@@ -184,6 +184,13 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     refetch,
   } = useTripBudget({ tripId, totalDays, enabled: true });
 
+  // ─── Paid-only snapshot: "Spent" = only what's actually paid ───
+  const tripExpensesCents = (summary?.totalCommittedCents || 0) + (summary?.plannedTotalCents || 0);
+  const snapshot = useTripFinancialSnapshot({
+    tripId,
+    tripTotalCents: tripExpensesCents,
+  });
+
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
     queryKey: ['cityBudgetBreakdown', tripId],
