@@ -921,7 +921,7 @@ export default function TripDetail() {
         setError(null);
 
         // Fetch trip details (don't use .single() to avoid hard failure on 0 rows)
-        const { data: tripData, error: tripError } = await supabase
+        let { data: tripData, error: tripError } = await supabase
           .from('trips')
           .select('*')
           .eq('id', tripId)
