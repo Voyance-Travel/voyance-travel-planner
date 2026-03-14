@@ -618,6 +618,7 @@ export function PaymentsTab({
 
       toast.success('Payment unmarked');
       await fetchPayments(150);
+      financialSnapshot.refetch();
       
     } catch (err) {
       console.error('Error unmarking payment:', err);
