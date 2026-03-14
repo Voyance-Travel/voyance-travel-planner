@@ -479,6 +479,8 @@ export async function syncItineraryToBudget(
           budgetCategory = 'food';
         } else if (catLower.includes('transport') || catLower.includes('transfer')) {
           budgetCategory = 'transit';
+        } else if (catLower.includes('hotel') || catLower.includes('lodging') || catLower.includes('accommodation')) {
+          budgetCategory = 'hotel';
         }
         
         entries.push({
