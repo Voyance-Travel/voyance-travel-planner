@@ -10581,6 +10581,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
       const isResume = resumeFromDay && resumeFromDay > 1;
       
+      // Generate a unique run ID to prevent stale invocations from overwriting data
+      const generationRunId = crypto.randomUUID();
+      
       const updatePayload: Record<string, unknown> = {
         itinerary_status: 'generating',
         metadata: {
@@ -10590,6 +10593,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           generation_completed_days: isResume ? (resumeFromDay - 1) : 0,
           generation_error: null,
           generation_heartbeat: new Date().toISOString(),
+          generation_run_id: generationRunId,
+          chain_broken_at_day: null,
+          chain_error: null,
         },
       };
       
@@ -10598,6 +10604,24 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         const existingItData = (currentTrip?.itinerary_data as Record<string, unknown>) || {};
         updatePayload.itinerary_data = { ...existingItData, days: [], status: 'generating' };
         console.log(`[generate-trip] Clearing existing itinerary_data.days for fresh generation`);
+        
+        // Also clear normalized tables to prevent stale rows from poisoning self-heal logic
+        try {
+          // First get itinerary_days IDs to cascade-delete activities
+          const { data: oldDays } = await supabase
+            .from('itinerary_days')
+            .select('id')
+            .eq('trip_id', tripId);
+          
+          if (oldDays && oldDays.length > 0) {
+            const oldDayIds = oldDays.map((d: any) => d.id);
+            await supabase.from('itinerary_activities').delete().in('day_id', oldDayIds);
+            await supabase.from('itinerary_days').delete().eq('trip_id', tripId);
+            console.log(`[generate-trip] Cleared ${oldDays.length} stale itinerary_days rows for fresh generation`);
+          }
+        } catch (cleanupErr) {
+          console.warn('[generate-trip] Failed to clear normalized tables:', cleanupErr);
+        }
       }
       
       await supabase.from('trips').update(updatePayload).eq('id', tripId);
@@ -10624,6 +10648,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         requestedDays: requestedDays || totalDays,
         dayNumber: effectiveStartDay,
         totalDays,
+        generationRunId,
       });
 
       // Retry loop with exponential backoff for intermittent 403 errors
@@ -10666,7 +10691,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     // The chain continues server-side even if the user closes their browser.
     // ==========================================================================
     if (action === 'generate-trip-day') {
-      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays } = params;
+      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId } = params;
 
       if (!tripId || !dayNumber || !totalDays) {
         return new Response(
@@ -10675,9 +10700,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         );
       }
 
-      console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId}`);
+      console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'})`);
 
-      // Guard: check trip is still in "generating" state (user might have cancelled)
+      // Guard: check trip is still in "generating" state AND run ID matches (user might have cancelled or a new run started)
       const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data').eq('id', tripId).single();
       if (!tripCheck || tripCheck.itinerary_status === 'cancelled' || tripCheck.itinerary_status === 'ready') {
         console.log(`[generate-trip-day] Trip ${tripId} status is ${tripCheck?.itinerary_status}, stopping chain`);
@@ -10685,6 +10710,19 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           JSON.stringify({ status: tripCheck?.itinerary_status || 'cancelled', dayNumber }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+
+      // Run ID idempotency guard: abort if a newer run has started
+      if (generationRunId) {
+        const tripMeta = (tripCheck.metadata as Record<string, unknown>) || {};
+        const currentRunId = tripMeta.generation_run_id as string | undefined;
+        if (currentRunId && currentRunId !== generationRunId) {
+          console.log(`[generate-trip-day] Stale run detected: this=${generationRunId}, current=${currentRunId}. Aborting.`);
+          return new Response(
+            JSON.stringify({ status: 'stale_run', dayNumber, message: 'A newer generation run has started' }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
       // Resolve multi-city mapping
@@ -10964,10 +11002,24 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
       // ── NO-SHRINK GUARD (chain save) ──────────────────────────────────
       // After deduplication, ensure we never save fewer days than we started with.
-      // If dedup accidentally removed non-duplicate days, fall back to the larger set.
-      if (updatedDays.length < existingDays.length) {
+      // Compare against BOTH in-memory existingDays AND canonical itinerary_days table count.
+      let canonicalCount = existingDays.length;
+      try {
+        const { count: tableRowCount } = await supabase
+          .from('itinerary_days')
+          .select('id', { count: 'exact', head: true })
+          .eq('trip_id', tripId);
+        if (tableRowCount && tableRowCount > canonicalCount) {
+          console.log(`[generate-trip-day] Canonical count elevated: JSON=${existingDays.length}, table=${tableRowCount}`);
+          canonicalCount = tableRowCount;
+        }
+      } catch (e) {
+        console.warn('[generate-trip-day] Could not query itinerary_days count:', e);
+      }
+
+      if (updatedDays.length < canonicalCount) {
         console.error(
-          `[generate-trip-day] 🛡️ SHRINK BLOCKED in chain: updatedDays=${updatedDays.length} < existingDays=${existingDays.length}. ` +
+          `[generate-trip-day] 🛡️ SHRINK BLOCKED in chain: updatedDays=${updatedDays.length} < canonical=${canonicalCount}. ` +
           `Falling back to existingDays + new day to prevent data loss.`
         );
         // Safe fallback: keep all existing days, replace only the current dayNumber
@@ -10982,6 +11034,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           .map((d: any, idx: number) => ({ ...d, dayNumber: idx + 1 }));
         updatedDays.length = 0;
         updatedDays.push(...safeDays);
+      }
+
+      // ── RUN ID CHECK BEFORE WRITE ──────────────────────────────────
+      // Re-verify run ID is still current before persisting to prevent stale overwrites
+      if (generationRunId) {
+        const { data: preWriteTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+        const preWriteMeta = (preWriteTrip?.metadata as Record<string, unknown>) || {};
+        const currentRunId = preWriteMeta.generation_run_id as string | undefined;
+        if (currentRunId && currentRunId !== generationRunId) {
+          console.log(`[generate-trip-day] Stale run at write time: this=${generationRunId}, current=${currentRunId}. Aborting write.`);
+          return new Response(
+            JSON.stringify({ status: 'stale_run', dayNumber, message: 'A newer generation run has started' }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
       const partialItinerary = {
@@ -11057,6 +11124,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             generation_heartbeat: new Date().toISOString(),
             generation_total_days: totalDays,
             generation_current_city: null,
+            chain_broken_at_day: null,
+            chain_error: null,
           },
         }).eq('id', tripId);
 
@@ -11106,6 +11175,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           requestedDays,
           dayNumber: dayNumber + 1,
           totalDays,
+          generationRunId,
         });
 
         // Retry loop with exponential backoff for intermittent 403 errors
