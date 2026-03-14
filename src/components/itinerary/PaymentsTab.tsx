@@ -302,8 +302,9 @@ export function PaymentsTab({
       'free time', 'downtime', 'leisure time', 'at leisure', 'rest', 'sleep',
       'check-in', 'check-out', 'checkin', 'checkout', 'check in', 'check out',
       'arrival at', 'departure from', 'packing',
+      'walk to', 'walk through', 'stroll', 'walking', 'evening walk', 'neighborhood walk',
     ];
-    const NON_PAYABLE_CATEGORIES = ['downtime', 'free_time'];
+    const NON_PAYABLE_CATEGORIES = ['downtime', 'free_time', 'walk', 'walking', 'stroll'];
 
     // Categories that should never be free - mirrors EditorialItinerary logic
     const NEVER_FREE_CATEGORIES = [
