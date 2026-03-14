@@ -54,7 +54,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
       setCategory(activity.category || activity.type || 'activity');
       setStartTime(activity.startTime || activity.time || '12:00');
       setEndTime(activity.endTime || '13:00');
-      setCost(String(activity.cost?.amount ?? 0));
+      setCost(String(activity.cost?.amount ?? activity.estimatedCost?.amount ?? 0));
       setWebsite(activity.website || activity.bookingUrl || '');
       setReservationMade(activity.reservationMade ?? false);
       setLocationName(activity.location?.name || '');
