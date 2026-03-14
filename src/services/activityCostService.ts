@@ -212,11 +212,7 @@ export async function upsertActivityCost(params: {
   cost_reference_id?: string | null;
   notes?: string;
 }): Promise<ActivityCostRow | null> {
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
-  if (!UUID_RE.test(params.activity_id)) {
-    console.info('upsertActivityCost skipped — non-UUID activity_id:', params.activity_id);
-    return null;
-  }
+  // activity_id is now TEXT — no UUID guard needed
 
   // Only block truly invalid values (negative costs)
   if (params.cost_per_person_usd < 0) {
@@ -347,8 +343,8 @@ export async function syncActivitiesToCostTable(
     costReferenceId?: string | null;
   }>
 ): Promise<number> {
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
-  const validActivities = activities.filter((a) => UUID_RE.test(a.id));
+  // activity_id is now TEXT — accept all IDs
+  const validActivities = activities.filter((a) => a.id);
   if (!validActivities.length) return 0;
 
   const rows = validActivities.map((a) => ({
