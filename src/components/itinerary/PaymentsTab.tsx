@@ -34,6 +34,7 @@ import {
   type TripPayment,
   type PaymentTotals
 } from '@/services/tripPaymentsAPI';
+import { markActivityPaid } from '@/services/activityCostService';
 import { useTripMembers, addTripMember, type TripMember } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import { toast } from 'sonner';
