@@ -5286,6 +5286,35 @@ export function EditorialItinerary({
                 } catch (e) {
                   console.warn('Failed to write swap cost to activity_costs:', e);
                 }
+
+                // Re-sync budget ledger so summary reflects the swap
+                try {
+                  const { syncItineraryToBudget } = await import('@/services/tripBudgetService');
+                  const daysForLedger = updatedDays.map(day => ({
+                    dayNumber: day.dayNumber,
+                    date: day.date || '',
+                    activities: day.activities.map(act => ({
+                      id: act.id,
+                      title: act.title || 'Activity',
+                      category: act.category || act.type || 'activities',
+                      cost: act.cost ? (typeof act.cost === 'number'
+                        ? { amount: act.cost, currency: 'USD' }
+                        : {
+                            amount: (act.cost as any).amount,
+                            total: (act.cost as any).total,
+                            perPerson: (act.cost as any).perPerson,
+                            basis: (act.cost as any).basis,
+                            currency: (act.cost as any).currency || 'USD',
+                          }) : undefined,
+                    })),
+                  }));
+                  await syncItineraryToBudget(tripId, daysForLedger, travelers);
+                  queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
+                  queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
+                  queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
+                } catch (e) {
+                  console.warn('Budget ledger re-sync after swap failed:', e);
+                }
               } else {
                 toast.error('Swap skipped because suggested cost was not lower.');
               }
