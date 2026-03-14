@@ -2371,12 +2371,14 @@ export function EditorialItinerary({
     // Multi-hotel: sum totalPrice (or pricePerNight * nights) across all hotels
     if (allHotels && allHotels.length > 0) {
       return allHotels.reduce((sum, h) => {
-        if (h.totalPrice) return sum + h.totalPrice;
-        if (h.pricePerNight && h.checkInDate && h.checkOutDate) {
+        const hotel = h.hotel;
+        if (!hotel) return sum;
+        if (hotel.totalPrice) return sum + hotel.totalPrice;
+        if (hotel.pricePerNight && h.checkInDate && h.checkOutDate) {
           const nights = Math.max(1, Math.ceil(
             (parseLocalDate(h.checkOutDate).getTime() - parseLocalDate(h.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
           ));
-          return sum + h.pricePerNight * nights;
+          return sum + hotel.pricePerNight * nights;
         }
         return sum;
       }, 0);
