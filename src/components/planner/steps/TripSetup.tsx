@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MapPin, Calendar, Users, Plane } from 'lucide-react';
+import { MapPin, CalendarIcon, Users, Plane } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getLocalToday } from '@/utils/dateUtils';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { getLocalToday, parseLocalDate } from '@/utils/dateUtils';
 
 interface TripSetupProps {
   formData: {
@@ -22,8 +26,11 @@ interface TripSetupProps {
 
 export default function TripSetup({ formData, updateFormData, onContinue }: TripSetupProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [startOpen, setStartOpen] = useState(false);
+  const [endOpen, setEndOpen] = useState(false);
 
   const today = getLocalToday();
+  const todayDate = parseLocalDate(today);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -126,49 +133,94 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
         {/* Dates */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="startDate" className="text-slate-700">
-              Start Date
-            </Label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-              <Input
-                id="startDate"
-                type="date"
-                min={today}
-                value={formData.startDate}
-                onChange={(e) => {
-                  const newStart = e.target.value;
-                  if (newStart && formData.endDate && newStart > formData.endDate) {
-                    updateFormData({ startDate: newStart, endDate: newStart });
-                  } else {
-                    updateFormData({ startDate: newStart });
-                  }
-                }}
-                className={`pl-10 h-12 ${errors.startDate ? 'border-destructive' : ''}`}
-              />
-            </div>
+            <Label className="text-slate-700">Start Date</Label>
+            <Popover open={startOpen} onOpenChange={setStartOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full h-12 justify-start text-left font-normal pl-10 relative",
+                    !formData.startDate && "text-muted-foreground",
+                    errors.startDate && "border-destructive"
+                  )}
+                >
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                  {formData.startDate
+                    ? format(parseLocalDate(formData.startDate), 'PPP')
+                    : 'Pick a date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={formData.startDate ? parseLocalDate(formData.startDate) : undefined}
+                  onSelect={(date) => {
+                    if (date) {
+                      const y = date.getFullYear();
+                      const m = String(date.getMonth() + 1).padStart(2, '0');
+                      const d = String(date.getDate()).padStart(2, '0');
+                      const newStart = `${y}-${m}-${d}`;
+                      if (formData.endDate && newStart > formData.endDate) {
+                        updateFormData({ startDate: newStart, endDate: newStart });
+                      } else {
+                        updateFormData({ startDate: newStart });
+                      }
+                    }
+                    setStartOpen(false);
+                  }}
+                  disabled={(date) => date < todayDate}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
             {errors.startDate && (
-              <p className="text-sm text-red-500">{errors.startDate}</p>
+              <p className="text-sm text-destructive">{errors.startDate}</p>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="endDate" className="text-slate-700">
-              End Date
-            </Label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-              <Input
-                id="endDate"
-                type="date"
-                min={formData.startDate || today}
-                value={formData.endDate}
-                onChange={(e) => updateFormData({ endDate: e.target.value })}
-                className={`pl-10 h-12 ${errors.endDate ? 'border-destructive' : ''}`}
-              />
-            </div>
+            <Label className="text-slate-700">End Date</Label>
+            <Popover open={endOpen} onOpenChange={setEndOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full h-12 justify-start text-left font-normal pl-10 relative",
+                    !formData.endDate && "text-muted-foreground",
+                    errors.endDate && "border-destructive"
+                  )}
+                >
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                  {formData.endDate
+                    ? format(parseLocalDate(formData.endDate), 'PPP')
+                    : 'Pick a date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={formData.endDate ? parseLocalDate(formData.endDate) : undefined}
+                  onSelect={(date) => {
+                    if (date) {
+                      const y = date.getFullYear();
+                      const m = String(date.getMonth() + 1).padStart(2, '0');
+                      const d = String(date.getDate()).padStart(2, '0');
+                      updateFormData({ endDate: `${y}-${m}-${d}` });
+                    }
+                    setEndOpen(false);
+                  }}
+                  disabled={(date) => {
+                    const minDate = formData.startDate ? parseLocalDate(formData.startDate) : todayDate;
+                    return date < minDate;
+                  }}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
             {errors.endDate && (
-              <p className="text-sm text-red-500">{errors.endDate}</p>
+              <p className="text-sm text-destructive">{errors.endDate}</p>
             )}
           </div>
         </div>
