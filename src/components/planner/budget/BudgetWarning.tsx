@@ -25,8 +25,10 @@ export function BudgetWarning({
   className,
 }: BudgetWarningProps) {
   const isRed = summary.status === 'red';
-  const overagePercent = Math.round(summary.usedPercent - 100);
-  const overageCents = summary.totalCommittedCents + summary.plannedTotalCents - summary.budgetTotalCents;
+  const rawOveragePercent = summary.usedPercent - 100;
+  const overagePercent = isFinite(rawOveragePercent) ? Math.round(rawOveragePercent) : 0;
+  const rawOverageCents = summary.totalCommittedCents + summary.plannedTotalCents - summary.budgetTotalCents;
+  const overageCents = isFinite(rawOverageCents) ? rawOverageCents : 0;
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat('en-US', {

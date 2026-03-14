@@ -45,6 +45,8 @@ import { useTripMembers } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BudgetCategory } from '@/services/tripBudgetService';
 import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
+import { syncHotelToLedger, syncFlightToLedger } from '@/services/budgetLedgerSync';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ItineraryActivity {
   id: string;
@@ -221,7 +223,29 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     });
   }, [itineraryDays, hasBudget, syncFromItinerary]);
 
+  // Sync hotel/flight committed costs to budget ledger on mount
+  useEffect(() => {
+    if (!hasBudget || !tripId) return;
+    (async () => {
+      try {
+        const { data: trip } = await supabase
+          .from('trips')
+          .select('hotel_selection, flight_selection')
+          .eq('id', tripId)
+          .single();
+        if (!trip) return;
+        const hotel = trip.hotel_selection as any;
+        const flight = trip.flight_selection as any;
+        if (hotel) await syncHotelToLedger(tripId, hotel);
+        if (flight) await syncFlightToLedger(tripId, flight);
+      } catch (err) {
+        console.error('[BudgetTab] Failed to sync hotel/flight to ledger:', err);
+      }
+    })();
+  }, [tripId, hasBudget]);
+
   const formatCurrency = useCallback((cents: number) => {
+    if (!isFinite(cents)) return '$0';
     const currency = settings?.budget_currency || 'USD';
     const amount = cents / 100;
     return new Intl.NumberFormat('en-US', {
@@ -409,7 +433,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              ≈ {formatCurrency(Math.round((summary?.remainingCents || 0) / totalDays))}/day
+              ≈ {formatCurrency(Math.round((summary?.remainingCents || 0) / Math.max(totalDays, 1)))}/day
             </p>
           </CardContent>
         </Card>
