@@ -1725,7 +1725,7 @@ function matchArchetypesV2(
     }
     
     // Apply fine-grained V3 trait scoring (the critical differentiator for most archetypes)
-    if (archetype.fineGrained && fineGrainedTraits) {
+    if (Array.isArray(archetype.fineGrained) && fineGrainedTraits) {
       for (const fg of archetype.fineGrained) {
         const traitValue = fineGrainedTraits[fg.trait];
         if (traitValue === undefined) continue;
