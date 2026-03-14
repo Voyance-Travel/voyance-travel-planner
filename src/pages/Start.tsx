@@ -2775,8 +2775,8 @@ export default function Start() {
                           .from('trips')
                           .insert({
                             user_id: user.id,
-                            name: isChatMultiCity ? `Trip to ${destinationSummary}` : `Trip to ${dest}`,
-                            destination: isChatMultiCity ? chatCities[0].name : dest,
+                            name: isChatMultiCity ? `Trip to ${destinationSummary}` : `Trip to ${cleanDest}`,
+                            destination: isChatMultiCity ? chatCities[0].name : cleanDest,
                             start_date: format(chatStartDate, 'yyyy-MM-dd'),
                             end_date: format(chatEndDate, 'yyyy-MM-dd'),
                             travelers: chatTravelers,
