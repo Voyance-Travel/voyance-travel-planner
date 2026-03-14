@@ -579,7 +579,6 @@ export function PaymentsTab({
       setNewExpenseAmount('');
       setNewExpenseType('flight');
       await fetchPayments(150);
-      await fetchSummary();
     } catch (err) {
       console.error('Error adding expense:', err);
       toast.error('Failed to add expense');
