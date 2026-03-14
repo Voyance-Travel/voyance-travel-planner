@@ -608,6 +608,13 @@ export function PaymentsTab({
 
       if (error) throw error;
 
+      // Reset activity_costs.is_paid so financial snapshot updates
+      await supabase
+        .from('activity_costs')
+        .update({ is_paid: false, paid_amount_usd: 0, paid_at: null })
+        .eq('trip_id', tripId)
+        .eq('activity_id', item.id);
+
       toast.success('Payment unmarked');
       await fetchPayments(150);
       
