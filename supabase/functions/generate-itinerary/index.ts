@@ -10581,6 +10581,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
       const isResume = resumeFromDay && resumeFromDay > 1;
       
+      // Generate a unique run ID to prevent stale invocations from overwriting data
+      const generationRunId = crypto.randomUUID();
+      
       const updatePayload: Record<string, unknown> = {
         itinerary_status: 'generating',
         metadata: {
@@ -10590,6 +10593,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           generation_completed_days: isResume ? (resumeFromDay - 1) : 0,
           generation_error: null,
           generation_heartbeat: new Date().toISOString(),
+          generation_run_id: generationRunId,
+          chain_broken_at_day: null,
+          chain_error: null,
         },
       };
       
@@ -10598,6 +10604,24 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         const existingItData = (currentTrip?.itinerary_data as Record<string, unknown>) || {};
         updatePayload.itinerary_data = { ...existingItData, days: [], status: 'generating' };
         console.log(`[generate-trip] Clearing existing itinerary_data.days for fresh generation`);
+        
+        // Also clear normalized tables to prevent stale rows from poisoning self-heal logic
+        try {
+          // First get itinerary_days IDs to cascade-delete activities
+          const { data: oldDays } = await supabase
+            .from('itinerary_days')
+            .select('id')
+            .eq('trip_id', tripId);
+          
+          if (oldDays && oldDays.length > 0) {
+            const oldDayIds = oldDays.map((d: any) => d.id);
+            await supabase.from('itinerary_activities').delete().in('day_id', oldDayIds);
+            await supabase.from('itinerary_days').delete().eq('trip_id', tripId);
+            console.log(`[generate-trip] Cleared ${oldDays.length} stale itinerary_days rows for fresh generation`);
+          }
+        } catch (cleanupErr) {
+          console.warn('[generate-trip] Failed to clear normalized tables:', cleanupErr);
+        }
       }
       
       await supabase.from('trips').update(updatePayload).eq('id', tripId);
