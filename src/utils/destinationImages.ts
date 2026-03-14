@@ -119,9 +119,7 @@ const CURATED_DESTINATION_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1517154421773-0529f29ea451?w=1200',
     'https://images.unsplash.com/photo-1546874177-9e664107314e?w=1200',
   ],
-  'busan': [
-    'https://images.unsplash.com/photo-1596422846543-75c6fc197f11?w=1200', // Busan coastal view
-  ],
+  'busan': [],
   'jeju': [
     'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?w=1200', // Jeju nature
     'https://images.unsplash.com/photo-1594817527365-bf75115b5a5d?w=1200', // Jeju landscape

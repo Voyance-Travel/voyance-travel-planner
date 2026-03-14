@@ -68,6 +68,7 @@ const BLOCKED_IMAGE_IDS = new Set([
   'photo-1596768651008-c3d3ef56c8cf',
   'photo-1623083500086-8a7cd5a8f4a6',
   'photo-1578037571214-25e07a2f91ef',
+  'photo-1596422846543-75c6fc197f11',
 ]);
 
 function isBlockedUrl(url: string): boolean {
