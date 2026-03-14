@@ -1913,7 +1913,16 @@ These help the traveler prepare for their trip.
           }
           
           if (dayCity.isLastDayInCity) {
-            multiCityPrompt += `\n   📍 CHECKOUT DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). Plan morning around checkout — breakfast at/near hotel, pack and check out, then activities before departing.`;
+            // Look ahead to find the next city's transport mode
+            const nextDayInfo = context.multiCityDayMap?.[dayNumber];
+            const nextLegTransport = nextDayInfo?.transportType || 'flight';
+            const nextLegCity = nextDayInfo?.cityName || 'the next destination';
+            const isNonFlightFullGen = nextLegTransport !== 'flight';
+            const transportLabelFullGen = nextLegTransport.toUpperCase();
+            multiCityPrompt += `\n   📍 CHECKOUT DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). Tomorrow the traveler takes a ${transportLabelFullGen} to ${nextLegCity}. Plan morning around checkout — breakfast at/near hotel, pack and check out, then activities before departing.`;
+            if (isNonFlightFullGen) {
+              multiCityPrompt += `\n   ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabelFullGen}.`;
+            }
           }
         }
         
