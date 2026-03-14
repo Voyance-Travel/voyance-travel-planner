@@ -6600,6 +6600,8 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       let resolvedTransitionTo = paramTransitionTo || '';
       let resolvedTransportMode = paramTransitionMode || '';
       let resolvedTransportDetails: any = null;
+      let resolvedNextLegTransport = '';
+      let resolvedNextLegCity = '';
       let resolvedIsMultiCity = !!paramIsMultiCity;
       let resolvedDestination = destination;
       let resolvedCountry = destinationCountry;
