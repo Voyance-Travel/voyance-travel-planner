@@ -978,6 +978,17 @@ function getActivityCostInfo(
 ): CostInfo {
   const category = activity.category || activity.type || 'activity';
   const title = activity.title || '';
+  
+  // Walk connectors are always free — skip estimation entirely
+  const catLower = category.toLowerCase();
+  const titleLower = title.toLowerCase();
+  const isWalk = ['walk', 'walking', 'stroll'].includes(catLower) ||
+    ['walk to', 'walk through', 'stroll', 'evening walk', 'neighborhood walk'].some(kw => titleLower.includes(kw));
+  if (isWalk) {
+    const rawCost = activity.cost?.amount;
+    return { amount: (rawCost && rawCost > 0) ? rawCost : 0, isEstimated: false, confidence: 'high' as const, basis: 'flat' as CostBasis };
+  }
+  
   const shouldNeverBeFree = isNeverFreeCategory(category, title);
   // Use explicit basis from backend if available, otherwise infer
   const basis: CostBasis = (activity as any).costBasis || (activity as any).cost?.basis || inferCostBasis(category, title);
