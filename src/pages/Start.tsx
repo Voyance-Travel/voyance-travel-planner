@@ -2557,7 +2557,7 @@ export default function Start() {
           trip_id: trip.id,
           city_order: 0,
           city_name: primaryDestination,
-          country: null,
+          country: (primaryDestination.includes(',') ? primaryDestination.split(',').pop()?.trim() : null) || null,
           arrival_date: format(startDate, 'yyyy-MM-dd'),
           departure_date: format(endDate, 'yyyy-MM-dd'),
           nights: nights > 0 ? nights : 1,
