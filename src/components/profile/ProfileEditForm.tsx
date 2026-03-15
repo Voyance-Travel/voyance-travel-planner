@@ -1,12 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { User, Mail, MapPin, Save, X } from 'lucide-react';
+import { User, Mail, Save, X } from 'lucide-react';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { AirportAutocomplete } from '@/components/profile/AirportAutocomplete';
 
 const profileSchema = z.object({
   name: z.string()
@@ -21,7 +22,6 @@ const profileSchema = z.object({
     .optional()
     .or(z.literal('')),
   homeAirport: z.string()
-    .regex(/^[A-Z]{3}$/, 'Must be a 3-letter airport code (e.g., LAX)')
     .optional()
     .or(z.literal('')),
 });
@@ -44,6 +44,7 @@ export default function ProfileEditForm({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isDirty }
   } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -129,24 +130,23 @@ export default function ProfileEditForm({
 
       {/* Home Airport */}
       <div className="space-y-2">
-        <Label htmlFor="homeAirport">Home Airport</Label>
-        <div className="relative">
-          <Input
-            {...register('homeAirport')}
-            id="homeAirport"
-            type="text"
-            className={`pl-10 uppercase ${errors.homeAirport ? 'border-destructive' : ''}`}
-            placeholder="LAX"
-            maxLength={3}
-          />
-          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        </div>
+        <Label>Home Airport</Label>
+        <Controller
+          name="homeAirport"
+          control={control}
+          render={({ field }) => (
+            <AirportAutocomplete
+              value={field.value}
+              onSelect={(code) => {
+                field.onChange(code);
+              }}
+              placeholder="Search your home airport..."
+            />
+          )}
+        />
         {errors.homeAirport && (
           <p className="text-sm text-destructive">{errors.homeAirport.message}</p>
         )}
-        <p className="text-xs text-muted-foreground">
-          3-letter airport code (e.g., JFK, LAX, ORD)
-        </p>
       </div>
 
       {/* Actions */}

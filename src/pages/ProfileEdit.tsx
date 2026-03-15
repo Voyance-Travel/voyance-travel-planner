@@ -80,6 +80,7 @@ export default function ProfileEdit() {
               defaultValues={{
                 name: user?.name || '',
                 email: user?.email || '',
+                homeAirport: user?.homeAirport || '',
               }}
               onSubmit={handleSubmit}
               onCancel={() => navigate(ROUTES.PROFILE.VIEW)}
