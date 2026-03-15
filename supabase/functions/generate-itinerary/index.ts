@@ -8065,6 +8065,7 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
       }
       
       // Use profile's budget tier if available, fallback to params
+      const effectiveBudgetTier = profile.budgetTier || budgetTier || 'moderate';
 
       // ==========================================================================
       // READ GENERATION CONTEXT: Enrichment computed once in generate-trip
