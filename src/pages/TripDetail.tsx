@@ -1106,12 +1106,62 @@ export default function TripDetail() {
             if (!autoResumeAttemptedRef.current) {
               autoResumeAttemptedRef.current = true;
               console.log('[TripDetail] Auto-resuming incomplete generation (first attempt)');
-              // Defer to next tick so handleResumeGeneration has access to latest trip state
               setTimeout(() => {
                 handleResumeGeneration();
               }, 1500);
             } else {
               setGenerationStalled(true);
+            }
+          }
+
+          // ── SELF-HEAL: Detect days that exist but have no real activities ("Unplanned") ──
+          // The day count matches expectedTotal but some days have empty activities arrays.
+          // Auto-regenerate those specific empty days once.
+          if (expectedTotal > 0 && actualDays >= expectedTotal && !autoResumeAttemptedRef.current) {
+            const daysList = (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>;
+            const emptyDayNumbers: number[] = [];
+            for (const day of daysList) {
+              const acts = Array.isArray(day.activities) ? day.activities : [];
+              // Filter out logistical-only activities (hotel check-in/out)
+              const realActs = acts.filter((a: any) => {
+                const cat = (a?.category || a?.type || '').toLowerCase();
+                return !['check-in', 'check-out', 'hotel', 'accommodation', 'checkout', 'checkin'].includes(cat);
+              });
+              if (realActs.length === 0 && day.dayNumber) {
+                emptyDayNumbers.push(day.dayNumber);
+              }
+            }
+
+            if (emptyDayNumbers.length > 0 && emptyDayNumbers.length < expectedTotal) {
+              autoResumeAttemptedRef.current = true;
+              console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} days have no activities (days: ${emptyDayNumbers.join(', ')}). Auto-regenerating.`);
+              // Regenerate each empty day sequentially
+              setTimeout(async () => {
+                try {
+                  for (const dayNum of emptyDayNumbers) {
+                    console.log(`[TripDetail] Auto-regenerating empty day ${dayNum}`);
+                    await supabase.functions.invoke('generate-itinerary', {
+                      body: {
+                        action: 'regenerate-day',
+                        tripId: tripId,
+                        dayNumber: dayNum,
+                        destination: tripData.destination,
+                        startDate: tripData.start_date,
+                        endDate: tripData.end_date,
+                        travelers: tripData.travelers || 1,
+                        tripType: tripData.trip_type,
+                        budgetTier: (tripData as any).budget_tier,
+                        isMultiCity: !!(tripData as any).is_multi_city,
+                      },
+                    });
+                  }
+                  // Refresh trip data after regeneration
+                  queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+                  toast.success(`Regenerated ${emptyDayNumbers.length} unplanned day${emptyDayNumbers.length > 1 ? 's' : ''}`);
+                } catch (err) {
+                  console.error('[TripDetail] Auto-regenerate empty days failed:', err);
+                }
+              }, 2000);
             }
           }
         }
