@@ -50,19 +50,19 @@ async function upsertLogisticsCost(
     .maybeSingle();
 
   if (existing) {
-    await supabase
+    const { error } = await supabase
       .from('activity_costs')
       .update({
         cost_per_person_usd: costPerPerson,
-        total_cost_usd: totalUsd,
         num_travelers: numTravelers,
         notes: description,
         source: 'logistics-sync',
         updated_at: new Date().toISOString(),
       })
       .eq('id', existing.id);
+    if (error) console.error('[budgetLedgerSync] update failed:', error);
   } else {
-    await supabase
+    const { error } = await supabase
       .from('activity_costs')
       .insert({
         trip_id: tripId,
@@ -70,13 +70,13 @@ async function upsertLogisticsCost(
         day_number: 0,
         category,
         cost_per_person_usd: costPerPerson,
-        total_cost_usd: totalUsd,
         num_travelers: numTravelers,
         source: 'logistics-sync',
         confidence: 'high',
         is_paid: false,
         notes: description,
       });
+    if (error) console.error('[budgetLedgerSync] insert failed:', error);
   }
 }
 
