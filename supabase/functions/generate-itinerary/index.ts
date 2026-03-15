@@ -2865,6 +2865,37 @@ async function generateItineraryAI(
     }
   }
 
+  // ── Post-batch dedup pass ──────────────────────────────────────
+  // Within a parallel batch, days can't see each other's activities,
+  // so duplicates may appear. Detect and rename them here.
+  const seenTitles = new Map<string, { dayNum: number; actIdx: number }>();
+  let dedupCount = 0;
+  for (const day of days) {
+    for (let i = 0; i < day.activities.length; i++) {
+      const act = day.activities[i];
+      const key = (act.title || act.name || '').toLowerCase().trim();
+      if (!key) continue;
+      // Skip logistics/accommodation — duplicates are expected (hotel check-in, etc.)
+      const cat = (act.category || '').toLowerCase();
+      if (['transport', 'transportation', 'accommodation', 'transfer', 'logistics'].includes(cat)) continue;
+
+      const existing = seenTitles.get(key);
+      if (existing && existing.dayNum !== day.dayNumber) {
+        // Mark as duplicate — append day number to make title unique
+        // The next generation stage or enrichment can refine this
+        console.log(`[Stage 2] Dedup: "${act.title}" appears on Day ${existing.dayNum} and Day ${day.dayNumber}`);
+        act.title = `${act.title} (Day ${day.dayNumber} version)`;
+        act._isDuplicate = true;
+        dedupCount++;
+      } else {
+        seenTitles.set(key, { dayNum: day.dayNumber, actIdx: i });
+      }
+    }
+  }
+  if (dedupCount > 0) {
+    console.log(`[Stage 2] Post-batch dedup: marked ${dedupCount} duplicate activities`);
+  }
+
   // Apply fallback costs for any missing values
   const fallbackCosts: Record<string, number> = {
     sightseeing: 15,
