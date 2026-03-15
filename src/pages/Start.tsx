@@ -3007,6 +3007,30 @@ export default function Start() {
                             rowCount: cityRows.length,
                             cities: cityRows.map(r => r.city_name),
                           });
+
+                          // ─── SPLIT BUDGET ACROSS CITIES (chat path) ───
+                          if (chatBudget) {
+                            const totalChatNights = chatCities.reduce((sum, c) => sum + (c.nights || 1), 0);
+                            const chatBudgetCents = Math.round(chatBudget * 100);
+                            const chatCityBudgets = chatCities.map((c, i) => {
+                              const cityNights = c.nights || 1;
+                              const share = cityNights / totalChatNights;
+                              return { cityOrder: i, allocatedBudgetCents: Math.round(chatBudgetCents * share) };
+                            });
+                            // Adjust rounding so the sum matches exactly
+                            const chatAllocatedSum = chatCityBudgets.reduce((s, c) => s + c.allocatedBudgetCents, 0);
+                            if (chatAllocatedSum !== chatBudgetCents) {
+                              chatCityBudgets[0].allocatedBudgetCents += (chatBudgetCents - chatAllocatedSum);
+                            }
+                            for (const cb of chatCityBudgets) {
+                              await supabase
+                                .from('trip_cities')
+                                .update({ allocated_budget_cents: cb.allocatedBudgetCents } as any)
+                                .eq('trip_id', trip.id)
+                                .eq('city_order', cb.cityOrder);
+                            }
+                            logger.info('[Start] Chat budget split:', chatCityBudgets.map(c => `City ${c.cityOrder}: $${(c.allocatedBudgetCents / 100).toFixed(2)}`).join(', '));
+                          }
                         } else {
                           // Single-city: insert one trip_cities row for unified schema
                           const startMs = chatStartDate.getTime();
