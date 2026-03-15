@@ -9295,7 +9295,71 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
 
         // =======================================================================
-        // PERSIST TO NORMALIZED TABLES: itinerary_days + itinerary_activities
+        // PERSONALIZATION VALIDATION: Check avoid-list & dietary violations
+        // Ported from generate-full Stage 2 — ensures per-day quality bar
+        // =======================================================================
+        if (tripId && profile) {
+          try {
+            const userPrefsForVal = userId ? await getUserPreferences(supabase, userId) : null;
+            const budgetIntentForVal = deriveBudgetIntent(
+              effectiveBudgetTier,
+              profile.traitScores.budget,
+              profile.traitScores.comfort
+            );
+            
+            const tripIntentsForVal = profile.tripIntents || [];
+            const valContext = buildValidationContext(
+              userPrefsForVal || {},
+              budgetIntentForVal,
+              profile.traitScores,
+              tripIntentsForVal
+            );
+            
+            // Override with unified profile data for accuracy
+            if (profile.dietaryRestrictions.length > 0) {
+              valContext.dietaryRestrictions = profile.dietaryRestrictions;
+            }
+            if (profile.avoidList.length > 0) {
+              valContext.avoidList = [...valContext.avoidList, ...profile.avoidList];
+            }
+            
+            const personalizationResult = validateItineraryPersonalization(
+              [{ ...generatedDay, activities: normalizedActivities }] as StrictDay[],
+              valContext
+            );
+            
+            if (personalizationResult.violations.length > 0) {
+              const criticalViolations = personalizationResult.violations.filter(v => v.severity === 'critical');
+              console.warn(`[generate-day] Personalization validation: ${personalizationResult.violations.length} violations (${criticalViolations.length} critical), score=${personalizationResult.personalizationScore}/100`);
+              
+              // Strip activities with critical avoid-list or dietary violations
+              if (criticalViolations.length > 0) {
+                const criticalActivityIds = new Set(criticalViolations.map(v => v.activityId).filter(Boolean));
+                if (criticalActivityIds.size > 0) {
+                  const beforeCount = generatedDay.activities.length;
+                  generatedDay.activities = generatedDay.activities.filter((act: any) => {
+                    if (act.isLocked) return true;
+                    if (criticalActivityIds.has(act.id)) {
+                      console.log(`[generate-day] 🚫 Removing "${act.title}" — critical personalization violation`);
+                      return false;
+                    }
+                    return true;
+                  });
+                  normalizedActivities = generatedDay.activities;
+                  const removedCount = beforeCount - generatedDay.activities.length;
+                  if (removedCount > 0) {
+                    console.log(`[generate-day] ✓ Stripped ${removedCount} activities with critical personalization violations`);
+                  }
+                }
+              }
+            } else {
+              console.log(`[generate-day] ✓ Personalization validation passed (score=${personalizationResult.personalizationScore}/100)`);
+            }
+          } catch (persValErr) {
+            console.warn('[generate-day] Personalization validation failed (non-blocking):', persValErr);
+          }
+        }
+
         // =======================================================================
         if (tripId) {
           try {
