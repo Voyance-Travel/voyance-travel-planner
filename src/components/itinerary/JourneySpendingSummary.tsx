@@ -1,5 +1,6 @@
 /**
  * JourneySpendingSummary — Cross-leg spending overview for linked trips on the Payments tab.
+ * Shows expected spend (from activity_costs) and paid amounts (from trip_payments).
  */
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -13,8 +14,8 @@ interface LegSpending {
   destination: string;
   journeyOrder: number;
   budgetTotalCents: number | null;
+  expectedCents: number;
   paidCents: number;
-  pendingCents: number;
   currency: string;
 }
 
@@ -41,19 +42,28 @@ export function JourneySpendingSummary({ journeyId, journeyName, currentTripId, 
 
       const tripIds = trips.map(t => t.id);
 
-      // Fetch payments for all legs
+      // Fetch activity_costs for expected spend per leg
+      const { data: costs } = await supabase
+        .from('activity_costs')
+        .select('trip_id, cost_per_person_usd, num_travelers')
+        .in('trip_id', tripIds);
+
+      const expectedMap = new Map<string, number>();
+      (costs || []).forEach(c => {
+        const total = (c.cost_per_person_usd || 0) * (c.num_travelers || 1) * 100; // convert to cents
+        expectedMap.set(c.trip_id, (expectedMap.get(c.trip_id) || 0) + total);
+      });
+
+      // Fetch payments for paid amounts
       const { data: payments } = await supabase
         .from('trip_payments')
         .select('trip_id, amount_cents, status')
         .in('trip_id', tripIds);
 
       const paidMap = new Map<string, number>();
-      const pendingMap = new Map<string, number>();
       (payments || []).forEach(p => {
         if (p.status === 'paid' || p.status === 'completed') {
           paidMap.set(p.trip_id, (paidMap.get(p.trip_id) || 0) + (p.amount_cents || 0));
-        } else if (p.status === 'pending') {
-          pendingMap.set(p.trip_id, (pendingMap.get(p.trip_id) || 0) + (p.amount_cents || 0));
         }
       });
 
@@ -62,8 +72,8 @@ export function JourneySpendingSummary({ journeyId, journeyName, currentTripId, 
         destination: t.destination,
         journeyOrder: t.journey_order ?? 0,
         budgetTotalCents: t.budget_total_cents,
+        expectedCents: Math.round(expectedMap.get(t.id) || 0),
         paidCents: paidMap.get(t.id) || 0,
-        pendingCents: pendingMap.get(t.id) || 0,
         currency: t.budget_currency || currency,
       })));
       setLoading(false);
@@ -74,12 +84,11 @@ export function JourneySpendingSummary({ journeyId, journeyName, currentTripId, 
   const fmt = (cents: number, cur: string = currency) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(cents / 100);
 
+  const totalExpected = legs.reduce((s, l) => s + l.expectedCents, 0);
   const totalPaid = legs.reduce((s, l) => s + l.paidCents, 0);
-  const totalPending = legs.reduce((s, l) => s + l.pendingCents, 0);
   const totalBudget = legs.reduce((s, l) => s + (l.budgetTotalCents || 0), 0);
-  const totalSpent = totalPaid + totalPending;
 
-  if (loading || totalSpent === 0) return null;
+  if (loading || (totalExpected === 0 && totalPaid === 0)) return null;
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border bg-card/50 overflow-hidden">
@@ -93,15 +102,18 @@ export function JourneySpendingSummary({ journeyId, journeyName, currentTripId, 
       </div>
 
       <div className="p-4 space-y-3">
-        {/* Per-leg one-liner */}
+        {/* Per-leg one-liner showing expected spend */}
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
           {legs.map(leg => {
-            const spent = leg.paidCents + leg.pendingCents;
+            const displayAmount = leg.expectedCents > 0 ? leg.expectedCents : leg.paidCents;
             const isCurrent = leg.id === currentTripId;
             return (
               <span key={leg.id} className={cn('flex items-center gap-1', isCurrent && 'font-semibold text-primary')}>
                 <MapPin className="h-3 w-3 text-muted-foreground" />
-                {leg.destination}: {fmt(spent, leg.currency)}
+                {leg.destination}: {fmt(displayAmount, leg.currency)}
+                {leg.paidCents > 0 && leg.expectedCents > 0 && (
+                  <span className="text-xs text-muted-foreground">({fmt(leg.paidCents, leg.currency)} paid)</span>
+                )}
               </span>
             );
           })}
@@ -111,7 +123,7 @@ export function JourneySpendingSummary({ journeyId, journeyName, currentTripId, 
         {totalBudget > 0 && (
           <div className="space-y-2 pt-2 border-t border-border">
             {legs.filter(l => l.budgetTotalCents && l.budgetTotalCents > 0).map(leg => {
-              const spent = leg.paidCents + leg.pendingCents;
+              const spent = leg.expectedCents > 0 ? leg.expectedCents : leg.paidCents;
               const pct = Math.min(100, Math.round((spent / (leg.budgetTotalCents || 1)) * 100));
               const isCurrent = leg.id === currentTripId;
               return (
@@ -131,9 +143,12 @@ export function JourneySpendingSummary({ journeyId, journeyName, currentTripId, 
         <div className="pt-3 border-t border-border flex items-center justify-between text-sm">
           <span className="font-semibold text-foreground">Journey Total</span>
           <div className="text-right">
-            <span className="font-semibold">{fmt(totalSpent)}</span>
+            <span className="font-semibold">{fmt(totalExpected > 0 ? totalExpected : totalPaid)}</span>
             {totalBudget > 0 && (
               <span className="text-xs text-muted-foreground ml-1.5">of {fmt(totalBudget)}</span>
+            )}
+            {totalPaid > 0 && totalExpected > 0 && (
+              <span className="text-xs text-muted-foreground ml-1.5">({fmt(totalPaid)} paid)</span>
             )}
           </div>
         </div>

@@ -286,6 +286,10 @@ export async function splitJourneyIfNeeded(
     const arrivalDate = addDays(startDate, dateOffset);
     const departureDate = addDays(arrivalDate, nights);
 
+    // Get the proportional budget from the leg insert
+    const legInsert = legInserts[i];
+    const allocatedBudget = legInsert?._legBudgetCents ?? null;
+
     cityInserts.push({
       trip_id: legTrip.id,
       city_order: 0, // Each leg has only one city
@@ -296,6 +300,7 @@ export async function splitJourneyIfNeeded(
       nights,
       generation_status: 'pending' as const,
       days_total: nights + 1, // Inclusive day count: nights + 1 (matches single-city convention)
+      allocated_budget_cents: allocatedBudget,
       transport_type: i > 0 && transports[i - 1] ? transports[i - 1].type : null,
       transport_details: i > 0 && transports[i - 1] ? transports[i - 1] as any : null,
       hotel_selection: hotelsByCity?.[dest.city]?.length
