@@ -117,6 +117,7 @@ export default function UserTracking() {
 
     const pageViews = events.filter(e => e.event_type === 'page_view');
     const pageExits = events.filter(e => e.event_type === 'page_exit');
+    const interactions = events.filter(e => !['page_view', 'page_exit'].includes(e.event_type));
     const sessions = new Set(events.map(e => e.session_id));
     const authedSessions = new Set(events.filter(e => e.user_id).map(e => e.session_id));
 
@@ -135,7 +136,6 @@ export default function UserTracking() {
     for (const e of pageViews) {
       lastBySession.set(e.session_id, e);
     }
-    // Collect exit page time from page_exit events keyed by session
     const exitTimeBySession = new Map<string, { path: string; time: number }>();
     for (const e of pageExits) {
       exitTimeBySession.set(e.session_id, { path: e.page_path, time: e.time_on_page_ms || 0 });
@@ -164,7 +164,6 @@ export default function UserTracking() {
         pageTraffic[e.page_path].exits++;
       }
     }
-    // Average out
     for (const p of Object.keys(pageTraffic)) {
       const t = pageTraffic[p];
       if (t.exits > 0) {
@@ -194,8 +193,7 @@ export default function UserTracking() {
       }
     }
 
-    // --- Bounce: user landed and left the site (single page_view session) ---
-    // A "bounce" = session with only 1 page view (user left without navigating further)
+    // --- Bounce ---
     const bounceSessions = new Set<string>();
     const bounceTimeByPage: Record<string, { total: number; count: number }> = {};
     for (const [sid, pages] of sessionPages.entries()) {
@@ -232,6 +230,30 @@ export default function UserTracking() {
       }
     }
 
+    // --- CTA / Interaction clicks ---
+    const ctaCounts: Record<string, { count: number; text: string }> = {};
+    for (const e of interactions) {
+      const key = e.event_type + '::' + (e.element_text || e.element_text || 'unknown');
+      if (!ctaCounts[key]) ctaCounts[key] = { count: 0, text: e.element_text || '' };
+      ctaCounts[key].count++;
+    }
+
+    // --- Funnel: Landing → Signup → Quiz → Trip Dashboard → Itinerary ---
+    const funnelSessions = {
+      landing: new Set<string>(),
+      signup: new Set<string>(),
+      quiz: new Set<string>(),
+      tripDashboard: new Set<string>(),
+      itinerary: new Set<string>(),
+    };
+    for (const e of pageViews) {
+      if (e.page_path === '/') funnelSessions.landing.add(e.session_id);
+      if (e.page_path === '/signup') funnelSessions.signup.add(e.session_id);
+      if (e.page_path === '/quiz') funnelSessions.quiz.add(e.session_id);
+      if (e.page_path === '/trip/dashboard') funnelSessions.tripDashboard.add(e.session_id);
+      if (e.page_path.startsWith('/itinerary/') || e.page_path === '/planner/itinerary') funnelSessions.itinerary.add(e.session_id);
+    }
+
     return {
       totalSessions: sessions.size,
       totalPageViews: pageViews.length,
@@ -245,6 +267,9 @@ export default function UserTracking() {
       bounceTimeByPage,
       deviceCounts,
       utmCounts,
+      ctaCounts,
+      funnelSessions,
+      totalInteractions: interactions.length,
     };
   }, [events]);
 
