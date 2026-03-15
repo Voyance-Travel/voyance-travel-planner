@@ -4883,7 +4883,7 @@ export function EditorialItinerary({
                      <span className="hidden sm:inline">History</span>
                    </Button>
                    <span className="text-xs text-muted-foreground">
-                     Day {selectedDayIndex + 1} of {days.length}
+                     Day {selectedDayIndex + 1} of {isActivelyGenerating ? expectedTotalDays : days.length}
                    </span>
                  </div>
                  )}
