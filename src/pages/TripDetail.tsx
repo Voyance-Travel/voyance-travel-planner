@@ -1906,7 +1906,7 @@ export default function TripDetail() {
       <Head title={`${trip.name} | Voyance`} />
       
       {/* Hero Destination Image — compact on mobile, taller on desktop */}
-      <div className="relative h-40 sm:h-56 md:h-72 -mt-16 overflow-hidden">
+      <div className="relative h-28 sm:h-40 md:h-56 lg:h-72 -mt-16 overflow-hidden">
         <ErrorBoundary>
         <img
           src={heroImageUrl}

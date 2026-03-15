@@ -299,7 +299,7 @@ export function SignUpForm() {
                 <span className="text-xs text-slate-500">{passwordStrength.label}</span>
               </div>
               
-              <div className="grid grid-cols-2 gap-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
                 {passwordRequirements.map((req, i) => (
                   <div key={i} className="flex items-center gap-1.5 text-xs">
                     {req.met ? (

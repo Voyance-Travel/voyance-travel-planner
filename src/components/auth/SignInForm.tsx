@@ -140,7 +140,7 @@ export function SignInForm() {
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-1">
             <Label htmlFor="password" className="text-slate-700">Password</Label>
             <Link 
               to="/forgot-password" 
