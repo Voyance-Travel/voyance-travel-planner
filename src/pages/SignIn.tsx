@@ -115,7 +115,7 @@ export default function SignIn() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="flex-1 flex flex-col justify-center px-8 md:px-12 lg:px-14 xl:px-16 py-12"
+            className="flex-1 flex flex-col justify-center px-4 sm:px-8 md:px-12 lg:px-14 xl:px-16 py-12"
           >
             <>
                 {/* Welcome header */}

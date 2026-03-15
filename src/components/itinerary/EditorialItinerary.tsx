@@ -9822,7 +9822,7 @@ function ActivityRow({
                       <MoreHorizontal className="h-5 w-5" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                  <DropdownMenuContent align="center" sideOffset={4} className="bg-background border shadow-lg z-50 min-w-[160px]">
                     <DropdownMenuItem
                       onClick={() => setShowProposeReplacement(true)}
                       className="cursor-pointer gap-2"

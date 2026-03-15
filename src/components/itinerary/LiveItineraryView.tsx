@@ -591,7 +591,7 @@ export function LiveItineraryView({
         >
           {/* ─── 1. Editorial Day Header ─── */}
           <div className="flex items-start gap-4">
-            <div className="text-4xl sm:text-5xl font-serif font-bold text-primary/20 leading-none select-none">
+            <div className="text-2xl sm:text-4xl font-serif font-bold text-primary/20 leading-none select-none">
               {String(currentDay.dayNumber).padStart(2, '0')}
             </div>
             <div className="flex-1 min-w-0 pt-1">

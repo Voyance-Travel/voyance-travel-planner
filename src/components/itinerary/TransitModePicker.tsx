@@ -331,7 +331,7 @@ export function TransitModePicker({
         <span className="text-muted-foreground shrink-0">{transportIcon}</span>
 
         {/* Title */}
-        <span className="text-xs text-muted-foreground truncate min-w-0">
+        <span className="text-xs text-muted-foreground truncate sm:whitespace-normal min-w-0">
           {activityTitle}
         </span>
 
