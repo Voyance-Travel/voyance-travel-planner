@@ -1559,6 +1559,15 @@ export function EditorialItinerary({
       activities: updatedActivities,
     };
   }), [rawDays]);
+
+  // Compute expected total days from start/end dates so we can show placeholders during generation
+  const expectedTotalDays = useMemo(() => {
+    if (!startDate || !endDate) return days.length;
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
+    const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(diff, days.length);
+  }, [startDate, endDate, days.length]);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
   // Persisted option group selections (key = optionGroup id, value = selected activity id)
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
