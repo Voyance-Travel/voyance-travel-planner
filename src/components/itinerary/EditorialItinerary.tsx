@@ -1387,12 +1387,19 @@ export function EditorialItinerary({
           descParts.push('Plan your transport details');
         }
 
+        const depInterCityCategory = tType === 'flight' ? 'inter_city_flight'
+          : tType === 'train' ? 'inter_city_train'
+          : tType === 'bus' ? 'inter_city_bus'
+          : tType === 'ferry' ? 'inter_city_ferry'
+          : tType === 'car' ? 'inter_city_car'
+          : 'inter_city_train';
+
         const departureCard: EditorialActivity = {
           id: `departure-transport-${dn}`,
           title,
           name: title,
-          type: 'transit',
-          category: 'transit',
+          type: depInterCityCategory,
+          category: depInterCityCategory,
           isLocked: false,
           startTime: cardTime,
           endTime: arrTime || undefined,
@@ -1400,6 +1407,22 @@ export function EditorialItinerary({
           description: descParts.join('\n'),
           location: undefined,
           __syntheticDeparture: true,
+          __interCityTransport: true,
+          __travelMeta: {
+            from: '',
+            to,
+            transportName: transportLabel,
+            hubLabel: '',
+            carrier,
+            flightNum,
+            depTime,
+            arrTime,
+            dur,
+            seatInfo: '',
+            bookingRef: '',
+            price: undefined,
+            currency: 'USD',
+          },
           __departureTransportType: tType,
         } as any;
 
