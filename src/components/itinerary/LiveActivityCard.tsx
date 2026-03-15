@@ -12,6 +12,7 @@ import { ActivityFeedbackModal } from './ActivityFeedbackModal';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { useActivityFeedback, type FeedbackRating } from '@/services/activityFeedbackAPI';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 
 type ActivityStatus = 'upcoming' | 'current' | 'completed' | 'skipped';
 
@@ -126,7 +127,7 @@ export function LiveActivityCard({
             {activity.startTime && (
               <Badge variant="outline" className="text-xs">
                 <Clock className="w-3 h-3 mr-1" />
-                {activity.startTime}
+                {formatTime12h(activity.startTime)}
               </Badge>
             )}
           </div>

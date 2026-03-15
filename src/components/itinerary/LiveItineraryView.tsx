@@ -20,6 +20,7 @@ import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { openMapLocation } from '@/utils/mapNavigation';
 import type { ActivityContext } from '@/types/feedback';
 import { cn } from '@/lib/utils';
+import { formatTime12h } from '@/utils/timeFormat';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -173,7 +174,7 @@ function TimelineActivityCard({
               </span>
               {activity.startTime && (
                 <span className="text-xs font-semibold text-primary tabular-nums shrink-0">
-                  {activity.startTime}
+                  {formatTime12h(activity.startTime)}
                 </span>
               )}
             </div>
@@ -223,8 +224,8 @@ function TimelineActivityCard({
               {activity.startTime && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {activity.startTime}
-                  {activity.endTime && ` – ${activity.endTime}`}
+                  {formatTime12h(activity.startTime)}
+                  {activity.endTime && ` – ${formatTime12h(activity.endTime)}`}
                 </span>
               )}
               {isCurrent && (

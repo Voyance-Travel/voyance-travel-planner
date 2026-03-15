@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { BookableActivity, getStateLabel, getStateColor } from '@/services/bookingStateMachine';
 import { formatPrice } from '@/utils/bookingUtils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 import { useState } from 'react';
 
 interface VoucherModalProps {
@@ -122,7 +123,7 @@ export function VoucherModal({
               {activity.startTime && (
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span>{activity.startTime}</span>
+                  <span>{formatTime12h(activity.startTime)}</span>
                 </div>
               )}
               

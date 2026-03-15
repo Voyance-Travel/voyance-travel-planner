@@ -22,6 +22,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 import {
   BookableActivity,
   BookingItemState,
@@ -278,7 +279,7 @@ export function BookableItemCard({
             {activity.startTime && (
               <div className="flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5" />
-                <span>{activity.startTime}{activity.endTime && ` - ${activity.endTime}`}</span>
+                <span>{formatTime12h(activity.startTime)}{activity.endTime && ` - ${formatTime12h(activity.endTime)}`}</span>
               </div>
             )}
             {activity.location && (

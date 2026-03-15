@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { getActivityIconName, getActivityColor, formatDuration } from '@/utils/plannerUtils';
 import { trackActivityClick } from '@/services/behaviorTrackingService';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 import { ExplainableActivity } from '@/components/itinerary/ExplainableActivity';
 import type { TripActivity } from '@/types/trip';
 
@@ -102,8 +103,8 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
               <div className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
                 <span>
-                  {activity.startTime}
-                  {activity.endTime && ` - ${activity.endTime}`}
+                  {formatTime12h(activity.startTime)}
+                  {activity.endTime && ` - ${formatTime12h(activity.endTime)}`}
                 </span>
               </div>
             )}

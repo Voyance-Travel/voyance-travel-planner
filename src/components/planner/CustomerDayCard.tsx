@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import type { DayItinerary, ItineraryActivity } from '@/types/itinerary';
 import { formatWeatherCondition } from '@/utils/textFormatting';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 import ActivityAlternativesDrawer from './ActivityAlternativesDrawer';
 import { useVersionHistory } from '@/hooks/useVersionHistory';
 
@@ -216,7 +217,7 @@ export default function CustomerDayCard({
                         <div className="flex gap-4">
                           <div className="flex items-center gap-2 text-muted-foreground w-20 flex-shrink-0">
                             <Clock className="w-4 h-4" />
-                            <span className="text-sm font-mono">{activity.time}</span>
+                            <span className="text-sm font-mono">{formatTime12h(activity.time)}</span>
                           </div>
                           
                           <div className="flex-1 min-w-0">

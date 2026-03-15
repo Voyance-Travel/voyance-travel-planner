@@ -14,6 +14,7 @@ import {
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 
 interface Activity {
   id: string;
@@ -208,7 +209,7 @@ export default function ItinerarySummaryCard({
                                     <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                                       <span className="flex items-center gap-1">
                                         <Clock className="w-4 h-4" />
-                                        {activity.time}
+                                        {formatTime12h(activity.time)}
                                       </span>
                                       {activity.duration && (
                                         <span>• {activity.duration}</span>

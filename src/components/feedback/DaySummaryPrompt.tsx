@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useUpsertDaySummary } from '@/services/feedbackAPI';
 import type { ActivityContext } from '@/types/feedback';
+import { formatTime12h } from '@/utils/timeFormat';
 
 interface DaySummaryPromptProps {
   tripId: string;
@@ -182,7 +183,7 @@ export function DaySummaryPrompt({
                         <div className="min-w-0">
                           <p className="font-medium truncate">{activity.name}</p>
                           {activity.startTime && (
-                            <p className="text-xs text-muted-foreground">{activity.startTime}</p>
+                            <p className="text-xs text-muted-foreground">{formatTime12h(activity.startTime)}</p>
                           )}
                         </div>
                       </button>

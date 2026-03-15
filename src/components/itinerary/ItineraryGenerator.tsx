@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { format, differenceInCalendarDays } from 'date-fns';
 import { parseLocalDate, safeFormatDate } from '@/utils/dateUtils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 import { ROUTES } from '@/config/routes';
 import { EditorialItinerary } from '@/components/itinerary/EditorialItinerary';
 import type { EditorialDay } from '@/components/itinerary/EditorialItinerary';
@@ -1434,7 +1435,7 @@ export function ItineraryGenerator({
                     className="flex items-center gap-3 text-sm"
                   >
                     <span className="text-muted-foreground w-14 shrink-0 font-mono">
-                      {activity.startTime}
+                      {formatTime12h(activity.startTime)}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
