@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ROUTES } from '@/config/routes';
 import { useTripPermission } from '@/services/tripCollaboratorsAPI';
-import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
+import { isNativeIOS, openWebsitePurchase } from '@/services/iapService';
 
 const ACTION_LABELS: Partial<Record<keyof typeof CREDIT_COSTS, string>> = {
   SWAP_ACTIVITY: 'Swap Activity',
