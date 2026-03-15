@@ -8230,12 +8230,30 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
         console.log(`[generate-day] Trip type "${tripType}" prompt built (${tripTypePrompt.length} chars)`);
       }
       
-      // Get archetype context for activity limits and other settings
+      // GAP 2: For group trips, intersect avoid lists across all travelers' archetypes
+      let groupAvoidOverride: string[] | null = null;
+      if (blendedDnaSnapshot && blendedDnaSnapshot.travelers.length > 1) {
+        try {
+          const allAvoidLists = blendedDnaSnapshot.travelers.map(t => {
+            const def = getArchetypeDefinition(t.archetype);
+            return new Set(def.avoid.map((a: string) => a.toLowerCase()));
+          });
+          // Intersection: only enforce items ALL travelers' archetypes avoid
+          const intersection = [...allAvoidLists[0]].filter(item => 
+            allAvoidLists.every(avoidSet => avoidSet.has(item))
+          );
+          groupAvoidOverride = intersection;
+          console.log(`[generate-day] ✓ Group avoid-list intersection: ${intersection.length} items (from ${allAvoidLists.length} archetypes)`);
+        } catch (avoidErr) {
+          console.warn('[generate-day] Group avoid-list intersection failed (non-blocking):', avoidErr);
+        }
+      }
+      
       const archetypeContext = getFullArchetypeContext(
         primaryArchetype, 
         resolvedDestination, 
         effectiveBudgetTier, 
-        { pace: traitScores.pace, budget: traitScores.budget }
+        effectiveTraitScores
       );
       const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;
       const minActivitiesFromArchetype = archetypeContext.definition.dayStructure.minScheduledActivities 
