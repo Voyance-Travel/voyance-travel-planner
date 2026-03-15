@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 import { recalculateDNAFromPreferences } from '@/utils/quizMapping';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
-import { useEntitlements } from '@/hooks/useEntitlements';
+
 import { CREDIT_COSTS } from '@/config/pricing';
 
 interface Message {
@@ -72,7 +72,6 @@ export default function DNAFeedbackChat({
 
   // Credit system hooks
   const { data: creditData } = useCredits();
-  const { isPaid } = useEntitlements();
   const spendCredits = useSpendCredits();
   const totalCredits = creditData?.totalCredits ?? 0;
 
@@ -83,20 +82,10 @@ export default function DNAFeedbackChat({
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    // Check and charge credits (skip for paid users)
-    if (!isPaid) {
-      if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
-        toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
-        return;
-      }
-      try {
-        await spendCredits.mutateAsync({
-          action: 'AI_MESSAGE',
-          metadata: { source: 'dna_feedback_chat' },
-        });
-      } catch {
-        return; // useSpendCredits shows error toast
-      }
+    // Pre-flight credit check (don't charge yet — charge on success)
+    if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
+      toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
+      return;
     }
 
     const userMessage: Message = {
@@ -136,6 +125,17 @@ export default function DNAFeedbackChat({
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+
+      // Charge credits AFTER successful AI response (charge-on-success pattern)
+      // No tripId — DNAFeedbackChat is profile-level, free caps don't apply (by design)
+      try {
+        await spendCredits.mutateAsync({
+          action: 'AI_MESSAGE',
+          metadata: { source: 'dna_feedback_chat' },
+        });
+      } catch {
+        console.warn('[DNAFeedbackChat] Credit charge failed post-response');
+      }
 
       // If AI suggested trait adjustments, apply them as overrides and recalculate
       if (response.suggestedTraits && Object.keys(response.suggestedTraits).length > 0) {

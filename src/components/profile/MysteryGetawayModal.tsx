@@ -125,8 +125,6 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
         return;
       }
 
-      await spendCredits.mutateAsync({ action: 'MYSTERY_GETAWAY' });
-
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/suggest-mystery-trips`,
         {
@@ -147,6 +145,14 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
       }
 
       const data = await response.json();
+
+      // Charge credits AFTER successful API response (charge-on-success pattern)
+      try {
+        await spendCredits.mutateAsync({ action: 'MYSTERY_GETAWAY' });
+      } catch {
+        console.warn('[MysteryGetaway] Credit charge failed post-response');
+      }
+
       setSuggestions(data.suggestions || []);
       setArchetype(data.userProfile?.archetype || 'Traveler');
       setStep('reveal');
@@ -242,8 +248,6 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
         return;
       }
 
-      await spendCredits.mutateAsync({ action: 'MYSTERY_LOGISTICS' });
-
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mystery-trip-logistics`,
         {
@@ -270,6 +274,14 @@ export default function MysteryGetawayModal({ open, onOpenChange }: MysteryGetaw
       }
 
       const data = await response.json();
+
+      // Charge credits AFTER successful API response (charge-on-success pattern)
+      try {
+        await spendCredits.mutateAsync({ action: 'MYSTERY_LOGISTICS' });
+      } catch {
+        console.warn('[MysteryGetaway] Logistics credit charge failed post-response');
+      }
+
       setFlightEstimate(data.flightEstimate);
       setHotelSuggestions(data.hotelSuggestions || []);
       setDepartureCity(data.departureCity || '');
