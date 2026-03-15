@@ -20,7 +20,7 @@ export const CREDIT_COSTS = {
   SWAP_ACTIVITY: 5,           // Swap an activity (after 10 free/trip)
   ADD_ACTIVITY: 5,            // Add a new activity to a day
   RESTAURANT_REC: 5,          // Restaurant recommendation (after 5 free/trip)
-  AI_MESSAGE: 5,              // AI companion message (after 20 free/trip)
+  AI_MESSAGE: 0,              // Free — credits charged on action execution only
   HOTEL_OPTIMIZATION: 100,    // Approve hotel-based itinerary swaps
   MYSTERY_GETAWAY: 15,        // Mystery Getaway destination suggestions
   MYSTERY_LOGISTICS: 5,       // Flight estimate + hotel suggestions for mystery trip

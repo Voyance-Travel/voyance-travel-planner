@@ -23,7 +23,7 @@ const FIXED_COSTS: Record<string, number> = {
   swap_activity: 5,
   add_activity: 5,
   restaurant_rec: 5,
-  ai_message: 5,
+  ai_message: 0, // Free — chat messages don't cost credits
   hotel_optimization: 100,
   mystery_getaway: 15,
   mystery_logistics: 5,

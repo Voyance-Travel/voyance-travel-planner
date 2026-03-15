@@ -203,21 +203,8 @@ export function ItineraryAssistant({
 
       const response = await sendChatMessage(apiMessages, itineraryContext, conversationId);
 
-      // ✅ Charge credits AFTER successful AI response — prevents credit drain on API failures
-      try {
-        const messageSpendResult = await spendCredits.mutateAsync({
-          action: 'AI_MESSAGE',
-          tripId,
-          metadata: { source: 'itinerary_assistant' },
-        });
-        if (!messageSpendResult.success) {
-          console.warn('[ItineraryAssistant] Post-response credit charge failed (non-fatal):', messageSpendResult);
-        }
-      } catch (creditErr) {
-        // The AI already responded — log but don't block the user from seeing it.
-        // This is a rare edge case (balance changed between pre-check and charge).
-        console.error('[ItineraryAssistant] Post-response credit charge error:', creditErr);
-      }
+      // Chat messages are free — no credit charge for conversation.
+      // Credits are only spent when the user clicks "Apply" on an action card.
 
       // Create assistant message with actions
       const assistantMessage: ChatMessage = {
