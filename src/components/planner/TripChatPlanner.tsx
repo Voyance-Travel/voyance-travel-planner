@@ -445,7 +445,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-9 w-9 sm:h-7 sm:w-7"
                 onClick={handlePaste}
                 title="Paste your research"
               >
