@@ -1980,7 +1980,7 @@ ${context.actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: This b
 ARCHETYPE: ${context.travelerDNA?.primaryArchetype || 'balanced'}
 ACTIVITY COUNT: ${effectiveMinActivities}-${effectiveMaxActivities} per day${isSmartFinishGeneration ? ' (SMART FINISH POLISH TARGET)' : ' (from archetype day structure - HARD LIMITS)'}
 ⚠️ MINIMUM ${effectiveMinActivities} activities required. Going UNDER = FAILURE. Going OVER ${effectiveMaxActivities} = FAILURE.
-Include a mix of: 3 dining slots (breakfast/lunch/dinner), transit between major moves, core exploration/activity slots, and an evening activity where appropriate.
+⚠️ MEAL REQUIREMENT (HARD RULE): Every standard full-exploration day MUST include exactly 3 dining slots: Breakfast (7:00-10:30 AM window), Lunch (11:30 AM-1:30 PM window), and Dinner (6:00-9:30 PM window). Arrival days include meals only after arrival. Departure days include meals only before departure. NEVER skip meals on a full day — a day without 3 meals is a FAILURE. Also include transit between major moves, core exploration/activity slots, and an evening activity where appropriate.
 ${isSmartFinishGeneration ? 'SMART FINISH HARD RULE: Keep ALL user-provided anchor activities by exact name and build additional activities around them — never replace or drop anchors.' : ''}
 ${multiCityPrompt}
 
