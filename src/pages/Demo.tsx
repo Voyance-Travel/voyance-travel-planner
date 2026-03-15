@@ -49,7 +49,7 @@ export default function Demo() {
 
         {/* Feature showcase - Step by step tour */}
         {showTour && (
-          <DemoFeatureShowcase onComplete={handleTourComplete} />
+          <DemoFeatureShowcase onComplete={handleTourComplete} onSkipToPlayground={handleSkipToPlayground} />
         )}
       </div>
 

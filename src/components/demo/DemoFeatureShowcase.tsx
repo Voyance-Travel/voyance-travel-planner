@@ -188,7 +188,7 @@ export function DemoFeatureShowcase({ onComplete, onSkipToPlayground }: DemoFeat
         <div className="text-center mt-12">
           <Button
             variant="link"
-            onClick={onComplete}
+            onClick={onSkipToPlayground || onComplete}
             className="text-muted-foreground hover:text-foreground text-sm"
           >
             Skip to playground →
