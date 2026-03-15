@@ -8528,7 +8528,8 @@ OUTPUT QUALITY:
 All text must be clean, correctly spelled English. No garbled characters, no non-Latin script, no leaked schema field names.
 `;
 
-      const isFullDay = !isFirstDay && !isLastDay;
+      // Use meal policy derived earlier (dayMealPolicy) instead of blanket isFullDay
+      const isFullDay = dayMealPolicy?.isFullExplorationDay ?? (!isFirstDay && !isLastDay);
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}.
 
 Date: ${date}
