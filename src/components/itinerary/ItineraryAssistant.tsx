@@ -525,13 +525,9 @@ export function ItineraryAssistant({
                 <SheetDescription className="text-xs">
                   Customize your {destination} itinerary
                 </SheetDescription>
-                {!aiMessageCap.isLoading && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {aiMessageCap.isFree
-                      ? `💬 ${aiMessageCap.freeRemaining} of ${aiMessageCap.cap} free messages remaining`
-                      : `💬 Continue chatting: ${aiMessageCap.creditCost} credits/message`}
-                  </p>
-                )}
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  💬 Chat is free — actions cost credits
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-2 text-xs">
