@@ -9673,7 +9673,7 @@ function ActivityRow({
                         <span className="text-xs font-medium">More Options</span>
                       </TooltipContent>
                     </Tooltip>
-                    <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                    <DropdownMenuContent align="center" sideOffset={4} className="bg-background border shadow-lg z-50 min-w-[160px]">
                       {onSwap && canViewPremium && (
                         <>
                           <DropdownMenuItem
