@@ -5047,8 +5047,10 @@ export function EditorialItinerary({
                     days={days}
                     colorIndex={collaborators.length}
                     onAddActivities={() => {
-                      // TODO: wire to lighter "enrich" endpoint
-                      toast.success(`Adding personalized activities for ${newlyAddedMember}...`);
+                      toast.success(`Regenerating itinerary to include ${newlyAddedMember}'s preferences...`);
+                      // Trigger full regeneration which blends the new member's DNA
+                      // and the backend backfill guarantees suggestedFor attribution
+                      handleRegenerateItinerary();
                     }}
                     onDismiss={() => setNewlyAddedMember(null)}
                   />
