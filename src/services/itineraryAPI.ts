@@ -205,16 +205,26 @@ function buildDayCityMap(cities: TripCity[], totalDays: number): Array<{
   transitionFrom?: string;
   transitionTo?: string;
   transitionMode?: string;
+  // Departure day: last day in a city before switching to the next
+  isDepartureDay?: boolean;
+  departureTo?: string;
+  departureTransportType?: string;
+  departureTransportDetails?: Record<string, unknown>;
 }> {
   const map: ReturnType<typeof buildDayCityMap> = [];
   
   for (const city of cities) {
     const nights = city.nights || city.days_total || 1;
+    const nextCity = cities.find(c => c.city_order === city.city_order + 1) || null;
     
     for (let n = 0; n < nights; n++) {
       // First day in a city that isn't the first city = transition day (half-and-half)
       const isTransition = n === 0 && city.city_order > 0 && city.transition_day_mode !== 'skip';
       const prevCity = city.city_order > 0 ? cities.find(c => c.city_order === city.city_order - 1) : null;
+      
+      // Last day in this city and there's a next city = departure day
+      const isLastDayOfCity = n === nights - 1;
+      const isDeparture = isLastDayOfCity && !!nextCity;
       
       map.push({
         cityName: city.city_name,
@@ -223,6 +233,10 @@ function buildDayCityMap(cities: TripCity[], totalDays: number): Array<{
         transitionFrom: isTransition ? prevCity?.city_name : undefined,
         transitionTo: isTransition ? city.city_name : undefined,
         transitionMode: isTransition ? (city.transport_type || undefined) : undefined,
+        isDepartureDay: isDeparture || undefined,
+        departureTo: isDeparture ? nextCity!.city_name : undefined,
+        departureTransportType: isDeparture ? (nextCity!.transport_type || undefined) : undefined,
+        departureTransportDetails: isDeparture ? (nextCity!.transport_details as Record<string, unknown> || undefined) : undefined,
       });
     }
   }
@@ -230,7 +244,7 @@ function buildDayCityMap(cities: TripCity[], totalDays: number): Array<{
   // Pad or trim to match totalDays
   while (map.length < totalDays) {
     const last = map[map.length - 1] || { cityName: 'Unknown', isTransitionDay: false };
-    map.push({ ...last, isTransitionDay: false });
+    map.push({ ...last, isTransitionDay: false, isDepartureDay: undefined });
   }
   
   return map.slice(0, totalDays);
