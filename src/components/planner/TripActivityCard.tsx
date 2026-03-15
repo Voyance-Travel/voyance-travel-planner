@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { getActivityIconName, getActivityColor, formatDuration } from '@/utils/plannerUtils';
 import { trackActivityClick } from '@/services/behaviorTrackingService';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 import { ExplainableActivity } from '@/components/itinerary/ExplainableActivity';
 import type { TripActivity } from '@/types/trip';
 
