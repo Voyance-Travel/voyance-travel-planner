@@ -140,6 +140,11 @@ export default function TripDetail() {
   const hotelEnrichmentAttempted = useRef(false);
   const debriefPromptAttempted = useRef(false);
   const autoGenerateTriggered = useRef(false);
+  const tripRef = useRef<Trip | null>(null);
+
+  useEffect(() => {
+    tripRef.current = trip;
+  }, [trip]);
 
   // Entitlements — gate premium features like chat assistant
   const { data: entitlements, refresh: refreshEntitlements } = useEntitlements(tripId);
