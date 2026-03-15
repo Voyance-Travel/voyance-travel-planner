@@ -46,6 +46,14 @@ export function EmbeddedCheckoutModal({
 }: EmbeddedCheckoutModalProps) {
   const [error, setError] = useState<string | null>(null);
 
+  // Safety net: redirect to website if somehow opened on iOS native
+  useEffect(() => {
+    if (isNativeIOS() && isOpen) {
+      openWebsitePurchase();
+      onClose();
+    }
+  }, [isOpen, onClose]);
+
   const fetchClientSecret = useCallback(async () => {
     try {
       setError(null);
