@@ -147,6 +147,7 @@ export function ItineraryGenerator({
   const [showCostConfirm, setShowCostConfirm] = useState(false);
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const [journeyLegs, setJourneyLegs] = useState<Array<{ city: string; days: number; cost: number }>>([]);
+  const [journeyMultiCityFee, setJourneyMultiCityFee] = useState(0);
 
   const fetchCompletedDaysFromBackend = useCallback(async (): Promise<GeneratedDay[]> => {
     if (!tripId) return [];
