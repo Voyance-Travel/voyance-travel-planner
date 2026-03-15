@@ -600,8 +600,10 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
     });
   }
 
-  // Discretionary categories use remaining budget after committed costs
-  const safeRemaining = Math.max(remaining, 0);
+  // Discretionary categories use total budget minus committed hotel/flight
+  const committedFixed = (settings.budget_include_hotel ? summary.committedHotelCents : 0)
+    + (settings.budget_include_flight ? summary.committedFlightCents : 0);
+  const discretionaryTotal = Math.max(budgetTotal - committedFixed, 0);
   result.push(
     {
       category: 'food',
