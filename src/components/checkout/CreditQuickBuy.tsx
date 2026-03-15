@@ -89,15 +89,10 @@ export function CreditQuickBuy({ currentBalance, tripId, children }: CreditQuick
   const { toast } = useToast();
 
   const handleBuy = async (pack: typeof FLEXIBLE_CREDITS[number]) => {
-    // iOS native IAP path
-    if (isIAPAvailable()) {
+    // iOS native: link out to website
+    if (isNativeIOS()) {
       setOpen(false);
-      const result = await purchaseByPackId(pack.id);
-      if (result.success) {
-        toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
-      } else if (result.error !== 'cancelled') {
-        toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
-      }
+      await openWebsitePurchase(pack.id);
       return;
     }
 

@@ -70,15 +70,10 @@ export function OutOfCreditsModal() {
         return;
       }
 
-      // iOS native IAP path
-      if (isIAPAvailable() && pack.id) {
-        const result = await purchaseByPackId(pack.id);
-        if (result.success) {
-          toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
-          dismiss();
-        } else if (result.error !== 'cancelled') {
-          toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
-        }
+      // iOS native: link out to website
+      if (isNativeIOS()) {
+        await openWebsitePurchase(pack.id);
+        dismiss();
         return;
       }
 

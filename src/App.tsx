@@ -301,7 +301,7 @@ const App = () => (
           <OutOfCreditsProvider>
             <TooltipProvider>
               <ImagePreloaderInit />
-              <IAPInitializer />
+              
               <PushInitializer />
               <GlobalErrorHandler />
               <Toaster />

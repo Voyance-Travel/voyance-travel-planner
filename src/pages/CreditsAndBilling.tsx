@@ -131,13 +131,9 @@ export default function CreditsAndBilling() {
   const { toast } = useToast();
 
   const handleBuyPack = async (pack: { priceId: string; productId: string; credits: number; name: string; id?: string }) => {
-    if (isIAPAvailable() && pack.id) {
-      const result = await purchaseByPackId(pack.id);
-      if (result.success) {
-        toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
-      } else if (result.error !== 'cancelled') {
-        toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
-      }
+    // iOS native: link out to website
+    if (isNativeIOS()) {
+      await openWebsitePurchase(pack.id);
       return;
     }
     setCheckoutConfig(pack);
