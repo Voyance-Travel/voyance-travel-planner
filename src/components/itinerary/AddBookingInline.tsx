@@ -879,12 +879,12 @@ export function AddHotelInline({
 
       // Sync hotel price to budget ledger if price was entered
       if (newHotel.totalPrice && newHotel.totalPrice > 0) {
-        syncHotelToLedger(tripId, {
+        await syncHotelToLedger(tripId, {
           name: newHotel.name,
           totalPrice: newHotel.totalPrice,
           checkIn: newHotel.checkInDate,
           checkOut: newHotel.checkOutDate,
-        }).catch(err => console.error('Failed to sync hotel to budget:', err));
+        });
       }
 
       toast.dismiss('hotel-enrich');

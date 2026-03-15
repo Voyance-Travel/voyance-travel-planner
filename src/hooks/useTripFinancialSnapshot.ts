@@ -76,6 +76,13 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     fetchData();
   }, [fetchData]);
 
+  // Re-fetch when bookings change (hotel/flight added)
+  useEffect(() => {
+    const handler = () => fetchData();
+    window.addEventListener('booking-changed', handler);
+    return () => window.removeEventListener('booking-changed', handler);
+  }, [fetchData]);
+
   const refetch = useCallback(() => fetchData(), [fetchData]);
 
   return useMemo(() => {
