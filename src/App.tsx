@@ -19,6 +19,7 @@ import { GlobalErrorHandler } from '@/components/common/GlobalErrorHandler';
 import { OAuthReturnHandler } from '@/components/auth/OAuthReturnHandler';
 import { useAnalyticsTracker } from '@/hooks/useAnalyticsTracker';
 import { useAccessibilityClasses } from '@/hooks/useAccessibilityClasses';
+import { useErrorTracker } from '@/hooks/useErrorTracker';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
