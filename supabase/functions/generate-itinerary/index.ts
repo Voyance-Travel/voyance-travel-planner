@@ -11024,7 +11024,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     // day credits are refunded server-side.
     // ==========================================================================
     if (action === 'generate-trip') {
-      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, resumeFromDay } = params;
+      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, resumeFromDay, isFirstTrip } = params;
       const userId = authResult.userId;
 
       if (!tripId || !destination || !startDate || !endDate) {
