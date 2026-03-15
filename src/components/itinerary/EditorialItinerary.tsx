@@ -5366,6 +5366,7 @@ export function EditorialItinerary({
                           onViewReviews={aiLocked ? undefined : openReviewsDrawer}
                           onTransportModeChange={handleTransportModeChange}
                           changingTransportActivityId={changingTransportActivityId}
+                          onSetActivityTransportation={(dIdx, aIdx, transport) => handleUpdateActivity(dIdx, aIdx, { transportation: transport })}
                           collaboratorColorMap={collaboratorColorMap}
                           aiLocked={aiLocked}
                           guestMustPropose={guestMustPropose}
@@ -8038,8 +8039,10 @@ interface DayCardProps {
   onUnlockTrip?: () => void;
   onUnlockDay?: (dayNumber: number) => void;
   unlockingDayNumber?: number | null;
-  onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
-  changingTransportActivityId?: string | null;
+   onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
+   changingTransportActivityId?: string | null;
+   /** Callback to set transportation data on an activity (e.g. from TransitGapIndicator) */
+   onSetActivityTransportation?: (dayIndex: number, activityIndex: number, transportation: EditorialActivity['transportation']) => void;
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
   aiLocked?: boolean;
   onRefreshDay?: () => void;
@@ -8106,6 +8109,7 @@ function DayCard({
   unlockingDayNumber,
   onTransportModeChange,
   changingTransportActivityId,
+  onSetActivityTransportation,
   collaboratorColorMap,
   aiLocked,
   guestMustPropose,
@@ -8635,6 +8639,14 @@ function DayCard({
                         isEditable={isEditable}
                         tripCurrency={tripCurrency}
                         travelers={travelers}
+                        onSelectMode={isEditable && onSetActivityTransportation ? (mode, duration, cost, instructions) => {
+                          onSetActivityTransportation(dayIndex, activityIndex, {
+                            method: mode,
+                            duration,
+                            ...(cost ? { estimatedCost: cost } : {}),
+                            ...(instructions ? { instructions } : {}),
+                          });
+                        } : undefined}
                       />
                     )}
                     {/* Inline Add Activity button between activities */}
