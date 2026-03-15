@@ -4,9 +4,9 @@
  * When enough details are gathered, the AI extracts them via tool calling.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Sparkles, User, ClipboardPaste, Mic, MicOff } from 'lucide-react';
+import { Send, Loader2, Sparkles, User, ClipboardPaste, Mic, MicOff, AlertCircle } from 'lucide-react';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,6 +19,7 @@ import { TripConfirmCard, type InterCityTransportMode } from './TripConfirmCard'
 import { resolveCities, type NormalizedCity } from '@/utils/cityNormalization';
 import { normalizeChatTripDates } from '@/utils/justTellUsDateGuard';
 import { parseLocalDate } from '@/utils/dateUtils';
+import { useCredits } from '@/hooks/useCredits';
 
 export interface ChatTripCity {
   name: string;
@@ -95,13 +96,27 @@ function normalizeMultiCity(details: TripDetails): TripDetails {
   return details;
 }
 
+const CHAT_SESSION_KEY = 'voyance_chat_messages';
+
 export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlannerProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content: "Hey! ✈️ Where are you thinking of going? Tell me anything - a city, a vibe, a dream trip. We'll figure it out together.",
-    },
-  ]);
+  const { data: creditData } = useCredits();
+  const hasNoCredits = creditData && creditData.totalCredits === 0;
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = sessionStorage.getItem(CHAT_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as ChatMessage[];
+        if (parsed.length > 1) return parsed;
+      }
+    } catch {}
+    return [
+      {
+        role: 'assistant',
+        content: "Hey! ✈️ Where are you thinking of going? Tell me anything - a city, a vibe, a dream trip. We'll figure it out together.",
+      },
+    ];
+  });
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [extractedDetails, setExtractedDetails] = useState<TripDetails | null>(null);
@@ -109,6 +124,13 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   const [cityTransports, setCityTransports] = useState<InterCityTransportMode[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Persist chat messages to sessionStorage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(CHAT_SESSION_KEY, JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
 
   const { isListening, isSupported: micSupported, toggleListening, interimTranscript } = useSpeechRecognition({
     onResult: (transcript) => {
@@ -304,9 +326,17 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
     }
   };
 
-  const handlePaste = () => {
-    textareaRef.current?.focus();
-    setInput(prev => prev || '');
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setInput(prev => prev ? `${prev}\n${text}` : text);
+        textareaRef.current?.focus();
+      }
+    } catch {
+      // Fallback: just focus so user can Ctrl+V
+      textareaRef.current?.focus();
+    }
   };
 
   return (
@@ -323,6 +353,14 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
             <p className="text-[10px] text-muted-foreground">Describe your trip or paste your research</p>
           </div>
         </div>
+
+        {/* Credit warning */}
+        {hasNoCredits && (
+          <div className="px-3 py-1.5 bg-destructive/10 border-b border-destructive/20 flex items-center gap-1.5">
+            <AlertCircle className="h-3 w-3 text-destructive flex-shrink-0" />
+            <p className="text-[10px] text-destructive">You have 0 credits. You'll need credits to generate your itinerary.</p>
+          </div>
+        )}
 
         {/* Chat messages */}
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
