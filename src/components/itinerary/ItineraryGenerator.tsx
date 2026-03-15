@@ -1054,7 +1054,7 @@ export function ItineraryGenerator({
                     <span className="text-foreground">{journeyLegs.length > 1 ? 'Journey Total' : 'Total'}</span>
                     <span className="text-primary">
                       {formatCredits(journeyLegs.length > 1 
-                        ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0) 
+                        ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0) + journeyMultiCityFee
                         : costEstimate.totalCredits
                       )} credits
                     </span>
