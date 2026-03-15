@@ -2407,6 +2407,15 @@ export default function Start() {
         ? multiCityDestinations.map(d => d.city).join(' → ')
         : `Trip to ${primaryDestination}`;
 
+      // Fetch owner_plan_tier for downstream entitlement checks
+      let ownerPlanTier = 'free';
+      try {
+        const { data: entitlements } = await supabase.functions.invoke('get-entitlements');
+        ownerPlanTier = entitlements?.plans?.[0] || 'free';
+      } catch (e) {
+        console.warn('[Start] Failed to fetch entitlements for owner_plan_tier:', e);
+      }
+
       // Save trip directly to database
       const { data: trip, error } = await supabase
         .from('trips')
