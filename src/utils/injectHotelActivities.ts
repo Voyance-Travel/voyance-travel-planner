@@ -30,35 +30,9 @@ interface HotelForInjection {
   coordinates?: { lat: number; lng: number };
 }
 
-function buildCheckInActivity(hotel: HotelForInjection, dayActivities?: EditorialActivity[]): EditorialActivity {
+function buildCheckInActivity(hotel: HotelForInjection): EditorialActivity {
   const photo = hotel.imageUrl || hotel.images?.[0];
-
-  // Determine check-in time: use hotel's check-in time, but if the day has an
-  // all-day event or activity running past the default, push check-in to after it ends
-  let checkInTime = hotel.checkInTime || '15:00';
-
-  if (dayActivities && dayActivities.length > 0) {
-    const checkInMinutes = timeToMinutes(checkInTime);
-
-    // Find the latest-ending non-transport, non-accommodation activity
-    let latestEnd = 0;
-    for (const act of dayActivities) {
-      const cat = (act.category || '').toLowerCase();
-      if (cat === 'transport' || cat === 'transportation' || cat === 'transit' || cat === 'accommodation') continue;
-      const startMin = timeToMinutes(act.startTime);
-      const durMin = act.durationMinutes || 120;
-      const endMin = startMin + durMin;
-      if (endMin > latestEnd) latestEnd = endMin;
-    }
-
-    // If the latest activity ends AFTER the default check-in time,
-    // push check-in to 30 min after (to allow for transit)
-    if (latestEnd > checkInMinutes) {
-      const lateHour = Math.floor((latestEnd + 30) / 60);
-      const lateMin = (latestEnd + 30) % 60;
-      checkInTime = `${String(lateHour).padStart(2, '0')}:${String(lateMin).padStart(2, '0')}`;
-    }
-  }
+  const checkInTime = hotel.checkInTime || '15:00';
 
   return {
     id: checkinId(hotel.id),
@@ -79,6 +53,69 @@ function buildCheckInActivity(hotel: HotelForInjection, dayActivities?: Editoria
     tags: ['check-in', 'structural'],
     cost: { amount: 0, currency: 'USD' },
   };
+}
+
+/** Convert minutes since midnight back to HH:MM string */
+function minutesToTime(m: number): string {
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+/**
+ * After injecting check-in, shift any overlapping or subsequent activities forward.
+ * Morning activities (before check-in) are untouched. Activities at or after
+ * check-in time get pushed to after the check-in window ends, with cascading.
+ */
+function adjustActivitiesAroundCheckIn(
+  activities: EditorialActivity[],
+  checkInTime: string
+): EditorialActivity[] {
+  const checkInStart = timeToMinutes(checkInTime);
+  const checkInEnd = checkInStart + 30; // 30 min check-in window
+  const MAX_TIME = 23 * 60; // Don't push past 11 PM
+
+  return activities.map(act => {
+    // Don't shift the check-in activity itself
+    if (act.id.startsWith('hotel-checkin-')) return act;
+    // Don't shift accommodation activities (checkout etc.)
+    if (act.category === 'accommodation') return act;
+
+    const actStart = timeToMinutes(act.startTime);
+
+    // Morning activities before check-in — leave untouched
+    if (actStart < checkInStart) return act;
+
+    // Activity overlaps with check-in window — shift to after check-in
+    if (actStart < checkInEnd) {
+      const newStart = Math.min(checkInEnd, MAX_TIME);
+      return { ...act, startTime: minutesToTime(newStart) };
+    }
+
+    return act;
+  }).sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+}
+
+/**
+ * Cascade-fix overlapping activities after initial shifts.
+ * Ensures a minimum 0-min gap (no overlaps) between consecutive activities.
+ */
+function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialActivity[] {
+  const MAX_TIME = 23 * 60;
+  const result = [...activities];
+
+  for (let i = 1; i < result.length; i++) {
+    const prev = result[i - 1];
+    const prevEnd = timeToMinutes(prev.startTime) + (prev.durationMinutes || 30);
+    const currStart = timeToMinutes(result[i].startTime);
+
+    if (currStart < prevEnd) {
+      const newStart = Math.min(prevEnd, MAX_TIME);
+      result[i] = { ...result[i], startTime: minutesToTime(newStart) };
+    }
+  }
+
+  return result;
 }
 
 function buildCheckOutActivity(hotel: HotelForInjection): EditorialActivity {
