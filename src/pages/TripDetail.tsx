@@ -1084,15 +1084,36 @@ export default function TripDetail() {
 
                 const rebuiltDays = fullDayRows.map((row: any) => {
                   const existingJsonDay = jsonDaysByNumber.get(row.day_number);
-                  // If we have a rich JSON day, prefer it; otherwise build from table row
-                  if (existingJsonDay) return existingJsonDay;
+                  const jsonActivities = existingJsonDay?.activities;
+                  const tableActivities = Array.isArray(row.activities) ? row.activities : [];
+                  
+                  // Use the richest activity source available:
+                  // 1) JSON day with non-empty activities (most metadata)
+                  // 2) Table row activities if non-empty
+                  // 3) Keep JSON day structure even if activities are empty (don't downgrade)
+                  const hasJsonActivities = Array.isArray(jsonActivities) && jsonActivities.length > 0;
+                  const hasTableActivities = tableActivities.length > 0;
+                  
+                  if (existingJsonDay && hasJsonActivities) {
+                    return existingJsonDay;
+                  }
+                  if (existingJsonDay && !hasJsonActivities && hasTableActivities) {
+                    // Enrich JSON day with table activities
+                    return { ...existingJsonDay, activities: tableActivities };
+                  }
+                  if (existingJsonDay) {
+                    // JSON day exists but both sources empty — keep JSON day as-is
+                    // (don't replace with a bare table rebuild that loses metadata)
+                    return existingJsonDay;
+                  }
+                  // No JSON day at all — build from table row (new day added to table)
                   return {
                     dayNumber: row.day_number,
                     date: row.date,
                     theme: row.theme || row.title || `Day ${row.day_number}`,
                     description: row.description || '',
                     weather: row.weather || undefined,
-                    activities: Array.isArray(row.activities) ? row.activities : [],
+                    activities: tableActivities,
                   };
                 });
 

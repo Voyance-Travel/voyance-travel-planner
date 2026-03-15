@@ -9616,15 +9616,50 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 }
               }
 
-              // 2) Upsert external-id based activities (newly generated)
+              // 2) Insert external-id based activities (newly generated)
+              // NOTE: We use delete-then-insert instead of upsert because there is no
+              // unique constraint on (trip_id, itinerary_day_id, external_id), which
+              // caused 42P10 errors and silently dropped activities.
               let persistedExternal: Array<{ id: string; external_id: string | null; is_locked: boolean | null }> = [];
               if (externalRows.length > 0) {
+                // First, delete existing non-locked external-id activities for this day
+                // so we can cleanly insert the new set
+                const externalIds = externalRows
+                  .map((r: any) => r.external_id)
+                  .filter(Boolean);
+                
+                if (externalIds.length > 0 && itineraryDayId) {
+                  await supabase
+                    .from('itinerary_activities')
+                    .delete()
+                    .eq('trip_id', tripId)
+                    .eq('itinerary_day_id', itineraryDayId)
+                    .eq('is_locked', false)
+                    .in('external_id', externalIds);
+                }
+
+                // Also clean up any orphan non-locked activities for this day
+                // that don't have UUIDs (leftover from previous failed inserts)
+                if (itineraryDayId) {
+                  const keepUuids = uuidRows.map((r: any) => r.id);
+                  if (keepUuids.length > 0) {
+                    await supabase
+                      .from('itinerary_activities')
+                      .delete()
+                      .eq('trip_id', tripId)
+                      .eq('itinerary_day_id', itineraryDayId)
+                      .eq('is_locked', false)
+                      .not('id', 'in', `(${keepUuids.join(',')})`);
+                  }
+                }
+
+                // Now insert fresh rows
                 const { data, error: extErr } = await supabase
                   .from('itinerary_activities')
-                  .upsert(externalRows, { onConflict: 'trip_id,itinerary_day_id,external_id' })
+                  .insert(externalRows)
                   .select('id, external_id, is_locked');
                 if (extErr) {
-                  console.error('[generate-day] Failed to upsert external-id activities:', extErr);
+                  console.error('[generate-day] Failed to insert external-id activities:', extErr);
                 } else {
                   persistedExternal = (data || []) as any;
                 }
