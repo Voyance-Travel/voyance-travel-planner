@@ -284,9 +284,9 @@ export async function splitJourneyIfNeeded(
     const arrivalDate = addDays(startDate, dateOffset);
     const departureDate = addDays(arrivalDate, nights);
 
-    // Get the proportional budget from the leg insert
+    // Get proportional budget from the leg insert
     const legInsert = legInserts[i];
-    const allocatedBudget = legInsert?._legBudgetCents ?? null;
+    const allocatedBudget = legInsert?.budget_total_cents ?? null;
 
     cityInserts.push({
       trip_id: legTrip.id,
