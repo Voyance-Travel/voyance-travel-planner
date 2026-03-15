@@ -8504,7 +8504,7 @@ General Requirements:
 - Include at least 1 EVENING/NIGHTLIFE activity after dinner (bar, show, night market, jazz, rooftop, dessert spot)
 - Include PRACTICAL TIPS inline: booking requirements, queue advice, dress codes, closure days, best times
 - The LAST activity's tips field must include a NEXT MORNING PREVIEW: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
-- For full exploration days: minimum 3 paid activities + 2 free activities + 3 meals + evening option
+- For full exploration days: minimum 3 paid activities + 2 free activities + required meals (per meal policy) + evening option
 ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}
 ${collaboratorAttributionPrompt}
 ${voyancePicksPrompt}
