@@ -140,13 +140,15 @@ function QuizIntro({ onStart, onSkip }: { onStart: () => void; onSkip: () => voi
       exit={{ opacity: 0 }}
       className="min-h-[80vh] flex items-center justify-center px-4 relative overflow-hidden"
     >
-      {/* Floating decorative elements */}
-      <FloatingMotif icon={<Plane className="w-8 h-8" />} delay={0} x="15%" y="20%" />
-      <FloatingMotif icon={<Globe className="w-10 h-10" />} delay={1.5} x="80%" y="25%" />
-      <FloatingMotif icon={<Mountain className="w-9 h-9" />} delay={3} x="10%" y="70%" />
-      <FloatingMotif icon={<Coffee className="w-7 h-7" />} delay={4.5} x="85%" y="65%" />
-      <FloatingMotif icon={<Luggage className="w-8 h-8" />} delay={2} x="75%" y="80%" />
-      <FloatingMotif icon={<Star className="w-6 h-6" />} delay={3.5} x="20%" y="45%" />
+      {/* Floating decorative elements — hidden on mobile to avoid overlap */}
+      <div className="hidden sm:block">
+        <FloatingMotif icon={<Plane className="w-8 h-8" />} delay={0} x="15%" y="20%" />
+        <FloatingMotif icon={<Globe className="w-10 h-10" />} delay={1.5} x="80%" y="25%" />
+        <FloatingMotif icon={<Mountain className="w-9 h-9" />} delay={3} x="10%" y="70%" />
+        <FloatingMotif icon={<Coffee className="w-7 h-7" />} delay={4.5} x="85%" y="65%" />
+        <FloatingMotif icon={<Luggage className="w-8 h-8" />} delay={2} x="75%" y="80%" />
+        <FloatingMotif icon={<Star className="w-6 h-6" />} delay={3.5} x="20%" y="45%" />
+      </div>
       
       <div className="max-w-2xl mx-auto text-center relative z-10">
         {/* Animated compass icon with subtle glow */}

@@ -216,8 +216,9 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
               )}
             </div>
             <div className={cn(
-              "grid gap-2",
-              tripDays <= 4 ? "grid-cols-4" : tripDays <= 5 ? "grid-cols-5" : tripDays <= 7 ? "grid-cols-7" : "grid-cols-8"
+              "flex overflow-x-auto gap-2 pb-2 scrollbar-hide",
+              "sm:grid sm:overflow-visible sm:pb-0",
+              tripDays <= 4 ? "sm:grid-cols-4" : tripDays <= 5 ? "sm:grid-cols-5" : tripDays <= 7 ? "sm:grid-cols-7" : "sm:grid-cols-8"
             )}>
               {weather.forecast.slice(0, Math.min(tripDays, 8)).map((day, idx) => {
                 const dayDate = parseLocalDate(day.date);
