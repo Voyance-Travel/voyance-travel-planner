@@ -801,8 +801,10 @@ export default function TripDetail() {
     })();
   }, [trip?.id, trip?.journey_id, trip?.itinerary_status, trip?.metadata, queryClient]);
 
+  // Auto-trigger generation only when ?generate=true is present
   useEffect(() => {
     if (
+      shouldAutoGenerate &&
       trip && 
       !loading && 
       !autoGenerateTriggered.current &&
@@ -812,9 +814,18 @@ export default function TripDetail() {
       (!hasItineraryData(trip) || trip.itinerary_status === 'failed')
     ) {
       autoGenerateTriggered.current = true;
+      // Clean up URL param immediately to prevent re-trigger
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('generate');
+        return next;
+      }, { replace: true });
       handleShowGenerator(true);
     }
-    // If we returned to the page while generation is in progress, clean up the URL param
+  }, [shouldAutoGenerate, trip, loading, isServerGenerating]);
+
+  // Separate effect: clean up URL param if generation is already in progress
+  useEffect(() => {
     if (shouldAutoGenerate && trip && (isServerGenerating || trip.itinerary_status === 'generating' || trip.itinerary_status === 'queued')) {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
@@ -822,7 +833,7 @@ export default function TripDetail() {
         return next;
       }, { replace: true });
     }
-  }, [shouldAutoGenerate, trip, loading, isServerGenerating]);
+  }, [shouldAutoGenerate, trip, isServerGenerating]);
 
   // Helper to check if trip has itinerary data
   function hasItineraryData(t: Trip | null): boolean {
