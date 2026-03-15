@@ -1139,12 +1139,9 @@ export default function TripDetail() {
             const emptyDayNumbers: number[] = [];
             for (const day of daysList) {
               const acts = Array.isArray(day.activities) ? day.activities : [];
-              // Filter out logistical-only activities (hotel check-in/out)
-              const realActs = acts.filter((a: any) => {
-                const cat = (a?.category || a?.type || '').toLowerCase();
-                return !['check-in', 'check-out', 'hotel', 'accommodation', 'checkout', 'checkin'].includes(cat);
-              });
-              if (realActs.length === 0 && day.dayNumber) {
+              // Only flag days with truly ZERO activities — not days with logistical-only content.
+              // Arrival/departure days with just check-in/check-out are intentionally planned that way.
+              if (acts.length === 0 && day.dayNumber) {
                 emptyDayNumbers.push(day.dayNumber);
               }
             }
