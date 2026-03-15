@@ -8391,6 +8391,12 @@ function DayCard({
                         currentCategory={activityToRender.category || activityToRender.type}
                         nextCategory={nextActivity?.category || nextActivity?.type}
                         sameLocation={!!(activityToRender.location?.name && nextActivity?.location?.name && activityToRender.location.name === nextActivity.location.name)}
+                        city={cleanDestination}
+                        originName={activityToRender.location?.name || activityToRender.title}
+                        destinationName={nextActivity?.location?.name || nextActivity?.title}
+                        isEditable={isEditable}
+                        tripCurrency={tripCurrency}
+                        travelers={travelers}
                       />
                     )}
                     {/* Inline Add Activity button between activities */}
