@@ -68,9 +68,10 @@ const FEATURES = [
 
 interface DemoFeatureShowcaseProps {
   onComplete: () => void;
+  onSkipToPlayground?: () => void;
 }
 
-export function DemoFeatureShowcase({ onComplete }: DemoFeatureShowcaseProps) {
+export function DemoFeatureShowcase({ onComplete, onSkipToPlayground }: DemoFeatureShowcaseProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const currentFeature = FEATURES[currentIndex];
   const isLast = currentIndex === FEATURES.length - 1;
@@ -187,7 +188,7 @@ export function DemoFeatureShowcase({ onComplete }: DemoFeatureShowcaseProps) {
         <div className="text-center mt-12">
           <Button
             variant="link"
-            onClick={onComplete}
+            onClick={onSkipToPlayground || onComplete}
             className="text-muted-foreground hover:text-foreground text-sm"
           >
             Skip to playground →
