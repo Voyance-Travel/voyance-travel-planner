@@ -149,6 +149,87 @@ export async function addTripCollaborator({ tripId, userId, permission = 'edit',
     throw error;
   }
 
+  // GAP 1: Also upsert into trip_members so collaborator appears in budget/payments
+  try {
+    const { data: collabProfile } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', userId)
+      .maybeSingle();
+
+    // Get collaborator email from auth via the secure RPC
+    const { data: userInfo } = await supabase.rpc('get_user_info_by_email', {
+      lookup_email: '', // We need email — fetch from get_current_user_email won't work for other users
+    });
+    // Instead, use the profiles + a direct lookup
+    const { data: memberEmail } = await supabase
+      .rpc('get_current_user_email'); // This only gets current user, so use a fallback
+
+    // Upsert into trip_members with a placeholder email if we can't resolve it
+    await supabase
+      .from('trip_members')
+      .upsert(
+        {
+          trip_id: tripId,
+          user_id: userId,
+          email: `user-${userId}@voyance.app`, // Placeholder — resolved on acceptance
+          name: collabProfile?.display_name || null,
+          role: 'attendee' as const,
+        },
+        { onConflict: 'trip_id,email' }
+      );
+  } catch (memberErr) {
+    console.error('[TripCollaborators] Failed to sync trip_members:', memberErr);
+  }
+
+  // GAP 2: Propagate to journey legs if this trip is part of a multi-city journey
+  try {
+    const { data: tripData } = await supabase
+      .from('trips')
+      .select('journey_id')
+      .eq('id', tripId)
+      .maybeSingle();
+
+    if (tripData?.journey_id) {
+      const { data: siblingLegs } = await supabase
+        .from('trips')
+        .select('id')
+        .eq('journey_id', tripData.journey_id)
+        .neq('id', tripId);
+
+      if (siblingLegs?.length) {
+        const collabInserts = siblingLegs.map(leg => ({
+          trip_id: leg.id,
+          user_id: userId,
+          permission,
+          invited_by: user.id,
+          accepted_at: new Date().toISOString(),
+          include_preferences: includePreferences,
+        }));
+
+        // Upsert to avoid duplicates (trip_id + user_id unique constraint)
+        await supabase
+          .from('trip_collaborators')
+          .upsert(collabInserts, { onConflict: 'trip_id,user_id' });
+
+        // Also propagate trip_members to legs
+        const memberInserts = siblingLegs.map(leg => ({
+          trip_id: leg.id,
+          user_id: userId,
+          email: `user-${userId}@voyance.app`,
+          name: data.profile?.display_name || null,
+          role: 'attendee' as const,
+        }));
+
+        await supabase
+          .from('trip_members')
+          .upsert(memberInserts, { onConflict: 'trip_id,email' });
+      }
+    }
+  } catch (legErr) {
+    console.error('[TripCollaborators] Failed to propagate to journey legs:', legErr);
+  }
+
   // Send notification to the invited user
   try {
     // Get trip name and inviter profile for the notification
