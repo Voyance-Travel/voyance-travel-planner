@@ -213,6 +213,53 @@ export async function splitJourneyIfNeeded(
 
   console.log(`[splitJourney] Created ${legs.length} leg trips for journey ${journeyId}`);
 
+  // Copy trip_collaborators from original trip to all legs
+  const { data: originalCollabs } = await supabase
+    .from('trip_collaborators')
+    .select('user_id, permission, include_preferences, accepted_at, invited_by')
+    .eq('trip_id', originalTripId);
+
+  if (originalCollabs?.length) {
+    const collabInserts = legs.flatMap(leg =>
+      originalCollabs.map(c => ({
+        trip_id: leg.id,
+        user_id: c.user_id,
+        permission: c.permission,
+        include_preferences: c.include_preferences,
+        accepted_at: c.accepted_at,
+        invited_by: c.invited_by,
+      }))
+    );
+    const { error: collabError } = await supabase.from('trip_collaborators').insert(collabInserts);
+    if (collabError) {
+      console.error('[splitJourney] Failed to copy collaborators to legs:', collabError);
+    } else {
+      console.log(`[splitJourney] Copied ${originalCollabs.length} collaborators to ${legs.length} legs`);
+    }
+  }
+
+  // Copy trip_members from original trip to all legs
+  const { data: originalMembers } = await supabase
+    .from('trip_members')
+    .select('user_id, role')
+    .eq('trip_id', originalTripId);
+
+  if (originalMembers?.length) {
+    const memberInserts = legs.flatMap(leg =>
+      originalMembers.map(m => ({
+        trip_id: leg.id,
+        user_id: m.user_id,
+        role: m.role,
+      }))
+    );
+    const { error: memberError } = await supabase.from('trip_members').insert(memberInserts);
+    if (memberError) {
+      console.error('[splitJourney] Failed to copy members to legs:', memberError);
+    } else {
+      console.log(`[splitJourney] Copied ${originalMembers.length} members to ${legs.length} legs`);
+    }
+  }
+
   // Create trip_cities rows for each leg
   const cityInserts: any[] = [];
   let dateOffset = 0;
