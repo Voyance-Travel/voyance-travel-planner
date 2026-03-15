@@ -8339,9 +8339,32 @@ Rules:
         }
       }
 
+      // GAP 2: Build group avoid-list override prompt if applicable
+      let groupAvoidPrompt = '';
+      if (groupAvoidOverride && blendedDnaSnapshot && blendedDnaSnapshot.travelers.length > 1) {
+        const ownerDef = getArchetypeDefinition(primaryArchetype);
+        const ownerAvoidSet = new Set(ownerDef.avoid.map(a => a.toLowerCase()));
+        const relaxedItems = [...ownerAvoidSet].filter(item => !groupAvoidOverride!.includes(item));
+        if (relaxedItems.length > 0) {
+          groupAvoidPrompt = `
+${'='.repeat(70)}
+🤝 GROUP TRIP AVOID-LIST RELAXATION
+${'='.repeat(70)}
+This is a GROUP trip. The owner's archetype normally avoids: ${ownerDef.avoid.join(', ')}.
+However, since companions have different preferences, ONLY avoid items that ALL travelers' archetypes agree on:
+${groupAvoidOverride.length > 0 ? `• Still avoid: ${groupAvoidOverride.join(', ')}` : '• No universal avoids — all activity types are fair game for this group.'}
+• NOW ALLOWED (relaxed for group): ${relaxedItems.join(', ')}
+Include some of the relaxed activities to satisfy companions' preferences.
+`;
+          console.log(`[generate-day] ✓ Avoid-list relaxed: ${relaxedItems.length} items now allowed for group`);
+        }
+      }
+      
       const systemPrompt = `You are an expert travel planner creating a COMPLETE hour-by-hour travel plan — not a suggestion list.
 
 ${generationHierarchy}
+
+${groupAvoidPrompt}
 
 ${tripTypePrompt}
 
