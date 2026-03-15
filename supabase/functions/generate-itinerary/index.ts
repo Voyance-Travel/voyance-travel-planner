@@ -8063,6 +8063,13 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
       // past learnings, recently used, forced slots, schedule constraints
       // ==========================================================================
       let generationContextPrompts = '';
+      // GAP 1: Extract blended trait scores from generation_context for group trips
+      let blendedTraitScores: Record<string, number> | null = null;
+      // GAP 2: Extract blended DNA snapshot for avoid-list intersection
+      let blendedDnaSnapshot: { travelers: Array<{ archetype: string }> } | null = null;
+      // GAP 4: Track stale context for regeneration detection
+      let gcTravelerCount = 0;
+      
       if (tripId) {
         try {
           const { data: gcTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
@@ -8089,6 +8096,18 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
             }
           }
           
+          // GAP 1: Extract blended trait scores for group trips
+          if (gc.blendedTraitScores && typeof gc.blendedTraitScores === 'object') {
+            blendedTraitScores = gc.blendedTraitScores as Record<string, number>;
+            console.log(`[generate-day] ✓ Using BLENDED trait scores: pace=${blendedTraitScores.pace}, budget=${blendedTraitScores.budget}`);
+          }
+          
+          // GAP 2: Extract blended DNA snapshot for avoid-list relaxation
+          if (gc.blendedDnaSnapshot && typeof gc.blendedDnaSnapshot === 'object') {
+            blendedDnaSnapshot = gc.blendedDnaSnapshot as any;
+            gcTravelerCount = (blendedDnaSnapshot?.travelers || []).length;
+          }
+          
           if (promptParts.length > 0) {
             generationContextPrompts = promptParts.join('\n\n');
             console.log(`[generate-day] Injected ${promptParts.length} enrichment prompts from generation_context`);
@@ -8096,7 +8115,30 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
         } catch (gcErr) {
           console.warn('[generate-day] Failed to read generation_context (non-blocking):', gcErr);
         }
+        
+        // GAP 4: Detect stale generation_context — if collaborators changed since initial generation
+        if (gcTravelerCount > 0) {
+          try {
+            const [{ count: collabCount }, { count: memberCount }] = await Promise.all([
+              supabase.from('trip_collaborators').select('*', { count: 'exact', head: true }).eq('trip_id', tripId).eq('include_preferences', true),
+              supabase.from('trip_members').select('*', { count: 'exact', head: true }).eq('trip_id', tripId),
+            ]);
+            const currentTravelerCount = 1 + (collabCount || 0) + (memberCount || 0); // +1 for owner
+            // Deduplicate isn't perfect but if count differs significantly, context is stale
+            if (Math.abs(currentTravelerCount - gcTravelerCount) >= 1) {
+              console.warn(`[generate-day] ⚠️ STALE CONTEXT: generation_context has ${gcTravelerCount} travelers but current trip has ~${currentTravelerCount}. Blended traits may be outdated. Consider full regeneration.`);
+              // Don't nullify blendedTraitScores — stale blended > no blended. Just warn.
+            }
+          } catch (staleErr) {
+            console.warn('[generate-day] Stale context check failed (non-blocking):', staleErr);
+          }
+        }
       }
+      
+      // GAP 1: Determine effective trait scores — use blended for groups, owner for solo
+      const effectiveTraitScores = blendedTraitScores 
+        ? { pace: blendedTraitScores.pace ?? traitScores.pace, budget: blendedTraitScores.budget ?? traitScores.budget }
+        : { pace: traitScores.pace, budget: traitScores.budget };
 
       console.log(`[generate-day] Budget tier: ${effectiveBudgetTier}`);
 
