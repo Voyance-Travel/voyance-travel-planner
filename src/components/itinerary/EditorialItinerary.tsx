@@ -6271,7 +6271,7 @@ export function EditorialItinerary({
       {/* Edit Flight Dialog */}
       {editFlightOpen && (
         <Dialog open={editFlightOpen} onOpenChange={setEditFlightOpen}>
-          <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Plane className="h-5 w-5 text-primary" />
