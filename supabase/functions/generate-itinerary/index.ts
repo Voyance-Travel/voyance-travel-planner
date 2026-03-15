@@ -164,6 +164,7 @@ import {
 // =============================================================================
 import {
   blendGroupArchetypes,
+  blendTraitScores,
   type TravelerArchetype,
 } from './group-archetype-blending.ts';
 
