@@ -8289,6 +8289,7 @@ ${transportPreferencePrompt}
 
 ${timingInstructions}
 ${lockedSlotsInstruction}
+${generationContextPrompts}
 
 CORE PRINCIPLE: A Voyance itinerary plans the traveler's ENTIRE day, hour by hour, from waking up to going to sleep. It handles logistics, meals, transit, and the little decisions that stress people out when traveling.
 
