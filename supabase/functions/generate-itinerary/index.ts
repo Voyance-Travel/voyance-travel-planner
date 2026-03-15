@@ -5180,7 +5180,7 @@ RULES FOR VOYANCE PICKS:
         authenticity: unifiedProfile.traitScores.authenticity ?? 0,
         adventure: unifiedProfile.traitScores.adventure ?? 0,
         budget: unifiedProfile.traitScores.budget ?? 0,
-        transformation: 0  // Not in unified profile, use default
+        transformation: unifiedProfile.traitScores.transformation ?? 0
       };
       
       // Get interests from unified profile (Phase 2 Fix: removed normalizedContext reference)
