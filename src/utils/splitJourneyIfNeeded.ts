@@ -241,7 +241,7 @@ export async function splitJourneyIfNeeded(
   // Copy trip_members from original trip to all legs
   const { data: originalMembers } = await supabase
     .from('trip_members')
-    .select('user_id, role')
+    .select('user_id, role, email, name')
     .eq('trip_id', originalTripId);
 
   if (originalMembers?.length) {
