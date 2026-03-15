@@ -8495,7 +8495,7 @@ General Requirements:
 - Account for REALISTIC travel time between activities — if two places are in different neighborhoods, leave 30-60 min gap (not 15 min). Only use 15 min gaps for locations within walking distance. Travel time and rest/settling buffers are SEPARATE — add both.
 - NEVER schedule zero-gap transitions. Every activity needs settling/buffer time ON TOP of travel: +5 min after walking, +10 min for taxi pickup/dropoff, +10 min for restaurant seating, +15 min for hotel check-in, +10 min for museum entry (ticket queue, bag check). Show this naturally: "Arrive ~6:30 PM. Check in, freshen up. Ready by 7:30 PM."
 - Include TRANSIT between every pair of consecutive activities as separate entries with category "transport" (mode, duration, cost, route/line info). Walks under 5 min can be noted in tips instead.
-- Include 3 MEALS per full day: breakfast, lunch, dinner — each a real named restaurant with price
+- Include meals as specified by the day's meal policy (see timing instructions above) — each a real named restaurant with price
 - Each lunch and dinner recommendation should include 1 ALTERNATIVE option in its "tips" field
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
 - Every activity MUST have a "title" field (the display name)
