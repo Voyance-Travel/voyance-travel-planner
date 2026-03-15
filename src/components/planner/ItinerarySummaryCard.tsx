@@ -14,6 +14,7 @@ import {
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 
 interface Activity {
   id: string;
