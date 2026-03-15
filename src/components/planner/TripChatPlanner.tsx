@@ -312,7 +312,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   return (
     <div className={cn('flex flex-col max-w-md mx-auto', className)}>
       {/* Chat container — looks like a proper chat window */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col" style={{ height: '420px' }}>
+      <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col" style={{ height: 'min(420px, calc(100vh - 200px))' }}>
         {/* Chat header */}
         <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
@@ -421,12 +421,12 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               className="min-h-[44px] max-h-[80px] resize-none pr-16 text-sm border-0 bg-muted/50 focus-visible:ring-1"
               disabled={isStreaming}
             />
-            <div className="absolute right-1.5 bottom-1.5 flex items-center gap-0.5">
+            <div className="absolute right-1.5 bottom-1.5 flex items-center gap-1.5 sm:gap-0.5">
               <Button
                 type="button"
                 size="icon"
                 variant="ghost"
-                className={cn("h-7 w-7 relative", isListening && "text-destructive")}
+                className={cn("h-9 w-9 sm:h-7 sm:w-7 relative", isListening && "text-destructive")}
                 onClick={() => {
                   if (!micSupported) {
                     toast.error("Voice input is not supported in this browser. Try Chrome or Edge.");
@@ -445,7 +445,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-9 w-9 sm:h-7 sm:w-7"
                 onClick={handlePaste}
                 title="Paste your research"
               >
@@ -454,7 +454,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               <Button
                 type="button"
                 size="icon"
-                className="h-7 w-7"
+                className="h-9 w-9 sm:h-7 sm:w-7"
                 onClick={() => sendMessage(input)}
                 disabled={!input.trim() || isStreaming}
               >

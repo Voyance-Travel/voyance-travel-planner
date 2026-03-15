@@ -116,7 +116,7 @@ export default function TopNav() {
       )}
       
       <header
-        className={`sticky top-0 z-50 transition-all duration-300 ${
+        className={`sticky top-0 z-50 pt-[env(safe-area-inset-top)] transition-all duration-300 ${
           isTransparent
             ? 'bg-gradient-to-b from-black/30 to-transparent'
             : 'bg-background/95 backdrop-blur-md border-b border-border shadow-sm'

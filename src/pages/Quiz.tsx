@@ -658,7 +658,7 @@ export default function Quiz() {
               className="flex-1 flex flex-col pt-20 pb-4"
             >
               {/* Sticky Progress */}
-              <div className="sticky top-16 z-20 bg-background/95 backdrop-blur-sm px-4 py-3 border-b border-border/50">
+              <div className="sticky top-14 sm:top-16 z-20 bg-background/95 backdrop-blur-sm px-4 py-2 sm:py-3 border-b border-border/50">
                 <div className="max-w-xl mx-auto">
                   <QuizProgressBar 
                     currentStep={currentStep} 
@@ -760,7 +760,7 @@ export default function Quiz() {
               </div>
               
               {/* Compact Navigation */}
-              <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t border-border/50 px-4 py-3">
+              <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t border-border/50 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <div className="max-w-xl mx-auto flex justify-between items-center">
                   <Button
                     variant="ghost"

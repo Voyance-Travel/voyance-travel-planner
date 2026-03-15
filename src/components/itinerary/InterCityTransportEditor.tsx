@@ -120,7 +120,7 @@ export function InterCityTransportEditor({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
+      <SheetContent side="bottom" className="max-h-[min(85vh,calc(100dvh-100px))] overflow-y-auto rounded-t-2xl">
         <SheetHeader className="pb-2">
           <SheetTitle className="flex items-center gap-2 text-base">
             <div className="flex items-center gap-1.5 text-sm">

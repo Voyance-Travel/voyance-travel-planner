@@ -4325,7 +4325,7 @@ export function EditorialItinerary({
         {/* Fade gradient indicating more tabs */}
         <div 
           data-tab-fade
-          className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none bg-gradient-to-l from-background to-transparent transition-opacity duration-200 sm:hidden"
+          className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none bg-gradient-to-l from-background to-transparent transition-opacity duration-200 sm:hidden"
           style={{ opacity: 0 }}
         />
        </div>}
@@ -6271,7 +6271,7 @@ export function EditorialItinerary({
       {/* Edit Flight Dialog */}
       {editFlightOpen && (
         <Dialog open={editFlightOpen} onOpenChange={setEditFlightOpen}>
-          <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Plane className="h-5 w-5 text-primary" />
@@ -6346,7 +6346,7 @@ export function EditorialItinerary({
       {/* Edit Hotel Dialog */}
       {editHotelOpen && (
         <Dialog open={editHotelOpen} onOpenChange={setEditHotelOpen}>
-          <DialogContent className="sm:max-w-[450px]">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[450px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Hotel className="h-5 w-5 text-primary" />
@@ -8300,7 +8300,7 @@ function DayCard({
               {(isEditable || !dayIsPreview) && !isCleanPreview && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-7 sm:w-7 shrink-0">
                       <MoreHorizontal className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
