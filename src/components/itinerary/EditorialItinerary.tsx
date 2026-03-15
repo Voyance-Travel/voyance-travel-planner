@@ -1261,6 +1261,8 @@ export function EditorialItinerary({
   const queryClient = useQueryClient();
   const isCleanPreview = viewMode === 'preview';
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
+
+
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
 
   // Sanitize wrapper: ensures every activity has a valid title and filters out
@@ -1557,6 +1559,15 @@ export function EditorialItinerary({
       activities: updatedActivities,
     };
   }), [rawDays]);
+
+  // Compute expected total days from start/end dates so we can show placeholders during generation
+  const expectedTotalDays = useMemo(() => {
+    if (!startDate || !endDate) return days.length;
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
+    const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(diff, days.length);
+  }, [startDate, endDate, days.length]);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
   // Persisted option group selections (key = optionGroup id, value = selected activity id)
   const [optionSelections, setOptionSelections] = useState<Record<string, string>>(
@@ -4839,7 +4850,7 @@ export function EditorialItinerary({
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-medium text-muted-foreground inline-flex items-center gap-1">
                   <span>
-                    {days.length} day{days.length !== 1 ? 's' : ''}
+                    {isActivelyGenerating ? expectedTotalDays : days.length} day{(isActivelyGenerating ? expectedTotalDays : days.length) !== 1 ? 's' : ''}
                     {startDate && endDate ? ` · ${safeFormatDate(startDate, 'MMM d')} – ${safeFormatDate(endDate, 'MMM d')}` : ''}
                   </span>
                   {onDateChange && (
@@ -4873,7 +4884,7 @@ export function EditorialItinerary({
                      <span className="hidden sm:inline">History</span>
                    </Button>
                    <span className="text-xs text-muted-foreground">
-                     Day {selectedDayIndex + 1} of {days.length}
+                     Day {selectedDayIndex + 1} of {isActivelyGenerating ? expectedTotalDays : days.length}
                    </span>
                  </div>
                  )}
@@ -5007,6 +5018,38 @@ export function EditorialItinerary({
                         </button>
                       );
                     })}
+                    {/* Placeholder tabs for days not yet generated */}
+                    {isActivelyGenerating && days.length < expectedTotalDays && (
+                      Array.from({ length: expectedTotalDays - days.length }, (_, i) => {
+                        const pendingDayNumber = days.length + i + 1;
+                        let dayDate: Date | null = null;
+                        try {
+                          if (startDate) {
+                            dayDate = addDays(parseLocalDate(startDate), pendingDayNumber - 1);
+                            if (isNaN(dayDate.getTime())) dayDate = null;
+                          }
+                        } catch { dayDate = null; }
+                        return (
+                          <div
+                            key={`pending-${pendingDayNumber}`}
+                            className="flex flex-col items-center px-3 py-2 rounded-xl min-w-[72px] border border-dashed border-border/50 bg-muted/20 opacity-60"
+                          >
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              <span className="sm:hidden">D{pendingDayNumber}</span><span className="hidden sm:inline">Day {pendingDayNumber}</span>
+                            </span>
+                            {dayDate ? (
+                              <>
+                                <span className="text-lg font-bold leading-tight text-muted-foreground">{dayDate.getDate()}</span>
+                                <span className="text-[10px] text-muted-foreground">{format(dayDate, 'EEE')}, {format(dayDate, 'MMM')}</span>
+                              </>
+                            ) : (
+                              <span className="text-lg font-bold leading-tight text-muted-foreground">–</span>
+                            )}
+                            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground mt-0.5" />
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
