@@ -8341,12 +8341,11 @@ function DayCard({
                   const prevTimeOfDay = isNaN(prevHour) ? '' : prevHour < 12 ? 'Morning' : prevHour < 17 ? 'Afternoon' : 'Evening';
                   const showTimeOfDayHeader = timeOfDay && timeOfDay !== prevTimeOfDay;
 
-                  // Compact travel summary card for consolidated transition-day activities
-                  const isTravelSummary = !!(activityToRender as any).__syntheticTravelSummary;
+                  // Compact inter-city transport card (unified for transition + departure)
+                  const isInterCityTransport = !!(activityToRender as any).__interCityTransport;
                   const travelMeta = (activityToRender as any).__travelMeta;
 
-                  if (isTravelSummary && travelMeta) {
-                    // Hide travel summary cards in clean preview
+                  if (isInterCityTransport && travelMeta) {
                     if (isCleanPreview) return null;
 
                     const TransportIcon = travelMeta.transportName?.toLowerCase() === 'flight' ? Plane
@@ -8356,61 +8355,12 @@ function DayCard({
                       : Car;
 
                     return (
-                      <div className="px-2 sm:px-0 py-2">
-                        <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] overflow-hidden relative group/travel">
-...
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // === Departure transport card (last day of a city before switching) ===
-                  const isDepartureCard = !!(activityToRender as any).__syntheticDeparture;
-                  if (isDepartureCard) {
-                    if (isCleanPreview) return null;
-                    const deptType = ((activityToRender as any).__departureTransportType || 'transfer').toLowerCase();
-                    const DepartIcon = deptType === 'flight' ? Plane
-                      : deptType === 'train' ? Train
-                      : deptType === 'bus' ? Bus
-                      : deptType === 'ferry' ? Ship
-                      : Car;
-                    const hasDetails = activityToRender.startTime && activityToRender.startTime !== '18:00';
-                    const descLines = (activityToRender.description || '').split('\n').filter(Boolean);
-
-                    return (
-                      <div key={activityToRender.id} className="px-2 sm:px-0 py-2">
-                        <div className="rounded-xl border-2 border-dashed border-accent/30 bg-accent/[0.04] overflow-hidden">
-                          <div className="flex items-center gap-3 px-4 py-3">
-                            <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                              <DepartIcon className="h-4.5 w-4.5 text-accent" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-sm text-foreground truncate">
-                                  {activityToRender.title}
-                                </span>
-                                {activityToRender.startTime && (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-                                    {activityToRender.startTime}
-                                  </Badge>
-                                )}
-                              </div>
-                              {descLines.length > 0 && (
-                                <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
-                                  {descLines.map((line, li) => (
-                                    <div key={li}>{line}</div>
-                                  ))}
-                                </div>
-                              )}
-                              {!hasDetails && (
-                                <div className="text-xs text-muted-foreground/60 mt-0.5 italic">
-                                  Add transport details for precise scheduling
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <InterCityTransportStrip
+                        key={activityToRender.id}
+                        activity={activityToRender}
+                        travelMeta={travelMeta}
+                        TransportIcon={TransportIcon}
+                      />
                     );
                   }
 
