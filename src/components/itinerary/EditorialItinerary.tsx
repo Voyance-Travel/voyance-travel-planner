@@ -302,6 +302,11 @@ export interface EditorialDay {
   transitionTo?: string;
   transportComparison?: TransportOption[];
   selectedTransportId?: string;
+  // Departure day fields
+  isDepartureDay?: boolean;
+  departureTo?: string;
+  departureTransportType?: string;
+  departureTransportDetails?: Record<string, unknown>;
 }
 
 export interface FlightLegDisplay {

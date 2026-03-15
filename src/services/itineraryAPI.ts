@@ -394,6 +394,11 @@ export async function generateItinerary(
         data.day.isTransitionDay = cityInfo.isTransitionDay;
         data.day.transitionFrom = cityInfo.transitionFrom;
         data.day.transitionTo = cityInfo.transitionTo;
+        // Departure day flags
+        data.day.isDepartureDay = cityInfo.isDepartureDay || false;
+        data.day.departureTo = cityInfo.departureTo;
+        data.day.departureTransportType = cityInfo.departureTransportType;
+        data.day.departureTransportDetails = cityInfo.departureTransportDetails;
       }
       days.push(data.day);
       // Track activities for next day to avoid repetition
