@@ -11,6 +11,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
 import { getFirstLegArrivalTime, getLastLegDepartureTime } from '@/utils/normalizeFlightSelection';
+import { cascadeFixOverlaps } from '@/utils/injectHotelActivities';
 
 /**
  * Normalize time strings ("2:30 PM" or "14:30") to "HH:MM" 24hr format
