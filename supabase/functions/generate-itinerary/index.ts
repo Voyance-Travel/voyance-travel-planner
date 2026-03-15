@@ -8056,7 +8056,48 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
       }
       
       // Use profile's budget tier if available, fallback to params
-      const effectiveBudgetTier = profile.budgetTier || budgetTier || 'moderate';
+
+      // ==========================================================================
+      // READ GENERATION CONTEXT: Enrichment computed once in generate-trip
+      // Includes: dietary, jet lag, weather, children, duration, group blending,
+      // past learnings, recently used, forced slots, schedule constraints
+      // ==========================================================================
+      let generationContextPrompts = '';
+      if (tripId) {
+        try {
+          const { data: gcTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+          const gc = ((gcTrip?.metadata as Record<string, unknown>)?.generation_context as Record<string, unknown>) || {};
+          
+          const promptParts: string[] = [];
+          
+          if (gc.dietaryEnforcementPrompt) promptParts.push(gc.dietaryEnforcementPrompt as string);
+          if (gc.jetLagPrompt && dayNumber <= 2) promptParts.push(gc.jetLagPrompt as string);
+          if (gc.weatherBackupPrompt) promptParts.push(gc.weatherBackupPrompt as string);
+          if (gc.tripDurationPrompt) promptParts.push(gc.tripDurationPrompt as string);
+          if (gc.childrenAgesPrompt) promptParts.push(gc.childrenAgesPrompt as string);
+          if (gc.reservationUrgencyPrompt) promptParts.push(gc.reservationUrgencyPrompt as string);
+          if (gc.dailyEstimatesPrompt) promptParts.push(gc.dailyEstimatesPrompt as string);
+          if (gc.groupBlendingPrompt) promptParts.push(gc.groupBlendingPrompt as string);
+          if (gc.forcedSlotsPrompt) promptParts.push(gc.forcedSlotsPrompt as string);
+          if (gc.scheduleConstraintsPrompt) promptParts.push(gc.scheduleConstraintsPrompt as string);
+          if (gc.pastTripLearnings) promptParts.push(gc.pastTripLearnings as string);
+          
+          if (gc.recentlyUsedActivities) {
+            const recentNames = gc.recentlyUsedActivities as string[];
+            if (recentNames.length > 0) {
+              promptParts.push(`\n## ⚠️ RECENTLY USED (avoid for variety):\nAvoid these activities/restaurants used in recent ${resolvedDestination} itineraries:\n- ${recentNames.join('\n- ')}\n`);
+            }
+          }
+          
+          if (promptParts.length > 0) {
+            generationContextPrompts = promptParts.join('\n\n');
+            console.log(`[generate-day] Injected ${promptParts.length} enrichment prompts from generation_context`);
+          }
+        } catch (gcErr) {
+          console.warn('[generate-day] Failed to read generation_context (non-blocking):', gcErr);
+        }
+      }
+
       console.log(`[generate-day] Budget tier: ${effectiveBudgetTier}`);
 
       // Fetch actual user-set budget for hard cap enforcement
