@@ -42,7 +42,7 @@ import {
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { useEntitlements } from '@/hooks/useEntitlements';
-import { useActionCap } from '@/hooks/useActionCap';
+
 import { CREDIT_COSTS } from '@/config/pricing';
 import { useQueryClient } from '@tanstack/react-query';
 
