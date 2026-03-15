@@ -125,8 +125,8 @@ export async function addTripMember(input: {
     .single();
 
   if (error) throw new Error(error.message);
-  
-  return {
+
+  const result: TripMember = {
     id: data.id,
     tripId: data.trip_id,
     userId: data.user_id,
@@ -136,6 +136,41 @@ export async function addTripMember(input: {
     invitedAt: data.invited_at,
     acceptedAt: data.accepted_at,
   };
+
+  // GAP 4: Propagate new member to journey legs
+  try {
+    const { data: tripData } = await supabase
+      .from('trips')
+      .select('journey_id')
+      .eq('id', input.tripId)
+      .maybeSingle();
+
+    if (tripData?.journey_id) {
+      const { data: siblingLegs } = await supabase
+        .from('trips')
+        .select('id')
+        .eq('journey_id', tripData.journey_id)
+        .neq('id', input.tripId);
+
+      if (siblingLegs?.length) {
+        const memberInserts = siblingLegs.map(leg => ({
+          trip_id: leg.id,
+          email: input.email,
+          name: input.name || null,
+          role: input.role || 'attendee',
+          user_id: data.user_id,
+        }));
+
+        await supabase
+          .from('trip_members')
+          .upsert(memberInserts, { onConflict: 'trip_id,email' });
+      }
+    }
+  } catch (legErr) {
+    console.error('[TripBudget] Failed to propagate member to journey legs:', legErr);
+  }
+
+  return result;
 }
 
 export async function updateTripMember(
