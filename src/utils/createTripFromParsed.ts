@@ -251,7 +251,7 @@ export async function createTripFromParsed(
       city_name: destination,
       arrival_date: startDate,
       departure_date: endDate,
-      nights: numDaysComputed,
+      nights: Math.max(1, numDaysComputed - 1),
       generation_status: 'pending',
       days_total: numDaysComputed,
     } as any).then(({ error: cityErr }) => {
