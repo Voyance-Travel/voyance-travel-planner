@@ -115,6 +115,8 @@ export function convertParsedToItineraryData(parsed: ParsedTripInput & { detecte
     overview: {
       currency,
     },
+    // Persist parsed preferences so buildResearchContext (enrich-manual-trip) can read them
+    preferences: parsed.preferences || undefined,
     metadata: {
       source: 'manual_paste',
       currency,
@@ -220,6 +222,17 @@ export async function createTripFromParsed(
           source: 'manual_paste',
           currency: tripCurrency,
           lastUpdated: new Date().toISOString(),
+          // Persist parsed preferences so generation engine can access them
+          ...(parsed.preferences ? {
+            userConstraints: {
+              dietary: parsed.preferences.dietary || [],
+              avoid: parsed.preferences.avoid || [],
+              focus: parsed.preferences.focus || [],
+              pace: parsed.preferences.pace || undefined,
+              budgetLevel: parsed.preferences.budgetLevel || undefined,
+            },
+            rawPreferenceText: parsed.preferences.rawPreferenceText || undefined,
+          } : {}),
         },
       })
       .select('id')
@@ -238,7 +251,7 @@ export async function createTripFromParsed(
       city_name: destination,
       arrival_date: startDate,
       departure_date: endDate,
-      nights: numDaysComputed,
+      nights: Math.max(1, numDaysComputed - 1),
       generation_status: 'pending',
       days_total: numDaysComputed,
     } as any).then(({ error: cityErr }) => {
