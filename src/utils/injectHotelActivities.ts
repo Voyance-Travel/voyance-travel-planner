@@ -286,11 +286,14 @@ export function injectHotelActivitiesIntoDays(
   const checkInDayIdx = findDayIndex(updated, hotel.checkInDate, true);
   const dayHasLateCheckin = updated[checkInDayIdx]?.activities.some(a => isLateCheckin(a));
   if (!dayHasLateCheckin) {
-    const dayActivities = updated[checkInDayIdx]?.activities || [];
-    const checkInActivity = buildCheckInActivity(hotel, dayActivities);
+    const checkInActivity = buildCheckInActivity(hotel);
+    const checkInTime = hotel.checkInTime || '15:00';
     updated = updated.map((day, idx) => {
       if (idx !== checkInDayIdx) return day;
-      return { ...day, activities: insertChronologically(day.activities, checkInActivity) };
+      const withCheckIn = insertChronologically(day.activities, checkInActivity);
+      const adjusted = adjustActivitiesAroundCheckIn(withCheckIn, checkInTime);
+      const cascaded = cascadeFixOverlaps(adjusted);
+      return { ...day, activities: cascaded };
     });
   }
 
