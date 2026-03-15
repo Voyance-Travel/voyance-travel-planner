@@ -495,6 +495,7 @@ export function useItineraryGeneration() {
         isMultiCity: trip.isMultiCity || false,
         creditsCharged: trip.creditsCharged || 0,
         requestedDays: trip.requestedDays || totalDays,
+        isFirstTrip: trip.isFirstTrip || false,
       },
     });
 

@@ -657,6 +657,7 @@ export function ItineraryGenerator({
             isMultiCity,
             creditsCharged: gateResult.creditsCharged,
             requestedDays: totalRequestedDays,
+            isFirstTrip: gateResult.isFirstTrip ?? false,
           });
           // Server acknowledged — start polling for completion
           setServerGenActive(true);
