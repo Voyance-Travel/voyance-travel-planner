@@ -20,6 +20,7 @@ import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { openMapLocation } from '@/utils/mapNavigation';
 import type { ActivityContext } from '@/types/feedback';
 import { cn } from '@/lib/utils';
+import { formatTime12h } from '@/utils/timeFormat';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
