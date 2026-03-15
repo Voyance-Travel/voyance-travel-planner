@@ -11870,10 +11870,14 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       };
 
       // Progressive unlock: update unlocked_day_count = max(current, dayNumber)
+      // For first trips, cap at 2 (FIRST_TRIP_FREE_DAYS) — remaining days unlock on purchase
       const { data: metaTrip } = await supabase.from('trips').select('metadata, unlocked_day_count').eq('id', tripId).single();
       const meta = (metaTrip?.metadata as Record<string, unknown>) || {};
       const currentUnlocked = (metaTrip as any)?.unlocked_day_count ?? 0;
-      const newUnlocked = Math.max(currentUnlocked, dayNumber);
+      let newUnlocked = Math.max(currentUnlocked, dayNumber);
+      if (isFirstTrip) {
+        newUnlocked = Math.min(newUnlocked, 2); // FIRST_TRIP_FREE_DAYS
+      }
 
       // === LAYER 4: Verify last day exists when generation is complete ===
       if (dayNumber >= totalDays && startDate && endDate) {
