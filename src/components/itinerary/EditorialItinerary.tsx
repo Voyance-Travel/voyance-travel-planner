@@ -1311,10 +1311,20 @@ export function EditorialItinerary({
             ...overrides,
           }) as any;
 
+        // Determine the specific inter-city transport category for proper icon display
+        const interCityCategory = tType === 'flight' ? 'inter_city_flight'
+          : tType === 'train' ? 'inter_city_train'
+          : tType === 'bus' ? 'inter_city_bus'
+          : tType === 'ferry' ? 'inter_city_ferry'
+          : tType === 'car' ? 'inter_city_car'
+          : 'inter_city_train';
+
+        const transportTitle = `${transportName} to ${to}`;
+
         const travelCards: EditorialActivity[] = [
-          mkActivity(`travel-summary-${dn}`, `${from} → ${to}`, {
+          mkActivity(`travel-summary-${dn}`, transportTitle, {
             __syntheticTravel: true,
-            __syntheticTravelSummary: true,
+            __interCityTransport: true,
             __travelMeta: {
               from,
               to,
@@ -1331,16 +1341,15 @@ export function EditorialItinerary({
               currency,
             },
             description: [
-              `${transportName}${carrier ? ` · ${carrier}` : ''}${flightNum ? ` ${flightNum}` : ''}`,
-              depTime && arrTime ? `Departs ${depTime} · Arrives ${arrTime}` : depTime ? `Departs ${depTime}` : arrTime ? `Arrives ${arrTime}` : '',
-              dur ? `Duration: ${dur}` : '',
-            ].filter(Boolean).join('\n'),
+              carrier && flightNum ? `${carrier} ${flightNum}` : carrier || '',
+              dur ? dur : '',
+            ].filter(Boolean).join(' · '),
             startTime: depTime,
             endTime: arrTime,
             duration: dur,
             cost: price != null ? { amount: price, currency } : undefined,
-            category: 'transit',
-            type: 'transit',
+            category: interCityCategory,
+            type: interCityCategory,
           } as any),
         ];
 
