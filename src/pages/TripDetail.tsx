@@ -1102,7 +1102,17 @@ export default function TripDetail() {
 
           if (expectedTotal > 0 && actualDays > 0 && actualDays < expectedTotal) {
             console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. Triggering resume.`);
-            setGenerationStalled(true);
+            // Auto-retry once before showing stalled UI to the user
+            if (!autoResumeAttemptedRef.current) {
+              autoResumeAttemptedRef.current = true;
+              console.log('[TripDetail] Auto-resuming incomplete generation (first attempt)');
+              // Defer to next tick so handleResumeGeneration has access to latest trip state
+              setTimeout(() => {
+                handleResumeGeneration();
+              }, 1500);
+            } else {
+              setGenerationStalled(true);
+            }
           }
         }
 
