@@ -7853,13 +7853,39 @@ Add your flight and hotel details for a more complete last day.`;
           const nextCity = resolvedNextLegCity || 'the next destination';
           const transportLabel = nextTransport.toUpperCase();
           const isNonFlight = nextTransport !== 'flight';
+          
+          // Build transport-specific departure instructions
+          let departureFacility = 'airport';
+          let departureInstructions = '';
+          if (nextTransport === 'train') {
+            departureFacility = 'train station';
+            departureInstructions = `
+- REQUIRED: Include a "Transfer to Train Station" activity (category: "transport") showing the taxi/rideshare/metro from the hotel to the train station. Include the station name and address in the location field.
+- REQUIRED: Include a "${transportLabel} to ${nextCity}" departure activity (category: "transport") as the LAST activity. Include the train station name, address, and platform/track info if known.
+- ⚠️ ABSOLUTELY DO NOT mention airports, flights, or "Transfer to Airport". The departure is from a TRAIN STATION.`;
+          } else if (nextTransport === 'bus') {
+            departureFacility = 'bus station';
+            departureInstructions = `
+- REQUIRED: Include a "Transfer to Bus Station" activity (category: "transport") showing the taxi/rideshare/metro from the hotel to the bus terminal. Include the station name and address in the location field.
+- REQUIRED: Include a "${transportLabel} to ${nextCity}" departure activity (category: "transport") as the LAST activity. Include the bus terminal name and address.
+- ⚠️ ABSOLUTELY DO NOT mention airports, flights, or "Transfer to Airport". The departure is from a BUS STATION.`;
+          } else if (nextTransport === 'ferry') {
+            departureFacility = 'ferry terminal';
+            departureInstructions = `
+- REQUIRED: Include a "Transfer to Ferry Terminal" activity (category: "transport") showing the taxi/rideshare from the hotel to the ferry port. Include the terminal name and address in the location field.
+- REQUIRED: Include a "${transportLabel} to ${nextCity}" departure activity (category: "transport") as the LAST activity. Include the ferry terminal name and address.
+- ⚠️ ABSOLUTELY DO NOT mention airports, flights, or "Transfer to Airport". The departure is from a FERRY TERMINAL.`;
+          } else if (nextTransport === 'car') {
+            departureInstructions = `
+- REQUIRED: Include a "Drive to ${nextCity}" departure activity (category: "transport") as the LAST activity.
+- ⚠️ ABSOLUTELY DO NOT mention airports, flights, or "Transfer to Airport". The traveler is DRIVING to the next destination.`;
+          }
+          
           dayConstraints += `\n\n🏨 CITY DEPARTURE — CHECKOUT DAY:
-- This is the LAST DAY in ${destination}. Tomorrow the traveler takes a ${transportLabel} to ${nextCity}.
+- This is the LAST DAY in ${destination}. The traveler departs for ${nextCity} by ${transportLabel}.
 - REQUIRED: Include "Hotel Checkout" activity in the morning (typically by 11:00 AM).
 - Plan morning activities around checkout. Luggage storage may be needed.
-- End the day early enough for evening packing/preparation.
-- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.${isNonFlight ? `
-- ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabel}.${nextTransport === 'train' ? ' If mentioning departure logistics, reference the train station instead.' : ''}${nextTransport === 'bus' ? ' If mentioning departure logistics, reference the bus station instead.' : ''}${nextTransport === 'car' ? ' The traveler is driving to the next destination.' : ''}${nextTransport === 'ferry' ? ' If mentioning departure logistics, reference the ferry terminal instead.' : ''}` : ''}`;
+- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.${isNonFlight ? departureInstructions : ''}`;
         }
 
         if (mcHotelName && mcHotelName !== 'Hotel') {
