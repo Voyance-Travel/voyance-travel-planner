@@ -4849,7 +4849,7 @@ export function EditorialItinerary({
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-medium text-muted-foreground inline-flex items-center gap-1">
                   <span>
-                    {days.length} day{days.length !== 1 ? 's' : ''}
+                    {isActivelyGenerating ? expectedTotalDays : days.length} day{(isActivelyGenerating ? expectedTotalDays : days.length) !== 1 ? 's' : ''}
                     {startDate && endDate ? ` · ${safeFormatDate(startDate, 'MMM d')} – ${safeFormatDate(endDate, 'MMM d')}` : ''}
                   </span>
                   {onDateChange && (
