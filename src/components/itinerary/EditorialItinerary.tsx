@@ -3964,7 +3964,9 @@ export function EditorialItinerary({
           }
         }
         activities.splice(insertIndex, 0, newActivity);
-        return { ...day, activities };
+        // GAP 2: Fix overlaps after inserting a new activity
+        const cascaded = cascadeFixOverlaps(activities);
+        return { ...day, activities: cascaded };
       });
       // Sync budget with updated days
       syncBudgetFromDays(updated);
