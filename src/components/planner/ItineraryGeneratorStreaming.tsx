@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLovableItinerary, GenerationPreferences, GenerationStep } from '@/hooks/useLovableItinerary';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 import type { DayItinerary } from '@/types/itinerary';
 import { GenerationPhases } from './shared/GenerationPhases';
 
