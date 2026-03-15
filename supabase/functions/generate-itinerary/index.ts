@@ -11024,7 +11024,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     // day credits are refunded server-side.
     // ==========================================================================
     if (action === 'generate-trip') {
-      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, resumeFromDay } = params;
+      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, resumeFromDay, isFirstTrip } = params;
       const userId = authResult.userId;
 
       if (!tripId || !destination || !startDate || !endDate) {
@@ -11460,6 +11460,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         dayNumber: effectiveStartDay,
         totalDays,
         generationRunId,
+        isFirstTrip: isFirstTrip || false,
       });
 
       // Retry loop with exponential backoff for intermittent 403 errors
@@ -11502,7 +11503,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     // The chain continues server-side even if the user closes their browser.
     // ==========================================================================
     if (action === 'generate-trip-day') {
-      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId } = params;
+      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip } = params;
 
       if (!tripId || !dayNumber || !totalDays) {
         return new Response(
@@ -11869,10 +11870,14 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       };
 
       // Progressive unlock: update unlocked_day_count = max(current, dayNumber)
+      // For first trips, cap at 2 (FIRST_TRIP_FREE_DAYS) — remaining days unlock on purchase
       const { data: metaTrip } = await supabase.from('trips').select('metadata, unlocked_day_count').eq('id', tripId).single();
       const meta = (metaTrip?.metadata as Record<string, unknown>) || {};
       const currentUnlocked = (metaTrip as any)?.unlocked_day_count ?? 0;
-      const newUnlocked = Math.max(currentUnlocked, dayNumber);
+      let newUnlocked = Math.max(currentUnlocked, dayNumber);
+      if (isFirstTrip) {
+        newUnlocked = Math.min(newUnlocked, 2); // FIRST_TRIP_FREE_DAYS
+      }
 
       // === LAYER 4: Verify last day exists when generation is complete ===
       if (dayNumber >= totalDays && startDate && endDate) {
@@ -11987,6 +11992,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           dayNumber: dayNumber + 1,
           totalDays,
           generationRunId,
+          isFirstTrip: isFirstTrip || false,
         });
 
         // Retry loop with exponential backoff for intermittent 403 errors

@@ -159,7 +159,7 @@ export function useGenerationGate() {
           recommendedPack: null,
           isFirstTrip: true,
           requestedDays: params.days,
-          generateDays: params.days, // Generate ALL days — content gated via LockedDayCard after day 2
+          generateDays: 2, // First trip: only generate days 1-2 free; remaining days generated on unlock
         };
       }
     }
