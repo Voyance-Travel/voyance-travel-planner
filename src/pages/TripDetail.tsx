@@ -1206,8 +1206,9 @@ export default function TripDetail() {
     fetchTripData();
     return () => {
       if (tripId) clearCachedVersion(tripId);
+      autoResumeAttemptedRef.current = false;
     };
-  }, [tripId]);
+  }, [tripId, handleResumeGeneration]);
 
   // Auto-repair legacy trips with missing activity_costs
   const costRepairAttempted = useRef(false);
