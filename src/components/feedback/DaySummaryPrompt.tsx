@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useUpsertDaySummary } from '@/services/feedbackAPI';
 import type { ActivityContext } from '@/types/feedback';
+import { formatTime12h } from '@/utils/timeFormat';
 
 interface DaySummaryPromptProps {
   tripId: string;
