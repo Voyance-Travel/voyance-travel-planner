@@ -58,61 +58,9 @@ serve(async (req) => {
       .eq('user_id', userId)
       .maybeSingle();
 
-    // Deduct credits via FIFO
-    const adminClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
-
-    const { data: deductResult, error: deductError } = await adminClient.rpc('deduct_credits_fifo', {
-      p_user_id: userId,
-      p_cost: 20,
-    });
-
-    if (deductError) {
-      const msg = deductError.message || '';
-      if (msg.includes('INSUFFICIENT_CREDITS')) {
-        return jsonResponse({ error: 'Insufficient credits', required: 20 }, 402);
-      }
-      throw deductError;
-    }
-
-    // Log credit spend
-    await adminClient.from('credit_ledger').insert({
-      user_id: userId,
-      transaction_type: 'spend',
-      action_type: 'generate_blog',
-      credits_delta: -20,
-      is_free_credit: false,
-      notes: `Blog generation for trip ${tripId}`,
-    });
-
-    // Sync balance cache
-    await adminClient.rpc('cleanup_rate_limits').catch(() => {}); // just to wake up
-    const now = new Date().toISOString();
-    await adminClient.from('credit_balances').update({
-      purchased_credits: adminClient.rpc ? undefined : 0, // will be handled below
-      updated_at: now,
-    }).eq('user_id', userId);
-
-    // Actually sync balances properly
-    await adminClient.from('credit_balances').update({
-      purchased_credits: (await adminClient.from('credit_purchases')
-        .select('remaining')
-        .eq('user_id', userId)
-        .gt('remaining', 0)
-        .neq('credit_type', 'free')
-        .or(`expires_at.is.null,expires_at.gt.${now}`)
-      ).data?.reduce((sum: number, r: any) => sum + r.remaining, 0) || 0,
-      free_credits: (await adminClient.from('credit_purchases')
-        .select('remaining')
-        .eq('user_id', userId)
-        .gt('remaining', 0)
-        .eq('credit_type', 'free')
-        .or(`expires_at.is.null,expires_at.gt.${now}`)
-      ).data?.reduce((sum: number, r: any) => sum + r.remaining, 0) || 0,
-      updated_at: now,
-    }).eq('user_id', userId);
+    // NOTE: Credit deduction is handled client-side via spend-credits edge function
+    // before invoking this function. This ensures idempotency, proper balance sync,
+    // and consistency with all other credit-gated actions.
 
     // Fetch trip data
     const { data: trip } = await supabase
