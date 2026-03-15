@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { syncHotelToLedger } from '@/services/budgetLedgerSync';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBudgetAlerts } from '@/hooks/useBudgetAlerts';
 import { getTripCities, updateCityHotel } from '@/services/tripCitiesService';
