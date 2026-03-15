@@ -1435,7 +1435,7 @@ export function ItineraryGenerator({
                     className="flex items-center gap-3 text-sm"
                   >
                     <span className="text-muted-foreground w-14 shrink-0 font-mono">
-                      {activity.startTime}
+                      {formatTime12h(activity.startTime)}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">

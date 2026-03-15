@@ -143,7 +143,7 @@ function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean })
             <div key={activity.id || actIndex} className="flex gap-4">
               <div className="flex items-center gap-2 text-muted-foreground w-24 flex-shrink-0">
                 <Clock className="w-4 h-4" />
-                <span className="text-sm">{activity.time}</span>
+                <span className="text-sm">{formatTime12h(activity.time)}</span>
               </div>
               <div className="flex-1">
                 <p className="font-medium text-foreground">{sanitizeActivityName(activity.title)}</p>

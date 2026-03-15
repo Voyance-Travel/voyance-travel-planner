@@ -183,7 +183,7 @@ export function DaySummaryPrompt({
                         <div className="min-w-0">
                           <p className="font-medium truncate">{activity.name}</p>
                           {activity.startTime && (
-                            <p className="text-xs text-muted-foreground">{activity.startTime}</p>
+                            <p className="text-xs text-muted-foreground">{formatTime12h(activity.startTime)}</p>
                           )}
                         </div>
                       </button>

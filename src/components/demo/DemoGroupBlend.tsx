@@ -260,7 +260,7 @@ export function DemoGroupBlend() {
                   >
                     <div className="flex items-start gap-3">
                       <div className="text-xs font-mono text-muted-foreground w-14 pt-0.5">
-                        {activity.time}
+                        {formatTime12h(activity.time)}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 flex-wrap">

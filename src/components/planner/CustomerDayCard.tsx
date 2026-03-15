@@ -217,7 +217,7 @@ export default function CustomerDayCard({
                         <div className="flex gap-4">
                           <div className="flex items-center gap-2 text-muted-foreground w-20 flex-shrink-0">
                             <Clock className="w-4 h-4" />
-                            <span className="text-sm font-mono">{activity.time}</span>
+                            <span className="text-sm font-mono">{formatTime12h(activity.time)}</span>
                           </div>
                           
                           <div className="flex-1 min-w-0">

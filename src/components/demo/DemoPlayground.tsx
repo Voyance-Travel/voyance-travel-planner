@@ -86,14 +86,7 @@ const DEMO_FEATURES = [
     color: 'text-rose-500'
   },
 ];
-
-// Convert 24-hour time to 12-hour AM/PM format
-const formatTime12h = (time24: string): string => {
-  const [hours, minutes] = time24.split(':').map(Number);
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const hours12 = hours % 12 || 12;
-  return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
-};
+import { formatTime12h } from '@/utils/timeFormat';
 
 export function DemoPlayground() {
   const navigate = useNavigate();

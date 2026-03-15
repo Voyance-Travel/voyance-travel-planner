@@ -331,7 +331,7 @@ function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean })
           {day.activities.slice(0, 4).map((activity, idx) => (
             <div key={activity.id} className="flex items-start gap-3">
               <div className="w-12 text-xs text-muted-foreground font-mono">
-                {activity.time}
+                {formatTime12h(activity.time)}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate">{sanitizeActivityName(activity.title)}</div>

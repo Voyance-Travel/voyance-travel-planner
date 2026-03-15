@@ -127,7 +127,7 @@ export function LiveActivityCard({
             {activity.startTime && (
               <Badge variant="outline" className="text-xs">
                 <Clock className="w-3 h-3 mr-1" />
-                {activity.startTime}
+                {formatTime12h(activity.startTime)}
               </Badge>
             )}
           </div>
