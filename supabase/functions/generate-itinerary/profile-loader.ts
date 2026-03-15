@@ -13,14 +13,15 @@ import { getFullArchetypeContext, type ArchetypeContext } from './archetype-data
 // =============================================================================
 
 export interface TraitScores {
-  pace: number;          // -10 to +10: negative = slow, positive = fast
-  budget: number;        // -10 to +10: negative = luxury, positive = frugal
-  social: number;        // -10 to +10: negative = solo, positive = social
-  planning: number;      // -10 to +10: negative = spontaneous, positive = planned
-  comfort: number;       // -10 to +10: negative = roughing it, positive = comfort
-  authenticity: number;  // -10 to +10: negative = tourist, positive = local
-  adventure: number;     // -10 to +10: negative = safe, positive = risky
-  cultural: number;      // -10 to +10: negative = shallow, positive = deep
+  pace: number;            // -10 to +10: negative = slow, positive = fast
+  budget: number;          // -10 to +10: negative = luxury, positive = frugal
+  social: number;          // -10 to +10: negative = solo, positive = social
+  planning: number;        // -10 to +10: negative = spontaneous, positive = planned
+  comfort: number;         // -10 to +10: negative = roughing it, positive = comfort
+  authenticity: number;    // -10 to +10: negative = tourist, positive = local
+  adventure: number;       // -10 to +10: negative = safe, positive = risky
+  cultural: number;        // -10 to +10: negative = shallow, positive = deep
+  transformation: number;  // -10 to +10: negative = no change, positive = growth/wellness
 }
 
 export type BudgetTier = 'budget' | 'moderate' | 'premium' | 'luxury';
