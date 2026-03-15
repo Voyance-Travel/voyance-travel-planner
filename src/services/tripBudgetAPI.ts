@@ -125,8 +125,8 @@ export async function addTripMember(input: {
     .single();
 
   if (error) throw new Error(error.message);
-  
-  return {
+
+  const result: TripMember = {
     id: data.id,
     tripId: data.trip_id,
     userId: data.user_id,
@@ -136,6 +136,41 @@ export async function addTripMember(input: {
     invitedAt: data.invited_at,
     acceptedAt: data.accepted_at,
   };
+
+  // GAP 4: Propagate new member to journey legs
+  try {
+    const { data: tripData } = await supabase
+      .from('trips')
+      .select('journey_id')
+      .eq('id', input.tripId)
+      .maybeSingle();
+
+    if (tripData?.journey_id) {
+      const { data: siblingLegs } = await supabase
+        .from('trips')
+        .select('id')
+        .eq('journey_id', tripData.journey_id)
+        .neq('id', input.tripId);
+
+      if (siblingLegs?.length) {
+        const memberInserts = siblingLegs.map(leg => ({
+          trip_id: leg.id,
+          email: input.email,
+          name: input.name || null,
+          role: input.role || 'attendee',
+          user_id: data.user_id,
+        }));
+
+        await supabase
+          .from('trip_members')
+          .upsert(memberInserts, { onConflict: 'trip_id,email' });
+      }
+    }
+  } catch (legErr) {
+    console.error('[TripBudget] Failed to propagate member to journey legs:', legErr);
+  }
+
+  return result;
 }
 
 export async function updateTripMember(
@@ -154,12 +189,50 @@ export async function updateTripMember(
 }
 
 export async function removeTripMember(memberId: string): Promise<void> {
+  // First get the member to know trip_id, user_id, email for leg cascading
+  const { data: member } = await supabase
+    .from('trip_members')
+    .select('trip_id, user_id, email')
+    .eq('id', memberId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('trip_members')
     .delete()
     .eq('id', memberId);
 
   if (error) throw new Error(error.message);
+
+  // GAP 5b: Cascade removal to journey legs
+  if (member) {
+    try {
+      const { data: tripData } = await supabase
+        .from('trips')
+        .select('journey_id')
+        .eq('id', member.trip_id)
+        .maybeSingle();
+
+      if (tripData?.journey_id) {
+        const { data: siblingLegs } = await supabase
+          .from('trips')
+          .select('id')
+          .eq('journey_id', tripData.journey_id)
+          .neq('id', member.trip_id);
+
+        if (siblingLegs?.length) {
+          const legIds = siblingLegs.map(l => l.id);
+
+          await supabase
+            .from('trip_members')
+            .delete()
+            .in('trip_id', legIds)
+            .eq('email', member.email);
+        }
+      }
+    } catch (legErr) {
+      console.error('[TripBudget] Failed to cascade member removal to journey legs:', legErr);
+    }
+  }
 }
 
 // ============================================================================
