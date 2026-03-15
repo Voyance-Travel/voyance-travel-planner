@@ -535,11 +535,35 @@ export default function PlannerHotelEnhanced() {
             hotel_cost_cents: Math.round(pricePerNight * 100),
           } as any)
           .eq('id', multiCityCityId);
+
+        // Sync hotel price to budget ledger
+        const tripId = searchParams.get('tripId') || plannerState.tripId;
+        if (tripId) {
+          const nights = Math.max(1, Math.ceil(
+            (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
+          ));
+          syncHotelToLedger(tripId, {
+            ...hotelSelection,
+            checkIn: startDate,
+            checkOut: endDate,
+            totalPrice: pricePerNight * nights,
+          } as any).catch(err => console.warn('[PlannerHotel] Budget sync failed:', err));
+        }
       } else {
         // Single-city: save via TripPlannerContext (writes to trips.hotel_selection)
         const tripId = await saveTrip();
         if (tripId) {
-          // Hotel selection saved to database
+          // Sync hotel price to budget ledger
+          const pricePerNight = room?.pricePerNight || hotel.pricePerNight || 0;
+          const nights = Math.max(1, Math.ceil(
+            (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
+          ));
+          syncHotelToLedger(tripId, {
+            ...hotelSelection,
+            checkIn: startDate,
+            checkOut: endDate,
+            totalPrice: pricePerNight * nights,
+          } as any).catch(err => console.warn('[PlannerHotel] Budget sync failed:', err));
         }
       }
     } catch (err) {
