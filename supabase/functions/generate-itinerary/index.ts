@@ -4463,6 +4463,7 @@ serve(async (req) => {
               authenticity: Number(rawScores.authenticity ?? rawScores.cultural_depth ?? 0),
               adventure: Number(rawScores.adventure ?? rawScores.risk_tolerance ?? 0),
               cultural: Number(rawScores.cultural ?? rawScores.cultural_interest ?? 0),
+              transformation: Number(rawScores.transformation ?? rawScores.wellness ?? 0),
             });
           }
 
