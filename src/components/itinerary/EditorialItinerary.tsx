@@ -8635,6 +8635,16 @@ function DayCard({
                         isEditable={isEditable}
                         tripCurrency={tripCurrency}
                         travelers={travelers}
+                        onSelectMode={isEditable ? (mode, duration, cost, instructions) => {
+                          handleUpdateActivity(dayIndex, activityIndex, {
+                            transportation: {
+                              method: mode,
+                              duration,
+                              ...(cost ? { estimatedCost: cost } : {}),
+                              ...(instructions ? { instructions } : {}),
+                            },
+                          });
+                        } : undefined}
                       />
                     )}
                     {/* Inline Add Activity button between activities */}

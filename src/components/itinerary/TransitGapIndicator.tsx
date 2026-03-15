@@ -608,6 +608,28 @@ export function TransitGapIndicator({
                                 <span><span className="font-medium">Tip:</span> {option.bookingTip}</span>
                               </div>
                             )}
+
+                            {/* Use this mode button */}
+                            {onSelectMode && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Parse cost string to number
+                                  const costMatch = option.estimatedCost?.match(/[\d.]+/);
+                                  const costAmount = costMatch ? parseFloat(costMatch[0]) : 0;
+                                  const cost = option.mode === 'walk' ? null : { amount: costAmount, currency: tripCurrency };
+                                  const instructions = routeDetailsCache[option.id]?.steps
+                                    ?.map(s => s.instruction)
+                                    .join(' → ') || option.route || undefined;
+                                  onSelectMode(option.mode, option.duration, cost, instructions);
+                                  setIsExpanded(false);
+                                }}
+                                className="w-full mt-1 py-1.5 px-3 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                              >
+                                Use {option.label}
+                              </button>
+                            )}
                           </div>
                         </motion.div>
                       )}
