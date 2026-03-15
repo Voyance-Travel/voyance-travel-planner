@@ -475,6 +475,12 @@ export interface EditorialItineraryProps {
 const activityStyles: Record<string, { icon: React.ReactNode; label: string }> = {
   transportation: { icon: <Plane className="h-4 w-4" />, label: 'Transport' },
   transport: { icon: <Car className="h-4 w-4" />, label: 'Transport' },
+  transit: { icon: <Train className="h-4 w-4" />, label: 'Travel' },
+  inter_city_flight: { icon: <Plane className="h-4 w-4" />, label: 'Flight' },
+  inter_city_train: { icon: <Train className="h-4 w-4" />, label: 'Train' },
+  inter_city_bus: { icon: <Bus className="h-4 w-4" />, label: 'Bus' },
+  inter_city_ferry: { icon: <Ship className="h-4 w-4" />, label: 'Ferry' },
+  inter_city_car: { icon: <Car className="h-4 w-4" />, label: 'Drive' },
   accommodation: { icon: <Hotel className="h-4 w-4" />, label: 'Stay' },
   dining: { icon: <Utensils className="h-4 w-4" />, label: 'Dining' },
   cultural: { icon: <Camera className="h-4 w-4" />, label: 'Culture' },
@@ -1116,6 +1122,94 @@ function getDayTotalCost(
 }
 
 // =============================================================================
+// INTER-CITY TRANSPORT STRIP (compact single-row card)
+// =============================================================================
+
+function InterCityTransportStrip({
+  activity,
+  travelMeta,
+  TransportIcon,
+}: {
+  activity: EditorialActivity;
+  travelMeta: any;
+  TransportIcon: React.ComponentType<{ className?: string }>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasExpandableDetails = travelMeta.arrTime || travelMeta.seatInfo || travelMeta.bookingRef;
+
+  return (
+    <div className="px-2 sm:px-0 py-1">
+      <div
+        className={cn(
+          "rounded-lg border border-primary/15 bg-primary/[0.03] px-3 py-2.5 group/transport",
+          hasExpandableDetails && "cursor-pointer"
+        )}
+        onClick={hasExpandableDetails ? () => setExpanded(prev => !prev) : undefined}
+      >
+        {/* Single compact row */}
+        <div className="flex items-center gap-2.5">
+          {/* Transport icon in a tinted circle */}
+          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <TransportIcon className="h-3.5 w-3.5 text-primary" />
+          </div>
+
+          {/* Title + subtitle */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">
+              {activity.title}
+            </p>
+            {travelMeta.carrier && (
+              <p className="text-[11px] text-muted-foreground truncate">
+                {travelMeta.carrier}{travelMeta.flightNum ? ` ${travelMeta.flightNum}` : ''}
+                {travelMeta.dur ? ` · ${travelMeta.dur}` : ''}
+              </p>
+            )}
+            {!travelMeta.carrier && !travelMeta.depTime && (
+              <p className="text-[11px] text-muted-foreground/60 italic truncate">
+                Plan your transport details
+              </p>
+            )}
+          </div>
+
+          {/* Time pill */}
+          {travelMeta.depTime && (
+            <span className="text-xs font-semibold text-primary tabular-nums shrink-0">
+              {travelMeta.depTime}
+            </span>
+          )}
+
+          {/* Cost */}
+          {travelMeta.price != null && travelMeta.price > 0 && (
+            <span className="text-xs text-muted-foreground shrink-0">
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: travelMeta.currency || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(travelMeta.price)}
+            </span>
+          )}
+
+          {/* Collapse/expand chevron */}
+          {hasExpandableDetails && (
+            <ChevronDown className={cn(
+              "h-3.5 w-3.5 text-muted-foreground/50 shrink-0 transition-transform duration-200",
+              expanded && "rotate-180"
+            )} />
+          )}
+        </div>
+
+        {/* Expandable details */}
+        {expanded && hasExpandableDetails && (
+          <div className="flex items-center gap-3 mt-2 pt-2 border-t border-primary/10 text-[11px] text-muted-foreground">
+            {travelMeta.depTime && travelMeta.arrTime && (
+              <span>{travelMeta.depTime} → {travelMeta.arrTime}</span>
+            )}
+            {travelMeta.seatInfo && <span>Class: {travelMeta.seatInfo}</span>}
+            {travelMeta.bookingRef && <span>Ref: {travelMeta.bookingRef}</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
@@ -1305,10 +1399,20 @@ export function EditorialItinerary({
             ...overrides,
           }) as any;
 
+        // Determine the specific inter-city transport category for proper icon display
+        const interCityCategory = tType === 'flight' ? 'inter_city_flight'
+          : tType === 'train' ? 'inter_city_train'
+          : tType === 'bus' ? 'inter_city_bus'
+          : tType === 'ferry' ? 'inter_city_ferry'
+          : tType === 'car' ? 'inter_city_car'
+          : 'inter_city_train';
+
+        const transportTitle = `${transportName} to ${to}`;
+
         const travelCards: EditorialActivity[] = [
-          mkActivity(`travel-summary-${dn}`, `${from} → ${to}`, {
+          mkActivity(`travel-summary-${dn}`, transportTitle, {
             __syntheticTravel: true,
-            __syntheticTravelSummary: true,
+            __interCityTransport: true,
             __travelMeta: {
               from,
               to,
@@ -1325,16 +1429,15 @@ export function EditorialItinerary({
               currency,
             },
             description: [
-              `${transportName}${carrier ? ` · ${carrier}` : ''}${flightNum ? ` ${flightNum}` : ''}`,
-              depTime && arrTime ? `Departs ${depTime} · Arrives ${arrTime}` : depTime ? `Departs ${depTime}` : arrTime ? `Arrives ${arrTime}` : '',
-              dur ? `Duration: ${dur}` : '',
-            ].filter(Boolean).join('\n'),
+              carrier && flightNum ? `${carrier} ${flightNum}` : carrier || '',
+              dur ? dur : '',
+            ].filter(Boolean).join(' · '),
             startTime: depTime,
             endTime: arrTime,
             duration: dur,
             cost: price != null ? { amount: price, currency } : undefined,
-            category: 'transit',
-            type: 'transit',
+            category: interCityCategory,
+            type: interCityCategory,
           } as any),
         ];
 
@@ -1372,12 +1475,19 @@ export function EditorialItinerary({
           descParts.push('Plan your transport details');
         }
 
+        const depInterCityCategory = tType === 'flight' ? 'inter_city_flight'
+          : tType === 'train' ? 'inter_city_train'
+          : tType === 'bus' ? 'inter_city_bus'
+          : tType === 'ferry' ? 'inter_city_ferry'
+          : tType === 'car' ? 'inter_city_car'
+          : 'inter_city_train';
+
         const departureCard: EditorialActivity = {
           id: `departure-transport-${dn}`,
           title,
           name: title,
-          type: 'transit',
-          category: 'transit',
+          type: depInterCityCategory,
+          category: depInterCityCategory,
           isLocked: false,
           startTime: cardTime,
           endTime: arrTime || undefined,
@@ -1385,6 +1495,22 @@ export function EditorialItinerary({
           description: descParts.join('\n'),
           location: undefined,
           __syntheticDeparture: true,
+          __interCityTransport: true,
+          __travelMeta: {
+            from: '',
+            to,
+            transportName: transportLabel,
+            hubLabel: '',
+            carrier,
+            flightNum,
+            depTime,
+            arrTime,
+            dur,
+            seatInfo: '',
+            bookingRef: '',
+            price: undefined,
+            currency: 'USD',
+          },
           __departureTransportType: tType,
         } as any;
 
@@ -8303,12 +8429,11 @@ function DayCard({
                   const prevTimeOfDay = isNaN(prevHour) ? '' : prevHour < 12 ? 'Morning' : prevHour < 17 ? 'Afternoon' : 'Evening';
                   const showTimeOfDayHeader = timeOfDay && timeOfDay !== prevTimeOfDay;
 
-                  // Compact travel summary card for consolidated transition-day activities
-                  const isTravelSummary = !!(activityToRender as any).__syntheticTravelSummary;
+                  // Compact inter-city transport card (unified for transition + departure)
+                  const isInterCityTransport = !!(activityToRender as any).__interCityTransport;
                   const travelMeta = (activityToRender as any).__travelMeta;
 
-                  if (isTravelSummary && travelMeta) {
-                    // Hide travel summary cards in clean preview
+                  if (isInterCityTransport && travelMeta) {
                     if (isCleanPreview) return null;
 
                     const TransportIcon = travelMeta.transportName?.toLowerCase() === 'flight' ? Plane
@@ -8318,61 +8443,12 @@ function DayCard({
                       : Car;
 
                     return (
-                      <div className="px-2 sm:px-0 py-2">
-                        <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] overflow-hidden relative group/travel">
-...
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // === Departure transport card (last day of a city before switching) ===
-                  const isDepartureCard = !!(activityToRender as any).__syntheticDeparture;
-                  if (isDepartureCard) {
-                    if (isCleanPreview) return null;
-                    const deptType = ((activityToRender as any).__departureTransportType || 'transfer').toLowerCase();
-                    const DepartIcon = deptType === 'flight' ? Plane
-                      : deptType === 'train' ? Train
-                      : deptType === 'bus' ? Bus
-                      : deptType === 'ferry' ? Ship
-                      : Car;
-                    const hasDetails = activityToRender.startTime && activityToRender.startTime !== '18:00';
-                    const descLines = (activityToRender.description || '').split('\n').filter(Boolean);
-
-                    return (
-                      <div key={activityToRender.id} className="px-2 sm:px-0 py-2">
-                        <div className="rounded-xl border-2 border-dashed border-accent/30 bg-accent/[0.04] overflow-hidden">
-                          <div className="flex items-center gap-3 px-4 py-3">
-                            <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                              <DepartIcon className="h-4.5 w-4.5 text-accent" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-sm text-foreground truncate">
-                                  {activityToRender.title}
-                                </span>
-                                {activityToRender.startTime && (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-                                    {activityToRender.startTime}
-                                  </Badge>
-                                )}
-                              </div>
-                              {descLines.length > 0 && (
-                                <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
-                                  {descLines.map((line, li) => (
-                                    <div key={li}>{line}</div>
-                                  ))}
-                                </div>
-                              )}
-                              {!hasDetails && (
-                                <div className="text-xs text-muted-foreground/60 mt-0.5 italic">
-                                  Add transport details for precise scheduling
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <InterCityTransportStrip
+                        key={activityToRender.id}
+                        activity={activityToRender}
+                        travelMeta={travelMeta}
+                        TransportIcon={TransportIcon}
+                      />
                     );
                   }
 

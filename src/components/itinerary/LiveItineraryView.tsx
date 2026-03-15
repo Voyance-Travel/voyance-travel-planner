@@ -5,7 +5,7 @@ import { parseLocalDate } from '@/utils/dateUtils';
 import { 
   Calendar, Sun, Cloud, CloudRain, Sparkles, TrendingUp, 
   ChevronLeft, ChevronRight, MapPin, CheckCircle, Navigation, Compass,
-  Clock, SkipForward, MessageSquare
+  Clock, SkipForward, MessageSquare, Plane, Train, Bus, Ship, Car
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -145,6 +145,43 @@ function TimelineActivityCard({
       openMapLocation({ name: activity.location.name });
     }
   };
+
+  // Inter-city transport: render as compact strip
+  const isInterCity = activity.category?.startsWith('inter_city_') || activity.type?.startsWith('inter_city_');
+
+  if (isInterCity) {
+    const TransportIcon = (activity.category || activity.type || '').includes('flight') ? Plane
+      : (activity.category || activity.type || '').includes('train') ? Train
+      : (activity.category || activity.type || '').includes('bus') ? Bus
+      : (activity.category || activity.type || '').includes('ferry') ? Ship
+      : Car;
+
+    return (
+      <>
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center pt-1.5">
+            <div className="w-3 h-3 rounded-full border-2 border-primary/40 bg-primary/10 shrink-0 z-10" />
+            {!isLast && <div className="w-px flex-1 min-h-[20px] bg-border" />}
+          </div>
+          <div className={cn('flex-1 min-w-0', isLast ? 'pb-0' : 'pb-3')}>
+            <div className="rounded-lg border border-primary/15 bg-primary/[0.03] px-3 py-2 flex items-center gap-2.5">
+              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <TransportIcon className="h-3 w-3 text-primary" />
+              </div>
+              <span className="text-sm font-medium text-foreground truncate flex-1">
+                {activity.name}
+              </span>
+              {activity.startTime && (
+                <span className="text-xs font-semibold text-primary tabular-nums shrink-0">
+                  {activity.startTime}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
