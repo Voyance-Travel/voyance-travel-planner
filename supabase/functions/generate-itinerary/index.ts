@@ -2598,7 +2598,7 @@ Generate activities for this day following ALL constraints above.`;
         });
         const removed = beforeCount - generatedDay.activities.length;
         if (removed > 0) {
-          console.log(`[Stage 2] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${resolvedNextLegTransport}, not flight)`);
+          console.log(`[Stage 2] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${nextLegTransport}, not flight)`);
         }
       }
 
