@@ -28,6 +28,7 @@ import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { syncHotelToLedger } from '@/services/budgetLedgerSync';
+import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
 import { cn } from '@/lib/utils';
 import { FlightImportModal } from './FlightImportModal';
 import { FindMyHotelsDrawer } from './FindMyHotelsDrawer';
