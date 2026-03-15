@@ -215,12 +215,20 @@ export function useEntitlements(tripId?: string) {
           const { reportConnectionFailure } = await import('@/components/common/ConnectionRecoveryBanner');
           reportConnectionFailure();
         } catch {}
+        // Return cached entitlements if available instead of restrictive defaults
+        // This prevents paid days from appearing locked after transient network errors
+        const cached = queryClient.getQueryData<EntitlementsResponse>(['entitlements', user?.id, tripId]);
+        if (cached && !cached.entitlements_error) {
+          console.log('[Entitlements] Returning cached entitlements instead of restrictive defaults');
+          return cached;
+        }
         return getDefaultEntitlements(user?.id || '');
       }
       return data;
     },
     enabled: isAuthenticated && !!user?.id,
     staleTime: 60000,
+    placeholderData: (previousData: EntitlementsResponse | undefined) => previousData,
     refetchOnWindowFocus: true,
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),

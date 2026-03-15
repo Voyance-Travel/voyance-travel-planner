@@ -1150,8 +1150,8 @@ export default function TripDetail() {
             }
 
             if (emptyDayNumbers.length > 0 && emptyDayNumbers.length < expectedTotal) {
-              autoResumeAttemptedRef.current = true;
               console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} days have no activities (days: ${emptyDayNumbers.join(', ')}). Auto-regenerating.`);
+              autoResumeAttemptedRef.current = true;
               // Regenerate each empty day sequentially
               setTimeout(async () => {
                 try {
@@ -1177,6 +1177,8 @@ export default function TripDetail() {
                   toast.success(`Regenerated ${emptyDayNumbers.length} unplanned day${emptyDayNumbers.length > 1 ? 's' : ''}`);
                 } catch (err) {
                   console.error('[TripDetail] Auto-regenerate empty days failed:', err);
+                  // Reset so it retries on next page load
+                  autoResumeAttemptedRef.current = false;
                 }
               }, 2000);
             }
