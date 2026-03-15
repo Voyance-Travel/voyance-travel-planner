@@ -104,7 +104,7 @@ export function ItineraryAssistant({
   const { isPaid } = useEntitlements();
   const spendCredits = useSpendCredits();
   const totalCredits = creditData?.totalCredits ?? 0;
-  const aiMessageCap = useActionCap(tripId, 'ai_message');
+  // ai_message is now free — no cap tracking needed
 
   // Keep local days in sync with props
   useEffect(() => {
