@@ -6,7 +6,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Sparkles, User, ClipboardPaste, Mic, MicOff } from 'lucide-react';
+import { Send, Loader2, Sparkles, User, ClipboardPaste, Mic, MicOff, AlertCircle } from 'lucide-react';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
