@@ -1358,10 +1358,10 @@ export function buildRegularDayPrompt(
   lines.push(`⚡ ACTIVITY DENSITY`);
   lines.push(`${'─'.repeat(40)}`);
   lines.push(`   Max EXPERIENCE activities: ${maxActivities} (museums, tours, attractions, cultural sites)`);
-  lines.push(`   ⚠️ IMPORTANT: Meals, transit, coffee stops, nightlife, and hotel bookends are MANDATORY ADDITIONS`);
-  lines.push(`   on top of the experience count. A full day should have 10-14 TOTAL entries:`);
+  lines.push(`   ⚠️ IMPORTANT: Required meals, transit, coffee stops, nightlife, and hotel bookends are MANDATORY ADDITIONS`);
+  lines.push(`   on top of the experience count. Total entries depend on the day's meal policy:`);
   lines.push(`     - ${maxActivities} experience activities (paid + free mix)`);
-  lines.push(`     - 3 meals (breakfast, lunch, dinner) = 3 entries`);
+  lines.push(`     - Required meals as specified by meal policy`);
   lines.push(`     - 4-6 transit entries between stops`);
   lines.push(`     - 1 nightlife/evening entry`);
   lines.push(`     - 1-2 hotel bookend entries (return to freshen up, end of day)`);
