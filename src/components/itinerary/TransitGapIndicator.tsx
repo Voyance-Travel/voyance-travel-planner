@@ -275,6 +275,9 @@ export function TransitGapIndicator({
     if (next && !hasFetched) fetchOptions();
   };
 
+  // Early returns after all hooks
+  if (shouldHide) return null;
+
   return (
     <div>
       {/* Tappable transit row — styled like TransitModePicker */}
