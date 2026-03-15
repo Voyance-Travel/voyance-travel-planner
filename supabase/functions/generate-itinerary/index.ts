@@ -1888,6 +1888,11 @@ These help the traveler prepare for their trip.
       const dayCountry = dayCity?.country || context.destinationCountry;
       const isTransitionDay = dayCity?.isTransitionDay || false;
       
+      // Derive city-boundary flags for post-processing airport strip (fixes dead-code bug)
+      const isLastDayInCity = dayCity?.isLastDayInCity || false;
+      const nextDayInfoForStrip = context.multiCityDayMap?.[dayNumber]; // dayNumber is 0-indexed+1, so [dayNumber] = next day
+      const nextLegTransport = nextDayInfoForStrip?.transportType || '';
+      
       let multiCityPrompt = '';
       if (context.isMultiCity && dayCity) {
         const cityFirstTime = context.firstTimePerCity
@@ -2578,7 +2583,7 @@ Generate activities for this day following ALL constraints above.`;
       // ==========================================================================
       // NON-FLIGHT DEPARTURE DAY: Strip airport activities when next leg is train/bus/car/ferry
       // ==========================================================================
-      if (paramIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
+      if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegTransport !== 'flight') {
         const beforeCount = generatedDay.activities.length;
         generatedDay.activities = generatedDay.activities.filter((a: any) => {
           const t = (a.title || '').toLowerCase();
@@ -2593,7 +2598,7 @@ Generate activities for this day following ALL constraints above.`;
         });
         const removed = beforeCount - generatedDay.activities.length;
         if (removed > 0) {
-          console.log(`[Stage 2] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${resolvedNextLegTransport}, not flight)`);
+          console.log(`[Stage 2] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${nextLegTransport}, not flight)`);
         }
       }
 
