@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { isQuizCompleted } from '@/utils/quizUtils';
 import { formatWeatherCondition } from '@/utils/textFormatting';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 import { useLovableItinerary } from '@/hooks/useLovableItinerary';
 import { AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
