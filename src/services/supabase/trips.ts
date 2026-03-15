@@ -562,12 +562,37 @@ export function useSaveFlightSelection() {
       const trip = await saveFlightSelection(tripId, flight);
       // Sync flight price to budget ledger
       await syncFlightToLedger(tripId, flight);
+      // Patch Day 1/last day activities with flight times
+      try {
+        await patchItineraryWithFlight(tripId, flight);
+      } catch (e) { console.warn('[useSaveFlightSelection] itinerary patch skipped:', e); }
+      // Cascade transport changes
+      try {
+        const { runCascadeAndPersist } = await import('@/services/cascadeTransportToItinerary');
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data: tripData } = await supabase
+          .from('trips')
+          .select('itinerary_data, is_multi_city')
+          .eq('id', tripId)
+          .single();
+        const itDays = (tripData?.itinerary_data as any)?.days;
+        if (itDays?.length) {
+          if (tripData?.is_multi_city) {
+            const { getTripCities } = await import('@/services/tripCitiesService');
+            const cities = await getTripCities(tripId);
+            await runCascadeAndPersist(tripId, itDays, flight, cities);
+          } else {
+            await runCascadeAndPersist(tripId, itDays, flight);
+          }
+        }
+      } catch (e) { console.warn('[useSaveFlightSelection] cascade skipped:', e); }
       return trip;
     },
     onSuccess: (_, { tripId }) => {
       toast.success('Flight selection saved');
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
       queryClient.invalidateQueries({ queryKey: ['budget', tripId] });
+      window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
     },
   });
 }
@@ -580,12 +605,20 @@ export function useSaveHotelSelection() {
       const trip = await saveHotelSelection(tripId, hotel);
       // Sync hotel price to budget ledger
       await syncHotelToLedger(tripId, hotel);
+      // Patch itinerary accommodation activities with hotel name
+      try {
+        await patchItineraryWithHotel(tripId, {
+          name: hotel.name || '',
+          address: hotel.address,
+        });
+      } catch (e) { console.warn('[useSaveHotelSelection] itinerary patch skipped:', e); }
       return trip;
     },
     onSuccess: (_, { tripId }) => {
       toast.success('Hotel selection saved');
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
       queryClient.invalidateQueries({ queryKey: ['budget', tripId] });
+      window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
     },
   });
 }

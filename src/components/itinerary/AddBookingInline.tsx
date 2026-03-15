@@ -295,6 +295,20 @@ export function AddFlightInline({
       setShowManualEntry(false);
       onFlightAdded?.();
 
+      // Sync flight price to budget ledger
+      try {
+        await syncFlightToLedger(tripId, flightSelection as any);
+      } catch (ledgerErr) {
+        console.warn('[AddBookingInline] Flight budget sync skipped:', ledgerErr);
+      }
+
+      // Patch Day 1/last day activities with flight arrival/departure times
+      try {
+        await patchItineraryWithFlight(tripId, flightSelection);
+      } catch (patchErr) {
+        console.warn('[AddBookingInline] Flight itinerary patch skipped:', patchErr);
+      }
+
       // Cascade transport changes to itinerary
       try {
         const { runCascadeAndPersist } = await import('@/services/cascadeTransportToItinerary');
