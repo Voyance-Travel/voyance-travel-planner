@@ -63,7 +63,6 @@ export function InlineModifier({
 
   // Credit system hooks
   const { data: creditData } = useCredits();
-  const { isPaid } = useEntitlements();
   const spendCredits = useSpendCredits();
   const totalCredits = creditData?.totalCredits ?? 0;
 
