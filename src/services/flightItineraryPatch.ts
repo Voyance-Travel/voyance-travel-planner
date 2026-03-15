@@ -133,6 +133,9 @@ export async function patchItineraryWithFlight(
             }
           }
         }
+        // GAP 3: Cascade fix overlaps on Day 1 after flight patch
+        day1.activities = cascadeFixOverlaps(activities as any) as any;
+        patched = true;
       }
     }
 
