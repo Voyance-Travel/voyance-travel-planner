@@ -8038,8 +8038,10 @@ interface DayCardProps {
   onUnlockTrip?: () => void;
   onUnlockDay?: (dayNumber: number) => void;
   unlockingDayNumber?: number | null;
-  onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
-  changingTransportActivityId?: string | null;
+   onTransportModeChange?: (dayIndex: number, activityId: string, newMode: string) => Promise<void>;
+   changingTransportActivityId?: string | null;
+   /** Callback to set transportation data on an activity (e.g. from TransitGapIndicator) */
+   onSetActivityTransportation?: (dayIndex: number, activityIndex: number, transportation: EditorialActivity['transportation']) => void;
   collaboratorColorMap?: Map<string, CollaboratorAttribution>;
   aiLocked?: boolean;
   onRefreshDay?: () => void;
