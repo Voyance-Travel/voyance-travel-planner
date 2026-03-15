@@ -234,11 +234,24 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Look up fare data from database
-    let fareQuery = supabase.from('airport_transfer_fares').select('*').ilike('city', city);
-    if (airportCode) fareQuery = fareQuery.eq('airport_code', airportCode.toUpperCase());
-    const { data: fares } = await fareQuery.limit(1);
-    const fareRecord = fares?.[0] as FareRecord | undefined;
+    // Detect if this is an airport route vs a city point-to-point route
+    const AIRPORT_KEYWORDS = ['airport', 'terminal', 'aeroporto', 'aéroport', 'flughafen', 'aeropuerto'];
+    const AIRPORT_CODE_PATTERN = /\b[A-Z]{3}\b/; // e.g. LHR, JFK
+    const originLower = (origin || '').toLowerCase();
+    const destLower = (destination || '').toLowerCase();
+    const isAirportRoute = AIRPORT_KEYWORDS.some(kw => originLower.includes(kw) || destLower.includes(kw))
+      || (airportCode && airportCode.length === 3)
+      || AIRPORT_CODE_PATTERN.test(origin || '')
+      || AIRPORT_CODE_PATTERN.test(destination || '');
+
+    // Look up fare data from database (only for airport routes)
+    let fareRecord: FareRecord | undefined;
+    if (isAirportRoute) {
+      let fareQuery = supabase.from('airport_transfer_fares').select('*').ilike('city', city);
+      if (airportCode) fareQuery = fareQuery.eq('airport_code', airportCode.toUpperCase());
+      const { data: fares } = await fareQuery.limit(1);
+      fareRecord = fares?.[0] as FareRecord | undefined;
+    }
 
     // Google Maps live duration
     let liveTaxiDuration: string | null = null;
