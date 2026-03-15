@@ -1455,6 +1455,7 @@ import {
   validateGeneratedDay,
   deduplicateActivities,
   type DayValidationResult,
+  type StrictDayMinimal,
 } from './day-validation.ts';
 
 
