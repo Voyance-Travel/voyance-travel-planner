@@ -56,7 +56,7 @@ function buildCheckInActivity(hotel: HotelForInjection): EditorialActivity {
 }
 
 /** Convert minutes since midnight back to HH:MM string */
-function minutesToTime(m: number): string {
+export function minutesToTime(m: number): string {
   const h = Math.floor(m / 60);
   const min = m % 60;
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
