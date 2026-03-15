@@ -17,7 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ROUTES } from '@/config/routes';
 import { useTripPermission } from '@/services/tripCollaboratorsAPI';
-import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
+import { isNativeIOS, openWebsitePurchase } from '@/services/iapService';
 
 const ACTION_LABELS: Partial<Record<keyof typeof CREDIT_COSTS, string>> = {
   SWAP_ACTIVITY: 'Swap Activity',
@@ -70,15 +70,10 @@ export function OutOfCreditsModal() {
         return;
       }
 
-      // iOS native IAP path
-      if (isIAPAvailable() && pack.id) {
-        const result = await purchaseByPackId(pack.id);
-        if (result.success) {
-          toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
-          dismiss();
-        } else if (result.error !== 'cancelled') {
-          toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
-        }
+      // iOS native: link out to website
+      if (isNativeIOS()) {
+        await openWebsitePurchase(pack.id);
+        dismiss();
         return;
       }
 

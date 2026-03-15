@@ -10,8 +10,7 @@ import { Coins, Crown, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CREDIT_COSTS, FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, BOOST_PACK, getRecommendedPack, formatCredits } from '@/config/pricing';
 import { EmbeddedCheckoutModal } from '@/components/checkout/EmbeddedCheckoutModal';
-import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
-import { useToast } from '@/hooks/use-toast';
+import { isNativeIOS, openWebsitePurchase } from '@/services/iapService';
 
 interface CreditNudgeProps {
   action: keyof typeof CREDIT_COSTS;
@@ -38,8 +37,6 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
     productId: string;
     mode: 'payment';
   } | null>(null);
-  const { toast } = useToast();
-
   const cost = CREDIT_COSTS[action];
   const deficit = cost - currentBalance;
   const recommended = getRecommendedPack(deficit);
@@ -52,14 +49,9 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
   if (!primaryPack) return null;
 
   const handleBuyPack = async (pack: { priceId: string; name: string; credits: number; productId: string; id?: string }) => {
-    if (isIAPAvailable() && pack.id) {
-      const result = await purchaseByPackId(pack.id);
-      if (result.success) {
-        toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added.` });
-        onDismiss();
-      } else if (result.error !== 'cancelled') {
-        toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
-      }
+    // iOS native: link out to website
+    if (isNativeIOS()) {
+      await openWebsitePurchase(pack.id);
       return;
     }
     setCheckoutPack({ priceId: pack.priceId, name: pack.name, credits: pack.credits, productId: pack.productId, mode: 'payment' });

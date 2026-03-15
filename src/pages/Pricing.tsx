@@ -21,7 +21,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
 import { cn } from '@/lib/utils';
-import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
+import { isNativeIOS, openWebsitePurchase } from '@/services/iapService';
 
 interface CheckoutConfig {
   priceId: string;
@@ -161,14 +161,9 @@ export default function Pricing() {
         return;
       }
 
-      // iOS native IAP path
-      if (isIAPAvailable()) {
-        const result = await purchaseByPackId(pack.id);
-        if (result.success) {
-          toast({ title: 'Purchase complete!', description: `${formatCredits(result.credits || pack.credits)} credits added to your account.` });
-        } else if (result.error !== 'cancelled') {
-          toast({ title: 'Purchase failed', description: result.error || 'Please try again.', variant: 'destructive' });
-        }
+      // iOS native: link out to website
+      if (isNativeIOS()) {
+        await openWebsitePurchase(pack.id);
         return;
       }
 

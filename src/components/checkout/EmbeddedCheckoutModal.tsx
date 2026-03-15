@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import {
   EmbeddedCheckoutProvider,
@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { isNativeIOS, openWebsitePurchase } from '@/services/iapService';
 
 // Initialize Stripe with publishable key
 const stripePromise = loadStripe('pk_live_51RJawaJytioXyqq9n5emMW9beYC8p5gGvNyWiNlcYevo4Ibe3YkTtrNGrqA70kSRn1tAX8W8xo0E9eI9x6swFYV700LWTtv0ea');
@@ -44,6 +45,14 @@ export function EmbeddedCheckoutModal({
   packageTier,
 }: EmbeddedCheckoutModalProps) {
   const [error, setError] = useState<string | null>(null);
+
+  // Safety net: redirect to website if somehow opened on iOS native
+  useEffect(() => {
+    if (isNativeIOS() && isOpen) {
+      openWebsitePurchase();
+      onClose();
+    }
+  }, [isOpen, onClose]);
 
   const fetchClientSecret = useCallback(async () => {
     try {
