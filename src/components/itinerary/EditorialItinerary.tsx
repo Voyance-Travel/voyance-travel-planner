@@ -2023,7 +2023,7 @@ export function EditorialItinerary({
     toast.success('Flight order updated');
     await Promise.resolve(onBookingAdded?.());
   }, [flightSelection, tripId, onBookingAdded]);
-import { BlendRecalcBanner } from './BlendRecalcBanner';
+
 
   // Handle transport mode change for a specific activity route segment
   const handleTransportModeChange = useCallback(async (dayIndex: number, activityId: string, newMode: string) => {
