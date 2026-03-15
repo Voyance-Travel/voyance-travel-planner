@@ -10,8 +10,7 @@ import { Coins, Crown, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CREDIT_COSTS, FLEXIBLE_CREDITS, VOYANCE_CLUB_PACKS, BOOST_PACK, getRecommendedPack, formatCredits } from '@/config/pricing';
 import { EmbeddedCheckoutModal } from '@/components/checkout/EmbeddedCheckoutModal';
-import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
-import { useToast } from '@/hooks/use-toast';
+import { isNativeIOS, openWebsitePurchase } from '@/services/iapService';
 
 interface CreditNudgeProps {
   action: keyof typeof CREDIT_COSTS;
