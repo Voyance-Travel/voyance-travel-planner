@@ -114,6 +114,7 @@ import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationS
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { TransitModePicker } from './TransitModePicker';
 
+import { cascadeFixOverlaps } from '@/utils/injectHotelActivities';
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { NewMemberSuggestionsCard } from './NewMemberSuggestionsCard';
 import { calculateItineraryValueStats } from '@/utils/intelligenceAnalytics';
@@ -3963,7 +3964,9 @@ export function EditorialItinerary({
           }
         }
         activities.splice(insertIndex, 0, newActivity);
-        return { ...day, activities };
+        // GAP 2: Fix overlaps after inserting a new activity
+        const cascaded = cascadeFixOverlaps(activities);
+        return { ...day, activities: cascaded };
       });
       // Sync budget with updated days
       syncBudgetFromDays(updated);
@@ -4053,21 +4056,29 @@ export function EditorialItinerary({
 
       return {
         ...day,
-        activities: day.activities.map((activity, aIdx) => {
-          // The edited activity itself
-          if (aIdx === activityIndex) {
-            return { ...activity, startTime, endTime, time: startTime };
+        activities: (() => {
+          let updated = day.activities.map((activity, aIdx) => {
+            // The edited activity itself
+            if (aIdx === activityIndex) {
+              const newDuration = parseTime(endTime) - parseTime(startTime);
+              return { ...activity, startTime, endTime, time: startTime, durationMinutes: Math.max(newDuration, 0) };
+            }
+            // Cascade: shift all activities after the edited one
+            if (cascade && aIdx > activityIndex && deltaMinutes !== 0) {
+              const aStart = activity.startTime || activity.time;
+              const aEnd = activity.endTime;
+              const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
+              const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
+              return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
+            }
+            return activity;
+          });
+          // GAP 1 & 4: Fix any remaining overlaps after cascade shift
+          if (cascade) {
+            updated = cascadeFixOverlaps(updated);
           }
-          // Cascade: shift all activities after the edited one
-          if (cascade && aIdx > activityIndex && deltaMinutes !== 0) {
-            const aStart = activity.startTime || activity.time;
-            const aEnd = activity.endTime;
-            const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
-            const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
-            return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
-          }
-          return activity;
-        }),
+          return updated;
+        })(),
       };
     }));
     setHasChanges(true);

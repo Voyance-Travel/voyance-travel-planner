@@ -56,7 +56,7 @@ function buildCheckInActivity(hotel: HotelForInjection): EditorialActivity {
 }
 
 /** Convert minutes since midnight back to HH:MM string */
-function minutesToTime(m: number): string {
+export function minutesToTime(m: number): string {
   const h = Math.floor(m / 60);
   const min = m % 60;
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
@@ -100,7 +100,7 @@ function adjustActivitiesAroundCheckIn(
  * Cascade-fix overlapping activities after initial shifts.
  * Ensures a minimum 0-min gap (no overlaps) between consecutive activities.
  */
-function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialActivity[] {
+export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialActivity[] {
   const MAX_TIME = 23 * 60;
   const result = [...activities];
 
@@ -142,7 +142,7 @@ function buildCheckOutActivity(hotel: HotelForInjection): EditorialActivity {
 }
 
 /** Parse time string "HH:MM" or "H:MM AM/PM" to minutes since midnight */
-function timeToMinutes(t?: string): number {
+export function timeToMinutes(t?: string): number {
   if (!t) return 0;
   const normalized = t.trim().toUpperCase();
   const m12 = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);

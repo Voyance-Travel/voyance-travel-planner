@@ -11,6 +11,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
 import { getFirstLegArrivalTime, getLastLegDepartureTime } from '@/utils/normalizeFlightSelection';
+import { cascadeFixOverlaps } from '@/utils/injectHotelActivities';
 
 /**
  * Normalize time strings ("2:30 PM" or "14:30") to "HH:MM" 24hr format
@@ -132,6 +133,9 @@ export async function patchItineraryWithFlight(
             }
           }
         }
+        // GAP 3: Cascade fix overlaps on Day 1 after flight patch
+        day1.activities = cascadeFixOverlaps(activities as any) as any;
+        patched = true;
       }
     }
 

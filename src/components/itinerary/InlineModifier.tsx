@@ -8,6 +8,7 @@ import { sendChatMessage, getActionDisplayInfo, type ItineraryContext } from '@/
 import { executeAction, type ItineraryDay, type ActionExecutionResult } from '@/services/itineraryActionExecutor';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { cascadeFixOverlaps } from '@/utils/injectHotelActivities';
 import { toFriendlyError } from '@/utils/friendlyErrors';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
@@ -203,7 +204,12 @@ export function InlineModifier({
       );
 
       if (result.success && result.updatedDays) {
-        onItineraryUpdate(result.updatedDays);
+        // GAP 5: Fix any timing overlaps in AI-rewritten activities
+        const fixedDays = result.updatedDays.map(day => ({
+          ...day,
+          activities: cascadeFixOverlaps(day.activities as any) as any,
+        }));
+        onItineraryUpdate(fixedDays);
         toast.success(result.message || 'Changes applied!');
         setPendingChange(null);
         setInput('');
