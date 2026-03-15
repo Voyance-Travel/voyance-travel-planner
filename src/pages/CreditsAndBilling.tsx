@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import TopNav from '@/components/common/TopNav';
 import Footer from '@/components/common/Footer';
-import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
+import { isNativeIOS, openWebsitePurchase } from '@/services/iapService';
 import { useToast } from '@/hooks/use-toast';
 
 interface LedgerEntry {
