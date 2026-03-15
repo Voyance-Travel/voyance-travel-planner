@@ -2576,6 +2576,28 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       // ==========================================================================
+      // NON-FLIGHT DEPARTURE DAY: Strip airport activities when next leg is train/bus/car/ferry
+      // ==========================================================================
+      if (paramIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
+        const beforeCount = generatedDay.activities.length;
+        generatedDay.activities = generatedDay.activities.filter((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          const isAirportRef =
+            t.includes('airport') ||
+            t.includes('taxi to airport') ||
+            t.includes('transfer to airport') ||
+            t.includes('departure transfer to airport') ||
+            t.includes('flight departure') ||
+            t.includes('head to airport');
+          return !isAirportRef;
+        });
+        const removed = beforeCount - generatedDay.activities.length;
+        if (removed > 0) {
+          console.log(`[Stage 2] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${resolvedNextLegTransport}, not flight)`);
+        }
+      }
+
+      // ==========================================================================
       // ARRIVAL DAY: Strip arrival/baggage/transfer activities — handled by Arrival Game Plan UI
       // ==========================================================================
       if (isFirstDay && generatedDay.activities.length > 0) {
