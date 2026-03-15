@@ -26,6 +26,7 @@ import { useDNAHotelRecommendations, type DNARecommendedHotel, type IdealHotelPr
 import { CREDIT_COSTS } from '@/config/pricing';
 import { saveHotelSelection } from '@/services/supabase/trips';
 import { syncHotelToLedger } from '@/services/budgetLedgerSync';
+import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
 
 interface FindMyHotelsDrawerProps {
   tripId: string;
