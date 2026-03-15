@@ -147,6 +147,7 @@ export function ItineraryGenerator({
   const [showCostConfirm, setShowCostConfirm] = useState(false);
   const [prePhase, setPrePhase] = useState<Extract<GenerationStep, 'gathering-dna' | 'personalizing' | 'preparing'> | null>(null);
   const [journeyLegs, setJourneyLegs] = useState<Array<{ city: string; days: number; cost: number }>>([]);
+  const [journeyMultiCityFee, setJourneyMultiCityFee] = useState(0);
 
   const fetchCompletedDaysFromBackend = useCallback(async (): Promise<GeneratedDay[]> => {
     if (!tripId) return [];
@@ -466,17 +467,18 @@ export function ItineraryGenerator({
             const legBaseCost = roundUpTo10(legDays * BASE_RATE_PER_DAY);
             return { city: leg.destination, days: legDays, cost: legBaseCost };
           });
-          if (breakdown.length > 0) {
-            breakdown[0].cost += multiCityFee;
-          }
+          setJourneyMultiCityFee(multiCityFee);
           setJourneyLegs(breakdown);
         } else {
+          setJourneyMultiCityFee(0);
           setJourneyLegs([]);
         }
       } else {
+        setJourneyMultiCityFee(0);
         setJourneyLegs([]);
       }
     } catch {
+      setJourneyMultiCityFee(0);
       setJourneyLegs([]);
     }
 
@@ -986,7 +988,7 @@ export function ItineraryGenerator({
           {showCostConfirm && costEstimate.totalCredits > 0 && (() => {
             // Use journey total if this is a journey, otherwise single-trip cost
             const effectiveTotalCost = journeyLegs.length > 1 
-              ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0)
+              ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0) + journeyMultiCityFee
               : costEstimate.totalCredits;
             const canAffordAll = currentBalance >= effectiveTotalCost;
             const costPerDay = 60; // CREDIT_COSTS standard
@@ -1017,6 +1019,12 @@ export function ItineraryGenerator({
                           <span>{formatCredits(leg.cost)} credits</span>
                         </div>
                       ))}
+                      {journeyMultiCityFee > 0 && (
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Multi-city fee</span>
+                          <span>{formatCredits(journeyMultiCityFee)} credits</span>
+                        </div>
+                      )}
                       <div className="border-t border-border/50 pt-1" />
                     </div>
                   )}
@@ -1046,7 +1054,7 @@ export function ItineraryGenerator({
                     <span className="text-foreground">{journeyLegs.length > 1 ? 'Journey Total' : 'Total'}</span>
                     <span className="text-primary">
                       {formatCredits(journeyLegs.length > 1 
-                        ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0) 
+                        ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0) + journeyMultiCityFee
                         : costEstimate.totalCredits
                       )} credits
                     </span>
