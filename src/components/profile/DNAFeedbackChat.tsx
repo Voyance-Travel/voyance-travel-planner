@@ -127,6 +127,17 @@ export default function DNAFeedbackChat({
 
       setMessages(prev => [...prev, assistantMessage]);
 
+      // Charge credits AFTER successful AI response (charge-on-success pattern)
+      // No tripId — DNAFeedbackChat is profile-level, free caps don't apply (by design)
+      try {
+        await spendCredits.mutateAsync({
+          action: 'AI_MESSAGE',
+          metadata: { source: 'dna_feedback_chat' },
+        });
+      } catch {
+        console.warn('[DNAFeedbackChat] Credit charge failed post-response');
+      }
+
       // If AI suggested trait adjustments, apply them as overrides and recalculate
       if (response.suggestedTraits && Object.keys(response.suggestedTraits).length > 0) {
         // Merge with existing overrides
