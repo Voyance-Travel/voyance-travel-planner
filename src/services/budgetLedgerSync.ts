@@ -126,15 +126,25 @@ export async function syncHotelToLedger(
   let totalUsd = hotel.totalPrice || 0;
 
   // Fallback: calculate from per-night if total isn't set
-  if (!totalUsd && hotel.pricePerNight && hotel.checkIn && hotel.checkOut) {
-    const nights = Math.max(
-      1,
-      Math.ceil(
-        (new Date(hotel.checkOut).getTime() - new Date(hotel.checkIn).getTime()) /
-        (1000 * 60 * 60 * 24),
-      ),
-    );
-    totalUsd = hotel.pricePerNight * nights;
+  // Handle both legacy (checkIn/checkOut) and normalized (checkInDate/checkOutDate) field names
+  if (!totalUsd && hotel.pricePerNight) {
+    const hotelAny = hotel as any;
+    const checkIn = hotel.checkIn || hotelAny.checkInDate;
+    const checkOut = hotel.checkOut || hotelAny.checkOutDate;
+
+    // Use explicit nights field if available, otherwise calculate from dates
+    let nights = hotelAny.nights || 0;
+    if (!nights && checkIn && checkOut) {
+      const checkInMs = new Date(checkIn).getTime();
+      const checkOutMs = new Date(checkOut).getTime();
+      if (!isNaN(checkInMs) && !isNaN(checkOutMs) && checkOutMs > checkInMs) {
+        nights = Math.max(1, Math.ceil((checkOutMs - checkInMs) / (1000 * 60 * 60 * 24)));
+      }
+    }
+
+    if (nights > 0) {
+      totalUsd = hotel.pricePerNight * nights;
+    }
   }
 
   if (!totalUsd || totalUsd <= 0) {
