@@ -1,203 +1,138 @@
-## Fix: Journey Leg Handoff + Pricing Consistency ✅ COMPLETE
 
-### Root causes fixed:
-1. **Backend handoff** (`triggerNextJourneyLeg`): Was sending `{ tripId }` only — rejected by service-role allowlist (missing `generate-trip`). Now fetches full trip fields and sends `action: 'generate-trip'` with complete payload. Allowlist expanded.
-2. **Frontend fallback** (`TripDetail.tsx`): Same `{ tripId }` problem. Now sends full `generate-trip` payload. No longer pre-sets `itinerary_status='generating'` before invoke succeeds.
-3. **Stuck-leg self-heal**: On TripDetail load, detects journey legs stuck in `generating` with no heartbeat/progress and auto-retriggers with full payload.
-4. **Pricing mismatch** (`useGenerationGate`): Was summing per-leg single-city estimates (missing multi-city fee). Now uses canonical `calculateTripCredits({ days: totalJourneyDays, cities: allCities })`.
-5. **Cost dialog timing** (`ItineraryGenerator`): Journey legs now pre-fetched in `handleGenerateClick` before showing confirmation, not after confirm.
 
----
+## Itinerary Generation Audit: Path Consistency & DNA Uniformity
 
-## Journey Sequential Generation — Implementation Status
+### Architecture Summary
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
+The generation engine has **two distinct code paths** that should produce identical results for the same DNA/constraints but currently diverge in several ways:
 
-**Implemented:**
+| Path | Entry | Used By |
+|------|-------|---------|
+| **Path A: `generate-full`** | `action: 'generate-full'` | Legacy full-trip pipeline (rarely used now) |
+| **Path B: `generate-trip` → `generate-trip-day` → `generate-day`** | Self-chaining | All current flows: Single City, Multi-City, Just Tell Us, Build It Myself |
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+Path B is the **active production path**. Path A (`generate-full`) is the legacy 7-stage pipeline. Both paths use `loadTravelerProfile()` as the single source of truth for DNA — this is correct and consistent.
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+### Verified Consistent (No Gaps)
 
-### Part 2: Auto-Chain Generation (TODO)
-
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
-
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
-
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
-
-**Implemented:**
-
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
+| Area | Path A | Path B | Match? |
+|------|--------|--------|--------|
+| DNA loading (`loadTravelerProfile`) | ✅ Stage 1.3 | ✅ Line 8042 | ✅ Same |
+| Archetype constraints (`buildFullPromptGuidanceAsync`) | ✅ Stage 1.96 | ✅ Line 8116 | ✅ Same |
+| Flight/hotel context (`getFlightHotelContext`) | ✅ Stage 1.4 | ✅ Line 7142 | ✅ Same |
+| Budget intent derivation | ✅ `deriveBudgetIntent` | ✅ Via `buildFullPromptGuidanceAsync` | ✅ Same |
+| Locked activities | ✅ (via `generateSingleDayWithRetry`) | ✅ Step 1 in generate-day | ✅ Same |
+| Multi-city day map | ✅ `prepareContext` | ✅ `generate-trip-day` resolves | ✅ Same |
+| Per-city hotel override | ✅ via `multiCityDayMap` | ✅ via `hotelOverride` param | ✅ Same |
+| Transition day detection | ✅ via `multiCityDayMap` | ✅ via explicit params + DB resolve | ✅ Same |
+| Must-do activities | ✅ via `context.mustDoActivities` | ✅ via `paramMustDoActivities` + metadata | ✅ Same |
+| Generation rules | ✅ via `context.generationRules` | ✅ via `paramGenerationRules` + metadata | ✅ Same |
+| Trip type modifiers | ✅ `buildTripTypePromptSection` | ✅ `buildTripTypePromptSection` | ✅ Same |
+| Collaborator attribution | ✅ Stage 1.2 | ✅ Lines 8186-8238 | ✅ Same |
+| Voyance Picks | ✅ Stage 1.93 | ✅ Lines 8163-8182 | ✅ Same |
+| AI model used | `gemini-3-flash-preview` | `gemini-3-flash-preview` | ✅ Same |
+| Validation + retries | ✅ `validateGeneratedDay` | ✅ Same function | ✅ Same |
 
 ---
 
-## Preference Enforcement Activation ✅ COMPLETE
+### Gaps Found
 
-### Fix 1: Per-day preference checks now trigger retries ✅
-Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
+#### GAP 1: `generate-full` Has Enrichment Stages That `generate-day` Skips (MEDIUM)
 
-### Fix 2: Stage 2.6 personalization rejection enabled ✅
-Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
+Path A (`generate-full`) runs these enrichment stages that Path B (`generate-day`) does **not**:
 
----
+1. **Stage 1.6 — AI Preference Enrichment** (`enrichPreferencesWithAI`): Transforms raw preferences into rich AI guidance. `generate-day` uses only `buildPreferenceContext` (raw structured data).
 
-## Itinerary Generation Quality Fixes ✅ COMPLETE
+2. **Stage 1.7 — Past Trip Learnings**: Fetches `trip_learnings` table (highlights, pain points, pacing feedback). `generate-day` never reads this table.
 
-### Bug 1: Arrival Sequence Inverted ✅
-Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
+3. **Stage 1.8 — Recently Used Activities**: Queries recent trips to the same destination to avoid repeat venues. `generate-day` has no such check.
 
-### Bug 2: User Preferences Ignored ✅
-- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
-- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
-- Warns when "light dinner" preference is violated by expensive dining ($50+)
+4. **Stage 1.9 — Local Events & Travel Advisory** (Perplexity): Discovers festivals, exhibitions, and safety info. `generate-day` skips this entirely.
 
-### Bug 3: Empty Days ✅
-Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
+5. **Stage 1.92 — Hidden Gems Discovery** (Perplexity): 5-layer deep research for local gems. `generate-day` never calls `discover-hidden-gems`.
 
-### Bug 4: Nonsensical Inter-City Flights ✅
-Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
+6. **Stage 1.96 — Personalization Enforcement** (`deriveForcedSlots`, `deriveScheduleConstraints`): Forces trait-based activity requirements per day. `generate-day` does not run these.
+
+**Impact**: Since all production traffic uses Path B (`generate-trip` → `generate-day`), **none of these enrichments are active for any user**. The hidden gems, local events, past trip learnings, AI preference enrichment, and forced personalization slots are dead code in production.
+
+**Fix**: Port the missing stages into the `generate-day` action. These should run once per trip (not per-day) and be stored in trip metadata so each day generation can read them.
 
 ---
 
-## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
+#### GAP 2: `generate-full` Runs Group Archetype Blending, `generate-day` Does Not (MEDIUM)
 
-**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
+Path A runs `blendGroupArchetypes()` (Stage 1.2.1) which:
+- Loads companion DNA profiles
+- Runs weighted trait score blending (owner 50%, companions 50% split)
+- Generates day assignments and conflict resolution
+- Saves `blendedDnaSnapshot` to trip record
 
-### Changes (single migration):
-1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
-2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
-3. **Backfill** — all existing tokens lowercased
-4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
-5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
-6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
+Path B (`generate-day`) loads collaborators for **attribution** only (suggestedFor prompt) but never blends their DNA traits into the generation. The AI gets the owner's archetype only.
 
----
+**Impact**: Group trips generated via the production path ignore companion archetypes for activity selection. A "luxury luminary" traveling with a "budget backpacker" gets a luxury-only itinerary.
 
-## Fix: User Requirements Ignored in Just Tell Us Pipeline ✅ COMPLETE
-
-### Layer 1: `findBestDay` respects `preferredDay` on Day 1/last day ✅
-- Modified skip guard in `must-do-priorities.ts` L472 to allow long activities on Day 1/last day when user explicitly requested that day via `preferredDay`.
-
-### Layer 2: `parseMustDoInput` resolves day-of-week and multi-day references ✅
-- Added `tripStartDate` and `totalDays` parameters to function signature
-- Day-of-week resolution: maps "Friday", "Saturday" etc. to trip day numbers using start date
-- Multi-day expansion: "both days" / "every day" / "all N days" duplicated into per-day entries
-- Updated all 5 callers in `index.ts` to pass `startDate` and `totalDays`
-
-### Layer 3: Chat AI prompt strengthened for temporal mapping ✅
-- Added CRITICAL TEMPORAL MAPPING RULES to system prompt in `chat-trip-planner/index.ts`
-- Updated `mustDoActivities` field description to instruct AI to expand multi-day refs into per-day entries with explicit day numbers
-
-### Layer 4: Day 1 arrival uses actual airport name ✅
-- Added `arrivalAirport` to `FlightHotelContextResult` interface and return value
-- Stage 2.55 split block uses `flightHotelResult.arrivalAirport` instead of hardcoded `'Airport'`
-- All 3 Day 1 constraint templates (morning/afternoon/evening) use `arrivalAirportDisplay`
+**Fix**: Run group archetype blending in `generate-trip` (once, before the chain starts) and store the blended profile in trip metadata. `generate-day` should read the blended profile instead of just the owner's.
 
 ---
 
-## Fix 12: Blocked Time Window Truncation ✅ COMPLETE
+#### GAP 3: `generate-full` Builds Dietary Enforcement Prompt, `generate-day` Does Not (LOW)
 
-**Root cause:** Chat planner outputs `time_block` constraints with start time but no `endTime`. `Start.tsx` defaults missing durations to 120 minutes, producing `09:00→11:00` instead of `09:00→17:00` for "US Open 9am to 5pm". The generator sees the short window and skips the event card.
+Path A calls `buildDietaryEnforcementPrompt()` and injects expanded dietary avoid lists into the system prompt. Path B relies only on the unified profile's `dietaryRestrictions` array through the basic preference context, without the expanded enforcement rules.
 
-### Layer 1: Self-correction in generation engine ✅
-- `budget-constraints.ts` `formatGenerationRules`: parses `reason` text for explicit time ranges (e.g. "9am to 5pm") using regex
-- If parsed end time is later than stored `to` value, overrides it
-- Fixes ALL existing trips with truncated blocked windows
+**Impact**: Dining activities may not fully respect nuanced dietary restrictions (e.g., "vegetarian" won't trigger expanded avoidance of specific cuisines/ingredients).
 
-### Layer 2: Chat planner schema extended ✅
-- Added `endTime` and `duration` fields to `userConstraints` schema in `chat-trip-planner/index.ts`
-- AI can now output structured time ranges (time="9:00 AM", endTime="5:00 PM")
-
-### Layer 3: Start.tsx time_block handler fixed ✅
-- Priority 1: Use explicit `endTime` from chat planner
-- Priority 2: Parse time range from constraint `description` text via regex
-- Priority 3: Fall back to duration math (existing behavior)
-- Eliminates the 120-minute default for events with known end times
+**Fix**: Add `buildDietaryEnforcementPrompt()` call to `generate-day`'s system prompt construction.
 
 ---
 
-## Fix 16: Replace Lovable Favicon with Voyance Favicon ✅ COMPLETE
+#### GAP 4: `generate-full` Injects Jet Lag, Weather, Trip Duration, Children Prompts; `generate-day` Does Not (LOW)
 
-- Deleted `public/favicon.ico` (Lovable heart logo)
-- Updated `index.html` favicon links with `?v=3` cache-buster, explicit sizes, and `image/x-icon` override pointing to PNG
-- Post-deploy: request Google re-crawl via Search Console
+Path A injects these specialized prompts:
+- `buildJetLagPrompt()` — adjusts Day 1-2 energy recommendations
+- `buildWeatherBackupPrompt()` — rain plan alternatives
+- `buildTripDurationPrompt()` — pacing across long vs short trips
+- `buildChildrenAgesPrompt()` — toddler/teen activity filtering
+- `buildReservationUrgencyPrompt()` — booking priority signals
+- `buildDailyEstimatesPrompt()` — budget tier guidance
 
----
+None of these are called in `generate-day`.
 
-## Fix 17: Community Guides Redesign — Phase 1 ✅ COMPLETE
+**Impact**: Production itineraries miss jet lag adjustments, weather backup plans, trip-duration-aware pacing, children-appropriate filtering, and reservation urgency signals.
 
-### Database Changes
-- Added `user_experience`, `user_rating`, `recommended`, `photos` columns to `guide_sections`
-- Added `moderation_status` column to `community_guides`
-- Created `guide_activity_reviews` table with indexes and RLS
-- Created `guide-photos` storage bucket with public read + authenticated upload/delete RLS
-
-### New Components
-- **`StarRating.tsx`** — 1-5 star rating with hover/click states
-- **`PhotoUploadGrid.tsx`** — Upload up to 4 photos per activity to Supabase Storage, with thumbnail grid and remove
-- **`EditableActivityCard.tsx`** — Rich editable card with experience textarea (2000 chars), star rating, photo uploads, recommend toggle (Yes/No/It's okay)
-- **`SmartTagSelector.tsx`** — Auto-suggested tags from destination, activity categories, Travel DNA, and trip type + custom input
-
-### Edge Function
-- **`moderate-guide-content`** — Keyword-based content moderation returning `{ approved, warnings, blocked_reasons }`. Blocks violence/explicit/hate/drugs; warns on PII (phone, email, SSN).
-
-### GuideBuilder.tsx Rewrite
-- Merged "Guide Content" section into editable activity cards
-- Sections are the single source of truth (persisted to `guide_sections` table)
-- Removed separate `guide_favorites` / `guide_manual_entries` dependency for the editor flow
-- Smart tags replace free-text input
-- Save mutation persists sections with new fields + runs moderation before publish
-- Activity reviews aggregated to `guide_activity_reviews` on publish
-- "Add Custom Tip" button replaces separate recommendation modal
-
-### Published View Redesign (CommunityGuideDetail.tsx)
-- Blog-style layout with hero image (first user photo or destination cover)
-- Only shows activities with user content (experience, rating, photos, or recommendation)
-- Star ratings and recommendation badges inline
-- Photo grids per activity
-- "Custom Tips" section at bottom for non-itinerary recommendations
-- "Voyance Tip" callout for activities without user experience text
+**Fix**: Add these prompt builders to `generate-day`. Most can be computed once per trip and stored in metadata.
 
 ---
 
-## Fix: City-Boundary Checkout/Check-in in generate-day Handler ✅ COMPLETE
+#### GAP 5: `generate-full` Runs Post-Generation Personalization Validation; `generate-day` Does Not (LOW)
 
-### Problem
-`generate-day` action extracted `paramIsFirstDayInCity` and `paramIsLastDayInCity` but never used them. Mid-journey city boundaries got no checkout/check-in constraints.
+Path A runs `validateItineraryPersonalization()` across all days, checking:
+- Avoid list violations (food dislikes, general avoidances)
+- Dietary restriction violations
+- Duplicate detection
+- Personalization field completeness
+- Pace compliance
 
-### Change
-- **`supabase/functions/generate-itinerary/index.ts`** — Inserted multi-city boundary block after the Day 1/Last Day decision tree:
-  - `paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay` → appends CITY ARRIVAL check-in constraints
-  - `paramIsLastDayInCity && !isLastDay` → appends CITY DEPARTURE checkout constraints
-  - Reinforces correct hotel name on all multi-city days
+Path B runs `validateGeneratedDay()` (basic structural validation) but **not** the full personalization validator.
+
+**Impact**: Dietary violations, avoid-list breaches, and missing personalization fields slip through undetected in production.
+
+**Fix**: Run `validateItineraryPersonalization()` per-day within the `generate-day` action, using the profile data already loaded.
+
+---
+
+### Recommendations — Priority Order
+
+1. **Port enrichment stages to `generate-trip` level** (Gaps 1, 2, 4): Run hidden gems, local events, group blending, jet lag, weather, etc. **once** in `generate-trip` and store results in `trip.metadata.generation_context`. Each `generate-day` call reads from this cache.
+
+2. **Add personalization validation to `generate-day`** (Gaps 3, 5): Include dietary enforcement prompt and post-generation personalization validation in the per-day path.
+
+3. **Consider deprecating `generate-full`**: Since all production traffic uses the chain path, the `generate-full` action is dead code. It should either be removed or marked as deprecated to avoid maintenance confusion.
+
+### Files Involved
+
+| Fix | Files |
+|-----|-------|
+| GAP 1-2, 4 (enrichment caching) | `supabase/functions/generate-itinerary/index.ts` (generate-trip + generate-day actions) |
+| GAP 3 (dietary prompt) | `supabase/functions/generate-itinerary/index.ts` (generate-day action) |
+| GAP 5 (validation) | `supabase/functions/generate-itinerary/index.ts` (generate-day action) |
+
