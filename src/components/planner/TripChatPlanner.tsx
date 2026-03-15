@@ -354,6 +354,14 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
           </div>
         </div>
 
+        {/* Credit warning */}
+        {hasNoCredits && (
+          <div className="px-3 py-1.5 bg-destructive/10 border-b border-destructive/20 flex items-center gap-1.5">
+            <AlertCircle className="h-3 w-3 text-destructive flex-shrink-0" />
+            <p className="text-[10px] text-destructive">You have 0 credits. You'll need credits to generate your itinerary.</p>
+          </div>
+        )}
+
         {/* Chat messages */}
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
           <AnimatePresence initial={false}>
