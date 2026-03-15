@@ -875,19 +875,10 @@ export function deriveScheduleConstraints(
     // Departure day — breakfast at most
     requiredMeals = ['breakfast'];
   } else {
-    // Standard day — derive from pace (original logic, but now only for truly full days)
-    requiredMeals = ['dinner']; // Always need dinner
-    if (pace <= 0) {
-      requiredMeals.push('lunch'); // Relaxed pace = sit-down lunch
-    }
-    if (pace <= -4) {
-      requiredMeals.push('breakfast'); // Very relaxed = leisurely breakfast
-    }
-    // For packed/active pace on full days, still include all 3
-    if (pace >= 2) {
-      if (!requiredMeals.includes('breakfast')) requiredMeals.push('breakfast');
-      if (!requiredMeals.includes('lunch')) requiredMeals.push('lunch');
-    }
+    // Standard full-exploration day — always requires all 3 meals regardless of pace.
+    // The pace trait affects meal *weight* (quick fuel vs. sit-down experience),
+    // NOT whether meals exist. Every traveler eats breakfast, lunch, and dinner.
+    requiredMeals = ['breakfast', 'lunch', 'dinner'];
   }
   
   // =========================================================================
