@@ -140,6 +140,11 @@ export default function TripDetail() {
   const hotelEnrichmentAttempted = useRef(false);
   const debriefPromptAttempted = useRef(false);
   const autoGenerateTriggered = useRef(false);
+  const tripRef = useRef<Trip | null>(null);
+
+  useEffect(() => {
+    tripRef.current = trip;
+  }, [trip]);
 
   // Entitlements — gate premium features like chat assistant
   const { data: entitlements, refresh: refreshEntitlements } = useEntitlements(tripId);
@@ -321,7 +326,8 @@ export default function TripDetail() {
 
   // Resume generation from where it left off
   const handleResumeGeneration = useCallback(async () => {
-    if (!tripId || !trip) return;
+    const currentTrip = tripRef.current;
+    if (!tripId || !currentTrip) return;
     if (resumeInFlightRef.current) {
       console.log('[Resume] Already resuming, skipping duplicate');
       return;
@@ -331,12 +337,12 @@ export default function TripDetail() {
     setGenerationStalled(false);
     onReadyCalledRef.current = false; // Reset so onReady can fire again for this new attempt
 
-    const meta = (trip.metadata as Record<string, unknown>) || {};
+    const meta = (currentTrip.metadata as Record<string, unknown>) || {};
     const completedDays = (meta.generation_completed_days as number) || 0;
     // Recompute expected days from canonical trip dates instead of trusting
     // potentially stale/inflated metadata.generation_total_days
-    const canonicalTotalDays = trip.start_date && trip.end_date
-      ? differenceInDays(parseLocalDate(trip.end_date), parseLocalDate(trip.start_date)) + 1
+    const canonicalTotalDays = currentTrip.start_date && currentTrip.end_date
+      ? differenceInDays(parseLocalDate(currentTrip.end_date), parseLocalDate(currentTrip.start_date)) + 1
       : 0;
     const metaTotalDays = (meta.generation_total_days as number) || 0;
     // Use canonical date-derived count as source of truth; fall back to metadata only if dates are missing
@@ -366,14 +372,14 @@ export default function TripDetail() {
         body: {
           action: 'generate-trip',
           tripId,
-          destination: trip.destination,
-          destinationCountry: (trip as any).destination_country,
-          startDate: trip.start_date,
-          endDate: trip.end_date,
-          travelers: trip.travelers || 1,
-          tripType: trip.trip_type,
-          budgetTier: (trip as any).budget_tier,
-          isMultiCity: !!(trip as any).is_multi_city,
+          destination: currentTrip.destination,
+          destinationCountry: (currentTrip as any).destination_country,
+          startDate: currentTrip.start_date,
+          endDate: currentTrip.end_date,
+          travelers: currentTrip.travelers || 1,
+          tripType: currentTrip.trip_type,
+          budgetTier: (currentTrip as any).budget_tier,
+          isMultiCity: !!(currentTrip as any).is_multi_city,
           creditsCharged: 0, // Already charged, no new charge
           requestedDays: totalDays,
           resumeFromDay: completedDays + 1, // Signal to backend to skip completed days
@@ -390,7 +396,7 @@ export default function TripDetail() {
       resumeInFlightRef.current = false;
       setResumingGeneration(false);
     }
-  }, [tripId, trip, supabase]);
+  }, [tripId]);
   // =========================================================================
   // HOTEL ENRICHMENT: Auto-enrich if missing address/website/photos
   // =========================================================================
