@@ -11992,6 +11992,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           dayNumber: dayNumber + 1,
           totalDays,
           generationRunId,
+          isFirstTrip: isFirstTrip || false,
         });
 
         // Retry loop with exponential backoff for intermittent 403 errors
