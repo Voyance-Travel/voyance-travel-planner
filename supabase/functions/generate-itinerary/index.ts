@@ -8202,7 +8202,7 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
         resolvedDestination,
         destinationId,
         effectiveBudgetTier,
-        { pace: traitScores.pace, budget: traitScores.budget },
+        effectiveTraitScores,
         LOVABLE_API_KEY
       );
       
