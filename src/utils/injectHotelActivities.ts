@@ -100,7 +100,7 @@ function adjustActivitiesAroundCheckIn(
  * Cascade-fix overlapping activities after initial shifts.
  * Ensures a minimum 0-min gap (no overlaps) between consecutive activities.
  */
-function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialActivity[] {
+export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialActivity[] {
   const MAX_TIME = 23 * 60;
   const result = [...activities];
 
