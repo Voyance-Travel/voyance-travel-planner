@@ -1243,9 +1243,14 @@ export function buildRegularDayPrompt(
   if (dna.sleepSchedule === 'night_owl') latestEnd = '23:30';
   if (dna.traits.pace <= -5) latestEnd = '21:30';
   
+  // Import meal policy for dynamic meal requirements
+  // Note: meal policy is injected from the caller; this prompt builds the structure
+  // The caller (index.ts) now handles meal policy derivation and injects the correct
+  // meal requirements block. This function provides the structural template.
+  
   const lines: string[] = [];
   lines.push(`${'='.repeat(60)}`);
-  lines.push(`📅 DAY ${dayNumber} - FULL EXPLORATION DAY (HOUR-BY-HOUR)`);
+  lines.push(`📅 DAY ${dayNumber} - EXPLORATION DAY (HOUR-BY-HOUR)`);
   lines.push(`${'='.repeat(60)}`);
   lines.push('');
   
