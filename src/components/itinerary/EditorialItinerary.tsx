@@ -5343,7 +5343,7 @@ export function EditorialItinerary({
                           onDayLock={handleDayLock}
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
                           onAddActivity={(afterIndex?: number) => setAddActivityModal({ dayIndex: selectedDayIndex, afterIndex })}
-                          onDiscover={() => setDiscoverDrawerOpen(true)}
+                          onDiscover={aiLocked ? undefined : () => setDiscoverDrawerOpen(true)}
                           onImportActivities={() => setImportModal({ dayIndex: selectedDayIndex })}
                           onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                           onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
