@@ -8108,6 +8108,7 @@ function DayCard({
   unlockingDayNumber,
   onTransportModeChange,
   changingTransportActivityId,
+  onSetActivityTransportation,
   collaboratorColorMap,
   aiLocked,
   guestMustPropose,
