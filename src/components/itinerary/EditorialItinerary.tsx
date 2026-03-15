@@ -5366,6 +5366,7 @@ export function EditorialItinerary({
                           onViewReviews={aiLocked ? undefined : openReviewsDrawer}
                           onTransportModeChange={handleTransportModeChange}
                           changingTransportActivityId={changingTransportActivityId}
+                          onSetActivityTransportation={(dIdx, aIdx, transport) => handleUpdateActivity(dIdx, aIdx, { transportation: transport })}
                           collaboratorColorMap={collaboratorColorMap}
                           aiLocked={aiLocked}
                           guestMustPropose={guestMustPropose}
