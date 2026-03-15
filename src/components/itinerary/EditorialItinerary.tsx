@@ -302,6 +302,11 @@ export interface EditorialDay {
   transitionTo?: string;
   transportComparison?: TransportOption[];
   selectedTransportId?: string;
+  // Departure day fields
+  isDepartureDay?: boolean;
+  departureTo?: string;
+  departureTransportType?: string;
+  departureTransportDetails?: Record<string, unknown>;
 }
 
 export interface FlightLegDisplay {
@@ -1264,79 +1269,145 @@ export function EditorialItinerary({
   // Check-out → Head to transport → Transport (seat/ticket) → Arrival → Check-in
   const days = useMemo(() => rawDays.map(day => {
     const d = day as any;
-    if (!d.isTransitionDay || !d.transitionFrom || !d.transitionTo) return day;
-    // Avoid duplicates if already injected
-    if (day.activities.some(a => (a as any).__syntheticTravel)) return day;
+    let updatedActivities = [...day.activities];
 
-    const from = d.transitionFrom as string;
-    const to = d.transitionTo as string;
-    const dn = day.dayNumber;
+    // === Transition day: inject travel summary at top ===
+    if (d.isTransitionDay && d.transitionFrom && d.transitionTo) {
+      if (!day.activities.some(a => (a as any).__syntheticTravel)) {
+        const from = d.transitionFrom as string;
+        const to = d.transitionTo as string;
+        const dn = day.dayNumber;
 
-    // Resolve transport details from comparison selection or raw metadata
-    const sel = d.transportComparison?.find((o: any) => o.id === d.selectedTransportId) || d.transportComparison?.[0];
-    const tType = sel?.mode || sel?.type || d.transportType || 'transfer';
-    const carrier = sel?.carrier || d.transportDetails?.carrier || '';
-    const flightNum = sel?.flightNumber || d.transportDetails?.flightNumber || '';
-    const depTime = sel?.departureTime || d.transportDetails?.departureTime || '';
-    const arrTime = sel?.arrivalTime || d.transportDetails?.arrivalTime || '';
-    const dur = sel?.duration || d.transportDetails?.duration || '';
-    const seatInfo = d.transportDetails?.seatClass || d.transportDetails?.seat || '';
-    const bookingRef = d.transportDetails?.bookingRef || d.transportDetails?.confirmationNumber || '';
-    const price = sel?.price ?? d.transportCostCents ? (d.transportCostCents / 100) : undefined;
-    const currency = sel?.currency || d.transportCurrency || 'USD';
+        const sel = d.transportComparison?.find((o: any) => o.id === d.selectedTransportId) || d.transportComparison?.[0];
+        const tType = sel?.mode || sel?.type || d.transportType || 'transfer';
+        const carrier = sel?.carrier || d.transportDetails?.carrier || '';
+        const flightNum = sel?.flightNumber || d.transportDetails?.flightNumber || '';
+        const depTime = sel?.departureTime || d.transportDetails?.departureTime || '';
+        const arrTime = sel?.arrivalTime || d.transportDetails?.arrivalTime || '';
+        const dur = sel?.duration || d.transportDetails?.duration || '';
+        const seatInfo = d.transportDetails?.seatClass || d.transportDetails?.seat || '';
+        const bookingRef = d.transportDetails?.bookingRef || d.transportDetails?.confirmationNumber || '';
+        const price = sel?.price ?? d.transportCostCents ? (d.transportCostCents / 100) : undefined;
+        const currency = sel?.currency || d.transportCurrency || 'USD';
 
-    const hubLabel = tType === 'flight' ? 'airport' : tType === 'train' ? 'train station' : tType === 'ferry' ? 'ferry terminal' : 'station';
-    const transportName = tType.charAt(0).toUpperCase() + tType.slice(1);
+        const hubLabel = tType === 'flight' ? 'airport' : tType === 'train' ? 'train station' : tType === 'ferry' ? 'ferry terminal' : 'station';
+        const transportName = tType.charAt(0).toUpperCase() + tType.slice(1);
 
-    const mkActivity = (id: string, title: string, overrides: Partial<EditorialActivity> & { __syntheticTravel: true }): EditorialActivity =>
-      ({
-        id,
-        title,
-        name: title,
-        type: 'transit',
-        category: 'transit',
-        isLocked: false,
-        location: undefined,
-        ...overrides,
-      }) as any;
+        const mkActivity = (id: string, title: string, overrides: Partial<EditorialActivity> & { __syntheticTravel: true }): EditorialActivity =>
+          ({
+            id,
+            title,
+            name: title,
+            type: 'transit',
+            category: 'transit',
+            isLocked: false,
+            location: undefined,
+            ...overrides,
+          }) as any;
 
-    const travelCards: EditorialActivity[] = [
-      // Single consolidated travel summary card
-      mkActivity(`travel-summary-${dn}`, `${from} → ${to}`, {
-        __syntheticTravel: true,
-        __syntheticTravelSummary: true,
-        __travelMeta: {
-          from,
-          to,
-          transportName,
-          hubLabel,
-          carrier,
-          flightNum,
-          depTime,
-          arrTime,
-          dur,
-          seatInfo,
-          bookingRef,
-          price,
-          currency,
-        },
-        description: [
-          `${transportName}${carrier ? ` · ${carrier}` : ''}${flightNum ? ` ${flightNum}` : ''}`,
-          depTime && arrTime ? `Departs ${depTime} · Arrives ${arrTime}` : depTime ? `Departs ${depTime}` : arrTime ? `Arrives ${arrTime}` : '',
-          dur ? `Duration: ${dur}` : '',
-        ].filter(Boolean).join('\n'),
-        startTime: depTime,
-        endTime: arrTime,
-        duration: dur,
-        cost: price != null ? { amount: price, currency } : undefined,
-        category: 'transit',
-        type: 'transit',
-      } as any),
-    ];
+        const travelCards: EditorialActivity[] = [
+          mkActivity(`travel-summary-${dn}`, `${from} → ${to}`, {
+            __syntheticTravel: true,
+            __syntheticTravelSummary: true,
+            __travelMeta: {
+              from,
+              to,
+              transportName,
+              hubLabel,
+              carrier,
+              flightNum,
+              depTime,
+              arrTime,
+              dur,
+              seatInfo,
+              bookingRef,
+              price,
+              currency,
+            },
+            description: [
+              `${transportName}${carrier ? ` · ${carrier}` : ''}${flightNum ? ` ${flightNum}` : ''}`,
+              depTime && arrTime ? `Departs ${depTime} · Arrives ${arrTime}` : depTime ? `Departs ${depTime}` : arrTime ? `Arrives ${arrTime}` : '',
+              dur ? `Duration: ${dur}` : '',
+            ].filter(Boolean).join('\n'),
+            startTime: depTime,
+            endTime: arrTime,
+            duration: dur,
+            cost: price != null ? { amount: price, currency } : undefined,
+            category: 'transit',
+            type: 'transit',
+          } as any),
+        ];
+
+        updatedActivities = [...travelCards, ...updatedActivities];
+      }
+    }
+
+    // === Departure day: inject transport card at end of day ===
+    if (d.isDepartureDay && d.departureTo) {
+      if (!updatedActivities.some(a => (a as any).__syntheticDeparture)) {
+        const to = d.departureTo as string;
+        const dn = day.dayNumber;
+        const tType = d.departureTransportType || 'transfer';
+        const details = d.departureTransportDetails || {};
+        const depTime = (details.departureTime as string) || '';
+        const arrTime = (details.arrivalTime as string) || '';
+        const carrier = (details.carrier as string) || '';
+        const flightNum = (details.flightNumber as string) || '';
+        const dur = (details.duration as string) || '';
+        const transportLabel = tType.charAt(0).toUpperCase() + tType.slice(1);
+        const title = `${transportLabel} to ${to}`;
+        const cardTime = depTime || '18:00';
+
+        const descParts = [];
+        if (carrier || flightNum) {
+          descParts.push(`${carrier}${flightNum ? ` ${flightNum}` : ''}`);
+        }
+        if (depTime) {
+          descParts.push(`Departs ${depTime}${arrTime ? ` · Arrives ${arrTime}` : ''}`);
+        }
+        if (dur) {
+          descParts.push(`Duration: ${dur}`);
+        }
+        if (!depTime && !carrier) {
+          descParts.push('Plan your transport details');
+        }
+
+        const departureCard: EditorialActivity = {
+          id: `departure-transport-${dn}`,
+          title,
+          name: title,
+          type: 'transit',
+          category: 'transit',
+          isLocked: false,
+          startTime: cardTime,
+          endTime: arrTime || undefined,
+          duration: dur || '~',
+          description: descParts.join('\n'),
+          location: undefined,
+          __syntheticDeparture: true,
+          __departureTransportType: tType,
+        } as any;
+
+        // Insert chronologically
+        const cardMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+        let insertIndex = updatedActivities.length;
+        for (let i = 0; i < updatedActivities.length; i++) {
+          const actTime = updatedActivities[i].startTime;
+          if (actTime) {
+            const actMinutes = parseInt(actTime.split(':')[0]) * 60 + parseInt(actTime.split(':')[1] || '0');
+            if (actMinutes > cardMinutes) {
+              insertIndex = i;
+              break;
+            }
+          }
+        }
+        updatedActivities.splice(insertIndex, 0, departureCard);
+      }
+    }
 
     return {
       ...day,
-      activities: [...travelCards, ...day.activities],
+      activities: updatedActivities,
     };
   }), [rawDays]);
   const [expandedDays, setExpandedDays] = useState<number[]>(initialDays.map(d => d.dayNumber));
@@ -8250,6 +8321,56 @@ function DayCard({
                       <div className="px-2 sm:px-0 py-2">
                         <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/[0.03] overflow-hidden relative group/travel">
 ...
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // === Departure transport card (last day of a city before switching) ===
+                  const isDepartureCard = !!(activityToRender as any).__syntheticDeparture;
+                  if (isDepartureCard) {
+                    if (isCleanPreview) return null;
+                    const deptType = ((activityToRender as any).__departureTransportType || 'transfer').toLowerCase();
+                    const DepartIcon = deptType === 'flight' ? Plane
+                      : deptType === 'train' ? Train
+                      : deptType === 'bus' ? Bus
+                      : deptType === 'ferry' ? Ship
+                      : Car;
+                    const hasDetails = activityToRender.startTime && activityToRender.startTime !== '18:00';
+                    const descLines = (activityToRender.description || '').split('\n').filter(Boolean);
+
+                    return (
+                      <div key={activityToRender.id} className="px-2 sm:px-0 py-2">
+                        <div className="rounded-xl border-2 border-dashed border-accent/30 bg-accent/[0.04] overflow-hidden">
+                          <div className="flex items-center gap-3 px-4 py-3">
+                            <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                              <DepartIcon className="h-4.5 w-4.5 text-accent" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-sm text-foreground truncate">
+                                  {activityToRender.title}
+                                </span>
+                                {activityToRender.startTime && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
+                                    {activityToRender.startTime}
+                                  </Badge>
+                                )}
+                              </div>
+                              {descLines.length > 0 && (
+                                <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
+                                  {descLines.map((line, li) => (
+                                    <div key={li}>{line}</div>
+                                  ))}
+                                </div>
+                              )}
+                              {!hasDetails && (
+                                <div className="text-xs text-muted-foreground/60 mt-0.5 italic">
+                                  Add transport details for precise scheduling
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );
