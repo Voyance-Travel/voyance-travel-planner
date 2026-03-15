@@ -1084,15 +1084,36 @@ export default function TripDetail() {
 
                 const rebuiltDays = fullDayRows.map((row: any) => {
                   const existingJsonDay = jsonDaysByNumber.get(row.day_number);
-                  // If we have a rich JSON day, prefer it; otherwise build from table row
-                  if (existingJsonDay) return existingJsonDay;
+                  const jsonActivities = existingJsonDay?.activities;
+                  const tableActivities = Array.isArray(row.activities) ? row.activities : [];
+                  
+                  // Use the richest activity source available:
+                  // 1) JSON day with non-empty activities (most metadata)
+                  // 2) Table row activities if non-empty
+                  // 3) Keep JSON day structure even if activities are empty (don't downgrade)
+                  const hasJsonActivities = Array.isArray(jsonActivities) && jsonActivities.length > 0;
+                  const hasTableActivities = tableActivities.length > 0;
+                  
+                  if (existingJsonDay && hasJsonActivities) {
+                    return existingJsonDay;
+                  }
+                  if (existingJsonDay && !hasJsonActivities && hasTableActivities) {
+                    // Enrich JSON day with table activities
+                    return { ...existingJsonDay, activities: tableActivities };
+                  }
+                  if (existingJsonDay) {
+                    // JSON day exists but both sources empty — keep JSON day as-is
+                    // (don't replace with a bare table rebuild that loses metadata)
+                    return existingJsonDay;
+                  }
+                  // No JSON day at all — build from table row (new day added to table)
                   return {
                     dayNumber: row.day_number,
                     date: row.date,
                     theme: row.theme || row.title || `Day ${row.day_number}`,
                     description: row.description || '',
                     weather: row.weather || undefined,
-                    activities: Array.isArray(row.activities) ? row.activities : [],
+                    activities: tableActivities,
                   };
                 });
 
@@ -1149,12 +1170,22 @@ export default function TripDetail() {
             if (emptyDayNumbers.length > 0 && emptyDayNumbers.length < expectedTotal) {
               console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} days have no activities (days: ${emptyDayNumbers.join(', ')}). Auto-regenerating.`);
               autoResumeAttemptedRef.current = true;
-              // Regenerate each empty day sequentially
+              // Regenerate each empty day sequentially, capturing responses
               setTimeout(async () => {
                 try {
+                  // Get the latest itinerary data for merging
+                  const { data: latestTrip } = await supabase
+                    .from('trips')
+                    .select('itinerary_data')
+                    .eq('id', tripId!)
+                    .single();
+                  
+                  const currentItinData = (latestTrip?.itinerary_data as any) || itinData || {};
+                  const currentDays = [...(currentItinData.days || [])] as any[];
+
                   for (const dayNum of emptyDayNumbers) {
                     console.log(`[TripDetail] Auto-regenerating empty day ${dayNum}`);
-                    await supabase.functions.invoke('generate-itinerary', {
+                    const { data: regenResult } = await supabase.functions.invoke('generate-itinerary', {
                       body: {
                         action: 'regenerate-day',
                         tripId: tripId,
@@ -1168,7 +1199,23 @@ export default function TripDetail() {
                         isMultiCity: !!(tripData as any).is_multi_city,
                       },
                     });
+
+                    // Merge returned day data into the local days array
+                    if (regenResult?.day?.activities?.length > 0) {
+                      const idx = currentDays.findIndex((d: any) => d.dayNumber === dayNum);
+                      if (idx >= 0) {
+                        currentDays[idx] = { ...currentDays[idx], ...regenResult.day };
+                      }
+                    }
                   }
+
+                  // Persist merged itinerary once at end to prevent stale JSON on next reload
+                  const mergedItinerary = { ...currentItinData, days: currentDays };
+                  await supabase.from('trips').update({
+                    itinerary_data: mergedItinerary as any,
+                    updated_at: new Date().toISOString(),
+                  }).eq('id', tripId!);
+
                   // Refresh trip data after regeneration
                   queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
                   toast.success(`Regenerated ${emptyDayNumbers.length} unplanned day${emptyDayNumbers.length > 1 ? 's' : ''}`);
