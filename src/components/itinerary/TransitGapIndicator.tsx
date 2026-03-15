@@ -200,6 +200,7 @@ export function TransitGapIndicator({
   isEditable = false,
   tripCurrency = 'USD',
   travelers = 1,
+  onSelectMode,
 }: TransitGapIndicatorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [options, setOptions] = useState<TransportOptionData[]>([]);
