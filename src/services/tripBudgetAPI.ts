@@ -189,12 +189,50 @@ export async function updateTripMember(
 }
 
 export async function removeTripMember(memberId: string): Promise<void> {
+  // First get the member to know trip_id, user_id, email for leg cascading
+  const { data: member } = await supabase
+    .from('trip_members')
+    .select('trip_id, user_id, email')
+    .eq('id', memberId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('trip_members')
     .delete()
     .eq('id', memberId);
 
   if (error) throw new Error(error.message);
+
+  // GAP 5b: Cascade removal to journey legs
+  if (member) {
+    try {
+      const { data: tripData } = await supabase
+        .from('trips')
+        .select('journey_id')
+        .eq('id', member.trip_id)
+        .maybeSingle();
+
+      if (tripData?.journey_id) {
+        const { data: siblingLegs } = await supabase
+          .from('trips')
+          .select('id')
+          .eq('journey_id', tripData.journey_id)
+          .neq('id', member.trip_id);
+
+        if (siblingLegs?.length) {
+          const legIds = siblingLegs.map(l => l.id);
+
+          await supabase
+            .from('trip_members')
+            .delete()
+            .in('trip_id', legIds)
+            .eq('email', member.email);
+        }
+      }
+    } catch (legErr) {
+      console.error('[TripBudget] Failed to cascade member removal to journey legs:', legErr);
+    }
+  }
 }
 
 // ============================================================================

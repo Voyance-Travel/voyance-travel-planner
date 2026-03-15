@@ -331,6 +331,43 @@ export async function removeTripCollaborator(collaboratorId: string): Promise<vo
   } catch (e) {
     console.error('[TripCollaborators] Error removing from trip_members:', e);
   }
+
+  // GAP 5: Cascade removal to all journey legs
+  try {
+    const { data: tripData } = await supabase
+      .from('trips')
+      .select('journey_id')
+      .eq('id', collab.trip_id)
+      .maybeSingle();
+
+    if (tripData?.journey_id) {
+      const { data: siblingLegs } = await supabase
+        .from('trips')
+        .select('id')
+        .eq('journey_id', tripData.journey_id)
+        .neq('id', collab.trip_id);
+
+      if (siblingLegs?.length) {
+        const legIds = siblingLegs.map(l => l.id);
+
+        // Remove from trip_collaborators on all legs
+        await supabase
+          .from('trip_collaborators')
+          .delete()
+          .in('trip_id', legIds)
+          .eq('user_id', collab.user_id);
+
+        // Remove from trip_members on all legs
+        await supabase
+          .from('trip_members')
+          .delete()
+          .in('trip_id', legIds)
+          .eq('user_id', collab.user_id);
+      }
+    }
+  } catch (legErr) {
+    console.error('[TripCollaborators] Failed to cascade removal to journey legs:', legErr);
+  }
 }
 
 /**

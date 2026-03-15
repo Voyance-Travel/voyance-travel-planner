@@ -4878,6 +4878,9 @@ export function EditorialItinerary({
                  )}
               </div>
 
+              {/* GAP 3: Render BlendRecalcBanner when companions changed after generation */}
+              <BlendRecalcBanner tripId={tripId} onRegenerate={handleRegenerateItinerary} />
+
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
