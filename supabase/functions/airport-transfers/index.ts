@@ -473,8 +473,29 @@ serve(async (req) => {
       });
     }
 
-    // AI recommendation
-    const { recommendation, recommendedId } = getArchetypeRecommendation(archetype, options, hotelName, pax);
+    // AI recommendation — use airport-specific logic only for airport routes
+    let recommendation: string;
+    let recommendedId: string;
+    if (isAirportRoute) {
+      const archResult = getArchetypeRecommendation(archetype, options, hotelName, pax);
+      recommendation = archResult.recommendation;
+      recommendedId = archResult.recommendedId;
+    } else {
+      // City route: recommend based on duration
+      const taxiOpt = options.find(o => o.id === 'taxi');
+      const trainOpt = options.find(o => o.id === 'train');
+      const taxiMins = taxiOpt?.durationMinutes || 99;
+      if (taxiMins <= 10) {
+        recommendedId = 'taxi';
+        recommendation = `It's a short ride — a taxi or rideshare is quick and easy.`;
+      } else if (trainOpt && trainOpt.durationMinutes < taxiMins * 1.5) {
+        recommendedId = 'train';
+        recommendation = `The metro/train is a great option here — affordable and avoids traffic.`;
+      } else {
+        recommendedId = 'taxi';
+        recommendation = `A taxi or rideshare is the most convenient way to get between these two spots.`;
+      }
+    }
 
     // Mark recommended option
     for (const opt of options) {
@@ -485,7 +506,7 @@ serve(async (req) => {
     }
 
     const result: TransferResponse = {
-      origin: origin || `${city} Airport`,
+      origin: origin || (isAirportRoute ? `${city} Airport` : city),
       destination: destination || (hotelName || city),
       options,
       aiRecommendation: recommendation,
