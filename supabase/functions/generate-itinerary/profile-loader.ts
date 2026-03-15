@@ -88,6 +88,7 @@ const DEFAULT_TRAIT_SCORES: TraitScores = {
   authenticity: 0,
   adventure: 0,
   cultural: 0,
+  transformation: 0,
 };
 
 const DEFAULT_ARCHETYPE = 'balanced_story_collector';
