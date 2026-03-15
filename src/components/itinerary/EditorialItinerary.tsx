@@ -475,6 +475,12 @@ export interface EditorialItineraryProps {
 const activityStyles: Record<string, { icon: React.ReactNode; label: string }> = {
   transportation: { icon: <Plane className="h-4 w-4" />, label: 'Transport' },
   transport: { icon: <Car className="h-4 w-4" />, label: 'Transport' },
+  transit: { icon: <Train className="h-4 w-4" />, label: 'Travel' },
+  inter_city_flight: { icon: <Plane className="h-4 w-4" />, label: 'Flight' },
+  inter_city_train: { icon: <Train className="h-4 w-4" />, label: 'Train' },
+  inter_city_bus: { icon: <Bus className="h-4 w-4" />, label: 'Bus' },
+  inter_city_ferry: { icon: <Ship className="h-4 w-4" />, label: 'Ferry' },
+  inter_city_car: { icon: <Car className="h-4 w-4" />, label: 'Drive' },
   accommodation: { icon: <Hotel className="h-4 w-4" />, label: 'Stay' },
   dining: { icon: <Utensils className="h-4 w-4" />, label: 'Dining' },
   cultural: { icon: <Camera className="h-4 w-4" />, label: 'Culture' },
