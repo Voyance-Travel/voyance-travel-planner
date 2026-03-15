@@ -114,7 +114,7 @@ import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationS
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { TransitModePicker } from './TransitModePicker';
 
-import { cascadeFixOverlaps, timeToMinutes, minutesToTime } from '@/utils/injectHotelActivities';
+import { cascadeFixOverlaps } from '@/utils/injectHotelActivities';
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { NewMemberSuggestionsCard } from './NewMemberSuggestionsCard';
 import { calculateItineraryValueStats } from '@/utils/intelligenceAnalytics';
