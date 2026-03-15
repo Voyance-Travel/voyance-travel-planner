@@ -5017,6 +5017,38 @@ export function EditorialItinerary({
                         </button>
                       );
                     })}
+                    {/* Placeholder tabs for days not yet generated */}
+                    {isActivelyGenerating && days.length < expectedTotalDays && (
+                      Array.from({ length: expectedTotalDays - days.length }, (_, i) => {
+                        const pendingDayNumber = days.length + i + 1;
+                        let dayDate: Date | null = null;
+                        try {
+                          if (startDate) {
+                            dayDate = addDays(parseLocalDate(startDate), pendingDayNumber - 1);
+                            if (isNaN(dayDate.getTime())) dayDate = null;
+                          }
+                        } catch { dayDate = null; }
+                        return (
+                          <div
+                            key={`pending-${pendingDayNumber}`}
+                            className="flex flex-col items-center px-3 py-2 rounded-xl min-w-[72px] border border-dashed border-border/50 bg-muted/20 opacity-60"
+                          >
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              <span className="sm:hidden">D{pendingDayNumber}</span><span className="hidden sm:inline">Day {pendingDayNumber}</span>
+                            </span>
+                            {dayDate ? (
+                              <>
+                                <span className="text-lg font-bold leading-tight text-muted-foreground">{dayDate.getDate()}</span>
+                                <span className="text-[10px] text-muted-foreground">{format(dayDate, 'EEE')}, {format(dayDate, 'MMM')}</span>
+                              </>
+                            ) : (
+                              <span className="text-lg font-bold leading-tight text-muted-foreground">–</span>
+                            )}
+                            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground mt-0.5" />
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
