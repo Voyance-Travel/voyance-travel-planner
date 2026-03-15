@@ -223,6 +223,24 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
             const content = choice?.delta?.content;
             if (content) {
               assistantContent += content;
+
+              // Fallback: detect tool-call emitted as plain text instead of structured tool_calls
+              const toolCallTextMatch = assistantContent.match(/\{\s*"action"\s*:\s*"extract_trip_details"\s*,\s*"action_input"\s*:\s*"([\s\S]*)"\s*\}\s*$/);
+              if (toolCallTextMatch) {
+                // Strip the leaked JSON from visible text
+                const visibleText = assistantContent.slice(0, assistantContent.indexOf(toolCallTextMatch[0])).trim();
+                assistantContent = visibleText;
+                // Parse the action_input (it's a JSON string that was escaped)
+                try {
+                  const unescaped = toolCallTextMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+                  toolCallArgs = unescaped;
+                  isToolCall = true;
+                  console.warn('[TripChatPlanner] Intercepted tool call emitted as plain text');
+                } catch (e) {
+                  console.error('[TripChatPlanner] Failed to parse leaked tool call:', e);
+                }
+              }
+
               const sanitized = sanitizeAIOutput(assistantContent);
               setMessages(prev => {
                 const last = prev[prev.length - 1];
