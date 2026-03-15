@@ -19,6 +19,7 @@ import { GlobalErrorHandler } from '@/components/common/GlobalErrorHandler';
 import { OAuthReturnHandler } from '@/components/auth/OAuthReturnHandler';
 import { useAnalyticsTracker } from '@/hooks/useAnalyticsTracker';
 import { useAccessibilityClasses } from '@/hooks/useAccessibilityClasses';
+import { useErrorTracker } from '@/hooks/useErrorTracker';
 
 // Providers
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -106,6 +107,7 @@ import ImageCuration from "./pages/admin/ImageCuration";
 import UnitEconomics from "./pages/admin/UnitEconomics";
 import TestSuites from "./pages/admin/TestSuites";
 import UserTracking from "./pages/admin/UserTracking";
+import SessionExplorer from "./pages/admin/SessionExplorer";
 
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
@@ -150,6 +152,7 @@ function JourneyTracker() {
   const trackAction = useJourneyStore(state => state.trackAction);
   useAnalyticsTracker();
   useAccessibilityClasses();
+  useErrorTracker();
   
   useEffect(() => {
     trackPageView(location.pathname);
@@ -269,6 +272,7 @@ function AnimatedRoutes() {
         <Route path="/admin/margins" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="/admin/test-suites" element={<ProtectedRoute><TestSuites /></ProtectedRoute>} />
         <Route path="/admin/user-tracking" element={<ProtectedRoute><UserTracking /></ProtectedRoute>} />
+                <Route path="/admin/session-explorer" element={<ProtectedRoute><SessionExplorer /></ProtectedRoute>} />
         
         {/* Agent CRM Routes */}
         <Route path="/agent" element={<ProtectedRoute><AgentDashboard /></ProtectedRoute>} />

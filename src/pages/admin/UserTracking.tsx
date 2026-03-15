@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowLeft, TrendingUp, TrendingDown, Users, MousePointerClick, Eye, Clock, ArrowRight } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Users, MousePointerClick, Eye, Clock, ArrowRight, Search, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format, subDays, startOfDay } from 'date-fns';
+import { FunnelChart } from '@/components/admin/FunnelChart';
 
 type PageEvent = {
   id: string;
@@ -116,6 +117,7 @@ export default function UserTracking() {
 
     const pageViews = events.filter(e => e.event_type === 'page_view');
     const pageExits = events.filter(e => e.event_type === 'page_exit');
+    const interactions = events.filter(e => !['page_view', 'page_exit'].includes(e.event_type));
     const sessions = new Set(events.map(e => e.session_id));
     const authedSessions = new Set(events.filter(e => e.user_id).map(e => e.session_id));
 
@@ -134,7 +136,6 @@ export default function UserTracking() {
     for (const e of pageViews) {
       lastBySession.set(e.session_id, e);
     }
-    // Collect exit page time from page_exit events keyed by session
     const exitTimeBySession = new Map<string, { path: string; time: number }>();
     for (const e of pageExits) {
       exitTimeBySession.set(e.session_id, { path: e.page_path, time: e.time_on_page_ms || 0 });
@@ -163,7 +164,6 @@ export default function UserTracking() {
         pageTraffic[e.page_path].exits++;
       }
     }
-    // Average out
     for (const p of Object.keys(pageTraffic)) {
       const t = pageTraffic[p];
       if (t.exits > 0) {
@@ -193,8 +193,7 @@ export default function UserTracking() {
       }
     }
 
-    // --- Bounce: user landed and left the site (single page_view session) ---
-    // A "bounce" = session with only 1 page view (user left without navigating further)
+    // --- Bounce ---
     const bounceSessions = new Set<string>();
     const bounceTimeByPage: Record<string, { total: number; count: number }> = {};
     for (const [sid, pages] of sessionPages.entries()) {
@@ -231,6 +230,30 @@ export default function UserTracking() {
       }
     }
 
+    // --- CTA / Interaction clicks ---
+    const ctaCounts: Record<string, { count: number; text: string }> = {};
+    for (const e of interactions) {
+      const key = e.event_type + '::' + (e.element_text || e.element_text || 'unknown');
+      if (!ctaCounts[key]) ctaCounts[key] = { count: 0, text: e.element_text || '' };
+      ctaCounts[key].count++;
+    }
+
+    // --- Funnel: Landing → Signup → Quiz → Trip Dashboard → Itinerary ---
+    const funnelSessions = {
+      landing: new Set<string>(),
+      signup: new Set<string>(),
+      quiz: new Set<string>(),
+      tripDashboard: new Set<string>(),
+      itinerary: new Set<string>(),
+    };
+    for (const e of pageViews) {
+      if (e.page_path === '/') funnelSessions.landing.add(e.session_id);
+      if (e.page_path === '/signup') funnelSessions.signup.add(e.session_id);
+      if (e.page_path === '/quiz') funnelSessions.quiz.add(e.session_id);
+      if (e.page_path === '/trip/dashboard') funnelSessions.tripDashboard.add(e.session_id);
+      if (e.page_path.startsWith('/itinerary/') || e.page_path === '/planner/itinerary') funnelSessions.itinerary.add(e.session_id);
+    }
+
     return {
       totalSessions: sessions.size,
       totalPageViews: pageViews.length,
@@ -244,6 +267,9 @@ export default function UserTracking() {
       bounceTimeByPage,
       deviceCounts,
       utmCounts,
+      ctaCounts,
+      funnelSessions,
+      totalInteractions: interactions.length,
     };
   }, [events]);
 
@@ -263,7 +289,13 @@ export default function UserTracking() {
             <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', serif" }}>User Tracking</h1>
             <p style={{ color: '#64748B', fontSize: 13, margin: '4px 0 0' }}>Where users enter, where they leave, and what converts</p>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button
+              onClick={() => navigate('/admin/session-explorer')}
+              style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #A78BFA44', background: '#A78BFA11', color: '#A78BFA', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              <Search size={12} /> Session Explorer
+            </button>
             {[1, 7, 14, 30].map(d => (
               <button
                 key={d}
@@ -416,6 +448,39 @@ export default function UserTracking() {
                   sorted(analytics.utmCounts).slice(0, 8).map(([campaign, count]) => (
                     <Row key={campaign} label={campaign} value={count} total={analytics.totalSessions} />
                   ))
+                )}
+              </Panel>
+            </div>
+
+            {/* Funnel + CTA Clicks */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              <Panel title="🔻 Conversion Funnel" subtitle="Session progression through key steps">
+                <FunnelChart steps={[
+                  { label: 'Landing', count: analytics.funnelSessions.landing.size },
+                  { label: 'Sign Up Page', count: analytics.funnelSessions.signup.size },
+                  { label: 'Quiz', count: analytics.funnelSessions.quiz.size },
+                  { label: 'Trip Dashboard', count: analytics.funnelSessions.tripDashboard.size },
+                  { label: 'Itinerary View', count: analytics.funnelSessions.itinerary.size },
+                ]} />
+              </Panel>
+
+              <Panel title="🖱️ CTA Clicks" subtitle={`${analytics.totalInteractions} interaction events`}>
+                {Object.entries(analytics.ctaCounts).length === 0 ? (
+                  <p style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', padding: '8px 0' }}>No interaction events tracked yet</p>
+                ) : (
+                  Object.entries(analytics.ctaCounts)
+                    .sort((a, b) => b[1].count - a[1].count)
+                    .slice(0, 12)
+                    .map(([key, data]) => {
+                      const [eventType] = key.split('::');
+                      return (
+                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #1E293B' }}>
+                          <span style={{ fontSize: 10, color: '#A78BFA', background: '#A78BFA22', padding: '1px 6px', borderRadius: 4, flexShrink: 0 }}>{eventType}</span>
+                          <span style={{ fontSize: 12, color: '#E2E8F0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{data.text || 'unnamed'}</span>
+                          <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#38BDF8', flexShrink: 0 }}>{data.count}</span>
+                        </div>
+                      );
+                    })
                 )}
               </Panel>
             </div>
