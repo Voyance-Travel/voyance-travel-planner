@@ -2992,6 +2992,7 @@ export default function Start() {
                             trip_id: trip.id,
                             city_order: 0,
                             city_name: cleanDest,
+                            country: (cleanDest.includes(',') ? cleanDest.split(',').pop()?.trim() : null) || null,
                             arrival_date: format(chatStartDate, 'yyyy-MM-dd'),
                             departure_date: format(chatEndDate, 'yyyy-MM-dd'),
                             nights,
