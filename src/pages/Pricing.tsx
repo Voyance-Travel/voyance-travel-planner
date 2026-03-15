@@ -21,7 +21,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { EmbeddedCheckoutModal } from '@/components/checkout';
 import { cn } from '@/lib/utils';
-import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
+import { isNativeIOS, openWebsitePurchase } from '@/services/iapService';
 
 interface CheckoutConfig {
   priceId: string;
