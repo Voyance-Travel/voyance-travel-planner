@@ -888,6 +888,14 @@ export function AddHotelInline({
         });
       }
 
+      // Cascade hotel info into itinerary accommodation activities
+      patchItineraryWithHotel(tripId, {
+        name: newHotel.name,
+        address: newHotel.address,
+        checkInDate: newHotel.checkInDate,
+        checkOutDate: newHotel.checkOutDate,
+      }).catch(err => console.error('[AddHotel] Itinerary patch failed:', err));
+
       toast.dismiss('hotel-enrich');
       toast.success(enrichment ? `${accomLabel} found and details updated!` : `${accomLabel} details saved!`);
       setShowManualEntry(false);
