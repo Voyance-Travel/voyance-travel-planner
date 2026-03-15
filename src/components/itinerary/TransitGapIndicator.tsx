@@ -10,11 +10,31 @@ import { cn } from '@/lib/utils';
 import {
   Footprints, AlertTriangle, Clock, Train, Car, Bus,
   Navigation2, ChevronDown, ChevronUp, Sparkles, Loader2, Ship,
+  ThumbsUp, ThumbsDown, Info,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 
 // ─── Types ─────────────────────────────────────────────────────────────
+
+interface RouteDetails {
+  steps: Array<{
+    instruction: string;
+    distance: string;
+    duration: string;
+    travelMode: string;
+    transitDetails?: {
+      lineName: string;
+      vehicleType: string;
+      departureStop: string;
+      arrivalStop: string;
+      numStops: number;
+    };
+  }>;
+  summary: string;
+  totalDuration: string;
+  totalDistance: string;
+}
 
 interface TransportOptionData {
   id: string;
