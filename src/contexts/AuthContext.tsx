@@ -52,7 +52,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // Transform Supabase data to our User type
 function transformProfile(
   supabaseUser: SupabaseUser | null, 
-  profile?: { display_name?: string; avatar_url?: string; quiz_completed?: boolean; travel_dna?: unknown } | null,
+  profile?: { display_name?: string; avatar_url?: string; quiz_completed?: boolean; travel_dna?: unknown; home_airport?: string } | null,
   preferences?: { budget_tier?: string; travel_pace?: string; accommodation_style?: string; home_airport?: string; travel_agent_mode?: boolean } | null
 ): User | null {
   if (!supabaseUser) return null;
@@ -64,7 +64,7 @@ function transformProfile(
     email: supabaseUser.email || '',
     name: profile?.display_name || supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0],
     avatar: profile?.avatar_url || supabaseUser.user_metadata?.avatar_url,
-    homeAirport: preferences?.home_airport || undefined,
+    homeAirport: profile?.home_airport || preferences?.home_airport || undefined,
     createdAt: supabaseUser.created_at,
     quizCompleted: profile?.quiz_completed || false,
     travelAgentMode: preferences?.travel_agent_mode || false,
