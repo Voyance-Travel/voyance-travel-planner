@@ -383,17 +383,30 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 py-6"
     >
-      {/* Over-budget Warning Banner */}
-      {warningLevel !== 'none' && summary && (
-        <BudgetWarning summary={summary} />
-      )}
+      {/* Over-budget Warning Banner — use snapshot as canonical source */}
+      {(() => {
+        const budgetCents = settings?.budget_total_cents || 0;
+        const snapshotUsedPct = budgetCents > 0 ? (snapshot.tripTotalCents / budgetCents) * 100 : 0;
+        const snapshotStatus: 'green' | 'yellow' | 'red' = snapshotUsedPct >= 100 ? 'red' : snapshotUsedPct >= 85 ? 'yellow' : 'green';
+        const showWarning = settings?.budget_warnings_enabled !== false
+          && settings?.budget_warning_threshold !== 'off'
+          && (snapshotStatus === 'red' || (snapshotStatus === 'yellow' && settings?.budget_warning_threshold !== 'red_only'));
+
+        return showWarning && summary ? (
+          <BudgetWarning summary={{
+            ...summary,
+            usedPercent: snapshotUsedPct,
+            status: snapshotStatus,
+          }} />
+        ) : null;
+      })()}
 
       {/* Budget Coach — AI suggestions when over budget */}
       {hasBudget && itineraryDays && itineraryDays.length > 0 && summary && (
         <BudgetCoach
           tripId={tripId}
           budgetTargetCents={summary.budgetTotalCents}
-          currentTotalCents={summary.totalCommittedCents + summary.plannedTotalCents}
+          currentTotalCents={snapshot.tripTotalCents}
           currency={settings?.budget_currency || 'USD'}
           destination={destination}
           itineraryDays={itineraryDays}
