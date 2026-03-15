@@ -140,7 +140,7 @@ export function resolveCities(
         country: c?.country ? String(c.country) : undefined,
         nights: Number(c?.nights),
       }))
-      .filter((c) => c.name.length > 1 && !isRegionNotCity(c.name));
+      .filter((c) => c.name.length > 1 && !isRegionNotCity(c.name) && !looksLikeAirportCode(c.name));
 
     if (normalized.length > 1) {
       const allNightsValid = normalized.every(
