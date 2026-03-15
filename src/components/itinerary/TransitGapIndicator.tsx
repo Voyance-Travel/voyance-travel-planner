@@ -82,6 +82,8 @@ interface TransitGapIndicatorProps {
   tripCurrency?: string;
   /** Number of travelers */
   travelers?: number;
+  /** Callback when a transport mode is selected — writes transportation data to the activity */
+  onSelectMode?: (mode: string, duration: string, cost: { amount: number; currency: string } | null, instructions?: string) => void;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────
