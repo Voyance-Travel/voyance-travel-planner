@@ -1261,40 +1261,36 @@ export function buildRegularDayPrompt(
   lines.push('');
 
   // =========================================================================
-  // FULL DAY STRUCTURE — HOUR-BY-HOUR TRAVEL PLAN (NOT just a list of activities)
+  // DAY STRUCTURE — HOUR-BY-HOUR TRAVEL PLAN (NOT just a list of activities)
+  // Note: Meal requirements are now dynamic per day - injected by index.ts
   // =========================================================================
-  lines.push(`🗓️ REQUIRED FULL-DAY STRUCTURE`);
+  lines.push(`🗓️ REQUIRED DAY STRUCTURE`);
   lines.push(`${'─'.repeat(40)}`);
   lines.push(`   This is NOT a suggestion list. It is a COMPLETE hour-by-hour travel plan.`);
   lines.push(`   Every hour from ${earliestStart} to ${latestEnd} must be accounted for.`);
   lines.push('');
   
-  lines.push(`   MANDATORY ELEMENTS FOR EVERY FULL DAY:`);
+  lines.push(`   STRUCTURE ELEMENTS (include as applicable per meal policy):`);
   lines.push(`   ┌──────────────────────────────────────────────────────────────┐`);
-  lines.push(`   │ 🍳 BREAKFAST — Near hotel. Restaurant name, ~price, walk time  │`);
+  lines.push(`   │ 🍳 BREAKFAST — If required by meal policy                     │`);
   lines.push(`   │ 🚶 TRANSIT — Mode, duration, cost between EVERY pair of stops  │`);
-  lines.push(`   │ 🎯 MORNING ACTIVITY 1 — Paid attraction/museum/tour            │`);
-  lines.push(`   │ 🚶 TRANSIT                                                      │`);
-  lines.push(`   │ 🌿 MORNING ACTIVITY 2 — Free activity (park, walk, viewpoint)  │`);
-  lines.push(`   │ 🚶 TRANSIT                                                      │`);
-  lines.push(`   │ 🍽️ LUNCH — Restaurant with price, distance from prev location  │`);
-  lines.push(`   │ 🚶 TRANSIT                                                      │`);
-  lines.push(`   │ 🎯 AFTERNOON ACTIVITY 1 — Paid attraction/experience           │`);
-  lines.push(`   │ 🚶 TRANSIT                                                      │`);
-  lines.push(`   │ 🌿 AFTERNOON ACTIVITY 2 — Free activity or coffee/snack break  │`);
+  lines.push(`   │ 🎯 MORNING ACTIVITY — Paid attraction/museum/tour              │`);
+  lines.push(`   │ 🌿 FREE ACTIVITY — Park, walk, viewpoint                       │`);
+  lines.push(`   │ 🍽️ LUNCH — If required by meal policy                          │`);
+  lines.push(`   │ 🎯 AFTERNOON ACTIVITY — Paid attraction/experience             │`);
   lines.push(`   │ 🏨 HOTEL RETURN — Freshen up before dinner (if appropriate)     │`);
-  lines.push(`   │ 🍷 DINNER — Restaurant with price, cuisine, dress code if any  │`);
+  lines.push(`   │ 🍷 DINNER — If required by meal policy                          │`);
   lines.push(`   │ 🌙 EVENING/NIGHTLIFE — Bar, jazz club, night market, show      │`);
   lines.push(`   │ 🏨 RETURN TO HOTEL                                               │`);
   lines.push(`   │ 🌅 NEXT MORNING PREVIEW — "Tomorrow: wake at X, breakfast at Y"│`);
   lines.push(`   └──────────────────────────────────────────────────────────────┘`);
   lines.push('');
 
-  lines.push(`   MEAL REQUIREMENTS (3 per full day):`);
-  lines.push(`   - BREAKFAST: Real restaurant/café name, walk time from hotel, ~price — MUST BE DIFFERENT from any previous day's breakfast`);
-  lines.push(`   - LUNCH: Restaurant near previous activity, ~price, 1 alternative option in tips — MUST BE DIFFERENT from any previous day's lunch`);
-  lines.push(`   - DINNER: Restaurant with price range, cuisine type, reservation needed? — MUST BE DIFFERENT from any previous day's dinner`);
-  lines.push(`     Include dress code if relevant. Add 1 alternative in tips field.`);
+  lines.push(`   MEAL DETAILS (for each required meal):`);
+  lines.push(`   - Each meal = real restaurant/café name + walk time/distance + approximate price`);
+  lines.push(`   - MUST BE DIFFERENT from any previous day's same-type meal`);
+  lines.push(`   - Lunch and dinner: include 1 alternative option in tips field`);
+  lines.push(`   - Only include meals specified by the day's meal policy — do NOT add extras`);
   lines.push('');
 
   lines.push(`   TRANSIT REQUIREMENTS (between EVERY consecutive activity):`);
