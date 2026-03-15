@@ -152,6 +152,7 @@ function JourneyTracker() {
   const trackAction = useJourneyStore(state => state.trackAction);
   useAnalyticsTracker();
   useAccessibilityClasses();
+  useErrorTracker();
   
   useEffect(() => {
     trackPageView(location.pathname);
