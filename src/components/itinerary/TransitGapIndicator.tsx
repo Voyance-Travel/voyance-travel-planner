@@ -217,6 +217,11 @@ export function TransitGapIndicator({
   const canExpand = isEditable && !!city && !!destinationName;
   const shouldHide = hasTransitBadge || eitherIsTransit;
 
+  const [expandedOptionId, setExpandedOptionId] = useState<string | null>(null);
+  const [routeDetailsCache, setRouteDetailsCache] = useState<Record<string, RouteDetails | null>>({});
+  const [loadingRouteId, setLoadingRouteId] = useState<string | null>(null);
+  const [showAllStepsFor, setShowAllStepsFor] = useState<string | null>(null);
+
   const fetchOptions = useCallback(async () => {
     if (hasFetched || isLoading || !city || !destinationName) return;
     setIsLoading(true);
