@@ -1784,16 +1784,16 @@ ${context.collaboratorTravelers && context.collaboratorTravelers.length > 0 ? `
 ${'='.repeat(70)}
 🎯 GROUP TRIP ATTRIBUTION — suggestedFor REQUIRED
 ${'='.repeat(70)}
-This is a GROUP TRIP. For EVERY activity, you MUST include a "suggestedFor" field with the user ID of the traveler whose preferences most influenced that choice.
+This is a GROUP TRIP. Some activities need a "suggestedFor" field to show which traveler's DNA inspired the choice.
 
 Travelers in this group:
 ${context.collaboratorTravelers.map(t => `  - "${t.userId}" (${t.name})`).join('\n')}
 
 Rules:
-- When an activity appeals to BOTH/ALL travelers' profiles equally (e.g. iconic landmarks, shared interests), use COMMA-SEPARATED user IDs: "id1,id2"
-- Use a single collaborator's ID when the activity clearly matches ONLY their preferences
+- LOGISTICAL activities (hotel check-in/check-out, airport arrival/departure, transfers, transit, packing, travel days) → DO NOT include suggestedFor. These are not DNA-driven.
+- USER-REQUESTED must-do activities (things the user explicitly asked for, e.g. "US Open", a specific restaurant they named) → set suggestedFor to ALL traveler IDs comma-separated: "${context.collaboratorTravelers.map(t => t.userId).join(',')}" — these were requested by the group, not inspired by any individual's DNA.
+- AI-CHOSEN activities (restaurants, bars, experiences YOU picked based on personality traits) → set suggestedFor to the SINGLE traveler whose DNA most influenced the pick. Only use comma-separated IDs if the activity genuinely matches multiple travelers' unique traits.
 - Use the primary planner's ID ("${context.userId}") ONLY when it specifically matches their profile, NOT as a default
-- EVERY activity MUST have a suggestedFor value — no exceptions
 ` : ''}
 
 ${'='.repeat(70)}
@@ -8447,16 +8447,18 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
 ${'='.repeat(70)}
 🎯 GROUP TRIP ATTRIBUTION — suggestedFor REQUIRED
 ${'='.repeat(70)}
-This is a GROUP TRIP. For EVERY activity, you MUST include a "suggestedFor" field with the user ID of the traveler whose preferences most influenced that choice.
+This is a GROUP TRIP. Some activities need a "suggestedFor" field to show which traveler's DNA inspired the choice.
 
 Travelers in this group:
 ${travelerList}
 
+All traveler IDs combined: "${allUserIdsForAttribution.join(',')}"
+
 Rules:
-- When an activity appeals to BOTH/ALL travelers' profiles equally (e.g. iconic landmarks, shared interests), use COMMA-SEPARATED user IDs: "id1,id2"
-- Use a single collaborator's ID when the activity clearly matches ONLY their preferences
+- LOGISTICAL activities (hotel check-in/check-out, airport arrival/departure, transfers, transit, packing, travel days) → DO NOT include suggestedFor. These are not DNA-driven.
+- USER-REQUESTED must-do activities (things the user explicitly asked for, e.g. specific events or restaurants they named) → set suggestedFor to ALL traveler IDs comma-separated: "${allUserIdsForAttribution.join(',')}" — these were requested by the group, not inspired by any individual's DNA.
+- AI-CHOSEN activities (restaurants, bars, experiences YOU picked based on personality traits) → set suggestedFor to the SINGLE traveler whose DNA most influenced the pick. Only use comma-separated IDs if the activity genuinely matches multiple travelers' unique traits.
 - Use the primary planner's ID ("${userId}") ONLY when it specifically matches their profile, NOT as a default
-- EVERY activity MUST have a suggestedFor value — no exceptions
 `;
           console.log(`[generate-day] Attribution prompt injected for ${allUserIds.length} travelers (collabs: ${(collabRows || []).length}, members: ${(memberRows || []).length})`);
         }
