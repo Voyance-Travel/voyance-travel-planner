@@ -4942,7 +4942,7 @@ export function EditorialItinerary({
                             'text-[10px] font-semibold uppercase tracking-wide',
                             isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'
                           )}>
-                            Day {day.dayNumber}
+                            <span className="sm:hidden">D{day.dayNumber}</span><span className="hidden sm:inline">Day {day.dayNumber}</span>
                           </span>
                           {dayDate ? (
                             <>
