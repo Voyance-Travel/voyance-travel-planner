@@ -502,3 +502,38 @@ function getArchetypeDayTheme(archetype: string): string {
 }
 
 export { formatArchetypeName, getCompatibilityScore };
+
+// =============================================================================
+// TRAIT SCORE BLENDING - Shared algorithm for owner + companions
+// =============================================================================
+
+const BLEND_TRAIT_KEYS = ['pace', 'budget', 'social', 'planning', 'comfort', 'authenticity', 'adventure', 'cultural', 'transformation'];
+
+/**
+ * Blend trait scores: owner gets 50% weight, companions split the remaining 50%.
+ * Returns blended trait scores as a Record<string, number>.
+ */
+export function blendTraitScores(
+  ownerTraits: Record<string, number>,
+  companionTraitsList: Record<string, number>[]
+): Record<string, number> {
+  if (companionTraitsList.length === 0) {
+    // No companions — return owner traits as-is
+    const result: Record<string, number> = {};
+    for (const key of BLEND_TRAIT_KEYS) {
+      result[key] = ownerTraits[key] ?? 0;
+    }
+    return result;
+  }
+
+  const ownerWeight = 0.5;
+  const companionWeight = 0.5 / companionTraitsList.length;
+
+  const blended: Record<string, number> = {};
+  for (const key of BLEND_TRAIT_KEYS) {
+    const ownerVal = ownerTraits[key] ?? 0;
+    const companionSum = companionTraitsList.reduce((sum, ct) => sum + (ct[key] ?? 0) * companionWeight, 0);
+    blended[key] = Math.round(ownerVal * ownerWeight + companionSum);
+  }
+  return blended;
+}

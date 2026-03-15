@@ -164,6 +164,7 @@ import {
 // =============================================================================
 import {
   blendGroupArchetypes,
+  blendTraitScores,
   type TravelerArchetype,
 } from './group-archetype-blending.ts';
 
@@ -4462,6 +4463,7 @@ serve(async (req) => {
               authenticity: Number(rawScores.authenticity ?? rawScores.cultural_depth ?? 0),
               adventure: Number(rawScores.adventure ?? rawScores.risk_tolerance ?? 0),
               cultural: Number(rawScores.cultural ?? rawScores.cultural_interest ?? 0),
+              transformation: Number(rawScores.transformation ?? rawScores.wellness ?? 0),
             });
           }
 
@@ -4471,7 +4473,7 @@ serve(async (req) => {
             groupBlendingPromptSection = blendResult.promptSection;
             console.log(`[Stage 1.2.1] ✓ Group archetype blending complete: ${travelers.length} travelers, ${blendResult.conflicts.length} conflicts, ${blendResult.splitOpportunities.length} split opportunities`);
 
-            // Build blended trait scores snapshot (owner 50%, companions split remaining 50%)
+            // Build blended trait scores snapshot using shared helper
             const ownerTraits = ownerDnaRow?.data?.trait_scores || {};
             const ownerTraitsNormalized: Record<string, number> = {
               pace: Number(ownerTraits.pace ?? 0),
@@ -4482,22 +4484,16 @@ serve(async (req) => {
               authenticity: Number(ownerTraits.authenticity ?? 0),
               adventure: Number(ownerTraits.adventure ?? 0),
               cultural: Number(ownerTraits.cultural ?? 0),
+              transformation: Number(ownerTraits.transformation ?? 0),
             };
 
             const companionTraitsList = companionUserIds
               .map((uid: string) => companionTraitScoresMap.get(uid))
               .filter(Boolean) as Record<string, number>[];
 
+            const blendedTraits = blendTraitScores(ownerTraitsNormalized, companionTraitsList);
             const ownerWeight = 0.5;
             const companionWeight = companionTraitsList.length > 0 ? 0.5 / companionTraitsList.length : 0;
-            
-            const blendedTraits: Record<string, number> = {};
-            const traitKeys = ['pace', 'budget', 'social', 'planning', 'comfort', 'authenticity', 'adventure', 'cultural'];
-            for (const key of traitKeys) {
-              const ownerVal = ownerTraitsNormalized[key] || 0;
-              const companionSum = companionTraitsList.reduce((sum, ct) => sum + (ct[key] || 0) * companionWeight, 0);
-              blendedTraits[key] = Math.round(ownerVal * ownerWeight + companionSum);
-            }
 
             blendedDnaSnapshot = {
               blendedTraits,
@@ -4528,6 +4524,19 @@ serve(async (req) => {
       // =======================================================================
       console.log("[Stage 1.3] Loading unified traveler profile...");
       const unifiedProfile = await loadTravelerProfile(supabase, userId, tripId, context.destination);
+      
+      // =======================================================================
+      // STAGE 1.3.1: Merge Blended DNA into Unified Profile (Group Trip Fix)
+      // =======================================================================
+      if (context.blendedDnaSnapshot?.blendedTraits) {
+        const blended = context.blendedDnaSnapshot.blendedTraits;
+        for (const [key, value] of Object.entries(blended)) {
+          if (key in unifiedProfile.traitScores) {
+            (unifiedProfile.traitScores as Record<string, number>)[key] = value as number;
+          }
+        }
+        console.log("[Stage 1.3.1] ✓ Overrode trait scores with blended group DNA");
+      }
       
       console.log(`[Stage 1.3] ✓ Profile loaded via unified loader:`);
       console.log(`[Stage 1.3]   archetype=${unifiedProfile.archetype} (source: ${unifiedProfile.archetypeSource})`);
@@ -5167,7 +5176,7 @@ RULES FOR VOYANCE PICKS:
         authenticity: unifiedProfile.traitScores.authenticity ?? 0,
         adventure: unifiedProfile.traitScores.adventure ?? 0,
         budget: unifiedProfile.traitScores.budget ?? 0,
-        transformation: 0  // Not in unified profile, use default
+        transformation: unifiedProfile.traitScores.transformation ?? 0
       };
       
       // Get interests from unified profile (Phase 2 Fix: removed normalizedContext reference)

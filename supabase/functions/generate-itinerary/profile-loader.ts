@@ -13,14 +13,15 @@ import { getFullArchetypeContext, type ArchetypeContext } from './archetype-data
 // =============================================================================
 
 export interface TraitScores {
-  pace: number;          // -10 to +10: negative = slow, positive = fast
-  budget: number;        // -10 to +10: negative = luxury, positive = frugal
-  social: number;        // -10 to +10: negative = solo, positive = social
-  planning: number;      // -10 to +10: negative = spontaneous, positive = planned
-  comfort: number;       // -10 to +10: negative = roughing it, positive = comfort
-  authenticity: number;  // -10 to +10: negative = tourist, positive = local
-  adventure: number;     // -10 to +10: negative = safe, positive = risky
-  cultural: number;      // -10 to +10: negative = shallow, positive = deep
+  pace: number;            // -10 to +10: negative = slow, positive = fast
+  budget: number;          // -10 to +10: negative = luxury, positive = frugal
+  social: number;          // -10 to +10: negative = solo, positive = social
+  planning: number;        // -10 to +10: negative = spontaneous, positive = planned
+  comfort: number;         // -10 to +10: negative = roughing it, positive = comfort
+  authenticity: number;    // -10 to +10: negative = tourist, positive = local
+  adventure: number;       // -10 to +10: negative = safe, positive = risky
+  cultural: number;        // -10 to +10: negative = shallow, positive = deep
+  transformation: number;  // -10 to +10: negative = no change, positive = growth/wellness
 }
 
 export type BudgetTier = 'budget' | 'moderate' | 'premium' | 'luxury';
@@ -87,6 +88,7 @@ const DEFAULT_TRAIT_SCORES: TraitScores = {
   authenticity: 0,
   adventure: 0,
   cultural: 0,
+  transformation: 0,
 };
 
 const DEFAULT_ARCHETYPE = 'balanced_story_collector';
@@ -372,6 +374,7 @@ function resolveTraitScores(travelDNA: any): TraitScores {
     authenticity: Number(rawScores.authenticity ?? rawScores.cultural_depth ?? 0),
     adventure: Number(rawScores.adventure ?? rawScores.risk_tolerance ?? 0),
     cultural: Number(rawScores.cultural ?? rawScores.cultural_interest ?? 0),
+    transformation: Number(rawScores.transformation ?? rawScores.wellness ?? 0),
   };
 }
 
