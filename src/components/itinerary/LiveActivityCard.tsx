@@ -12,6 +12,7 @@ import { ActivityFeedbackModal } from './ActivityFeedbackModal';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { useActivityFeedback, type FeedbackRating } from '@/services/activityFeedbackAPI';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { formatTime12h } from '@/utils/timeFormat';
 
 type ActivityStatus = 'upcoming' | 'current' | 'completed' | 'skipped';
 
