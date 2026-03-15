@@ -421,7 +421,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               className="min-h-[44px] max-h-[80px] resize-none pr-16 text-sm border-0 bg-muted/50 focus-visible:ring-1"
               disabled={isStreaming}
             />
-            <div className="absolute right-1.5 bottom-1.5 flex items-center gap-0.5">
+            <div className="absolute right-1.5 bottom-1.5 flex items-center gap-1.5 sm:gap-0.5">
               <Button
                 type="button"
                 size="icon"
