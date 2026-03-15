@@ -185,22 +185,17 @@ export function TransitGapIndicator({
   const [isLoading, setIsLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
 
-  // Don't show if TransitBadge is already visible with full details
-  if (hasTransitBadge) return null;
-
-  // Transit/transportation slots ARE the buffer — don't warn about them
+  // Compute derived values before any hooks that depend on them
   const eitherIsTransit = isTransitCategory(currentCategory) || isTransitCategory(nextCategory);
-  if (eitherIsTransit) return null;
-
   const skipBufferWarning = sameLocation;
   const isZeroGap = !skipBufferWarning && gapMinutes <= 0;
   const isTightGap = !skipBufferWarning && gapMinutes > 0 && gapMinutes < 15;
-
   const transportMethod = transportation?.method;
   const modeLabel = getGapTransportLabel(transportMethod, gapMinutes);
   const modeIcon = getGapTransportIcon(transportMethod, gapMinutes);
   const durationLabel = transportation?.duration || `${Math.abs(gapMinutes)} min`;
   const canExpand = isEditable && !!city && !!destinationName;
+  const shouldHide = hasTransitBadge || eitherIsTransit;
 
   const fetchOptions = useCallback(async () => {
     if (hasFetched || isLoading || !city || !destinationName) return;
