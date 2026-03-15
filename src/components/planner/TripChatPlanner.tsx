@@ -96,13 +96,27 @@ function normalizeMultiCity(details: TripDetails): TripDetails {
   return details;
 }
 
+const CHAT_SESSION_KEY = 'voyance_chat_messages';
+
 export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlannerProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content: "Hey! ✈️ Where are you thinking of going? Tell me anything - a city, a vibe, a dream trip. We'll figure it out together.",
-    },
-  ]);
+  const { data: creditData } = useCredits();
+  const hasNoCredits = creditData && creditData.totalCredits === 0;
+
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = sessionStorage.getItem(CHAT_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as ChatMessage[];
+        if (parsed.length > 1) return parsed;
+      }
+    } catch {}
+    return [
+      {
+        role: 'assistant',
+        content: "Hey! ✈️ Where are you thinking of going? Tell me anything - a city, a vibe, a dream trip. We'll figure it out together.",
+      },
+    ];
+  });
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [extractedDetails, setExtractedDetails] = useState<TripDetails | null>(null);
@@ -110,6 +124,13 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   const [cityTransports, setCityTransports] = useState<InterCityTransportMode[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Persist chat messages to sessionStorage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(CHAT_SESSION_KEY, JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
 
   const { isListening, isSupported: micSupported, toggleListening, interimTranscript } = useSpeechRecognition({
     onResult: (transcript) => {
