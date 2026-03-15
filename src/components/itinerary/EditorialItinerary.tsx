@@ -3676,6 +3676,8 @@ export function EditorialItinerary({
 
   // Request regeneration - checks credits and regeneration count
   const requestDayRegenerate = useCallback(async (dayIndex: number) => {
+    // Defense-in-depth: block regeneration when AI features are locked (manual builder pre-Smart Finish)
+    if (aiLocked) return;
     if (!canRegenerate()) {
       // Show upgrade prompt
       setPendingRegenerateDay(dayIndex);
