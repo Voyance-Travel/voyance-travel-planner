@@ -204,7 +204,12 @@ export function InlineModifier({
       );
 
       if (result.success && result.updatedDays) {
-        onItineraryUpdate(result.updatedDays);
+        // GAP 5: Fix any timing overlaps in AI-rewritten activities
+        const fixedDays = result.updatedDays.map(day => ({
+          ...day,
+          activities: cascadeFixOverlaps(day.activities as any) as any,
+        }));
+        onItineraryUpdate(fixedDays);
         toast.success(result.message || 'Changes applied!');
         setPendingChange(null);
         setInput('');
