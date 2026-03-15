@@ -115,6 +115,8 @@ export function convertParsedToItineraryData(parsed: ParsedTripInput & { detecte
     overview: {
       currency,
     },
+    // Persist parsed preferences so buildResearchContext (enrich-manual-trip) can read them
+    preferences: parsed.preferences || undefined,
     metadata: {
       source: 'manual_paste',
       currency,
