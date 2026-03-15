@@ -4529,6 +4529,19 @@ serve(async (req) => {
       console.log("[Stage 1.3] Loading unified traveler profile...");
       const unifiedProfile = await loadTravelerProfile(supabase, userId, tripId, context.destination);
       
+      // =======================================================================
+      // STAGE 1.3.1: Merge Blended DNA into Unified Profile (Group Trip Fix)
+      // =======================================================================
+      if (context.blendedDnaSnapshot?.blendedTraits) {
+        const blended = context.blendedDnaSnapshot.blendedTraits;
+        for (const [key, value] of Object.entries(blended)) {
+          if (key in unifiedProfile.traitScores) {
+            (unifiedProfile.traitScores as Record<string, number>)[key] = value as number;
+          }
+        }
+        console.log("[Stage 1.3.1] ✓ Overrode trait scores with blended group DNA");
+      }
+      
       console.log(`[Stage 1.3] ✓ Profile loaded via unified loader:`);
       console.log(`[Stage 1.3]   archetype=${unifiedProfile.archetype} (source: ${unifiedProfile.archetypeSource})`);
       console.log(`[Stage 1.3]   completeness=${unifiedProfile.dataCompleteness}%, fallback=${unifiedProfile.isFallback}`);
