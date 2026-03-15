@@ -8300,7 +8300,7 @@ function DayCard({
               {(isEditable || !dayIsPreview) && !isCleanPreview && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-7 sm:w-7 shrink-0">
                       <MoreHorizontal className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
