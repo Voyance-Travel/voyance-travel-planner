@@ -117,11 +117,11 @@ export function SocialLoginButtons({ mode = 'signin' }: SocialLoginButtonsProps)
         variant="outline"
         onClick={handleAppleLogin}
         disabled={anyLoading}
-        className="w-full h-12 bg-background hover:bg-muted border-border text-foreground font-medium"
+        className="w-full h-12 bg-black hover:bg-gray-900 text-white border-black dark:bg-white dark:hover:bg-gray-100 dark:text-black dark:border-white font-medium"
       >
         {isLoadingApple ? (
           <span className="flex items-center gap-2">
-            <span className="animate-spin rounded-full h-4 w-4 border-2 border-muted-foreground border-t-transparent" />
+            <span className="animate-spin rounded-full h-4 w-4 border-2 border-white/50 border-t-transparent dark:border-black/50 dark:border-t-transparent" />
             Connecting...
           </span>
         ) : (
