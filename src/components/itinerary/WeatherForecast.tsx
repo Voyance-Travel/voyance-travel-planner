@@ -233,7 +233,7 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05 }}
                     className={cn(
-                      "rounded-xl p-3 text-center transition-all",
+                      "rounded-xl p-3 text-center transition-all min-w-[72px] flex-shrink-0 sm:min-w-0 sm:flex-shrink",
                       isTodayActual 
                         ? "bg-primary/10 border-2 border-primary/30 shadow-md" 
                         : "bg-background/60 hover:bg-background/80"
