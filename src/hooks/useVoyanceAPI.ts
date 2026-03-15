@@ -224,7 +224,7 @@ export function useCreateTrip() {
             departure_date: input.endDate,
             nights,
             generation_status: 'pending',
-            days_total: nights,
+            days_total: nights + 1, // Inclusive day count: nights + 1
           } as any);
         } catch (e) {
           console.error('[useCreateTrip] trip_cities insert failed:', e);

@@ -2407,6 +2407,15 @@ export default function Start() {
         ? multiCityDestinations.map(d => d.city).join(' → ')
         : `Trip to ${primaryDestination}`;
 
+      // Fetch owner_plan_tier for downstream entitlement checks
+      let ownerPlanTier = 'free';
+      try {
+        const { data: entitlements } = await supabase.functions.invoke('get-entitlements');
+        ownerPlanTier = entitlements?.plans?.[0] || 'free';
+      } catch (e) {
+        console.warn('[Start] Failed to fetch entitlements for owner_plan_tier:', e);
+      }
+
       // Save trip directly to database
       const { data: trip, error } = await supabase
         .from('trips')
@@ -2429,6 +2438,7 @@ export default function Start() {
           transportation_preferences: isMultiCity && multiCityTransports.length > 0 ? multiCityTransports as any : null,
           creation_source: isMultiCity ? 'multi_city' : 'single_city',
           status: 'draft',
+          owner_plan_tier: ownerPlanTier,
           metadata: ({
             isFirstTimeVisitor,
             firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
@@ -2771,6 +2781,18 @@ export default function Start() {
                           source: 'chat',
                         } : null;
 
+                        // Fetch owner_plan_tier for chat path
+                        let chatOwnerPlanTier = 'free';
+                        try {
+                          const { data: chatEntitlements } = await supabase.functions.invoke('get-entitlements');
+                          chatOwnerPlanTier = chatEntitlements?.plans?.[0] || 'free';
+                        } catch (e) {
+                          console.warn('[Start] Failed to fetch entitlements for chat owner_plan_tier:', e);
+                        }
+
+                        // Determine budget_include_hotel for chat path
+                        const chatIncludeHotelInBudget = !!(hotelSelection && hotelSelection.length > 0 && hotelSelection.some((h: any) => h.pricePerNight && h.pricePerNight > 0));
+
                         const { data: trip, error } = await supabase
                           .from('trips')
                           .insert({
@@ -2785,6 +2807,8 @@ export default function Start() {
                             budget_total_cents: chatBudget ? chatBudget * 100 : null,
                             hotel_selection: hotelSelection,
                             flight_selection: flightSelection,
+                            budget_include_hotel: chatIncludeHotelInBudget,
+                            owner_plan_tier: chatOwnerPlanTier,
                             creation_source: isChatMultiCity ? 'multi_city' : 'chat',
                             status: 'draft',
                             is_multi_city: isChatMultiCity ? true : null,
@@ -2983,6 +3007,30 @@ export default function Start() {
                             rowCount: cityRows.length,
                             cities: cityRows.map(r => r.city_name),
                           });
+
+                          // ─── SPLIT BUDGET ACROSS CITIES (chat path) ───
+                          if (chatBudget) {
+                            const totalChatNights = chatCities.reduce((sum, c) => sum + (c.nights || 1), 0);
+                            const chatBudgetCents = Math.round(chatBudget * 100);
+                            const chatCityBudgets = chatCities.map((c, i) => {
+                              const cityNights = c.nights || 1;
+                              const share = cityNights / totalChatNights;
+                              return { cityOrder: i, allocatedBudgetCents: Math.round(chatBudgetCents * share) };
+                            });
+                            // Adjust rounding so the sum matches exactly
+                            const chatAllocatedSum = chatCityBudgets.reduce((s, c) => s + c.allocatedBudgetCents, 0);
+                            if (chatAllocatedSum !== chatBudgetCents) {
+                              chatCityBudgets[0].allocatedBudgetCents += (chatBudgetCents - chatAllocatedSum);
+                            }
+                            for (const cb of chatCityBudgets) {
+                              await supabase
+                                .from('trip_cities')
+                                .update({ allocated_budget_cents: cb.allocatedBudgetCents } as any)
+                                .eq('trip_id', trip.id)
+                                .eq('city_order', cb.cityOrder);
+                            }
+                            logger.info('[Start] Chat budget split:', chatCityBudgets.map(c => `City ${c.cityOrder}: $${(c.allocatedBudgetCents / 100).toFixed(2)}`).join(', '));
+                          }
                         } else {
                           // Single-city: insert one trip_cities row for unified schema
                           const startMs = chatStartDate.getTime();
