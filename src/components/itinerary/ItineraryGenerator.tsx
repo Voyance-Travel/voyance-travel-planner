@@ -467,17 +467,18 @@ export function ItineraryGenerator({
             const legBaseCost = roundUpTo10(legDays * BASE_RATE_PER_DAY);
             return { city: leg.destination, days: legDays, cost: legBaseCost };
           });
-          if (breakdown.length > 0) {
-            breakdown[0].cost += multiCityFee;
-          }
+          setJourneyMultiCityFee(multiCityFee);
           setJourneyLegs(breakdown);
         } else {
+          setJourneyMultiCityFee(0);
           setJourneyLegs([]);
         }
       } else {
+        setJourneyMultiCityFee(0);
         setJourneyLegs([]);
       }
     } catch {
+      setJourneyMultiCityFee(0);
       setJourneyLegs([]);
     }
 
