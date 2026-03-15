@@ -8004,16 +8004,36 @@ RULES:
       let timingInstructions = '';
       let dayMealPolicy: MealPolicy | null = null; // Will be set for non-first/last days
       if (isFirstDay && dayConstraints) {
+        // Derive meal policy for arrival day
+        dayMealPolicy = deriveMealPolicy({
+          dayNumber, totalDays, isFirstDay: true, isLastDay: dayNumber === totalDays,
+          arrivalTime24: flightContext.arrivalTime24 || undefined,
+          earliestAvailable: flightContext.earliestFirstActivityTime || undefined,
+        });
+        console.log(`[generate-day] Day ${dayNumber} (arrival) meal policy: mode=${dayMealPolicy.dayMode}, meals=[${dayMealPolicy.requiredMeals.join(',')}]`);
+        
         // For arrival day, put constraints directly in system prompt for maximum weight
         timingInstructions = `
 CRITICAL ARRIVAL DAY INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
 ${dayConstraints}
 
+${buildMealRequirementsPrompt(dayMealPolicy)}
+
 FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       } else if (isLastDay && dayConstraints) {
+        // Derive meal policy for departure day
+        dayMealPolicy = deriveMealPolicy({
+          dayNumber, totalDays, isFirstDay: false, isLastDay: true,
+          departureTime24: flightContext.returnDepartureTime24 || flightContext.returnDepartureTime || undefined,
+          latestAvailable: flightContext.latestLastActivityTime || undefined,
+        });
+        console.log(`[generate-day] Day ${dayNumber} (departure) meal policy: mode=${dayMealPolicy.dayMode}, meals=[${dayMealPolicy.requiredMeals.join(',')}]`);
+        
         timingInstructions = `
 CRITICAL DEPARTURE DAY INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
 ${dayConstraints}
+
+${buildMealRequirementsPrompt(dayMealPolicy)}
 
 FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       } else {
