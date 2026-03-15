@@ -454,7 +454,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               <Button
                 type="button"
                 size="icon"
-                className="h-7 w-7"
+                className="h-9 w-9 sm:h-7 sm:w-7"
                 onClick={() => sendMessage(input)}
                 disabled={!input.trim() || isStreaming}
               >
