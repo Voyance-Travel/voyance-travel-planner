@@ -4091,10 +4091,7 @@ async function finalSaveItinerary(
           if (['downtime', 'free_time', 'accommodation'].includes(cat)) continue;
 
           const rawCost = (act as any).cost || (act as any).estimatedCost || { amount: 0, currency: 'USD' };
-          const costPerPerson = typeof rawCost === 'number' ? rawCost : (rawCost.amount || 0);
-
-          // Include $0 rows for free activities so counts are accurate
-          // and cleanup logic works universally
+          let costPerPerson = typeof rawCost === 'number' ? rawCost : (rawCost.amount || 0);
 
           // Map itinerary categories to cost_reference categories
           const categoryMap: Record<string, string> = {
@@ -4108,6 +4105,51 @@ async function finalSaveItinerary(
           };
           const mappedCategory = categoryMap[cat] || 'activity';
 
+          // "Never free" estimation: if AI returned $0 for categories that always cost money,
+          // apply a reasonable default so DB values match frontend display
+          if (costPerPerson <= 0) {
+            const NEVER_FREE_CATEGORIES = [
+              'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee',
+              'cruise', 'boat', 'tour', 'activity', 'experience', 'spa', 'massage', 'show',
+              'performance', 'concert', 'theater', 'theatre', 'nightlife', 'bar', 'club',
+              'transfer', 'transport', 'transportation', 'airport', 'taxi', 'uber', 'rideshare',
+            ];
+            const NEVER_FREE_TITLE_KW = [
+              'breakfast', 'brunch', 'lunch', 'dinner', 'cruise', 'tour',
+              'restaurant', 'café', 'cafe', 'transfer', 'airport', 'taxi',
+              'uber', 'private car', 'shuttle', 'train to', 'bus to',
+            ];
+            const titleLower = ((act as any).title || '').toLowerCase();
+            const isNeverFree = NEVER_FREE_CATEGORIES.some(nfc => cat.includes(nfc)) ||
+              NEVER_FREE_TITLE_KW.some(kw => titleLower.includes(kw));
+
+            // Skip walks — they're always free
+            const isWalk = ['walk', 'walking', 'stroll'].includes(cat) ||
+              ['walk to', 'walk through', 'stroll', 'evening walk', 'neighborhood walk'].some(kw => titleLower.includes(kw));
+
+            if (isNeverFree && !isWalk) {
+              // Category-based default estimates (per person, USD)
+              const defaults: Record<string, number> = {
+                dining: 30, transport: 15, activity: 25, nightlife: 25, shopping: 20,
+              };
+              // Refine for meal type from title
+              if (titleLower.includes('breakfast') || titleLower.includes('coffee') || titleLower.includes('café') || titleLower.includes('cafe')) {
+                costPerPerson = 15;
+              } else if (titleLower.includes('lunch') || titleLower.includes('brunch')) {
+                costPerPerson = 25;
+              } else if (titleLower.includes('dinner')) {
+                costPerPerson = 40;
+              } else if (titleLower.includes('transfer') || titleLower.includes('taxi') || titleLower.includes('uber') || titleLower.includes('shuttle')) {
+                costPerPerson = 20;
+              } else if (titleLower.includes('private car')) {
+                costPerPerson = 50;
+              } else {
+                costPerPerson = defaults[mappedCategory] || 25;
+              }
+              console.log(`[Phase 4] Estimated $${costPerPerson}/pp for "${(act as any).title}" (was $0, category: ${cat})`);
+            }
+          }
+
           costRows.push({
             trip_id: tripId,
             activity_id: act.id,
@@ -4115,8 +4157,8 @@ async function finalSaveItinerary(
             cost_per_person_usd: Math.min(costPerPerson, 2000), // safety cap
             num_travelers: context.travelers || 1,
             category: mappedCategory,
-            source: 'reference',
-            confidence: 'medium',
+            source: costPerPerson > 0 && (typeof rawCost === 'number' ? rawCost : (rawCost.amount || 0)) <= 0 ? 'estimated' : 'reference',
+            confidence: costPerPerson > 0 && (typeof rawCost === 'number' ? rawCost : (rawCost.amount || 0)) <= 0 ? 'low' : 'medium',
           });
         }
       }

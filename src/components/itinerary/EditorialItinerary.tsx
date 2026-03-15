@@ -2623,9 +2623,10 @@ export function EditorialItinerary({
   // jsTotalCost is per-person; snapshot is all-travelers — always prefer snapshot for consistency
   const jsTotalCost = totalActivityCost + flightCost + hotelCost;
   const snapshotTotalUsd = financialSnapshot.tripTotalCents / 100;
-  const totalCost = !financialSnapshot.loading && snapshotTotalUsd > 0
+  // Always prefer snapshot when available — removes divergence with Payments tab
+  const totalCost = snapshotTotalUsd > 0
     ? snapshotTotalUsd
-    : jsTotalCost * (travelers || 1);
+    : jsTotalCost * (travelers || 1); // Fallback only before snapshot loads
   
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
