@@ -315,6 +315,14 @@ export function AddFlightInline({
       } catch (cascadeErr) {
         console.warn('[cascade] Flight cascade skipped:', cascadeErr);
       }
+
+      // Patch itinerary Day 1 / last day with actual flight times
+      try {
+        const { patchItineraryWithFlight } = await import('@/services/flightItineraryPatch');
+        await patchItineraryWithFlight(tripId, flightSelection);
+      } catch (patchErr) {
+        console.warn('[FlightPatch] Flight itinerary patch skipped:', patchErr);
+      }
     } catch (err) {
       console.error('Failed to save flight:', err);
       toast.error('Failed to save flight details');

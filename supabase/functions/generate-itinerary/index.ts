@@ -4097,6 +4097,23 @@ async function finalSaveItinerary(
       console.warn('[Stage 6] activity_costs write failed (non-blocking):', costWriteErr);
     }
 
+    // =========================================================================
+    // PHASE 5: Update trip_cities generation_status to 'generated'
+    // =========================================================================
+    try {
+      const totalDays = (enrichedData.days || []).length;
+      await supabase
+        .from('trip_cities')
+        .update({
+          generation_status: 'generated',
+          days_generated: totalDays,
+        } as any)
+        .eq('trip_id', tripId);
+      console.log(`[Stage 6] Updated trip_cities generation_status to 'generated' (${totalDays} days)`);
+    } catch (statusErr) {
+      console.warn('[Stage 6] trip_cities status update failed (non-blocking):', statusErr);
+    }
+
     return true;
   } catch (e) {
     console.error('[Stage 6] Final save error:', e);
