@@ -772,6 +772,16 @@ export function deriveScheduleConstraints(
   preferences?: {
     recoveryStyle?: string[];
     activeHoursPerDay?: 'light' | 'moderate' | 'full';
+  },
+  /** Day context for meal policy — when provided, overrides pace-only meal derivation */
+  dayContext?: {
+    isFirstDay?: boolean;
+    isLastDay?: boolean;
+    isTransitionDay?: boolean;
+    hasFullDayEvent?: boolean;
+    arrivalTime24?: string;
+    departureTime24?: string;
+    requiredMealsOverride?: ('breakfast' | 'lunch' | 'dinner')[];
   }
 ): ScheduleConstraints {
   const pace = traits.pace ?? 0; // -10 (relaxed) to +10 (packed)
@@ -844,13 +854,40 @@ export function deriveScheduleConstraints(
     }
   }
   
-  // Determine required meals based on pace
-  const requiredMeals: ('breakfast' | 'lunch' | 'dinner')[] = ['dinner']; // Always need dinner
-  if (pace <= 0) {
-    requiredMeals.push('lunch'); // Relaxed pace = sit-down lunch
-  }
-  if (pace <= -4) {
-    requiredMeals.push('breakfast'); // Very relaxed = leisurely breakfast
+  // =========================================================================
+  // MEAL SLOT DERIVATION — Now respects day context when provided
+  // =========================================================================
+  let requiredMeals: ('breakfast' | 'lunch' | 'dinner')[];
+  
+  if (dayContext?.requiredMealsOverride) {
+    // Caller has already computed the meal policy — use it directly
+    requiredMeals = dayContext.requiredMealsOverride;
+  } else if (dayContext?.hasFullDayEvent) {
+    // Full-day event — no mandatory meals
+    requiredMeals = [];
+  } else if (dayContext?.isTransitionDay) {
+    // Transition day — dinner at most
+    requiredMeals = ['dinner'];
+  } else if (dayContext?.isFirstDay) {
+    // Arrival day — conservative
+    requiredMeals = ['dinner'];
+  } else if (dayContext?.isLastDay) {
+    // Departure day — breakfast at most
+    requiredMeals = ['breakfast'];
+  } else {
+    // Standard day — derive from pace (original logic, but now only for truly full days)
+    requiredMeals = ['dinner']; // Always need dinner
+    if (pace <= 0) {
+      requiredMeals.push('lunch'); // Relaxed pace = sit-down lunch
+    }
+    if (pace <= -4) {
+      requiredMeals.push('breakfast'); // Very relaxed = leisurely breakfast
+    }
+    // For packed/active pace on full days, still include all 3
+    if (pace >= 2) {
+      if (!requiredMeals.includes('breakfast')) requiredMeals.push('breakfast');
+      if (!requiredMeals.includes('lunch')) requiredMeals.push('lunch');
+    }
   }
   
   // =========================================================================

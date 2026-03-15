@@ -116,6 +116,16 @@ import {
 } from './prompt-library.ts';
 
 // =============================================================================
+// MEAL POLICY — Dynamic meal requirements per day shape
+// =============================================================================
+import {
+  deriveMealPolicy,
+  buildMealRequirementsPrompt,
+  type MealPolicy,
+  type MealPolicyInput,
+} from './meal-policy.ts';
+
+// =============================================================================
 // PHASE 15: DYNAMIC DIETARY ENFORCEMENT ENGINE
 // =============================================================================
 import {
@@ -7992,48 +8002,98 @@ RULES:
 
       // Build system prompt with day-specific timing constraints EMBEDDED
       let timingInstructions = '';
+      let dayMealPolicy: MealPolicy | null = null; // Will be set for non-first/last days
       if (isFirstDay && dayConstraints) {
+        // Derive meal policy for arrival day
+        dayMealPolicy = deriveMealPolicy({
+          dayNumber, totalDays, isFirstDay: true, isLastDay: dayNumber === totalDays,
+          arrivalTime24: flightContext.arrivalTime24 || undefined,
+          earliestAvailable: flightContext.earliestFirstActivityTime || undefined,
+        });
+        console.log(`[generate-day] Day ${dayNumber} (arrival) meal policy: mode=${dayMealPolicy.dayMode}, meals=[${dayMealPolicy.requiredMeals.join(',')}]`);
+        
         // For arrival day, put constraints directly in system prompt for maximum weight
         timingInstructions = `
 CRITICAL ARRIVAL DAY INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
 ${dayConstraints}
 
+${buildMealRequirementsPrompt(dayMealPolicy)}
+
 FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       } else if (isLastDay && dayConstraints) {
+        // Derive meal policy for departure day
+        dayMealPolicy = deriveMealPolicy({
+          dayNumber, totalDays, isFirstDay: false, isLastDay: true,
+          departureTime24: flightContext.returnDepartureTime24 || flightContext.returnDepartureTime || undefined,
+          latestAvailable: flightContext.latestLastActivityTime || undefined,
+        });
+        console.log(`[generate-day] Day ${dayNumber} (departure) meal policy: mode=${dayMealPolicy.dayMode}, meals=[${dayMealPolicy.requiredMeals.join(',')}]`);
+        
         timingInstructions = `
 CRITICAL DEPARTURE DAY INSTRUCTIONS - YOU MUST FOLLOW THESE EXACTLY:
 ${dayConstraints}
 
+${buildMealRequirementsPrompt(dayMealPolicy)}
+
 FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       } else {
-        // ===== FULL EXPLORATION DAY: Comprehensive hour-by-hour plan =====
-        // This is where most days land — the detailed structure prompt
+        // ===== REGULAR DAY (may be full exploration or constrained) =====
         const hotelNameForDay = flightContext.hotelName || '';
         const hotelNeighborhood = flightContext.hotelAddress || '';
         
+        // ── Derive meal policy for this day ──
+        const dayMealInput: MealPolicyInput = {
+          dayNumber,
+          totalDays,
+          isFirstDay: false,
+          isLastDay: false,
+          isTransitionDay: resolvedIsTransitionDay,
+          hasFullDayEvent: !!(context.userConstraints || []).find(
+            (c: any) => c.type === 'full_day_event' && (c.day === dayNumber || !c.day)
+          ),
+          earliestAvailable: undefined, // will use defaults
+          latestAvailable: undefined,
+          lockedHours: (() => {
+            // Sum locked hours from time_block constraints on this day
+            const constraints = context.userConstraints || [];
+            let locked = 0;
+            for (const c of constraints as any[]) {
+              if (c.type === 'time_block' && c.day === dayNumber && c.time) {
+                // Estimate 2 hours per time block if no duration specified
+                locked += 2;
+              }
+              if (c.type === 'full_day_event' && (c.day === dayNumber || !c.day)) {
+                locked += 12;
+              }
+            }
+            return locked;
+          })(),
+        };
+        const dayMealPolicy = deriveMealPolicy(dayMealInput);
+        const mealRequirementsBlock = buildMealRequirementsPrompt(dayMealPolicy);
+        
+        console.log(`[generate-day] Day ${dayNumber} meal policy: mode=${dayMealPolicy.dayMode}, meals=[${dayMealPolicy.requiredMeals.join(',')}], usableHours=${dayMealPolicy.usableHours}`);
+        
         timingInstructions = `
-FULL EXPLORATION DAY — HOUR-BY-HOUR TRAVEL PLAN (NOT a suggestion list):
+${dayMealPolicy.isFullExplorationDay ? 'FULL EXPLORATION DAY' : dayMealPolicy.dayMode.replace(/_/g, ' ').toUpperCase()} — HOUR-BY-HOUR TRAVEL PLAN (NOT a suggestion list):
 
 This day must be a COMPLETE itinerary from morning to night. Every hour accounted for.
 
 REQUIRED DAY STRUCTURE:
-1. BREAKFAST (category: "dining") — Near hotel, real restaurant name, ~price, walking distance
+${dayMealPolicy.requiredMeals.includes('breakfast') ? '1. BREAKFAST (category: "dining") — Near hotel, real restaurant name, ~price, walking distance' : ''}
 2. TRANSIT between every pair of consecutive activities (category: "transport")
    - Include mode (${resolvedTransportModes.length > 0 ? resolvedTransportModes.join('/') : 'walk/taxi/metro/bus'}), duration, cost, route details
    - 10+ minute walks or any paid transit = separate activity entry
 3. MORNING ACTIVITIES — At least 1 paid + 1 free activity
-4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips
+${dayMealPolicy.requiredMeals.includes('lunch') ? '4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips' : ''}
 5. AFTERNOON ACTIVITIES — At least 1-2 paid + 1 free activity  
 6. HOTEL RETURN (if dinner venue is far) — "Freshen up" with category "accommodation"
-7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips
+${dayMealPolicy.requiredMeals.includes('dinner') ? '7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips' : ''}
 8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot (at least 1 suggestion)
 9. RETURN TO HOTEL — With transport mode and time
 10. NEXT MORNING PREVIEW — In the tips of the LAST activity: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
 
-MEAL RULES:
-- 3 meals per full day (breakfast, lunch, dinner) — NO EXCEPTIONS
-- Each meal = real restaurant name + approximate price + distance from previous stop
-- Each lunch and dinner must include 1 alternative option in the "tips" field
+${mealRequirementsBlock}
 
 TRANSIT RULES:
 - Between EVERY pair of consecutive stops, include transit info
@@ -8456,7 +8516,7 @@ General Requirements:
 - Account for REALISTIC travel time between activities — if two places are in different neighborhoods, leave 30-60 min gap (not 15 min). Only use 15 min gaps for locations within walking distance. Travel time and rest/settling buffers are SEPARATE — add both.
 - NEVER schedule zero-gap transitions. Every activity needs settling/buffer time ON TOP of travel: +5 min after walking, +10 min for taxi pickup/dropoff, +10 min for restaurant seating, +15 min for hotel check-in, +10 min for museum entry (ticket queue, bag check). Show this naturally: "Arrive ~6:30 PM. Check in, freshen up. Ready by 7:30 PM."
 - Include TRANSIT between every pair of consecutive activities as separate entries with category "transport" (mode, duration, cost, route/line info). Walks under 5 min can be noted in tips instead.
-- Include 3 MEALS per full day: breakfast, lunch, dinner — each a real named restaurant with price
+- Include meals as specified by the day's meal policy (see timing instructions above) — each a real named restaurant with price
 - Each lunch and dinner recommendation should include 1 ALTERNATIVE option in its "tips" field
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
 - Every activity MUST have a "title" field (the display name)
@@ -8465,7 +8525,7 @@ General Requirements:
 - Include at least 1 EVENING/NIGHTLIFE activity after dinner (bar, show, night market, jazz, rooftop, dessert spot)
 - Include PRACTICAL TIPS inline: booking requirements, queue advice, dress codes, closure days, best times
 - The LAST activity's tips field must include a NEXT MORNING PREVIEW: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
-- For full exploration days: minimum 3 paid activities + 2 free activities + 3 meals + evening option
+- For full exploration days: minimum 3 paid activities + 2 free activities + required meals (per meal policy) + evening option
 ${lockedActivities.length > 0 ? '- DO NOT generate activities for locked time slots listed above' : ''}
 ${collaboratorAttributionPrompt}
 ${voyancePicksPrompt}
@@ -8489,7 +8549,8 @@ OUTPUT QUALITY:
 All text must be clean, correctly spelled English. No garbled characters, no non-Latin script, no leaked schema field names.
 `;
 
-      const isFullDay = !isFirstDay && !isLastDay;
+      // Use meal policy derived earlier (dayMealPolicy) instead of blanket isFullDay
+      const isFullDay = dayMealPolicy?.isFullExplorationDay ?? (!isFirstDay && !isLastDay);
       const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}.
 
 Date: ${date}
@@ -8498,7 +8559,7 @@ Budget: ${effectiveBudgetTier}${actualDailyBudgetPerPerson != null ? ` (~$${actu
 ⚠️ HARD BUDGET CAP: The user has set a real budget of ~$${Math.round(actualDailyBudgetPerPerson * (travelers || 1))}/day total ($${actualDailyBudgetPerPerson}/person) for activities.
 ${actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: Do your best — prioritize FREE activities (parks, temples, markets, viewpoints, walking tours). For meals, suggest cheapest realistic options (street food, convenience stores). Do NOT invent fake low prices — use real local costs. Include a "budget_note" field with an honest 1-sentence note about budget feasibility.` : actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: Lean heavily on free attractions, street food, self-guided exploration. Limit paid activities to 1-2/day. Use realistic local prices.` : `Stay within this cap. Balance expensive activities with free alternatives.`}` : ''}
 ARCHETYPE: ${primaryArchetype}
-${isFullDay ? `DAY TYPE: Full exploration day — generate a COMPLETE hour-by-hour plan with 3 meals, transit between every stop, evening activity, and next-morning preview.` : `SIGHTSEEING ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} (adjust for arrival/departure constraints)`}
+${isFullDay ? `DAY TYPE: Full exploration day — generate a COMPLETE hour-by-hour plan with ${dayMealPolicy?.requiredMeals?.length ?? 3} meals (${dayMealPolicy?.requiredMeals?.join(', ') ?? 'breakfast, lunch, dinner'}), transit between every stop, evening activity, and next-morning preview.` : dayMealPolicy && !isFirstDay && !isLastDay ? `DAY TYPE: ${dayMealPolicy.dayMode.replace(/_/g, ' ')} — ${dayMealPolicy.mealInstructionText}` : `SIGHTSEEING ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} (adjust for arrival/departure constraints)`}
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
 ${preferences?.dayFocus ? `Day focus: ${preferences.dayFocus}` : ''}
 ${(() => {
@@ -8560,7 +8621,7 @@ ${(() => {
 })()}
 
 CRITICAL REMINDERS:
-1. ${isFullDay ? 'This is a FULL DAY: breakfast + 3 paid activities + 2 free activities + lunch + dinner + transit between all stops + evening activity + next morning preview. Fill EVERY hour.' : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
+1. ${isFullDay ? `This is a FULL DAY: ${dayMealPolicy?.requiredMeals?.join(' + ') ?? 'breakfast + lunch + dinner'} + 3 paid activities + 2 free activities + transit between all stops + evening activity + next morning preview. Fill EVERY hour.` : dayMealPolicy && !isFirstDay && !isLastDay ? `This is a ${dayMealPolicy.dayMode.replace(/_/g, ' ')} day. Required meals: ${dayMealPolicy.requiredMeals.length > 0 ? dayMealPolicy.requiredMeals.join(', ') : 'none'}. Do NOT add extra meals beyond what the meal policy specifies.` : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
 3. Check the budget constraints. If value-focused, no €100+ experiences.
 4. ${primaryArchetype === 'flexible_wanderer' || primaryArchetype === 'slow_traveler' || (traitScores.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
