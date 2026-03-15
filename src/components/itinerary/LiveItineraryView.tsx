@@ -5,7 +5,7 @@ import { parseLocalDate } from '@/utils/dateUtils';
 import { 
   Calendar, Sun, Cloud, CloudRain, Sparkles, TrendingUp, 
   ChevronLeft, ChevronRight, MapPin, CheckCircle, Navigation, Compass,
-  Clock, SkipForward, MessageSquare
+  Clock, SkipForward, MessageSquare, Plane, Train, Bus, Ship, Car
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
