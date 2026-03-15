@@ -3115,6 +3115,7 @@ export default function Start() {
 
                               if (splitResult.didSplit) {
                                 toast.success(`Journey created: ${splitResult.legCount} legs`);
+                                sessionStorage.removeItem('voyance_chat_messages');
                                 navigate(`/trip/${splitResult.firstLegTripId}?generate=true`);
                                 return;
                               }
@@ -3124,6 +3125,7 @@ export default function Start() {
                           }
                         }
 
+                        sessionStorage.removeItem('voyance_chat_messages');
                         navigate(`/trip/${trip.id}?generate=true`);
                       } catch (err) {
                         console.error('Error creating chat trip:', err);
