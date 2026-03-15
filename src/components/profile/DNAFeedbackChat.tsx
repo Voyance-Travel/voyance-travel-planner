@@ -83,20 +83,10 @@ export default function DNAFeedbackChat({
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
 
-    // Check and charge credits (skip for paid users)
-    if (!isPaid) {
-      if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
-        toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
-        return;
-      }
-      try {
-        await spendCredits.mutateAsync({
-          action: 'AI_MESSAGE',
-          metadata: { source: 'dna_feedback_chat' },
-        });
-      } catch {
-        return; // useSpendCredits shows error toast
-      }
+    // Pre-flight credit check (don't charge yet — charge on success)
+    if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
+      toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
+      return;
     }
 
     const userMessage: Message = {

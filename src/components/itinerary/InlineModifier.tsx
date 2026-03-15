@@ -115,21 +115,10 @@ export function InlineModifier({
   const handleSubmit = useCallback(async () => {
     if (!input.trim() || isProcessing) return;
 
-    // Charge credits for AI messages (skip for paid users)
-    if (!isPaid) {
-      if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
-        toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
-        return;
-      }
-      try {
-        await spendCredits.mutateAsync({
-          action: 'AI_MESSAGE',
-          tripId,
-          metadata: { source: 'inline_modifier' },
-        });
-      } catch {
-        return;
-      }
+    // Pre-flight credit check (don't charge yet — charge on success)
+    if (totalCredits < CREDIT_COSTS.AI_MESSAGE) {
+      toast.error(`Need ${CREDIT_COSTS.AI_MESSAGE} credits to send a message`);
+      return;
     }
 
     setIsProcessing(true);
@@ -141,6 +130,18 @@ export function InlineModifier({
         [{ role: 'user', content: input }],
         context
       );
+
+      // Charge credits AFTER successful AI response (charge-on-success pattern)
+      try {
+        await spendCredits.mutateAsync({
+          action: 'AI_MESSAGE',
+          tripId,
+          metadata: { source: 'inline_modifier' },
+        });
+      } catch {
+        // Credit charge failed but AI responded — still show result
+        console.warn('[InlineModifier] Credit charge failed post-response');
+      }
 
       if (response.actions && response.actions.length > 0) {
         const action = response.actions[0];
@@ -161,7 +162,7 @@ export function InlineModifier({
     } finally {
       setIsProcessing(false);
     }
-  }, [input, isProcessing, buildContext, isPaid, totalCredits, spendCredits, tripId]);
+  }, [input, isProcessing, buildContext, totalCredits, spendCredits, tripId]);
 
   /** Direct apply — owner or free_edit guest */
   const handleApplyDirect = useCallback(async () => {
