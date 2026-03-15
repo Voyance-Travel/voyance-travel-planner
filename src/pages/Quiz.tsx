@@ -658,7 +658,7 @@ export default function Quiz() {
               className="flex-1 flex flex-col pt-20 pb-4"
             >
               {/* Sticky Progress */}
-              <div className="sticky top-16 z-20 bg-background/95 backdrop-blur-sm px-4 py-3 border-b border-border/50">
+              <div className="sticky top-14 sm:top-16 z-20 bg-background/95 backdrop-blur-sm px-4 py-2 sm:py-3 border-b border-border/50">
                 <div className="max-w-xl mx-auto">
                   <QuizProgressBar 
                     currentStep={currentStep} 
