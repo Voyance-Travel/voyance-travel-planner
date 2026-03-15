@@ -197,6 +197,7 @@ export default function TripDetail() {
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [resumingGeneration, setResumingGeneration] = useState(false);
   const resumeInFlightRef = useRef(false);
+  const autoResumeAttemptedRef = useRef(false);
   const onReadyCalledRef = useRef(false);
   const [generateNewDaysPrompt, setGenerateNewDaysPrompt] = useState<{
     open: boolean;
@@ -1101,7 +1102,17 @@ export default function TripDetail() {
 
           if (expectedTotal > 0 && actualDays > 0 && actualDays < expectedTotal) {
             console.warn(`[TripDetail] Self-heal: trip marked ready but only ${actualDays}/${expectedTotal} days. Triggering resume.`);
-            setGenerationStalled(true);
+            // Auto-retry once before showing stalled UI to the user
+            if (!autoResumeAttemptedRef.current) {
+              autoResumeAttemptedRef.current = true;
+              console.log('[TripDetail] Auto-resuming incomplete generation (first attempt)');
+              // Defer to next tick so handleResumeGeneration has access to latest trip state
+              setTimeout(() => {
+                handleResumeGeneration();
+              }, 1500);
+            } else {
+              setGenerationStalled(true);
+            }
           }
         }
 
@@ -1195,8 +1206,9 @@ export default function TripDetail() {
     fetchTripData();
     return () => {
       if (tripId) clearCachedVersion(tripId);
+      autoResumeAttemptedRef.current = false;
     };
-  }, [tripId]);
+  }, [tripId, handleResumeGeneration]);
 
   // Auto-repair legacy trips with missing activity_costs
   const costRepairAttempted = useRef(false);
