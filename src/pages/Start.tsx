@@ -2991,7 +2991,7 @@ export default function Start() {
                           const { error: singleErr } = await supabase.from('trip_cities').insert({
                             trip_id: trip.id,
                             city_order: 0,
-                            city_name: dest,
+                            city_name: cleanDest,
                             arrival_date: format(chatStartDate, 'yyyy-MM-dd'),
                             departure_date: format(chatEndDate, 'yyyy-MM-dd'),
                             nights,
