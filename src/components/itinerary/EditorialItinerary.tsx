@@ -1528,6 +1528,25 @@ export function EditorialItinerary({
           }
         }
         updatedActivities.splice(insertIndex, 0, departureCard);
+
+        // Trim activities that occur at or after departure (traveler has left the city)
+        const depMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+        const bufferMinutes = tType === 'flight' ? 90 : tType === 'train' ? 45 : 30;
+        const cutoffMinutes = depMinutes - bufferMinutes;
+
+        updatedActivities = updatedActivities.filter(act => {
+          // Keep all synthetic cards (transport, hotel, etc.)
+          if ((act as any).__syntheticTravel || (act as any).__syntheticDeparture ||
+              (act as any).__interCityTransport || (act as any).__hotelCheckout ||
+              act.id.startsWith('hotel-') || act.id.startsWith('departure-') ||
+              act.id.startsWith('travel-')) {
+            return true;
+          }
+          // No time = keep (safe fallback)
+          if (!act.startTime) return true;
+          const actMin = parseInt(act.startTime.split(':')[0]) * 60 + parseInt(act.startTime.split(':')[1] || '0');
+          return actMin < cutoffMinutes;
+        });
       }
     }
 
