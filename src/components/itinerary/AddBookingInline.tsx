@@ -316,13 +316,8 @@ export function AddFlightInline({
         console.warn('[cascade] Flight cascade skipped:', cascadeErr);
       }
 
-      // Patch itinerary Day 1 / last day with actual flight times
-      try {
-        const { patchItineraryWithFlight } = await import('@/services/flightItineraryPatch');
-        await patchItineraryWithFlight(tripId, flightSelection);
-      } catch (patchErr) {
-        console.warn('[FlightPatch] Flight itinerary patch skipped:', patchErr);
-      }
+      // Dispatch booking-changed event for financial snapshot refresh
+      window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
     } catch (err) {
       console.error('Failed to save flight:', err);
       toast.error('Failed to save flight details');
@@ -903,6 +898,9 @@ export function AddHotelInline({
         checkInDate: newHotel.checkInDate,
         checkOutDate: newHotel.checkOutDate,
       }).catch(err => console.error('[AddHotel] Itinerary patch failed:', err));
+
+      // Dispatch booking-changed event for financial snapshot refresh
+      window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
 
       toast.dismiss('hotel-enrich');
       toast.success(enrichment ? `${accomLabel} found and details updated!` : `${accomLabel} details saved!`);
