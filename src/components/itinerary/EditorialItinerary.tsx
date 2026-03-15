@@ -3910,23 +3910,26 @@ export function EditorialItinerary({
   }, []);
 
   const handleAddActivity = useCallback(async (dayIndex: number, activity: Partial<EditorialActivity>) => {
-    // Spend credits for adding an activity (server handles free caps)
-    try {
-      const addCreditResult = await spendCredits.mutateAsync({
-        action: 'ADD_ACTIVITY',
-        tripId,
-        dayIndex,
-        metadata: {
-          activity_title: activity.title || 'New Activity',
-          day_number: days[dayIndex]?.dayNumber || dayIndex + 1,
-        },
-      });
-      console.log('[AddActivity] Credit spend result:', addCreditResult);
-    } catch (err) {
-      console.error('[AddActivity] Credit spend failed:', err);
-      setCreditNudge({ action: 'ADD_ACTIVITY' });
-      setAddActivityModal(null);
-      return;
+    // Skip credit charge in manual builder mode (pre-Smart Finish) — user is curating their own research
+    if (!aiLocked) {
+      // Spend credits for adding an activity (server handles free caps)
+      try {
+        const addCreditResult = await spendCredits.mutateAsync({
+          action: 'ADD_ACTIVITY',
+          tripId,
+          dayIndex,
+          metadata: {
+            activity_title: activity.title || 'New Activity',
+            day_number: days[dayIndex]?.dayNumber || dayIndex + 1,
+          },
+        });
+        console.log('[AddActivity] Credit spend result:', addCreditResult);
+      } catch (err) {
+        console.error('[AddActivity] Credit spend failed:', err);
+        setCreditNudge({ action: 'ADD_ACTIVITY' });
+        setAddActivityModal(null);
+        return;
+      }
     }
 
     const newActivity: EditorialActivity = {
