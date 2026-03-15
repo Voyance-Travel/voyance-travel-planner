@@ -250,9 +250,11 @@ export async function splitJourneyIfNeeded(
         trip_id: leg.id,
         user_id: m.user_id,
         role: m.role,
+        email: m.email,
+        name: m.name,
       }))
     );
-    const { error: memberError } = await supabase.from('trip_members').insert(memberInserts);
+    const { error: memberError } = await supabase.from('trip_members').insert(memberInserts as any[]);
     if (memberError) {
       console.error('[splitJourney] Failed to copy members to legs:', memberError);
     } else {
