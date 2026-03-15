@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowLeft, TrendingUp, TrendingDown, Users, MousePointerClick, Eye, Clock, ArrowRight } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Users, MousePointerClick, Eye, Clock, ArrowRight, Search, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format, subDays, startOfDay } from 'date-fns';
+import { FunnelChart } from '@/components/admin/FunnelChart';
 
 type PageEvent = {
   id: string;
