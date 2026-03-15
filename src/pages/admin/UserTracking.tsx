@@ -452,6 +452,39 @@ export default function UserTracking() {
               </Panel>
             </div>
 
+            {/* Funnel + CTA Clicks */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              <Panel title="🔻 Conversion Funnel" subtitle="Session progression through key steps">
+                <FunnelChart steps={[
+                  { label: 'Landing', count: analytics.funnelSessions.landing.size },
+                  { label: 'Sign Up Page', count: analytics.funnelSessions.signup.size },
+                  { label: 'Quiz', count: analytics.funnelSessions.quiz.size },
+                  { label: 'Trip Dashboard', count: analytics.funnelSessions.tripDashboard.size },
+                  { label: 'Itinerary View', count: analytics.funnelSessions.itinerary.size },
+                ]} />
+              </Panel>
+
+              <Panel title="🖱️ CTA Clicks" subtitle={`${analytics.totalInteractions} interaction events`}>
+                {Object.entries(analytics.ctaCounts).length === 0 ? (
+                  <p style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', padding: '8px 0' }}>No interaction events tracked yet</p>
+                ) : (
+                  Object.entries(analytics.ctaCounts)
+                    .sort((a, b) => b[1].count - a[1].count)
+                    .slice(0, 12)
+                    .map(([key, data]) => {
+                      const [eventType] = key.split('::');
+                      return (
+                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #1E293B' }}>
+                          <span style={{ fontSize: 10, color: '#A78BFA', background: '#A78BFA22', padding: '1px 6px', borderRadius: 4, flexShrink: 0 }}>{eventType}</span>
+                          <span style={{ fontSize: 12, color: '#E2E8F0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{data.text || 'unnamed'}</span>
+                          <span style={{ fontSize: 12, fontFamily: 'monospace', color: '#38BDF8', flexShrink: 0 }}>{data.count}</span>
+                        </div>
+                      );
+                    })
+                )}
+              </Panel>
+            </div>
+
             {/* All Pages Stats Table */}
             <div style={{ background: 'rgba(30,41,59,0.5)', borderRadius: 12, padding: 16, border: '1px solid #1E293B' }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 2px', color: '#E2E8F0' }}>📋 All Pages Overview</h3>
