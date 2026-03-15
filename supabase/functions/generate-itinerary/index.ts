@@ -8016,34 +8016,63 @@ ${dayConstraints}
 
 FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
       } else {
-        // ===== FULL EXPLORATION DAY: Comprehensive hour-by-hour plan =====
-        // This is where most days land — the detailed structure prompt
+        // ===== REGULAR DAY (may be full exploration or constrained) =====
         const hotelNameForDay = flightContext.hotelName || '';
         const hotelNeighborhood = flightContext.hotelAddress || '';
         
+        // ── Derive meal policy for this day ──
+        const dayMealInput: MealPolicyInput = {
+          dayNumber,
+          totalDays,
+          isFirstDay: false,
+          isLastDay: false,
+          isTransitionDay: resolvedIsTransitionDay,
+          hasFullDayEvent: !!(userConstraints || context.userConstraints || []).find(
+            (c: any) => c.type === 'full_day_event' && (c.day === dayNumber || !c.day)
+          ),
+          earliestAvailable: undefined, // will use defaults
+          latestAvailable: undefined,
+          lockedHours: (() => {
+            // Sum locked hours from time_block constraints on this day
+            const constraints = userConstraints || context.userConstraints || [];
+            let locked = 0;
+            for (const c of constraints as any[]) {
+              if (c.type === 'time_block' && c.day === dayNumber && c.time) {
+                // Estimate 2 hours per time block if no duration specified
+                locked += 2;
+              }
+              if (c.type === 'full_day_event' && (c.day === dayNumber || !c.day)) {
+                locked += 12;
+              }
+            }
+            return locked;
+          })(),
+        };
+        const dayMealPolicy = deriveMealPolicy(dayMealInput);
+        const mealRequirementsBlock = buildMealRequirementsPrompt(dayMealPolicy);
+        
+        console.log(`[generate-day] Day ${dayNumber} meal policy: mode=${dayMealPolicy.dayMode}, meals=[${dayMealPolicy.requiredMeals.join(',')}], usableHours=${dayMealPolicy.usableHours}`);
+        
         timingInstructions = `
-FULL EXPLORATION DAY — HOUR-BY-HOUR TRAVEL PLAN (NOT a suggestion list):
+${dayMealPolicy.isFullExplorationDay ? 'FULL EXPLORATION DAY' : dayMealPolicy.dayMode.replace(/_/g, ' ').toUpperCase()} — HOUR-BY-HOUR TRAVEL PLAN (NOT a suggestion list):
 
 This day must be a COMPLETE itinerary from morning to night. Every hour accounted for.
 
 REQUIRED DAY STRUCTURE:
-1. BREAKFAST (category: "dining") — Near hotel, real restaurant name, ~price, walking distance
+${dayMealPolicy.requiredMeals.includes('breakfast') ? '1. BREAKFAST (category: "dining") — Near hotel, real restaurant name, ~price, walking distance' : ''}
 2. TRANSIT between every pair of consecutive activities (category: "transport")
    - Include mode (${resolvedTransportModes.length > 0 ? resolvedTransportModes.join('/') : 'walk/taxi/metro/bus'}), duration, cost, route details
    - 10+ minute walks or any paid transit = separate activity entry
 3. MORNING ACTIVITIES — At least 1 paid + 1 free activity
-4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips
+${dayMealPolicy.requiredMeals.includes('lunch') ? '4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips' : ''}
 5. AFTERNOON ACTIVITIES — At least 1-2 paid + 1 free activity  
 6. HOTEL RETURN (if dinner venue is far) — "Freshen up" with category "accommodation"
-7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips
+${dayMealPolicy.requiredMeals.includes('dinner') ? '7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips' : ''}
 8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot (at least 1 suggestion)
 9. RETURN TO HOTEL — With transport mode and time
 10. NEXT MORNING PREVIEW — In the tips of the LAST activity: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
 
-MEAL RULES:
-- 3 meals per full day (breakfast, lunch, dinner) — NO EXCEPTIONS
-- Each meal = real restaurant name + approximate price + distance from previous stop
-- Each lunch and dinner must include 1 alternative option in the "tips" field
+${mealRequirementsBlock}
 
 TRANSIT RULES:
 - Between EVERY pair of consecutive stops, include transit info
