@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { toFriendlyError } from '@/utils/friendlyErrors';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
-import { useEntitlements } from '@/hooks/useEntitlements'; // kept for potential future use
+
 import { CREDIT_COSTS } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';

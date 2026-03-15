@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 import { recalculateDNAFromPreferences } from '@/utils/quizMapping';
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
-import { useEntitlements } from '@/hooks/useEntitlements';
+
 import { CREDIT_COSTS } from '@/config/pricing';
 
 interface Message {
