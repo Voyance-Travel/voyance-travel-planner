@@ -27,8 +27,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
-import { syncHotelToLedger } from '@/services/budgetLedgerSync';
+import { syncHotelToLedger, syncFlightToLedger } from '@/services/budgetLedgerSync';
 import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
+import { patchItineraryWithFlight } from '@/services/flightItineraryPatch';
 import { cn } from '@/lib/utils';
 import { FlightImportModal } from './FlightImportModal';
 import { FindMyHotelsDrawer } from './FindMyHotelsDrawer';
@@ -293,6 +294,20 @@ export function AddFlightInline({
       toast.success(legObjs.length > 1 ? `${legObjs.length} flight legs saved!` : 'Flight details saved!');
       setShowManualEntry(false);
       onFlightAdded?.();
+
+      // Sync flight price to budget ledger
+      try {
+        await syncFlightToLedger(tripId, flightSelection as any);
+      } catch (ledgerErr) {
+        console.warn('[AddBookingInline] Flight budget sync skipped:', ledgerErr);
+      }
+
+      // Patch Day 1/last day activities with flight arrival/departure times
+      try {
+        await patchItineraryWithFlight(tripId, flightSelection);
+      } catch (patchErr) {
+        console.warn('[AddBookingInline] Flight itinerary patch skipped:', patchErr);
+      }
 
       // Cascade transport changes to itinerary
       try {

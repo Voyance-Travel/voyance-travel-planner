@@ -26,6 +26,7 @@ import { useDNAHotelRecommendations, type DNARecommendedHotel, type IdealHotelPr
 import { CREDIT_COSTS } from '@/config/pricing';
 import { saveHotelSelection } from '@/services/supabase/trips';
 import { syncHotelToLedger } from '@/services/budgetLedgerSync';
+import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
 
 interface FindMyHotelsDrawerProps {
   tripId: string;
@@ -176,9 +177,22 @@ export function FindMyHotelsDrawer({
       // Sync hotel cost to budget ledger
       await syncHotelToLedger(tripId, hotelData);
 
+      // Patch itinerary accommodation activities with hotel name/address
+      try {
+        await patchItineraryWithHotel(tripId, {
+          name: hotel.name,
+          address: hotel.address || hotel.neighborhood,
+        });
+      } catch (patchErr) {
+        console.warn('[FindMyHotels] Hotel itinerary patch skipped:', patchErr);
+      }
+
       setSelectedHotelId(hotel.id);
       toast.success(`${hotel.name} saved to your trip!`);
       onHotelSelected?.();
+
+      // Dispatch booking-changed event for financial snapshot refresh
+      window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
 
       // Close drawer after short delay
       setTimeout(() => setIsOpen(false), 1200);
