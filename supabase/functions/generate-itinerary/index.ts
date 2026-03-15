@@ -1888,6 +1888,11 @@ These help the traveler prepare for their trip.
       const dayCountry = dayCity?.country || context.destinationCountry;
       const isTransitionDay = dayCity?.isTransitionDay || false;
       
+      // Derive city-boundary flags for post-processing airport strip (fixes dead-code bug)
+      const isLastDayInCity = dayCity?.isLastDayInCity || false;
+      const nextDayInfoForStrip = context.multiCityDayMap?.[dayNumber]; // dayNumber is 0-indexed+1, so [dayNumber] = next day
+      const nextLegTransport = nextDayInfoForStrip?.transportType || '';
+      
       let multiCityPrompt = '';
       if (context.isMultiCity && dayCity) {
         const cityFirstTime = context.firstTimePerCity
