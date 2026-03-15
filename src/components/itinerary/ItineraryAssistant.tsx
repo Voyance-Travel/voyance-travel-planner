@@ -175,22 +175,8 @@ export function ItineraryAssistant({
       return;
     }
 
-    // Pre-flight credit check: verify the user CAN pay before calling the API.
-    // The actual charge happens AFTER a successful response to prevent credit drain on failures.
-    try {
-      // Dry-run: useSpendCredits validates balance & free caps server-side.
-      // We do a lightweight check here; the real deduction is below.
-      if (!aiMessageCap.isFree && totalCredits < CREDIT_COSTS.AI_MESSAGE) {
-        spendCredits.mutateAsync({
-          action: 'AI_MESSAGE',
-          tripId,
-          metadata: { source: 'itinerary_assistant_preflight' },
-        }).catch(() => {}); // triggers OutOfCreditsModal via hook
-        return;
-      }
-    } catch {
-      return;
-    }
+    // Chat messages are free — no pre-flight credit check needed.
+    // Credits are only charged when the user applies an action (swap, rewrite, etc.).
 
     // Client-side safety: basic input sanitization
     const sanitizedInput = trimmedInput
