@@ -148,17 +148,81 @@ export function ItineraryAssistant({
     }
   }, [isOpen]);
 
+  // Build a contextual, proactive greeting based on the actual itinerary
+  const buildContextualGreeting = useCallback((): string => {
+    const observations: string[] = [];
+
+    // Check for packed days (6+ activities)
+    for (const day of currentDays) {
+      if (day.activities.length >= 6) {
+        observations.push(`I see Day ${day.dayNumber} is packed with ${day.activities.length} activities — want me to space things out a bit?`);
+        break;
+      }
+    }
+
+    // Check for light days (<3 activities)
+    if (observations.length < 2) {
+      for (const day of currentDays) {
+        if (day.activities.length > 0 && day.activities.length < 3) {
+          observations.push(`Day ${day.dayNumber} has some free time — want me to suggest something fun to fill the gap?`);
+          break;
+        }
+      }
+    }
+
+    // Check for missing dinner slots
+    if (observations.length < 2) {
+      for (const day of currentDays) {
+        const hasDinner = day.activities.some(a => {
+          const cat = (a.category || '').toLowerCase();
+          const title = (a.title || a.name || '').toLowerCase();
+          return cat.includes('dinner') || cat.includes('dining') || title.includes('dinner');
+        });
+        if (!hasDinner && day.activities.length > 0) {
+          observations.push(`Day ${day.dayNumber} doesn't have dinner planned yet — want me to find a spot${accommodationInfo?.neighborhood ? ` near ${accommodationInfo.neighborhood}` : ''}?`);
+          break;
+        }
+      }
+    }
+
+    // Accommodation proximity observation
+    if (observations.length < 2 && accommodationInfo?.neighborhood) {
+      observations.push(`Since you're staying in ${accommodationInfo.neighborhood}, I can suggest walkable spots nearby.`);
+    }
+
+    // DNA-based observation
+    if (observations.length < 2 && blendedDna?.blendedTraits) {
+      const traits = blendedDna.blendedTraits;
+      if ((traits.adventure ?? 0) >= 7) {
+        observations.push(`Your Travel DNA says you love adventure — I'll keep an eye out for thrill-seeking options!`);
+      } else if ((traits.authenticity ?? 0) >= 7) {
+        observations.push(`Your DNA leans toward authentic local experiences — let me know if any activity feels too touristy.`);
+      } else if ((traits.comfort ?? 0) >= 7) {
+        observations.push(`I see you value comfort — I'll make sure your days have a nice rhythm without too much rushing.`);
+      }
+    }
+
+    // Build the greeting
+    const intro = `Hey! I've been looking over your ${destination} itinerary. `;
+    const body = observations.length > 0
+      ? observations.slice(0, 2).join('\n\n')
+      : `Everything looks solid! Just say the word if you want to swap an activity, adjust the pace, or explore different neighborhoods.`;
+    const outro = `\n\n💬 Chat's free — I only use credits when you apply a change.`;
+
+    return intro + body + outro;
+  }, [currentDays, destination, accommodationInfo, blendedDna]);
+
   // Add initial greeting when opened for first time
   useEffect(() => {
     if (isOpen && messages.length === 0) {
       setMessages([{
         id: 'welcome',
         role: 'assistant',
-        content: `Hi! I'm here to help you customize your ${destination} itinerary. Chat with me as much as you like — it's free! You can say things like:\n\n• "Make Day 3 more relaxed"\n• "I'm a foodie, more eating options on Day 2"\n• "Replace the museum with something outdoors"\n• "Move dinner earlier and add a jazz club"\n• "Days 4 and 5 feel similar, make them different"\n\nI'll suggest changes and you decide which to apply. What would you like?`,
+        content: buildContextualGreeting(),
         timestamp: new Date(),
       }]);
     }
-  }, [isOpen, messages.length, destination]);
+  }, [isOpen, messages.length, buildContextualGreeting]);
 
   // Max message length to prevent abuse
   const MAX_MESSAGE_LENGTH = 500;
