@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { isIAPAvailable, purchaseByPackId } from '@/services/iapService';
+import { isNativeIOS, openWebsitePurchase } from '@/services/iapService';
 import { useToast } from '@/hooks/use-toast';
 
 interface CreditQuickBuyProps {
