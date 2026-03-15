@@ -222,6 +222,17 @@ export async function createTripFromParsed(
           source: 'manual_paste',
           currency: tripCurrency,
           lastUpdated: new Date().toISOString(),
+          // Persist parsed preferences so generation engine can access them
+          ...(parsed.preferences ? {
+            userConstraints: {
+              dietary: parsed.preferences.dietary || [],
+              avoid: parsed.preferences.avoid || [],
+              focus: parsed.preferences.focus || [],
+              pace: parsed.preferences.pace || undefined,
+              budgetLevel: parsed.preferences.budgetLevel || undefined,
+            },
+            rawPreferenceText: parsed.preferences.rawPreferenceText || undefined,
+          } : {}),
         },
       })
       .select('id')
