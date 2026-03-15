@@ -107,6 +107,7 @@ import ImageCuration from "./pages/admin/ImageCuration";
 import UnitEconomics from "./pages/admin/UnitEconomics";
 import TestSuites from "./pages/admin/TestSuites";
 import UserTracking from "./pages/admin/UserTracking";
+import SessionExplorer from "./pages/admin/SessionExplorer";
 
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
