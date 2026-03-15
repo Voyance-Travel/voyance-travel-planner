@@ -9435,6 +9435,23 @@ function ActivityRow({
                 return (
                   <>
                     <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{venue}</h4>
+                    {/* Mobile-only attribution dot */}
+                    {activity.suggestedFor && collaboratorColorMap && (() => {
+                      const ids = activity.suggestedFor!.split(',').map(s => s.trim()).filter(id => collaboratorColorMap.has(id));
+                      if (ids.length === 0) return null;
+                      const attrs = ids.map(id => collaboratorColorMap.get(id)!);
+                      return (
+                        <span className="sm:hidden inline-flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground">
+                          <span className="inline-flex -space-x-0.5">
+                            {attrs.map(attr => {
+                              const colors = getCollaboratorColor(attr.colorIndex);
+                              return <span key={attr.userId} className={cn("h-2 w-2 rounded-full", colors.dot)} />;
+                            })}
+                          </span>
+                          {attrs.length === 1 ? `For ${attrs[0].name}` : `For ${attrs.map(a => a.name).join(' & ')}`}
+                        </span>
+                      );
+                    })()}
                     <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 italic line-clamp-1">{activityTitle}</p>
                     {/* Address gated by premium access — hidden in compact mode */}
                     {hasAddress && address !== venue && !compact && (
