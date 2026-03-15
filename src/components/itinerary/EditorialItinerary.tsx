@@ -6346,7 +6346,7 @@ export function EditorialItinerary({
       {/* Edit Hotel Dialog */}
       {editHotelOpen && (
         <Dialog open={editHotelOpen} onOpenChange={setEditHotelOpen}>
-          <DialogContent className="sm:max-w-[450px]">
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[450px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Hotel className="h-5 w-5 text-primary" />
