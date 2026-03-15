@@ -10,6 +10,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { Json } from '@/integrations/supabase/types';
 import { syncFlightToLedger, syncHotelToLedger } from '@/services/budgetLedgerSync';
+import { patchItineraryWithFlight } from '@/services/flightItineraryPatch';
+import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
 
 // ============================================================================
 // TYPES
