@@ -9512,8 +9512,8 @@ function ActivityRow({
                 return (
                   <>
                     <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{venue}</h4>
-                    {/* Mobile-only attribution dot */}
-                    {activity.suggestedFor && collaboratorColorMap && (() => {
+                    {/* Mobile-only attribution dot — skip for logistical activities */}
+                    {activity.suggestedFor && collaboratorColorMap && !isCheckIn && !isAirport && !isAccommodation && !isTransport && !isDowntime && (() => {
                       const ids = activity.suggestedFor!.split(',').map(s => s.trim()).filter(id => collaboratorColorMap.has(id));
                       if (ids.length === 0) return null;
                       const attrs = ids.map(id => collaboratorColorMap.get(id)!);
