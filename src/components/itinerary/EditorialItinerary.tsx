@@ -9393,8 +9393,8 @@ function ActivityRow({
             <div className="hidden sm:flex items-center gap-2 mb-1.5">
               <span className="p-1 rounded bg-primary/10 text-primary">{style.icon}</span>
               <span className="text-xs text-primary/80 uppercase tracking-wider font-medium">{style.label}</span>
-              {/* Collaborator attribution dot (desktop) */}
-              {activity.suggestedFor && collaboratorColorMap && (() => {
+              {/* Collaborator attribution dot (desktop) — skip for logistical activities */}
+              {activity.suggestedFor && collaboratorColorMap && !isCheckIn && !isAirport && !isAccommodation && !isTransport && !isDowntime && (() => {
                 const ids = activity.suggestedFor!.split(',').map(s => s.trim()).filter(id => collaboratorColorMap.has(id));
                 if (ids.length === 0) return null;
                 if (ids.length === 1) {
