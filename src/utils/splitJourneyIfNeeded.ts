@@ -144,12 +144,8 @@ export async function splitJourneyIfNeeded(
       mustDoActivities: legMustDos.length > 0 ? legMustDos : null,
       splitFromTrip: originalTripId,
       journeyLeg: i + 1,
-      // Propagate generation rules and constraints from original trip metadata
-      generation_rules: metadata.generation_rules || null,
-      constraints: metadata.constraints || null,
-      transportation_preferences: metadata.transportation_preferences || null,
-      dietary: metadata.dietary || null,
-      pacing: metadata.pacing || null,
+      // Note: generation rules, constraints, dietary, pacing, transportation_preferences
+      // are already propagated via the ...metadata spread above (camelCase keys)
     };
 
     // First-time visitor per city

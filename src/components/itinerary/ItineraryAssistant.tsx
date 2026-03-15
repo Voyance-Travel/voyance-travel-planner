@@ -417,7 +417,7 @@ export function ItineraryAssistant({
                     ? act.cost
                     : (act.cost as any).amount || (act.cost as any).total || (act.cost as any).perPerson || 0)
                   : 0;
-                if (costVal > 0) {
+                if (costVal >= 0) {
                   activitiesForCostTable.push({
                     id: act.id,
                     dayNumber: day.dayNumber,
