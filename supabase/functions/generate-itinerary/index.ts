@@ -9964,6 +9964,44 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
 
         // ====================================================================
+        // DEPARTURE DAY SEQUENCE FIX (generate-day path):
+        // If checkout exists AFTER airport transfer, swap them & re-anchor times
+        // ====================================================================
+        if (isLastDay && generatedDay.activities.length > 1) {
+          const checkoutIdx = generatedDay.activities.findIndex((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            return t.includes('checkout') || t.includes('check-out') || t.includes('check out');
+          });
+          const airportIdx = generatedDay.activities.findIndex((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            return (t.includes('airport') || t.includes('departure transfer')) &&
+                   ((a.category || '').toLowerCase() === 'transport' || t.includes('transfer'));
+          });
+
+          if (checkoutIdx !== -1 && airportIdx !== -1 && checkoutIdx > airportIdx) {
+            console.log(`[generate-day] Fixing departure sequence: checkout@${checkoutIdx} → before airport@${airportIdx}`);
+            const checkoutAct = generatedDay.activities[checkoutIdx];
+            const airportAct = generatedDay.activities[airportIdx];
+
+            const checkoutDur = Math.max(5, ((parseTimeToMinutes(checkoutAct.endTime) ?? 0) - (parseTimeToMinutes(checkoutAct.startTime) ?? 0))) || 15;
+            const transferDur = Math.max(10, ((parseTimeToMinutes(airportAct.endTime) ?? 0) - (parseTimeToMinutes(airportAct.startTime) ?? 0))) || 60;
+
+            checkoutAct.startTime = airportAct.startTime;
+            checkoutAct.endTime = addMinutesToHHMM(checkoutAct.startTime, checkoutDur);
+            airportAct.startTime = checkoutAct.endTime;
+            airportAct.endTime = addMinutesToHHMM(airportAct.startTime, transferDur);
+
+            generatedDay.activities[airportIdx] = checkoutAct;
+            generatedDay.activities[checkoutIdx] = airportAct;
+            generatedDay.activities.sort((a: any, b: any) => {
+              const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+              const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+              return ta - tb;
+            });
+          }
+        }
+
+        // ====================================================================
         // NON-FLIGHT DEPARTURE DAY: Strip airport activities (generate-day path)
         // ====================================================================
         if (paramIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
