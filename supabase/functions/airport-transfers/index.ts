@@ -234,11 +234,24 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Look up fare data from database
-    let fareQuery = supabase.from('airport_transfer_fares').select('*').ilike('city', city);
-    if (airportCode) fareQuery = fareQuery.eq('airport_code', airportCode.toUpperCase());
-    const { data: fares } = await fareQuery.limit(1);
-    const fareRecord = fares?.[0] as FareRecord | undefined;
+    // Detect if this is an airport route vs a city point-to-point route
+    const AIRPORT_KEYWORDS = ['airport', 'terminal', 'aeroporto', 'aéroport', 'flughafen', 'aeropuerto'];
+    const AIRPORT_CODE_PATTERN = /\b[A-Z]{3}\b/; // e.g. LHR, JFK
+    const originLower = (origin || '').toLowerCase();
+    const destLower = (destination || '').toLowerCase();
+    const isAirportRoute = AIRPORT_KEYWORDS.some(kw => originLower.includes(kw) || destLower.includes(kw))
+      || (airportCode && airportCode.length === 3)
+      || AIRPORT_CODE_PATTERN.test(origin || '')
+      || AIRPORT_CODE_PATTERN.test(destination || '');
+
+    // Look up fare data from database (only for airport routes)
+    let fareRecord: FareRecord | undefined;
+    if (isAirportRoute) {
+      let fareQuery = supabase.from('airport_transfer_fares').select('*').ilike('city', city);
+      if (airportCode) fareQuery = fareQuery.eq('airport_code', airportCode.toUpperCase());
+      const { data: fares } = await fareQuery.limit(1);
+      fareRecord = fares?.[0] as FareRecord | undefined;
+    }
 
     // Google Maps live duration
     let liveTaxiDuration: string | null = null;
@@ -299,14 +312,33 @@ serve(async (req) => {
     const regional = getRegionalEstimate(city);
     const sym = fareRecord?.currency_symbol || regional.symbol;
 
+    // Readable origin/destination labels for route descriptions
+    const originLabel = origin || (isAirportRoute ? `${city} Airport` : city);
+    const destLabel = destination || (isAirportRoute ? (hotelName || 'hotel') : city);
+
+    // City routes use ~30% of airport fare estimates (avg 3-5km vs 20-40km)
+    const cityScaleFactor = 0.3;
+
     // 1) Taxi/Rideshare
     const taxiDuration = liveTaxiDuration || (fareRecord
       ? formatDurationRange(fareRecord.taxi_duration_min, fareRecord.taxi_duration_max)
       : regional.taxiDuration);
     const taxiMinutes = liveTaxiMinutes || fareRecord?.taxi_duration_max || fareRecord?.taxi_duration_min || 40;
-    const taxiCost = fareRecord
-      ? formatCost(fareRecord.taxi_cost_min, fareRecord.taxi_cost_max, sym, fareRecord.taxi_is_fixed_price)
-      : `${sym}${regional.taxiMin}-${regional.taxiMax}`;
+
+    let taxiCost: string;
+    let taxiCostMin: number;
+    let taxiCostMax: number;
+    if (isAirportRoute) {
+      taxiCostMin = fareRecord?.taxi_cost_min || regional.taxiMin;
+      taxiCostMax = fareRecord?.taxi_cost_max || regional.taxiMax;
+      taxiCost = fareRecord
+        ? formatCost(fareRecord.taxi_cost_min, fareRecord.taxi_cost_max, sym, fareRecord.taxi_is_fixed_price)
+        : `${sym}${regional.taxiMin}-${regional.taxiMax}`;
+    } else {
+      taxiCostMin = Math.max(3, Math.round((fareRecord?.taxi_cost_min || regional.taxiMin) * cityScaleFactor));
+      taxiCostMax = Math.max(5, Math.round((fareRecord?.taxi_cost_max || regional.taxiMax) * cityScaleFactor));
+      taxiCost = `${sym}${taxiCostMin}-${taxiCostMax}`;
+    }
 
     options.push({
       id: 'taxi',
@@ -316,12 +348,20 @@ serve(async (req) => {
       duration: taxiDuration,
       durationMinutes: taxiMinutes,
       estimatedCost: taxiCost,
-      costPerPerson: pax > 1 ? `~${sym}${Math.round((fareRecord?.taxi_cost_min || regional.taxiMin) / pax)}-${Math.round((fareRecord?.taxi_cost_max || regional.taxiMax) / pax)} pp` : undefined,
-      route: `Direct door-to-door from ${isReturn ? (hotelName || 'hotel') : 'airport'} to ${isReturn ? 'airport' : (hotelName || 'hotel')}`,
-      pros: ['Door-to-door, no transfers', 'Best with luggage', 'Available 24/7'],
-      cons: ['Traffic can add 20-30 min at peak hours', 'Ride apps may surge price'],
+      costPerPerson: pax > 1 ? `~${sym}${Math.round(taxiCostMin / pax)}-${Math.round(taxiCostMax / pax)} pp` : undefined,
+      route: isAirportRoute
+        ? `Direct door-to-door from ${isReturn ? (hotelName || 'hotel') : 'airport'} to ${isReturn ? 'airport' : (hotelName || 'hotel')}`
+        : `Direct ride from ${originLabel} to ${destLabel}`,
+      pros: isAirportRoute
+        ? ['Door-to-door, no transfers', 'Best with luggage', 'Available 24/7']
+        : ['Door-to-door, fastest option', 'No navigation needed', 'Available on demand'],
+      cons: isAirportRoute
+        ? ['Traffic can add 20-30 min at peak hours', 'Ride apps may surge price']
+        : ['Cost adds up on multiple trips', 'Traffic can vary'],
       notes: liveTaxiDuration ? 'Live traffic estimate' : (fareRecord?.taxi_notes || undefined),
-      bookingTip: 'Pre-book via hotel or use Uber/Bolt at arrivals',
+      bookingTip: isAirportRoute
+        ? 'Pre-book via hotel or use Uber/Bolt at arrivals'
+        : 'Use Uber, Bolt, or local rideshare apps',
     });
 
     // 2) Train/Metro
@@ -330,9 +370,17 @@ serve(async (req) => {
         ? formatDurationRange(fareRecord.train_duration_min, fareRecord.train_duration_max)
         : regional.trainDuration || '30-45 min');
       const trainMinutes = liveTransitMinutes || fareRecord?.train_duration_max || fareRecord?.train_duration_min || 35;
-      const trainCost = fareRecord?.train_cost
-        ? `${sym}${fareRecord.train_cost}`
-        : `${sym}${regional.trainCost}`;
+
+      let trainCost: string;
+      if (isAirportRoute) {
+        trainCost = fareRecord?.train_cost
+          ? `${sym}${fareRecord.train_cost}`
+          : `${sym}${regional.trainCost}`;
+      } else {
+        const rawCost = fareRecord?.train_cost || regional.trainCost || 5;
+        const cityCost = Math.max(1, Math.round(rawCost * cityScaleFactor));
+        trainCost = `${sym}${cityCost}`;
+      }
 
       options.push({
         id: 'train',
@@ -344,63 +392,110 @@ serve(async (req) => {
         estimatedCost: trainCost,
         costPerPerson: `${trainCost} pp`,
         trainLine: fareRecord?.train_line || undefined,
-        route: fareRecord?.train_line
-          ? `${fareRecord.train_line} to city center, then walk/taxi to ${hotelName || 'hotel'}`
-          : `Airport express to central station, then metro/taxi`,
-        pros: ['Cheapest option', 'No traffic delays', 'See the city on the way'],
-        cons: ['Luggage can be awkward', 'May need a transfer', 'Limited late-night service'],
+        route: isAirportRoute
+          ? (fareRecord?.train_line
+            ? `${fareRecord.train_line} to city center, then walk/taxi to ${hotelName || 'hotel'}`
+            : `Airport express to central station, then metro/taxi`)
+          : `Take metro or rail nearest to ${destLabel}`,
+        pros: isAirportRoute
+          ? ['Cheapest option', 'No traffic delays', 'See the city on the way']
+          : ['Affordable and reliable', 'No traffic delays', 'Covers most of the city'],
+        cons: isAirportRoute
+          ? ['Luggage can be awkward', 'May need a transfer', 'Limited late-night service']
+          : ['May need a short walk at each end', 'Crowded at rush hour'],
         notes: fareRecord?.train_notes || undefined,
-        bookingTip: 'Buy tickets at the airport station or use contactless payment',
+        bookingTip: isAirportRoute
+          ? 'Buy tickets at the airport station or use contactless payment'
+          : 'Use contactless payment or buy a day pass',
       });
     }
 
-    // 3) Airport Bus/Shuttle
+    // 3) Bus/Shuttle
     if ((fareRecord && fareRecord.bus_cost !== null) || regional.busCost !== null) {
       const busDuration = fareRecord
         ? formatDurationRange(fareRecord.bus_duration_min, fareRecord.bus_duration_max)
         : regional.busDuration || '45-60 min';
       const busMinutes = fareRecord?.bus_duration_max || fareRecord?.bus_duration_min || 50;
-      const busCost = fareRecord?.bus_cost
-        ? `${sym}${fareRecord.bus_cost}`
-        : `${sym}${regional.busCost}`;
+
+      let busCost: string;
+      if (isAirportRoute) {
+        busCost = fareRecord?.bus_cost
+          ? `${sym}${fareRecord.bus_cost}`
+          : `${sym}${regional.busCost}`;
+      } else {
+        const rawCost = fareRecord?.bus_cost || regional.busCost || 4;
+        const cityCost = Math.max(1, Math.round(rawCost * cityScaleFactor));
+        busCost = `${sym}${cityCost}`;
+      }
 
       options.push({
         id: 'bus',
         mode: 'bus',
-        label: 'Airport Bus / Shuttle',
+        label: isAirportRoute ? 'Airport Bus / Shuttle' : 'Bus',
         icon: '🚌',
         duration: busDuration,
         durationMinutes: busMinutes,
         estimatedCost: busCost,
         costPerPerson: `${busCost} pp`,
-        route: 'Airport shuttle to city center drop-off point',
-        pros: ['Very affordable', 'Comfortable seating', 'Luggage space included'],
-        cons: ['Fixed schedule', 'Multiple stops', 'Longer journey time'],
+        route: isAirportRoute
+          ? 'Airport shuttle to city center drop-off point'
+          : `Local bus service toward ${destLabel}`,
+        pros: isAirportRoute
+          ? ['Very affordable', 'Comfortable seating', 'Luggage space included']
+          : ['Very affordable', 'Wide route coverage', 'Frequent service in most cities'],
+        cons: isAirportRoute
+          ? ['Fixed schedule', 'Multiple stops', 'Longer journey time']
+          : ['Multiple stops', 'Can be slow in traffic', 'Route may not be direct'],
         notes: fareRecord?.bus_notes || undefined,
-        bookingTip: 'Check schedule at arrivals — runs every 15-30 min typically',
+        bookingTip: isAirportRoute
+          ? 'Check schedule at arrivals — runs every 15-30 min typically'
+          : 'Check local transit app for real-time arrivals',
       });
     }
 
-    // 4) Hotel Car Service / Private Transfer
-    const hotelCarMin = regional.hotelCarMin || 50;
-    const hotelCarMax = regional.hotelCarMax || 100;
-    options.push({
-      id: 'hotel_car',
-      mode: 'private',
-      label: 'Hotel Car Service',
-      icon: '🚘',
-      duration: liveTaxiDuration || taxiDuration, // same as taxi route
-      durationMinutes: taxiMinutes,
-      estimatedCost: `${sym}${hotelCarMin}-${hotelCarMax}`,
-      route: `Pre-arranged driver waiting at arrivals with name sign`,
-      pros: ['Most comfortable', 'Driver waiting at arrivals', 'No navigation needed', 'Premium vehicles'],
-      cons: ['Most expensive option', 'Must book in advance'],
-      notes: hotelName ? `Ask ${hotelName} concierge about car service` : 'Contact hotel for car service',
-      bookingTip: hotelName ? `Book through ${hotelName} when confirming your reservation` : 'Book through your hotel concierge',
-    });
+    // 4) Hotel Car Service / Private Transfer — only for airport routes
+    if (isAirportRoute) {
+      const hotelCarMin = regional.hotelCarMin || 50;
+      const hotelCarMax = regional.hotelCarMax || 100;
+      options.push({
+        id: 'hotel_car',
+        mode: 'private',
+        label: 'Hotel Car Service',
+        icon: '🚘',
+        duration: liveTaxiDuration || taxiDuration,
+        durationMinutes: taxiMinutes,
+        estimatedCost: `${sym}${hotelCarMin}-${hotelCarMax}`,
+        route: `Pre-arranged driver waiting at arrivals with name sign`,
+        pros: ['Most comfortable', 'Driver waiting at arrivals', 'No navigation needed', 'Premium vehicles'],
+        cons: ['Most expensive option', 'Must book in advance'],
+        notes: hotelName ? `Ask ${hotelName} concierge about car service` : 'Contact hotel for car service',
+        bookingTip: hotelName ? `Book through ${hotelName} when confirming your reservation` : 'Book through your hotel concierge',
+      });
+    }
 
-    // AI recommendation
-    const { recommendation, recommendedId } = getArchetypeRecommendation(archetype, options, hotelName, pax);
+    // AI recommendation — use airport-specific logic only for airport routes
+    let recommendation: string;
+    let recommendedId: string;
+    if (isAirportRoute) {
+      const archResult = getArchetypeRecommendation(archetype, options, hotelName, pax);
+      recommendation = archResult.recommendation;
+      recommendedId = archResult.recommendedId;
+    } else {
+      // City route: recommend based on duration
+      const taxiOpt = options.find(o => o.id === 'taxi');
+      const trainOpt = options.find(o => o.id === 'train');
+      const taxiMins = taxiOpt?.durationMinutes || 99;
+      if (taxiMins <= 10) {
+        recommendedId = 'taxi';
+        recommendation = `It's a short ride — a taxi or rideshare is quick and easy.`;
+      } else if (trainOpt && trainOpt.durationMinutes < taxiMins * 1.5) {
+        recommendedId = 'train';
+        recommendation = `The metro/train is a great option here — affordable and avoids traffic.`;
+      } else {
+        recommendedId = 'taxi';
+        recommendation = `A taxi or rideshare is the most convenient way to get between these two spots.`;
+      }
+    }
 
     // Mark recommended option
     for (const opt of options) {
@@ -411,7 +506,7 @@ serve(async (req) => {
     }
 
     const result: TransferResponse = {
-      origin: origin || `${city} Airport`,
+      origin: origin || (isAirportRoute ? `${city} Airport` : city),
       destination: destination || (hotelName || city),
       options,
       aiRecommendation: recommendation,
