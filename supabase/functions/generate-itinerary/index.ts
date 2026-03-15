@@ -116,6 +116,16 @@ import {
 } from './prompt-library.ts';
 
 // =============================================================================
+// MEAL POLICY — Dynamic meal requirements per day shape
+// =============================================================================
+import {
+  deriveMealPolicy,
+  buildMealRequirementsPrompt,
+  type MealPolicy,
+  type MealPolicyInput,
+} from './meal-policy.ts';
+
+// =============================================================================
 // PHASE 15: DYNAMIC DIETARY ENFORCEMENT ENGINE
 // =============================================================================
 import {
