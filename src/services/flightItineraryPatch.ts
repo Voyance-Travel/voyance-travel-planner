@@ -3,15 +3,14 @@
  * 
  * When a flight is added/changed after generation, adjusts Day 1 and last day
  * activities to respect actual arrival/departure times.
+ * 
+ * Accepts the actual flight_selection schema (legacy {departure, return} or
+ * new {legs}) and uses normalizeFlightSelection for consistent access.
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import type { Json } from '@/integrations/supabase/types';
-
-interface FlightInfo {
-  departureTime?: string; // e.g. "14:30" or "2:30 PM"
-  arrivalTime?: string;
-}
+import { saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
+import { getFirstLegArrivalTime, getLastLegDepartureTime } from '@/utils/normalizeFlightSelection';
 
 /**
  * Normalize time strings ("2:30 PM" or "14:30") to "HH:MM" 24hr format
@@ -70,17 +69,25 @@ function isDepartureActivity(title: string): boolean {
 
 /**
  * Patch itinerary_data Day 1 and last day with flight times.
- * - Day 1: Adjusts arrival-related activities to match inbound flight arrival
- * - Last day: Adjusts departure-related activities to match outbound flight departure
+ * 
+ * Accepts the raw flight_selection object (any shape — legacy or legs[]).
+ * Uses normalizeFlightSelection helpers to extract arrival/departure times.
+ * Uses saveItineraryOptimistic for concurrent-edit safety.
  */
 export async function patchItineraryWithFlight(
   tripId: string,
-  flight: {
-    outbound?: FlightInfo;
-    return?: FlightInfo;
-  },
+  flightSelection: unknown,
 ): Promise<boolean> {
   try {
+    // Extract times using the normalizer (handles all flight_selection shapes)
+    const arrivalTimeRaw = getFirstLegArrivalTime(flightSelection);
+    const departureTimeRaw = getLastLegDepartureTime(flightSelection);
+
+    if (!arrivalTimeRaw && !departureTimeRaw) {
+      console.log('[FlightPatch] No arrival or departure time found in flight selection');
+      return false;
+    }
+
     const { data: trip, error: fetchError } = await supabase
       .from('trips')
       .select('itinerary_data')
@@ -95,15 +102,14 @@ export async function patchItineraryWithFlight(
 
     let patched = false;
 
-    // Patch Day 1 with outbound arrival
-    if (flight.outbound?.arrivalTime) {
-      const arrivalNorm = normalize24h(flight.outbound.arrivalTime);
+    // Patch Day 1 with arrival time
+    if (arrivalTimeRaw) {
+      const arrivalNorm = normalize24h(arrivalTimeRaw);
       if (arrivalNorm) {
         const day1 = days[0];
         const activities = day1.activities as Array<Record<string, unknown>> | undefined;
         if (activities?.length) {
           const arrivalMins = timeToMinutes(arrivalNorm);
-          // Buffer: earliest activity should start 30min after arrival
           const earliestStart = arrivalMins + 30;
 
           for (const act of activities) {
@@ -115,7 +121,6 @@ export async function patchItineraryWithFlight(
               continue;
             }
 
-            // Shift activities that are before earliest allowed start
             const actTime = normalize24h(String(act.start_time || ''));
             if (actTime && timeToMinutes(actTime) < earliestStart) {
               const duration = act.end_time
@@ -130,17 +135,15 @@ export async function patchItineraryWithFlight(
       }
     }
 
-    // Patch last day with return departure
-    if (flight.return?.departureTime) {
-      const departNorm = normalize24h(flight.return.departureTime);
+    // Patch last day with departure time
+    if (departureTimeRaw) {
+      const departNorm = normalize24h(departureTimeRaw);
       if (departNorm) {
         const lastDay = days[days.length - 1];
         const activities = lastDay.activities as Array<Record<string, unknown>> | undefined;
         if (activities?.length) {
           const departMins = timeToMinutes(departNorm);
-          // Buffer: need to be at airport 2hrs before
           const latestEnd = departMins - 120;
-          // Airport transfer should start 2.5hrs before
           const transferStart = departMins - 150;
 
           for (const act of activities) {
@@ -152,7 +155,6 @@ export async function patchItineraryWithFlight(
               continue;
             }
 
-            // Trim activities that extend past latest end
             const actEndStr = normalize24h(String(act.end_time || ''));
             if (actEndStr && timeToMinutes(actEndStr) > latestEnd && latestEnd > 0) {
               act.end_time = minutesToTime(latestEnd);
@@ -165,16 +167,12 @@ export async function patchItineraryWithFlight(
 
     if (!patched) return false;
 
-    const { error: updateError } = await supabase
-      .from('trips')
-      .update({
-        itinerary_data: { ...itineraryData, days } as Json,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', tripId);
+    // Use optimistic update for version safety
+    await fetchAndCacheVersion(tripId);
+    const result = await saveItineraryOptimistic(tripId, { ...itineraryData, days });
 
-    if (updateError) {
-      console.error('[FlightPatch] Failed to update itinerary:', updateError);
+    if (!result.success) {
+      console.error('[FlightPatch] Optimistic update failed:', result.error);
       return false;
     }
 

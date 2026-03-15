@@ -899,6 +899,9 @@ export function AddHotelInline({
         checkOutDate: newHotel.checkOutDate,
       }).catch(err => console.error('[AddHotel] Itinerary patch failed:', err));
 
+      // Dispatch booking-changed event for financial snapshot refresh
+      window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+
       toast.dismiss('hotel-enrich');
       toast.success(enrichment ? `${accomLabel} found and details updated!` : `${accomLabel} details saved!`);
       setShowManualEntry(false);

@@ -3,10 +3,11 @@
  * 
  * When a hotel is added/changed after generation, updates accommodation
  * activities in itinerary_data to reflect the correct hotel name & address.
+ * Uses saveItineraryOptimistic for concurrent-edit safety.
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import type { Json } from '@/integrations/supabase/types';
+import { saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
 
 const ACCOMMODATION_KEYWORDS = [
   'hotel check-in', 'hotel check in', 'check-in & refresh',
@@ -55,7 +56,6 @@ export async function patchItineraryWithHotel(
         const title = String(act.title || act.name || '');
         if (!isAccommodationActivity(title)) continue;
 
-        // Update the activity with real hotel info
         const isCheckout = title.toLowerCase().includes('checkout') || title.toLowerCase().includes('check-out');
         
         if (isCheckout) {
@@ -77,16 +77,12 @@ export async function patchItineraryWithHotel(
 
     if (!patched) return false;
 
-    const { error: updateError } = await supabase
-      .from('trips')
-      .update({
-        itinerary_data: { ...itineraryData, days } as Json,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', tripId);
+    // Use optimistic update for version safety
+    await fetchAndCacheVersion(tripId);
+    const result = await saveItineraryOptimistic(tripId, { ...itineraryData, days });
 
-    if (updateError) {
-      console.error('[HotelPatch] Failed to update itinerary:', updateError);
+    if (!result.success) {
+      console.error('[HotelPatch] Optimistic update failed:', result.error);
       return false;
     }
 

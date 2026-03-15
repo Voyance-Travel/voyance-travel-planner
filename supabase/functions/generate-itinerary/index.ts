@@ -4055,8 +4055,8 @@ async function finalSaveItinerary(
           const rawCost = (act as any).cost || (act as any).estimatedCost || { amount: 0, currency: 'USD' };
           const costPerPerson = typeof rawCost === 'number' ? rawCost : (rawCost.amount || 0);
 
-          // Skip truly free items
-          if (costPerPerson <= 0) continue;
+          // Include $0 rows for free activities so counts are accurate
+          // and cleanup logic works universally
 
           // Map itinerary categories to cost_reference categories
           const categoryMap: Record<string, string> = {
