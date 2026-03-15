@@ -289,7 +289,13 @@ export default function UserTracking() {
             <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, fontFamily: "'Playfair Display', serif" }}>User Tracking</h1>
             <p style={{ color: '#64748B', fontSize: 13, margin: '4px 0 0' }}>Where users enter, where they leave, and what converts</p>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button
+              onClick={() => navigate('/admin/session-explorer')}
+              style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #A78BFA44', background: '#A78BFA11', color: '#A78BFA', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              <Search size={12} /> Session Explorer
+            </button>
             {[1, 7, 14, 30].map(d => (
               <button
                 key={d}
