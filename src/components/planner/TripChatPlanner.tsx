@@ -4,7 +4,7 @@
  * When enough details are gathered, the AI extracts them via tool calling.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader2, Sparkles, User, ClipboardPaste, Mic, MicOff } from 'lucide-react';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
