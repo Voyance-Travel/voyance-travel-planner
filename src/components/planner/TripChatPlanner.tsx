@@ -426,7 +426,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
                 type="button"
                 size="icon"
                 variant="ghost"
-                className={cn("h-7 w-7 relative", isListening && "text-destructive")}
+                className={cn("h-9 w-9 sm:h-7 sm:w-7 relative", isListening && "text-destructive")}
                 onClick={() => {
                   if (!micSupported) {
                     toast.error("Voice input is not supported in this browser. Try Chrome or Edge.");
