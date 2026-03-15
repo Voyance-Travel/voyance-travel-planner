@@ -312,7 +312,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   return (
     <div className={cn('flex flex-col max-w-md mx-auto', className)}>
       {/* Chat container — looks like a proper chat window */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col" style={{ height: '420px' }}>
+      <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col" style={{ height: 'min(420px, calc(100vh - 200px))' }}>
         {/* Chat header */}
         <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
