@@ -173,10 +173,8 @@ export function FindMyHotelsDrawer({
         await saveHotelSelection(tripId, hotelData);
       }
 
-      // Sync hotel cost to budget ledger (non-critical)
-      await syncHotelToLedger(tripId, hotelData).catch(err => {
-        console.warn('[FindMyHotelsDrawer] Budget sync failed (non-critical):', err);
-      });
+      // Sync hotel cost to budget ledger
+      await syncHotelToLedger(tripId, hotelData);
 
       setSelectedHotelId(hotel.id);
       toast.success(`${hotel.name} saved to your trip!`);

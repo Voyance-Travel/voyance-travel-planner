@@ -2720,6 +2720,8 @@ export default function TripDetail() {
                         setTrip(updatedTrip);
                       }
                     } catch { /* non-critical */ }
+                    // Signal financial snapshot hooks to refresh
+                    window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
                   }}
                   onUnlockComplete={(enrichedItinerary) => {
                     refreshEntitlements();
