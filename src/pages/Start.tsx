@@ -2781,6 +2781,18 @@ export default function Start() {
                           source: 'chat',
                         } : null;
 
+                        // Fetch owner_plan_tier for chat path
+                        let chatOwnerPlanTier = 'free';
+                        try {
+                          const { data: chatEntitlements } = await supabase.functions.invoke('get-entitlements');
+                          chatOwnerPlanTier = chatEntitlements?.plans?.[0] || 'free';
+                        } catch (e) {
+                          console.warn('[Start] Failed to fetch entitlements for chat owner_plan_tier:', e);
+                        }
+
+                        // Determine budget_include_hotel for chat path
+                        const chatIncludeHotelInBudget = !!(hotelSelection && hotelSelection.length > 0 && hotelSelection.some((h: any) => h.pricePerNight && h.pricePerNight > 0));
+
                         const { data: trip, error } = await supabase
                           .from('trips')
                           .insert({
@@ -2795,6 +2807,8 @@ export default function Start() {
                             budget_total_cents: chatBudget ? chatBudget * 100 : null,
                             hotel_selection: hotelSelection,
                             flight_selection: flightSelection,
+                            budget_include_hotel: chatIncludeHotelInBudget,
+                            owner_plan_tier: chatOwnerPlanTier,
                             creation_source: isChatMultiCity ? 'multi_city' : 'chat',
                             status: 'draft',
                             is_multi_city: isChatMultiCity ? true : null,
