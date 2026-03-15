@@ -142,7 +142,7 @@ function buildCheckOutActivity(hotel: HotelForInjection): EditorialActivity {
 }
 
 /** Parse time string "HH:MM" or "H:MM AM/PM" to minutes since midnight */
-function timeToMinutes(t?: string): number {
+export function timeToMinutes(t?: string): number {
   if (!t) return 0;
   const normalized = t.trim().toUpperCase();
   const m12 = normalized.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/);
