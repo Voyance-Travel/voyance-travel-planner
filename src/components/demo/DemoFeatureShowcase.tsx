@@ -68,9 +68,10 @@ const FEATURES = [
 
 interface DemoFeatureShowcaseProps {
   onComplete: () => void;
+  onSkipToPlayground?: () => void;
 }
 
-export function DemoFeatureShowcase({ onComplete }: DemoFeatureShowcaseProps) {
+export function DemoFeatureShowcase({ onComplete, onSkipToPlayground }: DemoFeatureShowcaseProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const currentFeature = FEATURES[currentIndex];
   const isLast = currentIndex === FEATURES.length - 1;
