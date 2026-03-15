@@ -2186,6 +2186,42 @@ export type Database = {
         }
         Relationships: []
       }
+      client_errors: {
+        Row: {
+          component_name: string | null
+          created_at: string | null
+          error_message: string
+          id: string
+          metadata: Json | null
+          page_path: string | null
+          session_id: string | null
+          stack_trace: string | null
+          user_id: string | null
+        }
+        Insert: {
+          component_name?: string | null
+          created_at?: string | null
+          error_message: string
+          id?: string
+          metadata?: Json | null
+          page_path?: string | null
+          session_id?: string | null
+          stack_trace?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          component_name?: string | null
+          created_at?: string | null
+          error_message?: string
+          id?: string
+          metadata?: Json | null
+          page_path?: string | null
+          session_id?: string | null
+          stack_trace?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       community_guides: {
         Row: {
           content: Json | null
