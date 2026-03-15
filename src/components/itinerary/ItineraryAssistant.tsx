@@ -42,7 +42,7 @@ import {
 import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useCredits } from '@/hooks/useCredits';
 import { useEntitlements } from '@/hooks/useEntitlements';
-import { useActionCap } from '@/hooks/useActionCap';
+
 import { CREDIT_COSTS } from '@/config/pricing';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -104,7 +104,7 @@ export function ItineraryAssistant({
   const { isPaid } = useEntitlements();
   const spendCredits = useSpendCredits();
   const totalCredits = creditData?.totalCredits ?? 0;
-  const aiMessageCap = useActionCap(tripId, 'ai_message');
+  // ai_message is now free — no cap tracking needed
 
   // Keep local days in sync with props
   useEffect(() => {
@@ -154,7 +154,7 @@ export function ItineraryAssistant({
       setMessages([{
         id: 'welcome',
         role: 'assistant',
-        content: `Hi! I'm here to help you customize your ${destination} itinerary. You can tell me things like:\n\n• "Make Day 3 more relaxed"\n• "I'm a foodie, more eating options on Day 2"\n• "Replace the museum with something outdoors"\n• "Move dinner earlier and add a jazz club"\n• "Days 4 and 5 feel similar, make them different"\n\nI'll handle all the changes (meals, transit, timing) in one go. What would you like?`,
+        content: `Hi! I'm here to help you customize your ${destination} itinerary. Chat with me as much as you like — it's free! You can say things like:\n\n• "Make Day 3 more relaxed"\n• "I'm a foodie, more eating options on Day 2"\n• "Replace the museum with something outdoors"\n• "Move dinner earlier and add a jazz club"\n• "Days 4 and 5 feel similar, make them different"\n\nI'll suggest changes and you decide which to apply. What would you like?`,
         timestamp: new Date(),
       }]);
     }
@@ -175,22 +175,8 @@ export function ItineraryAssistant({
       return;
     }
 
-    // Pre-flight credit check: verify the user CAN pay before calling the API.
-    // The actual charge happens AFTER a successful response to prevent credit drain on failures.
-    try {
-      // Dry-run: useSpendCredits validates balance & free caps server-side.
-      // We do a lightweight check here; the real deduction is below.
-      if (!aiMessageCap.isFree && totalCredits < CREDIT_COSTS.AI_MESSAGE) {
-        spendCredits.mutateAsync({
-          action: 'AI_MESSAGE',
-          tripId,
-          metadata: { source: 'itinerary_assistant_preflight' },
-        }).catch(() => {}); // triggers OutOfCreditsModal via hook
-        return;
-      }
-    } catch {
-      return;
-    }
+    // Chat messages are free — no pre-flight credit check needed.
+    // Credits are only charged when the user applies an action (swap, rewrite, etc.).
 
     // Client-side safety: basic input sanitization
     const sanitizedInput = trimmedInput
@@ -217,21 +203,8 @@ export function ItineraryAssistant({
 
       const response = await sendChatMessage(apiMessages, itineraryContext, conversationId);
 
-      // ✅ Charge credits AFTER successful AI response — prevents credit drain on API failures
-      try {
-        const messageSpendResult = await spendCredits.mutateAsync({
-          action: 'AI_MESSAGE',
-          tripId,
-          metadata: { source: 'itinerary_assistant' },
-        });
-        if (!messageSpendResult.success) {
-          console.warn('[ItineraryAssistant] Post-response credit charge failed (non-fatal):', messageSpendResult);
-        }
-      } catch (creditErr) {
-        // The AI already responded — log but don't block the user from seeing it.
-        // This is a rare edge case (balance changed between pre-check and charge).
-        console.error('[ItineraryAssistant] Post-response credit charge error:', creditErr);
-      }
+      // Chat messages are free — no credit charge for conversation.
+      // Credits are only spent when the user clicks "Apply" on an action card.
 
       // Create assistant message with actions
       const assistantMessage: ChatMessage = {
@@ -552,13 +525,9 @@ export function ItineraryAssistant({
                 <SheetDescription className="text-xs">
                   Customize your {destination} itinerary
                 </SheetDescription>
-                {!aiMessageCap.isLoading && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {aiMessageCap.isFree
-                      ? `💬 ${aiMessageCap.freeRemaining} of ${aiMessageCap.cap} free messages remaining`
-                      : `💬 Continue chatting: ${aiMessageCap.creditCost} credits/message`}
-                  </p>
-                )}
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  💬 Chat is free — actions cost credits
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-2 text-xs">
