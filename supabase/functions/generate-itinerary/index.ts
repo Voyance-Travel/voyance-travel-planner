@@ -9924,7 +9924,27 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
 
         // ====================================================================
-        // SUGGESTED-FOR GUARANTEE: Backfill missing suggestedFor for group trips
+        // NON-FLIGHT DEPARTURE DAY: Strip airport activities (generate-day path)
+        // ====================================================================
+        if (paramIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
+          const beforeCount = generatedDay.activities.length;
+          generatedDay.activities = generatedDay.activities.filter((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            const isAirportRef =
+              t.includes('airport') ||
+              t.includes('taxi to airport') ||
+              t.includes('transfer to airport') ||
+              t.includes('departure transfer to airport') ||
+              t.includes('flight departure') ||
+              t.includes('head to airport');
+            return !isAirportRef;
+          });
+          const removed = beforeCount - generatedDay.activities.length;
+          if (removed > 0) {
+            console.log(`[generate-day] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${resolvedNextLegTransport}, not flight)`);
+          }
+        }
+
         // ====================================================================
         if (allUserIdsForAttribution.length > 1 && generatedDay?.activities?.length) {
           let backfilledCount = 0;
