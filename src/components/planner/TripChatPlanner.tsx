@@ -304,9 +304,17 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
     }
   };
 
-  const handlePaste = () => {
-    textareaRef.current?.focus();
-    setInput(prev => prev || '');
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setInput(prev => prev ? `${prev}\n${text}` : text);
+        textareaRef.current?.focus();
+      }
+    } catch {
+      // Fallback: just focus so user can Ctrl+V
+      textareaRef.current?.focus();
+    }
   };
 
   return (
