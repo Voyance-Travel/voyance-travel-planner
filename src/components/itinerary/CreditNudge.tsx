@@ -37,8 +37,6 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
     productId: string;
     mode: 'payment';
   } | null>(null);
-  const { toast } = useToast();
-
   const cost = CREDIT_COSTS[action];
   const deficit = cost - currentBalance;
   const recommended = getRecommendedPack(deficit);
