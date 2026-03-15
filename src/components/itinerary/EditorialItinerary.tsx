@@ -8376,6 +8376,7 @@ function DayCard({
                     );
                   }
 
+                  return (
                   <div className={cn(
                     "transition-all duration-300",
                     isHighlighted && "bg-primary/5"
