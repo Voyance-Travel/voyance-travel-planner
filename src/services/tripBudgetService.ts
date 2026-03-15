@@ -600,35 +600,37 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
     });
   }
 
-  // Discretionary categories use remaining budget after committed costs
-  const safeRemaining = Math.max(remaining, 0);
+  // Discretionary categories use total budget minus committed hotel/flight
+  const committedFixed = (settings.budget_include_hotel ? summary.committedHotelCents : 0)
+    + (settings.budget_include_flight ? summary.committedFlightCents : 0);
+  const discretionaryTotal = Math.max(budgetTotal - committedFixed, 0);
   result.push(
     {
       category: 'food',
-      allocatedCents: Math.round(safeRemaining * (allocations.food_percent / 100)),
+      allocatedCents: Math.round(discretionaryTotal * (allocations.food_percent / 100)),
       usedCents: summary.plannedFoodCents,
-      remainingCents: Math.round(safeRemaining * (allocations.food_percent / 100)) - summary.plannedFoodCents,
+      remainingCents: Math.round(discretionaryTotal * (allocations.food_percent / 100)) - summary.plannedFoodCents,
       percent: allocations.food_percent,
     },
     {
       category: 'activities',
-      allocatedCents: Math.round(safeRemaining * (allocations.activities_percent / 100)),
+      allocatedCents: Math.round(discretionaryTotal * (allocations.activities_percent / 100)),
       usedCents: summary.plannedActivitiesCents,
-      remainingCents: Math.round(safeRemaining * (allocations.activities_percent / 100)) - summary.plannedActivitiesCents,
+      remainingCents: Math.round(discretionaryTotal * (allocations.activities_percent / 100)) - summary.plannedActivitiesCents,
       percent: allocations.activities_percent,
     },
     {
       category: 'transit',
-      allocatedCents: Math.round(safeRemaining * (allocations.transit_percent / 100)),
+      allocatedCents: Math.round(discretionaryTotal * (allocations.transit_percent / 100)),
       usedCents: summary.plannedTransitCents,
-      remainingCents: Math.round(safeRemaining * (allocations.transit_percent / 100)) - summary.plannedTransitCents,
+      remainingCents: Math.round(discretionaryTotal * (allocations.transit_percent / 100)) - summary.plannedTransitCents,
       percent: allocations.transit_percent,
     },
     {
       category: 'misc',
-      allocatedCents: Math.round(safeRemaining * (allocations.misc_percent / 100)),
+      allocatedCents: Math.round(discretionaryTotal * (allocations.misc_percent / 100)),
       usedCents: 0,
-      remainingCents: Math.round(safeRemaining * (allocations.misc_percent / 100)),
+      remainingCents: Math.round(discretionaryTotal * (allocations.misc_percent / 100)),
       percent: allocations.misc_percent,
     },
   );
