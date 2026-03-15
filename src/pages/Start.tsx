@@ -3125,6 +3125,7 @@ export default function Start() {
                           }
                         }
 
+                        sessionStorage.removeItem('voyance_chat_messages');
                         navigate(`/trip/${trip.id}?generate=true`);
                       } catch (err) {
                         console.error('Error creating chat trip:', err);
