@@ -154,6 +154,11 @@ export async function splitJourneyIfNeeded(
 
     const legName = `${journeyName}: ${dest.city}`;
 
+    // Proportional budget for this leg
+    const legBudgetCents = originalTrip.budget_total_cents
+      ? Math.round((originalTrip.budget_total_cents as number) * nights / totalDays)
+      : null;
+
     legInserts.push({
       user_id: originalTrip.user_id,
       name: legName,
@@ -164,9 +169,7 @@ export async function splitJourneyIfNeeded(
       travelers: originalTrip.travelers,
       trip_type: originalTrip.trip_type,
       budget_tier: originalTrip.budget_tier,
-      budget_total_cents: originalTrip.budget_total_cents
-        ? Math.round((originalTrip.budget_total_cents as number) * nights / totalDays)
-        : null,
+      budget_total_cents: legBudgetCents,
       origin_city: i === 0 ? originalTrip.origin_city : destinations[i - 1].city,
       flight_selection: i === 0 ? originalTrip.flight_selection : null,
       hotel_selection: hotelsByCity?.[dest.city]?.length
@@ -187,6 +190,12 @@ export async function splitJourneyIfNeeded(
       itinerary_status: 'not_started',
       owner_plan_tier: originalTrip.owner_plan_tier,
       metadata: legMetadata as any,
+      // Propagate generation rules and constraints from original trip
+      generation_rules: originalTrip.generation_rules || null,
+      constraints: originalTrip.constraints || null,
+      transportation_preferences: originalTrip.transportation_preferences || null,
+      dietary: originalTrip.dietary || null,
+      pacing: originalTrip.pacing || null,
       // Journey fields
       journey_id: journeyId,
       journey_name: journeyName,
@@ -195,6 +204,8 @@ export async function splitJourneyIfNeeded(
       transition_mode: transport?.type || null,
       transition_departure_time: transport?.departureTime || null,
       transition_arrival_time: transport?.arrivalTime || null,
+      // Store leg budget for reference
+      _legBudgetCents: legBudgetCents,
     });
 
     currentDate = legEnd;
