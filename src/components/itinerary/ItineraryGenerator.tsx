@@ -988,7 +988,7 @@ export function ItineraryGenerator({
           {showCostConfirm && costEstimate.totalCredits > 0 && (() => {
             // Use journey total if this is a journey, otherwise single-trip cost
             const effectiveTotalCost = journeyLegs.length > 1 
-              ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0)
+              ? journeyLegs.reduce((sum, leg) => sum + leg.cost, 0) + journeyMultiCityFee
               : costEstimate.totalCredits;
             const canAffordAll = currentBalance >= effectiveTotalCost;
             const costPerDay = 60; // CREDIT_COSTS standard
