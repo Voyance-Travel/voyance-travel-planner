@@ -4471,7 +4471,7 @@ serve(async (req) => {
             groupBlendingPromptSection = blendResult.promptSection;
             console.log(`[Stage 1.2.1] ✓ Group archetype blending complete: ${travelers.length} travelers, ${blendResult.conflicts.length} conflicts, ${blendResult.splitOpportunities.length} split opportunities`);
 
-            // Build blended trait scores snapshot (owner 50%, companions split remaining 50%)
+            // Build blended trait scores snapshot using shared helper
             const ownerTraits = ownerDnaRow?.data?.trait_scores || {};
             const ownerTraitsNormalized: Record<string, number> = {
               pace: Number(ownerTraits.pace ?? 0),
@@ -4482,22 +4482,16 @@ serve(async (req) => {
               authenticity: Number(ownerTraits.authenticity ?? 0),
               adventure: Number(ownerTraits.adventure ?? 0),
               cultural: Number(ownerTraits.cultural ?? 0),
+              transformation: Number(ownerTraits.transformation ?? 0),
             };
 
             const companionTraitsList = companionUserIds
               .map((uid: string) => companionTraitScoresMap.get(uid))
               .filter(Boolean) as Record<string, number>[];
 
+            const blendedTraits = blendTraitScores(ownerTraitsNormalized, companionTraitsList);
             const ownerWeight = 0.5;
             const companionWeight = companionTraitsList.length > 0 ? 0.5 / companionTraitsList.length : 0;
-            
-            const blendedTraits: Record<string, number> = {};
-            const traitKeys = ['pace', 'budget', 'social', 'planning', 'comfort', 'authenticity', 'adventure', 'cultural'];
-            for (const key of traitKeys) {
-              const ownerVal = ownerTraitsNormalized[key] || 0;
-              const companionSum = companionTraitsList.reduce((sum, ct) => sum + (ct[key] || 0) * companionWeight, 0);
-              blendedTraits[key] = Math.round(ownerVal * ownerWeight + companionSum);
-            }
 
             blendedDnaSnapshot = {
               blendedTraits,
