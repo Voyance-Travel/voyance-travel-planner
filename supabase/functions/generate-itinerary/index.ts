@@ -8002,6 +8002,7 @@ RULES:
 
       // Build system prompt with day-specific timing constraints EMBEDDED
       let timingInstructions = '';
+      let dayMealPolicy: MealPolicy | null = null; // Will be set for non-first/last days
       if (isFirstDay && dayConstraints) {
         // For arrival day, put constraints directly in system prompt for maximum weight
         timingInstructions = `
