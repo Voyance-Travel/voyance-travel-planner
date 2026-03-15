@@ -2583,7 +2583,7 @@ Generate activities for this day following ALL constraints above.`;
       // ==========================================================================
       // NON-FLIGHT DEPARTURE DAY: Strip airport activities when next leg is train/bus/car/ferry
       // ==========================================================================
-      if (paramIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
+      if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegTransport !== 'flight') {
         const beforeCount = generatedDay.activities.length;
         generatedDay.activities = generatedDay.activities.filter((a: any) => {
           const t = (a.title || '').toLowerCase();
