@@ -2576,6 +2576,28 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       // ==========================================================================
+      // NON-FLIGHT DEPARTURE DAY: Strip airport activities when next leg is train/bus/car/ferry
+      // ==========================================================================
+      if (paramIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
+        const beforeCount = generatedDay.activities.length;
+        generatedDay.activities = generatedDay.activities.filter((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          const isAirportRef =
+            t.includes('airport') ||
+            t.includes('taxi to airport') ||
+            t.includes('transfer to airport') ||
+            t.includes('departure transfer to airport') ||
+            t.includes('flight departure') ||
+            t.includes('head to airport');
+          return !isAirportRef;
+        });
+        const removed = beforeCount - generatedDay.activities.length;
+        if (removed > 0) {
+          console.log(`[Stage 2] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${resolvedNextLegTransport}, not flight)`);
+        }
+      }
+
+      // ==========================================================================
       // ARRIVAL DAY: Strip arrival/baggage/transfer activities — handled by Arrival Game Plan UI
       // ==========================================================================
       if (isFirstDay && generatedDay.activities.length > 0) {
@@ -7853,13 +7875,39 @@ Add your flight and hotel details for a more complete last day.`;
           const nextCity = resolvedNextLegCity || 'the next destination';
           const transportLabel = nextTransport.toUpperCase();
           const isNonFlight = nextTransport !== 'flight';
+          
+          // Build transport-specific departure instructions
+          let departureFacility = 'airport';
+          let departureInstructions = '';
+          if (nextTransport === 'train') {
+            departureFacility = 'train station';
+            departureInstructions = `
+- REQUIRED: Include a "Transfer to Train Station" activity (category: "transport") showing the taxi/rideshare/metro from the hotel to the train station. Include the station name and address in the location field.
+- REQUIRED: Include a "${transportLabel} to ${nextCity}" departure activity (category: "transport") as the LAST activity. Include the train station name, address, and platform/track info if known.
+- ⚠️ ABSOLUTELY DO NOT mention airports, flights, or "Transfer to Airport". The departure is from a TRAIN STATION.`;
+          } else if (nextTransport === 'bus') {
+            departureFacility = 'bus station';
+            departureInstructions = `
+- REQUIRED: Include a "Transfer to Bus Station" activity (category: "transport") showing the taxi/rideshare/metro from the hotel to the bus terminal. Include the station name and address in the location field.
+- REQUIRED: Include a "${transportLabel} to ${nextCity}" departure activity (category: "transport") as the LAST activity. Include the bus terminal name and address.
+- ⚠️ ABSOLUTELY DO NOT mention airports, flights, or "Transfer to Airport". The departure is from a BUS STATION.`;
+          } else if (nextTransport === 'ferry') {
+            departureFacility = 'ferry terminal';
+            departureInstructions = `
+- REQUIRED: Include a "Transfer to Ferry Terminal" activity (category: "transport") showing the taxi/rideshare from the hotel to the ferry port. Include the terminal name and address in the location field.
+- REQUIRED: Include a "${transportLabel} to ${nextCity}" departure activity (category: "transport") as the LAST activity. Include the ferry terminal name and address.
+- ⚠️ ABSOLUTELY DO NOT mention airports, flights, or "Transfer to Airport". The departure is from a FERRY TERMINAL.`;
+          } else if (nextTransport === 'car') {
+            departureInstructions = `
+- REQUIRED: Include a "Drive to ${nextCity}" departure activity (category: "transport") as the LAST activity.
+- ⚠️ ABSOLUTELY DO NOT mention airports, flights, or "Transfer to Airport". The traveler is DRIVING to the next destination.`;
+          }
+          
           dayConstraints += `\n\n🏨 CITY DEPARTURE — CHECKOUT DAY:
-- This is the LAST DAY in ${destination}. Tomorrow the traveler takes a ${transportLabel} to ${nextCity}.
+- This is the LAST DAY in ${destination}. The traveler departs for ${nextCity} by ${transportLabel}.
 - REQUIRED: Include "Hotel Checkout" activity in the morning (typically by 11:00 AM).
 - Plan morning activities around checkout. Luggage storage may be needed.
-- End the day early enough for evening packing/preparation.
-- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.${isNonFlight ? `
-- ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabel}.${nextTransport === 'train' ? ' If mentioning departure logistics, reference the train station instead.' : ''}${nextTransport === 'bus' ? ' If mentioning departure logistics, reference the bus station instead.' : ''}${nextTransport === 'car' ? ' The traveler is driving to the next destination.' : ''}${nextTransport === 'ferry' ? ' If mentioning departure logistics, reference the ferry terminal instead.' : ''}` : ''}`;
+- Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.${isNonFlight ? departureInstructions : ''}`;
         }
 
         if (mcHotelName && mcHotelName !== 'Hotel') {
@@ -9876,7 +9924,27 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
 
         // ====================================================================
-        // SUGGESTED-FOR GUARANTEE: Backfill missing suggestedFor for group trips
+        // NON-FLIGHT DEPARTURE DAY: Strip airport activities (generate-day path)
+        // ====================================================================
+        if (paramIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
+          const beforeCount = generatedDay.activities.length;
+          generatedDay.activities = generatedDay.activities.filter((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            const isAirportRef =
+              t.includes('airport') ||
+              t.includes('taxi to airport') ||
+              t.includes('transfer to airport') ||
+              t.includes('departure transfer to airport') ||
+              t.includes('flight departure') ||
+              t.includes('head to airport');
+            return !isAirportRef;
+          });
+          const removed = beforeCount - generatedDay.activities.length;
+          if (removed > 0) {
+            console.log(`[generate-day] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${resolvedNextLegTransport}, not flight)`);
+          }
+        }
+
         // ====================================================================
         if (allUserIdsForAttribution.length > 1 && generatedDay?.activities?.length) {
           let backfilledCount = 0;
