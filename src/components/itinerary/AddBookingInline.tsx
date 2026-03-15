@@ -28,6 +28,7 @@ import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { syncHotelToLedger } from '@/services/budgetLedgerSync';
+import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
 import { cn } from '@/lib/utils';
 import { FlightImportModal } from './FlightImportModal';
 import { FindMyHotelsDrawer } from './FindMyHotelsDrawer';
@@ -886,6 +887,14 @@ export function AddHotelInline({
           checkOut: newHotel.checkOutDate,
         });
       }
+
+      // Cascade hotel info into itinerary accommodation activities
+      patchItineraryWithHotel(tripId, {
+        name: newHotel.name,
+        address: newHotel.address,
+        checkInDate: newHotel.checkInDate,
+        checkOutDate: newHotel.checkOutDate,
+      }).catch(err => console.error('[AddHotel] Itinerary patch failed:', err));
 
       toast.dismiss('hotel-enrich');
       toast.success(enrichment ? `${accomLabel} found and details updated!` : `${accomLabel} details saved!`);

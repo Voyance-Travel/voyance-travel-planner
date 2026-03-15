@@ -398,7 +398,7 @@ export function ItineraryAssistant({
             })),
           }));
           // Sync to activity_costs table (single source of truth)
-          import('@/services/activityCostService').then(({ syncActivitiesToCostTable }) => {
+          import('@/services/activityCostService').then(({ syncActivitiesToCostTable, cleanupRemovedActivityCosts }) => {
             const activitiesForCostTable: Array<{
               id: string;
               dayNumber: number;
@@ -407,9 +407,11 @@ export function ItineraryAssistant({
               numTravelers?: number;
               source?: string;
             }> = [];
+            const allActivityIds: string[] = [];
 
             for (const day of sortedDays) {
               for (const act of day.activities) {
+                if (act.id) allActivityIds.push(act.id);
                 const costVal = act.cost
                   ? (typeof act.cost === 'number'
                     ? act.cost
@@ -421,16 +423,22 @@ export function ItineraryAssistant({
                     dayNumber: day.dayNumber,
                     category: String(act.category || act.type || 'activities'),
                     costPerPersonUsd: costVal,
-                    numTravelers: 1,
+                    numTravelers: travelers || 1,
                     source: 'chat-sync',
                   });
                 }
               }
             }
 
+            // Upsert current activities
             if (activitiesForCostTable.length > 0) {
               syncActivitiesToCostTable(tripId, activitiesForCostTable)
                 .catch(err => console.error('[ItineraryAssistant] Activity cost sync failed:', err));
+            }
+            // Remove orphaned cost rows for swapped/removed activities
+            if (allActivityIds.length > 0) {
+              cleanupRemovedActivityCosts(tripId, allActivityIds)
+                .catch(err => console.error('[ItineraryAssistant] Orphan cleanup failed:', err));
             }
           });
         }

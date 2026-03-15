@@ -370,6 +370,46 @@ export async function syncActivitiesToCostTable(
   return data?.length || 0;
 }
 
+/**
+ * Remove activity_costs rows for activities that no longer exist in the itinerary.
+ * Call after edits (swap, rewrite, regenerate) to clean up stale cost rows.
+ */
+export async function cleanupRemovedActivityCosts(
+  tripId: string,
+  currentActivityIds: string[],
+): Promise<number> {
+  if (!currentActivityIds.length) return 0;
+
+  // Fetch all non-logistics activity_cost rows for this trip
+  const { data: existingRows, error: fetchError } = await supabase
+    .from('activity_costs')
+    .select('id, activity_id')
+    .eq('trip_id', tripId)
+    .neq('source', 'logistics-sync'); // Don't touch flight/hotel rows
+
+  if (fetchError || !existingRows) return 0;
+
+  const currentIdSet = new Set(currentActivityIds);
+  const orphanIds = existingRows
+    .filter(row => !currentIdSet.has(row.activity_id))
+    .map(row => row.id);
+
+  if (!orphanIds.length) return 0;
+
+  const { error: deleteError } = await supabase
+    .from('activity_costs')
+    .delete()
+    .in('id', orphanIds);
+
+  if (deleteError) {
+    console.error('cleanupRemovedActivityCosts error:', deleteError);
+    return 0;
+  }
+
+  console.log(`[ActivityCostService] Cleaned up ${orphanIds.length} orphaned cost rows`);
+  return orphanIds.length;
+}
+
 // ─── Exchange Rates ──────────────────────────────────────────
 
 export async function getExchangeRate(currencyCode: string): Promise<number | null> {

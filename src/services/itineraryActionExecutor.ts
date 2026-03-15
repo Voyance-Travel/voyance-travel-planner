@@ -505,8 +505,42 @@ async function executePacingAction(
       updatedActivities.splice(unlockedIdx, 1);
     }
   } else if (adjustment === 'more_packed') {
-    const existingActivity = day.activities.find(a => !a.isLocked) || day.activities[0];
-    
+    // Find the largest time gap in the day's schedule
+    const sortedActs = [...updatedActivities]
+      .map(a => ({ ...a, mins: parseTimeToMinutes(a.startTime || a.time) }))
+      .filter(a => a.mins < 9999)
+      .sort((a, b) => a.mins - b.mins);
+
+    let gapStart = '10:00'; // default morning start
+    let gapStartMins = 10 * 60;
+    let largestGap = 0;
+
+    if (sortedActs.length > 0) {
+      // Check gaps between consecutive activities
+      for (let i = 0; i < sortedActs.length - 1; i++) {
+        const endMins = sortedActs[i].mins + 90; // assume ~90min per activity
+        const nextStart = sortedActs[i + 1].mins;
+        const gap = nextStart - endMins;
+        if (gap > largestGap) {
+          largestGap = gap;
+          gapStartMins = endMins;
+          const h = Math.floor(endMins / 60);
+          const m = endMins % 60;
+          gapStart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
+      }
+      // Also check gap after last activity
+      const lastEnd = sortedActs[sortedActs.length - 1].mins + 90;
+      const eveningEnd = 21 * 60; // 9 PM
+      if (eveningEnd - lastEnd > largestGap) {
+        largestGap = eveningEnd - lastEnd;
+        gapStartMins = lastEnd;
+        const h = Math.floor(lastEnd / 60);
+        const m = lastEnd % 60;
+        gapStart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      }
+    }
+
     const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
       body: {
         currentActivity: { id: 'new', name: 'Quick Activity', type: 'activity' },
@@ -518,6 +552,10 @@ async function executePacingAction(
     if (!error && data?.success && data.alternatives?.length > 0) {
       const alternatives = data.alternatives as AlternativeActivity[];
       const newActivity = alternatives[0];
+      const endMins = gapStartMins + 60;
+      const endH = Math.floor(endMins / 60);
+      const endM = endMins % 60;
+      const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
       updatedActivities.push({
         id: newActivity.id,
         title: newActivity.name,
@@ -526,9 +564,10 @@ async function executePacingAction(
         category: newActivity.category,
         cost: { amount: newActivity.estimatedCost },
         location: { name: newActivity.location },
-        startTime: '15:00',
+        startTime: gapStart,
+        endTime,
         isLocked: false,
-      });
+      } as Activity);
     }
   }
 
