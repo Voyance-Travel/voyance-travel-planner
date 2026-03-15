@@ -113,7 +113,7 @@ export function TransportComparisonCard({
               >
                 <CardContent className="p-3 space-y-2">
                   {/* Top row: mode + operator + badges */}
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className={cn(
                         'p-1.5 rounded-md',
@@ -144,7 +144,7 @@ export function TransportComparisonCard({
                     </div>
 
                     {/* Cost */}
-                    <div className="text-right">
+                    <div className="sm:text-right">
                       <div className="text-sm font-semibold text-foreground">
                         {formatCurrency(option.cost.total, option.cost.currency)}
                       </div>

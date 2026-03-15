@@ -218,7 +218,7 @@ export function SignUpForm() {
           </motion.div>
         )}
         
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="firstName" className="text-slate-700">First Name</Label>
             <div className="relative">

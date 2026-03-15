@@ -171,7 +171,7 @@ export function TransitBadge({
               {onTransportModeChange && !isChangingMode && (
                 <div className="pt-1">
                   <p className="text-[10px] text-muted-foreground/60 mb-1.5">Change transport:</p>
-                  <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex overflow-x-auto gap-2 pb-1 scrollbar-hide sm:flex-wrap sm:overflow-visible">
                     {AVAILABLE_MODES.map(mode => {
                       const isActive = mode.value === currentMode ||
                         (currentMode === 'walk' && mode.value === 'walking');

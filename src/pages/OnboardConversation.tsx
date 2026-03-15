@@ -310,7 +310,7 @@ export default function OnboardConversation() {
                   value={story}
                   onChange={(e) => setStory(e.target.value)}
                   placeholder="Japan was amazing but exhausting. The best day was getting lost in Kyoto and finding a tiny soba shop where we were the only tourists. I wish the whole trip had been like that. Less scheduled, more wandering..."
-                  className="min-h-[200px] text-base resize-none"
+                  className="min-h-[120px] sm:min-h-[200px] text-base resize-none"
                   disabled={isAnalyzing}
                 />
 

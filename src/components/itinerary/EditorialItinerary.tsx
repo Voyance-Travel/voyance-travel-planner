@@ -4314,7 +4314,7 @@ export function EditorialItinerary({
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" sideOffset={4}>
                 <DropdownMenuItem onClick={() => setActiveTab('payments' as typeof activeTab)}>
                   <CreditCard className="h-4 w-4 mr-2" /> Payments
                 </DropdownMenuItem>
@@ -4942,7 +4942,7 @@ export function EditorialItinerary({
                             'text-[10px] font-semibold uppercase tracking-wide',
                             isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'
                           )}>
-                            Day {day.dayNumber}
+                            <span className="sm:hidden">D{day.dayNumber}</span><span className="hidden sm:inline">Day {day.dayNumber}</span>
                           </span>
                           {dayDate ? (
                             <>
@@ -4964,7 +4964,7 @@ export function EditorialItinerary({
                           {/* City name for multi-city */}
                           {cityName && (
                             <span className={cn(
-                              'text-[9px] font-medium truncate max-w-[64px] mt-0.5 flex items-center gap-0.5',
+                              'text-[9px] font-medium truncate max-w-[48px] sm:max-w-[64px] mt-0.5 flex items-center gap-0.5',
                               isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground/70'
                             )}>
                               {isDayTransition && <ArrowRight className="h-2 w-2 shrink-0" />}
@@ -8304,7 +8304,7 @@ function DayCard({
                       <MoreHorizontal className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuContent align="end" sideOffset={4} className="w-44">
                     {!dayIsPreview && (
                       <DropdownMenuItem onClick={() => setShowTransportDetails(prev => !prev)}>
                         <Route className="h-3.5 w-3.5 mr-2" />
@@ -9673,7 +9673,7 @@ function ActivityRow({
                         <span className="text-xs font-medium">More Options</span>
                       </TooltipContent>
                     </Tooltip>
-                    <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                    <DropdownMenuContent align="center" sideOffset={4} className="bg-background border shadow-lg z-50 min-w-[160px]">
                       {onSwap && canViewPremium && (
                         <>
                           <DropdownMenuItem
@@ -9822,7 +9822,7 @@ function ActivityRow({
                       <MoreHorizontal className="h-5 w-5" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                  <DropdownMenuContent align="center" sideOffset={4} className="bg-background border shadow-lg z-50 min-w-[160px]">
                     <DropdownMenuItem
                       onClick={() => setShowProposeReplacement(true)}
                       className="cursor-pointer gap-2"
