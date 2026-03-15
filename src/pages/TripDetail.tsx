@@ -197,6 +197,7 @@ export default function TripDetail() {
   const stalledTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [resumingGeneration, setResumingGeneration] = useState(false);
   const resumeInFlightRef = useRef(false);
+  const autoResumeAttemptedRef = useRef(false);
   const onReadyCalledRef = useRef(false);
   const [generateNewDaysPrompt, setGenerateNewDaysPrompt] = useState<{
     open: boolean;
