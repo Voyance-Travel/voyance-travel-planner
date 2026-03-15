@@ -66,6 +66,7 @@ import { parseEditorialDays } from '@/utils/itineraryParser';
 import { getAppUrl } from '@/utils/getAppUrl';
 import { resolveInviteLink, getInviteErrorMessage, type InviteHealth } from '@/services/inviteResolver';
 
+import { BlendRecalcBanner } from './BlendRecalcBanner';
 import AirlineLogo from '@/components/planner/shared/AirlineLogo';
 import { useRefreshDay, type RefreshResult, type ProposedChange } from '@/hooks/useRefreshDay';
 import { RefreshDayDiffView } from './RefreshDayDiffView';
