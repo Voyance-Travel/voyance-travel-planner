@@ -8304,7 +8304,7 @@ function DayCard({
                       <MoreHorizontal className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuContent align="end" sideOffset={4} className="w-44">
                     {!dayIsPreview && (
                       <DropdownMenuItem onClick={() => setShowTransportDetails(prev => !prev)}>
                         <Route className="h-3.5 w-3.5 mr-2" />
