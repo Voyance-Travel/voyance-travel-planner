@@ -1455,6 +1455,7 @@ import {
   validateGeneratedDay,
   deduplicateActivities,
   type DayValidationResult,
+  type StrictDayMinimal,
 } from './day-validation.ts';
 
 
@@ -9076,6 +9077,124 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
 
         generatedDay.title = generatedDay.title || generatedDay.theme || `Day ${dayNumber}`;
+
+        // =======================================================================
+        // TRIP-WIDE DUPLICATE VALIDATION (same as full generation path)
+        // Build previousDays from existing itinerary, call validateGeneratedDay
+        // =======================================================================
+        if (tripId) {
+          try {
+            // Fetch trip's itinerary_data to build previousDays
+            const { data: tripItinData } = await supabase
+              .from('trips')
+              .select('itinerary_data')
+              .eq('id', tripId)
+              .single();
+
+            const existingDays = (tripItinData?.itinerary_data as any)?.days || [];
+            const previousDaysForValidation: StrictDayMinimal[] = existingDays
+              .filter((d: any) => d.dayNumber !== dayNumber)
+              .map((d: any) => ({
+                dayNumber: d.dayNumber || 0,
+                date: d.date || '',
+                title: d.title || d.theme || '',
+                theme: d.theme,
+                activities: (d.activities || []).map((a: any) => ({
+                  id: a.id || '',
+                  title: a.title || a.name || '',
+                  startTime: a.startTime || a.start_time || '',
+                  endTime: a.endTime || a.end_time || '',
+                  category: a.category || 'activity',
+                  location: a.location || { name: '', address: '' },
+                  cost: a.cost || a.estimatedCost || { amount: 0, currency: 'USD' },
+                  description: a.description || '',
+                  tags: a.tags || [],
+                  bookingRequired: a.bookingRequired || false,
+                  transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+                })),
+              }));
+
+            if (previousDaysForValidation.length > 0) {
+              const isFirstDay = dayNumber === 1;
+              const isLastDay = dayNumber === totalDays;
+              const mustDoList = (paramMustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+
+              // Build the current day in StrictDayMinimal format
+              const currentDayForValidation: StrictDayMinimal = {
+                dayNumber,
+                date: date || '',
+                title: generatedDay.title || '',
+                theme: generatedDay.theme,
+                activities: (generatedDay.activities || []).map((a: any) => ({
+                  id: a.id || '',
+                  title: a.title || a.name || '',
+                  startTime: a.startTime || '',
+                  endTime: a.endTime || '',
+                  category: a.category || 'activity',
+                  location: a.location || { name: '', address: '' },
+                  cost: a.cost || a.estimatedCost || { amount: 0, currency: 'USD' },
+                  description: a.description || '',
+                  tags: a.tags || [],
+                  bookingRequired: a.bookingRequired || false,
+                  transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+                })),
+              };
+
+              const dayValidation = validateGeneratedDay(
+                currentDayForValidation,
+                dayNumber,
+                isFirstDay,
+                isLastDay,
+                totalDays,
+                previousDaysForValidation,
+                false, // not smart finish
+                mustDoList
+              );
+
+              if (dayValidation.errors.length > 0) {
+                console.warn(`[generate-day] Trip-wide validation errors for Day ${dayNumber}:`, dayValidation.errors);
+
+                // Strip duplicates found by validation instead of full retry
+                // Remove activities flagged as MEAL REPEAT or TRIP-WIDE DUPLICATE
+                const duplicateTitles: string[] = [];
+                for (const err of dayValidation.errors) {
+                  // Extract activity title from error messages like 'MEAL REPEAT: "Restaurant X" on Day 3...'
+                  // or 'TRIP-WIDE DUPLICATE: "Activity Y" is too similar to...'
+                  const titleMatch = err.match(/(?:MEAL REPEAT|TRIP-WIDE DUPLICATE|CONCEPT SIMILARITY):\s*"([^"]+)"/i);
+                  if (titleMatch) {
+                    duplicateTitles.push(titleMatch[1].toLowerCase());
+                  }
+                }
+
+                if (duplicateTitles.length > 0) {
+                  const beforeCount = generatedDay.activities.length;
+                  generatedDay.activities = generatedDay.activities.filter((act: any) => {
+                    const actTitle = (act.title || '').toLowerCase();
+                    const isDupe = duplicateTitles.some(dt => actTitle.includes(dt) || dt.includes(actTitle));
+                    if (isDupe) {
+                      // Don't remove locked activities
+                      if (act.isLocked) return true;
+                      console.log(`[generate-day] 🗑️ Removing duplicate activity "${act.title}" (matched trip-wide validation)`);
+                      return false;
+                    }
+                    return true;
+                  });
+                  const removedCount = beforeCount - generatedDay.activities.length;
+                  if (removedCount > 0) {
+                    console.log(`[generate-day] ✓ Stripped ${removedCount} trip-wide duplicate activities from Day ${dayNumber}`);
+                    normalizedActivities = generatedDay.activities;
+                  }
+                }
+              }
+
+              if (dayValidation.warnings.length > 0) {
+                console.log(`[generate-day] Trip-wide validation warnings for Day ${dayNumber}:`, dayValidation.warnings);
+              }
+            }
+          } catch (validationErr) {
+            console.warn('[generate-day] Trip-wide duplicate validation failed (non-blocking):', validationErr);
+          }
+        }
 
         // =======================================================================
         // PERSIST TO NORMALIZED TABLES: itinerary_days + itinerary_activities
