@@ -1261,6 +1261,16 @@ export function EditorialItinerary({
   const queryClient = useQueryClient();
   const isCleanPreview = viewMode === 'preview';
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
+
+  // Compute expected total days from start/end dates so we can show placeholders during generation
+  const expectedTotalDays = useMemo(() => {
+    if (!startDate || !endDate) return days.length;
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate);
+    const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(diff, days.length);
+  }, [startDate, endDate, days.length]);
+
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
 
   // Sanitize wrapper: ensures every activity has a valid title and filters out
