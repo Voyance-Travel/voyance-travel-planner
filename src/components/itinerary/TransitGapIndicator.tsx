@@ -10,11 +10,31 @@ import { cn } from '@/lib/utils';
 import {
   Footprints, AlertTriangle, Clock, Train, Car, Bus,
   Navigation2, ChevronDown, ChevronUp, Sparkles, Loader2, Ship,
+  ThumbsUp, ThumbsDown, Info,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 
 // ─── Types ─────────────────────────────────────────────────────────────
+
+interface RouteDetails {
+  steps: Array<{
+    instruction: string;
+    distance: string;
+    duration: string;
+    travelMode: string;
+    transitDetails?: {
+      lineName: string;
+      vehicleType: string;
+      departureStop: string;
+      arrivalStop: string;
+      numStops: number;
+    };
+  }>;
+  summary: string;
+  totalDuration: string;
+  totalDistance: string;
+}
 
 interface TransportOptionData {
   id: string;
@@ -197,6 +217,11 @@ export function TransitGapIndicator({
   const canExpand = isEditable && !!city && !!destinationName;
   const shouldHide = hasTransitBadge || eitherIsTransit;
 
+  const [expandedOptionId, setExpandedOptionId] = useState<string | null>(null);
+  const [routeDetailsCache, setRouteDetailsCache] = useState<Record<string, RouteDetails | null>>({});
+  const [loadingRouteId, setLoadingRouteId] = useState<string | null>(null);
+  const [showAllStepsFor, setShowAllStepsFor] = useState<string | null>(null);
+
   const fetchOptions = useCallback(async () => {
     if (hasFetched || isLoading || !city || !destinationName) return;
     setIsLoading(true);
@@ -268,10 +293,47 @@ export function TransitGapIndicator({
     }
   }, [city, destinationName, originName, hasFetched, isLoading]);
 
+  const fetchRouteDetails = useCallback(async (option: TransportOptionData) => {
+    if (routeDetailsCache[option.id] !== undefined || loadingRouteId === option.id) return;
+    setLoadingRouteId(option.id);
+    try {
+      const googleMode = option.mode === 'taxi' || option.mode === 'uber' || option.mode === 'rideshare' ? 'driving'
+        : option.mode === 'train' || option.mode === 'metro' || option.mode === 'bus' || option.mode === 'transit' ? 'transit'
+        : option.mode === 'walk' ? 'walking'
+        : 'driving';
+
+      const origin = originName || city;
+      const destination = (destinationName || '') + ', ' + city;
+
+      const { data, error } = await supabase.functions.invoke('route-details', {
+        body: { origin, destination, mode: googleMode },
+      });
+
+      if (!error && data?.steps?.length > 0) {
+        setRouteDetailsCache(prev => ({ ...prev, [option.id]: data as RouteDetails }));
+      } else {
+        setRouteDetailsCache(prev => ({ ...prev, [option.id]: null }));
+      }
+    } catch {
+      setRouteDetailsCache(prev => ({ ...prev, [option.id]: null }));
+    } finally {
+      setLoadingRouteId(null);
+    }
+  }, [routeDetailsCache, loadingRouteId, originName, city, destinationName]);
+
+  const toggleOptionDetail = (optionId: string, option?: TransportOptionData) => {
+    const next = expandedOptionId === optionId ? null : optionId;
+    setExpandedOptionId(next);
+    if (next && option && routeDetailsCache[optionId] === undefined) {
+      fetchRouteDetails(option);
+    }
+  };
+
   const handleExpand = () => {
     if (!canExpand) return;
     const next = !isExpanded;
     setIsExpanded(next);
+    if (next) setExpandedOptionId(null);
     if (next && !hasFetched) fetchOptions();
   };
 
@@ -369,38 +431,187 @@ export function TransitGapIndicator({
                 </div>
               )}
 
-              {/* Options list */}
-              {!isLoading && options.map(option => (
-                <div
-                  key={option.id}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border/50 bg-background hover:border-primary/30 transition-colors"
-                >
-                  <span className="text-muted-foreground shrink-0">
-                    {getModeIcon(option.mode)}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{option.label}</span>
-                      {option.recommended && (
-                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-primary/10 text-primary border-0">
-                          👍 Best
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-2.5 w-2.5" />
-                        {option.duration}
+              {/* Options list with Level 2 expansion */}
+              {!isLoading && options.map(option => {
+                const isDetailExpanded = expandedOptionId === option.id;
+
+                return (
+                  <div
+                    key={option.id}
+                    className={cn(
+                      "rounded-lg border transition-all overflow-hidden",
+                      isDetailExpanded ? "border-primary/30 bg-primary/[0.02]" : "border-border/50 bg-background hover:border-primary/30",
+                      option.recommended && !isDetailExpanded && "border-primary/20 bg-primary/[0.02]"
+                    )}
+                  >
+                    {/* Level 1: Option summary row */}
+                    <button
+                      onClick={() => toggleOptionDetail(option.id, option)}
+                      className="flex items-center gap-2.5 p-2.5 w-full text-left hover:bg-secondary/10 transition-colors"
+                    >
+                      <span className="text-muted-foreground shrink-0">
+                        {getModeIcon(option.mode)}
                       </span>
-                      <span className="font-medium">{option.estimatedCost}</span>
-                      {option.costPerPerson && travelers > 1 && (
-                        <span className="text-muted-foreground/70">({option.costPerPerson} pp)</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-foreground">{option.label}</span>
+                          {option.recommended && (
+                            <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-primary border-primary/20">
+                              <ThumbsUp className="h-2 w-2 mr-0.5" />
+                              Best
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-0.5">
+                            <Clock className="h-2.5 w-2.5" /> {option.duration}
+                          </span>
+                          <span className="font-medium text-foreground">{option.estimatedCost}</span>
+                          {option.costPerPerson && travelers > 1 && (
+                            <span className="text-muted-foreground/70">({option.costPerPerson} pp)</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-muted-foreground/40 shrink-0">
+                        {isDetailExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </span>
+                    </button>
+
+                    {/* Level 2: Route details */}
+                    <AnimatePresence>
+                      {isDetailExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border/30">
+                            {/* Loading route details */}
+                            {loadingRouteId === option.id && (
+                              <div className="flex items-center gap-2 py-2">
+                                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                                <span className="text-[11px] text-muted-foreground">Loading route details...</span>
+                              </div>
+                            )}
+
+                            {/* Step-by-step directions */}
+                            {routeDetailsCache[option.id]?.steps && routeDetailsCache[option.id]!.steps.length > 0 ? (() => {
+                              const MAX_INLINE_STEPS = 5;
+                              const steps = routeDetailsCache[option.id]!.steps;
+                              const showAll = showAllStepsFor === option.id;
+                              const visibleSteps = showAll ? steps : steps.slice(0, MAX_INLINE_STEPS);
+                              const hiddenCount = steps.length - MAX_INLINE_STEPS;
+
+                              return (
+                                <div className="space-y-1.5">
+                                  {routeDetailsCache[option.id]!.summary && (
+                                    <p className="text-[11px] font-medium text-foreground">{routeDetailsCache[option.id]!.summary}</p>
+                                  )}
+                                  {routeDetailsCache[option.id]!.totalDuration && (
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {routeDetailsCache[option.id]!.totalDuration} · {routeDetailsCache[option.id]!.totalDistance}
+                                    </p>
+                                  )}
+                                  {visibleSteps.map((step, idx) => (
+                                    <div key={idx} className="flex items-start gap-2">
+                                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-[9px] font-bold shrink-0 mt-0.5">
+                                        {idx + 1}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-[11px] text-foreground/90 leading-snug">{step.instruction}</p>
+                                        {step.transitDetails && (
+                                          <div className="flex items-center gap-1 mt-0.5 text-[10px] bg-secondary/40 rounded px-1.5 py-0.5 w-fit">
+                                            <Train className="h-2.5 w-2.5 text-primary shrink-0" />
+                                            <span className="font-medium text-foreground">{step.transitDetails.lineName}</span>
+                                            <span className="text-muted-foreground">
+                                              {step.transitDetails.departureStop} → {step.transitDetails.arrivalStop}
+                                              {step.transitDetails.numStops > 0 && ` (${step.transitDetails.numStops} stop${step.transitDetails.numStops > 1 ? 's' : ''})`}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {step.distance && (
+                                          <p className="text-[10px] text-muted-foreground mt-0.5">{step.distance} · {step.duration}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {hiddenCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowAllStepsFor(showAll ? null : option.id);
+                                      }}
+                                      className="text-xs text-primary hover:text-primary/80 font-medium pt-1"
+                                    >
+                                      {showAll ? 'Show fewer steps' : `+ ${hiddenCount} more step${hiddenCount > 1 ? 's' : ''}`}
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })() : loadingRouteId !== option.id ? (
+                              /* Fallback to generic route from airport-transfers */
+                              <>
+                                {option.route && (
+                                  <div className="text-xs text-foreground/80">
+                                    <span className="font-medium text-foreground">Route: </span>
+                                    {option.route}
+                                  </div>
+                                )}
+                                {option.trainLine && (
+                                  <div className="flex items-center gap-1.5 text-xs text-foreground/80 bg-secondary/30 rounded px-2 py-1">
+                                    <Train className="h-3 w-3 text-primary shrink-0" />
+                                    Take the <span className="font-medium">{option.trainLine}</span>
+                                  </div>
+                                )}
+                              </>
+                            ) : null}
+
+                            {/* Pros */}
+                            {option.pros && option.pros.length > 0 && (
+                              <div className="space-y-1">
+                                {option.pros.map((pro, i) => (
+                                  <div key={i} className="flex items-start gap-1.5 text-[11px] text-green-700 dark:text-green-400">
+                                    <ThumbsUp className="h-2.5 w-2.5 mt-0.5 shrink-0" />
+                                    <span>{pro}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Cons */}
+                            {option.cons && option.cons.length > 0 && (
+                              <div className="space-y-1">
+                                {option.cons.map((con, i) => (
+                                  <div key={i} className="flex items-start gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                                    <ThumbsDown className="h-2.5 w-2.5 mt-0.5 shrink-0" />
+                                    <span>{con}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Notes */}
+                            {option.notes && (
+                              <p className="text-[10px] text-muted-foreground italic">{option.notes}</p>
+                            )}
+
+                            {/* Booking tip */}
+                            {option.bookingTip && (
+                              <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground bg-secondary/20 rounded px-2 py-1.5">
+                                <Info className="h-3 w-3 shrink-0 mt-0.5" />
+                                <span><span className="font-medium">Tip:</span> {option.bookingTip}</span>
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
                       )}
-                    </div>
+                    </AnimatePresence>
                   </div>
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0" />
-                </div>
-              ))}
+                );
+              })}
 
               {/* Empty state */}
               {!isLoading && hasFetched && options.length === 0 && (
