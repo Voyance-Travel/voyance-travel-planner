@@ -144,6 +144,12 @@ export async function splitJourneyIfNeeded(
       mustDoActivities: legMustDos.length > 0 ? legMustDos : null,
       splitFromTrip: originalTripId,
       journeyLeg: i + 1,
+      // Propagate generation rules and constraints from original trip metadata
+      generation_rules: metadata.generation_rules || null,
+      constraints: metadata.constraints || null,
+      transportation_preferences: metadata.transportation_preferences || null,
+      dietary: metadata.dietary || null,
+      pacing: metadata.pacing || null,
     };
 
     // First-time visitor per city
@@ -153,6 +159,11 @@ export async function splitJourneyIfNeeded(
     }
 
     const legName = `${journeyName}: ${dest.city}`;
+
+    // Proportional budget for this leg
+    const legBudgetCents = originalTrip.budget_total_cents
+      ? Math.round((originalTrip.budget_total_cents as number) * nights / totalDays)
+      : null;
 
     legInserts.push({
       user_id: originalTrip.user_id,
@@ -164,9 +175,7 @@ export async function splitJourneyIfNeeded(
       travelers: originalTrip.travelers,
       trip_type: originalTrip.trip_type,
       budget_tier: originalTrip.budget_tier,
-      budget_total_cents: originalTrip.budget_total_cents
-        ? Math.round((originalTrip.budget_total_cents as number) * nights / totalDays)
-        : null,
+      budget_total_cents: legBudgetCents,
       origin_city: i === 0 ? originalTrip.origin_city : destinations[i - 1].city,
       flight_selection: i === 0 ? originalTrip.flight_selection : null,
       hotel_selection: hotelsByCity?.[dest.city]?.length
@@ -275,6 +284,10 @@ export async function splitJourneyIfNeeded(
     const arrivalDate = addDays(startDate, dateOffset);
     const departureDate = addDays(arrivalDate, nights);
 
+    // Get proportional budget from the leg insert
+    const legInsert = legInserts[i];
+    const allocatedBudget = legInsert?.budget_total_cents ?? null;
+
     cityInserts.push({
       trip_id: legTrip.id,
       city_order: 0, // Each leg has only one city
@@ -285,6 +298,7 @@ export async function splitJourneyIfNeeded(
       nights,
       generation_status: 'pending' as const,
       days_total: nights + 1, // Inclusive day count: nights + 1 (matches single-city convention)
+      allocated_budget_cents: allocatedBudget,
       transport_type: i > 0 && transports[i - 1] ? transports[i - 1].type : null,
       transport_details: i > 0 && transports[i - 1] ? transports[i - 1] as any : null,
       hotel_selection: hotelsByCity?.[dest.city]?.length

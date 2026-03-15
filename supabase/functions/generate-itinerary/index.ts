@@ -6621,10 +6621,14 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       if (!res.ok) {
         const errorBody = await res.text().catch(() => 'no body');
         console.error(`[triggerNextJourneyLeg] Non-2xx response for leg ${nextLeg.id}: ${res.status} — ${errorBody}`);
+        // Fetch existing metadata to merge (preserve must-dos, personalization)
+        const { data: legMeta } = await supabase.from('trips').select('metadata').eq('id', nextLeg.id).single();
+        const existingMeta = (legMeta?.metadata as Record<string, unknown>) || {};
         // Reset to queued so frontend fallback can retry
         await supabase.from('trips').update({
           itinerary_status: 'queued',
           metadata: {
+            ...existingMeta,
             chain_error: `Backend returned ${res.status}`,
             chain_error_at: new Date().toISOString(),
           },
@@ -6635,10 +6639,14 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       console.log(`[triggerNextJourneyLeg] Next leg ${nextLeg.id} invoke status: ${res.status}`);
     } catch (fetchErr) {
       console.error(`[triggerNextJourneyLeg] Failed to invoke next leg ${nextLeg.id}:`, fetchErr);
+      // Fetch existing metadata to merge (preserve must-dos, personalization)
+      const { data: legMeta } = await supabase.from('trips').select('metadata').eq('id', nextLeg.id).single();
+      const existingMeta = (legMeta?.metadata as Record<string, unknown>) || {};
       // Reset status so the frontend fallback can retry
       await supabase.from('trips').update({
         itinerary_status: 'queued',
         metadata: {
+          ...existingMeta,
           chain_error: String(fetchErr),
           chain_error_at: new Date().toISOString(),
         },

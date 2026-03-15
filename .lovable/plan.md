@@ -1,108 +1,203 @@
+## Fix: Journey Leg Handoff + Pricing Consistency ✅ COMPLETE
 
+### Root causes fixed:
+1. **Backend handoff** (`triggerNextJourneyLeg`): Was sending `{ tripId }` only — rejected by service-role allowlist (missing `generate-trip`). Now fetches full trip fields and sends `action: 'generate-trip'` with complete payload. Allowlist expanded.
+2. **Frontend fallback** (`TripDetail.tsx`): Same `{ tripId }` problem. Now sends full `generate-trip` payload. No longer pre-sets `itinerary_status='generating'` before invoke succeeds.
+3. **Stuck-leg self-heal**: On TripDetail load, detects journey legs stuck in `generating` with no heartbeat/progress and auto-retriggers with full payload.
+4. **Pricing mismatch** (`useGenerationGate`): Was summing per-leg single-city estimates (missing multi-city fee). Now uses canonical `calculateTripCredits({ days: totalJourneyDays, cities: allCities })`.
+5. **Cost dialog timing** (`ItineraryGenerator`): Journey legs now pre-fetched in `handleGenerateClick` before showing confirmation, not after confirm.
 
-## Multi-City Itinerary — Full End-to-End Audit
+---
 
-### Pipeline Traced
+## Journey Sequential Generation — Implementation Status
 
-```text
-Start.tsx (Form/Chat) → multi-city destinations → trip insert (is_multi_city=true)
-→ trip_cities insert (per-city rows) → splitJourneyIfNeeded (8+ days, 2+ cities)
-→ Journey split: original trip cancelled, N leg trips created
-→ Navigate to first leg → TripDetail ?generate=true
-→ ItineraryGenerator → Credit gate (charges ALL days upfront on leg 1)
-→ generate-itinerary edge function (generate-trip action)
-→ Per-day generation with multiCityDayMap context
-→ Stage 6 final save → triggerNextJourneyLeg (self-chaining)
-→ Next leg: queued → generating → ready (repeat chain)
-→ Frontend: useGenerationPoller + isQueuedJourneyLeg polling
-→ EditorialItinerary per-leg → JourneyUpNext card → JourneySpendingSummary
-```
+### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
 
-### Working Well
+**Implemented:**
 
-1. **Journey split logic** — Clean separation: 8+ days with 2+ cities triggers split into linked leg trips sharing a `journey_id`. Original trip cancelled with audit trail. Collaborators and members correctly copied to all legs.
-2. **Sequential chaining** — `triggerNextJourneyLeg()` fires after Stage 6 completes, invoking `generate-trip` for the next queued leg via service-role auth bypass.
-3. **Frontend queue polling** — `TripDetail.tsx` detects `isQueuedJourneyLeg` and polls both current leg status and previous leg readiness. Stuck-leg self-heal with 3-minute timeout.
-4. **Chain failure recovery** — `chain_broken_at_day` backend signal, `resumeInFlight` concurrency lock, auto-resume up to 3 attempts before showing stalled UI.
-5. **Transition day prompts** — Full 3-part skeleton (origin morning, transit, destination evening) via `buildTransitionDayPrompt()`. Transport mode look-ahead prevents airport hallucinations for non-flight legs.
-6. **Per-city hotel injection** — Hotels from `trip_cities.hotel_selection` injected into generation prompts with geographic anchoring, check-in/checkout constraints, and negative hotel substitution rules.
-7. **Budget split across legs** — `budget_total_cents` proportionally distributed based on nights per city.
-8. **Transport cascade** — `runCascadeAndPersist` handles both single and multi-city (passes `cities` param for inter-city transport awareness).
-9. **JourneyUpNext card** — Correctly links to next leg with transport mode icon and dates.
-10. **JourneySpendingSummary** — Cross-leg payment overview on Payments tab.
-11. **All edge functions operational** — No broken functions detected.
+1. **`src/hooks/useGenerationGate.ts`**:
+   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
+   - Added journey detection: fetches all sibling legs when `journeyId` is present
+   - Sums credit costs across all journey legs for unified billing
+   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
+   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
 
-### Gaps Found
+2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
+   - Added `journeyLegs` state for cost breakdown display
+   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
+   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
+   - Updated cost confirmation dialog:
+     - Shows "Journey Cost Breakdown" header for journeys
+     - Lists each leg with city, days, and cost
+     - Shows "Journey Total" instead of "Total"
+     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
+     - Disabled partial generation for journeys (must pay full upfront)
+     - "Confirm & Generate Journey" button text for journeys
 
-#### **GAP 1: `JourneySpendingSummary` reads `trip_payments`, not `activity_costs`** (MEDIUM)
+### Part 2: Auto-Chain Generation (TODO)
 
-The `JourneySpendingSummary` component queries `trip_payments` table for per-leg spending. But the canonical financial source is `activity_costs` (via `v_trip_total`). If no manual payments exist, the journey summary shows $0 for every leg even when `activity_costs` has real expected spend data. This makes the cross-leg spending overview useless until users manually mark items as paid.
+When leg 1 completes generation, the backend should:
+1. Check for next queued leg in the journey
+2. Automatically trigger `generate-trip` for the next leg
+3. Continue until all legs are generated
 
-**Fix**: Query `activity_costs` (or the `v_trip_total` view) alongside `trip_payments` to show expected spend per leg, not just paid amounts.
+Files to modify:
+- `supabase/functions/generate-trip/index.ts` or similar edge function
+- Add post-generation hook to detect and chain to next journey leg
 
-#### **GAP 2: Hotel patch only targets one trip, not journey legs** (MEDIUM)
+### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
 
-`patchItineraryWithHotel()` accepts a single `tripId`. For journey legs, each leg is its own trip. If a user adds a hotel via `AddBookingInline` for leg 2, the patch correctly targets leg 2's `itinerary_data`. However, the **hotel save path** has a subtle issue: when `cityId` is provided (multi-city), the hotel saves to `trip_cities.hotel_selection`, but the `patchItineraryWithHotel` call still uses `tripId` — which is correct since each journey leg IS its own trip. This works as designed. No gap here.
+**Implemented:**
 
-#### **GAP 3: Flight added on leg 1 doesn't affect leg N departure** (LOW)
+1. **`src/pages/TripDetail.tsx`**:
+   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
+   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
+   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
+   - Added distinct "queued" state UI:
+     - Clock icon with hourglass badge
+     - "{destination} is up next" heading
+     - Explanation text about waiting for previous leg
+     - "View previous city" button to navigate back to the generating leg
+   - Added `Clock` to lucide-react imports
 
-When a user adds a flight on the original (pre-split) trip, the `flight_selection` is only copied to leg 1 via `splitJourneyIfNeeded` (line 171). If the user later adds a return flight on leg N (last leg), the flight data goes to leg N's trip but the `cascadeTransportToItinerary` logic may not handle the last-day departure correctly since the return flight is stored on a different trip than where the itinerary shows.
+---
 
-Actually, re-reading: `AddBookingInline` receives the current trip's `tripId`, so if user is on leg 3 and adds a flight, it saves to leg 3's `flight_selection` and cascades to leg 3's itinerary. This works correctly per-leg.
+## Preference Enforcement Activation ✅ COMPLETE
 
-#### **GAP 4: `triggerNextJourneyLeg` metadata overwrite** (MEDIUM)
+### Fix 1: Per-day preference checks now trigger retries ✅
+Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
 
-When the chain trigger fails (lines 6625-6631), it overwrites the entire `metadata` field:
-```typescript
-metadata: {
-  chain_error: `Backend returned ${res.status}`,
-  chain_error_at: new Date().toISOString(),
-},
-```
-This replaces ALL existing metadata (mustDoActivities, splitFromTrip, journeyLeg, etc.) with just the error fields. This means if generation is retried, all per-leg must-do activities and personalization context is lost.
+### Fix 2: Stage 2.6 personalization rejection enabled ✅
+Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
 
-**Fix**: Merge error fields into existing metadata instead of replacing: `{ ...existingMetadata, chain_error: ... }`.
+---
 
-#### **GAP 5: Journey legs don't inherit `generation_rules` or `constraints`** (MEDIUM)
+## Itinerary Generation Quality Fixes ✅ COMPLETE
 
-`splitJourneyIfNeeded` copies `metadata.mustDoActivities` split by city keyword matching. But it does NOT copy:
-- `generation_rules` (time blocks, avoidances, pacing preferences)
-- `constraints` from the Fine-Tune step
-- `transportation_preferences`
-- `dietary` restrictions
+### Bug 1: Arrival Sequence Inverted ✅
+Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
 
-These fields exist on the original trip but are not propagated to leg trips. The generation edge function reads these from the leg's trip row, finding them null, and generates without the user's personalization constraints.
+### Bug 2: User Preferences Ignored ✅
+- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
+- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
+- Warns when "light dinner" preference is violated by expensive dining ($50+)
 
-**Fix**: Copy `generation_rules`, `constraints`, `transportation_preferences`, and relevant preferences fields from the original trip to each leg trip during the split.
+### Bug 3: Empty Days ✅
+Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
 
-#### **GAP 6: Credits charged once on leg 1 but no guard on leg N** (LOW)
+### Bug 4: Nonsensical Inter-City Flights ✅
+Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
 
-All journey legs after leg 1 are invoked with `creditsCharged: 0`. The `triggerNextJourneyLeg` correctly passes this. However, there's no DB-level guard preventing a malicious or buggy re-invocation from charging credits again on leg 2+. The credit gate in `useGenerationGate` does check this, but the self-chaining backend path bypasses the frontend gate entirely.
+---
 
-This is low severity since the service-role bypass is only used for internal chaining, but worth noting for defense-in-depth.
+## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
 
-#### **GAP 7: `allocated_budget_cents` not set on journey leg `trip_cities` rows** (LOW)
+**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
 
-In `splitJourneyIfNeeded` (line 278-301), `trip_cities` rows are created for each leg but `allocated_budget_cents` is never set. The form path in `Start.tsx` (line 2543-2548) does set this for non-split multi-city trips, but after the split, the per-city budget allocation is only on the parent trip's `trip_cities` rows (which belong to the now-cancelled original trip).
+### Changes (single migration):
+1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
+2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
+3. **Backfill** — all existing tokens lowercased
+4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
+5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
+6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
 
-Each leg trip gets `budget_total_cents` set proportionally (line 167-168), but the leg's `trip_cities` row has no `allocated_budget_cents`. This means budget-per-city views that query `trip_cities.allocated_budget_cents` show $0.
+---
 
-**Fix**: Set `allocated_budget_cents` on each leg's `trip_cities` row equal to the leg's `budget_total_cents`.
+## Fix: User Requirements Ignored in Just Tell Us Pipeline ✅ COMPLETE
 
-### Recommendations — Priority Order
+### Layer 1: `findBestDay` respects `preferredDay` on Day 1/last day ✅
+- Modified skip guard in `must-do-priorities.ts` L472 to allow long activities on Day 1/last day when user explicitly requested that day via `preferredDay`.
 
-1. **Fix metadata overwrite in `triggerNextJourneyLeg`** — Merge errors into existing metadata to preserve must-dos and personalization
-2. **Propagate generation rules to journey legs** — Copy constraints, dietary, transportation_preferences during split
-3. **Fix `JourneySpendingSummary` to use `activity_costs`** — Show expected spend, not just payments
-4. **Set `allocated_budget_cents` on leg `trip_cities`** — Budget per-city accuracy
-5. **No regressions** — All previous fixes (cost sync, pacing, hotel/flight patches, dedup, optimistic locking) remain intact and unmodified
+### Layer 2: `parseMustDoInput` resolves day-of-week and multi-day references ✅
+- Added `tripStartDate` and `totalDays` parameters to function signature
+- Day-of-week resolution: maps "Friday", "Saturday" etc. to trip day numbers using start date
+- Multi-day expansion: "both days" / "every day" / "all N days" duplicated into per-day entries
+- Updated all 5 callers in `index.ts` to pass `startDate` and `totalDays`
 
-### Files Involved
+### Layer 3: Chat AI prompt strengthened for temporal mapping ✅
+- Added CRITICAL TEMPORAL MAPPING RULES to system prompt in `chat-trip-planner/index.ts`
+- Updated `mustDoActivities` field description to instruct AI to expand multi-day refs into per-day entries with explicit day numbers
 
-| Fix | Files |
-|-----|-------|
-| GAP 4 (metadata overwrite) | `supabase/functions/generate-itinerary/index.ts` (lines 6625-6645) |
-| GAP 5 (generation rules) | `src/utils/splitJourneyIfNeeded.ts` (lines 157-198) |
-| GAP 1 (journey spending) | `src/components/itinerary/JourneySpendingSummary.tsx` |
-| GAP 7 (allocated_budget) | `src/utils/splitJourneyIfNeeded.ts` (lines 278-301) |
+### Layer 4: Day 1 arrival uses actual airport name ✅
+- Added `arrivalAirport` to `FlightHotelContextResult` interface and return value
+- Stage 2.55 split block uses `flightHotelResult.arrivalAirport` instead of hardcoded `'Airport'`
+- All 3 Day 1 constraint templates (morning/afternoon/evening) use `arrivalAirportDisplay`
 
+---
+
+## Fix 12: Blocked Time Window Truncation ✅ COMPLETE
+
+**Root cause:** Chat planner outputs `time_block` constraints with start time but no `endTime`. `Start.tsx` defaults missing durations to 120 minutes, producing `09:00→11:00` instead of `09:00→17:00` for "US Open 9am to 5pm". The generator sees the short window and skips the event card.
+
+### Layer 1: Self-correction in generation engine ✅
+- `budget-constraints.ts` `formatGenerationRules`: parses `reason` text for explicit time ranges (e.g. "9am to 5pm") using regex
+- If parsed end time is later than stored `to` value, overrides it
+- Fixes ALL existing trips with truncated blocked windows
+
+### Layer 2: Chat planner schema extended ✅
+- Added `endTime` and `duration` fields to `userConstraints` schema in `chat-trip-planner/index.ts`
+- AI can now output structured time ranges (time="9:00 AM", endTime="5:00 PM")
+
+### Layer 3: Start.tsx time_block handler fixed ✅
+- Priority 1: Use explicit `endTime` from chat planner
+- Priority 2: Parse time range from constraint `description` text via regex
+- Priority 3: Fall back to duration math (existing behavior)
+- Eliminates the 120-minute default for events with known end times
+
+---
+
+## Fix 16: Replace Lovable Favicon with Voyance Favicon ✅ COMPLETE
+
+- Deleted `public/favicon.ico` (Lovable heart logo)
+- Updated `index.html` favicon links with `?v=3` cache-buster, explicit sizes, and `image/x-icon` override pointing to PNG
+- Post-deploy: request Google re-crawl via Search Console
+
+---
+
+## Fix 17: Community Guides Redesign — Phase 1 ✅ COMPLETE
+
+### Database Changes
+- Added `user_experience`, `user_rating`, `recommended`, `photos` columns to `guide_sections`
+- Added `moderation_status` column to `community_guides`
+- Created `guide_activity_reviews` table with indexes and RLS
+- Created `guide-photos` storage bucket with public read + authenticated upload/delete RLS
+
+### New Components
+- **`StarRating.tsx`** — 1-5 star rating with hover/click states
+- **`PhotoUploadGrid.tsx`** — Upload up to 4 photos per activity to Supabase Storage, with thumbnail grid and remove
+- **`EditableActivityCard.tsx`** — Rich editable card with experience textarea (2000 chars), star rating, photo uploads, recommend toggle (Yes/No/It's okay)
+- **`SmartTagSelector.tsx`** — Auto-suggested tags from destination, activity categories, Travel DNA, and trip type + custom input
+
+### Edge Function
+- **`moderate-guide-content`** — Keyword-based content moderation returning `{ approved, warnings, blocked_reasons }`. Blocks violence/explicit/hate/drugs; warns on PII (phone, email, SSN).
+
+### GuideBuilder.tsx Rewrite
+- Merged "Guide Content" section into editable activity cards
+- Sections are the single source of truth (persisted to `guide_sections` table)
+- Removed separate `guide_favorites` / `guide_manual_entries` dependency for the editor flow
+- Smart tags replace free-text input
+- Save mutation persists sections with new fields + runs moderation before publish
+- Activity reviews aggregated to `guide_activity_reviews` on publish
+- "Add Custom Tip" button replaces separate recommendation modal
+
+### Published View Redesign (CommunityGuideDetail.tsx)
+- Blog-style layout with hero image (first user photo or destination cover)
+- Only shows activities with user content (experience, rating, photos, or recommendation)
+- Star ratings and recommendation badges inline
+- Photo grids per activity
+- "Custom Tips" section at bottom for non-itinerary recommendations
+- "Voyance Tip" callout for activities without user experience text
+
+---
+
+## Fix: City-Boundary Checkout/Check-in in generate-day Handler ✅ COMPLETE
+
+### Problem
+`generate-day` action extracted `paramIsFirstDayInCity` and `paramIsLastDayInCity` but never used them. Mid-journey city boundaries got no checkout/check-in constraints.
+
+### Change
+- **`supabase/functions/generate-itinerary/index.ts`** — Inserted multi-city boundary block after the Day 1/Last Day decision tree:
+  - `paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay` → appends CITY ARRIVAL check-in constraints
+  - `paramIsLastDayInCity && !isLastDay` → appends CITY DEPARTURE checkout constraints
+  - Reinforces correct hotel name on all multi-city days
