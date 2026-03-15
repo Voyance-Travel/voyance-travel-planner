@@ -4964,7 +4964,7 @@ export function EditorialItinerary({
                           {/* City name for multi-city */}
                           {cityName && (
                             <span className={cn(
-                              'text-[9px] font-medium truncate max-w-[64px] mt-0.5 flex items-center gap-0.5',
+                              'text-[9px] font-medium truncate max-w-[48px] sm:max-w-[64px] mt-0.5 flex items-center gap-0.5',
                               isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground/70'
                             )}>
                               {isDayTransition && <ArrowRight className="h-2 w-2 shrink-0" />}
