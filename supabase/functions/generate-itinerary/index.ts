@@ -11503,7 +11503,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     // The chain continues server-side even if the user closes their browser.
     // ==========================================================================
     if (action === 'generate-trip-day') {
-      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId } = params;
+      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip } = params;
 
       if (!tripId || !dayNumber || !totalDays) {
         return new Response(
