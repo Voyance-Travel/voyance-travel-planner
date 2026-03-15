@@ -1019,6 +1019,12 @@ export function ItineraryGenerator({
                           <span>{formatCredits(leg.cost)} credits</span>
                         </div>
                       ))}
+                      {journeyMultiCityFee > 0 && (
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Multi-city fee</span>
+                          <span>{formatCredits(journeyMultiCityFee)} credits</span>
+                        </div>
+                      )}
                       <div className="border-t border-border/50 pt-1" />
                     </div>
                   )}
