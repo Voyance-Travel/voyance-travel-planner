@@ -144,6 +144,12 @@ export async function splitJourneyIfNeeded(
       mustDoActivities: legMustDos.length > 0 ? legMustDos : null,
       splitFromTrip: originalTripId,
       journeyLeg: i + 1,
+      // Propagate generation rules and constraints from original trip metadata
+      generation_rules: metadata.generation_rules || null,
+      constraints: metadata.constraints || null,
+      transportation_preferences: metadata.transportation_preferences || null,
+      dietary: metadata.dietary || null,
+      pacing: metadata.pacing || null,
     };
 
     // First-time visitor per city
@@ -190,12 +196,6 @@ export async function splitJourneyIfNeeded(
       itinerary_status: 'not_started',
       owner_plan_tier: originalTrip.owner_plan_tier,
       metadata: legMetadata as any,
-      // Propagate generation rules and constraints from original trip
-      generation_rules: originalTrip.generation_rules || null,
-      constraints: originalTrip.constraints || null,
-      transportation_preferences: originalTrip.transportation_preferences || null,
-      dietary: originalTrip.dietary || null,
-      pacing: originalTrip.pacing || null,
       // Journey fields
       journey_id: journeyId,
       journey_name: journeyName,
@@ -204,8 +204,6 @@ export async function splitJourneyIfNeeded(
       transition_mode: transport?.type || null,
       transition_departure_time: transport?.departureTime || null,
       transition_arrival_time: transport?.arrivalTime || null,
-      // Store leg budget for reference
-      _legBudgetCents: legBudgetCents,
     });
 
     currentDate = legEnd;
