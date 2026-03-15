@@ -8638,14 +8638,12 @@ function DayCard({
                         isEditable={isEditable}
                         tripCurrency={tripCurrency}
                         travelers={travelers}
-                        onSelectMode={isEditable ? (mode, duration, cost, instructions) => {
-                          handleUpdateActivity(dayIndex, activityIndex, {
-                            transportation: {
-                              method: mode,
-                              duration,
-                              ...(cost ? { estimatedCost: cost } : {}),
-                              ...(instructions ? { instructions } : {}),
-                            },
+                        onSelectMode={isEditable && onSetActivityTransportation ? (mode, duration, cost, instructions) => {
+                          onSetActivityTransportation(dayIndex, activityIndex, {
+                            method: mode,
+                            duration,
+                            ...(cost ? { estimatedCost: cost } : {}),
+                            ...(instructions ? { instructions } : {}),
                           });
                         } : undefined}
                       />
