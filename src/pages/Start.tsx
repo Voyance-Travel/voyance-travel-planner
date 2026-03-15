@@ -2734,7 +2734,9 @@ export default function Start() {
                         // Prefer AI-extracted city names over raw destination (which may contain descriptive text)
                         const rawCityList = Array.isArray(details.cities) ? details.cities : [];
                         const primaryCityName = rawCityList.length > 0 ? String(rawCityList[0].name || '').trim() : '';
-                        const cleanDest = primaryCityName || dest;
+const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
+                          ? primaryCityName
+                          : (!/^[A-Z]{3}$/i.test(dest) ? dest : dest);
 
                         const destinationSummary = isChatMultiCity
                           ? chatCities.map((city) => city.name).join(', ')

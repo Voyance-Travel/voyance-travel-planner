@@ -63,10 +63,16 @@ const DESCRIPTIVE_TERMS = new Set([
   'romantic', 'solo', 'group', 'family', 'honeymoon', 'backpacking',
 ]);
 
+/** Returns true if the candidate looks like a 3-letter IATA airport code */
+function looksLikeAirportCode(candidate: string): boolean {
+  return /^[A-Z]{3}$/i.test(candidate.trim());
+}
+
 /** Returns false if a candidate clearly isn't a city name */
 function looksLikeCityName(candidate: string): boolean {
   const words = candidate.trim().split(/\s+/);
   if (words.length >= 6) return false;
+  if (looksLikeAirportCode(candidate)) return false;
   return !words.some((w) => DESCRIPTIVE_TERMS.has(w.toLowerCase()));
 }
 
