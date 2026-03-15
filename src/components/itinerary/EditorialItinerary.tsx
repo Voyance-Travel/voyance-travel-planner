@@ -3676,6 +3676,8 @@ export function EditorialItinerary({
 
   // Request regeneration - checks credits and regeneration count
   const requestDayRegenerate = useCallback(async (dayIndex: number) => {
+    // Defense-in-depth: block regeneration when AI features are locked (manual builder pre-Smart Finish)
+    if (aiLocked) return;
     if (!canRegenerate()) {
       // Show upgrade prompt
       setPendingRegenerateDay(dayIndex);
@@ -3910,23 +3912,26 @@ export function EditorialItinerary({
   }, []);
 
   const handleAddActivity = useCallback(async (dayIndex: number, activity: Partial<EditorialActivity>) => {
-    // Spend credits for adding an activity (server handles free caps)
-    try {
-      const addCreditResult = await spendCredits.mutateAsync({
-        action: 'ADD_ACTIVITY',
-        tripId,
-        dayIndex,
-        metadata: {
-          activity_title: activity.title || 'New Activity',
-          day_number: days[dayIndex]?.dayNumber || dayIndex + 1,
-        },
-      });
-      console.log('[AddActivity] Credit spend result:', addCreditResult);
-    } catch (err) {
-      console.error('[AddActivity] Credit spend failed:', err);
-      setCreditNudge({ action: 'ADD_ACTIVITY' });
-      setAddActivityModal(null);
-      return;
+    // Skip credit charge in manual builder mode (pre-Smart Finish) — user is curating their own research
+    if (!aiLocked) {
+      // Spend credits for adding an activity (server handles free caps)
+      try {
+        const addCreditResult = await spendCredits.mutateAsync({
+          action: 'ADD_ACTIVITY',
+          tripId,
+          dayIndex,
+          metadata: {
+            activity_title: activity.title || 'New Activity',
+            day_number: days[dayIndex]?.dayNumber || dayIndex + 1,
+          },
+        });
+        console.log('[AddActivity] Credit spend result:', addCreditResult);
+      } catch (err) {
+        console.error('[AddActivity] Credit spend failed:', err);
+        setCreditNudge({ action: 'ADD_ACTIVITY' });
+        setAddActivityModal(null);
+        return;
+      }
     }
 
     const newActivity: EditorialActivity = {
@@ -5338,7 +5343,7 @@ export function EditorialItinerary({
                           onDayLock={handleDayLock}
                           onDayRegenerate={() => handleDayRegenerate(selectedDayIndex)}
                           onAddActivity={(afterIndex?: number) => setAddActivityModal({ dayIndex: selectedDayIndex, afterIndex })}
-                          onDiscover={() => setDiscoverDrawerOpen(true)}
+                          onDiscover={aiLocked ? undefined : () => setDiscoverDrawerOpen(true)}
                           onImportActivities={() => setImportModal({ dayIndex: selectedDayIndex })}
                           onTimeEdit={(dIdx, aIdx, activity) => setTimeEditModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
                           onActivityEdit={(dIdx, aIdx, activity) => setEditActivityModal({ dayIndex: dIdx, activityIndex: aIdx, activity })}
