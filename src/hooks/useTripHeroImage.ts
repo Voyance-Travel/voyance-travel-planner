@@ -16,7 +16,7 @@ import {
   hasCuratedImages,
   generateDestinationGradient
 } from '@/utils/destinationImages';
-import { getHeroImageByName } from '@/services/destinationImagesAPI';
+import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
 
 interface UseTripHeroImageOptions {
@@ -69,6 +69,9 @@ export function useTripHeroImage({
   const [seededFailed, setSeededFailed] = useState(false);
   const [curatedIndex, setCuratedIndex] = useState(0);
   const [curatedFailed, setCuratedFailed] = useState(false);
+  const [canonicalUrl, setCanonicalUrl] = useState<string | null>(null);
+  const [canonicalFetched, setCanonicalFetched] = useState(false);
+  const [canonicalFailed, setCanonicalFailed] = useState(false);
   const [dbCuratedUrl, setDbCuratedUrl] = useState<string | null>(null);
   const [dbCuratedFetched, setDbCuratedFetched] = useState(false);
   const [dbCuratedFailed, setDbCuratedFailed] = useState(false);
@@ -80,10 +83,34 @@ export function useTripHeroImage({
   const curatedImages = getCuratedImages(destination);
   const hasCurated = hasCuratedImages(destination);
 
-  // Fetch DB curated image if hardcoded curated not available
+  // Fetch canonical destination hero image (shared across all views)
   useEffect(() => {
     const shouldFetch = 
       (!seededHeroUrl || seededFailed) && 
+      !canonicalFetched;
+
+    if (!shouldFetch || !destination) return;
+
+    let cancelled = false;
+
+    getDestinationCanonicalImage(destination)
+      .then((url) => {
+        if (cancelled) return;
+        setCanonicalFetched(true);
+        if (url) setCanonicalUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setCanonicalFetched(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [destination, seededHeroUrl, seededFailed, canonicalFetched]);
+
+  // Fetch DB curated image if canonical and hardcoded curated not available
+  useEffect(() => {
+    const shouldFetch = 
+      (!seededHeroUrl || seededFailed) && 
+      canonicalFetched && !canonicalUrl &&
       !hasCurated && 
       !dbCuratedFetched;
 
@@ -104,12 +131,13 @@ export function useTripHeroImage({
       });
 
     return () => { cancelled = true; };
-  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched]);
+  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, canonicalFetched, canonicalUrl]);
 
-  // Fetch from API if DB curated images aren't available either
+  // Fetch from API if canonical, curated, and DB curated aren't available
   useEffect(() => {
     const shouldFetch = 
       (!seededHeroUrl || seededFailed) && 
+      canonicalFetched && !canonicalUrl &&
       !hasCurated && 
       dbCuratedFetched && !dbCuratedUrl &&
       !apiFetched;
@@ -141,13 +169,12 @@ export function useTripHeroImage({
     return () => {
       cancelled = true;
     };
-  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched]);
+  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl]);
 
   // Determine current image URL based on fallback chain
   const getImageUrl = (): { url: string; source: UseTripHeroImageResult['source'] } => {
     // 1. Seeded hero (if not failed AND not a known-broken Unsplash URL)
     if (seededHeroUrl && !seededFailed) {
-      // Treat dead Unsplash URLs as failed so we skip straight to curated/API
       if (/images\.unsplash\.com/.test(seededHeroUrl)) {
         // Unsplash CDN URLs break silently — treat seeded as failed
       } else {
@@ -155,22 +182,27 @@ export function useTripHeroImage({
       }
     }
 
-    // 2. Curated images (if available and not all failed)
+    // 2. Canonical destination hero (shared single source of truth)
+    if (canonicalUrl && !canonicalFailed) {
+      return { url: canonicalUrl, source: 'db_curated' };
+    }
+
+    // 3. Curated images — pinned to [0], no rotation
     if (hasCurated && !curatedFailed && curatedImages[curatedIndex]) {
       return { url: curatedImages[curatedIndex], source: 'curated' };
     }
 
-    // 3. DB curated image (admin-managed)
+    // 4. DB curated image (admin-managed curated_images table)
     if (dbCuratedUrl && !dbCuratedFailed) {
       return { url: dbCuratedUrl, source: 'db_curated' };
     }
 
-    // 4. API fetched image
+    // 5. API fetched image
     if (apiImageUrl && !apiFailed) {
       return { url: apiImageUrl, source: 'api' };
     }
 
-    // 5. Gradient fallback
+    // 6. Gradient fallback
     return { 
       url: generateDestinationGradient(tripId || destination), 
       source: 'gradient' 
@@ -222,6 +254,12 @@ export function useTripHeroImage({
       return;
     }
 
+    // Handle canonical image failure
+    if (canonicalUrl && !canonicalFailed) {
+      setCanonicalFailed(true);
+      return;
+    }
+
     // Handle curated image failure - try next in list
     if (hasCurated && !curatedFailed) {
       if (curatedIndex < curatedImages.length - 1) {
@@ -245,7 +283,9 @@ export function useTripHeroImage({
     }
   }, [
     seededHeroUrl, 
-    seededFailed, 
+    seededFailed,
+    canonicalUrl,
+    canonicalFailed,
     hasCurated, 
     curatedFailed, 
     curatedIndex, 

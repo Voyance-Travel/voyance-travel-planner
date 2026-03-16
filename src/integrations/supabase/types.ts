@@ -3001,6 +3001,7 @@ export type Database = {
           food_scene: string | null
           getting_around: string | null
           google_place_id: string | null
+          hero_image_url: string | null
           id: string
           known_for: Json | null
           last_content_update: string | null
@@ -3054,6 +3055,7 @@ export type Database = {
           food_scene?: string | null
           getting_around?: string | null
           google_place_id?: string | null
+          hero_image_url?: string | null
           id?: string
           known_for?: Json | null
           last_content_update?: string | null
@@ -3107,6 +3109,7 @@ export type Database = {
           food_scene?: string | null
           getting_around?: string | null
           google_place_id?: string | null
+          hero_image_url?: string | null
           id?: string
           known_for?: Json | null
           last_content_update?: string | null

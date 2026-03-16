@@ -370,9 +370,62 @@ export function useActivityImages(destinationId: string | undefined, limit: numb
   });
 }
 
+// ============================================================================
+// DESTINATION CANONICAL IMAGE HELPERS
+// ============================================================================
+
+/**
+ * Fetch the canonical hero_image_url from the destinations table.
+ * Returns null if not set or destination not found.
+ */
+export async function getDestinationCanonicalImage(destinationName: string): Promise<string | null> {
+  try {
+    const cityOnly = destinationName.split(',')[0].trim();
+    const { data, error } = await supabase
+      .from('destinations')
+      .select('hero_image_url')
+      .ilike('city', cityOnly)
+      .not('hero_image_url', 'is', null)
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    return (data[0] as any).hero_image_url || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write-back: persist a resolved hero image URL to destinations.hero_image_url.
+ * Fire-and-forget — does NOT overwrite if already set.
+ */
+export function writeBackDestinationCanonicalImage(destinationName: string, imageUrl: string): void {
+  if (!destinationName || !imageUrl || imageUrl.startsWith('data:')) return;
+  // Don't persist Unsplash URLs (they break)
+  if (/images\.unsplash\.com/.test(imageUrl)) return;
+
+  const cityOnly = destinationName.split(',')[0].trim();
+
+  // Fire-and-forget
+  (async () => {
+    try {
+      await supabase
+        .from('destinations')
+        .update({ hero_image_url: imageUrl } as any)
+        .ilike('city', cityOnly)
+        .is('hero_image_url', null);
+      console.log('[Images] Wrote back canonical hero for:', cityOnly);
+    } catch {
+      /* best-effort */
+    }
+  })();
+}
+
 export default {
   getDestinationImages,
   getHeroImage,
   getGalleryImages,
   getActivityImages,
+  getDestinationCanonicalImage,
+  writeBackDestinationCanonicalImage,
 };
