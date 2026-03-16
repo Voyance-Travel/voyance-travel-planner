@@ -3303,7 +3303,7 @@ export function EditorialItinerary({
       const filteredDays = days
         .filter((_d, idx) => {
           const dayNumber = idx + 1;
-          return canViewPremiumContentForDay(entitlements, dayNumber);
+          return canViewDay(dayNumber);
         })
         .map(d => ({
           dayNumber: d.dayNumber,
