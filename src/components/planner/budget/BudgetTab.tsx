@@ -488,7 +488,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             <p className="text-xs text-muted-foreground mt-1">
               Estimated total for {travelers} traveler{travelers !== 1 ? 's' : ''}
               {travelers > 1 && snapshot.tripTotalCents > 0 && (
-                <> · {formatCurrency(Math.round(snapshot.tripTotalCents / travelers))}/person</>
+                <> · {formatCurrency(Math.floor(snapshot.tripTotalCents / travelers))}/person</>
               )}
             </p>
             <Progress 
