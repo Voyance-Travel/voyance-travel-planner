@@ -1348,13 +1348,13 @@ export function EditorialItinerary({
           }
           
           // Refetch financial snapshot so Budget tab updates immediately
-          financialSnapshot.refetch();
+          window.dispatchEvent(new CustomEvent('booking-changed'));
         } catch (err) {
           console.error('[EditorialItinerary] Activity cost sync failed:', err);
         }
       }
     });
-  }, [tripId, queryClient, travelers, financialSnapshot]);
+  }, [tripId, queryClient, travelers]);
 
   // Auto-sync budget ledger on initial load so stale planned entries are replaced
   const budgetSyncedRef = useRef(false);
