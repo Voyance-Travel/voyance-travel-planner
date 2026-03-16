@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { BookOpen, Clock, MapPin, ArrowRight, Users, Globe } from 'lucide-react';
+import { BookOpen, Clock, MapPin, ArrowRight, Users, Globe, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
