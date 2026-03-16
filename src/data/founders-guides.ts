@@ -26,7 +26,7 @@ export const foundersGuides: FoundersGuide[] = [
     destination: 'London',
     readTime: '8 min read',
     coverImage: toSiteImageUrlFromPhotoId('photo-1513635269975-59663e0ac1ad'),
-    summary: "London has my heart. Every time I go back it gets better. This isn't a list of top 10 things — it's what I actually did, where I actually ate, and what I'd tell a friend.",
+    summary: "London has my heart. Every time I go back it gets better. This isn't a list of top 10 things - it's what I actually did, where I actually ate, and what I'd tell a friend.",
     datePublished: '2026-03-15',
     tags: ['London', 'Food', 'Nightlife', 'Markets', 'UK'],
     content: `# Founder's Guide: London
