@@ -77,11 +77,14 @@ const suggestionsCache = new Map<
 >();
 
 function hashItinerary(days: ItineraryDay[]): string {
-  // Quick content-based hash so we know when to invalidate
+  // Content-based hash including costs and titles so we invalidate on edits/swaps
   return days
     .map(
       (d) =>
-        `${d.dayNumber}:${d.activities.map((a) => a.id).join(',')}`
+        `${d.dayNumber}:${d.activities.map((a) => {
+          const costVal = typeof a.cost === 'number' ? a.cost : (a.cost as any)?.amount ?? 0;
+          return `${a.id}|${a.title || ''}|${costVal}`;
+        }).join(',')}`
     )
     .join('|');
 }
