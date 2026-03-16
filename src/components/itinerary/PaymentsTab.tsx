@@ -1194,7 +1194,7 @@ export function PaymentsTab({
                     If split equally among {travelers} travelers:
                   </p>
                   <p className="text-xl font-semibold text-primary">
-                    {formatCurrency(Math.round(estimatedTotal / travelers))} per person
+                    {formatCurrency(Math.floor(estimatedTotal / travelers))} per person
                   </p>
                 </div>
               )}
@@ -1230,7 +1230,7 @@ export function PaymentsTab({
                       If split equally among {travelers} travelers:
                     </p>
                     <p className="text-xl font-semibold text-primary">
-                      {formatCurrency(Math.round(estimatedTotal / travelers))} per person
+                      {formatCurrency(Math.floor(estimatedTotal / travelers))} per person
                     </p>
                   </div>
                 )}

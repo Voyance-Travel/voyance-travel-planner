@@ -151,6 +151,8 @@ export function formatCurrency(amountCents: number, currency: string = 'USD'): s
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currency.toUpperCase(),
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(amount);
 }
 

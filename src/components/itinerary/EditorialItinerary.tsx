@@ -1120,7 +1120,11 @@ function getDayTotalCost(
   destinationCity?: string,
   destinationCountry?: string
 ): number {
-  return activities.reduce((sum, act) => sum + getActivityCost(act, travelers, budgetTier, destinationCity, destinationCountry), 0);
+  // Only sum confirmed costs (not estimates) so day badges match the canonical Trip Total
+  return activities.reduce((sum, act) => {
+    const info = getActivityCostInfo(act, travelers, budgetTier, destinationCity, destinationCountry);
+    return sum + (info.isEstimated ? 0 : info.amount);
+  }, 0);
 }
 
 // =============================================================================
@@ -8302,9 +8306,9 @@ function DayCard({
                    {totalCost > 0 ? `${formatCurrency(displayCost(totalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}` : 'Free'}
                  </Badge>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <span className="text-xs font-medium">Day Cost Estimate</span>
-              </TooltipContent>
+               <TooltipContent side="bottom">
+                 <span className="text-xs font-medium">Confirmed costs only</span>
+               </TooltipContent>
              </Tooltip>
              )}
              {day.weather && (
