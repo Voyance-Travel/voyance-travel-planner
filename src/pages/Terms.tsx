@@ -8,11 +8,7 @@ export default function Terms() {
     window.scrollTo(0, 0);
   }, []);
 
-  const lastUpdated = new Date().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  const lastUpdated = 'March 16, 2026';
 
   return (
     <MainLayout>
