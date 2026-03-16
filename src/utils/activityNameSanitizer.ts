@@ -97,5 +97,21 @@ export function sanitizeActivityName(name: string | undefined | null): string {
     }
   }
 
+  // Strip trailing geographic synonym stuffing
+  // e.g., "Central Park walk borough town place locale district" → "Central Park walk"
+  const GEO_SYNONYMS = new Set([
+    'borough', 'town', 'place', 'locale', 'district', 'quarter', 'sector',
+    'area', 'neighborhood', 'neighbourhood', 'zone', 'region', 'vicinity',
+    'suburb', 'precinct', 'ward', 'enclave', 'territory', 'locality',
+  ]);
+  const geoWords = sanitized.split(' ');
+  const geoMatches = geoWords.filter(w => GEO_SYNONYMS.has(w.toLowerCase()));
+  if (geoMatches.length >= 3) {
+    const firstGeoIdx = geoWords.findIndex(w => GEO_SYNONYMS.has(w.toLowerCase()));
+    if (firstGeoIdx > 0) {
+      sanitized = geoWords.slice(0, firstGeoIdx).join(' ');
+    }
+  }
+
   return sanitized || 'Activity';
 }

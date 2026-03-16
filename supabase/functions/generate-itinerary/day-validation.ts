@@ -386,6 +386,49 @@ export function validateGeneratedDay(
   return { isValid: errors.length === 0, errors, warnings };
 }
 
+// =============================================================================
+// GEOGRAPHIC SYNONYM STRIPPING — Removes keyword-stuffed location synonyms
+// =============================================================================
+const GEO_SYNONYMS = new Set([
+  'borough', 'town', 'place', 'locale', 'district', 'quarter', 'sector',
+  'area', 'neighborhood', 'neighbourhood', 'zone', 'region', 'vicinity',
+  'suburb', 'precinct', 'ward', 'enclave', 'territory', 'locality',
+]);
+
+/**
+ * Sanitize activity titles: strip geographic synonym stuffing and cap length.
+ * Call after generation, before persistence.
+ */
+export function sanitizeActivityTitles(day: StrictDayMinimal): StrictDayMinimal {
+  if (!day.activities?.length) return day;
+
+  for (const act of day.activities) {
+    if (!act.title) continue;
+    let title = act.title;
+
+    // Check for geographic synonym cluster (3+ geo synonyms in title)
+    const words = title.split(/\s+/);
+    const geoMatches = words.filter(w => GEO_SYNONYMS.has(w.toLowerCase()));
+    if (geoMatches.length >= 3) {
+      // Find first geo synonym and truncate before it
+      const firstGeoIdx = words.findIndex(w => GEO_SYNONYMS.has(w.toLowerCase()));
+      if (firstGeoIdx > 0) {
+        title = words.slice(0, firstGeoIdx).join(' ');
+      }
+    }
+
+    // Cap at 60 characters
+    if (title.length > 60) {
+      title = title.substring(0, 57).replace(/\s+\S*$/, '') + '...';
+    }
+
+    act.title = title.trim() || act.title;
+    act.name = act.title;
+  }
+
+  return day;
+}
+
 /**
  * POST-VALIDATION: Strip duplicate activities from a day.
  * Now meal-safe: will NOT remove a dining activity if it is the only instance
