@@ -732,6 +732,13 @@ export function enforceRequiredMealsFinalGuard(
     return { activities, injectedMeals: [], alreadyCompliant: true };
   }
 
+  // Pre-filter: remove any chain restaurants from fallbackVenues
+  const cleanFallbackVenues = fallbackVenues.filter(v => !isChainRestaurant(v.name));
+  if (cleanFallbackVenues.length < fallbackVenues.length) {
+    console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Stripped ${fallbackVenues.length - cleanFallbackVenues.length} chain(s) from fallback venues`);
+  }
+  fallbackVenues = cleanFallbackVenues;
+
   const detected = detectMealSlots(activities);
   const missing = requiredMeals.filter(meal => !detected.includes(meal));
 

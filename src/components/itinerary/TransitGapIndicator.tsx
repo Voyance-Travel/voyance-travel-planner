@@ -364,18 +364,20 @@ export function TransitGapIndicator({
         {/* Icon */}
         <span className={cn(
           "shrink-0",
-          isZeroGap ? "text-destructive" : "text-muted-foreground",
+          isZeroGap ? "text-muted-foreground/60" : "text-muted-foreground",
         )}>
-          {isZeroGap ? <AlertTriangle className="h-3.5 w-3.5" /> : modeIcon}
+          {isZeroGap ? modeIcon : modeIcon}
         </span>
 
         {/* Label: method + destination */}
         <span className={cn(
           "text-xs truncate min-w-0",
-          isZeroGap ? "text-destructive font-medium" : "text-muted-foreground",
+          isZeroGap ? "text-muted-foreground/70" : "text-muted-foreground",
         )}>
           {isZeroGap
-            ? 'No travel buffer'
+            ? destinationName
+              ? `${modeLabel} to ${destinationName}`
+              : modeLabel
             : destinationName
               ? `${modeLabel} to ${destinationName}`
               : modeLabel
@@ -383,16 +385,16 @@ export function TransitGapIndicator({
         </span>
 
         {/* Duration pill */}
-        {!isZeroGap && (
-          <span className={cn(
-            "text-[10px] font-medium rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap",
-            isTightGap
+        <span className={cn(
+          "text-[10px] font-medium rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap",
+          isZeroGap
+            ? "text-muted-foreground/60 bg-secondary/30"
+            : isTightGap
               ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border border-yellow-500/20"
               : "text-muted-foreground bg-secondary/50",
-          )}>
-            {durationLabel}{isTightGap ? ' (tight)' : ''}
-          </span>
-        )}
+        )}>
+          {isZeroGap ? '0 min' : durationLabel}{isTightGap ? ' (tight)' : ''}
+        </span>
 
         {/* Expand indicator */}
         {canExpand && (
