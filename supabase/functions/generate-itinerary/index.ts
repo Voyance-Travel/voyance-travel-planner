@@ -2808,7 +2808,7 @@ Generate activities for this day following ALL constraints above.`;
         }
 
         // Check for "light dining" preference violations
-        const wantsLightDining = userNotes.includes('light dinner') || userNotes.includes('light meal') || userNotes.includes('casual dinner') || userNotes.includes('simple dinner') || userNotes.includes('quick bite');
+        const wantsLightDining = userPreferenceText.includes('light dinner') || userPreferenceText.includes('light meal') || userPreferenceText.includes('casual dinner') || userPreferenceText.includes('simple dinner') || userPreferenceText.includes('quick bite');
         if (wantsLightDining) {
           for (const act of generatedDay.activities) {
             const isDining = ((act as any).category || '').toLowerCase() === 'dining';
