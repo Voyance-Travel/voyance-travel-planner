@@ -228,9 +228,7 @@ export function useActivityImage(
           setImageUrl(result.url);
           setSource(result.source);
 
-          if (activityId && result.source !== 'fallback') {
-            persistPhotoToActivity(activityId, result.url).catch(() => {});
-          }
+          // Photo persistence is now handled by useActivityImageWriteback
         } else {
           setSource('fallback');
         }
