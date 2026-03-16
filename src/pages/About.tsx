@@ -4,9 +4,27 @@ import { ArrowRight, Compass, Heart, Zap, Shield, Check, X, Sparkles, Globe, Clo
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import Head from '@/components/common/Head';
-import ashtonHeadshot from '@/assets/ashton-headshot.jpg';
-import clintonHeadshot from '@/assets/clinton-headshot.jpg';
-import grahamHeadshot from '@/assets/graham-headshot.jpg';
+import aboutTravel1 from '@/assets/about-travel-1.jpg';
+import aboutTravel2 from '@/assets/about-travel-2.jpg';
+import aboutTravel3 from '@/assets/about-travel-3.jpg';
+import aboutTravel4 from '@/assets/about-travel-4.jpg';
+import aboutTravel5 from '@/assets/about-travel-5.jpg';
+import aboutTravel6 from '@/assets/about-travel-6.jpg';
+import aboutTravel7 from '@/assets/about-travel-7.jpg';
+import aboutTravel8 from '@/assets/about-travel-8.jpg';
+import aboutTravel9 from '@/assets/about-travel-9.jpg';
+
+const travelPhotos = [
+  { src: aboutTravel1, alt: "Travel adventure" },
+  { src: aboutTravel2, alt: "Travel adventure" },
+  { src: aboutTravel3, alt: "Travel adventure" },
+  { src: aboutTravel4, alt: "Travel adventure" },
+  { src: aboutTravel5, alt: "Travel adventure" },
+  { src: aboutTravel6, alt: "Travel adventure" },
+  { src: aboutTravel7, alt: "Travel adventure" },
+  { src: aboutTravel8, alt: "Travel adventure" },
+  { src: aboutTravel9, alt: "Travel adventure" },
+];
 
 // Visual mockup of chaos (before) - Real website style
 function ChaosMockup() {
@@ -468,6 +486,35 @@ export default function About() {
               </div>
             </motion.div>
 
+            {/* Photo Gallery Strip */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="mt-10 md:mt-14 -mx-4 md:-mx-6"
+            >
+              <div
+                className="flex gap-3 md:gap-4 overflow-x-auto px-4 md:px-6 pb-4 scrollbar-hide"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
+                {travelPhotos.map((photo, i) => (
+                  <div
+                    key={i}
+                    className="relative overflow-hidden rounded-xl shrink-0 w-[220px] md:w-[280px] aspect-[4/5]"
+                    onContextMenu={(e) => e.preventDefault()}
+                  >
+                    <img
+                      src={photo.src}
+                      alt={photo.alt}
+                      className="w-full h-full object-cover pointer-events-none select-none"
+                      draggable={false}
+                    />
+                    <div className="absolute inset-0" />
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
             {/* Ashton */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -475,31 +522,17 @@ export default function About() {
               viewport={{ once: true }}
               className="mt-12 md:mt-16"
             >
-              <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start">
-                <div
-                  className="relative overflow-hidden rounded-xl w-40 h-40 md:w-48 md:h-48 shrink-0 mx-auto md:mx-0"
-                  onContextMenu={(e) => e.preventDefault()}
-                >
-                  <img
-                    src={ashtonHeadshot}
-                    alt="Ashton Lightfoot"
-                    className="w-full h-full object-cover pointer-events-none select-none"
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0" />
-                </div>
-                <div className="space-y-3 text-sm md:text-base leading-relaxed">
-                  <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Ashton Lightfoot, Co-Founder</h3>
-                  <p className="text-muted-foreground">
-                    Ashton is the product mind behind Voyance. She comes from a career in product management in the tech industry, where she spent years figuring out how to build things people actually want to use. She's currently earning her Executive MBA at Georgia Tech with a specialization in technology - so when she's not building Voyance, she's studying how to build it better.
-                  </p>
-                  <p className="text-muted-foreground">
-                    But the real reason Voyance exists is that Ashton loves to travel. London has her heart. She's a self-described Paris girly. She would fly back to Vienna tomorrow just to eat cheese-stuffed hot dogs from a street stand. Her Founder's Guides across seven cities are written the way she talks - honest, specific, and always leading with what she actually loved.
-                  </p>
-                  <p className="text-foreground font-medium italic">
-                    She believes the best travel advice comes from someone who's been there, ordered the wrong thing at least once, and can tell you exactly what to get instead.
-                  </p>
-                </div>
+              <div className="space-y-3 text-sm md:text-base leading-relaxed">
+                <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Ashton Lightfoot, Co-Founder</h3>
+                <p className="text-muted-foreground">
+                  Ashton is the product mind behind Voyance. She comes from a career in product management in the tech industry, where she spent years figuring out how to build things people actually want to use. She's currently earning her Executive MBA at Georgia Tech with a specialization in technology - so when she's not building Voyance, she's studying how to build it better.
+                </p>
+                <p className="text-muted-foreground">
+                  But the real reason Voyance exists is that Ashton loves to travel. London has her heart. She's a self-described Paris girly. She would fly back to Vienna tomorrow just to eat cheese-stuffed hot dogs from a street stand. Her Founder's Guides across seven cities are written the way she talks - honest, specific, and always leading with what she actually loved.
+                </p>
+                <p className="text-foreground font-medium italic">
+                  She believes the best travel advice comes from someone who's been there, ordered the wrong thing at least once, and can tell you exactly what to get instead.
+                </p>
               </div>
             </motion.div>
 
@@ -510,31 +543,17 @@ export default function About() {
               viewport={{ once: true }}
               className="mt-12 md:mt-16"
             >
-              <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start">
-                <div
-                  className="relative overflow-hidden rounded-xl w-40 h-40 md:w-48 md:h-48 shrink-0 mx-auto md:mx-0"
-                  onContextMenu={(e) => e.preventDefault()}
-                >
-                  <img
-                    src={clintonHeadshot}
-                    alt="Clinton Brooks"
-                    className="w-full h-full object-cover pointer-events-none select-none"
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0" />
-                </div>
-                <div className="space-y-3 text-sm md:text-base leading-relaxed">
-                  <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Clinton Brooks, Co-Founder</h3>
-                  <p className="text-muted-foreground">
-                    Clinton is the finance half of Voyance. While Ashton is obsessing over which tiny sushi counter in London has only 20 seats, Clinton makes sure the business behind it all actually works.
-                  </p>
-                  <p className="text-muted-foreground">
-                    He and Ashton have traveled together across the US, Europe, North Africa, the Caribbean, and Japan. A lot of the places in Voyance's curator picks are spots they discovered side by side - from a hidden yakiniku restaurant in Vienna that seats six people to a legendary food market in Barcelona they both want to go back to.
-                  </p>
-                  <p className="text-muted-foreground">
-                    His background in finance means Voyance is built to last, not just built to launch. He handles the business strategy and operations so the product can stay focused on what matters - giving travelers recommendations they can actually trust.
-                  </p>
-                </div>
+              <div className="space-y-3 text-sm md:text-base leading-relaxed">
+                <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Clinton Brooks, Co-Founder</h3>
+                <p className="text-muted-foreground">
+                  Clinton is the finance half of Voyance. While Ashton is obsessing over which tiny sushi counter in London has only 20 seats, Clinton makes sure the business behind it all actually works.
+                </p>
+                <p className="text-muted-foreground">
+                  He and Ashton have traveled together across the US, Europe, North Africa, the Caribbean, and Japan. A lot of the places in Voyance's curator picks are spots they discovered side by side - from a hidden yakiniku restaurant in Vienna that seats six people to a legendary food market in Barcelona they both want to go back to.
+                </p>
+                <p className="text-muted-foreground">
+                  His background in finance means Voyance is built to last, not just built to launch. He handles the business strategy and operations so the product can stay focused on what matters - giving travelers recommendations they can actually trust.
+                </p>
               </div>
             </motion.div>
 
@@ -545,25 +564,11 @@ export default function About() {
               viewport={{ once: true }}
               className="mt-12 md:mt-16"
             >
-              <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start">
-                <div
-                  className="relative overflow-hidden rounded-xl w-40 h-40 md:w-48 md:h-48 shrink-0 mx-auto md:mx-0"
-                  onContextMenu={(e) => e.preventDefault()}
-                >
-                  <img
-                    src={grahamHeadshot}
-                    alt="Graham the Yorkie"
-                    className="w-full h-full object-cover pointer-events-none select-none"
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0" />
-                </div>
-                <div className="space-y-3 text-sm md:text-base leading-relaxed">
-                  <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Graham, Chief Inspiration Officer</h3>
-                  <p className="text-muted-foreground">
-                    Graham is the Yorkie who's been there for every late-night building session, every trip-planning marathon, and every "should we really do this?" conversation. He hasn't technically been to all the cities in our guides, but he's been part of making Voyance happen from day one. And yes, he has his own travel wardrobe.
-                  </p>
-                </div>
+              <div className="space-y-3 text-sm md:text-base leading-relaxed">
+                <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Graham, Chief Inspiration Officer</h3>
+                <p className="text-muted-foreground">
+                  Graham is the Yorkie who's been there for every late-night building session, every trip-planning marathon, and every "should we really do this?" conversation. He hasn't technically been to all the cities in our guides, but he's been part of making Voyance happen from day one. And yes, he has his own travel wardrobe.
+                </p>
               </div>
             </motion.div>
 
