@@ -247,43 +247,56 @@ export async function handleGenerateTripDay(
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
-      const resp = await fetch(generateUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          'apikey': Deno.env.get("SUPABASE_ANON_KEY") || '',
-        },
-        body: JSON.stringify({
-          action: 'generate-day',
-          tripId,
-          dayNumber,
-          totalDays,
-          destination: cityInfo?.cityName || destination,
-          destinationCountry: cityInfo?.country || destinationCountry,
-          date: formattedDate,
-          travelers: travelers || 1,
-          tripType: tripType || 'vacation',
-          budgetTier: budgetTier || 'moderate',
-          userId,
-          previousDayActivities: previousActivities,
-          isMultiCity: isMultiCity || false,
-          isTransitionDay: cityInfo?.isTransitionDay || false,
-          transitionFrom: cityInfo?.transitionFrom,
-          transitionTo: cityInfo?.transitionTo,
-          transitionMode: cityInfo?.transportType,
-          hotelOverride: cityInfo?.hotelName ? {
-            name: cityInfo.hotelName,
-            address: cityInfo.hotelAddress || '',
-          } : undefined,
-          isFirstDayInCity: cityInfo ? (dayNumber === 1 || dayCityMap![dayNumber - 2]?.cityName !== cityInfo.cityName) : false,
-          isLastDayInCity: cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false,
-        }),
-      });
+
+      // Add AbortController with 150s timeout to prevent hanging on 502/504 upstream errors
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 150_000);
+
+      let resp: Response;
+      try {
+        resp = await fetch(generateUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            'apikey': Deno.env.get("SUPABASE_ANON_KEY") || '',
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            action: 'generate-day',
+            tripId,
+            dayNumber,
+            totalDays,
+            destination: cityInfo?.cityName || destination,
+            destinationCountry: cityInfo?.country || destinationCountry,
+            date: formattedDate,
+            travelers: travelers || 1,
+            tripType: tripType || 'vacation',
+            budgetTier: budgetTier || 'moderate',
+            userId,
+            previousDayActivities: previousActivities,
+            isMultiCity: isMultiCity || false,
+            isTransitionDay: cityInfo?.isTransitionDay || false,
+            transitionFrom: cityInfo?.transitionFrom,
+            transitionTo: cityInfo?.transitionTo,
+            transitionMode: cityInfo?.transportType,
+            hotelOverride: cityInfo?.hotelName ? {
+              name: cityInfo.hotelName,
+              address: cityInfo.hotelAddress || '',
+            } : undefined,
+            isFirstDayInCity: cityInfo ? (dayNumber === 1 || dayCityMap![dayNumber - 2]?.cityName !== cityInfo.cityName) : false,
+            isLastDayInCity: cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false,
+          }),
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error(`Day ${dayNumber} HTTP ${resp.status}: ${errText}`);
+        const errText = await resp.text().catch(() => '(no body)');
+        // Classify 502/504 as retryable infrastructure errors
+        const isInfraError = resp.status === 502 || resp.status === 504 || resp.status === 503;
+        throw new Error(`Day ${dayNumber} HTTP ${resp.status}${isInfraError ? ' (infra)' : ''}: ${errText.slice(0, 200)}`);
       }
 
       const data = await resp.json();
@@ -294,10 +307,13 @@ export async function handleGenerateTripDay(
       break;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[generate-trip-day] Day ${dayNumber} attempt ${attempt + 1} failed: ${msg}`);
-      lastError = msg;
+      const isAbort = err instanceof DOMException && err.name === 'AbortError';
+      console.warn(`[generate-trip-day] Day ${dayNumber} attempt ${attempt + 1} failed${isAbort ? ' (timeout)' : ''}: ${msg}`);
+      lastError = isAbort ? `Day ${dayNumber} timed out after 150s` : msg;
       if (attempt < MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, 5000 * (attempt + 1)));
+        // Longer backoff for infrastructure errors
+        const backoffMs = msg.includes('(infra)') || isAbort ? 8000 * (attempt + 1) : 5000 * (attempt + 1);
+        await new Promise(r => setTimeout(r, backoffMs));
       }
     }
   }
