@@ -472,16 +472,16 @@ export default function About() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">The People Behind Voyance</span>
+              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Meet the Founders</span>
               <div className="mt-4 md:mt-8 space-y-4 md:space-y-6 text-sm md:text-lg leading-relaxed">
                 <p className="text-foreground font-medium text-lg md:text-xl">
-                  We're not a big tech company. We're two travelers who got tired of generic recommendations and decided to build something better.
+                  We're Ashton and Clinton - the two people (and one Yorkie) behind Voyance.
                 </p>
                 <p className="text-muted-foreground">
-                  Voyance started because we kept running into the same problem - every travel app gave us the same recycled lists. The same "top 10" articles. The same recommendations that felt like they were written by someone who had never actually been there. We wanted a travel planner that felt like getting advice from a friend who just got back from the trip. So we built one.
+                  People work too hard for their money. Too hard for their vacation. And they have too little of both. When you finally take that trip, you shouldn't be stuck in a tourist trap. You shouldn't be handing your money to something that wasn't worth it. And you definitely shouldn't have spent hours planning just to end up disappointed.
                 </p>
                 <p className="text-muted-foreground">
-                  Every Voyance Pick in our system is a place we've personally been to. Every Founder's Guide is written from real trips, real meals, and real opinions. We don't recommend what we haven't tried.
+                  We built Voyance because we lived that frustration ourselves - and we decided to fix it. You tell us who you are one time. We remember you. We plan your trip around you. And the more you use Voyance, the better we get at knowing exactly what you want.
                 </p>
               </div>
             </motion.div>
@@ -525,13 +525,25 @@ export default function About() {
               <div className="space-y-3 text-sm md:text-base leading-relaxed">
                 <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Ashton Lightfoot, Co-Founder</h3>
                 <p className="text-muted-foreground">
-                  Ashton is the product mind behind Voyance. She comes from a career in product management in the tech industry, where she spent years figuring out how to build things people actually want to use. She's currently earning her Executive MBA at Georgia Tech with a specialization in technology - so when she's not building Voyance, she's studying how to build it better.
+                  I work to travel. That's just who I am. If I'm not moving, it's because I'm home spending time with Graham or planning my next trip. I come from product management in the tech industry, and I'm currently earning my Executive MBA at Georgia Tech with a specialization in technology - so when I'm not building Voyance, I'm studying how to build it better.
                 </p>
                 <p className="text-muted-foreground">
-                  But the real reason Voyance exists is that Ashton loves to travel. London has her heart. She's a self-described Paris girly. She would fly back to Vienna tomorrow just to eat cheese-stuffed hot dogs from a street stand. Her Founder's Guides across seven cities are written the way she talks - honest, specific, and always leading with what she actually loved.
+                  I built Voyance because I spent too much time planning my own travel. Hours and hours of research - not just "does this hotel look good," but examining five or six sets of user images to figure out if it's actually the place to go. Not just picking a 4.8-star restaurant because the rating looks good, but reading through the menu to see if it's something I could really see myself eating. What do the reviews truly say? That level of detail takes time, and most people don't have it.
+                </p>
+                <p className="text-muted-foreground">
+                  And then there's the other side of it - I'd do all that work, plan the perfect trip, and still end up disappointed because one detail didn't work out. That's when it hit me. People work too hard for their money. Too hard for their vacation. And they have too little of both. It's not fair to spend your limited time off stuck somewhere that wasn't worth it.
+                </p>
+                <p className="text-muted-foreground">
+                  Friends and family always ask me for travel recommendations because they know the care I put in. I wanted to give that same care to everyone. I tried using AI to help, and it gave me generic lists with paid ads - recommendations that didn't know me, didn't remember me, and didn't care who I was.
+                </p>
+                <p className="text-muted-foreground">
+                  So I built Voyance to be different. Tell us who you are one time. We lock it in forever. We're your dedicated travel agent in your pocket. We consider the real you - the authentic spots, not just what seems to be popular. But hey, we'll tell you the popular spots too if that's who you are. We watch your budget so the credit card bill doesn't surprise you. We watch your time so you're not spending hours in spreadsheets. And we watch your peace of mind so planning a trip doesn't drive you crazy.
+                </p>
+                <p className="text-muted-foreground">
+                  We want to always get it right, but the beauty is we only get better. Keep using Voyance and it keeps learning you. Bring someone else along and we'll blend them with who you are so everyone gets what they want.
                 </p>
                 <p className="text-foreground font-medium italic">
-                  She believes the best travel advice comes from someone who's been there, ordered the wrong thing at least once, and can tell you exactly what to get instead.
+                  London has my heart. I'm a Paris girly. I would fly back to Vienna tomorrow just to eat cheese-stuffed hot dogs from a street stand. The Founder's Guides I've written across seven cities are exactly how I talk about travel with my friends - honest, specific, and always leading with what I actually loved.
                 </p>
               </div>
             </motion.div>
@@ -546,13 +558,19 @@ export default function About() {
               <div className="space-y-3 text-sm md:text-base leading-relaxed">
                 <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Clinton Brooks, Co-Founder</h3>
                 <p className="text-muted-foreground">
-                  Clinton is the finance half of Voyance. While Ashton is obsessing over which tiny sushi counter in London has only 20 seats, Clinton makes sure the business behind it all actually works.
+                  I'm the finance side of Voyance. While Ashton is obsessing over which tiny sushi counter in London has only 20 seats, I make sure the business behind it all actually works.
                 </p>
                 <p className="text-muted-foreground">
-                  He and Ashton have traveled together across the US, Europe, North Africa, the Caribbean, and Japan. A lot of the places in Voyance's curator picks are spots they discovered side by side - from a hidden yakiniku restaurant in Vienna that seats six people to a legendary food market in Barcelona they both want to go back to.
+                  But I'm also part of the reason Voyance exists. I got tired of Ashton telling me a trip would cost one thing and the credit card bill saying something different. I got tired of sitting in spreadsheets, planning everything out line by line, changing one small thing and having to redo all the price calculations. That's why Voyance tracks your budget and trip totals in real time - because we lived that pain.
                 </p>
                 <p className="text-muted-foreground">
-                  His background in finance means Voyance is built to last, not just built to launch. He handles the business strategy and operations so the product can stay focused on what matters - giving travelers recommendations they can actually trust.
+                  And then there was the other problem - whose turn was it? How do we make sure we're both getting what we want out of a trip when we're both working equally hard? That's where our blended travel DNA comes in. Voyance plans trips for everyone in the group from the start, not just one person's preferences.
+                </p>
+                <p className="text-muted-foreground">
+                  We've traveled together across the US, Europe, North Africa, the Caribbean, and Japan. A lot of the places in Voyance's curator picks are spots we discovered side by side - from a hidden yakiniku restaurant in Vienna that seats six people to a legendary food market in Barcelona we both want to go back to.
+                </p>
+                <p className="text-foreground font-medium italic">
+                  My background in finance means Voyance is built to last, not just built to launch. I handle the business strategy and operations so the product can stay focused on what matters - making sure your time and your money are valued.
                 </p>
               </div>
             </motion.div>
@@ -567,7 +585,7 @@ export default function About() {
               <div className="space-y-3 text-sm md:text-base leading-relaxed">
                 <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Graham, Chief Inspiration Officer</h3>
                 <p className="text-muted-foreground">
-                  Graham is the Yorkie who's been there for every late-night building session, every trip-planning marathon, and every "should we really do this?" conversation. He hasn't technically been to all the cities in our guides, but he's been part of making Voyance happen from day one. And yes, he has his own travel wardrobe.
+                  He's the Yorkie who's been there for every late-night building session, every trip-planning marathon, and every "should we really do this?" conversation. He hasn't been to all the cities in our guides (yet), but he's been part of making Voyance happen from day one. And yes, he has his own travel wardrobe.
                 </p>
               </div>
             </motion.div>
