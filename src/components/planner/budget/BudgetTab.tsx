@@ -276,35 +276,54 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     refetch,
   } = useTripBudget({ tripId, totalDays, enabled: true });
 
-  // ─── Financial snapshot: single source of truth for expected spend ───
-  const rawSnapshot = useTripFinancialSnapshot(tripId);
-  
-  // Always prefer JS-calculated total as primary source — it reflects the live itinerary.
-  // DB snapshot is only used for paid tracking (which only exists in the DB).
-  const snapshot = useMemo(() => {
-    const useLiveTotal = jsTotalCostCents && jsTotalCostCents > 0;
-    const effectiveTotal = useLiveTotal ? jsTotalCostCents : rawSnapshot.tripTotalCents;
-    const toBePaid = Math.max(0, effectiveTotal - rawSnapshot.paidCents);
-    
-    if (useLiveTotal && effectiveTotal !== rawSnapshot.tripTotalCents) {
-      console.info(`[BudgetTab] Using live itinerary total: ${effectiveTotal}c (DB: ${rawSnapshot.tripTotalCents}c)`);
+  // ─── Fetch payments for payable items calculation ───
+  const fetchPaymentsForBudget = useCallback(async () => {
+    const result = await getTripPayments(tripId);
+    if (result.success) {
+      setPayments(result.payments || []);
     }
-    
+  }, [tripId]);
+
+  useEffect(() => {
+    fetchPaymentsForBudget();
+  }, [fetchPaymentsForBudget]);
+
+  // Listen for payment changes
+  useEffect(() => {
+    const handler = () => fetchPaymentsForBudget();
+    window.addEventListener('booking-changed', handler);
+    return () => window.removeEventListener('booking-changed', handler);
+  }, [fetchPaymentsForBudget]);
+
+  // ─── Payable items: single source of truth matching Payments tab ───
+  const { totalCents: payableTotalCents } = usePayableItems({
+    days: itineraryDays || [],
+    flightSelection,
+    hotelSelection,
+    travelers,
+    payments,
+    budgetTier,
+    destination,
+    destinationCountry,
+  });
+
+  // Build a snapshot-like object from payable items total
+  const snapshot = useMemo(() => {
+    const paidCents = payments
+      .filter(p => p.status === 'paid')
+      .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0);
+    const budgetTotalCents = settings?.budget_total_cents || 0;
+    const toBePaid = Math.max(0, payableTotalCents - paidCents);
+
     return {
-      ...rawSnapshot,
-      tripTotalCents: effectiveTotal,
+      tripTotalCents: payableTotalCents,
+      paidCents,
       toBePaidCents: toBePaid,
-      plannedUnpaidCents: toBePaid,
-      budgetRemainingCents: rawSnapshot.budgetTotalCents - effectiveTotal,
-      paidPercent: effectiveTotal > 0 ? Math.min((rawSnapshot.paidCents / effectiveTotal) * 100, 100) : 0,
+      budgetTotalCents,
+      budgetRemainingCents: budgetTotalCents - payableTotalCents,
+      paidPercent: payableTotalCents > 0 ? Math.min((paidCents / payableTotalCents) * 100, 100) : 0,
     };
-  }, [rawSnapshot, jsTotalCostCents]);
-  
-  // Check if category breakdown totals are misaligned with the live total
-  const categoryTotalCents = useMemo(() => {
-    return allocations.reduce((sum, a) => sum + a.usedCents, 0);
-  }, [allocations]);
-  const isCategorySyncing = snapshot.tripTotalCents > 0 && categoryTotalCents > 0 && (categoryTotalCents / snapshot.tripTotalCents) < 0.2;
+  }, [payableTotalCents, payments, settings?.budget_total_cents]);
 
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
