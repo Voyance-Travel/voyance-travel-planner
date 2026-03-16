@@ -905,6 +905,49 @@ export default function TripDashboard() {
   }, [isAuthenticated, user?.id]);
 
   // =========================================================================
+  // REALTIME: Listen for trip_collaborators changes so guests see deletions
+  // =========================================================================
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+
+    const channel = supabase
+      .channel('dashboard-collab-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'trip_collaborators',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const deletedTripId = (payload.old as any)?.trip_id;
+          if (deletedTripId) {
+            setTrips(prev => prev.filter(t => t.id !== deletedTripId));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'trip_collaborators',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // New collaboration — reload trips to pick it up
+          window.location.reload();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAuthenticated, user?.id]);
+
+  // =========================================================================
   // WELCOME-BACK NOTIFICATION: Show toast when user returns and their
   // itinerary has progressed, completed, or is partially done
   // =========================================================================
