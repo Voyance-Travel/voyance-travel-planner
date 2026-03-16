@@ -65,8 +65,8 @@ interface BudgetCoachProps {
   currency: string;
   destination?: string;
   itineraryDays: ItineraryDay[];
-  /** Called when the user applies a suggestion — parent must update the itinerary */
-  onApplySuggestion?: (suggestion: BudgetSuggestion) => void;
+  /** Called when the user applies a suggestion — parent must update the itinerary. Returns true if swap succeeded. */
+  onApplySuggestion?: (suggestion: BudgetSuggestion) => Promise<boolean> | void;
   className?: string;
 }
 
