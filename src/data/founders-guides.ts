@@ -80,6 +80,50 @@ If you go, don't try to do everything. Pick a few neighborhoods, eat well, and l
 
 *This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
   },
+  {
+    slug: 'paris',
+    title: "Founder's Guide: Paris",
+    subtitle: "I'm a Paris girly. I'll just say it.",
+    authorName: 'Ashton Lightfoot',
+    authorTitle: 'Co-Founder of Voyance',
+    destination: 'Paris',
+    readTime: '6 min read',
+    coverImage: toSiteImageUrlFromPhotoId('photo-1502602898657-3e91760cbb34'),
+    summary: "Paris doesn't need me to tell you it's beautiful. What I can tell you is what actually stood out - the meals I still think about, the moments that caught me off guard, and the stuff that no amount of Instagram research prepared me for.",
+    datePublished: '2026-03-16',
+    tags: ['Paris', 'Food', 'Art', 'Walking', 'France'],
+    content: `# Founder's Guide: Paris
+
+I'm a Paris girly. I'll just say it. Paris doesn't need me to tell you it's beautiful - you already know that. What I can tell you is what actually stood out when I was there - the meals I still think about, the moments that caught me off guard, and the stuff that no amount of Instagram research prepared me for.
+
+## What to See
+
+**The Louvre** is my favorite place in the world. I get lost in there every time. I always wish I had more time in Paris so I could dedicate more time to the Louvre. The building itself is as impressive as the art inside. My advice: buy tickets online to skip the main line, and enter through the Carrousel du Louvre entrance underground - way shorter wait. Pick two or three sections max. If you try to see everything, you'll burn out and remember nothing.
+
+**Sacre-Coeur** sitting on top of Montmartre - the view from those steps at sunset is one of the best things I've ever seen in any city. One of the most magical nights I can think of was walking up the hill, looking over the entire city, and then walking back down through all those hidden neighborhoods tucked behind the main area. Just sit on the steps. Take it in. The artists in Place du Tertre nearby are worth a wander afterward.
+
+**The Seine at golden hour** might be the single most beautiful walk you can do in any city on earth. Start from Notre-Dame and walk toward the Eiffel Tower along the Left Bank. The bridges alone are worth it - Pont Alexandre III is the most photogenic. And you have to do the little boats that serve drinks on the river. They're fabulous.
+
+## Where to Eat
+
+Paris is the city where even a simple meal feels like an event. Here's where I'd send you.
+
+**Angelina** is famous for the hot chocolate, and I know it feels like it's overhyped - but it's actually delicious. This isn't hot cocoa - it's essentially a cup of melted chocolate with all the whipped cream. Rich, thick, almost too much. The Mont-Blanc pastry is the other must-order. The tearoom itself is gorgeous Belle Epoque, open since 1903. Lines can be long, so go early or try the location at Versailles.
+
+**Le Relais de l'Entrecote** - you have to try this. There is no menu. You sit down, they bring you a walnut salad, and then they bring you steak frites in their legendary secret herb butter sauce. That's it. You get seconds automatically. No reservations - just show up and queue. Go for lunch to avoid the worst of the lines. It's one of the most genius restaurant concepts I've ever seen. Everything served on a wooden block. So good.
+
+**Sacre Fleur** is the tiny steak spot I fell in love with near Montmartre. This whole restaurant has less than 20 people. The menu is very limited - steak, fries, and I had the steak tartare, which was delicious. It's tucked behind the main area near Sacre-Coeur - you have to go up the hill and around to find it. It's not in the touristy part. That's what makes it special.
+
+**Petit Bon** - I love the tea finger sandwiches at Petit Bon. Little crustless finger sandwiches, beautifully done. It's the kind of casual neighborhood spot that reminds you why French food has the reputation it does. No fuss, no pretense - just well-done French classics in a warm room.
+
+## The Takeaway
+
+Paris rewards you for slowing down. The best moments aren't about checking off landmarks - they're about sitting on the steps of Sacre-Coeur watching the sun go down, or eating steak frites at a restaurant that's been doing the same thing perfectly for decades, or getting lost in the Louvre for the third time and still finding something new.
+
+Don't overschedule Paris. Walk the river. Eat well. Let the city set the pace.
+
+*This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
+  },
 ];
 
 export function getFoundersGuides(): FoundersGuide[] {
