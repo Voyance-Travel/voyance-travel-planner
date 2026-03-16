@@ -370,9 +370,45 @@ export function LiveItineraryView({
   onActivitySkip
 }: LiveItineraryViewProps) {
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+  // Hydrate completed/skipped state from activity metadata on mount
+  const initialCompleted = useMemo(() => {
+    const ids = new Set<string>();
+    days.forEach(day => day.activities.forEach((a: any) => {
+      if (a.metadata?.completed) ids.add(a.id);
+    }));
+    return ids;
+  }, [days]);
+
+  const initialSkipped = useMemo(() => {
+    const ids = new Set<string>();
+    days.forEach(day => day.activities.forEach((a: any) => {
+      if (a.metadata?.skipped) ids.add(a.id);
+    }));
+    return ids;
+  }, [days]);
+
   const [completedActivities, setCompletedActivities] = useState<Set<string>>(new Set());
   const [skippedActivities, setSkippedActivities] = useState<Set<string>>(new Set());
   const [recentCompletedActivity, setRecentCompletedActivity] = useState<ActivityContext | null>(null);
+
+  // Sync initial state when days data changes (e.g. re-mount or data refresh)
+  useEffect(() => {
+    if (initialCompleted.size > 0) {
+      setCompletedActivities(prev => {
+        const merged = new Set([...prev, ...initialCompleted]);
+        return merged.size !== prev.size ? merged : prev;
+      });
+    }
+  }, [initialCompleted]);
+
+  useEffect(() => {
+    if (initialSkipped.size > 0) {
+      setSkippedActivities(prev => {
+        const merged = new Set([...prev, ...initialSkipped]);
+        return merged.size !== prev.size ? merged : prev;
+      });
+    }
+  }, [initialSkipped]);
   
   const { data: tripFeedback } = useTripFeedback(tripId);
   const { data: insights } = useUserPreferenceInsights();

@@ -452,7 +452,7 @@ export default function ActiveTrip() {
 
 
 
-  const handleActivityComplete = useCallback((activityId: string) => {
+  const handleActivityComplete = useCallback(async (activityId: string) => {
     setCompletedActivities(prev => new Set([...prev, activityId]));
     
     const activity = todaysItinerary?.activities.find(a => a.id === activityId);
@@ -466,6 +466,25 @@ export default function ActiveTrip() {
         endTime: activity.endTime,
         completedAt: new Date(),
       });
+    }
+
+    // Persist completion to the database
+    try {
+      const { data: existing } = await supabase
+        .from('trip_activities')
+        .select('metadata')
+        .eq('id', activityId)
+        .maybeSingle();
+
+      const currentMeta = (existing?.metadata as Record<string, unknown>) || {};
+      await supabase
+        .from('trip_activities')
+        .update({
+          metadata: { ...currentMeta, completed: true, completedAt: new Date().toISOString() } as any,
+        })
+        .eq('id', activityId);
+    } catch (err) {
+      console.error('[ActiveTrip] Failed to persist activity completion:', err);
     }
   }, [todaysItinerary]);
 
