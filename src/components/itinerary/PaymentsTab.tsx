@@ -330,7 +330,7 @@ export function PaymentsTab({
       setSelectedMemberId('');
       // Background refetch to sync real IDs and summary
       fetchPayments(300);
-      financialSnapshot.refetch();
+      window.dispatchEvent(new CustomEvent('booking-changed'));
     } catch (err) {
       console.error('Error marking paid:', err);
       toast.error('Failed to update');
