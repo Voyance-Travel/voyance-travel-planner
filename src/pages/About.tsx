@@ -384,14 +384,14 @@ export default function About() {
               <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Why Voyance Exists</span>
               <div className="mt-4 md:mt-8 space-y-4 md:space-y-6 text-base md:text-lg leading-relaxed">
                 <p className="text-foreground font-medium text-lg md:text-xl">
-                  Voyance started because I kept having the same experience.
+                  Voyance started because we kept having the same experience.
                 </p>
                 <p className="text-muted-foreground text-sm md:text-lg">
-                  I'd spend hours planning a trip, make thoughtful choices, and still end up wasting time and 
-                  money in ways that didn't feel obvious until I was already there.
+                  We'd spend hours planning a trip, make thoughtful choices, and still end up wasting time and 
+                  money in ways that didn't feel obvious until we were already there.
                 </p>
                 <p className="text-foreground font-medium text-sm md:text-lg">
-                  I wanted a better way to plan, one that protects your vacation time, respects your budget, 
+                  We wanted a better way to plan, one that protects your vacation time, respects your budget, 
                   and actually reflects you.
                 </p>
               </div>
