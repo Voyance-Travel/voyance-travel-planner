@@ -443,7 +443,9 @@ export function ItineraryAssistant({
             })),
           }));
           // Sync to activity_costs table (single source of truth)
-          import('@/services/activityCostService').then(({ syncActivitiesToCostTable, cleanupRemovedActivityCosts }) => {
+          // Use canonical pricing engine to resolve per-person costs correctly
+          import('@/services/activityCostService').then(async ({ syncActivitiesToCostTable, cleanupRemovedActivityCosts }) => {
+            const { resolvePerPersonForDb, resolveCategory } = await import('@/lib/trip-pricing');
             const activitiesForCostTable: Array<{
               id: string;
               dayNumber: number;
@@ -457,17 +459,14 @@ export function ItineraryAssistant({
             for (const day of sortedDays) {
               for (const act of day.activities) {
                 if (act.id) allActivityIds.push(act.id);
-                const costVal = act.cost
-                  ? (typeof act.cost === 'number'
-                    ? act.cost
-                    : (act.cost as any).amount || (act.cost as any).total || (act.cost as any).perPerson || 0)
-                  : 0;
-                if (costVal >= 0) {
+                const costPerPerson = resolvePerPersonForDb(act.cost as any, travelers || 1);
+
+                if (costPerPerson >= 0) {
                   activitiesForCostTable.push({
                     id: act.id,
                     dayNumber: day.dayNumber,
-                    category: String(act.category || act.type || 'activities'),
-                    costPerPersonUsd: costVal,
+                    category: resolveCategory(String(act.category || ''), String(act.type || '')),
+                    costPerPersonUsd: costPerPerson,
                     numTravelers: travelers || 1,
                     source: 'chat-sync',
                   });
@@ -485,6 +484,8 @@ export function ItineraryAssistant({
               cleanupRemovedActivityCosts(tripId, allActivityIds)
                 .catch(err => console.error('[ItineraryAssistant] Orphan cleanup failed:', err));
             }
+            // Notify financial snapshot to refetch
+            window.dispatchEvent(new CustomEvent('booking-changed'));
           });
         }
 

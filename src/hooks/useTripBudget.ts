@@ -2,6 +2,7 @@
  * Trip Budget Hook
  * 
  * React hook for managing trip budgets with real-time updates.
+ * All cost data now reads from activity_costs (single source of truth).
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,9 +13,7 @@ import {
   updateTripBudgetSettings,
   getBudgetSummary,
   getBudgetLedger,
-  addLedgerEntry,
   deleteLedgerEntry,
-  syncItineraryToBudget,
   recordCommittedExpense,
   getCategoryAllocations,
   getDefaultAllocations,
@@ -56,7 +55,6 @@ interface UseTripBudgetReturn {
   setAllocations: (allocations: BudgetAllocations) => Promise<void>;
   addExpense: (category: BudgetCategory, amountCents: number, description: string, bookingId?: string) => Promise<void>;
   removeEntry: (entryId: string) => Promise<void>;
-  syncFromItinerary: (days: any[]) => Promise<void>;
   refetch: () => void;
 }
 
@@ -74,7 +72,7 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
     enabled: enabled && !!tripId,
   });
   
-  // Fetch summary
+  // Fetch summary (now derived from activity_costs)
   const {
     data: summary,
     isLoading: summaryLoading,
@@ -85,7 +83,7 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
     enabled: enabled && !!tripId,
   });
   
-  // Fetch ledger
+  // Fetch ledger (now derived from activity_costs)
   const {
     data: ledger = [],
     isLoading: ledgerLoading,
@@ -140,25 +138,16 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
     },
   });
   
-  // Delete entry mutation
+  // Delete entry mutation (now deletes from activity_costs)
   const deleteEntryMutation = useMutation({
     mutationFn: deleteLedgerEntry,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
       queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
+      window.dispatchEvent(new CustomEvent('booking-changed'));
     },
     onError: () => {
       toast.error('Failed to remove entry');
-    },
-  });
-  
-  // Sync from itinerary mutation
-  const syncMutation = useMutation({
-    mutationFn: (days: any[]) => syncItineraryToBudget(tripId, days, settings?.travelers || 1),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
-      queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
-      queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
     },
   });
   
@@ -222,10 +211,6 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
     await deleteEntryMutation.mutateAsync(entryId);
   };
   
-  const syncFromItinerary = async (days: any[]) => {
-    await syncMutation.mutateAsync(days);
-  };
-  
   const refetch = () => {
     refetchSettings();
     refetchSummary();
@@ -240,7 +225,7 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
     allocations,
     
     isLoading: settingsLoading || summaryLoading || ledgerLoading,
-    isUpdating: updateMutation.isPending || addExpenseMutation.isPending || syncMutation.isPending,
+    isUpdating: updateMutation.isPending || addExpenseMutation.isPending,
     
     hasBudget,
     isOverBudget,
@@ -253,7 +238,6 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
     setAllocations,
     addExpense,
     removeEntry,
-    syncFromItinerary,
     refetch,
   };
 }
