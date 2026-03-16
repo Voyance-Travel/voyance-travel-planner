@@ -96,7 +96,8 @@ export function validateGeneratedDay(
   totalDays: number,
   previousDays: StrictDayMinimal[] = [],
   isSmartFinish: boolean = false,
-  mustDoActivities: string[] = []
+  mustDoActivities: string[] = [],
+  requiredMealsOverride?: RequiredMeal[]
 ): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
