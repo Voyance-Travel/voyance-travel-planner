@@ -197,6 +197,11 @@ export function calculateDailyTarget(
   return { baseline, splurge, recovery };
 }
 
+/** Check if an allocations object has valid numeric keys (not an empty {}) */
+export function isValidAllocations(a: unknown): a is BudgetAllocations {
+  return !!a && typeof (a as any).food_percent === 'number' && typeof (a as any).activities_percent === 'number';
+}
+
 // =============================================================================
 // API FUNCTIONS
 // =============================================================================
@@ -234,7 +239,7 @@ export async function getTripBudgetSettings(tripId: string): Promise<TripBudgetS
     budget_include_flight: data.budget_include_flight ?? false,
     budget_warnings_enabled: data.budget_warnings_enabled ?? true,
     budget_warning_threshold: (data.budget_warning_threshold as WarningThreshold) || 'yellow',
-    budget_allocations: (data.budget_allocations as unknown as BudgetAllocations) || DEFAULT_ALLOCATIONS.balanced,
+    budget_allocations: isValidAllocations(data.budget_allocations) ? (data.budget_allocations as unknown as BudgetAllocations) : DEFAULT_ALLOCATIONS.balanced,
     travelers: data.travelers || 1,
   };
 }
