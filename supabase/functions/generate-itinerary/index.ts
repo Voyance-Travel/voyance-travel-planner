@@ -6352,7 +6352,10 @@ If the purpose is a specific event, plan at least ONE full day around that event
 
       // =======================================================================
       // STAGE 4.5: Opening Hours Validation & Auto-Fix
-      // Detect activities scheduled outside operating hours and attempt to fix
+      // Detect activities scheduled outside operating hours and attempt to fix.
+      // CONFIRMED CLOSURES (venue closed all day) → REMOVE the activity.
+      // Time conflicts (venue open, wrong time) → shift time.
+      // Unfixable time conflicts → tag as closedRisk (uncertain warning only).
       // =======================================================================
       if (context.startDate) {
         const hoursViolations = validateOpeningHours(enrichedDays, context.startDate);
@@ -6360,6 +6363,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
           console.warn(`[Stage 4.5] ⚠️ ${hoursViolations.length} opening hours conflict(s) detected — attempting auto-fix:`);
           
           let fixedCount = 0;
+          let removedCount = 0;
           
           for (const violation of hoursViolations) {
             const day = enrichedDays[violation.dayNumber - 1];
@@ -6367,7 +6371,16 @@ If the purpose is a specific event, plan at least ONE full day around that event
             const activity = day.activities.find((a: StrictActivity) => a.id === violation.activityId);
             if (!activity) continue;
             
-            // Try to auto-fix: adjust startTime based on venue hours
+            // ─── CONFIRMED CLOSED ALL DAY → REMOVE the activity ───
+            if (violation.isConfirmedClosed) {
+              const removedTitle = activity.title;
+              day.activities = day.activities.filter((a: StrictActivity) => a.id !== violation.activityId);
+              removedCount++;
+              console.log(`  ✗ Day ${violation.dayNumber}: "${removedTitle}" — REMOVED (confirmed closed on this day)`);
+              continue;
+            }
+            
+            // ─── TIME CONFLICT (venue is open, but wrong time) → try shifting ───
             const openingHours = (activity as any).openingHours as string[] | undefined;
             if (openingHours && activity.startTime) {
               const startDate = new Date(context.startDate);
@@ -6380,11 +6393,11 @@ If the purpose is a specific event, plan at least ONE full day around that event
               
               if (dayEntry) {
                 const entryLower = dayEntry.toLowerCase();
-                // If venue is CLOSED on this day, we can't fix — mark as closedRisk
+                // Double-check: if somehow closed entry slipped through (shouldn't with isConfirmedClosed above)
                 if (entryLower.includes('closed') || entryLower.includes('fermé') || entryLower.includes('cerrado') || entryLower.includes('chiuso')) {
-                  (activity as any).closedRisk = true;
-                  (activity as any).closedRiskReason = `${dayName}: Venue is closed. Consider visiting on another day.`;
-                  console.warn(`  - Day ${violation.dayNumber}: "${violation.activityTitle}" — CLOSED on ${dayName}, cannot auto-fix`);
+                  day.activities = day.activities.filter((a: StrictActivity) => a.id !== violation.activityId);
+                  removedCount++;
+                  console.log(`  ✗ Day ${violation.dayNumber}: "${violation.activityTitle}" — REMOVED (closed, caught in fallback)`);
                   continue;
                 }
                 
@@ -6441,10 +6454,10 @@ If the purpose is a specific event, plan at least ONE full day around that event
                     if (latestStart >= venueOpenMins + 10) {
                       newStartMins = latestStart;
                     } else {
-                      // Activity duration doesn't fit in opening window — can't fix
-                      (activity as any).closedRisk = true;
-                      (activity as any).closedRiskReason = `${dayName}: Open ${Math.floor(venueOpenMins / 60).toString().padStart(2, '0')}:${(venueOpenMins % 60).toString().padStart(2, '0')}–${Math.floor(venueCloseMins / 60).toString().padStart(2, '0')}:${(venueCloseMins % 60).toString().padStart(2, '0')}, activity duration (${duration}min) doesn't fit.`;
-                      console.warn(`  - Day ${violation.dayNumber}: "${violation.activityTitle}" — duration ${duration}min doesn't fit in venue hours, cannot auto-fix`);
+                      // Activity duration doesn't fit in opening window — REMOVE instead of warning
+                      day.activities = day.activities.filter((a: StrictActivity) => a.id !== violation.activityId);
+                      removedCount++;
+                      console.log(`  ✗ Day ${violation.dayNumber}: "${violation.activityTitle}" — REMOVED (duration ${duration}min doesn't fit in venue hours)`);
                       continue;
                     }
                   }
@@ -6464,15 +6477,16 @@ If the purpose is a specific event, plan at least ONE full day around that event
               }
             }
             
-            // Couldn't auto-fix — tag with warning
+            // Couldn't auto-fix and not confirmed closed — tag as uncertain warning only
             (activity as any).closedRisk = true;
             (activity as any).closedRiskReason = violation.reason;
-            console.warn(`  - Day ${violation.dayNumber}: "${violation.activityTitle}" — ${violation.reason} (could not auto-fix)`);
+            console.warn(`  - Day ${violation.dayNumber}: "${violation.activityTitle}" — ${violation.reason} (uncertain, tagged as warning)`);
           }
           
-          if (fixedCount > 0) {
-            console.log(`[Stage 4.5] ✓ Auto-fixed ${fixedCount}/${hoursViolations.length} operating hours conflicts`);
-          }
+          const summary: string[] = [];
+          if (fixedCount > 0) summary.push(`${fixedCount} time-shifted`);
+          if (removedCount > 0) summary.push(`${removedCount} removed (confirmed closed)`);
+          console.log(`[Stage 4.5] ✓ Results: ${summary.join(', ') || 'no fixes needed'} out of ${hoursViolations.length} conflicts`);
         } else {
           console.log("[Stage 4.5] ✓ No opening hours conflicts detected");
         }
