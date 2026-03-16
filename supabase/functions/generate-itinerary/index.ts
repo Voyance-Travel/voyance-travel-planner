@@ -1482,6 +1482,8 @@ import {
   sanitizeActivityTitles,
   detectMealSlots,
   enforceRequiredMealsFinalGuard,
+  isChainRestaurant,
+  filterChainRestaurants,
   type DayValidationResult,
   type StrictDayMinimal,
 } from './day-validation.ts';
@@ -2931,6 +2933,15 @@ Generate activities for this day following ALL constraints above.`;
 
         // POST-VALIDATION: Strip keyword-stuffed activity titles
         generatedDay = sanitizeActivityTitles(generatedDay);
+
+        // POST-VALIDATION: Strip chain restaurants from dining activities
+        {
+          const { filtered: chainFiltered, removedChains } = filterChainRestaurants(generatedDay.activities || []);
+          if (removedChains.length > 0) {
+            console.warn(`[Stage 2] Day ${dayNumber}: 🚫 Chain filter removed ${removedChains.length} chain(s): ${removedChains.join(', ')}`);
+            generatedDay.activities = chainFiltered;
+          }
+        }
 
         // ====================================================================
         // MEAL FINAL GUARD — shared helper, single source of truth
@@ -10627,6 +10638,16 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             }
           }
 
+          // Strip chain restaurants before meal guard runs
+          {
+            const { filtered: chainFiltered, removedChains } = filterChainRestaurants(generatedDay.activities || []);
+            if (removedChains.length > 0) {
+              console.warn(`[generate-day] 🚫 Chain filter removed ${removedChains.length} chain(s) from Day ${dayNumber}: ${removedChains.join(', ')}`);
+              generatedDay.activities = chainFiltered;
+              normalizedActivities = generatedDay.activities;
+            }
+          }
+
           const mealGuardResult = enforceRequiredMealsFinalGuard(
             generatedDay.activities || [],
             dayMealPolicy.requiredMeals,
@@ -11160,6 +11181,7 @@ REQUIREMENTS:
 - Include 12 breakfast/brunch spots, 14 lunch spots, 14 dinner spots
 - Mix of cuisines: local specialties, international, street food, fine dining
 - Spread across different neighborhoods
+- **ABSOLUTELY NO chain or franchise restaurants** (e.g., McDonald's, Five Guys, Starbucks, Subway, Chili's, Applebee's, Olive Garden, Cheesecake Factory, etc.). Only independent, locally-owned, or locally-iconic establishments. If it has more than 3 locations worldwide, do NOT include it.
 
 For EACH restaurant, return a JSON array with objects containing:
 - "name": exact restaurant name
@@ -11203,8 +11225,13 @@ Return ONLY the JSON array, no other text.`;
                     priceRange: r.priceRange || '$$',
                     description: r.description || '',
                     address: r.neighborhood ? `${r.neighborhood}, ${city}` : city,
-                  })).filter((r: any) => r.name.length > 2);
-                  console.log(`[generate-trip] 🍽️ Restaurant pool for "${city}": ${restaurantPoolByCity[city].length} real restaurants`);
+                  })).filter((r: any) => r.name.length > 2 && !isChainRestaurant(r.name));
+                  const preFilterCount = parsed.length;
+                  const postFilterCount = restaurantPoolByCity[city].length;
+                  if (preFilterCount !== postFilterCount) {
+                    console.warn(`[generate-trip] 🚫 Chain filter removed ${preFilterCount - postFilterCount} chain restaurant(s) from "${city}" pool`);
+                  }
+                  console.log(`[generate-trip] 🍽️ Restaurant pool for "${city}": ${postFilterCount} real restaurants (${preFilterCount - postFilterCount} chains removed)`);
 
                   // Cache to verified_venues for future trips (non-blocking)
                   try {
