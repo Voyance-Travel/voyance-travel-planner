@@ -47,6 +47,8 @@ import { useTripMembers } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BudgetCategory } from '@/services/tripBudgetService';
 import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
+import { usePayableItems } from '@/hooks/usePayableItems';
+import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 
 interface ItineraryActivity {
