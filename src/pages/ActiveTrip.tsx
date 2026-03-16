@@ -240,7 +240,29 @@ export default function ActiveTrip() {
   const [view, setView] = useState<ViewType>('today');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [completedActivities, setCompletedActivities] = useState<Set<string>>(new Set());
+  const [skippedActivities, setSkippedActivities] = useState<Set<string>>(new Set());
   const [recentCompletedActivity, setRecentCompletedActivity] = useState<ActivityContext | null>(null);
+
+  // Hydrate completed/skipped activities from DB on mount
+  useEffect(() => {
+    if (!tripId) return;
+    supabase
+      .from('trip_activities')
+      .select('id, metadata')
+      .eq('trip_id', tripId)
+      .then(({ data }) => {
+        if (!data) return;
+        const completed = new Set<string>();
+        const skipped = new Set<string>();
+        data.forEach((row: any) => {
+          const meta = row.metadata as Record<string, unknown> | null;
+          if (meta?.completed) completed.add(row.id);
+          if (meta?.skipped) skipped.add(row.id);
+        });
+        if (completed.size > 0) setCompletedActivities(prev => new Set([...prev, ...completed]));
+        if (skipped.size > 0) setSkippedActivities(prev => new Set([...prev, ...skipped]));
+      });
+  }, [tripId]);
   const [showDaySummary, setShowDaySummary] = useState(false);
   const [rescueDismissed, setRescueDismissed] = useState(false);
   const [mediaCapture, setMediaCapture] = useState<{ open: boolean; activityId: string; activityName: string; mode: 'photo' | 'voice' }>({
