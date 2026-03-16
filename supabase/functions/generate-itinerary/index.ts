@@ -10638,6 +10638,16 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             }
           }
 
+          // Strip chain restaurants before meal guard runs
+          {
+            const { filtered: chainFiltered, removedChains } = filterChainRestaurants(generatedDay.activities || []);
+            if (removedChains.length > 0) {
+              console.warn(`[generate-day] 🚫 Chain filter removed ${removedChains.length} chain(s) from Day ${dayNumber}: ${removedChains.join(', ')}`);
+              generatedDay.activities = chainFiltered;
+              normalizedActivities = generatedDay.activities;
+            }
+          }
+
           const mealGuardResult = enforceRequiredMealsFinalGuard(
             generatedDay.activities || [],
             dayMealPolicy.requiredMeals,
