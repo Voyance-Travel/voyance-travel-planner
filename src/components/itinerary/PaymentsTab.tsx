@@ -5,7 +5,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getAppUrl } from '@/utils/getAppUrl';
-import { estimateCostSync } from '@/lib/cost-estimation';
 
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { motion, AnimatePresence } from 'framer-motion';
