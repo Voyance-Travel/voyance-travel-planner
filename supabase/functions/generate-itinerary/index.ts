@@ -4114,20 +4114,36 @@ async function finalSaveItinerary(
     } : null;
 
     // Compute correct end_date from the actual generated days
+    // IMPORTANT: Never shrink end_date — only extend it if generation produced more days
     let computedEndDate: string | undefined;
     try {
       const daysArray = frontendReadyData?.days || frontendReadyData?.itinerary?.days;
       if (Array.isArray(daysArray) && daysArray.length > 0 && tripId) {
-        // Fetch the trip start_date to compute end
         const { data: tripRow } = await supabase
           .from('trips')
-          .select('start_date')
+          .select('start_date, end_date')
           .eq('id', tripId)
           .single();
         if (tripRow?.start_date) {
-          const [y, m, d] = tripRow.start_date.split('-').map(Number);
-          const endD = new Date(y, m - 1, d + daysArray.length - 1);
-          computedEndDate = endD.toISOString().split('T')[0];
+          // Use timezone-safe formatDate helper instead of toISOString()
+          const newEndDate = formatDate(tripRow.start_date, daysArray.length - 1);
+          const existingEndDate = tripRow.end_date;
+
+          // Calculate expected days from the stored date range
+          if (existingEndDate) {
+            const expectedDays = calculateDays(tripRow.start_date, existingEndDate);
+            if (daysArray.length < expectedDays) {
+              console.warn(`[Stage 6] Generated ${daysArray.length} days but trip has ${expectedDays} expected days (${tripRow.start_date} to ${existingEndDate}). NOT shrinking end_date.`);
+              // Don't set computedEndDate — keep existing end_date
+            } else if (daysArray.length > expectedDays) {
+              console.log(`[Stage 6] Generated ${daysArray.length} days (more than expected ${expectedDays}). Extending end_date to ${newEndDate}.`);
+              computedEndDate = newEndDate;
+            }
+            // If equal, no need to update
+          } else {
+            // No existing end_date, safe to set
+            computedEndDate = newEndDate;
+          }
         }
       }
     } catch (e) {
