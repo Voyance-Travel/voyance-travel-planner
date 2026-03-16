@@ -4446,13 +4446,17 @@ export function EditorialItinerary({
                           await generateConsumerTripPdf({
                             tripName: `Trip to ${destination}`,
                             destination, startDate, endDate, travelers, days, unlockedDayNumbers,
-                            flight: allFlightLegs[0] ? {
-                              airline: allFlightLegs[0].airline || '',
-                              departure: allFlightLegs[0].departure?.time || '',
-                              arrival: allFlightLegs[0].arrival?.time || '',
-                              departureAirport: allFlightLegs[0].departure?.airport || '',
-                              arrivalAirport: allFlightLegs[0].arrival?.airport || '',
-                            } : undefined,
+                            flights: allFlightLegs.length > 0 ? allFlightLegs.map((leg, i) => ({
+                              airline: leg.airline || '',
+                              departureTime: leg.departure?.time || '',
+                              arrivalTime: leg.arrival?.time || '',
+                              departureAirport: leg.departure?.airport || '',
+                              arrivalAirport: leg.arrival?.airport || '',
+                              date: leg.departure?.date || '',
+                              label: allFlightLegs.length > 1
+                                ? (leg.isDestinationArrival ? 'Outbound' : leg.isDestinationDeparture ? 'Return' : i === 0 ? 'Outbound' : i === allFlightLegs.length - 1 ? 'Return' : `Leg ${i + 1}`)
+                                : undefined,
+                            })) : undefined,
                             hotel: hotelSelection ? {
                               name: hotelSelection.name || '',
                               neighborhood: hotelSelection.neighborhood || '',
