@@ -15,12 +15,9 @@ import aboutTravel8 from '@/assets/about-travel-8.jpg';
 import aboutTravel9 from '@/assets/about-travel-9.jpg';
 
 const travelPhotos = [
-  { src: aboutTravel1, alt: "Travel adventure" },
   { src: aboutTravel2, alt: "Travel adventure" },
-  { src: aboutTravel3, alt: "Travel adventure" },
   { src: aboutTravel4, alt: "Travel adventure" },
   { src: aboutTravel5, alt: "Travel adventure" },
-  { src: aboutTravel6, alt: "Travel adventure" },
   { src: aboutTravel7, alt: "Travel adventure" },
   { src: aboutTravel8, alt: "Travel adventure" },
   { src: aboutTravel9, alt: "Travel adventure" },
