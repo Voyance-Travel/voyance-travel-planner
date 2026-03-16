@@ -6,6 +6,8 @@ export type TripViewMode = 'edit' | 'preview';
 interface UseTripViewModeOptions {
   /** Whether the current user owns or can edit this trip */
   isOwner: boolean;
+  /** Whether a collaborator has edit permission (can propose changes) */
+  canEdit?: boolean;
 }
 
 /**
@@ -13,7 +15,7 @@ interface UseTripViewModeOptions {
  * - Owner defaults to 'edit'
  * - Non-owner forced to 'preview' (cannot toggle)
  */
-export function useTripViewMode({ isOwner }: UseTripViewModeOptions) {
+export function useTripViewMode({ isOwner, canEdit = false }: UseTripViewModeOptions) {
   // FIX 22A: Preview mode intentionally disabled while schema-driven generation
   // is being built in isolation. To re-enable, remove the early return below
   // and uncomment the original logic.
@@ -23,16 +25,18 @@ export function useTripViewMode({ isOwner }: UseTripViewModeOptions) {
 
   const rawMode = searchParams.get('mode');
 
+  const hasEditAccess = isOwner || canEdit;
+
   const mode: TripViewMode = useMemo(() => {
     if (!PREVIEW_MODE_ENABLED) return 'edit';
-    if (!isOwner) return 'preview';
+    if (!hasEditAccess) return 'preview';
     if (rawMode === 'preview') return 'preview';
     return 'edit';
-  }, [isOwner, rawMode]);
+  }, [hasEditAccess, rawMode]);
 
   const setMode = useCallback(
     (newMode: TripViewMode) => {
-      if (!isOwner) return; // Non-owners can't toggle
+      if (!hasEditAccess) return; // View-only users can't toggle
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -46,7 +50,7 @@ export function useTripViewMode({ isOwner }: UseTripViewModeOptions) {
         { replace: true }
       );
     },
-    [isOwner, setSearchParams]
+    [hasEditAccess, setSearchParams]
   );
 
   return {
@@ -54,6 +58,6 @@ export function useTripViewMode({ isOwner }: UseTripViewModeOptions) {
     setMode,
     isPreviewMode: mode === 'preview',
     isEditMode: mode === 'edit',
-    canToggle: PREVIEW_MODE_ENABLED && isOwner,
+    canToggle: PREVIEW_MODE_ENABLED && hasEditAccess,
   };
 }
