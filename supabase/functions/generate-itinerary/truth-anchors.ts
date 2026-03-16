@@ -543,6 +543,8 @@ export interface OpeningHoursViolation {
   activityId: string;
   reason: string;
   category: string;
+  /** true = verified hours data confirms closure; false = time conflict but venue is open that day */
+  isConfirmedClosed: boolean;
 }
 
 export function validateOpeningHours(
@@ -567,18 +569,45 @@ export function validateOpeningHours(
 
       const result = isVenueOpenOnDay(activity.openingHours, dayOfWeek, activity.startTime);
       if (!result.isOpen) {
+        // Determine if this is a full-day closure vs a time conflict
+        const isFullDayClosure = isVenueClosedAllDay(activity.openingHours, dayOfWeek);
         violations.push({
           dayNumber: dayIdx + 1,
           activityTitle: activity.title,
           activityId: activity.id,
           reason: result.reason || 'Venue appears to be closed',
           category: activity.category,
+          isConfirmedClosed: isFullDayClosure,
         });
       }
     }
   }
 
   return violations;
+}
+
+/**
+ * Check if a venue is closed the entire day (not just a time conflict)
+ */
+export function isVenueClosedAllDay(
+  openingHours: string[] | undefined,
+  dayOfWeek: number
+): boolean {
+  if (!openingHours || openingHours.length === 0) return false;
+  
+  const dayName = DAY_NAMES[dayOfWeek];
+  if (!dayName) return false;
+  
+  const dayEntry = openingHours.find(h => 
+    h.toLowerCase().startsWith(dayName.toLowerCase())
+  );
+  
+  if (!dayEntry) return false;
+  
+  const entryLower = dayEntry.toLowerCase();
+  return entryLower.includes('closed') || entryLower.includes('fermé') || 
+         entryLower.includes('cerrado') || entryLower.includes('chiuso') || 
+         entryLower.includes('geschlossen');
 }
 
 /**

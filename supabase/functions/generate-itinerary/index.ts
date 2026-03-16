@@ -9098,12 +9098,14 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         // =======================================================================
         // Opening Hours Validation for single-day generation
+        // Confirmed closures → REMOVE. Uncertain → tag as closedRisk warning.
         // =======================================================================
         if (date) {
           const dayDate = new Date(date);
           const dayOfWeek = dayDate.getDay();
-          const { isVenueOpenOnDay } = await import('./truth-anchors.ts');
+          const { isVenueOpenOnDay, isVenueClosedAllDay } = await import('./truth-anchors.ts');
           
+          const activitiesToRemove: string[] = [];
           for (const act of normalizedActivities) {
             if (!act.openingHours || act.openingHours.length === 0) continue;
             const skipCats = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation'];
@@ -9111,10 +9113,23 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             
             const result = isVenueOpenOnDay(act.openingHours, dayOfWeek, act.startTime);
             if (!result.isOpen) {
-              console.warn(`[generate-day] ⚠️ "${act.title}" may be closed: ${result.reason}`);
-              (act as any).closedRisk = true;
-              (act as any).closedRiskReason = result.reason;
+              const closedAllDay = isVenueClosedAllDay(act.openingHours, dayOfWeek);
+              if (closedAllDay) {
+                // Confirmed closed → remove
+                console.log(`[generate-day] ✗ "${act.title}" — REMOVED (confirmed closed all day)`);
+                activitiesToRemove.push(act.id);
+              } else {
+                // Time conflict only → uncertain warning
+                console.warn(`[generate-day] ⚠️ "${act.title}" time conflict: ${result.reason}`);
+                (act as any).closedRisk = true;
+                (act as any).closedRiskReason = result.reason;
+              }
             }
+          }
+          
+          if (activitiesToRemove.length > 0) {
+            normalizedActivities = normalizedActivities.filter((a: { id: string }) => !activitiesToRemove.includes(a.id));
+            console.log(`[generate-day] Removed ${activitiesToRemove.length} confirmed-closed activities`);
           }
         }
 
