@@ -8647,7 +8647,7 @@ function DayCard({
                           compact={compactCards}
                           isPastTrip={isPastTrip}
                           isCleanPreview={isCleanPreview}
-                          onPhotoResolved={reportPhoto}
+                          onPhotoResolved={onPhotoResolved}
                         />
                       </div>
                     </div>
