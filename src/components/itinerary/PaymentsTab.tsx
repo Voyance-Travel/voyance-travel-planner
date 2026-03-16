@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getAppUrl } from '@/utils/getAppUrl';
 
 import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
+import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JourneySpendingSummary } from './JourneySpendingSummary';
 import { FirstUseHint } from './FirstUseHint';
