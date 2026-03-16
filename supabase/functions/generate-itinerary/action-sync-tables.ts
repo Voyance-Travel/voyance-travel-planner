@@ -13,10 +13,10 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
     return errorJson("Missing tripId", 400);
   }
 
-  // Verify ownership
+  // Verify ownership and get start_date for date derivation
   const { data: trip } = await supabase
     .from('trips')
-    .select('user_id, itinerary_data')
+    .select('user_id, itinerary_data, start_date')
     .eq('id', tripId)
     .single();
   
@@ -60,7 +60,18 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
     };
     
     const dayNumber = d.dayNumber || 1;
-    const date = d.date || new Date().toISOString().split('T')[0];
+    // Derive date from trip start_date if missing
+    let date = d.date;
+    if (!date && trip.start_date) {
+      const derived = new Date(trip.start_date + 'T00:00:00Z');
+      derived.setUTCDate(derived.getUTCDate() + dayNumber - 1);
+      date = derived.toISOString().split('T')[0];
+      console.log(`[sync-itinerary-tables] Derived missing date for day ${dayNumber}: ${date}`);
+    }
+    if (!date) {
+      date = new Date().toISOString().split('T')[0];
+      console.warn(`[sync-itinerary-tables] No start_date available — using today for day ${dayNumber}`);
+    }
     
     const { data: dayRow, error: dayError } = await supabase
       .from('itinerary_days')

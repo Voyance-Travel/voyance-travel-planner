@@ -772,6 +772,7 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
 
   const sortedDays = sortActivitiesChronologically(updatedDays);
   try {
+    // Fetch existing itinerary metadata to preserve it
     const { data: trip, error: fetchError } = await supabase
       .from('trips')
       .select('itinerary_data')
@@ -784,40 +785,36 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
     }
 
     const currentData = (trip?.itinerary_data as Record<string, unknown>) || {};
-    const itineraryUpdate: Json = {
+    const itineraryPayload = {
       ...currentData,
       days: JSON.parse(JSON.stringify(sortedDays)),
-    } as Json;
+    };
 
-    // Try optimistic update first (increments itinerary_version for concurrency protection)
-    const { getCachedVersion } = await import('@/services/itineraryOptimisticUpdate');
-    const cachedVersion = getCachedVersion(tripId);
+    // Route through backend save-itinerary for normalization, meal guard, and table sync
+    const { error: saveError } = await supabase.functions.invoke('generate-itinerary', {
+      body: {
+        action: 'save-itinerary',
+        tripId,
+        itinerary: itineraryPayload,
+      },
+    });
 
-    if (cachedVersion !== undefined) {
-      const { saveItineraryOptimistic } = await import('@/services/itineraryOptimisticUpdate');
-      const result = await saveItineraryOptimistic(tripId, itineraryUpdate as Record<string, unknown>);
-      if (result.success) {
-        console.log('[ActionExecutor] Trip itinerary updated via optimistic lock, version:', result.newVersion);
-        return;
+    if (saveError) {
+      console.error('[ActionExecutor] Backend save failed, falling back to direct update:', saveError);
+      // Fallback: direct update
+      const { error: updateError } = await supabase
+        .from('trips')
+        .update({
+          itinerary_data: itineraryPayload as any,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', tripId);
+
+      if (updateError) {
+        console.error('[ActionExecutor] Direct update also failed:', updateError);
       }
-      if (result.error === 'version_conflict') {
-        console.warn('[ActionExecutor] Version conflict detected, falling back to direct update');
-      }
-    }
-
-    // Fallback: direct update (for solo users or when no version is cached)
-    const { error: updateError } = await supabase
-      .from('trips')
-      .update({
-        itinerary_data: itineraryUpdate,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', tripId);
-
-    if (updateError) {
-      console.error('[ActionExecutor] Error updating trip:', updateError);
     } else {
-      console.log('[ActionExecutor] Trip itinerary updated successfully');
+      console.log('[ActionExecutor] Trip itinerary saved via backend (normalized + meal-guarded)');
     }
   } catch (err) {
     console.error('[ActionExecutor] Update error:', err);

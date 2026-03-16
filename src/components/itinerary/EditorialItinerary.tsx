@@ -2914,22 +2914,24 @@ export function EditorialItinerary({
           .maybeSingle();
 
         if (existingTrip && !checkError) {
-          // Trip exists in database - save there
-          const { error } = await supabase
-            .from('trips')
-            .update({
-              itinerary_data: itineraryData as any,
-              itinerary_status: 'ready',
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', tripId);
+          // Trip exists in database - save through backend for normalization + meal guard
+          try {
+            const { error } = await supabase.functions.invoke('generate-itinerary', {
+              body: {
+                action: 'save-itinerary',
+                tripId,
+                itinerary: itineraryData,
+              },
+            });
 
-          if (!error) {
-            setHasChanges(false);
-            setLastSaved(new Date());
-            // Silent auto-save — no toast for background saves
-          } else {
-            console.error('[EditorialItinerary] Database save failed:', error);
+            if (!error) {
+              setHasChanges(false);
+              setLastSaved(new Date());
+            } else {
+              console.error('[EditorialItinerary] Backend save failed:', error);
+            }
+          } catch (saveErr) {
+            console.error('[EditorialItinerary] Backend save error:', saveErr);
           }
         } else {
           // Trip is in localStorage - always persist there so refreshes never re-trigger generation
@@ -2988,15 +2990,14 @@ export function EditorialItinerary({
       let saved = false;
 
       if (existingTrip) {
-        // Save to database
-        const { error } = await supabase
-          .from('trips')
-          .update({
-            itinerary_data: itineraryData as any,
-            itinerary_status: 'ready',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', tripId);
+        // Save through backend for normalization + meal guard + table sync
+        const { error } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'save-itinerary',
+            tripId,
+            itinerary: itineraryData,
+          },
+        });
 
         if (error) throw error;
         saved = true;

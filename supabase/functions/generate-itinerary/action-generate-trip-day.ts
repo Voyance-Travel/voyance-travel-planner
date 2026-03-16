@@ -391,7 +391,16 @@ export async function handleGenerateTripDay(
     );
   }
 
-  // Day generated successfully — save it
+  // Day generated successfully — ensure date is always set
+  if (!dayResult.date && startDate) {
+    const derived = new Date(startDate);
+    derived.setDate(derived.getDate() + dayNumber - 1);
+    dayResult.date = derived.toISOString().split('T')[0];
+    console.log(`[generate-trip-day] Derived missing date for day ${dayNumber}: ${dayResult.date}`);
+  }
+  dayResult.dayNumber = dayNumber;
+
+  // Save it
   const filteredExisting = existingDays.filter((d: any) => d?.dayNumber !== dayNumber);
   
   // LAYER 1: HARD VALIDATION — deduplicate by date AND dayNumber
@@ -490,6 +499,18 @@ export async function handleGenerateTripDay(
       if (!result.alreadyCompliant) {
         updatedDays[i] = { ...d, activities: result.activities };
         console.warn(`[generate-trip-day] 🍽️ MEAL GUARD: Day ${dn} missing [${result.injectedMeals.join(', ')}] — injected before chain save`);
+      }
+    }
+  }
+
+  // ── DATE NORMALIZATION (ensure every day has a date) ─────────────
+  if (startDate) {
+    for (let i = 0; i < updatedDays.length; i++) {
+      if (!updatedDays[i].date) {
+        const derived = new Date(startDate);
+        derived.setDate(derived.getDate() + (updatedDays[i].dayNumber || i + 1) - 1);
+        updatedDays[i].date = derived.toISOString().split('T')[0];
+        console.log(`[generate-trip-day] Derived missing date for existing day ${updatedDays[i].dayNumber}: ${updatedDays[i].date}`);
       }
     }
   }
