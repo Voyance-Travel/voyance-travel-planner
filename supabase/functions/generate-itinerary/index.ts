@@ -2693,7 +2693,9 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       const mustDoList = (context.mustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
-      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, mustDoList);
+      const detectedMeals = detectMealSlots(generatedDay.activities || []);
+      console.log(`[Stage 2] Day ${dayNumber} meal diagnostics: mode=${dayMealPolicy.dayMode}, required=[${dayMealPolicy.requiredMeals.join(', ')}], detected=[${detectedMeals.join(', ')}]`);
+      const validation = validateGeneratedDay(generatedDay, dayNumber, isFirstDay, isLastDay, context.totalDays, previousDays, !!context.isSmartFinish, mustDoList, dayMealPolicy.requiredMeals);
 
       // ==========================================================================
       // MINIMUM REAL ACTIVITY COUNT VALIDATION
