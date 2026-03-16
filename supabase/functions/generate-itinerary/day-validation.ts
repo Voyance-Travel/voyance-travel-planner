@@ -226,7 +226,11 @@ export function validateGeneratedDay(
       const prevType = getExperienceType(prevAct);
       const currType = getExperienceType(act);
       if (prevType === 'culinary_class' && currType === 'culinary_class') {
-        errors.push(`Back-to-back culinary classes are not allowed: "${prevAct.title}" followed by "${act.title}"`);
+        if (isSmartFinish) {
+          warnings.push(`Back-to-back culinary classes: "${prevAct.title}" followed by "${act.title}" - consider variety`);
+        } else {
+          errors.push(`Back-to-back culinary classes are not allowed: "${prevAct.title}" followed by "${act.title}"`);
+        }
       }
 
       const specificMealCategories = ['breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'];
@@ -236,7 +240,11 @@ export function validateGeneratedDay(
       const prevIsGenericDining = !prevMealType && (prevAct.category || '').toLowerCase().includes('dining');
 
       if (!currIsTransportLike && !prevIsTransportLike && currMealType && prevMealType && currMealType === prevMealType) {
-        errors.push(`Activities ${i} and ${i + 1} are both "${currMealType}" meals - NEVER schedule two ${currMealType} spots back-to-back`);
+        if (isSmartFinish) {
+          warnings.push(`Activities ${i} and ${i + 1} are both "${currMealType}" meals - consider variety`);
+        } else {
+          errors.push(`Activities ${i} and ${i + 1} are both "${currMealType}" meals - NEVER schedule two ${currMealType} spots back-to-back`);
+        }
       } else if (!currIsTransportLike && !prevIsTransportLike && currIsGenericDining && prevIsGenericDining) {
         warnings.push(`Activities ${i} and ${i + 1} are both dining entries - consider more variety`);
       }
@@ -259,9 +267,15 @@ export function validateGeneratedDay(
   if (requiredMealsForDay.length > 0 && day.activities?.length) {
     for (const mealType of requiredMealsForDay) {
       if (!detectedMeals.includes(mealType)) {
-        errors.push(
-          `MISSING MEAL: Day ${dayNumber} is missing ${mealType.toUpperCase()}. Required meals for this day are [${requiredMealsForDay.join(', ')}]. Add a clearly labeled ${mealType} dining activity at a real restaurant or café.`
-        );
+        if (isSmartFinish) {
+          warnings.push(
+            `MISSING MEAL: Day ${dayNumber} is missing ${mealType.toUpperCase()} - consider adding a ${mealType} dining activity.`
+          );
+        } else {
+          errors.push(
+            `MISSING MEAL: Day ${dayNumber} is missing ${mealType.toUpperCase()}. Required meals for this day are [${requiredMealsForDay.join(', ')}]. Add a clearly labeled ${mealType} dining activity at a real restaurant or café.`
+          );
+        }
       }
     }
   }
@@ -271,7 +285,11 @@ export function validateGeneratedDay(
     const types = day.activities.map(getExperienceType);
     const culinaryCount = types.filter(t => t === 'culinary_class').length;
     if (culinaryCount > 1) {
-      errors.push(`VARIETY RULE VIOLATION: Only ONE culinary class/workshop is allowed per day (found ${culinaryCount}).`);
+      if (isSmartFinish) {
+        warnings.push(`Multiple culinary classes on one day (found ${culinaryCount}) - consider variety`);
+      } else {
+        errors.push(`VARIETY RULE VIOLATION: Only ONE culinary class/workshop is allowed per day (found ${culinaryCount}).`);
+      }
     }
   }
 
@@ -303,7 +321,11 @@ export function validateGeneratedDay(
         for (const prevConcept of previousConcepts) {
           if (conceptSimilarity(actConcept, prevConcept)) {
             if (isRecurringEvent(act, mustDoActivities)) continue;
-            errors.push(`MEAL REPEAT: "${act.title}" is too similar to a meal from a previous day. Each day should feature DIFFERENT restaurants.`);
+            if (isSmartFinish) {
+              warnings.push(`MEAL REPEAT: "${act.title}" is similar to a meal from a previous day - consider variety`);
+            } else {
+              errors.push(`MEAL REPEAT: "${act.title}" is too similar to a meal from a previous day. Each day should feature DIFFERENT restaurants.`);
+            }
             break;
           }
         }
@@ -376,11 +398,27 @@ export function validateGeneratedDay(
     const checkoutMins = checkoutAct?.startTime ? parseTimeToMinutesLocal(checkoutAct.startTime) : null;
     const airportMins = airportAct?.startTime ? parseTimeToMinutesLocal(airportAct.startTime) : null;
     if (checkoutMins !== null && airportMins !== null && checkoutMins > airportMins) {
-      errors.push('Departure day sequence violation: Hotel checkout must occur before airport transfer.');
+      if (isSmartFinish) {
+        warnings.push('Departure day sequence: Hotel checkout should occur before airport transfer.');
+      } else {
+        errors.push('Departure day sequence violation: Hotel checkout must occur before airport transfer.');
+      }
     }
 
-    if (!hasCheckout) errors.push('Last day MUST include hotel checkout activity');
-    if (!hasDeparture) errors.push('Last day MUST end with departure/airport transfer activity');
+    if (!hasCheckout) {
+      if (isSmartFinish) {
+        warnings.push('Last day should include hotel checkout activity');
+      } else {
+        errors.push('Last day MUST include hotel checkout activity');
+      }
+    }
+    if (!hasDeparture) {
+      if (isSmartFinish) {
+        warnings.push('Last day should end with departure/airport transfer activity');
+      } else {
+        errors.push('Last day MUST end with departure/airport transfer activity');
+      }
+    }
   }
 
   return { isValid: errors.length === 0, errors, warnings };
