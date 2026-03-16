@@ -378,6 +378,7 @@ Vegas rewards you for knowing where to go. The difference between a forgettable 
     authorName: 'Ashton Lightfoot',
     authorTitle: 'Co-Founder of Voyance',
     readTime: '6 min read',
+    datePublished: '2026-03-16',
     tags: ['Atlanta', 'Food', 'Restaurants', 'Day Trips', 'Georgia'],
     summary: "A local's guide to Atlanta — world-class dining, iconic attractions, and hidden gems from someone who lives here.",
     content: `# Founder's Guide: Atlanta
