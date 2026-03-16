@@ -203,8 +203,9 @@ function CostsList({ ledger, formatCurrency, categoryColors, categoryIcons, onAc
   );
 }
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, journeyId, journeyName, jsTotalCostCents }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
+  const [payments, setPayments] = useState<TripPayment[]>([]);
   const syncAttempted = useRef(false);
   const { data: rawTripMembers = [] } = useTripMembers(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
