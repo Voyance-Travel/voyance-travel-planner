@@ -40,11 +40,7 @@ const imageCache = new Map<string, { url: string; source: string }>();
 // Pending requests to dedupe concurrent fetches
 const pendingRequests = new Map<string, Promise<{ url: string; source: string } | null>>();
 
-// Track which activity IDs we've already persisted to avoid duplicate writes
-const persistedActivityIds = new Set<string>();
-
-// UUID v4 pattern check
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// persistedActivityIds and UUID_REGEX removed — persistence now handled by useActivityImageWriteback
 
 function getCategoryFallback(category?: string, title?: string): string {
   return getActivityFallbackImage(category, title);
