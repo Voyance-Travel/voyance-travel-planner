@@ -5107,7 +5107,7 @@ export function EditorialItinerary({
             
              {/* Bulk Unlock Banner - hidden in clean preview */}
              {!isCleanPreview && !isActivelyGenerating && (() => {
-              const lockedDayCount = days.filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber)).length;
+              const lockedDayCount = days.filter(d => !canViewDay(d.dayNumber)).length;
               const unlockedCount = days.length - lockedDayCount;
               if (lockedDayCount < 2) return null;
               return (
