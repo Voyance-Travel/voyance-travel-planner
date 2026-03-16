@@ -159,7 +159,7 @@ Barcelona is the city that has everything, incredible architecture, world-class 
 
 Barcelona is the rare city that delivers on every front. The architecture is world-class. The food scene is deep. The beaches are right there. And the nightlife goes until sunrise if you want it to.
 
-My top Barcelona moments: standing inside Sagrada Familia when the light hit, swimming at the Montjuic pool overlooking the city, spending hours grazing through La Boqueria, and eating razor clams at the counter at Bar Canete. That's a full day, and it's one of the best days you'll have anywhere.
+My top Barcelona moments: standing inside Sagrada Familia when the light hit, the view from the Montjuic pool overlooking the city, spending hours grazing through La Boqueria, and eating razor clams at the counter at Bar Canete. That's a full day, and it's one of the best days you'll have anywhere.
 
 *This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise, we don't recommend what we haven't tried.*`,
   },
