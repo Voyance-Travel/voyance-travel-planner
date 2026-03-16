@@ -124,6 +124,44 @@ Don't overschedule Paris. Walk the river. Eat well. Let the city set the pace.
 
 *This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
   },
+  {
+    slug: 'barcelona',
+    title: "Founder's Guide: Barcelona",
+    subtitle: "Barcelona is the city that has everything.",
+    authorName: 'Ashton Lightfoot',
+    authorTitle: 'Co-Founder of Voyance',
+    destination: 'Barcelona',
+    readTime: '5 min read',
+    coverImage: toSiteImageUrlFromPhotoId('photo-1583422409516-2895a77efded'),
+    summary: "Barcelona is the city that has everything - incredible architecture, world-class food, beaches, nightlife, and a vibe that makes you immediately start thinking about when you can come back.",
+    datePublished: '2026-03-16',
+    tags: ['Barcelona', 'Food', 'Architecture', 'Beaches', 'Spain'],
+    content: `# Founder's Guide: Barcelona
+
+Barcelona is the city that has everything - incredible architecture, world-class food, beaches, nightlife, and a vibe that makes you immediately start thinking about when you can come back. I already want to go back. Specifically, I want to go back and spend an entire day in the food market. That's how much I loved it.
+
+## What to See
+
+**Sagrada Familia** is the reason most people go to Barcelona, and it should be. I've seen a lot of churches and cathedrals around the world. This one is different. When you walk inside and the light pours through those stained glass windows - blues and greens on one side, reds and oranges on the other - it takes your breath away. Gaudi started this in 1882 and it's still not finished. Book tickets online weeks in advance because they sell out. Pay extra for tower access. Go in the morning when the east-facing stained glass catches the sunlight.
+
+**Piscina Municipal de Montjuic** - go up to the Olympic swimming pool, have a drink, and see the city. It's the pool from the 1992 Games, open to the public, and you're swimming with a panoramic view of the entire city and the Mediterranean below you. One of the most unique things you can do in any European city. Then walk back down and explore the palace area. Check opening hours because they vary by season.
+
+## Where to Eat and Drink
+
+**La Boqueria** - this food market is one of my favorite places in the world. I'm not exaggerating. It's been operating on La Rambla since 1217. Hundreds of stalls - fresh seafood, jamon, fruit juices, tapas, everything. Walk past the front stalls near the entrance (those are tourist traps with higher prices) and go deeper into the market for better quality and better prices. Get there before 11am on a weekday before the cruise ship crowds arrive. Fresh juice is a must. I want to go back to Barcelona just to spend time here. It was wonderful.
+
+**Bar Canete** is where I had some of the best tapas of the trip. It's legendary - really hard to get into, and it absolutely lived up to the hype. It's on a side street off La Rambla with a marble bar counter and an open kitchen. Sit at the counter if you can and watch them work. The razor clams, jamon croquettes, and grilled prawns are the must-orders. Seafood-focused, intimate, not a ton of space. Arrive early for dinner or expect a wait.
+
+**Dow Jones Bar** is one of the most fun bar concepts I've ever seen. Cocktail prices fluctuate in real-time based on demand, displayed on stock ticker screens around the bar. When the "market crashes," everything gets cheap. It's a little grungy, I'll be honest, but it's a genuinely fun experience, especially with a group. Great for a pre-dinner drink or late-night stop.
+
+## The Takeaway
+
+Barcelona is the rare city that delivers on every front. The architecture is world-class. The food scene is deep. The beaches are right there. And the nightlife goes until sunrise if you want it to.
+
+My top Barcelona moments: standing inside Sagrada Familia when the light hit, swimming at the Montjuic pool overlooking the city, spending hours grazing through La Boqueria, and eating razor clams at the counter at Bar Canete. That's a full day, and it's one of the best days you'll have anywhere.
+
+*This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
+  },
 ];
 
 export function getFoundersGuides(): FoundersGuide[] {
