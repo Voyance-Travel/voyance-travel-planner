@@ -8832,7 +8832,7 @@ function DayCard({
                     )}
 
                     <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
-                      Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}{travelers > 1 ? '/pp' : ''}
+                      Day Total: {formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}{travelers > 1 ? '/pp' : ''}
                     </span>
                   </div>
                 </div>
