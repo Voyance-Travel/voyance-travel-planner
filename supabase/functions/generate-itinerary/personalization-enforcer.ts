@@ -1275,7 +1275,7 @@ export function validateDayPersonalization(
       violations.push({
         type: 'missing_meal',
         details: `Missing ${requiredMeal} slot (required for this pace)`,
-        severity: requiredMeal === 'dinner' ? 'major' : 'minor'
+        severity: 'major'
       });
     }
   }

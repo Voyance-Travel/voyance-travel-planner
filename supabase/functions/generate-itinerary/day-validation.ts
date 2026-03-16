@@ -212,6 +212,35 @@ export function validateGeneratedDay(
     }
   }
 
+  // ==========================================================================
+  // REQUIRED MEAL COUNT VALIDATION (Breakfast, Lunch, Dinner)
+  // Full exploration days (not first/last) MUST have all 3 meals explicitly labeled
+  // ==========================================================================
+  if (!isFirstDay && !isLastDay && day.activities?.length) {
+    const mealKeywordMap: Record<string, string[]> = {
+      breakfast: ['breakfast', 'brunch'],
+      lunch: ['lunch'],
+      dinner: ['dinner', 'supper', 'evening meal'],
+    };
+
+    for (const [mealType, keywords] of Object.entries(mealKeywordMap)) {
+      const hasMeal = day.activities.some(act => {
+        const title = (act.title || '').toLowerCase();
+        const category = (act.category || '').toLowerCase();
+        // Check if activity is dining AND title/category references this meal
+        const isDining = category === 'dining' || category.includes('dining');
+        const matchesMeal = keywords.some(kw => title.includes(kw) || category.includes(kw));
+        return isDining && matchesMeal;
+      });
+
+      if (!hasMeal) {
+        errors.push(
+          `MISSING MEAL: Day ${dayNumber} is missing ${mealType.toUpperCase()}. Every full exploration day MUST have breakfast, lunch, AND dinner as explicitly labeled dining activities. Add a ${mealType} at a real restaurant.`
+        );
+      }
+    }
+  }
+
   // Day-level variety rules
   if (day.activities?.length) {
     const types = day.activities.map(getExperienceType);

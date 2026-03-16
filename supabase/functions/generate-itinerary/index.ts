@@ -2846,6 +2846,58 @@ Generate activities for this day following ALL constraints above.`;
           generatedDay = dedupedDay;
         }
 
+        // ====================================================================
+        // MEAL INJECTION FALLBACK — If retries exhausted and meals still missing,
+        // inject stub meal activities so no full day ships without B/L/D
+        // ====================================================================
+        if (isLastAttempt && !isFirstDay && !isLastDay) {
+          const mealSlots: { type: string; keywords: string[]; time: string; endTime: string }[] = [
+            { type: 'Breakfast', keywords: ['breakfast', 'brunch'], time: '08:30', endTime: '09:15' },
+            { type: 'Lunch', keywords: ['lunch'], time: '12:30', endTime: '13:30' },
+            { type: 'Dinner', keywords: ['dinner', 'supper', 'evening meal'], time: '19:00', endTime: '20:15' },
+          ];
+
+          for (const slot of mealSlots) {
+            const hasMeal = generatedDay.activities.some((a: any) => {
+              const title = (a.title || '').toLowerCase();
+              const category = (a.category || '').toLowerCase();
+              const isDining = category === 'dining' || category.includes('dining');
+              const matchesMeal = slot.keywords.some(kw => title.includes(kw) || category.includes(kw));
+              return isDining && matchesMeal;
+            });
+
+            if (!hasMeal) {
+              const destination = context.destination || 'the destination';
+              console.warn(`[Stage 2] Day ${dayNumber}: INJECTING missing ${slot.type} (retries exhausted)`);
+              const stubMeal: any = {
+                id: `injected-${slot.type.toLowerCase()}-${dayNumber}`,
+                title: `${slot.type} — Local Restaurant`,
+                startTime: slot.time,
+                endTime: slot.endTime,
+                category: 'dining',
+                location: { name: `${slot.type} spot in ${destination}`, address: destination },
+                cost: { amount: slot.type === 'Breakfast' ? 12 : slot.type === 'Lunch' ? 18 : 30, currency: context.currency || 'USD', source: 'injected_fallback' },
+                description: `${slot.type} at a well-reviewed local spot. This meal was auto-added to ensure your day includes all three meals.`,
+                tags: ['dining', slot.type.toLowerCase()],
+                bookingRequired: false,
+                transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency: context.currency || 'USD' }, instructions: 'Short walk from previous activity' },
+                tips: `Ask your hotel for a ${slot.type.toLowerCase()} recommendation nearby.`,
+                _injected: true,
+              };
+              generatedDay.activities.push(stubMeal);
+            }
+          }
+
+          // Re-sort activities by start time after injection
+          generatedDay.activities.sort((a: any, b: any) => {
+            const parseMin = (t: string) => {
+              const m = (t || '').match(/(\d{1,2}):(\d{2})/);
+              return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
+            };
+            return parseMin(a.startTime) - parseMin(b.startTime);
+          });
+        }
+
         // Tag day with multi-city info
         if (context.isMultiCity && dayCity) {
           generatedDay.city = dayCity.cityName;
