@@ -254,6 +254,21 @@ export function ItineraryGenerator({
       setPrePhase(null);
       try {
         const completedDays = await fetchCompletedDaysFromBackend();
+        
+        // Validate: don't finalize if all days are empty shells
+        const daysWithActivities = completedDays.filter(
+          (d: any) => Array.isArray(d.activities) && d.activities.length > 0
+        ).length;
+        
+        if (completedDays.length > 0 && daysWithActivities === 0) {
+          console.error('[ItineraryGenerator] onReady: All days are empty shells — treating as failed');
+          setHasStarted(true);
+          setPrePhase('preparing');
+          setServerGenActive(true);
+          setGenerationIssueSince(Date.now());
+          return;
+        }
+        
         const gr = gateResultRef.current;
         toast.success('Your itinerary is ready!', { duration: 4000 });
         // Let the celebration screen show for 3 seconds before transitioning
