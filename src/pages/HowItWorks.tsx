@@ -22,7 +22,10 @@ import {
   MapPin,
   MessageCircle,
   ClipboardPaste,
-  Globe
+  Globe,
+  Wallet,
+  BookOpen,
+  Compass
 } from 'lucide-react';
 import useEmblaCarousel from 'embla-carousel-react';
 import { ARCHETYPE_NARRATIVES, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
@@ -48,6 +51,9 @@ const promises = [
   { text: 'Real reviews, not paid placements', icon: Star },
   { text: "Book direct - we don't mark up prices", icon: DollarSign },
   { text: 'Your data stays yours', icon: Lock },
+  { text: 'We learn travel-you, nothing else', icon: Dna },
+  { text: 'Your trips are saved forever', icon: BookOpen },
+  { text: 'Every rating makes your next trip better', icon: Star },
 ];
 
 const ALL_ARCHETYPE_IDS = [
@@ -353,7 +359,7 @@ export default function HowItWorks() {
             </div>
           </motion.div>
 
-          {/* Chapter 4 - Live Your Trip */}
+          {/* Chapter 4 - Watch Your Budget */}
           <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
@@ -363,22 +369,56 @@ export default function HowItWorks() {
             <div className="relative md:order-1 order-2">
               <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
               <img 
-                src={liveTripImage}
-                alt="Using Voyance as a live travel companion"
+                src={itineraryImage}
+                alt="Real-time budget tracking for your trip"
                 className="relative rounded-xl md:rounded-2xl shadow-xl md:shadow-2xl w-full aspect-square md:aspect-[4/3] object-cover"
               />
             </div>
             <div className="md:order-2 order-1">
               <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">04</span>
               <h2 className="text-xl md:text-4xl font-serif font-bold text-foreground -mt-4 md:-mt-8 mb-3 md:mb-6">
+                Watch your budget
+              </h2>
+              <p className="text-sm md:text-lg text-muted-foreground leading-relaxed mb-3 md:mb-6">
+                Every activity, every hotel, every meal – priced and totaled in real time. No more spreadsheets. No more surprises on the credit card. Your trip budget updates as you build, swap, and customize your itinerary. Set your limit, and Voyance keeps you on track without sacrificing the experiences that matter to you.
+              </p>
+              <div className="mt-4 md:mt-8 grid grid-cols-3 gap-2 md:gap-4 text-center">
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Real-time</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">totals</p>
+                </div>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Per-day</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">breakdown</p>
+                </div>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">No surprises</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">guaranteed</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Chapter 5 - Live Your Trip */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center mb-16 md:mb-32"
+          >
+            <div>
+              <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">05</span>
+              <h2 className="text-xl md:text-4xl font-serif font-bold text-foreground -mt-4 md:-mt-8 mb-3 md:mb-6">
                 Live your trip
               </h2>
               <p className="text-sm md:text-lg text-muted-foreground leading-relaxed mb-3 md:mb-6">
-                Your itinerary becomes a day-by-day travel companion. Get real-time directions, 
-                activity details, and local tips as you go. Want to swap an activity or change 
-                your pace? Your consultant adapts with you.
+                Your itinerary becomes a day-by-day travel companion with a live map view of your entire trip. See every activity, restaurant, and experience plotted on an interactive map – where you're going, what's next, and how to get there. Get real-time directions, activity details, and local tips as you go. Want to swap an activity or change your pace? Your consultant adapts with you.
               </p>
               <div className="mt-4 md:mt-8 grid grid-cols-3 gap-2 md:gap-4 text-center">
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Live map</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">see your full trip</p>
+                </div>
                 <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
                   <p className="text-lg md:text-2xl font-bold text-primary">Real-time</p>
                   <p className="text-[10px] md:text-xs text-muted-foreground">guidance</p>
@@ -387,15 +427,59 @@ export default function HowItWorks() {
                   <p className="text-lg md:text-2xl font-bold text-primary">On-the-fly</p>
                   <p className="text-[10px] md:text-xs text-muted-foreground">changes</p>
                 </div>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-primary/20 to-accent/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
+              <img 
+                src={liveTripImage}
+                alt="Live map view of your trip"
+                className="relative rounded-xl md:rounded-2xl shadow-xl md:shadow-2xl w-full aspect-square md:aspect-[4/3] object-cover"
+              />
+            </div>
+          </motion.div>
+
+          {/* Chapter 6 - Share Your Story */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center mb-16 md:mb-32"
+          >
+            <div className="relative md:order-1 order-2">
+              <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-accent/20 to-primary/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
+              <img 
+                src={communityImage}
+                alt="Sharing your travel story as a community guide"
+                className="relative rounded-xl md:rounded-2xl shadow-xl md:shadow-2xl w-full aspect-square md:aspect-[4/3] object-cover"
+              />
+            </div>
+            <div className="md:order-2 order-1">
+              <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">06</span>
+              <h2 className="text-xl md:text-4xl font-serif font-bold text-foreground -mt-4 md:-mt-8 mb-3 md:mb-6">
+                Share your story
+              </h2>
+              <p className="text-sm md:text-lg text-muted-foreground leading-relaxed mb-3 md:mb-6">
+                After your trip, it lives on. View your past trips anytime – every itinerary, every restaurant, every detail saved and organized. Rate the activities you did, share your photos and tips, and turn your experience into a community guide that helps fellow travelers discover what you loved. Your ratings don't just help others – they teach Voyance what you love so your next trip is even better.
+              </p>
+              <div className="mt-4 md:mt-8 grid grid-cols-3 gap-2 md:gap-4 text-center">
                 <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
-                  <p className="text-lg md:text-2xl font-bold text-primary">Day-by-day</p>
-                  <p className="text-[10px] md:text-xs text-muted-foreground">companion</p>
+                  <p className="text-lg md:text-2xl font-bold text-primary">Past trips</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">saved forever</p>
+                </div>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Community</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">guides</p>
+                </div>
+                <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
+                  <p className="text-lg md:text-2xl font-bold text-primary">Your ratings</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">make us smarter</p>
                 </div>
               </div>
             </div>
           </motion.div>
 
-          {/* Chapter 5 - Share Your Story */}
+          {/* Chapter 7 - We Only Know Travel-You */}
           <motion.div
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
@@ -403,35 +487,36 @@ export default function HowItWorks() {
             className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16 items-center"
           >
             <div>
-              <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">05</span>
+              <span className="text-4xl md:text-8xl font-serif font-bold text-primary/10">07</span>
               <h2 className="text-xl md:text-4xl font-serif font-bold text-foreground -mt-4 md:-mt-8 mb-3 md:mb-6">
-                Share your story
+                We only know travel-you
               </h2>
               <p className="text-sm md:text-lg text-muted-foreground leading-relaxed mb-3 md:mb-6">
-                After your trip, turn your experience into a community guide. Rate activities, 
-                share your photos and tips, and help fellow travelers discover what you loved. 
-                Browse guides from travelers like you for your next adventure.
+                This is important. Voyance doesn't try to be everything. We're not tracking your work schedule, your grocery list, or your morning routine. We know one thing: how you travel. Your Travel DNA is dedicated entirely to understanding you as a traveler – what excites you, what drains you, how you recharge, and what makes a trip feel like it was made for you.
+              </p>
+              <p className="hidden md:block text-lg text-muted-foreground leading-relaxed">
+                That separation is the point. We're not a general AI trying to guess what you want. We're a travel-specific AI that remembers exactly who you are every time you come back. Tell us once. We lock it in. And we only get better.
               </p>
               <div className="mt-4 md:mt-8 grid grid-cols-3 gap-2 md:gap-4 text-center">
                 <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
-                  <p className="text-lg md:text-2xl font-bold text-primary">Community</p>
-                  <p className="text-[10px] md:text-xs text-muted-foreground">guides</p>
+                  <p className="text-lg md:text-2xl font-bold text-primary">Travel-only</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">DNA</p>
                 </div>
                 <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
-                  <p className="text-lg md:text-2xl font-bold text-primary">Photo</p>
-                  <p className="text-[10px] md:text-xs text-muted-foreground">journals</p>
+                  <p className="text-lg md:text-2xl font-bold text-primary">Tell us once</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">we remember</p>
                 </div>
                 <div className="p-2 md:p-4 bg-muted/50 rounded-lg md:rounded-xl">
-                  <p className="text-lg md:text-2xl font-bold text-primary">Real</p>
-                  <p className="text-[10px] md:text-xs text-muted-foreground">traveler reviews</p>
+                  <p className="text-lg md:text-2xl font-bold text-primary">Always</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">improving</p>
                 </div>
               </div>
             </div>
             <div className="relative">
               <div className="absolute -inset-2 md:-inset-4 bg-gradient-to-br from-primary/20 to-accent/20 rounded-2xl md:rounded-3xl blur-xl md:blur-2xl" />
               <img 
-                src={communityImage}
-                alt="Sharing your travel story as a community guide"
+                src={quizImage}
+                alt="Travel DNA - we only know the traveler in you"
                 className="relative rounded-xl md:rounded-2xl shadow-xl md:shadow-2xl w-full aspect-square md:aspect-[4/3] object-cover"
               />
             </div>
