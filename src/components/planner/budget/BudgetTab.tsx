@@ -262,37 +262,32 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // ─── Financial snapshot: single source of truth for expected spend ───
   const rawSnapshot = useTripFinancialSnapshot(tripId);
   
-  // Fallback: if DB snapshot is suspiciously low vs JS-calculated total, use JS total
+  // Always prefer JS-calculated total as primary source — it reflects the live itinerary.
+  // DB snapshot is only used for paid tracking (which only exists in the DB).
   const snapshot = useMemo(() => {
-    if (jsTotalCostCents && jsTotalCostCents > 0 && rawSnapshot.tripTotalCents > 0) {
-      const ratio = rawSnapshot.tripTotalCents / jsTotalCostCents;
-      if (ratio < 0.2) {
-        // DB has less than 20% of JS total — likely stale/incomplete sync
-        console.warn(`[BudgetTab] Snapshot stale: DB=${rawSnapshot.tripTotalCents}c vs JS=${jsTotalCostCents}c, using JS fallback`);
-        const toBePaid = Math.max(0, jsTotalCostCents - rawSnapshot.paidCents);
-        return {
-          ...rawSnapshot,
-          tripTotalCents: jsTotalCostCents,
-          toBePaidCents: toBePaid,
-          plannedUnpaidCents: toBePaid,
-          budgetRemainingCents: rawSnapshot.budgetTotalCents - jsTotalCostCents,
-          paidPercent: jsTotalCostCents > 0 ? Math.min((rawSnapshot.paidCents / jsTotalCostCents) * 100, 100) : 0,
-        };
-      }
+    const useLiveTotal = jsTotalCostCents && jsTotalCostCents > 0;
+    const effectiveTotal = useLiveTotal ? jsTotalCostCents : rawSnapshot.tripTotalCents;
+    const toBePaid = Math.max(0, effectiveTotal - rawSnapshot.paidCents);
+    
+    if (useLiveTotal && effectiveTotal !== rawSnapshot.tripTotalCents) {
+      console.info(`[BudgetTab] Using live itinerary total: ${effectiveTotal}c (DB: ${rawSnapshot.tripTotalCents}c)`);
     }
-    // Also fallback when snapshot is 0 but JS has data
-    if (rawSnapshot.tripTotalCents === 0 && jsTotalCostCents && jsTotalCostCents > 0) {
-      return {
-        ...rawSnapshot,
-        tripTotalCents: jsTotalCostCents,
-        toBePaidCents: jsTotalCostCents,
-        plannedUnpaidCents: jsTotalCostCents,
-        budgetRemainingCents: rawSnapshot.budgetTotalCents - jsTotalCostCents,
-        paidPercent: 0,
-      };
-    }
-    return rawSnapshot;
+    
+    return {
+      ...rawSnapshot,
+      tripTotalCents: effectiveTotal,
+      toBePaidCents: toBePaid,
+      plannedUnpaidCents: toBePaid,
+      budgetRemainingCents: rawSnapshot.budgetTotalCents - effectiveTotal,
+      paidPercent: effectiveTotal > 0 ? Math.min((rawSnapshot.paidCents / effectiveTotal) * 100, 100) : 0,
+    };
   }, [rawSnapshot, jsTotalCostCents]);
+  
+  // Check if category breakdown totals are misaligned with the live total
+  const categoryTotalCents = useMemo(() => {
+    return allocations.reduce((sum, a) => sum + a.usedCents, 0);
+  }, [allocations]);
+  const isCategorySyncing = snapshot.tripTotalCents > 0 && categoryTotalCents > 0 && (categoryTotalCents / snapshot.tripTotalCents) < 0.2;
 
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
@@ -497,12 +492,12 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           </CardContent>
         </Card>
 
-        {/* Expected Spend Card — total expected cost from all sources */}
+        {/* Trip Expenses Card — total estimated cost from live itinerary */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4" />
-              Expected Spend
+              Trip Expenses
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -519,19 +514,25 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 </span>
               )}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Estimated total for {travelers} traveler{travelers !== 1 ? 's' : ''}
+              {travelers > 1 && snapshot.tripTotalCents > 0 && (
+                <> · {formatCurrency(Math.round(snapshot.tripTotalCents / travelers))}/person</>
+              )}
+            </p>
             <Progress 
               value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.tripTotalCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)} 
               className="h-2 mt-3"
             />
             {snapshot.paidCents > 0 && (
               <p className="text-xs text-muted-foreground mt-2">
-                Paid: {formatCurrency(snapshot.paidCents)}
+                Paid so far: {formatCurrency(snapshot.paidCents)} · To be paid: {formatCurrency(snapshot.toBePaidCents)}
               </p>
             )}
           </CardContent>
         </Card>
 
-        {/* Budget Remaining Card — budget minus expected spend */}
+        {/* Budget Remaining Card — budget minus trip expenses */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -553,8 +554,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              ≈ {formatCurrency(Math.round(Math.max(0, snapshot.budgetRemainingCents) / Math.max(totalDays, 1)))}/day
+            <p className="text-xs text-muted-foreground mt-1">
+              Budget minus trip expenses
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              ≈ {formatCurrency(Math.round(Math.max(0, snapshot.budgetRemainingCents) / Math.max(totalDays, 1)))}/day remaining
             </p>
           </CardContent>
         </Card>
@@ -570,6 +574,12 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {isCategorySyncing && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border text-muted-foreground text-xs">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <p>Category totals are syncing — the Trip Expenses total above reflects your full itinerary.</p>
+              </div>
+            )}
             {allocations.map((alloc) => {
               const allocated = alloc.allocatedCents;
               const used = alloc.usedCents;
@@ -608,6 +618,13 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 </div>
               );
             })}
+            {/* Authoritative total from itinerary */}
+            {snapshot.tripTotalCents > 0 && (
+              <div className="flex items-center justify-between pt-3 border-t border-border text-sm">
+                <span className="font-medium text-muted-foreground">Total from itinerary</span>
+                <span className="font-semibold">{formatCurrency(snapshot.tripTotalCents)}</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
