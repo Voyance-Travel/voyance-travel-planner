@@ -202,8 +202,12 @@ export function PaymentsTab({
     destinationCountry,
   });
 
-  // Total comes from the shared payable items calculation
-  const estimatedTotal = payableTotalCents;
+  // ─── Canonical total from DB ledger (single source of truth, matches header + budget) ───
+  const financialSnapshot = useTripFinancialSnapshot(tripId);
+  // Use the DB-backed ledger total; fall back to payable items only if ledger hasn't loaded yet
+  const estimatedTotal = financialSnapshot.tripTotalCents > 0
+    ? financialSnapshot.tripTotalCents
+    : payableTotalCents;
   // "Paid so far" reflects actual recorded payments from trip_payments
   const paidAmount = totals.paid;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);

@@ -294,35 +294,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     return () => window.removeEventListener('booking-changed', handler);
   }, [fetchPaymentsForBudget]);
 
-  // ─── Payable items: single source of truth matching Payments tab ───
-  const { totalCents: payableTotalCents } = usePayableItems({
-    days: itineraryDays || [],
-    flightSelection,
-    hotelSelection,
-    travelers,
-    payments,
-    budgetTier,
-    destination,
-    destinationCountry,
-  });
-
-  // Build a snapshot-like object from payable items total
-  const snapshot = useMemo(() => {
-    const paidCents = payments
-      .filter(p => p.status === 'paid')
-      .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0);
-    const budgetTotalCents = settings?.budget_total_cents || 0;
-    const toBePaid = Math.max(0, payableTotalCents - paidCents);
-
-    return {
-      tripTotalCents: payableTotalCents,
-      paidCents,
-      toBePaidCents: toBePaid,
-      budgetTotalCents,
-      budgetRemainingCents: budgetTotalCents - payableTotalCents,
-      paidPercent: payableTotalCents > 0 ? Math.min((paidCents / payableTotalCents) * 100, 100) : 0,
-    };
-  }, [payableTotalCents, payments, settings?.budget_total_cents]);
+  // ─── Canonical financial snapshot from DB ledger (single source of truth) ───
+  const snapshot = useTripFinancialSnapshot(tripId);
 
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
