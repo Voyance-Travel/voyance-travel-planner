@@ -40,6 +40,7 @@ import { useBulkUnlock } from '@/hooks/useBulkUnlock';
 import { HotelGalleryModal } from './HotelGalleryModal';
 import { DraggableActivityList } from './DraggableActivityList';
 import { TransportComparisonCard } from './TransportComparisonCard';
+import { InterCityTransportCard } from './InterCityTransportCard';
 import { AirportHotelTransfer, SelectedTransfer } from './AirportHotelTransfer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8588,11 +8589,11 @@ function DayCard({
                       : Car;
 
                     return (
-                      <InterCityTransportStrip
+                      <InterCityTransportCard
                         key={activityToRender.id}
-                        activity={activityToRender}
+                        title={activityToRender.title || ''}
                         travelMeta={travelMeta}
-                        TransportIcon={TransportIcon}
+                        className="mx-2 sm:mx-0 my-1"
                       />
                     );
                   }
