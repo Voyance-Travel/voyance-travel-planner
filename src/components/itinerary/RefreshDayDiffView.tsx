@@ -177,13 +177,26 @@ export function RefreshDayDiffView({
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <p className="text-foreground leading-relaxed">{change.description}</p>
-                {change.oldValue && change.newValue && change.type !== 'no_change' && (
+                {change.type === 'replacement' && onFindAlternative ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-7 gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFindAlternative(change.activityId, change.activityTitle);
+                    }}
+                  >
+                    <Search className="h-3 w-3" />
+                    Find Alternative
+                  </Button>
+                ) : change.oldValue && change.newValue && change.type !== 'no_change' ? (
                   <div className="flex items-center gap-2 mt-1 text-xs">
                     <span className="text-destructive/70 line-through">{change.oldValue}</span>
                     <ArrowRight className="h-3 w-3 text-muted-foreground" />
                     <span className="text-primary font-medium">{change.newValue}</span>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           ))}

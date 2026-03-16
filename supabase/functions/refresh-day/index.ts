@@ -271,16 +271,47 @@ Deno.serve(async (req: Request) => {
             });
             changedIds.add(act.id);
           } else {
-            // Too late — suggest finishing earlier
-            const suggestion = `Adjust to finish by ${hoursCheck.closes}.`;
-            issues.push({
-              type: 'operating_hours',
-              activityId: act.id,
-              activityTitle: act.title,
-              severity: 'warning',
-              message: `${act.title} operates ${hoursCheck.opens}–${hoursCheck.closes} but is scheduled ${act.startTime || '?'}–${act.endTime || '?'}.`,
-              suggestion,
-            });
+            // Too late — calculate an earlier start so activity finishes by closing time
+            const closesMin = parseTime(hoursCheck.closes!);
+            const duration = act.durationMinutes || (endMin !== null && startMin !== null ? endMin - startMin : 60);
+
+            if (closesMin !== null) {
+              const newStart = minutesToTime(closesMin - duration);
+              const newEnd = minutesToTime(closesMin);
+
+              issues.push({
+                type: 'operating_hours',
+                activityId: act.id,
+                activityTitle: act.title,
+                severity: 'warning',
+                message: `${act.title} operates ${hoursCheck.opens}–${hoursCheck.closes} but is scheduled ${act.startTime || '?'}–${act.endTime || '?'}.`,
+                suggestion: `Move to ${newStart}–${newEnd} to finish by closing time.`,
+              });
+
+              if (!changedIds.has(act.id)) {
+                proposedChanges.push({
+                  id: `change-${++changeCounter}`,
+                  type: 'time_shift',
+                  activityId: act.id,
+                  activityTitle: act.title,
+                  icon: 'clock',
+                  description: `${act.title}: ${act.startTime} → ${newStart} (closes at ${hoursCheck.closes})`,
+                  oldValue: `${act.startTime}–${act.endTime || '?'}`,
+                  newValue: `${newStart}–${newEnd}`,
+                  patch: { startTime: newStart, endTime: newEnd },
+                });
+                changedIds.add(act.id);
+              }
+            } else {
+              issues.push({
+                type: 'operating_hours',
+                activityId: act.id,
+                activityTitle: act.title,
+                severity: 'warning',
+                message: `${act.title} operates ${hoursCheck.opens}–${hoursCheck.closes} but is scheduled ${act.startTime || '?'}–${act.endTime || '?'}.`,
+                suggestion: `Adjust to finish by ${hoursCheck.closes}.`,
+              });
+            }
           }
         }
       }
