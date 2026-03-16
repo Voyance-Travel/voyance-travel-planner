@@ -374,7 +374,7 @@ Vegas rewards you for knowing where to go. The difference between a forgettable 
     title: "Founder's Guide: Atlanta",
     subtitle: 'A restaurant city that punches well above its weight.',
     destination: 'Atlanta',
-    coverImage: toSiteImageUrlFromPhotoId('photo-1575917649111-0cee4e0e8b22'),
+    coverImage: atlantaSkyline,
     authorName: 'Ashton Lightfoot',
     authorTitle: 'Co-Founder of Voyance',
     readTime: '6 min read',
