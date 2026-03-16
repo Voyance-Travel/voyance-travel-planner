@@ -8847,13 +8847,11 @@ function DayCard({
                   onAcceptAll={(changes) => onApplyRefreshChanges?.(changes)}
                   onAcceptSelected={(changes) => onApplyRefreshChanges?.(changes)}
                   onDismiss={() => onDismissRefresh?.()}
-                  onFindAlternative={(activityId, activityTitle) => {
-                    // Find the activity in current day's activities and open swap drawer
-                    const dayIndex = days.findIndex(d => d.dayNumber === day.dayNumber);
-                    if (dayIndex === -1) return;
+                  onFindAlternative={(activityId, _activityTitle) => {
+                    if (!onActivitySwap) return;
                     const matchedActivity = day.activities.find(a => a.id === activityId);
                     if (matchedActivity) {
-                      openSwapDrawer(dayIndex, matchedActivity);
+                      onActivitySwap(dayIndex, matchedActivity);
                     }
                   }}
                   className="mt-3"
