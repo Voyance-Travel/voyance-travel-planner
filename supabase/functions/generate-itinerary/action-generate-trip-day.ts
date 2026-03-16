@@ -200,6 +200,27 @@ export async function handleGenerateTripDay(
   const existingData = (tripCheck.itinerary_data as any) || {};
   const existingDays: any[] = Array.isArray(existingData.days) ? existingData.days : [];
 
+  // ── RESTAURANT POOL: Load pre-generated pool from trip metadata ───
+  const tripMeta = (tripCheck.metadata as Record<string, unknown>) || {};
+  const restaurantPoolByCity: Record<string, any[]> = (tripMeta.restaurant_pool as any) || {};
+  const usedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
+  
+  // Get the pool for this day's city
+  const dayCity = cityInfo?.cityName || destination || '';
+  let restaurantPool: any[] = restaurantPoolByCity[dayCity] || [];
+  // Also try partial match if exact city not found
+  if (restaurantPool.length === 0 && dayCity) {
+    for (const [poolCity, pool] of Object.entries(restaurantPoolByCity)) {
+      if (poolCity.toLowerCase().includes(dayCity.toLowerCase()) || dayCity.toLowerCase().includes(poolCity.toLowerCase())) {
+        restaurantPool = pool;
+        break;
+      }
+    }
+  }
+  if (restaurantPool.length > 0) {
+    console.log(`[generate-trip-day] Restaurant pool for "${dayCity}": ${restaurantPool.length} venues (${usedRestaurants.length} already used)`);
+  }
+
   // CAP previousActivities to last 3 days to prevent prompt bloat on day 8+
   // The full dedup is handled post-generation by day-validation.ts
   const PREV_DAY_WINDOW = 3;
@@ -296,6 +317,8 @@ export async function handleGenerateTripDay(
             } : undefined,
             isFirstDayInCity: cityInfo ? (dayNumber === 1 || dayCityMap![dayNumber - 2]?.cityName !== cityInfo.cityName) : false,
             isLastDayInCity: cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false,
+            restaurantPool: restaurantPool.length > 0 ? restaurantPool : undefined,
+            usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
           }),
         });
       } finally {
@@ -587,32 +610,46 @@ export async function handleGenerateTripDay(
     }
   }
 
-  // ── PRE-FETCH REAL VENUE CANDIDATES for meal guard fallbacks ─────
+  // ── BUILD MEAL GUARD FALLBACK VENUES ─────────────────────────────
+  // PRIORITY 1: Use the pre-generated restaurant pool (real, curated)
   let fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
-  try {
-    const destQuery = cityInfo?.cityName || destination || '';
-    if (destQuery) {
-      const { data: venues } = await supabase
-        .from('verified_venues')
-        .select('name, address, category')
-        .ilike('city', `%${destQuery}%`)
-        .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
-        .limit(30);
-      if (venues && venues.length > 0) {
-        // Classify venues by likely meal type based on name/category
-        for (const v of venues) {
-          const nameLower = (v.name || '').toLowerCase();
-          let mealType = 'any';
-          if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery') || nameLower.includes('coffee')) mealType = 'breakfast';
-          else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich') || nameLower.includes('deli')) mealType = 'lunch';
-          else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro') || nameLower.includes('trattoria')) mealType = 'dinner';
-          fallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
-        }
-        console.log(`[generate-trip-day] Pre-fetched ${fallbackVenues.length} real venue candidates for meal guard fallbacks`);
+  if (restaurantPool.length > 0) {
+    const usedSet = new Set(usedRestaurants.map(n => n.toLowerCase()));
+    for (const r of restaurantPool) {
+      if (!usedSet.has((r.name || '').toLowerCase())) {
+        fallbackVenues.push({ name: r.name, address: r.address || r.neighborhood || dayCity, mealType: r.mealType || 'any' });
       }
     }
-  } catch (e) {
-    console.warn('[generate-trip-day] Could not pre-fetch venue candidates:', e);
+    if (fallbackVenues.length > 0) {
+      console.log(`[generate-trip-day] Meal guard using ${fallbackVenues.length} venues from restaurant pool`);
+    }
+  }
+  // PRIORITY 2: Supplement with verified_venues if pool is thin
+  if (fallbackVenues.length < 5) {
+    try {
+      const destQuery = cityInfo?.cityName || destination || '';
+      if (destQuery) {
+        const { data: venues } = await supabase
+          .from('verified_venues')
+          .select('name, address, category')
+          .ilike('city', `%${destQuery}%`)
+          .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+          .limit(30);
+        if (venues && venues.length > 0) {
+          for (const v of venues) {
+            const nameLower = (v.name || '').toLowerCase();
+            let mealType = 'any';
+            if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery') || nameLower.includes('coffee')) mealType = 'breakfast';
+            else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich') || nameLower.includes('deli')) mealType = 'lunch';
+            else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro') || nameLower.includes('trattoria')) mealType = 'dinner';
+            fallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
+          }
+          console.log(`[generate-trip-day] Supplemented with ${venues.length} verified_venues candidates`);
+        }
+      }
+    } catch (e) {
+      console.warn('[generate-trip-day] Could not pre-fetch venue candidates:', e);
+    }
   }
 
   // ── MEAL COMPLIANCE GUARD (before save) ──────────────────────────
@@ -821,6 +858,18 @@ export async function handleGenerateTripDay(
   } else {
     // More days remain — save progress and self-chain
     const nextCityName = dayCityMap?.[dayNumber]?.cityName || null;
+    // Track used restaurants from this day's dining activities
+    const newUsedRestaurants = [...usedRestaurants];
+    const dayActivities = dayResult?.activities || [];
+    for (const act of dayActivities) {
+      if ((act.category || '').toLowerCase() === 'dining' && act.title) {
+        const name = (act.title || '').replace(/^(Breakfast|Lunch|Dinner):\s*/i, '').trim();
+        if (name && !newUsedRestaurants.includes(name)) {
+          newUsedRestaurants.push(name);
+        }
+      }
+    }
+
     await supabase.from('trips').update({
       itinerary_data: partialItinerary,
       unlocked_day_count: newUnlocked,
@@ -830,6 +879,7 @@ export async function handleGenerateTripDay(
         generation_heartbeat: new Date().toISOString(),
         generation_total_days: totalDays,
         generation_current_city: nextCityName,
+        used_restaurants: newUsedRestaurants,
       },
     }).eq('id', tripId);
 

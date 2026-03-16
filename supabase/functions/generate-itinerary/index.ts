@@ -6853,7 +6853,8 @@ If the purpose is a specific event, plan at least ONE full day around that event
         isMultiCity: paramIsMultiCity, isTransitionDay: paramIsTransitionDay, transitionFrom: paramTransitionFrom, transitionTo: paramTransitionTo, transitionMode: paramTransitionMode,
         mustDoActivities: paramMustDoActivities, interestCategories: paramInterestCategories, generationRules: paramGenerationRules,
         pacing: paramPacing, isFirstTimeVisitor: paramIsFirstTimeVisitor,
-        hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity } = params;
+        hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity,
+        restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants } = params;
       
       // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
       // This is the critical fix - frontend calls often omit userId, but auth token is always present
@@ -8910,6 +8911,49 @@ ${(() => {
   return result;
 })()}
 
+${(() => {
+  // RESTAURANT POOL INJECTION: If a pre-generated pool is available, inject it
+  // so the AI picks from real restaurants instead of inventing generic ones
+  if (!paramRestaurantPool || !Array.isArray(paramRestaurantPool) || paramRestaurantPool.length === 0) return '';
+  
+  // Filter out already-used restaurants
+  const usedSet = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
+  const available = paramRestaurantPool.filter((r: any) => !usedSet.has((r.name || '').toLowerCase()));
+  
+  if (available.length === 0) return '';
+  
+  const breakfastSpots = available.filter((r: any) => r.mealType === 'breakfast').slice(0, 8);
+  const lunchSpots = available.filter((r: any) => r.mealType === 'lunch').slice(0, 8);
+  const dinnerSpots = available.filter((r: any) => r.mealType === 'dinner').slice(0, 8);
+  const anySpots = available.filter((r: any) => r.mealType === 'any').slice(0, 6);
+  
+  let poolPrompt = `
+${'='.repeat(70)}
+🍽️ RESTAURANT POOL — PICK FROM THIS LIST (DO NOT INVENT RESTAURANTS)
+${'='.repeat(70)}
+For ALL meals today, you MUST pick a restaurant from this pre-verified list.
+Do NOT make up restaurant names. Do NOT use generic names like "local restaurant" or "dinner spot".
+Each restaurant below is REAL and highly rated (4.5+ stars).
+
+`;
+  if (breakfastSpots.length > 0) {
+    poolPrompt += `BREAKFAST OPTIONS:\n${breakfastSpots.map((r: any) => `  • ${r.name} — ${r.cuisine || 'Local cuisine'}, ${r.neighborhood || ''} (${r.priceRange || '$$'})`).join('\n')}\n\n`;
+  }
+  if (lunchSpots.length > 0) {
+    poolPrompt += `LUNCH OPTIONS:\n${lunchSpots.map((r: any) => `  • ${r.name} — ${r.cuisine || 'Local cuisine'}, ${r.neighborhood || ''} (${r.priceRange || '$$'})`).join('\n')}\n\n`;
+  }
+  if (dinnerSpots.length > 0) {
+    poolPrompt += `DINNER OPTIONS:\n${dinnerSpots.map((r: any) => `  • ${r.name} — ${r.cuisine || 'Local cuisine'}, ${r.neighborhood || ''} (${r.priceRange || '$$'})`).join('\n')}\n\n`;
+  }
+  if (anySpots.length > 0) {
+    poolPrompt += `FLEXIBLE (any meal):\n${anySpots.map((r: any) => `  • ${r.name} — ${r.cuisine || 'Local cuisine'}, ${r.neighborhood || ''} (${r.priceRange || '$$'})`).join('\n')}\n\n`;
+  }
+  poolPrompt += `RULE: Pick ONE restaurant per meal from the lists above. Use the EXACT name as shown. Do NOT modify restaurant names.`;
+  
+  console.log(`[generate-day] Injected restaurant pool: ${available.length} available (${breakfastSpots.length}B/${lunchSpots.length}L/${dinnerSpots.length}D/${anySpots.length}any)`);
+  return poolPrompt;
+})()}
+
 CRITICAL REMINDERS:
 1. ${isFullDay ? `This is a FULL DAY: ${dayMealPolicy?.requiredMeals?.join(' + ') ?? 'breakfast + lunch + dinner'} + 3 paid activities + 2 free activities + transit between all stops + evening activity + next morning preview. Fill EVERY hour.` : dayMealPolicy && !isFirstDay && !isLastDay ? `This is a ${dayMealPolicy.dayMode.replace(/_/g, ' ')} day. Required meals: ${dayMealPolicy.requiredMeals.length > 0 ? dayMealPolicy.requiredMeals.join(', ') : 'none'}. Do NOT add extra meals beyond what the meal policy specifies.` : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
@@ -10439,31 +10483,52 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         // use REAL restaurant names instead of generic "dinner spot" text.
         // ====================================================================
         if (dayMealPolicy && dayMealPolicy.requiredMeals.length > 0) {
-          // Pre-fetch real venue candidates for better fallbacks
+          // Build meal fallback venues from restaurant pool first, then verified_venues
           let mealFallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
-          try {
-            const destQuery = resolvedDestination || destination || '';
-            if (destQuery && supabase) {
-              const { data: venues } = await supabase
-                .from('verified_venues')
-                .select('name, address, category')
-                .ilike('city', `%${destQuery}%`)
-                .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
-                .limit(30);
-              if (venues && venues.length > 0) {
-                for (const v of venues) {
-                  const nameLower = (v.name || '').toLowerCase();
-                  let mealType = 'any';
-                  if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery')) mealType = 'breakfast';
-                  else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich')) mealType = 'lunch';
-                  else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro')) mealType = 'dinner';
-                  mealFallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
-                }
-                console.log(`[generate-day] Pre-fetched ${mealFallbackVenues.length} real venue candidates for meal guard`);
+          
+          // PRIORITY 1: Use the pre-generated restaurant pool (real, curated restaurants)
+          if (paramRestaurantPool && Array.isArray(paramRestaurantPool) && paramRestaurantPool.length > 0) {
+            const usedSet = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
+            for (const r of paramRestaurantPool) {
+              if (!usedSet.has((r.name || '').toLowerCase())) {
+                mealFallbackVenues.push({
+                  name: r.name,
+                  address: r.address || r.neighborhood || (resolvedDestination || destination || ''),
+                  mealType: r.mealType || 'any',
+                });
               }
             }
-          } catch (e) {
-            console.warn('[generate-day] Could not pre-fetch venue candidates:', e);
+            if (mealFallbackVenues.length > 0) {
+              console.log(`[generate-day] Meal guard using ${mealFallbackVenues.length} venues from restaurant pool`);
+            }
+          }
+          
+          // PRIORITY 2: Fallback to verified_venues if pool is empty
+          if (mealFallbackVenues.length < 5) {
+            try {
+              const destQuery = resolvedDestination || destination || '';
+              if (destQuery && supabase) {
+                const { data: venues } = await supabase
+                  .from('verified_venues')
+                  .select('name, address, category')
+                  .ilike('city', `%${destQuery}%`)
+                  .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+                  .limit(30);
+                if (venues && venues.length > 0) {
+                  for (const v of venues) {
+                    const nameLower = (v.name || '').toLowerCase();
+                    let mealType = 'any';
+                    if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery')) mealType = 'breakfast';
+                    else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich')) mealType = 'lunch';
+                    else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro')) mealType = 'dinner';
+                    mealFallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
+                  }
+                  console.log(`[generate-day] Supplemented with ${venues.length} verified_venues candidates`);
+                }
+              }
+            } catch (e) {
+              console.warn('[generate-day] Could not pre-fetch venue candidates:', e);
+            }
           }
 
           const mealGuardResult = enforceRequiredMealsFinalGuard(
@@ -10478,7 +10543,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           if (!mealGuardResult.alreadyCompliant) {
             generatedDay.activities = mealGuardResult.activities as any;
             normalizedActivities = generatedDay.activities;
-            console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'real venues' : 'destination-aware fallbacks'} before return`);
+            console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'REAL POOL venues' : 'destination-aware fallbacks'} before return`);
           } else {
             console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
           }
@@ -10957,6 +11022,134 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         
         // Store generation_context in the update payload
         (updatePayload.metadata as Record<string, unknown>).generation_context = enrichmentContext;
+      }
+
+      // ========================================================================
+      // STAGE: RESTAURANT POOL PRE-GENERATION
+      // One AI call per city to pre-generate 40+ real, highly-rated restaurants.
+      // This pool is injected into every day prompt so the AI picks from real
+      // restaurants instead of inventing generic "dinner spot" placeholders.
+      // ========================================================================
+      try {
+        const cities: string[] = [];
+        if (isMultiCity) {
+          const { data: tripCities } = await supabase
+            .from('trip_cities')
+            .select('city_name, country')
+            .eq('trip_id', tripId)
+            .order('city_order', { ascending: true });
+          if (tripCities && tripCities.length > 0) {
+            for (const c of tripCities) {
+              if (c.city_name && !cities.includes(c.city_name)) {
+                cities.push(c.city_name);
+              }
+            }
+          }
+        }
+        if (cities.length === 0) {
+          cities.push(destination);
+        }
+
+        const restaurantPoolByCity: Record<string, any[]> = {};
+        const LOVABLE_API_KEY_FOR_POOL = Deno.env.get("LOVABLE_API_KEY") || '';
+
+        for (const city of cities) {
+          try {
+            const budgetLabel = budgetTier === 'luxury' ? 'luxury' : budgetTier === 'budget' ? 'budget-friendly' : 'mid-range';
+            const poolPrompt = `List exactly 40 real, currently operating restaurants in ${city}${destinationCountry ? `, ${destinationCountry}` : ''} for a ${budgetLabel} traveler.
+
+REQUIREMENTS:
+- ONLY real restaurants that exist right now (no fictional names)
+- 4.5+ star rated preferred
+- Include 12 breakfast/brunch spots, 14 lunch spots, 14 dinner spots
+- Mix of cuisines: local specialties, international, street food, fine dining
+- Spread across different neighborhoods
+
+For EACH restaurant, return a JSON array with objects containing:
+- "name": exact restaurant name
+- "mealType": "breakfast" | "lunch" | "dinner"
+- "cuisine": cuisine type (e.g., "Japanese", "Italian", "Street Food")
+- "neighborhood": area/district name
+- "priceRange": "$" | "$$" | "$$$" | "$$$$"
+- "description": one-line description (max 15 words)
+
+Return ONLY the JSON array, no other text.`;
+
+            const poolResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY_FOR_POOL}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-flash",
+                messages: [
+                  { role: "system", content: "You are a restaurant database. Return ONLY valid JSON arrays. No markdown, no explanations." },
+                  { role: "user", content: poolPrompt },
+                ],
+                temperature: 0.7,
+              }),
+            });
+
+            if (poolResp.ok) {
+              const poolData = await poolResp.json();
+              const content = poolData.choices?.[0]?.message?.content || '';
+              // Extract JSON array from response
+              const jsonMatch = content.match(/\[[\s\S]*\]/);
+              if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  restaurantPoolByCity[city] = parsed.map((r: any) => ({
+                    name: r.name || '',
+                    mealType: r.mealType || 'any',
+                    cuisine: r.cuisine || '',
+                    neighborhood: r.neighborhood || '',
+                    priceRange: r.priceRange || '$$',
+                    description: r.description || '',
+                    address: r.neighborhood ? `${r.neighborhood}, ${city}` : city,
+                  })).filter((r: any) => r.name.length > 2);
+                  console.log(`[generate-trip] 🍽️ Restaurant pool for "${city}": ${restaurantPoolByCity[city].length} real restaurants`);
+
+                  // Cache to verified_venues for future trips (non-blocking)
+                  try {
+                    const venueInserts = restaurantPoolByCity[city].slice(0, 20).map((r: any) => ({
+                      name: r.name,
+                      city: city,
+                      destination: city,
+                      address: r.address || '',
+                      category: 'restaurant',
+                      source: 'restaurant_pool_ai',
+                      rating: 4.5,
+                      usage_count: 0,
+                      expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+                    }));
+                    await supabase.from('verified_venues').upsert(venueInserts, { onConflict: 'name,city', ignoreDuplicates: true });
+                  } catch (cacheErr) {
+                    console.warn(`[generate-trip] Failed to cache restaurant pool for "${city}" (non-blocking):`, cacheErr);
+                  }
+                } else {
+                  console.warn(`[generate-trip] Restaurant pool for "${city}": parsed but empty/invalid`);
+                }
+              } else {
+                console.warn(`[generate-trip] Restaurant pool for "${city}": no JSON array found in response`);
+              }
+            } else {
+              console.warn(`[generate-trip] Restaurant pool AI call failed for "${city}": ${poolResp.status}`);
+            }
+          } catch (cityPoolErr) {
+            console.warn(`[generate-trip] Restaurant pool failed for "${city}" (non-blocking):`, cityPoolErr);
+          }
+        }
+
+        // Store the restaurant pool in generation context
+        if (Object.keys(restaurantPoolByCity).length > 0) {
+          const existingMeta = (updatePayload.metadata as Record<string, unknown>) || {};
+          (existingMeta as any).restaurant_pool = restaurantPoolByCity;
+          (existingMeta as any).used_restaurants = [];
+          console.log(`[generate-trip] Restaurant pools stored for ${Object.keys(restaurantPoolByCity).length} cities`);
+        }
+      } catch (poolErr) {
+        console.warn('[generate-trip] Restaurant pool generation failed (non-blocking):', poolErr);
       }
       
       await supabase.from('trips').update(updatePayload).eq('id', tripId);
