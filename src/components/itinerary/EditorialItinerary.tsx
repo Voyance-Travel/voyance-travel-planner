@@ -1107,6 +1107,9 @@ function getActivityReviewCount(activity: EditorialActivity): number | null {
 }
 
 function getActivityPhoto(activity: EditorialActivity): string | null {
+  // Prefer explicit image_url (set by writeback) over photos array
+  const directUrl = (activity as any).image_url;
+  if (directUrl && typeof directUrl === 'string' && directUrl.startsWith('http')) return directUrl;
   if (!activity.photos || activity.photos.length === 0) return null;
   const photo = activity.photos[0];
   if (typeof photo === 'string') return photo;
