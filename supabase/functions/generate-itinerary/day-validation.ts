@@ -388,8 +388,13 @@ export function validateGeneratedDay(
 
 /**
  * POST-VALIDATION: Strip duplicate activities from a day.
+ * Now meal-safe: will NOT remove a dining activity if it is the only instance
+ * of a required meal slot for the day.
  */
-export function deduplicateActivities(day: StrictDayMinimal): { day: StrictDayMinimal; removed: string[] } {
+export function deduplicateActivities(
+  day: StrictDayMinimal,
+  requiredMeals: RequiredMeal[] = []
+): { day: StrictDayMinimal; removed: string[] } {
   if (!day.activities || day.activities.length <= 1) {
     return { day, removed: [] };
   }
@@ -420,6 +425,23 @@ export function deduplicateActivities(day: StrictDayMinimal): { day: StrictDayMi
 
   const repeatableCategories = ['transport', 'accommodation', 'downtime', 'free_time'];
 
+  // Pre-count meal slots so we know which meals only have one provider
+  const mealProviders: Record<RequiredMeal, StrictActivityMinimal[]> = {
+    breakfast: [], lunch: [], dinner: [],
+  };
+  if (requiredMeals.length > 0) {
+    for (const act of day.activities) {
+      const cat = (act.category || '').toLowerCase();
+      if (!cat.includes('dining')) continue;
+      const title = (act.title || '').toLowerCase();
+      for (const meal of requiredMeals) {
+        if (MEAL_KEYWORDS[meal].some(kw => title.includes(kw))) {
+          mealProviders[meal].push(act);
+        }
+      }
+    }
+  }
+
   for (const act of day.activities) {
     const category = (act.category || '').toLowerCase();
     if (repeatableCategories.includes(category)) {
@@ -431,11 +453,33 @@ export function deduplicateActivities(day: StrictDayMinimal): { day: StrictDayMi
     const locationKey = normalizeText(act.location?.name || '') + '|' + normalizeText(act.location?.address || '');
     const normalTitle = normalizeText(act.title || '');
 
+    let isDuplicate = false;
     if (normalTitle.length > 5 && seenTitles.has(normalTitle)) {
-      removed.push(act.title || 'untitled');
-      continue;
+      isDuplicate = true;
+    } else if (concept.length > 3 && seenConcepts.has(concept) && locationKey.length > 3 && seenLocations.has(locationKey)) {
+      isDuplicate = true;
     }
-    if (concept.length > 3 && seenConcepts.has(concept) && locationKey.length > 3 && seenLocations.has(locationKey)) {
+
+    if (isDuplicate) {
+      // MEAL-SAFE CHECK: Don't remove if this is the sole provider of a required meal
+      let isSoleMealProvider = false;
+      if (requiredMeals.length > 0 && category.includes('dining')) {
+        const actTitle = (act.title || '').toLowerCase();
+        for (const meal of requiredMeals) {
+          if (MEAL_KEYWORDS[meal].some(kw => actTitle.includes(kw)) && mealProviders[meal].length <= 1) {
+            isSoleMealProvider = true;
+            break;
+          }
+        }
+      }
+      if (isSoleMealProvider) {
+        // Keep it — it's the only source for a required meal
+        kept.push(act);
+        if (normalTitle.length > 5) seenTitles.add(normalTitle);
+        if (concept.length > 3) seenConcepts.add(concept);
+        if (locationKey.length > 3) seenLocations.add(locationKey);
+        continue;
+      }
       removed.push(act.title || 'untitled');
       continue;
     }
@@ -450,4 +494,87 @@ export function deduplicateActivities(day: StrictDayMinimal): { day: StrictDayMi
     return { day: { ...day, activities: kept }, removed };
   }
   return { day, removed: [] };
+}
+
+// =============================================================================
+// FINAL MEAL GUARD — The last line of defense before any day is returned/saved
+// =============================================================================
+// This function MUST be called after ALL post-processing (dedup, personalization
+// stripping, opening hours removal, etc.) and BEFORE returning/persisting the day.
+// It detects missing required meals and injects fallback dining activities.
+// =============================================================================
+
+export interface MealGuardResult {
+  activities: StrictActivityMinimal[];
+  injectedMeals: RequiredMeal[];
+  alreadyCompliant: boolean;
+}
+
+export function enforceRequiredMealsFinalGuard(
+  activities: StrictActivityMinimal[],
+  requiredMeals: RequiredMeal[],
+  dayNumber: number,
+  destination: string,
+  currency: string = 'USD',
+  dayMode: string = 'unknown',
+): MealGuardResult {
+  if (requiredMeals.length === 0) {
+    return { activities, injectedMeals: [], alreadyCompliant: true };
+  }
+
+  const detected = detectMealSlots(activities);
+  const missing = requiredMeals.filter(meal => !detected.includes(meal));
+
+  if (missing.length === 0) {
+    return { activities, injectedMeals: [], alreadyCompliant: true };
+  }
+
+  console.warn(
+    `[MEAL FINAL GUARD] Day ${dayNumber}: ` +
+    `required=[${requiredMeals.join(',')}], detected=[${detected.join(',')}], ` +
+    `MISSING=[${missing.join(',')}] — injecting fallback meals (dayMode=${dayMode})`
+  );
+
+  const fallbackTimes: Record<RequiredMeal, { start: string; end: string; cost: number }> = {
+    breakfast: { start: '08:30', end: '09:15', cost: 12 },
+    lunch:     { start: '12:30', end: '13:30', cost: 18 },
+    dinner:    { start: '19:00', end: '20:15', cost: 30 },
+  };
+
+  const result = [...activities];
+
+  for (const mealType of missing) {
+    const slot = fallbackTimes[mealType];
+    const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+    result.push({
+      id: `guard-${mealType}-${dayNumber}-${Date.now()}`,
+      title: `${label} — Local ${mealType === 'breakfast' ? 'Café' : 'Restaurant'}`,
+      startTime: slot.start,
+      endTime: slot.end,
+      category: 'dining',
+      location: { name: `${label} spot in ${destination}`, address: destination },
+      cost: { amount: slot.cost, currency, source: 'meal_guard_fallback' } as any,
+      description: `${label} was auto-added by the meal guard to satisfy the required meal policy for this ${dayMode.replace(/_/g, ' ')} day.`,
+      tags: ['dining', mealType, 'meal-guard'],
+      bookingRequired: false,
+      transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency }, instructions: 'Short walk from the previous activity' },
+      tips: `Ask your hotel for a nearby ${mealType} recommendation if you want to swap this spot.`,
+    } as StrictActivityMinimal);
+  }
+
+  // Sort by startTime
+  result.sort((a, b) => {
+    const parseMin = (t: string) => {
+      const m = (t || '').match(/(\d{1,2}):(\d{2})/);
+      return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
+    };
+    return parseMin(a.startTime) - parseMin(b.startTime);
+  });
+
+  const afterDetected = detectMealSlots(result);
+  console.log(
+    `[MEAL FINAL GUARD] Day ${dayNumber}: after injection detected=[${afterDetected.join(',')}]`
+  );
+
+  return { activities: result, injectedMeals: missing, alreadyCompliant: false };
 }
