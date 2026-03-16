@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { CheckCircle, AlertTriangle, X, ChevronDown, ChevronUp, Clock, Timer, ArrowUpDown, Check, ArrowRight } from 'lucide-react';
+import { CheckCircle, AlertTriangle, X, ChevronDown, ChevronUp, Clock, Timer, ArrowUpDown, Check, ArrowRight, ArrowRightLeft, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,6 +16,7 @@ const iconMap: Record<string, React.ReactNode> = {
   'alert-triangle': <AlertTriangle className="h-4 w-4" />,
   'timer': <Timer className="h-4 w-4" />,
   'arrow-up-down': <ArrowUpDown className="h-4 w-4" />,
+  'arrow-right-left': <ArrowRightLeft className="h-4 w-4" />,
   'check': <Check className="h-4 w-4" />,
 };
 
