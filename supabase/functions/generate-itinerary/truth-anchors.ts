@@ -397,9 +397,15 @@ COMMON CLOSURE PATTERNS TO KNOW:
 - Religious sites: limited access during services (especially Sunday mornings)
 - Restaurant "dead zone": most close between 14:30-18:00 for prep
 
+CONFIRMED CLOSURES ARE HARD FAILURES:
+- If you KNOW a venue is closed on the scheduled day (e.g., Louvre on Monday), DO NOT include it. Pick a different venue.
+- The post-generation validator will REMOVE confirmed-closed activities. Do not rely on closedRisk tagging — the activity will be dropped.
+- Only use \`closedRisk: true\` when you are GENUINELY UNCERTAIN (no hours data available, seasonal hours, etc.)
+
 If you are NOT CERTAIN a venue is open on the scheduled day/time:
 - Set \`closedRisk: true\` in the activity metadata
 - Provide a backup venue in \`closedRiskAlternative\` field (name + address of a nearby alternative that IS open)
+- Note: closedRisk is ONLY for uncertainty. If hours data confirms closure, the activity will be replaced automatically.
 
 EXAMPLES OF WHAT TO AVOID:
 - Scheduling the Louvre on Monday (closed)
@@ -537,6 +543,8 @@ export interface OpeningHoursViolation {
   activityId: string;
   reason: string;
   category: string;
+  /** true = verified hours data confirms closure; false = time conflict but venue is open that day */
+  isConfirmedClosed: boolean;
 }
 
 export function validateOpeningHours(
@@ -561,18 +569,45 @@ export function validateOpeningHours(
 
       const result = isVenueOpenOnDay(activity.openingHours, dayOfWeek, activity.startTime);
       if (!result.isOpen) {
+        // Determine if this is a full-day closure vs a time conflict
+        const isFullDayClosure = isVenueClosedAllDay(activity.openingHours, dayOfWeek);
         violations.push({
           dayNumber: dayIdx + 1,
           activityTitle: activity.title,
           activityId: activity.id,
           reason: result.reason || 'Venue appears to be closed',
           category: activity.category,
+          isConfirmedClosed: isFullDayClosure,
         });
       }
     }
   }
 
   return violations;
+}
+
+/**
+ * Check if a venue is closed the entire day (not just a time conflict)
+ */
+export function isVenueClosedAllDay(
+  openingHours: string[] | undefined,
+  dayOfWeek: number
+): boolean {
+  if (!openingHours || openingHours.length === 0) return false;
+  
+  const dayName = DAY_NAMES[dayOfWeek];
+  if (!dayName) return false;
+  
+  const dayEntry = openingHours.find(h => 
+    h.toLowerCase().startsWith(dayName.toLowerCase())
+  );
+  
+  if (!dayEntry) return false;
+  
+  const entryLower = dayEntry.toLowerCase();
+  return entryLower.includes('closed') || entryLower.includes('fermé') || 
+         entryLower.includes('cerrado') || entryLower.includes('chiuso') || 
+         entryLower.includes('geschlossen');
 }
 
 /**
