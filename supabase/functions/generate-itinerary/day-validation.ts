@@ -240,7 +240,11 @@ export function validateGeneratedDay(
       const prevIsGenericDining = !prevMealType && (prevAct.category || '').toLowerCase().includes('dining');
 
       if (!currIsTransportLike && !prevIsTransportLike && currMealType && prevMealType && currMealType === prevMealType) {
-        errors.push(`Activities ${i} and ${i + 1} are both "${currMealType}" meals - NEVER schedule two ${currMealType} spots back-to-back`);
+        if (isSmartFinish) {
+          warnings.push(`Activities ${i} and ${i + 1} are both "${currMealType}" meals - consider variety`);
+        } else {
+          errors.push(`Activities ${i} and ${i + 1} are both "${currMealType}" meals - NEVER schedule two ${currMealType} spots back-to-back`);
+        }
       } else if (!currIsTransportLike && !prevIsTransportLike && currIsGenericDining && prevIsGenericDining) {
         warnings.push(`Activities ${i} and ${i + 1} are both dining entries - consider more variety`);
       }
