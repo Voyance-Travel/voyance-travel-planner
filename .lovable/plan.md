@@ -1,203 +1,130 @@
-## Fix: Journey Leg Handoff + Pricing Consistency ✅ COMPLETE
 
-### Root causes fixed:
-1. **Backend handoff** (`triggerNextJourneyLeg`): Was sending `{ tripId }` only — rejected by service-role allowlist (missing `generate-trip`). Now fetches full trip fields and sends `action: 'generate-trip'` with complete payload. Allowlist expanded.
-2. **Frontend fallback** (`TripDetail.tsx`): Same `{ tripId }` problem. Now sends full `generate-trip` payload. No longer pre-sets `itinerary_status='generating'` before invoke succeeds.
-3. **Stuck-leg self-heal**: On TripDetail load, detects journey legs stuck in `generating` with no heartbeat/progress and auto-retriggers with full payload.
-4. **Pricing mismatch** (`useGenerationGate`): Was summing per-leg single-city estimates (missing multi-city fee). Now uses canonical `calculateTripCredits({ days: totalJourneyDays, cities: allCities })`.
-5. **Cost dialog timing** (`ItineraryGenerator`): Journey legs now pre-fetched in `handleGenerateClick` before showing confirmation, not after confirm.
 
----
+# Format for Adding Voyance Picks Data
 
-## Journey Sequential Generation — Implementation Status
+Based on the `voyance_picks` table schema, here's the exact format you need to add new owner's recommendations:
 
-### Part 1: Unified Cost Confirmation + Queue All Legs ✅ COMPLETE
+## SQL INSERT Format
 
-**Implemented:**
+```sql
+INSERT INTO voyance_picks (
+  destination,
+  name,
+  category,
+  why_essential,
+  description,
+  insider_tip,
+  neighborhood,
+  price_range,
+  best_time,
+  address,
+  tags,
+  priority
+) VALUES (
+  'New York',                                    -- destination (required) - city name
+  'The Spotted Pig',                             -- name (required) - venue name
+  'dining',                                      -- category (required) - dining, nightlife, activity, experience
+  'Legendary gastropub that defined West Village dining',  -- why_essential (required) - short reason
+  'Michelin-starred gastropub serving elevated comfort food in a cozy, no-reservations setting',  -- description
+  'Arrive by 5:30pm on weekdays or expect a 90+ minute wait. The ricotta gnudi and chargrilled burger are non-negotiable.',  -- insider_tip
+  'West Village',                                -- neighborhood
+  '$30-50',                                      -- price_range
+  'Weekday early dinner (5:30-6pm) to avoid the crowd',  -- best_time
+  '314 W 11th St, New York, NY 10014',          -- address
+  ARRAY['gastropub', 'michelin-star', 'no-reservations', 'local-favorite'],  -- tags (array)
+  1                                              -- priority (1 = highest)
+);
+```
 
-1. **`src/hooks/useGenerationGate.ts`**:
-   - Added `journeyId` and `journeyTotalLegs` to `GenerationGateParams` interface
-   - Added journey detection: fetches all sibling legs when `journeyId` is present
-   - Sums credit costs across all journey legs for unified billing
-   - Uses `totalJourneyCost` instead of single-leg cost when in journey mode
-   - After successful credit spend, queues sibling legs with `itinerary_status: 'queued'`
+## Field Requirements
 
-2. **`src/components/itinerary/ItineraryGenerator.tsx`**:
-   - Added `journeyLegs` state for cost breakdown display
-   - In `handleGenerate()`: fetches journey info if this is leg 1, populates `journeyLegs` array
-   - Passes `journeyId` and `journeyTotalLegs` to the generation gate
-   - Updated cost confirmation dialog:
-     - Shows "Journey Cost Breakdown" header for journeys
-     - Lists each leg with city, days, and cost
-     - Shows "Journey Total" instead of "Total"
-     - Uses `effectiveTotalCost` (journey sum or single-trip cost) for affordability checks
-     - Disabled partial generation for journeys (must pay full upfront)
-     - "Confirm & Generate Journey" button text for journeys
+**Required Fields:**
+- `destination` - City name (e.g., "New York", "Paris", "Tokyo")
+- `name` - Venue/experience name
+- `category` - One of: `dining`, `nightlife`, `activity`, `experience`, `accommodation`
+- `why_essential` - Short reason why this is a founder pick (1-2 sentences)
 
-### Part 2: Auto-Chain Generation (TODO)
+**Recommended Fields:**
+- `description` - What it is and what makes it special
+- `insider_tip` - Specific actionable advice (timing, what to order, how to experience it)
+- `neighborhood` - Area/district within the city
+- `price_range` - Format like "$15-25", "$$", "$50-100 per person"
+- `best_time` - When to go for best experience
+- `tags` - Array of relevant tags
 
-When leg 1 completes generation, the backend should:
-1. Check for next queued leg in the journey
-2. Automatically trigger `generate-trip` for the next leg
-3. Continue until all legs are generated
+**Optional Fields:**
+- `address` - Full street address
+- `coordinates` - JSON with lat/lng: `'{"lat": 40.7359, "lng": -74.0064}'::jsonb`
+- `priority` - 1 (highest) to 10 (lowest), default is 1
+- `added_by` - Defaults to "founder"
+- `is_active` - Defaults to true
 
-Files to modify:
-- `supabase/functions/generate-trip/index.ts` or similar edge function
-- Add post-generation hook to detect and chain to next journey leg
+## Example: Adding Multiple Picks for New York
 
-### Part 3: Queued State UI for Waiting Legs ✅ COMPLETE
+```sql
+-- Restaurant Pick
+INSERT INTO voyance_picks (destination, name, category, why_essential, description, insider_tip, neighborhood, price_range, best_time, tags)
+VALUES (
+  'New York',
+  'Russ & Daughters',
+  'dining',
+  'The definitive NYC appetizing shop — 110 years of smoked fish perfection',
+  'Fourth-generation family business serving the best bagels and lox in the city, plus caviar, rugelach, and Jewish delicacies.',
+  'Order the Super Heebster bagel. Get there before 10am on weekends to avoid the line. The original Essex St location has more soul than the cafe.',
+  'Lower East Side',
+  '$15-30',
+  'Weekday breakfast (8-9am)',
+  ARRAY['bagels', 'jewish-deli', 'historic', 'breakfast', 'local-icon']
+);
 
-**Implemented:**
+-- Activity Pick
+INSERT INTO voyance_picks (destination, name, category, why_essential, description, insider_tip, neighborhood, price_range, best_time, tags)
+VALUES (
+  'New York',
+  'The High Line at Sunset',
+  'activity',
+  'NYC's most inspired public space — a park in the sky with unbeatable golden hour views',
+  'Elevated park built on historic freight rail line, stretching from the Meatpacking District to Hudson Yards.',
+  'Enter at Gansevoort St and walk north. Stop at the viewing platform near 10th Ave around 7pm in summer for perfect light. Exit at 23rd St for Chelsea Market.',
+  'Chelsea',
+  'Free',
+  'Summer evenings 6:30-8pm',
+  ARRAY['park', 'free', 'sunset', 'architecture', 'must-visit']
+);
 
-1. **`src/pages/TripDetail.tsx`**:
-   - Added `isQueuedJourneyLeg` flag to distinguish queued journey legs from active generation
-   - Updated `isServerGenerating` to exclude queued journey legs (they're not actively generating)
-   - Added polling effect: checks every 5s if queued leg's status changes, auto-transitions to generator when backend starts
-   - Added distinct "queued" state UI:
-     - Clock icon with hourglass badge
-     - "{destination} is up next" heading
-     - Explanation text about waiting for previous leg
-     - "View previous city" button to navigate back to the generating leg
-   - Added `Clock` to lucide-react imports
+-- Nightlife Pick
+INSERT INTO voyance_picks (destination, name, category, why_essential, description, insider_tip, neighborhood, price_range, tags)
+VALUES (
+  'New York',
+  'Attaboy',
+  'nightlife',
+  'The platonic ideal of a speakeasy — no menu, just perfect drinks tailored to your taste',
+  'Unmarked bar from legendary bartenders Sam Ross and Michael McIlroy. They ask what you like and create something you'll never forget.',
+  'No sign, no menu, no photos. Ring the bell at 134 Eldridge. Tell them your spirit preference and one flavor you like. Trust the process. Cash only.',
+  'Lower East Side',
+  '$18-22 per cocktail',
+  ARRAY['speakeasy', 'cocktails', 'no-menu', 'cash-only', 'intimate']
+);
+```
 
----
+## Current Example in Database
 
-## Preference Enforcement Activation ✅ COMPLETE
+Here's the existing Aruba pick as reference:
 
-### Fix 1: Per-day preference checks now trigger retries ✅
-Moved MINIMUM REAL ACTIVITY COUNT and USER PREFERENCE VALIDATION blocks to after `validateGeneratedDay()` so they can push errors into `validation.errors`. Upgraded all `console.warn` calls to `validation.errors.push` + `validation.isValid = false`. Added budget preference validation ($75+ threshold). Activity keyword checks skip departure days.
+- **Destination:** Aruba
+- **Name:** Zeerovers
+- **Category:** dining
+- **Why Essential:** "This IS the Aruba dining experience. No tablecloths, no reservations, no pretense — just the best seafood on the island at honest prices. Every local will tell you this is their #1 spot. Missing Zeerovers is like going to Naples and skipping pizza."
+- **Description:** "A no-frills seaside fish shack in Savaneta where locals and visitors alike line up for the freshest catch on the island — fried whole fish, shrimp, and mahi mahi served on paper plates with panoramic ocean views."
+- **Insider Tip:** "Go between 12-1pm before the lunch rush. Order the catch of the day fried whole with funchi and pan bati on the side. Grab a Balashi beer from the cooler. Sit at the water's edge tables — the ones on the left side have the best breeze and sunset angle."
+- **Price Range:** $15-25 per person
+- **Best Time:** Lunch (11:30am-2pm) for best selection, or sunset for atmosphere
 
-### Fix 2: Stage 2.6 personalization rejection enabled ✅
-Uncommented and enhanced the rejection block. Critical and major dietary violations are now actively enforced — dietary violations get patched with ⚠️ warnings in activity descriptions. Low personalization scores (<40) are logged.
+## How the System Uses This Data
 
----
+When generating an itinerary for the destination city, the system:
+1. Queries all active Voyance Picks for that city
+2. Injects them into the AI prompt with priority weighting
+3. Displays matched activities with the "Voyance Pick — Vetted by our founders" badge
+4. Shows the `insider_tip` in the callout component
 
-## Itinerary Generation Quality Fixes ✅ COMPLETE
-
-### Bug 1: Arrival Sequence Inverted ✅
-Post-generation validator in `index.ts` detects when hotel check-in is ordered before airport arrival on Day 1. Extracts arrival/transfer/checkin activities, recalculates times based on flight arrival, and re-inserts in correct order.
-
-### Bug 2: User Preferences Ignored ✅
-- Strengthened preference injection in system prompt with explicit enforcement language (🚨 MUST BE HONORED)
-- Added post-generation validation logging that checks activities against keyword map for requested activities (skiing, surfing, etc.)
-- Warns when "light dinner" preference is violated by expensive dining ($50+)
-
-### Bug 3: Empty Days ✅
-Added minimum real activity count validation after generation. Filters out logistics (transport, accommodation, downtime) and warns when a day has fewer than 2 real activities (1 for departure day).
-
-### Bug 4: Nonsensical Inter-City Flights ✅
-Added `SAME_METRO_PAIRS` lookup in `buildTransitionDayPrompt` (prompt-library.ts). When origin and destination are in the same metro area (e.g., East Rutherford ↔ NYC), flights are suppressed from transport options and the prompt explicitly forbids them. Default mode switches to `rideshare`.
-
----
-
-## Fix: Case-Sensitive Token Lookup ✅ COMPLETE
-
-**Root cause:** `generate_share_token()` used base64 encoding producing mixed-case tokens. Mobile apps (iMessage, WhatsApp) can lowercase URLs, breaking the case-sensitive PostgreSQL lookup.
-
-### Changes (single migration):
-1. **`generate_share_token(integer)`** — switched from base64 to hex encoding (lowercase-only: a-f, 0-9)
-2. **Case-insensitive index** — `idx_trip_invites_token_lower` on `LOWER(token)`
-3. **Backfill** — all existing tokens lowercased
-4. **`get_trip_invite_info()`** — `WHERE LOWER(token) = LOWER(p_token)` + failure logging + `replaced_at` check
-5. **`accept_trip_invite()`** — `WHERE LOWER(token) = LOWER(p_token) FOR UPDATE`
-6. **`replaced_at` column** — added to `trip_invites` for soft-delete support
-
----
-
-## Fix: User Requirements Ignored in Just Tell Us Pipeline ✅ COMPLETE
-
-### Layer 1: `findBestDay` respects `preferredDay` on Day 1/last day ✅
-- Modified skip guard in `must-do-priorities.ts` L472 to allow long activities on Day 1/last day when user explicitly requested that day via `preferredDay`.
-
-### Layer 2: `parseMustDoInput` resolves day-of-week and multi-day references ✅
-- Added `tripStartDate` and `totalDays` parameters to function signature
-- Day-of-week resolution: maps "Friday", "Saturday" etc. to trip day numbers using start date
-- Multi-day expansion: "both days" / "every day" / "all N days" duplicated into per-day entries
-- Updated all 5 callers in `index.ts` to pass `startDate` and `totalDays`
-
-### Layer 3: Chat AI prompt strengthened for temporal mapping ✅
-- Added CRITICAL TEMPORAL MAPPING RULES to system prompt in `chat-trip-planner/index.ts`
-- Updated `mustDoActivities` field description to instruct AI to expand multi-day refs into per-day entries with explicit day numbers
-
-### Layer 4: Day 1 arrival uses actual airport name ✅
-- Added `arrivalAirport` to `FlightHotelContextResult` interface and return value
-- Stage 2.55 split block uses `flightHotelResult.arrivalAirport` instead of hardcoded `'Airport'`
-- All 3 Day 1 constraint templates (morning/afternoon/evening) use `arrivalAirportDisplay`
-
----
-
-## Fix 12: Blocked Time Window Truncation ✅ COMPLETE
-
-**Root cause:** Chat planner outputs `time_block` constraints with start time but no `endTime`. `Start.tsx` defaults missing durations to 120 minutes, producing `09:00→11:00` instead of `09:00→17:00` for "US Open 9am to 5pm". The generator sees the short window and skips the event card.
-
-### Layer 1: Self-correction in generation engine ✅
-- `budget-constraints.ts` `formatGenerationRules`: parses `reason` text for explicit time ranges (e.g. "9am to 5pm") using regex
-- If parsed end time is later than stored `to` value, overrides it
-- Fixes ALL existing trips with truncated blocked windows
-
-### Layer 2: Chat planner schema extended ✅
-- Added `endTime` and `duration` fields to `userConstraints` schema in `chat-trip-planner/index.ts`
-- AI can now output structured time ranges (time="9:00 AM", endTime="5:00 PM")
-
-### Layer 3: Start.tsx time_block handler fixed ✅
-- Priority 1: Use explicit `endTime` from chat planner
-- Priority 2: Parse time range from constraint `description` text via regex
-- Priority 3: Fall back to duration math (existing behavior)
-- Eliminates the 120-minute default for events with known end times
-
----
-
-## Fix 16: Replace Lovable Favicon with Voyance Favicon ✅ COMPLETE
-
-- Deleted `public/favicon.ico` (Lovable heart logo)
-- Updated `index.html` favicon links with `?v=3` cache-buster, explicit sizes, and `image/x-icon` override pointing to PNG
-- Post-deploy: request Google re-crawl via Search Console
-
----
-
-## Fix 17: Community Guides Redesign — Phase 1 ✅ COMPLETE
-
-### Database Changes
-- Added `user_experience`, `user_rating`, `recommended`, `photos` columns to `guide_sections`
-- Added `moderation_status` column to `community_guides`
-- Created `guide_activity_reviews` table with indexes and RLS
-- Created `guide-photos` storage bucket with public read + authenticated upload/delete RLS
-
-### New Components
-- **`StarRating.tsx`** — 1-5 star rating with hover/click states
-- **`PhotoUploadGrid.tsx`** — Upload up to 4 photos per activity to Supabase Storage, with thumbnail grid and remove
-- **`EditableActivityCard.tsx`** — Rich editable card with experience textarea (2000 chars), star rating, photo uploads, recommend toggle (Yes/No/It's okay)
-- **`SmartTagSelector.tsx`** — Auto-suggested tags from destination, activity categories, Travel DNA, and trip type + custom input
-
-### Edge Function
-- **`moderate-guide-content`** — Keyword-based content moderation returning `{ approved, warnings, blocked_reasons }`. Blocks violence/explicit/hate/drugs; warns on PII (phone, email, SSN).
-
-### GuideBuilder.tsx Rewrite
-- Merged "Guide Content" section into editable activity cards
-- Sections are the single source of truth (persisted to `guide_sections` table)
-- Removed separate `guide_favorites` / `guide_manual_entries` dependency for the editor flow
-- Smart tags replace free-text input
-- Save mutation persists sections with new fields + runs moderation before publish
-- Activity reviews aggregated to `guide_activity_reviews` on publish
-- "Add Custom Tip" button replaces separate recommendation modal
-
-### Published View Redesign (CommunityGuideDetail.tsx)
-- Blog-style layout with hero image (first user photo or destination cover)
-- Only shows activities with user content (experience, rating, photos, or recommendation)
-- Star ratings and recommendation badges inline
-- Photo grids per activity
-- "Custom Tips" section at bottom for non-itinerary recommendations
-- "Voyance Tip" callout for activities without user experience text
-
----
-
-## Fix: City-Boundary Checkout/Check-in in generate-day Handler ✅ COMPLETE
-
-### Problem
-`generate-day` action extracted `paramIsFirstDayInCity` and `paramIsLastDayInCity` but never used them. Mid-journey city boundaries got no checkout/check-in constraints.
-
-### Change
-- **`supabase/functions/generate-itinerary/index.ts`** — Inserted multi-city boundary block after the Day 1/Last Day decision tree:
-  - `paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay` → appends CITY ARRIVAL check-in constraints
-  - `paramIsLastDayInCity && !isLastDay` → appends CITY DEPARTURE checkout constraints
-  - Reinforces correct hotel name on all multi-city days
