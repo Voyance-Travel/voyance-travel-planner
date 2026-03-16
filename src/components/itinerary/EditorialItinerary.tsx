@@ -5502,7 +5502,7 @@ export function EditorialItinerary({
               !!(parsedMetadata?.accommodationNotes?.length) ||
               days.some(d => d.activities.some(a =>
                 a.category === 'hotel' || a.category === 'accommodation' ||
-                /check.?in/i.test(a.title || a.name || '')
+                /check.?in/i.test(a.title || '')
               ))
             }
             hasFlight={hasFlightData}
