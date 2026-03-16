@@ -136,6 +136,7 @@ import {
   buildMealRequirementsPrompt,
   type MealPolicy,
   type MealPolicyInput,
+  type RequiredMeal,
 } from './meal-policy.ts';
 
 // =============================================================================
