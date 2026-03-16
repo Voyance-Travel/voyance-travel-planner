@@ -8588,11 +8588,11 @@ function DayCard({
                       : Car;
 
                     return (
-                      <InterCityTransportStrip
+                      <InterCityTransportCard
                         key={activityToRender.id}
-                        activity={activityToRender}
+                        title={activityToRender.title || activityToRender.name || ''}
                         travelMeta={travelMeta}
-                        TransportIcon={TransportIcon}
+                        className="mx-2 sm:mx-0 my-1"
                       />
                     );
                   }
