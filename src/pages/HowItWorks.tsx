@@ -592,7 +592,15 @@ export default function HowItWorks() {
       {/* Feature Tour (Interactive) */}
       {showFeatureTour && (
         <div id="feature-tour">
-          <DemoFeatureShowcase onComplete={() => setShowFeatureTour(false)} />
+          <DemoFeatureShowcase 
+            onComplete={() => setShowFeatureTour(false)} 
+            onSkipToPlayground={() => {
+              setShowFeatureTour(false);
+              setTimeout(() => {
+                document.getElementById('playground')?.scrollIntoView({ behavior: 'smooth' });
+              }, 100);
+            }}
+          />
         </div>
       )}
 
