@@ -9759,25 +9759,44 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 console.warn(`[generate-day] Trip-wide validation errors for Day ${dayNumber}:`, dayValidation.errors);
 
                 // Strip duplicates found by validation instead of full retry
-                // Remove activities flagged as MEAL REPEAT or TRIP-WIDE DUPLICATE
+                // Remove activities flagged as TRIP-WIDE DUPLICATE or CONCEPT SIMILARITY
+                // CRITICAL: NEVER strip dining activities — a repeated real restaurant is
+                // infinitely better than a generic "Breakfast spot" placeholder from the meal guard.
+                // MEAL REPEAT errors for dining are logged as warnings but the activity is kept.
                 const duplicateTitles: string[] = [];
+                const mealRepeatTitles: string[] = [];
                 for (const err of dayValidation.errors) {
-                  // Extract activity title from error messages like 'MEAL REPEAT: "Restaurant X" on Day 3...'
-                  // or 'TRIP-WIDE DUPLICATE: "Activity Y" is too similar to...'
-                  const titleMatch = err.match(/(?:MEAL REPEAT|TRIP-WIDE DUPLICATE|CONCEPT SIMILARITY):\s*"([^"]+)"/i);
+                  // Separate MEAL REPEAT (dining) from other duplicates (sightseeing, tours)
+                  const mealMatch = err.match(/MEAL REPEAT:\s*"([^"]+)"/i);
+                  if (mealMatch) {
+                    mealRepeatTitles.push(mealMatch[1]);
+                    continue; // Do NOT add to duplicateTitles — we keep dining activities
+                  }
+                  const titleMatch = err.match(/(?:TRIP-WIDE DUPLICATE|CONCEPT SIMILARITY):\s*"([^"]+)"/i);
                   if (titleMatch) {
                     duplicateTitles.push(titleMatch[1].toLowerCase());
                   }
+                }
+
+                // Log meal repeats but keep them — real restaurant > placeholder
+                if (mealRepeatTitles.length > 0) {
+                  console.log(`[generate-day] ⚠️ Day ${dayNumber} has ${mealRepeatTitles.length} MEAL REPEAT(s): [${mealRepeatTitles.join(', ')}] — KEEPING (real restaurant > placeholder)`);
                 }
 
                 if (duplicateTitles.length > 0) {
                   const beforeCount = generatedDay.activities.length;
                   generatedDay.activities = generatedDay.activities.filter((act: any) => {
                     const actTitle = (act.title || '').toLowerCase();
+                    const actCategory = (act.category || '').toLowerCase();
                     const isDupe = duplicateTitles.some(dt => actTitle.includes(dt) || dt.includes(actTitle));
                     if (isDupe) {
                       // Don't remove locked activities
                       if (act.isLocked) return true;
+                      // NEVER remove dining activities — keep the repeat rather than losing the meal
+                      if (actCategory === 'dining') {
+                        console.log(`[generate-day] 🍽️ Keeping duplicate dining activity "${act.title}" (real restaurant > placeholder)`);
+                        return true;
+                      }
                       console.log(`[generate-day] 🗑️ Removing duplicate activity "${act.title}" (matched trip-wide validation)`);
                       return false;
                     }
