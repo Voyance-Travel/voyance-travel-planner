@@ -384,7 +384,7 @@ export function ItineraryAssistant({
           const newActions = [...msg.actions];
           newActions[actionIndex] = { 
             ...newActions[actionIndex], 
-            status: result.success ? 'applied' : 'declined' 
+            status: result.success ? 'applied' : 'failed' 
           };
           return { ...msg, actions: newActions };
         }
@@ -523,7 +523,7 @@ export function ItineraryAssistant({
       setMessages(prev => prev.map(msg => {
         if (msg.id === messageId && msg.actions) {
           const newActions = [...msg.actions];
-          newActions[actionIndex] = { ...newActions[actionIndex], status: 'declined' };
+          newActions[actionIndex] = { ...newActions[actionIndex], status: 'failed' };
           return { ...msg, actions: newActions };
         }
         return msg;
@@ -609,9 +609,9 @@ export function ItineraryAssistant({
                     onCheckedChange={setApprovalMode}
                     className="scale-75"
                   />
-                  <Label htmlFor="approval-mode" className="text-muted-foreground cursor-pointer">
-                    {approvalMode ? 'Approve' : 'Direct'}
-                  </Label>
+                   <Label htmlFor="approval-mode" className="text-muted-foreground cursor-pointer">
+                     {approvalMode ? 'Review first' : 'Auto-apply'}
+                   </Label>
                 </div>
               </div>
             </div>
@@ -646,6 +646,7 @@ export function ItineraryAssistant({
                           const isPending = action.status === 'pending';
                           const isApplied = action.status === 'applied';
                           const isDeclined = action.status === 'declined';
+                          const isFailed = action.status === 'failed';
                           const actionId = `${message.id}-${idx}`;
                           const isThisExecuting = executingActionId === actionId;
 
@@ -656,6 +657,7 @@ export function ItineraryAssistant({
                                 "transition-all",
                                 isApplied && "border-green-500/50 bg-green-500/5",
                                 isDeclined && "opacity-50",
+                                isFailed && "border-destructive/50 bg-destructive/5",
                                 isThisExecuting && "border-primary/50 animate-pulse"
                               )}
                             >
@@ -719,6 +721,32 @@ export function ItineraryAssistant({
                                 )}
                                 {isDeclined && (
                                   <Badge variant="secondary" className="mt-2">Declined</Badge>
+                                )}
+                                {isFailed && (
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <Badge variant="destructive">Failed</Badge>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-xs gap-1"
+                                      onClick={() => {
+                                        // Reset to pending then retry
+                                        setMessages(prev => prev.map(msg => {
+                                          if (msg.id === message.id && msg.actions) {
+                                            const newActions = [...msg.actions];
+                                            newActions[idx] = { ...newActions[idx], status: 'pending' };
+                                            return { ...msg, actions: newActions };
+                                          }
+                                          return msg;
+                                        }));
+                                        handleActionApply(message.id, idx, { ...action, status: 'pending' });
+                                      }}
+                                      disabled={isExecuting}
+                                    >
+                                      <RefreshCw className="h-3 w-3" />
+                                      Retry
+                                    </Button>
+                                  </div>
                                 )}
                               </CardContent>
                             </Card>
