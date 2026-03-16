@@ -437,14 +437,58 @@ export async function handleGenerateTripDay(
     }
   }
 
+  // ── SKIP-TO-CHAIN: If dayResult is null (failed day, chain continuing), skip save and go to chain ──
+  if (!dayResult && dayNumber < totalDays) {
+    console.log(`[generate-trip-day] Day ${dayNumber} failed, skipping save and chaining to day ${dayNumber + 1}`);
+    // Jump directly to chain logic
+    const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const chainBody = JSON.stringify({
+      action: 'generate-trip-day',
+      tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId,
+      isMultiCity, creditsCharged, requestedDays, dayNumber: dayNumber + 1, totalDays, generationRunId,
+      isFirstTrip: isFirstTrip || false,
+    });
+
+    const maxChainRetries = 3;
+    let chainOk = false;
+    for (let attempt = 1; attempt <= maxChainRetries; attempt++) {
+      try {
+        const response = await fetch(generateUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+          body: chainBody,
+        });
+        if (response.ok) { chainOk = true; break; }
+        const respText = await response.text().catch(() => '');
+        console.error(`[generate-trip-day] Skip-chain attempt ${attempt}/${maxChainRetries} returned ${response.status}: ${respText.slice(0, 200)}`);
+        if (response.status >= 400 && response.status < 500) break;
+      } catch (err) {
+        console.error(`[generate-trip-day] Skip-chain attempt ${attempt}/${maxChainRetries} error:`, err);
+      }
+      if (attempt < maxChainRetries) await new Promise(r => setTimeout(r, 3000 * attempt));
+    }
+    if (!chainOk) {
+      const { data: cm } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+      const cmeta = (cm?.metadata as Record<string, unknown>) || {};
+      await supabase.from('trips').update({
+        metadata: { ...cmeta, chain_broken_at_day: dayNumber, chain_error: `Chain to day ${dayNumber + 1} failed after skip-chain retries` },
+      }).eq('id', tripId);
+    }
+    return new Response(
+      JSON.stringify({ status: 'day_failed_continuing', dayNumber, totalDays, nextDay: dayNumber + 1 }),
+      { headers: jsonHeaders }
+    );
+  }
+
   // Day generated successfully — ensure date is always set
-  if (!dayResult.date && startDate) {
+  if (!dayResult!.date && startDate) {
     const derived = new Date(startDate);
     derived.setDate(derived.getDate() + dayNumber - 1);
-    dayResult.date = derived.toISOString().split('T')[0];
-    console.log(`[generate-trip-day] Derived missing date for day ${dayNumber}: ${dayResult.date}`);
+    dayResult!.date = derived.toISOString().split('T')[0];
+    console.log(`[generate-trip-day] Derived missing date for day ${dayNumber}: ${dayResult!.date}`);
   }
-  dayResult.dayNumber = dayNumber;
+  dayResult!.dayNumber = dayNumber;
 
   // Save it
   const filteredExisting = existingDays.filter((d: any) => d?.dayNumber !== dayNumber);
