@@ -8303,7 +8303,7 @@ function DayCard({
              <Tooltip delayDuration={200}>
                <TooltipTrigger asChild>
                  <Badge variant="outline" className="text-xs sm:text-sm font-semibold border-primary/30 bg-primary/5 text-primary shrink-0 cursor-default">
-                   {totalCost > 0 ? `${formatCurrency(displayCost(totalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}` : 'Free'}
+                   {totalCost > 0 ? `${formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}${travelers > 1 ? '/pp' : ''}` : 'Free'}
                  </Badge>
               </TooltipTrigger>
                <TooltipContent side="bottom">
@@ -8832,7 +8832,7 @@ function DayCard({
                     )}
 
                     <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
-                      Day Total: {formatCurrency(displayCost(totalCost), tripCurrency)}{travelers > 1 ? '/pp' : ''}
+                      Day Total: {formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}{travelers > 1 ? '/pp' : ''}
                     </span>
                   </div>
                 </div>
