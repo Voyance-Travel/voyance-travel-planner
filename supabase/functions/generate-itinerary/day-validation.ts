@@ -267,9 +267,15 @@ export function validateGeneratedDay(
   if (requiredMealsForDay.length > 0 && day.activities?.length) {
     for (const mealType of requiredMealsForDay) {
       if (!detectedMeals.includes(mealType)) {
-        errors.push(
-          `MISSING MEAL: Day ${dayNumber} is missing ${mealType.toUpperCase()}. Required meals for this day are [${requiredMealsForDay.join(', ')}]. Add a clearly labeled ${mealType} dining activity at a real restaurant or café.`
-        );
+        if (isSmartFinish) {
+          warnings.push(
+            `MISSING MEAL: Day ${dayNumber} is missing ${mealType.toUpperCase()} - consider adding a ${mealType} dining activity.`
+          );
+        } else {
+          errors.push(
+            `MISSING MEAL: Day ${dayNumber} is missing ${mealType.toUpperCase()}. Required meals for this day are [${requiredMealsForDay.join(', ')}]. Add a clearly labeled ${mealType} dining activity at a real restaurant or café.`
+          );
+        }
       }
     }
   }
