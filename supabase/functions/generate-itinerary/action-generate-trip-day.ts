@@ -515,9 +515,50 @@ export async function handleGenerateTripDay(
     }
   }
 
+  // STRUCTURAL VALIDATION: Verify the newly generated day has real activities
+  const newDayInArray = updatedDays.find((d: any) => d.dayNumber === dayNumber);
+  const newDayActivities = Array.isArray(newDayInArray?.activities) ? newDayInArray.activities : [];
+  if (newDayActivities.length === 0) {
+    console.error(`[generate-trip-day] ⚠️ EMPTY DAY DETECTED: Day ${dayNumber} has 0 activities after generation. Marking as failed.`);
+    
+    const { data: failTrip } = await supabase.from('trips').select('metadata, unlocked_day_count').eq('id', tripId).single();
+    const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
+    
+    await supabase.from('trips').update({
+      itinerary_status: existingDays.length > 0 ? 'partial' : 'failed',
+      metadata: {
+        ...failMeta,
+        generation_error: `Day ${dayNumber} generated with 0 activities`,
+        generation_failed_at: new Date().toISOString(),
+        generation_failed_on_day: dayNumber,
+        generation_completed_days: existingDays.length,
+        generation_total_days: totalDays,
+        empty_day_detected: true,
+      },
+    }).eq('id', tripId);
+
+    return new Response(
+      JSON.stringify({ status: 'failed', dayNumber, error: `Day ${dayNumber} generated with 0 activities` }),
+      { headers: jsonHeaders }
+    );
+  }
+
+  // Check ALL days for completeness before marking ready
+  const allDaysHaveActivities = dayNumber >= totalDays
+    ? updatedDays.every((d: any) => Array.isArray(d.activities) && d.activities.length > 0)
+    : true;
+  
+  const computedStatus = (dayNumber >= totalDays && allDaysHaveActivities) ? 'ready' : 'generating';
+  if (dayNumber >= totalDays && !allDaysHaveActivities) {
+    const emptyDayNumbers = updatedDays
+      .filter((d: any) => !Array.isArray(d.activities) || d.activities.length === 0)
+      .map((d: any) => d.dayNumber);
+    console.error(`[generate-trip-day] ⚠️ SHELL DAYS DETECTED at chain completion: days ${emptyDayNumbers.join(', ')} have 0 activities. Marking as partial.`);
+  }
+
   const partialItinerary = {
     days: updatedDays,
-    status: dayNumber >= totalDays ? 'ready' : 'generating',
+    status: computedStatus,
     generatedAt: new Date().toISOString(),
   };
 
