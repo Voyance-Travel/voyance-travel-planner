@@ -67,19 +67,7 @@ interface PaymentsTabProps {
   journeyName?: string | null;
 }
 
-interface PayableItem {
-  id: string;
-  type: 'flight' | 'hotel' | 'activity';
-  name: string;
-  amountCents: number;
-  dayNumber?: number;
-  payment?: TripPayment;
-  /** All payments associated with this item (for split tracking) */
-  allPayments: TripPayment[];
-  assignedMemberId?: string;
-  /** All assigned member IDs (for split assignments) */
-  assignedMemberIds: string[];
-}
+// PayableItem type is now imported from usePayableItems
 
 export function PaymentsTab({ 
   tripId, 
