@@ -252,16 +252,30 @@ export function useEntitlements(tripId?: string) {
 /**
  * Check if user can view premium content for a specific day.
  * Premium = photos, addresses, tips, reviews, booking links.
+ * 
+ * @param tripLevelUnlockedDays - Optional fallback from trips.unlocked_day_count.
+ *   Prevents showing "locked" on already-paid days while entitlements are loading.
  */
 export function canViewPremiumContentForDay(
   entitlements: EntitlementsResponse | undefined,
-  dayNumber: number
+  dayNumber: number,
+  tripLevelUnlockedDays?: number
 ): boolean {
-  // No entitlements loaded = assume first trip, days 1-2 free
-  if (!entitlements) return dayNumber <= 2;
+  // If entitlements aren't loaded yet but trip row says days are unlocked, trust the trip row.
+  // This prevents the "unlock days you already paid for" flash during entitlement loading.
+  if (!entitlements) {
+    if (tripLevelUnlockedDays !== undefined && tripLevelUnlockedDays > 0) {
+      return dayNumber <= tripLevelUnlockedDays;
+    }
+    return dayNumber <= 2;
+  }
+  // Use the HIGHER of entitlements vs trip-level count (entitlements can lag behind)
+  const effectiveUnlocked = tripLevelUnlockedDays !== undefined
+    ? Math.max(entitlements.unlocked_day_count ?? 0, tripLevelUnlockedDays)
+    : entitlements.unlocked_day_count ?? 0;
   return canAccessDaySimple(
     dayNumber,
-    entitlements.unlocked_day_count ?? 0,
+    effectiveUnlocked,
     entitlements.is_first_trip,
     entitlements.trip_has_smart_finish,
   );
