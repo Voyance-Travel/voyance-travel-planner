@@ -4476,7 +4476,7 @@ export function EditorialItinerary({
                           toast.info('Generating PDF...');
                           const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
                           const unlockedDayNumbers = new Set(
-                            days.filter(d => canViewPremiumContentForDay(entitlements, d.dayNumber)).map(d => d.dayNumber)
+                            days.filter(d => canViewDay(d.dayNumber)).map(d => d.dayNumber)
                           );
                           await generateConsumerTripPdf({
                             tripName: `Trip to ${destination}`,
