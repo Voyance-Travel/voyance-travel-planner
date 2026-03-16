@@ -2990,15 +2990,14 @@ export function EditorialItinerary({
       let saved = false;
 
       if (existingTrip) {
-        // Save to database
-        const { error } = await supabase
-          .from('trips')
-          .update({
-            itinerary_data: itineraryData as any,
-            itinerary_status: 'ready',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', tripId);
+        // Save through backend for normalization + meal guard + table sync
+        const { error } = await supabase.functions.invoke('generate-itinerary', {
+          body: {
+            action: 'save-itinerary',
+            tripId,
+            itinerary: itineraryData,
+          },
+        });
 
         if (error) throw error;
         saved = true;
