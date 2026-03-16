@@ -1267,6 +1267,8 @@ export function EditorialItinerary({
   const isCleanPreview = viewMode === 'preview';
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
 
+  // Batch write-back of resolved activity photos into itinerary_data
+  const { reportPhoto } = useActivityImageWriteback(tripId);
 
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
 
