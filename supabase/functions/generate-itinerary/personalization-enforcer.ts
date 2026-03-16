@@ -1345,6 +1345,8 @@ These constraints are derived from the traveler's traits. VIOLATIONS WILL CAUSE 
 
 If transit time between venues exceeds walking limit, include explicit transport activity.
 
+**POST-PROCESSING NOTE**: After generation, the system will verify all buffers using actual GPS coordinates and haversine distances between venues. If two venues are far apart but you scheduled a short gap, the system will automatically expand the gap and cascade-shift later activities. Plan conservatively — it's better to leave generous gaps that don't need correction.
+
 ## 🚦 REALISTIC TRANSITION BUFFER RULES — MANDATORY
 NEVER schedule back-to-back activities with zero gap. Every transition requires buffer time ON TOP of travel time.
 The next activity's startTime must be: previous endTime + travel duration + buffer.

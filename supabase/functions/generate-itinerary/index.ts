@@ -2443,6 +2443,24 @@ Generate activities for this day following ALL constraints above.`;
             else requiredTransitMins = 45;                   // far
           }
 
+          // DISTANCE-AWARE: Use haversine on coordinates if available and no transit info
+          if (requiredTransitMins <= 10) {
+            const curCoords = current.location?.coordinates || current.coordinates;
+            const nextCoords = next.location?.coordinates || next.coordinates;
+            if (curCoords?.lat && curCoords?.lng && nextCoords?.lat && nextCoords?.lng) {
+              const distKm = haversineDistanceKm(curCoords.lat, curCoords.lng, nextCoords.lat, nextCoords.lng);
+              let distBasedMin = 10;
+              if (distKm >= 0.5) distBasedMin = 15;
+              if (distKm >= 2) distBasedMin = 20;
+              if (distKm >= 5) distBasedMin = 30;
+              if (distKm >= 15) distBasedMin = 45;
+              if (distBasedMin > requiredTransitMins) {
+                requiredTransitMins = distBasedMin;
+                console.log(`[Stage 2] Day ${dayNumber}: GPS distance ${distKm.toFixed(1)}km between "${current.title}" → "${next.title}" → requiring ${distBasedMin}min buffer`);
+              }
+            }
+          }
+
           // When current IS a transport activity, the travel is already accounted for.
           // But we still need an ARRIVAL BUFFER at the next venue:
           // - Museum/attraction entry (bag check, ticket queue): 10 min
@@ -6134,13 +6152,13 @@ If the purpose is a specific event, plan at least ONE full day around that event
       }
 
       // =======================================================================
-      // STAGE 2.7: Transit Gap Enforcement
-      // Shift activity start times forward when consecutive activities have
-      // insufficient buffer (< 15 min gap). This catches cases where the AI
-      // ignored the buffer constraints from the personalization enforcer.
+      // STAGE 2.7: Overlap Fix (lightweight)
+      // Only fix true overlaps and zero/negative gaps (< 5 min).
+      // Distance-aware buffer enforcement happens in Stage 4.6 after
+      // coordinates are available from enrichment.
       // =======================================================================
-      const MIN_GAP_MINUTES = 15;
-      let gapFixCount = 0;
+      const MIN_OVERLAP_GAP = 5;
+      let overlapFixCount = 0;
       
       for (const day of aiResult.days) {
         if (!day.activities || day.activities.length < 2) continue;
@@ -6169,11 +6187,9 @@ If the purpose is a specific event, plan at least ONE full day around that event
             return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
           };
           
-          // Compute current activity's end time
           const startMins = parseT(current.startTime);
           if (startMins === null) continue;
           
-          // Parse duration
           let durMins = 60;
           if (current.duration) {
             const d = String(current.duration).toLowerCase();
@@ -6191,23 +6207,23 @@ If the purpose is a specific event, plan at least ONE full day around that event
           
           const gap = nextStartMins - endMins;
           
-          if (gap < MIN_GAP_MINUTES) {
-            const newStart = endMins + MIN_GAP_MINUTES;
+          // Only fix true overlaps / near-zero gaps
+          if (gap < MIN_OVERLAP_GAP) {
+            const newStart = endMins + MIN_OVERLAP_GAP;
             const oldTime = next.startTime;
             next.startTime = fmtT(newStart);
-            // Also update endTime if it exists
             if (next.endTime) {
               const nextDur = (parseT(next.endTime) || (newStart + 60)) - (parseT(oldTime) || newStart);
               next.endTime = fmtT(newStart + Math.max(nextDur, 30));
             }
-            gapFixCount++;
-            console.log(`[Stage 2.7] Day ${day.dayNumber}: Shifted "${next.title || next.name}" from ${oldTime} → ${next.startTime} (gap was ${gap} min)`);
+            overlapFixCount++;
+            console.log(`[Stage 2.7] Day ${day.dayNumber}: Fixed overlap for "${next.title || next.name}" from ${oldTime} → ${next.startTime} (gap was ${gap} min)`);
           }
         }
       }
       
-      if (gapFixCount > 0) {
-        console.log(`[Stage 2.7] Fixed ${gapFixCount} insufficient transit gaps across all days`);
+      if (overlapFixCount > 0) {
+        console.log(`[Stage 2.7] Fixed ${overlapFixCount} overlaps/zero-gaps across all days`);
       }
 
       // =====================================================================
@@ -6489,6 +6505,92 @@ If the purpose is a specific event, plan at least ONE full day around that event
           console.log(`[Stage 4.5] ✓ Results: ${summary.join(', ') || 'no fixes needed'} out of ${hoursViolations.length} conflicts`);
         } else {
           console.log("[Stage 4.5] ✓ No opening hours conflicts detected");
+        }
+      }
+
+      // =======================================================================
+      // STAGE 4.6: Distance-Aware Buffer Enforcement
+      // Now that Stage 4 enrichment has added verified GPS coordinates,
+      // calculate actual haversine distances between consecutive activities
+      // and enforce realistic transit buffers based on distance.
+      // =======================================================================
+      {
+        const distanceToMinBuffer = (distKm: number): number => {
+          if (distKm < 0.5) return 10;   // < 500m: easy walk
+          if (distKm < 2) return 15;      // 500m–2km: brisk walk
+          if (distKm < 5) return 20;      // 2km–5km: short taxi
+          if (distKm < 15) return 30;     // 5km–15km: taxi ride
+          return 45;                       // > 15km: cross-city
+        };
+
+        let bufferFixCount = 0;
+
+        for (const day of enrichedDays) {
+          if (!day.activities || day.activities.length < 2) continue;
+
+          for (let i = 0; i < day.activities.length - 1; i++) {
+            const current = day.activities[i];
+            const next = day.activities[i + 1];
+
+            // Get coordinates from enriched location data
+            const curCoords = current.location?.coordinates || current.coordinates;
+            const nextCoords = next.location?.coordinates || next.coordinates;
+
+            if (!curCoords?.lat || !curCoords?.lng || !nextCoords?.lat || !nextCoords?.lng) continue;
+
+            const distKm = haversineDistanceKm(
+              curCoords.lat, curCoords.lng,
+              nextCoords.lat, nextCoords.lng
+            );
+
+            const requiredBuffer = distanceToMinBuffer(distKm);
+
+            // Parse current end time and next start time
+            const curEndMins = parseTimeToMinutes(current.endTime || current.startTime || '');
+            const nextStartMins = parseTimeToMinutes(next.startTime || '');
+            if (curEndMins === null || nextStartMins === null) continue;
+
+            // If current has no endTime, estimate from duration
+            let effectiveEndMins = curEndMins;
+            if (!current.endTime && current.startTime) {
+              const startM = parseTimeToMinutes(current.startTime);
+              if (startM !== null) {
+                let durMins = 60;
+                if (current.duration) {
+                  const d = String(current.duration).toLowerCase();
+                  const hm = d.match(/([\d.]+)\s*(?:hours?|hrs?|h)/);
+                  const mm = d.match(/([\d.]+)\s*(?:minutes?|mins?|m(?!onth))/);
+                  durMins = 0;
+                  if (hm) durMins += parseFloat(hm[1]) * 60;
+                  if (mm) durMins += parseFloat(mm[1]);
+                  if (durMins === 0) durMins = 60;
+                }
+                effectiveEndMins = startM + durMins;
+              }
+            }
+
+            const actualGap = nextStartMins - effectiveEndMins;
+
+            if (actualGap < requiredBuffer) {
+              const deficit = requiredBuffer - actualGap;
+              // Cascade-shift this activity and all subsequent ones forward
+              for (let j = i + 1; j < day.activities.length; j++) {
+                const act = day.activities[j];
+                const s = parseTimeToMinutes(act.startTime || '');
+                const e = parseTimeToMinutes(act.endTime || '');
+                if (s !== null) act.startTime = minutesToHHMM(s + deficit);
+                if (e !== null) act.endTime = minutesToHHMM(e + deficit);
+              }
+              bufferFixCount++;
+              console.log(`[Stage 4.6] Day ${day.dayNumber}: "${current.title}" → "${next.title}" = ${distKm.toFixed(1)}km, needed ${requiredBuffer}min buffer but had ${actualGap}min — shifted +${deficit}min`);
+            }
+          }
+        }
+
+        if (bufferFixCount > 0) {
+          console.log(`[Stage 4.6] ✓ Fixed ${bufferFixCount} insufficient distance-based buffers across all days`);
+        } else {
+          console.log(`[Stage 4.6] ✓ All transit buffers are sufficient for actual distances`);
         }
       }
 
