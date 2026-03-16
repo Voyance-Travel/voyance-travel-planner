@@ -1035,8 +1035,7 @@ export default function TripDetail() {
 
         // Self-heal: auto-correct stale 'generating' status if itinerary_data is complete
         if (tripData.itinerary_status === 'generating') {
-          const staleItinData = tripData.itinerary_data as { days?: unknown[] } | null;
-          const staleJsonDays = Array.isArray(staleItinData?.days) ? staleItinData!.days.length : 0;
+          const staleItinData = tripData.itinerary_data as { days?: any[] } | null;
           // Compute canonical expected days from trip dates
           let canonicalExpected = 0;
           if (tripData.start_date && tripData.end_date) {
