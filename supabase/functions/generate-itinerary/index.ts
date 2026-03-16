@@ -8206,14 +8206,14 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
           isFirstDay: false,
           isLastDay: false,
           isTransitionDay: resolvedIsTransitionDay,
-          hasFullDayEvent: !!(context.userConstraints || []).find(
+          hasFullDayEvent: !!((metadata?.userConstraints as any[]) || []).find(
             (c: any) => c.type === 'full_day_event' && (c.day === dayNumber || !c.day)
           ),
           earliestAvailable: undefined, // will use defaults
           latestAvailable: undefined,
           lockedHours: (() => {
             // Sum locked hours from time_block constraints on this day
-            const constraints = context.userConstraints || [];
+            const constraints = (metadata?.userConstraints as any[]) || [];
             let locked = 0;
             for (const c of constraints as any[]) {
               if (c.type === 'time_block' && c.day === dayNumber && c.time) {
