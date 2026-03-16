@@ -9752,7 +9752,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 totalDays,
                 previousDaysForValidation,
                 false, // not smart finish
-                mustDoList
+                mustDoList,
+                dayMealPolicy?.requiredMeals
               );
 
               if (dayValidation.errors.length > 0) {
