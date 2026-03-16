@@ -465,34 +465,6 @@ export default function About() {
               </div>
             </motion.div>
 
-            {/* Photo Gallery Strip */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="mt-10 md:mt-14 -mx-4 md:-mx-6"
-            >
-              <div
-                className="flex gap-3 md:gap-4 overflow-x-auto px-4 md:px-6 pb-4 scrollbar-hide"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              >
-                {travelPhotos.map((photo, i) => (
-                  <div
-                    key={i}
-                    className="relative overflow-hidden rounded-xl shrink-0 w-[220px] md:w-[280px] aspect-[4/5]"
-                    onContextMenu={(e) => e.preventDefault()}
-                  >
-                    <img
-                      src={photo.src}
-                      alt={photo.alt}
-                      className="w-full h-full object-cover pointer-events-none select-none"
-                      draggable={false}
-                    />
-                    <div className="absolute inset-0" />
-                  </div>
-                ))}
-              </div>
-            </motion.div>
 
             {/* Ashton */}
             <motion.div
