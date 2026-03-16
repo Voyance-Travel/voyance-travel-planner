@@ -492,12 +492,12 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           </CardContent>
         </Card>
 
-        {/* Expected Spend Card — total expected cost from all sources */}
+        {/* Trip Expenses Card — total estimated cost from live itinerary */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <TrendingUp className="h-4 w-4" />
-              Expected Spend
+              Trip Expenses
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -514,13 +514,19 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 </span>
               )}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Estimated total for {travelers} traveler{travelers !== 1 ? 's' : ''}
+              {travelers > 1 && snapshot.tripTotalCents > 0 && (
+                <> · {formatCurrency(Math.round(snapshot.tripTotalCents / travelers))}/person</>
+              )}
+            </p>
             <Progress 
               value={Math.min((settings?.budget_total_cents || 0) > 0 ? (snapshot.tripTotalCents / (settings!.budget_total_cents || 1)) * 100 : 0, 100)} 
               className="h-2 mt-3"
             />
             {snapshot.paidCents > 0 && (
               <p className="text-xs text-muted-foreground mt-2">
-                Paid: {formatCurrency(snapshot.paidCents)}
+                Paid so far: {formatCurrency(snapshot.paidCents)} · To be paid: {formatCurrency(snapshot.toBePaidCents)}
               </p>
             )}
           </CardContent>
