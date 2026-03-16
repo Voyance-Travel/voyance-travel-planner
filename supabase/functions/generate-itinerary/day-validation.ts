@@ -226,7 +226,11 @@ export function validateGeneratedDay(
       const prevType = getExperienceType(prevAct);
       const currType = getExperienceType(act);
       if (prevType === 'culinary_class' && currType === 'culinary_class') {
-        errors.push(`Back-to-back culinary classes are not allowed: "${prevAct.title}" followed by "${act.title}"`);
+        if (isSmartFinish) {
+          warnings.push(`Back-to-back culinary classes: "${prevAct.title}" followed by "${act.title}" - consider variety`);
+        } else {
+          errors.push(`Back-to-back culinary classes are not allowed: "${prevAct.title}" followed by "${act.title}"`);
+        }
       }
 
       const specificMealCategories = ['breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'];
