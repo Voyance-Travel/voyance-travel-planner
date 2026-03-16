@@ -276,6 +276,44 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
             details.endDate = normalized.endDate;
           }
 
+          // Date echo-back validation: check if AI-extracted dates seem plausible
+          // by scanning conversation for date-like mentions and comparing durations
+          if (details.startDate && details.endDate) {
+            const extractedStart = parseLocalDate(details.startDate);
+            const extractedEnd = parseLocalDate(details.endDate);
+            const extractedDays = Math.round((extractedEnd.getTime() - extractedStart.getTime()) / 86_400_000) + 1;
+
+            // Scan user messages for duration mentions (e.g., "5 nights", "7 days", "a week")
+            const userText = messages
+              .filter(m => m.role === 'user')
+              .map(m => m.content)
+              .join(' ')
+              .toLowerCase();
+
+            let mentionedDuration: number | null = null;
+            const nightsMatch = userText.match(/(\d+)\s*nights?/);
+            const daysMatch = userText.match(/(\d+)\s*days?/);
+            const weekMatch = userText.match(/(\d+)\s*weeks?|a\s+week/);
+
+            if (nightsMatch) {
+              mentionedDuration = parseInt(nightsMatch[1], 10) + 1; // nights → days (inclusive)
+            } else if (daysMatch) {
+              mentionedDuration = parseInt(daysMatch[1], 10);
+            } else if (weekMatch) {
+              const weeks = weekMatch[1] ? parseInt(weekMatch[1], 10) : 1;
+              mentionedDuration = weeks * 7 + 1;
+            }
+
+            if (mentionedDuration !== null && Math.abs(extractedDays - mentionedDuration) >= 2) {
+              console.warn('[TripChatPlanner] Duration mismatch — AI extracted', extractedDays,
+                'days but user mentioned ~', mentionedDuration, 'days');
+              toast.info(
+                `I understood ${details.startDate} to ${details.endDate} (${extractedDays - 1} nights). You can adjust dates on the next screen if needed.`,
+                { duration: 6000 }
+              );
+            }
+          }
+
           // Safety net: if AI didn't populate cities[] but destination has multiple cities,
           // try to extract from the conversation history as well
           if ((!details.cities || details.cities.length <= 1) && details.destination) {
