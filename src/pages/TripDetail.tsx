@@ -2326,7 +2326,7 @@ export default function TripDetail() {
             /* Editorial Itinerary - Same design as SampleItinerary with editing */
             (() => {
               // Use centralized safe parser for editorial days
-              const editorDays: EditorialDay[] = parseEditorialDays(trip.itinerary_data, trip.start_date) as EditorialDay[];
+              const editorDays: EditorialDay[] = parseEditorialDays(trip.itinerary_data, trip.start_date, trip.end_date) as EditorialDay[];
 
               // Normalize flight_selection using the unified normalizer
               // Supports legs[], {departure, return}, and flat formats
