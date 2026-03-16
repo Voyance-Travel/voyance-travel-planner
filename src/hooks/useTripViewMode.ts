@@ -36,7 +36,7 @@ export function useTripViewMode({ isOwner, canEdit = false }: UseTripViewModeOpt
 
   const setMode = useCallback(
     (newMode: TripViewMode) => {
-      if (!isOwner) return; // Non-owners can't toggle
+      if (!hasEditAccess) return; // View-only users can't toggle
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
