@@ -5,6 +5,91 @@
 import { isRecurringEvent } from './currency-utils.ts';
 import type { RequiredMeal } from './meal-policy.ts';
 
+// =============================================================================
+// CHAIN RESTAURANT BLOCKLIST — prevents chain restaurants from appearing
+// =============================================================================
+
+export const CHAIN_RESTAURANT_BLOCKLIST: string[] = [
+  'five guys', 'mcdonalds', "mcdonald's", 'burger king', "wendy's", 'wendys',
+  'subway', 'starbucks', 'chick-fil-a', 'chickfila', 'taco bell',
+  'kfc', 'kentucky fried chicken', 'popeyes', "popeye's", 'panda express',
+  'chipotle', "domino's", 'dominos', 'pizza hut', "papa john's", 'papa johns',
+  "applebee's", 'applebees', "chili's", 'chilis', 'olive garden',
+  'tgi fridays', "tgi friday's", "denny's", 'dennys', 'ihop',
+  'waffle house', 'cracker barrel', 'red lobster', 'outback steakhouse',
+  'buffalo wild wings', 'hooters', "nando's", 'nandos', 'wetherspoons',
+  'tim hortons', "dunkin'", 'dunkin donuts', 'panera bread', 'panera',
+  "arby's", 'arbys', 'sonic drive-in', 'jack in the box',
+  'shake shack', 'in-n-out', 'whataburger', "culver's", 'culvers',
+  "zaxby's", 'zaxbys', "raising cane's", 'raising canes', 'wingstop',
+  "jimmy john's", 'jimmy johns', "jersey mike's", 'jersey mikes',
+  'firehouse subs', 'cheesecake factory', "p.f. chang's", 'pf changs',
+  'benihana', "ruth's chris", 'ruths chris', "morton's", 'mortons',
+  'capital grille', 'the capital grille', 'hard rock cafe', 'planet hollywood',
+  'rainforest cafe', 'bubba gump', 'golden corral', 'bob evans',
+  "carl's jr", 'carls jr', 'del taco', 'el pollo loco',
+  "bojangles'", 'bojangles', 'church\'s chicken', "church's chicken",
+  "jason's deli", 'jasons deli', 'qdoba', 'moe\'s southwest grill',
+  "moe's southwest", 'tropical smoothie', 'smoothie king',
+  'jamba juice', 'cinnabon', 'auntie anne\'s', "auntie anne's",
+  'dairy queen', 'baskin robbins', 'baskin-robbins', "coldstone creamery",
+  'cold stone', 'krispy kreme', "little caesars", "little caesar's",
+  'papa murphy\'s', "papa murphy's", 'wingstop', 'el pollo loco',
+  'white castle', 'checkers', "rally's", 'rallys',
+  "long john silver's", 'long john silvers', 'captain d\'s',
+  'boston market', 'cracker barrel', 'perkins', "denny's",
+  'texas roadhouse', 'longhorn steakhouse', 'red robin',
+  'bob evans', "o'charley's", 'ocharles',
+  'cheddar\'s scratch kitchen', "cheddar's",
+  'yard house', 'bj\'s restaurant', "bj's restaurant",
+  'dave and busters', "dave & buster's",
+  'the cheesecake factory', 'seasons 52',
+  'bahama breeze', 'cracker barrel old country store',
+];
+
+/**
+ * Check if a restaurant name matches any chain in the blocklist.
+ * Uses normalized lowercase comparison with substring matching.
+ */
+export function isChainRestaurant(name: string): boolean {
+  if (!name) return false;
+  const normalized = name.toLowerCase().trim();
+  return CHAIN_RESTAURANT_BLOCKLIST.some(chain => {
+    // Exact match or the name contains the chain name
+    if (normalized === chain) return true;
+    if (normalized.includes(chain)) return true;
+    // Also check if the chain name is a significant portion of the restaurant name
+    // e.g. "Five Guys Burgers" should match "five guys"
+    const chainWords = chain.split(/\s+/);
+    if (chainWords.length >= 2) {
+      return chainWords.every(word => normalized.includes(word));
+    }
+    return false;
+  });
+}
+
+/**
+ * Filter chain restaurants from a list of activities.
+ * Returns the filtered list and an array of removed chain names.
+ */
+export function filterChainRestaurants(
+  activities: StrictActivityMinimal[],
+): { filtered: StrictActivityMinimal[]; removedChains: string[] } {
+  const removedChains: string[] = [];
+  const filtered = activities.filter(a => {
+    const category = (a.category || '').toLowerCase();
+    if (!category.includes('dining') && !category.includes('restaurant') && !category.includes('food')) {
+      return true; // Not a dining activity, keep it
+    }
+    if (isChainRestaurant(a.title)) {
+      removedChains.push(a.title);
+      return false;
+    }
+    return true;
+  });
+  return { filtered, removedChains };
+}
+
 // Re-declare minimal interfaces needed (avoid circular imports)
 export interface StrictActivityMinimal {
   id: string;

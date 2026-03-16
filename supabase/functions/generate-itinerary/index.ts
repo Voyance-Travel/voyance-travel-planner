@@ -11160,6 +11160,7 @@ REQUIREMENTS:
 - Include 12 breakfast/brunch spots, 14 lunch spots, 14 dinner spots
 - Mix of cuisines: local specialties, international, street food, fine dining
 - Spread across different neighborhoods
+- **ABSOLUTELY NO chain or franchise restaurants** (e.g., McDonald's, Five Guys, Starbucks, Subway, Chili's, Applebee's, Olive Garden, Cheesecake Factory, etc.). Only independent, locally-owned, or locally-iconic establishments. If it has more than 3 locations worldwide, do NOT include it.
 
 For EACH restaurant, return a JSON array with objects containing:
 - "name": exact restaurant name
