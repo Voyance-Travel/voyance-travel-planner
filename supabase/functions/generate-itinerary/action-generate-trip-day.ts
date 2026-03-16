@@ -8,6 +8,8 @@
  */
 
 import { corsHeaders } from './action-types.ts';
+import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
+import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
