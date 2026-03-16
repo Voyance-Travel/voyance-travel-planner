@@ -2550,7 +2550,12 @@ export default function TripDetail() {
                                 const h = c.hotel_selection as any;
                                 const hotel = Array.isArray(h) && h.length > 0 ? h[0] : h;
                                 return !!hotel?.name;
-                              }))
+                              })) ||
+                              !!((trip?.metadata as any)?.accommodationNotes?.length) ||
+                              editorDays.some((d: any) => d.activities?.some((a: any) =>
+                                a.category === 'hotel' || a.category === 'accommodation' ||
+                                /check.?in/i.test(a.title || a.name || '')
+                              ))
                             }
                             isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
                             hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
@@ -2742,7 +2747,12 @@ export default function TripDetail() {
                           const h = c.hotel_selection as any;
                           const hotel = Array.isArray(h) && h.length > 0 ? h[0] : h;
                           return !!hotel?.name;
-                        }))
+                        })) ||
+                        !!((trip?.metadata as any)?.accommodationNotes?.length) ||
+                        editorDays.some((d: any) => d.activities?.some((a: any) =>
+                          a.category === 'hotel' || a.category === 'accommodation' ||
+                          /check.?in/i.test(a.title || a.name || '')
+                        ))
                       }
                       isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
                       hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}

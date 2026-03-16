@@ -5497,7 +5497,14 @@ export function EditorialItinerary({
             travelers={travelers}
             totalDays={days.length}
             itineraryDays={days}
-            hasHotel={!!(hotelSelection?.pricePerNight || hotelSelection?.name)}
+            hasHotel={
+              !!(hotelSelection?.pricePerNight || hotelSelection?.name) ||
+              !!(parsedMetadata?.accommodationNotes?.length) ||
+              days.some(d => d.activities.some(a =>
+                a.category === 'hotel' || a.category === 'accommodation' ||
+                /check.?in/i.test(a.title || '')
+              ))
+            }
             hasFlight={hasFlightData}
             destination={destination}
             destinationCountry={destinationCountry}
