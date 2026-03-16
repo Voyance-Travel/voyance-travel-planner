@@ -9132,7 +9132,7 @@ function ActivityRow({
   
   // Fetch real photos for most activities, including hotels (but not generic check-ins without hotel name)
   const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
-  const shouldFetchRealPhoto = canViewPremium && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
+  const shouldFetchRealPhoto = canViewPremium && !isManualMode && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
   
   const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
     isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,
