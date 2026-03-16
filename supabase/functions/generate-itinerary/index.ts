@@ -2808,7 +2808,7 @@ Generate activities for this day following ALL constraints above.`;
         }
 
         // Check for "light dining" preference violations
-        const wantsLightDining = userNotes.includes('light dinner') || userNotes.includes('light meal') || userNotes.includes('casual dinner') || userNotes.includes('simple dinner') || userNotes.includes('quick bite');
+        const wantsLightDining = userPreferenceText.includes('light dinner') || userPreferenceText.includes('light meal') || userPreferenceText.includes('casual dinner') || userPreferenceText.includes('simple dinner') || userPreferenceText.includes('quick bite');
         if (wantsLightDining) {
           for (const act of generatedDay.activities) {
             const isDining = ((act as any).category || '').toLowerCase() === 'dining';
@@ -2824,7 +2824,7 @@ Generate activities for this day following ALL constraints above.`;
         }
 
         // Check for budget preference violations
-        const wantsBudget = userNotes.includes('budget') || userNotes.includes('cheap') || userNotes.includes('affordable') || userNotes.includes('save money') || userNotes.includes('low cost');
+        const wantsBudget = userPreferenceText.includes('budget') || userPreferenceText.includes('cheap') || userPreferenceText.includes('affordable') || userPreferenceText.includes('save money') || userPreferenceText.includes('low cost');
         if (wantsBudget) {
           const expensiveActivities = generatedDay.activities.filter((a: any) => {
             const cost = (a as any).cost?.amount || 0;
