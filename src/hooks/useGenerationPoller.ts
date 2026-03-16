@@ -278,6 +278,17 @@ export function useGenerationPoller({
       }
 
       if (isStalled) {
+        // Log stall event to client_errors for server-side correlation
+        try {
+          supabase.from('client_errors').insert([{
+            session_id: sessionStorage.getItem('voy_session_id') || 'unknown',
+            error_message: `generation_stalled: day ${completedDays}/${totalDays}`,
+            page_path: window.location.pathname,
+            component_name: 'useGenerationPoller',
+            metadata: { tripId, completedDays, totalDays, autoResumeAttempt: autoResumeCountRef.current },
+          } as any]).then();
+        } catch {}
+
         // Auto-resume: try up to MAX_AUTO_RESUME_ATTEMPTS before showing stalled UI
         if (autoResumeCountRef.current < MAX_AUTO_RESUME_ATTEMPTS && !resumeInFlight) {
           autoResumeCountRef.current += 1;
