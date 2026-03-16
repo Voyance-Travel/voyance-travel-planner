@@ -60,6 +60,7 @@ import { safeFormatDate, parseLocalDate } from '@/utils/dateUtils';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
+import { useActivityImageWriteback } from '@/hooks/useActivityImageWriteback';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
@@ -1266,6 +1267,8 @@ export function EditorialItinerary({
   const isCleanPreview = viewMode === 'preview';
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
 
+  // Batch write-back of resolved activity photos into itinerary_data
+  const { reportPhoto } = useActivityImageWriteback(tripId);
 
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
 
@@ -5470,6 +5473,7 @@ export function EditorialItinerary({
                           refreshResult={refreshResults[selectedDay.dayNumber] || null}
                           onDismissRefresh={() => setRefreshResults(prev => { const next = { ...prev }; delete next[selectedDay.dayNumber]; return next; })}
                           onApplyRefreshChanges={(changes) => handleApplyRefreshChanges(selectedDayIndex, changes)}
+                          onPhotoResolved={reportPhoto}
                         />
                       )}
                     </>
@@ -8129,6 +8133,8 @@ interface DayCardProps {
    isCleanPreview?: boolean;
    /** Whether an edit modal is currently open — disables drag */
    isModalEditing?: boolean;
+   /** Callback to report resolved photo for batch write-back */
+   onPhotoResolved?: (activityId: string, photoUrl: string) => void;
 }
 
 function DayCard({
@@ -8189,6 +8195,7 @@ function DayCard({
   isPastTrip = false,
   isCleanPreview = false,
   isModalEditing = false,
+  onPhotoResolved,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -8641,6 +8648,7 @@ function DayCard({
                           compact={compactCards}
                           isPastTrip={isPastTrip}
                           isCleanPreview={isCleanPreview}
+                          onPhotoResolved={onPhotoResolved}
                         />
                       </div>
                     </div>
@@ -8686,8 +8694,8 @@ function DayCard({
                         aiLocked={aiLocked}
                         compact={compactCards}
                         isPastTrip={isPastTrip}
-                        isCleanPreview={isCleanPreview}
-                      />
+                          onPhotoResolved={onPhotoResolved}
+                        />
                     </div>
                     {/* Compact transit gap indicator between activities */}
                     {!isLastActivity && gapMinutes !== null && !dayIsPreview && !isCleanPreview && (
@@ -8922,6 +8930,8 @@ interface ActivityRowProps {
   isPastTrip?: boolean;
   /** Clean preview mode — magazine-style reading card */
   isCleanPreview?: boolean;
+  /** Callback to report a resolved photo URL for batch write-back */
+  onPhotoResolved?: (activityId: string, photoUrl: string) => void;
 }
 
 function ActivityRow({
@@ -8965,6 +8975,7 @@ function ActivityRow({
   compact = false,
   isPastTrip = false,
   isCleanPreview = false,
+  onPhotoResolved,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -9105,6 +9116,13 @@ function ActivityRow({
 
   const thumbnailUrl = fetchedImageUrl;
   const [thumbnailError, setThumbnailError] = useState(false);
+
+  // Report resolved photo for batch write-back to itinerary_data
+  useEffect(() => {
+    if (fetchedImageUrl && !imageLoading && onPhotoResolved && activity.id) {
+      onPhotoResolved(activity.id, fetchedImageUrl);
+    }
+  }, [fetchedImageUrl, imageLoading, onPhotoResolved, activity.id]);
   // Library modal state removed - agent features disabled
 
   // ── Clean Preview Mode — magazine-style reading card ────────────────

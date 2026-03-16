@@ -40,41 +40,26 @@ const imageCache = new Map<string, { url: string; source: string }>();
 // Pending requests to dedupe concurrent fetches
 const pendingRequests = new Map<string, Promise<{ url: string; source: string } | null>>();
 
-// Track which activity IDs we've already persisted to avoid duplicate writes
-const persistedActivityIds = new Set<string>();
-
-// UUID v4 pattern check
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// persistedActivityIds and UUID_REGEX removed — persistence now handled by useActivityImageWriteback
 
 function getCategoryFallback(category?: string, title?: string): string {
   return getActivityFallbackImage(category, title);
 }
 
+// Strip common prefixes to deduplicate cache keys for the same venue
+const STRIP_PREFIXES = /^(visit|explore|discover|tour|see|experience|dinner at|lunch at|breakfast at|stop at|walk to|head to|check out)\s+/i;
+
 function getCacheKey(title: string, destination?: string, cacheId?: string): string {
-  const normalized = `${cacheId || title}-${destination || 'unknown'}`
+  const cleanTitle = (cacheId || title).replace(STRIP_PREFIXES, '').trim();
+  const normalized = `${cleanTitle}-${destination || 'unknown'}`
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '-')
     .slice(0, 80);
   return normalized;
 }
 
-async function persistPhotoToActivity(activityId: string, photoUrl: string): Promise<void> {
-  if (!activityId || !UUID_REGEX.test(activityId)) return;
-  if (persistedActivityIds.has(activityId)) return;
-  persistedActivityIds.add(activityId);
-  try {
-    const { error } = await supabase
-      .from('trip_activities')
-      .update({ photos: [photoUrl] })
-      .eq('id', activityId);
-    if (error) {
-      persistedActivityIds.delete(activityId);
-      console.warn('[useActivityImage] Failed to persist photo:', error.message);
-    }
-  } catch {
-    persistedActivityIds.delete(activityId);
-  }
-}
+// persistPhotoToActivity removed — photos are now written back to
+// itinerary_data via useActivityImageWriteback at the itinerary level.
 
 // ── NEW: Check curated_images table ──────────────────────────────────────────
 async function fetchFromCuratedImages(
@@ -239,9 +224,7 @@ export function useActivityImage(
           setImageUrl(result.url);
           setSource(result.source);
 
-          if (activityId && result.source !== 'fallback') {
-            persistPhotoToActivity(activityId, result.url).catch(() => {});
-          }
+          // Photo persistence is now handled by useActivityImageWriteback
         } else {
           setSource('fallback');
         }
@@ -262,5 +245,4 @@ export function getActivityPlaceholder(category?: string): string {
 export function clearActivityImageCache(): void {
   imageCache.clear();
   pendingRequests.clear();
-  persistedActivityIds.clear();
 }

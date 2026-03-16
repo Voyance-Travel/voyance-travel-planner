@@ -122,10 +122,31 @@ async function checkCuratedCache(
 
     let resolvedUrl = String(pick.image_url || '').trim();
 
-    const needsHeal =
-      !!resolvedUrl &&
+    const isStorageUrl = !!resolvedUrl &&
       !resolvedUrl.startsWith('data:') &&
-      !resolvedUrl.includes('/storage/v1/object/public/trip-photos/');
+      resolvedUrl.includes('/storage/v1/object/public/trip-photos/');
+
+    const needsHeal = !!resolvedUrl &&
+      !resolvedUrl.startsWith('data:') &&
+      !isStorageUrl;
+
+    // Validate existing storage URLs with a HEAD check — purge stale entries
+    if (isStorageUrl) {
+      try {
+        const headResp = await fetch(resolvedUrl, { method: 'HEAD' });
+        if (!headResp.ok) {
+          console.log(`[Images] ⚠️ Storage URL returned ${headResp.status} for ${entityKey}, purging cache entry`);
+          await supabase
+            .from('curated_images')
+            .delete()
+            .eq('id', pick.id);
+          return null; // Fall through to fresh fetch
+        }
+      } catch (headErr) {
+        console.warn(`[Images] HEAD check failed for ${entityKey}:`, headErr);
+        // On network error, still return the URL — better than nothing
+      }
+    }
 
     // Self-heal legacy external URLs by copying once into our storage bucket.
     if (needsHeal) {
