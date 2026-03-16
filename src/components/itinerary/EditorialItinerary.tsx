@@ -1852,6 +1852,27 @@ export function EditorialItinerary({
   // Get entitlements for credit checking
   const { data: entitlements, isPaid } = useEntitlements(tripId);
   
+  // Fetch trip-level unlocked_day_count as fallback for entitlements loading state.
+  // Prevents "unlock days you already paid for" flash when entitlements are slow/failed.
+  const { data: tripUnlockedCount } = useQuery({
+    queryKey: ['trip-unlocked-count', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('trips')
+        .select('unlocked_day_count')
+        .eq('id', tripId)
+        .maybeSingle();
+      return (data as any)?.unlocked_day_count ?? 0;
+    },
+    staleTime: 30_000,
+    enabled: !!tripId,
+  });
+  
+  // Wrapper: always pass trip-level fallback so paid days never show as locked
+  const canViewDay = useCallback((dayNum: number) => {
+    return canViewPremiumContentForDay(entitlements, dayNum, tripUnlockedCount ?? undefined);
+  }, [entitlements, tripUnlockedCount]);
+  
   // Credit system hooks
   const { data: creditData } = useCredits();
   const spendCredits = useSpendCredits();
