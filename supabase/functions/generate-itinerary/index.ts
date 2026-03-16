@@ -11023,6 +11023,134 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         // Store generation_context in the update payload
         (updatePayload.metadata as Record<string, unknown>).generation_context = enrichmentContext;
       }
+
+      // ========================================================================
+      // STAGE: RESTAURANT POOL PRE-GENERATION
+      // One AI call per city to pre-generate 40+ real, highly-rated restaurants.
+      // This pool is injected into every day prompt so the AI picks from real
+      // restaurants instead of inventing generic "dinner spot" placeholders.
+      // ========================================================================
+      try {
+        const cities: string[] = [];
+        if (isMultiCity) {
+          const { data: tripCities } = await supabase
+            .from('trip_cities')
+            .select('city_name, country')
+            .eq('trip_id', tripId)
+            .order('city_order', { ascending: true });
+          if (tripCities && tripCities.length > 0) {
+            for (const c of tripCities) {
+              if (c.city_name && !cities.includes(c.city_name)) {
+                cities.push(c.city_name);
+              }
+            }
+          }
+        }
+        if (cities.length === 0) {
+          cities.push(destination);
+        }
+
+        const restaurantPoolByCity: Record<string, any[]> = {};
+        const LOVABLE_API_KEY_FOR_POOL = Deno.env.get("LOVABLE_API_KEY") || '';
+
+        for (const city of cities) {
+          try {
+            const budgetLabel = budgetTier === 'luxury' ? 'luxury' : budgetTier === 'budget' ? 'budget-friendly' : 'mid-range';
+            const poolPrompt = `List exactly 40 real, currently operating restaurants in ${city}${destinationCountry ? `, ${destinationCountry}` : ''} for a ${budgetLabel} traveler.
+
+REQUIREMENTS:
+- ONLY real restaurants that exist right now (no fictional names)
+- 4.5+ star rated preferred
+- Include 12 breakfast/brunch spots, 14 lunch spots, 14 dinner spots
+- Mix of cuisines: local specialties, international, street food, fine dining
+- Spread across different neighborhoods
+
+For EACH restaurant, return a JSON array with objects containing:
+- "name": exact restaurant name
+- "mealType": "breakfast" | "lunch" | "dinner"
+- "cuisine": cuisine type (e.g., "Japanese", "Italian", "Street Food")
+- "neighborhood": area/district name
+- "priceRange": "$" | "$$" | "$$$" | "$$$$"
+- "description": one-line description (max 15 words)
+
+Return ONLY the JSON array, no other text.`;
+
+            const poolResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY_FOR_POOL}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-flash",
+                messages: [
+                  { role: "system", content: "You are a restaurant database. Return ONLY valid JSON arrays. No markdown, no explanations." },
+                  { role: "user", content: poolPrompt },
+                ],
+                temperature: 0.7,
+              }),
+            });
+
+            if (poolResp.ok) {
+              const poolData = await poolResp.json();
+              const content = poolData.choices?.[0]?.message?.content || '';
+              // Extract JSON array from response
+              const jsonMatch = content.match(/\[[\s\S]*\]/);
+              if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  restaurantPoolByCity[city] = parsed.map((r: any) => ({
+                    name: r.name || '',
+                    mealType: r.mealType || 'any',
+                    cuisine: r.cuisine || '',
+                    neighborhood: r.neighborhood || '',
+                    priceRange: r.priceRange || '$$',
+                    description: r.description || '',
+                    address: r.neighborhood ? `${r.neighborhood}, ${city}` : city,
+                  })).filter((r: any) => r.name.length > 2);
+                  console.log(`[generate-trip] 🍽️ Restaurant pool for "${city}": ${restaurantPoolByCity[city].length} real restaurants`);
+
+                  // Cache to verified_venues for future trips (non-blocking)
+                  try {
+                    const venueInserts = restaurantPoolByCity[city].slice(0, 20).map((r: any) => ({
+                      name: r.name,
+                      city: city,
+                      destination: city,
+                      address: r.address || '',
+                      category: 'restaurant',
+                      source: 'restaurant_pool_ai',
+                      rating: 4.5,
+                      usage_count: 0,
+                      expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+                    }));
+                    await supabase.from('verified_venues').upsert(venueInserts, { onConflict: 'name,city', ignoreDuplicates: true });
+                  } catch (cacheErr) {
+                    console.warn(`[generate-trip] Failed to cache restaurant pool for "${city}" (non-blocking):`, cacheErr);
+                  }
+                } else {
+                  console.warn(`[generate-trip] Restaurant pool for "${city}": parsed but empty/invalid`);
+                }
+              } else {
+                console.warn(`[generate-trip] Restaurant pool for "${city}": no JSON array found in response`);
+              }
+            } else {
+              console.warn(`[generate-trip] Restaurant pool AI call failed for "${city}": ${poolResp.status}`);
+            }
+          } catch (cityPoolErr) {
+            console.warn(`[generate-trip] Restaurant pool failed for "${city}" (non-blocking):`, cityPoolErr);
+          }
+        }
+
+        // Store the restaurant pool in generation context
+        if (Object.keys(restaurantPoolByCity).length > 0) {
+          const existingMeta = (updatePayload.metadata as Record<string, unknown>) || {};
+          (existingMeta as any).restaurant_pool = restaurantPoolByCity;
+          (existingMeta as any).used_restaurants = [];
+          console.log(`[generate-trip] Restaurant pools stored for ${Object.keys(restaurantPoolByCity).length} cities`);
+        }
+      } catch (poolErr) {
+        console.warn('[generate-trip] Restaurant pool generation failed (non-blocking):', poolErr);
+      }
       
       await supabase.from('trips').update(updatePayload).eq('id', tripId);
 
