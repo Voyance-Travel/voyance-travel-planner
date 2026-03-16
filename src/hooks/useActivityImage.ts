@@ -1,6 +1,6 @@
 /**
  * Hook for fetching activity photos using tiered real photo sources
- * Priority: Cache → Google Places → TripAdvisor → Wikimedia → AI (last resort)
+ * Priority: Cache → Curated DB → Google Places → TripAdvisor → Wikimedia → AI (last resort)
  * Falls back to static type-based images when no real photo is available.
  */
 import { useState, useEffect, useRef } from 'react';
@@ -59,10 +59,7 @@ function getCacheKey(title: string, destination?: string, cacheId?: string): str
 }
 
 async function persistPhotoToActivity(activityId: string, photoUrl: string): Promise<void> {
-  // Skip persist for non-UUID IDs (shared activities use slug IDs like "sh-day1-dinner")
-  if (!activityId || !UUID_REGEX.test(activityId)) {
-    return;
-  }
+  if (!activityId || !UUID_REGEX.test(activityId)) return;
   if (persistedActivityIds.has(activityId)) return;
   persistedActivityIds.add(activityId);
   try {
@@ -70,13 +67,37 @@ async function persistPhotoToActivity(activityId: string, photoUrl: string): Pro
       .from('trip_activities')
       .update({ photos: [photoUrl] })
       .eq('id', activityId);
-
     if (error) {
       persistedActivityIds.delete(activityId);
       console.warn('[useActivityImage] Failed to persist photo:', error.message);
     }
   } catch {
     persistedActivityIds.delete(activityId);
+  }
+}
+
+// ── NEW: Check curated_images table ──────────────────────────────────────────
+async function fetchFromCuratedImages(
+  title: string,
+  category: string,
+  destination: string
+): Promise<{ url: string; source: string } | null> {
+  try {
+    const normalizedTitle = title.trim().toLowerCase().replace(/\s+/g, '_');
+    const { data, error } = await supabase
+      .from('curated_images')
+      .select('image_url, source')
+      .eq('is_blacklisted', false)
+      .or(`entity_key.eq.${normalizedTitle},entity_key.ilike.%${title.trim().replace(/[^a-zA-Z0-9 ]/g, '')}%`)
+      .order('vote_score', { ascending: false })
+      .limit(1);
+
+    if (error || !data || data.length === 0) return null;
+    const row = data[0];
+    if (!row.image_url) return null;
+    return { url: row.image_url, source: `curated_${row.source || 'db'}` };
+  } catch {
+    return null;
   }
 }
 
@@ -95,9 +116,7 @@ async function fetchImageFromBackend(
       },
     });
 
-    if (error) {
-      return null;
-    }
+    if (error) return null;
 
     const image = data?.images?.[0];
     if (image?.url && image.source !== 'fallback') {
@@ -105,7 +124,7 @@ async function fetchImageFromBackend(
     }
 
     return null;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -133,7 +152,6 @@ export function useActivityImage(
   }, []);
 
   useEffect(() => {
-    // If we have an existing photo from the backend, use it
     if (existingPhoto) {
       setImageUrl(existingPhoto);
       setSource('existing');
@@ -141,7 +159,6 @@ export function useActivityImage(
       return;
     }
 
-    // Skip fetching for transport/downtime only - accommodation can now fetch hotel images
     const skipCategories = ['transport', 'transportation', 'downtime', 'free_time'];
     if (skipCategories.includes(category?.toLowerCase() || '')) {
       setImageUrl(getCategoryFallback(category, title));
@@ -152,7 +169,7 @@ export function useActivityImage(
 
     const cacheKey = getCacheKey(title, destination, cacheId);
 
-    // Check in-memory cache first
+    // 1. In-memory cache
     if (imageCache.has(cacheKey)) {
       const cached = imageCache.get(cacheKey)!;
       setImageUrl(cached.url);
@@ -161,17 +178,17 @@ export function useActivityImage(
       return;
     }
 
-    // Check localStorage cache (survives page reload)
+    // 2. localStorage cache
     const localCached = getFromLocalCache(cacheKey);
     if (localCached) {
-      imageCache.set(cacheKey, localCached); // warm in-memory
+      imageCache.set(cacheKey, localCached);
       setImageUrl(localCached.url);
       setSource(localCached.source);
       setLoading(false);
       return;
     }
 
-    // Check if there's already a pending request for this image
+    // Dedup pending requests
     if (pendingRequests.has(cacheKey)) {
       pendingRequests.get(cacheKey)!.then((result) => {
         if (mountedRef.current) {
@@ -188,7 +205,6 @@ export function useActivityImage(
       return;
     }
 
-    // If destination is missing, don't attempt "real" venue lookup.
     if (!destination || destination.trim().length < 2) {
       setImageUrl(getCategoryFallback(category, title));
       setSource('fallback');
@@ -196,24 +212,25 @@ export function useActivityImage(
       return;
     }
 
-    // Set loading state with category fallback as placeholder
+    // Show category fallback as placeholder while loading
     setImageUrl(getCategoryFallback(category, title));
     setLoading(true);
 
-    // Create the fetch promise
-    const fetchPromise = fetchImageFromBackend(
-      title,
-      category || 'activity',
-      destination
-    );
+    // NEW: Tiered fetch — curated_images DB first, then edge function
+    const fetchPromise = (async (): Promise<{ url: string; source: string } | null> => {
+      // 3. Try curated_images table first (fast, stable URLs)
+      const curated = await fetchFromCuratedImages(title, category || 'activity', destination);
+      if (curated) return curated;
+
+      // 4. Fall back to edge function (Google Places, etc.)
+      return fetchImageFromBackend(title, category || 'activity', destination);
+    })();
 
     pendingRequests.set(cacheKey, fetchPromise);
 
-    // Debounce slightly to batch rapid requests
     const timer = setTimeout(() => {
       fetchPromise.then((result) => {
         pendingRequests.delete(cacheKey);
-        
         if (!mountedRef.current) return;
 
         if (result) {
@@ -222,12 +239,10 @@ export function useActivityImage(
           setImageUrl(result.url);
           setSource(result.source);
 
-          // Persist photo URL to activity record so future loads skip the API
           if (activityId && result.source !== 'fallback') {
             persistPhotoToActivity(activityId, result.url).catch(() => {});
           }
         } else {
-          // Keep the category fallback
           setSource('fallback');
         }
         setLoading(false);
@@ -240,12 +255,10 @@ export function useActivityImage(
   return { imageUrl, loading, source };
 }
 
-// Pre-get a placeholder URL based on category (no API call, instant)
 export function getActivityPlaceholder(category?: string): string {
   return getCategoryFallback(category);
 }
 
-// Clear the image cache (useful for testing or forced refresh)
 export function clearActivityImageCache(): void {
   imageCache.clear();
   pendingRequests.clear();
