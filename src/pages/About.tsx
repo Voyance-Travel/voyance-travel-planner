@@ -585,7 +585,7 @@ export default function About() {
               <div className="space-y-3 text-sm md:text-base leading-relaxed">
                 <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Graham, Chief Inspiration Officer</h3>
                 <p className="text-muted-foreground">
-                  Graham is the Yorkie who's been there for every late-night building session, every trip-planning marathon, and every "should we really do this?" conversation. He hasn't technically been to all the cities in our guides, but he's been part of making Voyance happen from day one. And yes, he has his own travel wardrobe.
+                  He's the Yorkie who's been there for every late-night building session, every trip-planning marathon, and every "should we really do this?" conversation. He hasn't been to all the cities in our guides (yet), but he's been part of making Voyance happen from day one. And yes, he has his own travel wardrobe.
                 </p>
               </div>
             </motion.div>
