@@ -197,6 +197,11 @@ export function calculateDailyTarget(
   return { baseline, splurge, recovery };
 }
 
+/** Check if an allocations object has valid numeric keys (not an empty {}) */
+export function isValidAllocations(a: unknown): a is BudgetAllocations {
+  return !!a && typeof (a as any).food_percent === 'number' && typeof (a as any).activities_percent === 'number';
+}
+
 // =============================================================================
 // API FUNCTIONS
 // =============================================================================
