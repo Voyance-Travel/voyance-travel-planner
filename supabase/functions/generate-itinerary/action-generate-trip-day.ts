@@ -317,6 +317,8 @@ export async function handleGenerateTripDay(
             } : undefined,
             isFirstDayInCity: cityInfo ? (dayNumber === 1 || dayCityMap![dayNumber - 2]?.cityName !== cityInfo.cityName) : false,
             isLastDayInCity: cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false,
+            restaurantPool: restaurantPool.length > 0 ? restaurantPool : undefined,
+            usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
           }),
         });
       } finally {
