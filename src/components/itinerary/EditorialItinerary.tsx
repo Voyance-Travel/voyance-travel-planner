@@ -5118,7 +5118,7 @@ export function EditorialItinerary({
                   unlockedCount={unlockedCount}
                   onBulkUnlock={() => {
                     const lockedDayNumbers = days
-                      .filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber))
+                      .filter(d => !canViewDay(d.dayNumber))
                       .map(d => d.dayNumber);
                     bulkUnlock({
                       tripId,
