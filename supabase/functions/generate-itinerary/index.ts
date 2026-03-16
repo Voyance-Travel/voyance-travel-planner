@@ -2824,7 +2824,7 @@ Generate activities for this day following ALL constraints above.`;
         }
 
         // Check for budget preference violations
-        const wantsBudget = userNotes.includes('budget') || userNotes.includes('cheap') || userNotes.includes('affordable') || userNotes.includes('save money') || userNotes.includes('low cost');
+        const wantsBudget = userPreferenceText.includes('budget') || userPreferenceText.includes('cheap') || userPreferenceText.includes('affordable') || userPreferenceText.includes('save money') || userPreferenceText.includes('low cost');
         if (wantsBudget) {
           const expensiveActivities = generatedDay.activities.filter((a: any) => {
             const cost = (a as any).cost?.amount || 0;
