@@ -218,6 +218,13 @@ export default function DestinationDetail() {
   // Use cached storage URL if available, otherwise original
   const heroImageUrl = cachedHeroUrl || destination?.imageUrl || '';
 
+  // Auto-enrich thin database destinations
+  const { isEnriching } = useDestinationEnrichment(
+    dbDestination as any,
+    !!staticDestination,
+    activities.length > 0
+  );
+
   // Loading state for database fetch
   if (!staticDestination && isLoadingDb) {
     return (
