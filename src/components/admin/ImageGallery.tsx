@@ -6,10 +6,11 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Ban, Search, Loader2 } from 'lucide-react';
+import { Ban, Search, Loader2, Upload, ImagePlus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import ImageGalleryCard, { type CuratedImage } from './ImageGalleryCard';
+import ImageUploadDialog from './ImageUploadDialog';
 
 const PAGE_SIZE = 50;
 
@@ -41,6 +42,10 @@ export default function ImageGallery() {
   // Preview dialog
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  // Upload dialog
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadPrefill, setUploadPrefill] = useState<{ entityKey?: string; entityType?: string; destination?: string; replaceId?: string } | undefined>();
+
   // Stats
   const [totalCount, setTotalCount] = useState(0);
 
@@ -58,7 +63,6 @@ export default function ImageGallery() {
         query = query.or(`entity_key.ilike.%${search.trim()}%,destination.ilike.%${search.trim()}%`);
       }
 
-      // Sort
       switch (sortBy) {
         case 'vote_score': query = query.order('vote_score', { ascending: false }); break;
         case 'quality_score': query = query.order('quality_score', { ascending: false, nullsFirst: false }); break;
@@ -150,6 +154,23 @@ export default function ImageGallery() {
     }
   };
 
+  // Upload replace for a specific image
+  const handleUploadReplace = (image: CuratedImage) => {
+    setUploadPrefill({
+      entityKey: image.entity_key,
+      entityType: image.entity_type,
+      destination: image.destination || '',
+      replaceId: image.id,
+    });
+    setUploadOpen(true);
+  };
+
+  // New upload (no prefill)
+  const handleNewUpload = () => {
+    setUploadPrefill(undefined);
+    setUploadOpen(true);
+  };
+
   // Filter broken images (client-side only)
   const displayImages = brokenOnly ? images.filter(img => brokenIds.has(img.id)) : images;
 
@@ -189,6 +210,7 @@ export default function ImageGallery() {
             <SelectItem value="google">Google</SelectItem>
             <SelectItem value="storage">Storage</SelectItem>
             <SelectItem value="curated">Curated</SelectItem>
+            <SelectItem value="admin_upload">Admin uploads</SelectItem>
           </SelectContent>
         </Select>
 
@@ -218,12 +240,18 @@ export default function ImageGallery() {
             <Badge variant="destructive">{brokenIds.size} broken detected</Badge>
           )}
         </div>
-        {selected.size > 0 && (
-          <Button variant="destructive" size="sm" onClick={handleBulkBlacklist}>
-            <Ban className="h-3.5 w-3.5 mr-1.5" />
-            Blacklist {selected.size} selected
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleNewUpload}>
+            <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
+            Upload Image
           </Button>
-        )}
+          {selected.size > 0 && (
+            <Button variant="destructive" size="sm" onClick={handleBulkBlacklist}>
+              <Ban className="h-3.5 w-3.5 mr-1.5" />
+              Blacklist {selected.size} selected
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Grid */}
@@ -247,6 +275,7 @@ export default function ImageGallery() {
                 onReplace={setReplaceTarget}
                 onBlacklist={handleBlacklist}
                 onPreview={setPreviewUrl}
+                onUploadReplace={handleUploadReplace}
               />
             ))}
           </div>
@@ -262,7 +291,7 @@ export default function ImageGallery() {
         </>
       )}
 
-      {/* Replace dialog */}
+      {/* Replace dialog (URL paste) */}
       <Dialog open={!!replaceTarget} onOpenChange={open => !open && setReplaceTarget(null)}>
         <DialogContent>
           <DialogHeader>
@@ -286,6 +315,20 @@ export default function ImageGallery() {
                 <img src={replaceUrl} alt="Preview" className="w-full h-32 object-cover rounded-md bg-muted" />
               </div>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                if (replaceTarget) {
+                  handleUploadReplace(replaceTarget);
+                  setReplaceTarget(null);
+                }
+              }}
+            >
+              <Upload className="h-3.5 w-3.5 mr-1.5" />
+              Or upload a file instead
+            </Button>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReplaceTarget(null)}>Cancel</Button>
@@ -308,6 +351,14 @@ export default function ImageGallery() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Upload dialog */}
+      <ImageUploadDialog
+        open={uploadOpen}
+        onClose={() => { setUploadOpen(false); setUploadPrefill(undefined); }}
+        onUploaded={() => fetchImages(0)}
+        prefill={uploadPrefill}
+      />
     </div>
   );
 }

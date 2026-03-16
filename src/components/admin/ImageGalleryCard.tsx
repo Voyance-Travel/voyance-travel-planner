@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Ban, Replace, Maximize2 } from 'lucide-react';
+import { Ban, Replace, Maximize2, Upload } from 'lucide-react';
 
 export interface CuratedImage {
   id: string;
@@ -25,14 +25,15 @@ interface Props {
   onReplace: (image: CuratedImage) => void;
   onBlacklist: (id: string) => void;
   onPreview: (url: string) => void;
+  onUploadReplace?: (image: CuratedImage) => void;
 }
 
-export default function ImageGalleryCard({ image, selected, onSelect, onReplace, onBlacklist, onPreview }: Props) {
+export default function ImageGalleryCard({ image, selected, onSelect, onReplace, onBlacklist, onPreview, onUploadReplace }: Props) {
   const [broken, setBroken] = useState(false);
 
   const sourceBadgeColor = (source: string) => {
     if (source.includes('google')) return 'bg-blue-500/20 text-blue-700 dark:text-blue-300';
-    if (source.includes('storage') || source.includes('cached')) return 'bg-green-500/20 text-green-700 dark:text-green-300';
+    if (source.includes('storage') || source.includes('cached') || source.includes('admin_upload')) return 'bg-green-500/20 text-green-700 dark:text-green-300';
     if (source.includes('curated')) return 'bg-amber-500/20 text-amber-700 dark:text-amber-300';
     return 'bg-muted text-muted-foreground';
   };
@@ -73,6 +74,11 @@ export default function ImageGalleryCard({ image, selected, onSelect, onReplace,
           <Button size="sm" variant="secondary" onClick={() => onReplace(image)}>
             <Replace className="h-3.5 w-3.5" />
           </Button>
+          {onUploadReplace && (
+            <Button size="sm" variant="secondary" onClick={() => onUploadReplace(image)} title="Replace with file upload">
+              <Upload className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button size="sm" variant="destructive" onClick={() => onBlacklist(image.id)}>
             <Ban className="h-3.5 w-3.5" />
           </Button>
