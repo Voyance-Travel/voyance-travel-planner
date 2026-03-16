@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { guides, getAllCategories } from '@/data/guides';
 import { CommunityGuidesGrid } from '@/components/guides/CommunityGuidesGrid';
+import { getFoundersGuides } from '@/data/founders-guides';
 
 export default function Guides() {
   const [searchParams] = useSearchParams();
