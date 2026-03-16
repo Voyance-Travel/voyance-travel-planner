@@ -48,9 +48,12 @@ export function BudgetSetupDialog({
   const [includeHotel, setIncludeHotel] = useState(settings?.budget_include_hotel ?? true);
   const [includeFlight, setIncludeFlight] = useState(settings?.budget_include_flight ?? false);
   const [warningsEnabled, setWarningsEnabled] = useState(settings?.budget_warnings_enabled ?? true);
-  const [allocations, setAllocations] = useState<BudgetAllocations>(
-    settings?.budget_allocations || getDefaultAllocations(spendStyle)
-  );
+  const [allocations, setAllocations] = useState<BudgetAllocations>(() => {
+    const a = settings?.budget_allocations;
+    return (a && typeof a.food_percent === 'number' && typeof a.activities_percent === 'number')
+      ? a
+      : getDefaultAllocations(spendStyle);
+  });
   const [isSaving, setIsSaving] = useState(false);
   // Per-person individual budgets: { memberId: dollarString }
   const [individualBudgets, setIndividualBudgets] = useState<Record<string, string>>({});
