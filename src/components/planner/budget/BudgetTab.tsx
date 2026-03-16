@@ -83,6 +83,8 @@ interface BudgetTabProps {
   /** Journey fields for linked trip budget summary */
   journeyId?: string | null;
   journeyName?: string | null;
+  /** JS-calculated total cost (all travelers, in cents) as fallback when DB snapshot is stale */
+  jsTotalCostCents?: number;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
