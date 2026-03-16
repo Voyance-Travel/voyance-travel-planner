@@ -26,7 +26,7 @@ export const foundersGuides: FoundersGuide[] = [
     destination: 'London',
     readTime: '8 min read',
     coverImage: toSiteImageUrlFromPhotoId('photo-1513635269975-59663e0ac1ad'),
-    summary: "London has my heart. Every time I go back it gets better. This isn't a list of top 10 things — it's what I actually did, where I actually ate, and what I'd tell a friend.",
+    summary: "London has my heart. Every time I go back it gets better. This isn't a list of top 10 things - it's what I actually did, where I actually ate, and what I'd tell a friend.",
     datePublished: '2026-03-15',
     tags: ['London', 'Food', 'Nightlife', 'Markets', 'UK'],
     content: `# Founder's Guide: London
@@ -381,7 +381,7 @@ Vegas rewards you for knowing where to go. The difference between a forgettable 
     readTime: '6 min read',
     datePublished: '2026-03-16',
     tags: ['Atlanta', 'Food', 'Restaurants', 'Day Trips', 'Georgia'],
-    summary: "A local's guide to Atlanta — world-class dining, iconic attractions, and hidden gems from someone who lives here.",
+    summary: "A local's guide to Atlanta - world-class dining, iconic attractions, and hidden gems from someone who lives here.",
     content: `# Founder's Guide: Atlanta
 
 Atlanta is home. I live here, and I think I take it for granted sometimes. But when friends visit and I have to actually think about what to recommend, I realize this city has so much going for it. The dining scene here is deep. Atlanta doesn't get the credit it deserves nationally, but people who know food know that this city punches well above its weight.
