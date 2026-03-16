@@ -14,7 +14,7 @@ export default function Terms() {
     <MainLayout>
       <Head
         title="Terms of Service | Voyance"
-        description="Voyance terms of service and usage guidelines."
+        description="Voyance terms of service. Read our usage guidelines and service agreements."
       />
       
       <section className="pt-24 pb-16">

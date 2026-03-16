@@ -263,6 +263,8 @@ function AnimatedRoutes() {
         {/* Legal Routes */}
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/legal/privacy" element={<Navigate to="/privacy" replace />} />
+        <Route path="/legal/terms" element={<Navigate to="/terms" replace />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
         

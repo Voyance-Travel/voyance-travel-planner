@@ -81,6 +81,8 @@ export const ROUTES = {
   // Legal
   PRIVACY: '/privacy',
   TERMS: '/terms',
+  LEGAL_PRIVACY: '/legal/privacy',
+  LEGAL_TERMS: '/legal/terms',
   PRICING: '/pricing',
   PAYMENT_SUCCESS: '/payment-success',
   

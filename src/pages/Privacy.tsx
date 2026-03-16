@@ -14,7 +14,7 @@ export default function Privacy() {
     <MainLayout>
       <Head
         title="Privacy Policy | Voyance"
-        description="Voyance privacy policy and data usage practices."
+        description="Voyance privacy policy. Learn how we protect your data and handle your personal information."
       />
       
       <section className="pt-24 pb-16">
