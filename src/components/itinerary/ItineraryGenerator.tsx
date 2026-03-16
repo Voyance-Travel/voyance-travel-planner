@@ -360,10 +360,26 @@ export function ItineraryGenerator({
     }
 
     if (existingDays.length > 0) {
-      // Only treat as truly ready if ALL expected days are present
+      // STRUCTURAL CHECK: Require at least one real activity per day
+      // Shell days (theme/title only, no activities) should NOT be treated as complete
+      const daysWithActivities = existingDays.filter(
+        (d: any) => Array.isArray(d.activities) && d.activities.length > 0
+      ).length;
+      const isShellOnly = daysWithActivities === 0;
+
+      if (isShellOnly) {
+        console.warn(`[ItineraryGenerator] Shell-only itinerary detected: ${existingDays.length} days but 0 have activities. Treating as incomplete.`);
+        setHasStarted(true);
+        setPrePhase('preparing');
+        setServerGenActive(true);
+        setShowRetryButton(false);
+        return 'in_progress' as const;
+      }
+
+      // Only treat as truly ready if ALL expected days are present AND have activities
       const isComplete = expectedTotalDays > 0
-        ? actualDays >= expectedTotalDays
-        : true; // No expected count known — legacy fallback, treat as ready
+        ? (actualDays >= expectedTotalDays && daysWithActivities >= expectedTotalDays)
+        : daysWithActivities > 0; // Fallback: at least some days have real content
 
       if (isComplete) {
         setGenerationIssueSince(null);
