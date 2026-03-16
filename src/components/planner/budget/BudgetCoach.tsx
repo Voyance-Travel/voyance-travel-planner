@@ -65,8 +65,8 @@ interface BudgetCoachProps {
   currency: string;
   destination?: string;
   itineraryDays: ItineraryDay[];
-  /** Called when the user applies a suggestion — parent must update the itinerary */
-  onApplySuggestion?: (suggestion: BudgetSuggestion) => void;
+  /** Called when the user applies a suggestion — parent must update the itinerary. Returns true if swap succeeded. */
+  onApplySuggestion?: (suggestion: BudgetSuggestion) => Promise<boolean> | void;
   className?: string;
 }
 
@@ -77,11 +77,14 @@ const suggestionsCache = new Map<
 >();
 
 function hashItinerary(days: ItineraryDay[]): string {
-  // Quick content-based hash so we know when to invalidate
+  // Content-based hash including costs and titles so we invalidate on edits/swaps
   return days
     .map(
       (d) =>
-        `${d.dayNumber}:${d.activities.map((a) => a.id).join(',')}`
+        `${d.dayNumber}:${d.activities.map((a) => {
+          const costVal = typeof a.cost === 'number' ? a.cost : (a.cost as any)?.amount ?? 0;
+          return `${a.id}|${a.title || ''}|${costVal}`;
+        }).join(',')}`
     )
     .join('|');
 }
@@ -249,9 +252,22 @@ export function BudgetCoach({
   const totalPotentialSavings = suggestions.reduce((sum, s) => sum + s.savings, 0);
   const isNowOnTarget = remainingGap <= 0;
 
-  const handleApply = (suggestion: BudgetSuggestion) => {
+  const handleApply = async (suggestion: BudgetSuggestion) => {
+    // Call parent handler and wait for success/failure
+    try {
+      const result = await onApplySuggestion?.(suggestion);
+      // If the handler explicitly returned false, the swap was blocked
+      if (result === false) {
+        toast.error('Swap was blocked — the suggested cost was not lower.');
+        return;
+      }
+    } catch (e) {
+      toast.error('Swap failed. Please try again.');
+      return;
+    }
+
+    // Only mark as applied AFTER parent confirmed success
     setAppliedIds((prev) => new Set(prev).add(suggestion.activity_id));
-    onApplySuggestion?.(suggestion);
 
     // Remove applied suggestion from list and cache so it doesn't reappear
     setSuggestions((prev) => prev.filter((s) => s.activity_id !== suggestion.activity_id));
