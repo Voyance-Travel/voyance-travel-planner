@@ -279,7 +279,11 @@ export function validateGeneratedDay(
     const types = day.activities.map(getExperienceType);
     const culinaryCount = types.filter(t => t === 'culinary_class').length;
     if (culinaryCount > 1) {
-      errors.push(`VARIETY RULE VIOLATION: Only ONE culinary class/workshop is allowed per day (found ${culinaryCount}).`);
+      if (isSmartFinish) {
+        warnings.push(`Multiple culinary classes on one day (found ${culinaryCount}) - consider variety`);
+      } else {
+        errors.push(`VARIETY RULE VIOLATION: Only ONE culinary class/workshop is allowed per day (found ${culinaryCount}).`);
+      }
     }
   }
 
