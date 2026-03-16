@@ -651,7 +651,7 @@ export default function DestinationDetail() {
               </section>
 
               {/* Activities Section */}
-              {activities.length > 0 && (
+              {(activities.length > 0 || isEnriching) && (
                 <section>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="font-serif text-2xl font-semibold">Top Experiences</h2>
