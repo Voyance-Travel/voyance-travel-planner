@@ -928,8 +928,49 @@ The user's list is a STARTING POINT with 3-4 venues per day. You MUST produce a 
 // VALIDATION
 // =============================================================================
 
+const STOP_WORDS = new Set([
+  'a', 'an', 'the', 'at', 'in', 'on', 'to', 'for', 'of', 'and', 'with', 'by', 'from', 'is', 'it', 'its',
+]);
+
+/**
+ * Strip stop words from a string and return significant words only.
+ */
+function getSignificantWords(text: string): string[] {
+  return text.toLowerCase().split(/\s+/).filter(w => w.length > 1 && !STOP_WORDS.has(w));
+}
+
+/**
+ * Fuzzy match: returns true if the activity title matches the must-do name.
+ * Uses three strategies:
+ * 1. All significant words present (exact match minus stop words)
+ * 2. 80%+ of significant words present (fuzzy threshold)
+ * 3. Substring containment (activity name contained in title or vice versa)
+ */
+function fuzzyMatchMustDo(activityTitle: string, mustDoName: string): boolean {
+  const titleLower = activityTitle.toLowerCase();
+  const nameLower = mustDoName.toLowerCase();
+
+  // Strategy 3: Direct substring containment
+  if (titleLower.includes(nameLower) || nameLower.includes(titleLower)) {
+    return true;
+  }
+
+  // Strategy 1 & 2: Word-level matching with stop word removal
+  const searchWords = getSignificantWords(mustDoName);
+  if (searchWords.length === 0) return false;
+
+  const matchCount = searchWords.filter(w => titleLower.includes(w)).length;
+
+  // Strategy 1: All significant words present
+  if (matchCount === searchWords.length) return true;
+
+  // Strategy 2: 80% threshold (minimum 2 words matched)
+  const threshold = Math.max(2, Math.ceil(searchWords.length * 0.8));
+  return matchCount >= threshold;
+}
+
 export function validateMustDosInItinerary(
-  itineraryDays: Array<{ dayNumber: number; activities: Array<{ title: string }> }>,
+  itineraryDays: Array<{ dayNumber: number; activities: Array<{ title: string; description?: string }> }>,
   mustDos: MustDoPriority[]
 ): { 
   allPresent: boolean; 
@@ -943,12 +984,11 @@ export function validateMustDosInItinerary(
     if (mustDo.priority !== 'must') continue;
     
     let wasFound = false;
-    const searchTerms = mustDo.activityName.toLowerCase().split(' ');
     
     for (const day of itineraryDays) {
       for (const activity of day.activities) {
-        const titleLower = activity.title.toLowerCase();
-        if (searchTerms.every(term => titleLower.includes(term))) {
+        const textToSearch = `${activity.title} ${activity.description || ''}`;
+        if (fuzzyMatchMustDo(textToSearch, mustDo.activityName)) {
           found.push({ priority: mustDo, dayNumber: day.dayNumber });
           wasFound = true;
           break;
