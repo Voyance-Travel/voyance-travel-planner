@@ -13,7 +13,9 @@ import { CommunityGuidesGrid } from '@/components/guides/CommunityGuidesGrid';
 
 export default function Guides() {
   const [searchParams] = useSearchParams();
-  const defaultTab = searchParams.get('tab') === 'community' ? 'community' : 'voyance';
+  const tabParam = searchParams.get('tab');
+  const defaultTab = tabParam === 'community' ? 'community' : tabParam === 'founders' ? 'founders' : 'voyance';
+  const foundersGuides = getFoundersGuides();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   
   const categories = ['All', ...getAllCategories()];
