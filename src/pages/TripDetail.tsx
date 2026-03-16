@@ -1117,19 +1117,11 @@ export default function TripDetail() {
           // Never overwrite populated JSON days with empty table-backed days.
           if (jsonDayCount > 0 && itineraryDaysDbCount > jsonDayCount && tripId) {
             console.warn(
-              `[TripDetail] Self-heal: itinerary_data.days (${jsonDayCount}) < itinerary_days table (${itineraryDaysDbCount}). Checking table activities before rebuild.`
+              `[TripDetail] Self-heal: itinerary_data.days (${jsonDayCount}) < itinerary_days table (${itineraryDaysDbCount}). Rebuilding from table.`
             );
             try {
-              // First check if itinerary_activities actually has data for this trip
-              const { count: activityCount } = await supabase
-                .from('itinerary_activities')
-                .select('id', { count: 'exact', head: true })
-                .eq('trip_id', tripId);
-
-              // Always attempt rebuild from itinerary_days — the table stores embedded activities
-              // so itinerary_activities count is irrelevant for rebuild capability
+              // Rebuild directly from itinerary_days — the table stores embedded activities
               {
-                const _activityCount = activityCount; // preserve for logging
                 const { data: fullDayRows } = await supabase
                   .from('itinerary_days')
                   .select('day_number, date, title, theme, description, weather, activities')
