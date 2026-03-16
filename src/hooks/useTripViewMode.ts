@@ -50,7 +50,7 @@ export function useTripViewMode({ isOwner, canEdit = false }: UseTripViewModeOpt
         { replace: true }
       );
     },
-    [isOwner, setSearchParams]
+    [hasEditAccess, setSearchParams]
   );
 
   return {
