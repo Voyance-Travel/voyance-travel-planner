@@ -2443,6 +2443,24 @@ Generate activities for this day following ALL constraints above.`;
             else requiredTransitMins = 45;                   // far
           }
 
+          // DISTANCE-AWARE: Use haversine on coordinates if available and no transit info
+          if (requiredTransitMins <= 10) {
+            const curCoords = current.location?.coordinates || current.coordinates;
+            const nextCoords = next.location?.coordinates || next.coordinates;
+            if (curCoords?.lat && curCoords?.lng && nextCoords?.lat && nextCoords?.lng) {
+              const distKm = haversineDistanceKm(curCoords.lat, curCoords.lng, nextCoords.lat, nextCoords.lng);
+              let distBasedMin = 10;
+              if (distKm >= 0.5) distBasedMin = 15;
+              if (distKm >= 2) distBasedMin = 20;
+              if (distKm >= 5) distBasedMin = 30;
+              if (distKm >= 15) distBasedMin = 45;
+              if (distBasedMin > requiredTransitMins) {
+                requiredTransitMins = distBasedMin;
+                console.log(`[Stage 2] Day ${dayNumber}: GPS distance ${distKm.toFixed(1)}km between "${current.title}" → "${next.title}" → requiring ${distBasedMin}min buffer`);
+              }
+            }
+          }
+
           // When current IS a transport activity, the travel is already accounted for.
           // But we still need an ARRIVAL BUFFER at the next venue:
           // - Museum/attraction entry (bag check, ticket queue): 10 min
