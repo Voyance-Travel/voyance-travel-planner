@@ -609,9 +609,9 @@ export function ItineraryAssistant({
                     onCheckedChange={setApprovalMode}
                     className="scale-75"
                   />
-                  <Label htmlFor="approval-mode" className="text-muted-foreground cursor-pointer">
-                    {approvalMode ? 'Approve' : 'Direct'}
-                  </Label>
+                   <Label htmlFor="approval-mode" className="text-muted-foreground cursor-pointer">
+                     {approvalMode ? 'Review first' : 'Auto-apply'}
+                   </Label>
                 </div>
               </div>
             </div>
