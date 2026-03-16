@@ -8895,7 +8895,14 @@ ${(() => {
   }
   let result = '';
   if (nonRecurring.length > 0) {
-    result += `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${nonRecurring.join(', ')}`;
+    // CAP to last 40 items to prevent prompt bloat on day 8+
+    const MAX_AVOID_LIST = 40;
+    const capped = nonRecurring.slice(-MAX_AVOID_LIST);
+    const omitted = nonRecurring.length - capped.length;
+    result += `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${capped.join(', ')}`;
+    if (omitted > 0) {
+      result += `\n(Plus ${omitted} more from earlier days — avoid ALL previously visited venues, not just the ones listed above.)`;
+    }
   }
   if (recurring.length > 0) {
     result += `\nTHESE ARE MULTI-DAY EVENTS the traveler is attending across multiple days — YOU MUST CREATE A FULL ATTENDANCE ACTIVITY CARD for each (not just transit): ${recurring.join(', ')}`;
