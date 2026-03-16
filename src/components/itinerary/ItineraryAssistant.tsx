@@ -384,7 +384,7 @@ export function ItineraryAssistant({
           const newActions = [...msg.actions];
           newActions[actionIndex] = { 
             ...newActions[actionIndex], 
-            status: result.success ? 'applied' : 'declined' 
+            status: result.success ? 'applied' : 'failed' 
           };
           return { ...msg, actions: newActions };
         }
