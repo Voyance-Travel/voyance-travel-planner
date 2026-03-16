@@ -318,12 +318,22 @@ export async function handleGenerateTripDay(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const isAbort = err instanceof DOMException && err.name === 'AbortError';
-      console.warn(`[generate-trip-day] Day ${dayNumber} attempt ${attempt + 1} failed${isAbort ? ' (timeout)' : ''}: ${msg}`);
-      lastError = isAbort ? `Day ${dayNumber} timed out after 150s` : msg;
+      const timeoutLabel = dayNumber <= 3 ? '120s' : '180s';
+      console.warn(`[generate-trip-day] Day ${dayNumber} attempt ${attempt + 1} failed${isAbort ? ` (timeout ${timeoutLabel})` : ''}: ${msg}`);
+      lastError = isAbort ? `Day ${dayNumber} timed out after ${timeoutLabel}` : msg;
       if (attempt < MAX_RETRIES) {
         // Longer backoff for infrastructure errors
         const backoffMs = msg.includes('(infra)') || isAbort ? 8000 * (attempt + 1) : 5000 * (attempt + 1);
         await new Promise(r => setTimeout(r, backoffMs));
+        
+        // SLIM PROMPT RETRY for day 4+ after first failure: reduce previousActivities
+        // to last 2 days only to shrink the prompt and avoid AI truncation
+        if (dayNumber >= 4 && attempt >= 1 && previousActivities.length > 15) {
+          const slimCount = Math.min(15, previousActivities.length);
+          const removed = previousActivities.length - slimCount;
+          previousActivities.splice(0, removed);
+          console.log(`[generate-trip-day] Slim prompt retry: reduced previousActivities to ${slimCount} items (removed ${removed})`);
+        }
       }
     }
   }
