@@ -50,8 +50,12 @@ function getCategoryFallback(category?: string, title?: string): string {
   return getActivityFallbackImage(category, title);
 }
 
+// Strip common prefixes to deduplicate cache keys for the same venue
+const STRIP_PREFIXES = /^(visit|explore|discover|tour|see|experience|dinner at|lunch at|breakfast at|stop at|walk to|head to|check out)\s+/i;
+
 function getCacheKey(title: string, destination?: string, cacheId?: string): string {
-  const normalized = `${cacheId || title}-${destination || 'unknown'}`
+  const cleanTitle = (cacheId || title).replace(STRIP_PREFIXES, '').trim();
+  const normalized = `${cleanTitle}-${destination || 'unknown'}`
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '-')
     .slice(0, 80);
