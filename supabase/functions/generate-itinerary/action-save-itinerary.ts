@@ -4,6 +4,8 @@
  */
 
 import { type ActionContext, okJson, errorJson } from './action-types.ts';
+import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
+import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
 
 /** After a leg finishes generating, check if there's a queued next leg and kick it off. */
 export async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<void> {
