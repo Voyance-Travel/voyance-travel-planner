@@ -5559,20 +5559,22 @@ export function EditorialItinerary({
                       }
 
                       applied = true;
+                      // Preserve original cost basis so syncBudgetFromDays writes correct per-person value
+                      const originalBasis = typeof act.cost === 'object' && act.cost !== null
+                        ? (act.cost as any).basis
+                        : undefined;
                       return {
                         ...act,
                         title: suggestion.suggested_swap,
                         name: suggestion.suggested_swap,
                         description: suggestion.suggested_description || suggestion.suggested_swap,
                         cost: typeof act.cost === 'object' && act.cost !== null
-                          ? { ...(act.cost as any), amount: newCostWhole }
+                          ? { ...(act.cost as any), amount: newCostWhole, basis: originalBasis }
                           : newCostWhole,
-                        // Update location name so dining venue display reflects the swap
                         location: {
                           ...(act.location || {}),
                           name: suggestion.suggested_swap,
                         },
-                        // Clear stale Voyance intelligence from old activity
                         tips: undefined,
                         voyanceInsight: undefined,
                         isVoyancePick: false,
@@ -5585,29 +5587,15 @@ export function EditorialItinerary({
                 return updated;
               });
 
-              // Sync activity_costs outside of setDays updater
+              // Let syncBudgetFromDays handle ALL writes to activity_costs.
+              // Do NOT call upsertActivityCost directly — it ignores cost basis
+              // and can double-count flat-rate items.
               if (updatedDays.length > 0) {
                 syncBudgetFromDays(updatedDays);
               }
 
               if (applied) {
                 setHasChanges(true);
-                // Write the new cost to activity_costs table (single source of truth)
-                try {
-                  // activity_id is now TEXT — no UUID guard needed
-                  const { upsertActivityCost } = await import('@/services/activityCostService');
-                  await upsertActivityCost({
-                    trip_id: tripId,
-                    activity_id: suggestion.activity_id,
-                    day_number: suggestion.day_number,
-                    cost_per_person_usd: newCostWhole,
-                    num_travelers: travelers,
-                    category: 'activity',
-                    source: 'reference',
-                  });
-                } catch (e) {
-                  console.warn('Failed to write swap cost to activity_costs:', e);
-                }
 
                 // Re-sync budget ledger so summary reflects the swap
                 try {
@@ -5637,8 +5625,10 @@ export function EditorialItinerary({
                 } catch (e) {
                   console.warn('Budget ledger re-sync after swap failed:', e);
                 }
+
+                return true; // Signal success to BudgetCoach
               } else {
-                toast.error('Swap skipped because suggested cost was not lower.');
+                return false; // Signal failure — swap was blocked
               }
             }}
           />
