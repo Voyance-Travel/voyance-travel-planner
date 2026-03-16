@@ -443,7 +443,7 @@ export default function About() {
         </div>
       </section>
 
-      {/* Who's Behind It */}
+      {/* The People Behind Voyance */}
       <section className="py-12 md:py-24 bg-background relative overflow-hidden">
         <div className="absolute top-1/2 left-1/4 w-64 h-64 bg-primary/3 rounded-full blur-3xl" />
         
@@ -454,23 +454,123 @@ export default function About() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Who's Behind It</span>
+              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">The People Behind Voyance</span>
               <div className="mt-4 md:mt-8 space-y-4 md:space-y-6 text-sm md:text-lg leading-relaxed">
+                <p className="text-foreground font-medium text-lg md:text-xl">
+                  We're not a big tech company. We're two travelers who got tired of generic recommendations and decided to build something better.
+                </p>
                 <p className="text-muted-foreground">
-                  Voyance is being built by a small team across engineering, AI, and design, focused on accuracy, 
-                  performance, and a premium experience.
+                  Voyance started because we kept running into the same problem - every travel app gave us the same recycled lists. The same "top 10" articles. The same recommendations that felt like they were written by someone who had never actually been there. We wanted a travel planner that felt like getting advice from a friend who just got back from the trip. So we built one.
                 </p>
-                <p className="text-foreground font-medium">
-                  If you're joining now, you're joining at the ground floor. Your feedback will shape 
-                  what Voyance becomes.
+                <p className="text-muted-foreground">
+                  Every Voyance Pick in our system is a place we've personally been to. Every Founder's Guide is written from real trips, real meals, and real opinions. We don't recommend what we haven't tried.
                 </p>
-              </div>
-              
-              {/* Signature */}
-              <div className="mt-8 md:mt-12 pt-6 md:pt-8 border-t border-border/50">
-                <p className="text-foreground font-serif text-lg md:text-xl">The Voyance Team</p>
               </div>
             </motion.div>
+
+            {/* Ashton */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="mt-12 md:mt-16"
+            >
+              <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start">
+                <div
+                  className="relative overflow-hidden rounded-xl w-40 h-40 md:w-48 md:h-48 shrink-0 mx-auto md:mx-0"
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  <img
+                    src={ashtonHeadshot}
+                    alt="Ashton Lightfoot"
+                    className="w-full h-full object-cover pointer-events-none select-none"
+                    draggable={false}
+                  />
+                  <div className="absolute inset-0" />
+                </div>
+                <div className="space-y-3 text-sm md:text-base leading-relaxed">
+                  <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Ashton Lightfoot, Co-Founder</h3>
+                  <p className="text-muted-foreground">
+                    Ashton is the product mind behind Voyance. She comes from a career in product management in the tech industry, where she spent years figuring out how to build things people actually want to use. She's currently earning her Executive MBA at Georgia Tech with a specialization in technology - so when she's not building Voyance, she's studying how to build it better.
+                  </p>
+                  <p className="text-muted-foreground">
+                    But the real reason Voyance exists is that Ashton loves to travel. London has her heart. She's a self-described Paris girly. She would fly back to Vienna tomorrow just to eat cheese-stuffed hot dogs from a street stand. Her Founder's Guides across seven cities are written the way she talks - honest, specific, and always leading with what she actually loved.
+                  </p>
+                  <p className="text-foreground font-medium italic">
+                    She believes the best travel advice comes from someone who's been there, ordered the wrong thing at least once, and can tell you exactly what to get instead.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Clinton */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="mt-12 md:mt-16"
+            >
+              <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start">
+                <div
+                  className="relative overflow-hidden rounded-xl w-40 h-40 md:w-48 md:h-48 shrink-0 mx-auto md:mx-0"
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  <img
+                    src={clintonHeadshot}
+                    alt="Clinton Brooks"
+                    className="w-full h-full object-cover pointer-events-none select-none"
+                    draggable={false}
+                  />
+                  <div className="absolute inset-0" />
+                </div>
+                <div className="space-y-3 text-sm md:text-base leading-relaxed">
+                  <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Clinton Brooks, Co-Founder</h3>
+                  <p className="text-muted-foreground">
+                    Clinton is the finance half of Voyance. While Ashton is obsessing over which tiny sushi counter in London has only 20 seats, Clinton makes sure the business behind it all actually works.
+                  </p>
+                  <p className="text-muted-foreground">
+                    He and Ashton have traveled together across the US, Europe, North Africa, the Caribbean, and Japan. A lot of the places in Voyance's curator picks are spots they discovered side by side - from a hidden yakiniku restaurant in Vienna that seats six people to a legendary food market in Barcelona they both want to go back to.
+                  </p>
+                  <p className="text-muted-foreground">
+                    His background in finance means Voyance is built to last, not just built to launch. He handles the business strategy and operations so the product can stay focused on what matters - giving travelers recommendations they can actually trust.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Graham */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="mt-12 md:mt-16"
+            >
+              <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start">
+                <div
+                  className="relative overflow-hidden rounded-xl w-40 h-40 md:w-48 md:h-48 shrink-0 mx-auto md:mx-0"
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  <img
+                    src={grahamHeadshot}
+                    alt="Graham the Yorkie"
+                    className="w-full h-full object-cover pointer-events-none select-none"
+                    draggable={false}
+                  />
+                  <div className="absolute inset-0" />
+                </div>
+                <div className="space-y-3 text-sm md:text-base leading-relaxed">
+                  <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Graham, Chief Inspiration Officer</h3>
+                  <p className="text-muted-foreground">
+                    Graham is the Yorkie who's been there for every late-night building session, every trip-planning marathon, and every "should we really do this?" conversation. He hasn't technically been to all the cities in our guides, but he's been part of making Voyance happen from day one. And yes, he has his own travel wardrobe.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Signature */}
+            <div className="mt-10 md:mt-14 pt-6 md:pt-8 border-t border-border/50">
+              <p className="text-foreground font-serif text-lg md:text-xl">The Voyance Team</p>
+            </div>
           </div>
         </div>
       </section>
