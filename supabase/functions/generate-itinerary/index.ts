@@ -1482,6 +1482,8 @@ import {
   sanitizeActivityTitles,
   detectMealSlots,
   enforceRequiredMealsFinalGuard,
+  isChainRestaurant,
+  filterChainRestaurants,
   type DayValidationResult,
   type StrictDayMinimal,
 } from './day-validation.ts';
