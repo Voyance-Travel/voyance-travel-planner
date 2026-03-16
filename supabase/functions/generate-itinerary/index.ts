@@ -2895,8 +2895,29 @@ Generate activities for this day following ALL constraints above.`;
           dayMealPolicy.dayMode,
         );
         if (!mealGuardResult.alreadyCompliant) {
+          // If NOT the last attempt, treat meal guard firing as a retry trigger
+          // instead of silently accepting placeholders
+          if (!isLastAttempt) {
+            const missingList = mealGuardResult.injectedMeals.map(m => m.toUpperCase()).join(', ');
+            console.warn(`[Stage 2] Day ${dayNumber}: Meal guard detected missing [${missingList}] — triggering retry instead of accepting placeholders`);
+            // Add specific meal-missing errors to trigger a focused retry
+            lastValidation = {
+              isValid: false,
+              errors: [
+                `🚨 MISSING MEALS: Your response is missing ${missingList} dining activities. You MUST include a REAL, NAMED restaurant for each of: ${missingList}. Generic names like "Local Café" or "Breakfast spot" are NOT acceptable. Include the actual restaurant name, category="dining", and the meal type keyword in the title.`
+              ],
+              warnings: [],
+            };
+            lastError = new Error(`Meal guard fired: missing [${missingList}]`);
+            console.log(`[Stage 2] Day ${dayNumber} missing meals [${missingList}], retrying (attempt ${attempt + 1})...`);
+            if (attempt < maxRetries) {
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+            }
+            continue;
+          }
+          // Last attempt — accept the guard fallbacks
           generatedDay.activities = mealGuardResult.activities as any;
-          console.warn(`[Stage 2] Day ${dayNumber}: Meal guard injected [${mealGuardResult.injectedMeals.join(', ')}]`);
+          console.warn(`[Stage 2] Day ${dayNumber}: FINAL ATTEMPT — Meal guard injected [${mealGuardResult.injectedMeals.join(', ')}] (destination-aware fallbacks)`);
         } else {
           console.log(`[Stage 2] Day ${dayNumber}: Meal guard passed — all required meals present`);
         }
