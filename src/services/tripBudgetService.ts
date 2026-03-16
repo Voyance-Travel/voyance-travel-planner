@@ -297,20 +297,27 @@ export async function updateTripBudgetSettings(
  * Maps activity_costs rows to the BudgetLedgerEntry interface for UI compatibility.
  */
 export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry[]> {
-  const { data, error } = await supabase
-    .from('activity_costs')
-    .select('*')
-    .eq('trip_id', tripId)
-    .order('day_number', { ascending: true, nullsFirst: true })
-    .order('created_at', { ascending: true });
+  const [costsResult, totalResult] = await Promise.all([
+    supabase
+      .from('activity_costs')
+      .select('*')
+      .eq('trip_id', tripId)
+      .order('day_number', { ascending: true, nullsFirst: true })
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('v_trip_total')
+      .select('total_all_travelers_usd')
+      .eq('trip_id', tripId)
+      .maybeSingle(),
+  ]);
   
-  if (error) {
-    console.error('[BudgetService] Error fetching ledger from activity_costs:', error);
+  if (costsResult.error) {
+    console.error('[BudgetService] Error fetching ledger from activity_costs:', costsResult.error);
     return [];
   }
   
   // Map activity_costs rows → BudgetLedgerEntry shape for UI compatibility
-  return (data || []).map((row: any) => {
+  const entries: BudgetLedgerEntry[] = (costsResult.data || []).map((row: any) => {
     const costPerPerson = Number(row.cost_per_person_usd) || 0;
     const numTravelers = Number(row.num_travelers) || 1;
     const totalCents = Math.round(costPerPerson * numTravelers * 100);
@@ -333,6 +340,23 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
       updated_at: row.updated_at || new Date().toISOString(),
     };
   });
+
+  // Largest-remainder adjustment: ensure ledger item sum matches canonical DB total
+  if (entries.length > 0 && totalResult.data) {
+    const canonicalCents = Math.round((Number(totalResult.data.total_all_travelers_usd) || 0) * 100);
+    const rawSum = entries.reduce((s, e) => s + e.amount_cents, 0);
+    const diff = canonicalCents - rawSum;
+    if (diff !== 0 && Math.abs(diff) <= entries.length) {
+      // Apply adjustment to the largest entry
+      let largestIdx = 0;
+      for (let i = 1; i < entries.length; i++) {
+        if (entries[i].amount_cents > entries[largestIdx].amount_cents) largestIdx = i;
+      }
+      entries[largestIdx].amount_cents += diff;
+    }
+  }
+
+  return entries;
 }
 
 /**
