@@ -5498,6 +5498,7 @@ export function EditorialItinerary({
                           onDismissRefresh={() => setRefreshResults(prev => { const next = { ...prev }; delete next[selectedDay.dayNumber]; return next; })}
                           onApplyRefreshChanges={(changes) => handleApplyRefreshChanges(selectedDayIndex, changes)}
                           onPhotoResolved={reportPhoto}
+                          isManualMode={isManualMode}
                         />
                       )}
                     </>
@@ -8159,6 +8160,8 @@ interface DayCardProps {
    isModalEditing?: boolean;
    /** Callback to report resolved photo for batch write-back */
    onPhotoResolved?: (activityId: string, photoUrl: string) => void;
+   /** Manual builder mode — skip real photo fetching to avoid API costs */
+   isManualMode?: boolean;
 }
 
 function DayCard({
@@ -8220,6 +8223,7 @@ function DayCard({
   isCleanPreview = false,
   isModalEditing = false,
   onPhotoResolved,
+  isManualMode = false,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -8673,6 +8677,7 @@ function DayCard({
                           isPastTrip={isPastTrip}
                           isCleanPreview={isCleanPreview}
                           onPhotoResolved={onPhotoResolved}
+                          isManualMode={isManualMode}
                         />
                       </div>
                     </div>
@@ -8719,6 +8724,7 @@ function DayCard({
                         compact={compactCards}
                         isPastTrip={isPastTrip}
                           onPhotoResolved={onPhotoResolved}
+                          isManualMode={isManualMode}
                         />
                     </div>
                     {/* Compact transit gap indicator between activities */}
@@ -8952,10 +8958,12 @@ interface ActivityRowProps {
   compact?: boolean;
   /** Whether this is a past trip — shows guide bookmark button */
   isPastTrip?: boolean;
-  /** Clean preview mode — magazine-style reading card */
-  isCleanPreview?: boolean;
-  /** Callback to report a resolved photo URL for batch write-back */
-  onPhotoResolved?: (activityId: string, photoUrl: string) => void;
+   /** Clean preview mode — magazine-style reading card */
+   isCleanPreview?: boolean;
+   /** Callback to report a resolved photo URL for batch write-back */
+   onPhotoResolved?: (activityId: string, photoUrl: string) => void;
+   /** Manual builder mode — skip real photo fetching to avoid API costs */
+   isManualMode?: boolean;
 }
 
 function ActivityRow({
@@ -9000,6 +9008,7 @@ function ActivityRow({
   isPastTrip = false,
   isCleanPreview = false,
   onPhotoResolved,
+  isManualMode = false,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -9127,7 +9136,7 @@ function ActivityRow({
   
   // Fetch real photos for most activities, including hotels (but not generic check-ins without hotel name)
   const hasHotelName = hotelName && hotelName.length > 3 && !hotelName.toLowerCase().includes('hotel check');
-  const shouldFetchRealPhoto = canViewPremium && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
+  const shouldFetchRealPhoto = canViewPremium && !isManualMode && showThumbnail && !isAirport && (hasHotelName || (!isCheckIn && !isAccommodation));
   
   const { imageUrl: fetchedImageUrl, loading: imageLoading } = useActivityImage(
     isHotelActivity && hasHotelName ? `${hotelName} hotel` : effectiveSearchTerm,

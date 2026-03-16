@@ -1,6 +1,6 @@
 /**
  * Hook for fetching activity photos using tiered real photo sources
- * Priority: Cache → Curated DB → Google Places → TripAdvisor → Wikimedia → AI (last resort)
+ * Priority: Cache → Attractions/Activities DB → Curated DB → Google Places → TripAdvisor → Wikimedia → AI (last resort)
  * Falls back to static type-based images when no real photo is available.
  */
 import { useState, useEffect, useRef } from 'react';
@@ -40,8 +40,6 @@ const imageCache = new Map<string, { url: string; source: string }>();
 // Pending requests to dedupe concurrent fetches
 const pendingRequests = new Map<string, Promise<{ url: string; source: string } | null>>();
 
-// persistedActivityIds and UUID_REGEX removed — persistence now handled by useActivityImageWriteback
-
 function getCategoryFallback(category?: string, title?: string): string {
   return getActivityFallbackImage(category, title);
 }
@@ -58,10 +56,70 @@ function getCacheKey(title: string, destination?: string, cacheId?: string): str
   return normalized;
 }
 
-// persistPhotoToActivity removed — photos are now written back to
-// itinerary_data via useActivityImageWriteback at the itinerary level.
+// ── Cross-share: Check attractions & activities tables ───────────────────────
+async function fetchFromSharedTables(
+  title: string,
+  destination: string
+): Promise<{ url: string; source: string } | null> {
+  try {
+    const cleanTitle = title.replace(STRIP_PREFIXES, '').trim();
+    if (cleanTitle.length < 3) return null;
 
-// ── NEW: Check curated_images table ──────────────────────────────────────────
+    // Try attractions table first (higher quality data)
+    const { data: attraction } = await supabase
+      .from('attractions')
+      .select('image_url, name')
+      .not('image_url', 'is', null)
+      .ilike('name', `%${cleanTitle}%`)
+      .limit(1);
+
+    if (attraction?.[0]?.image_url) {
+      return { url: attraction[0].image_url, source: 'shared_attraction' };
+    }
+
+    // Try activities table
+    const { data: activity } = await supabase
+      .from('activities')
+      .select('image_url, name')
+      .not('image_url', 'is', null)
+      .ilike('name', `%${cleanTitle}%`)
+      .limit(1);
+
+    if (activity?.[0]?.image_url) {
+      return { url: activity[0].image_url, source: 'shared_activity' };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Write-back resolved photo to shared tables (fire-and-forget) ─────────────
+function writeBackToSharedTables(title: string, photoUrl: string): void {
+  const cleanTitle = title.replace(STRIP_PREFIXES, '').trim();
+  if (cleanTitle.length < 3 || photoUrl.startsWith('data:')) return;
+
+  // Try to match and update attractions table
+  supabase
+    .from('attractions')
+    .update({ image_url: photoUrl })
+    .is('image_url', null)
+    .ilike('name', cleanTitle)
+    .then(({ error }) => {
+      if (!error) {
+        // Also try activities table
+        supabase
+          .from('activities')
+          .update({ image_url: photoUrl })
+          .is('image_url', null)
+          .ilike('name', cleanTitle)
+          .then(() => { /* fire-and-forget */ });
+      }
+    });
+}
+
+// ── Check curated_images table ──────────────────────────────────────────────
 async function fetchFromCuratedImages(
   title: string,
   category: string,
@@ -201,13 +259,17 @@ export function useActivityImage(
     setImageUrl(getCategoryFallback(category, title));
     setLoading(true);
 
-    // NEW: Tiered fetch — curated_images DB first, then edge function
+    // Tiered fetch: shared tables → curated_images → edge function
     const fetchPromise = (async (): Promise<{ url: string; source: string } | null> => {
-      // 3. Try curated_images table first (fast, stable URLs)
+      // 3. Try attractions/activities tables (cross-user shared photos — zero cost)
+      const shared = await fetchFromSharedTables(title, destination);
+      if (shared) return shared;
+
+      // 4. Try curated_images table (fast, stable URLs)
       const curated = await fetchFromCuratedImages(title, category || 'activity', destination);
       if (curated) return curated;
 
-      // 4. Fall back to edge function (Google Places, etc.)
+      // 5. Fall back to edge function (Google Places, etc.)
       return fetchImageFromBackend(title, category || 'activity', destination);
     })();
 
@@ -224,7 +286,10 @@ export function useActivityImage(
           setImageUrl(result.url);
           setSource(result.source);
 
-          // Photo persistence is now handled by useActivityImageWriteback
+          // Write-back to shared tables so future users get this for free
+          if (result.source !== 'shared_attraction' && result.source !== 'shared_activity') {
+            writeBackToSharedTables(title, result.url);
+          }
         } else {
           setSource('fallback');
         }
