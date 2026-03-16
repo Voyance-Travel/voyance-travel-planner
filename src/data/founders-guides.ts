@@ -369,6 +369,61 @@ Vegas rewards you for knowing where to go. The difference between a forgettable 
 
 *This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
   },
+  {
+    slug: 'atlanta',
+    title: "Founder's Guide: Atlanta",
+    subtitle: 'A restaurant city that punches well above its weight.',
+    destination: 'Atlanta',
+    coverImage: toSiteImageUrlFromPhotoId('photo-1575917649111-0cee4e0e8b22'),
+    authorName: 'Ashton Lightfoot',
+    authorTitle: 'Co-Founder of Voyance',
+    readTime: '6 min read',
+    tags: ['Atlanta', 'Food', 'Restaurants', 'Day Trips', 'Georgia'],
+    summary: "A local's guide to Atlanta — world-class dining, iconic attractions, and hidden gems from someone who lives here.",
+    content: `# Founder's Guide: Atlanta
+
+Atlanta is home. I live here, and I think I take it for granted sometimes. But when friends visit and I have to actually think about what to recommend, I realize this city has so much going for it. The dining scene here is deep. Atlanta doesn't get the credit it deserves nationally, but people who know food know that this city punches well above its weight.
+
+## What to See
+
+**Georgia Aquarium** is the largest aquarium in the Western Hemisphere, and the whale shark gallery is worth the trip alone. Stand at the big window on the lower level and just watch. Go on a weekday morning to avoid the crowds. You come into the city and this is the must-do.
+
+**World of Coca-Cola** is right next to the Aquarium, so pair them. I'm a Coke addict, so this makes sense for me. The tasting room where you try Coke products from around the world is the best part. Try the Beverly from Italy - it's legendarily terrible, and that's the whole point.
+
+**Piedmont Park** is Atlanta's Central Park. Walk the Active Oval loop for the best skyline views. The Saturday Green Market runs March through December and is worth timing around.
+
+## Where to Eat
+
+This is where Atlanta really shines. I have strong opinions here.
+
+**Atlas** inside the St. Regis - if you're feeling really bougie, I love Atlas. The art collection alone is stunning. This is a dress-up, special-occasion spot. If you're celebrating something, this is where you go.
+
+**Bacchanalia** is Atlanta's most celebrated restaurant. James Beard recognized, chef-driven, seasonal prix fixe. It's been the city's best for decades and it still earns it. Book two to three weeks ahead.
+
+**Omakase Table** is the best sushi experience in Atlanta and one of my favorites. It's probably the most expensive spot on this list, but if you're a sushi fan, it will change your life. Book the counter seats and let the chef guide you. Trust the process.
+
+**Chops Lobster Bar** is my go-to steakhouse, but here's the real move: skip the main dining room and go to the Lobster Bar downstairs. Better vibe, and the lobster bisque is a must.
+
+**Taqueria Del Sol** is always a great vibe. Counter service, creative fillings with a Southern twist, lines out the door at lunch. The chicken taco and the brisket taco are the staples. Get the jalapeno coleslaw. Lines move fast. Just good food, good energy.
+
+**Barcelona Wine Bar** in Inman Park is excellent. Perfect for a date night. Spanish tapas, great wine list, warm energy. Sit at the bar if you're a couple and let the sommelier pick your wine.
+
+**Little Sparrow** is a solid neighborhood spot, but the real reason to go is **Bar Blanc** upstairs. Everything at Bar Blanc is upstairs. They do one of the best steak frites in the city - and I think the fries are unlimited. I actually want to go right now just thinking about it. This is the hidden Atlanta move that most visitors and even some locals don't know about.
+
+**Marcel** has a great atmosphere - art deco design, good cocktails, and a see-and-be-seen crowd. A fun spot to go out and enjoy the vibe.
+
+## Day Trip
+
+**Chateau Elan Winery** is about an hour north of the city and makes a great day trip. French-inspired estate with wine tastings, a spa, golf courses, and nice grounds to walk. If you stay overnight, the spa is excellent. Start your trip this way if you're coming in from the north.
+
+## The Takeaway
+
+Atlanta is a restaurant city. That's what makes it great. The fine dining is world-class (Bacchanalia, Atlas, Omakase Table), the casual spots have serious followings (Taqueria Del Sol, Little Sparrow), and there are hidden gems like Bar Blanc that make you feel like you're in on a secret.
+
+If you're visiting, build your trip around the food. See the Aquarium, walk Piedmont Park, but eat your way through the city. That's the real Atlanta.
+
+*This guide is based on my real experiences. I live here. Every recommendation is a place I've personally been to - most of them, many times. That's the Voyance promise - we don't recommend what we haven't tried.*`,
+  },
 ];
 
 export function getFoundersGuides(): FoundersGuide[] {
