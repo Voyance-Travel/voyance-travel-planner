@@ -646,6 +646,7 @@ export function ItineraryAssistant({
                           const isPending = action.status === 'pending';
                           const isApplied = action.status === 'applied';
                           const isDeclined = action.status === 'declined';
+                          const isFailed = action.status === 'failed';
                           const actionId = `${message.id}-${idx}`;
                           const isThisExecuting = executingActionId === actionId;
 
