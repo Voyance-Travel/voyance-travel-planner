@@ -133,10 +133,11 @@ export function useTripHeroImage({
     return () => { cancelled = true; };
   }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, canonicalFetched, canonicalUrl]);
 
-  // Fetch from API if DB curated images aren't available either
+  // Fetch from API if canonical, curated, and DB curated aren't available
   useEffect(() => {
     const shouldFetch = 
       (!seededHeroUrl || seededFailed) && 
+      canonicalFetched && !canonicalUrl &&
       !hasCurated && 
       dbCuratedFetched && !dbCuratedUrl &&
       !apiFetched;
@@ -168,13 +169,12 @@ export function useTripHeroImage({
     return () => {
       cancelled = true;
     };
-  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched]);
+  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, dbCuratedUrl, apiFetched, canonicalFetched, canonicalUrl]);
 
   // Determine current image URL based on fallback chain
   const getImageUrl = (): { url: string; source: UseTripHeroImageResult['source'] } => {
     // 1. Seeded hero (if not failed AND not a known-broken Unsplash URL)
     if (seededHeroUrl && !seededFailed) {
-      // Treat dead Unsplash URLs as failed so we skip straight to curated/API
       if (/images\.unsplash\.com/.test(seededHeroUrl)) {
         // Unsplash CDN URLs break silently — treat seeded as failed
       } else {
@@ -182,22 +182,27 @@ export function useTripHeroImage({
       }
     }
 
-    // 2. Curated images (if available and not all failed)
+    // 2. Canonical destination hero (shared single source of truth)
+    if (canonicalUrl && !canonicalFailed) {
+      return { url: canonicalUrl, source: 'db_curated' };
+    }
+
+    // 3. Curated images — pinned to [0], no rotation
     if (hasCurated && !curatedFailed && curatedImages[curatedIndex]) {
       return { url: curatedImages[curatedIndex], source: 'curated' };
     }
 
-    // 3. DB curated image (admin-managed)
+    // 4. DB curated image (admin-managed curated_images table)
     if (dbCuratedUrl && !dbCuratedFailed) {
       return { url: dbCuratedUrl, source: 'db_curated' };
     }
 
-    // 4. API fetched image
+    // 5. API fetched image
     if (apiImageUrl && !apiFailed) {
       return { url: apiImageUrl, source: 'api' };
     }
 
-    // 5. Gradient fallback
+    // 6. Gradient fallback
     return { 
       url: generateDestinationGradient(tripId || destination), 
       source: 'gradient' 
