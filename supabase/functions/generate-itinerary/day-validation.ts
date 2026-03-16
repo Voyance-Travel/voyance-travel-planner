@@ -315,7 +315,11 @@ export function validateGeneratedDay(
         for (const prevConcept of previousConcepts) {
           if (conceptSimilarity(actConcept, prevConcept)) {
             if (isRecurringEvent(act, mustDoActivities)) continue;
-            errors.push(`MEAL REPEAT: "${act.title}" is too similar to a meal from a previous day. Each day should feature DIFFERENT restaurants.`);
+            if (isSmartFinish) {
+              warnings.push(`MEAL REPEAT: "${act.title}" is similar to a meal from a previous day - consider variety`);
+            } else {
+              errors.push(`MEAL REPEAT: "${act.title}" is too similar to a meal from a previous day. Each day should feature DIFFERENT restaurants.`);
+            }
             break;
           }
         }
