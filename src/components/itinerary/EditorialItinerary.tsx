@@ -9109,6 +9109,13 @@ function ActivityRow({
 
   const thumbnailUrl = fetchedImageUrl;
   const [thumbnailError, setThumbnailError] = useState(false);
+
+  // Report resolved photo for batch write-back to itinerary_data
+  useEffect(() => {
+    if (fetchedImageUrl && !imageLoading && onPhotoResolved && activity.id) {
+      onPhotoResolved(activity.id, fetchedImageUrl);
+    }
+  }, [fetchedImageUrl, imageLoading, onPhotoResolved, activity.id]);
   // Library modal state removed - agent features disabled
 
   // ── Clean Preview Mode — magazine-style reading card ────────────────
