@@ -8724,6 +8724,7 @@ function DayCard({
                         compact={compactCards}
                         isPastTrip={isPastTrip}
                           onPhotoResolved={onPhotoResolved}
+                          isManualMode={isManualMode}
                         />
                     </div>
                     {/* Compact transit gap indicator between activities */}
