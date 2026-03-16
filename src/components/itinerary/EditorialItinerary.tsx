@@ -1305,7 +1305,7 @@ export function EditorialItinerary({
     }));
 
     // Sync to activity_costs table (single source of truth for all cost totals)
-    import('@/services/activityCostService').then(({ syncActivitiesToCostTable }) => {
+    import('@/services/activityCostService').then(async ({ syncActivitiesToCostTable, cleanupRemovedActivityCosts }) => {
       const activitiesForCostTable: Array<{
         id: string;
         dayNumber: number;
@@ -1336,8 +1336,22 @@ export function EditorialItinerary({
       }
 
       if (activitiesForCostTable.length > 0) {
-        syncActivitiesToCostTable(tripId, activitiesForCostTable)
-          .catch(err => console.error('[EditorialItinerary] Activity cost sync failed:', err));
+        try {
+          const synced = await syncActivitiesToCostTable(tripId, activitiesForCostTable);
+          console.log(`[EditorialItinerary] Synced ${synced}/${activitiesForCostTable.length} activity costs`);
+          
+          // Clean up orphaned rows (stale activities no longer in the itinerary)
+          const currentIds = activitiesForCostTable.map(a => a.id);
+          const cleaned = await cleanupRemovedActivityCosts(tripId, currentIds);
+          if (cleaned > 0) {
+            console.log(`[EditorialItinerary] Cleaned ${cleaned} orphaned cost rows`);
+          }
+          
+          // Refetch financial snapshot so Budget tab updates immediately
+          window.dispatchEvent(new CustomEvent('booking-changed'));
+        } catch (err) {
+          console.error('[EditorialItinerary] Activity cost sync failed:', err);
+        }
       }
     });
   }, [tripId, queryClient, travelers]);
@@ -5488,6 +5502,7 @@ export function EditorialItinerary({
             destination={destination}
             journeyId={journeyId}
             journeyName={journeyName}
+            jsTotalCostCents={Math.round(jsTotalCost * (travelers || 1) * 100)}
             onActivityRemove={(activityId) => {
               // Remove the activity from itinerary days when deleted from budget
               setDays(prev => {

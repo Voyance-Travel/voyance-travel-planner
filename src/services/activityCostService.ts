@@ -358,16 +358,42 @@ export async function syncActivitiesToCostTable(
     cost_reference_id: a.costReferenceId || null,
   }));
 
-  const { data, error } = await supabase
-    .from('activity_costs')
-    .upsert(rows, { onConflict: 'trip_id,activity_id' })
-    .select();
+  // Split into chunks of 20 to prevent single-batch failures
+  const CHUNK_SIZE = 20;
+  let totalSynced = 0;
 
-  if (error) {
-    console.error('syncActivitiesToCostTable error:', error);
-    return 0;
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + CHUNK_SIZE);
+    try {
+      const { data, error } = await supabase
+        .from('activity_costs')
+        .upsert(chunk, { onConflict: 'trip_id,activity_id' })
+        .select();
+
+      if (error) {
+        console.error(`[syncActivitiesToCostTable] Chunk ${i / CHUNK_SIZE + 1} batch failed, falling back to row-by-row:`, error);
+        // Fallback: try each row individually
+        for (const row of chunk) {
+          try {
+            const { error: rowErr } = await supabase
+              .from('activity_costs')
+              .upsert(row, { onConflict: 'trip_id,activity_id' });
+            if (!rowErr) totalSynced++;
+            else console.error(`[syncActivitiesToCostTable] Row failed (${row.activity_id}):`, rowErr);
+          } catch (rowEx) {
+            console.error(`[syncActivitiesToCostTable] Row exception (${row.activity_id}):`, rowEx);
+          }
+        }
+      } else {
+        totalSynced += data?.length || 0;
+      }
+    } catch (chunkEx) {
+      console.error(`[syncActivitiesToCostTable] Chunk ${i / CHUNK_SIZE + 1} exception:`, chunkEx);
+    }
   }
-  return data?.length || 0;
+
+  console.log(`[syncActivitiesToCostTable] Synced ${totalSynced}/${rows.length} rows for trip ${tripId}`);
+  return totalSynced;
 }
 
 /**
