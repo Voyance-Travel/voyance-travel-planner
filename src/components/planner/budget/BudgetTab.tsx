@@ -260,7 +260,39 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   } = useTripBudget({ tripId, totalDays, enabled: true });
 
   // ─── Financial snapshot: single source of truth for expected spend ───
-  const snapshot = useTripFinancialSnapshot(tripId);
+  const rawSnapshot = useTripFinancialSnapshot(tripId);
+  
+  // Fallback: if DB snapshot is suspiciously low vs JS-calculated total, use JS total
+  const snapshot = useMemo(() => {
+    if (jsTotalCostCents && jsTotalCostCents > 0 && rawSnapshot.tripTotalCents > 0) {
+      const ratio = rawSnapshot.tripTotalCents / jsTotalCostCents;
+      if (ratio < 0.2) {
+        // DB has less than 20% of JS total — likely stale/incomplete sync
+        console.warn(`[BudgetTab] Snapshot stale: DB=${rawSnapshot.tripTotalCents}c vs JS=${jsTotalCostCents}c, using JS fallback`);
+        const toBePaid = Math.max(0, jsTotalCostCents - rawSnapshot.paidCents);
+        return {
+          ...rawSnapshot,
+          tripTotalCents: jsTotalCostCents,
+          toBePaidCents: toBePaid,
+          plannedUnpaidCents: toBePaid,
+          budgetRemainingCents: rawSnapshot.budgetTotalCents - jsTotalCostCents,
+          paidPercent: jsTotalCostCents > 0 ? Math.min((rawSnapshot.paidCents / jsTotalCostCents) * 100, 100) : 0,
+        };
+      }
+    }
+    // Also fallback when snapshot is 0 but JS has data
+    if (rawSnapshot.tripTotalCents === 0 && jsTotalCostCents && jsTotalCostCents > 0) {
+      return {
+        ...rawSnapshot,
+        tripTotalCents: jsTotalCostCents,
+        toBePaidCents: jsTotalCostCents,
+        plannedUnpaidCents: jsTotalCostCents,
+        budgetRemainingCents: rawSnapshot.budgetTotalCents - jsTotalCostCents,
+        paidPercent: 0,
+      };
+    }
+    return rawSnapshot;
+  }, [rawSnapshot, jsTotalCostCents]);
 
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
