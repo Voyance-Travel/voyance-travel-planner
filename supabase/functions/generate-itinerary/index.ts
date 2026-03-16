@@ -1566,6 +1566,7 @@ async function generateSingleDayWithRetry(
     isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with "Hotel Check-in & Refresh" (category: accommodation) as the FIRST activity. Do NOT include an "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" activity — arrival logistics are handled by a separate UI component. Start the day with hotel check-in, then proceed to real activities.' : '',
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
     '13. **HOTEL FIDELITY — CRITICAL**: If a specific hotel name and address are provided in the accommodation section, you MUST use that EXACT hotel name for ALL accommodation activities (check-in, return to hotel, freshen up, checkout, etc.). Do NOT invent, substitute, or suggest a different hotel. The user has already booked their accommodation.',
+    '14. **NO KEYWORD STUFFING**: Activity titles must be concise (max 8 words). NEVER pad titles with synonym lists of location types (e.g., "borough town place locale district quarter sector area"). Use the specific venue or activity name only.',
   ].filter(Boolean).join('\n');
 
   // Build list of previous experience types for stricter rejection
