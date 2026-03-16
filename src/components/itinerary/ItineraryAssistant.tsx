@@ -657,6 +657,7 @@ export function ItineraryAssistant({
                                 "transition-all",
                                 isApplied && "border-green-500/50 bg-green-500/5",
                                 isDeclined && "opacity-50",
+                                isFailed && "border-destructive/50 bg-destructive/5",
                                 isThisExecuting && "border-primary/50 animate-pulse"
                               )}
                             >
