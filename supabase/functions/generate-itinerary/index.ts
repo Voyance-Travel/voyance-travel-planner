@@ -8351,7 +8351,7 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
             return locked;
           })(),
         };
-        const dayMealPolicy = deriveMealPolicy(dayMealInput);
+        dayMealPolicy = deriveMealPolicy(dayMealInput);
         const mealRequirementsBlock = buildMealRequirementsPrompt(dayMealPolicy);
         
         console.log(`[generate-day] Day ${dayNumber} meal policy: mode=${dayMealPolicy.dayMode}, meals=[${dayMealPolicy.requiredMeals.join(',')}], usableHours=${dayMealPolicy.usableHours}`);
