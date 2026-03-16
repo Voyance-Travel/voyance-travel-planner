@@ -10378,6 +10378,31 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           }
         }
 
+        // ====================================================================
+        // MEAL FINAL GUARD — Last line of defense for generate-day path
+        // Runs AFTER all post-processing (dedup, personalization strip,
+        // opening hours removal, route optimization, etc.)
+        // This is the fix for the persistent "missing meals" bug: previously
+        // only generateSingleDayWithRetry had meal injection; this path did not.
+        // ====================================================================
+        if (dayMealPolicy && dayMealPolicy.requiredMeals.length > 0) {
+          const mealGuardResult = enforceRequiredMealsFinalGuard(
+            generatedDay.activities || [],
+            dayMealPolicy.requiredMeals,
+            dayNumber,
+            resolvedDestination || destination || 'the destination',
+            'USD',
+            dayMealPolicy.dayMode,
+          );
+          if (!mealGuardResult.alreadyCompliant) {
+            generatedDay.activities = mealGuardResult.activities as any;
+            normalizedActivities = generatedDay.activities;
+            console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected before return`);
+          } else {
+            console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
+          }
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
