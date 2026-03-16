@@ -88,6 +88,44 @@ export async function triggerNextJourneyLeg(supabase: any, tripId: string): Prom
   }
 }
 
+// ── HELPERS ───────────────────────────────────────────────────────
+/** Derive a date string from trip start_date + dayNumber offset */
+function deriveDateFromStartDate(startDate: string, dayNumber: number): string {
+  const d = new Date(startDate + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + dayNumber - 1);
+  return d.toISOString().split('T')[0];
+}
+
+/** Parse "HH:MM" to minutes since midnight for sorting */
+function parseTimeToMinutes(t?: string): number {
+  if (!t) return 0;
+  const m = t.match(/(\d{1,2}):(\d{2})/);
+  return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
+}
+
+/**
+ * Normalize all days: ensure dayNumber, date, sort activities by time.
+ * This is the single canonical normalization that runs BEFORE persistence.
+ */
+function normalizeDays(days: any[], tripStartDate: string | null): any[] {
+  return days.map((day: any, idx: number) => {
+    const dayNumber = idx + 1;
+    // Derive date from start_date if missing or blank
+    let date = day.date;
+    if (!date && tripStartDate) {
+      date = deriveDateFromStartDate(tripStartDate, dayNumber);
+    }
+    // Sort activities by startTime/start_time/time
+    let activities = Array.isArray(day.activities) ? [...day.activities] : [];
+    activities.sort((a: any, b: any) => {
+      const ta = parseTimeToMinutes(a.startTime || a.start_time || a.time);
+      const tb = parseTimeToMinutes(b.startTime || b.start_time || b.time);
+      return ta - tb;
+    });
+    return { ...day, dayNumber, date, activities };
+  });
+}
+
 export async function handleSaveItinerary(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
   const { tripId, itinerary } = params;
@@ -95,7 +133,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // Verify trip access
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('user_id')
+    .select('user_id, start_date, end_date')
     .eq('id', tripId)
     .single();
 
@@ -118,6 +156,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     console.error(`[save-itinerary] Unauthorized save attempt by ${userId} for trip ${tripId}`);
     return errorJson("Access denied. You don't have permission to modify this trip.", 403);
   }
+
+  const tripStartDate: string | null = trip.start_date || null;
 
   // ── NO-SHRINK GUARD ──────────────────────────────────────────────
   const allowShrink = params.allowShrink === true;
@@ -150,22 +190,26 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     return okJson({ success: true, shrinkBlocked: true, incomingCount, canonicalExisting });
   }
 
-  // ── MEAL COMPLIANCE GUARD ──────────────────────────────────────
-  // Before persisting, ensure every full exploration day has required meals.
-  // This is the last line of defense — catches frontend saves, AI assistant
-  // edits, and any path that bypasses the generation-time meal guard.
-  const itineraryDays: any[] = Array.isArray((itinerary as any)?.days) ? (itinerary as any).days : [];
+  // ── STEP 1: NORMALIZE DAYS ─────────────────────────────────────
+  // Ensure dayNumber, date (derived from start_date), activity sort order
+  let itineraryDays: any[] = Array.isArray((itinerary as any)?.days) ? (itinerary as any).days : [];
+  if (itineraryDays.length > 0) {
+    itineraryDays = normalizeDays(itineraryDays, tripStartDate);
+    (itinerary as any).days = itineraryDays;
+  }
+
   const totalDays = itineraryDays.length;
+
+  // Validate: reject if any day still has no date after normalization
+  const daysWithoutDate = itineraryDays.filter((d: any) => !d.date);
+  if (daysWithoutDate.length > 0 && tripStartDate) {
+    console.error(`[save-itinerary] ❌ ${daysWithoutDate.length} days still have no date after normalization — this should not happen`);
+  }
+
+  // ── STEP 2: MEAL COMPLIANCE GUARD ─────────────────────────────
   let mealGuardInjections = 0;
 
   if (totalDays > 0) {
-    // Load trip dates to derive meal policy per day
-    const { data: tripDates } = await supabase
-      .from('trips')
-      .select('start_date, end_date, metadata')
-      .eq('id', tripId)
-      .single();
-
     for (let i = 0; i < itineraryDays.length; i++) {
       const day = itineraryDays[i];
       if (!day?.activities || !Array.isArray(day.activities)) continue;
@@ -174,7 +218,6 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
 
-      // Derive meal policy for this day
       const policy = deriveMealPolicy({
         dayNumber,
         totalDays,
@@ -209,11 +252,11 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
 
     if (mealGuardInjections > 0) {
       console.log(`[save-itinerary] Meal guard total: ${mealGuardInjections} meals injected across trip`);
-      // Update the itinerary with meal-compliant days
       (itinerary as any).days = itineraryDays;
     }
   }
 
+  // ── STEP 3: PERSIST TO trips.itinerary_data ─────────────────────
   const updatePayload: Record<string, any> = {
     itinerary_data: itinerary,
     itinerary_status: 'ready',
@@ -230,8 +273,25 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     return errorJson("Failed to save itinerary", 500);
   }
 
+  // ── STEP 4: SYNC TO NORMALIZED TABLES ──────────────────────────
+  // Keep itinerary_days + itinerary_activities in sync with JSON snapshot
+  try {
+    const syncCtx: ActionContext = { supabase, userId, params: { tripId } };
+    const { handleSyncItineraryTables } = await import('./action-sync-tables.ts');
+    const syncResult = await handleSyncItineraryTables(syncCtx);
+    const syncBody = await syncResult.json().catch(() => null);
+    if (syncBody && !syncBody.success) {
+      console.error('[save-itinerary] Table sync failed:', syncBody);
+    } else {
+      console.log(`[save-itinerary] Table sync complete:`, syncBody);
+    }
+  } catch (syncErr) {
+    // Non-fatal: JSON snapshot is the source of truth
+    console.error('[save-itinerary] Table sync error (non-fatal):', syncErr);
+  }
+
   // Trigger next journey leg if applicable
   await triggerNextJourneyLeg(supabase, tripId);
 
-  return okJson({ success: true });
+  return okJson({ success: true, normalized: true, mealGuardInjections });
 }
