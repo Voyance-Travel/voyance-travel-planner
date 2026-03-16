@@ -10483,31 +10483,52 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         // use REAL restaurant names instead of generic "dinner spot" text.
         // ====================================================================
         if (dayMealPolicy && dayMealPolicy.requiredMeals.length > 0) {
-          // Pre-fetch real venue candidates for better fallbacks
+          // Build meal fallback venues from restaurant pool first, then verified_venues
           let mealFallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
-          try {
-            const destQuery = resolvedDestination || destination || '';
-            if (destQuery && supabase) {
-              const { data: venues } = await supabase
-                .from('verified_venues')
-                .select('name, address, category')
-                .ilike('city', `%${destQuery}%`)
-                .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
-                .limit(30);
-              if (venues && venues.length > 0) {
-                for (const v of venues) {
-                  const nameLower = (v.name || '').toLowerCase();
-                  let mealType = 'any';
-                  if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery')) mealType = 'breakfast';
-                  else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich')) mealType = 'lunch';
-                  else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro')) mealType = 'dinner';
-                  mealFallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
-                }
-                console.log(`[generate-day] Pre-fetched ${mealFallbackVenues.length} real venue candidates for meal guard`);
+          
+          // PRIORITY 1: Use the pre-generated restaurant pool (real, curated restaurants)
+          if (paramRestaurantPool && Array.isArray(paramRestaurantPool) && paramRestaurantPool.length > 0) {
+            const usedSet = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
+            for (const r of paramRestaurantPool) {
+              if (!usedSet.has((r.name || '').toLowerCase())) {
+                mealFallbackVenues.push({
+                  name: r.name,
+                  address: r.address || r.neighborhood || (resolvedDestination || destination || ''),
+                  mealType: r.mealType || 'any',
+                });
               }
             }
-          } catch (e) {
-            console.warn('[generate-day] Could not pre-fetch venue candidates:', e);
+            if (mealFallbackVenues.length > 0) {
+              console.log(`[generate-day] Meal guard using ${mealFallbackVenues.length} venues from restaurant pool`);
+            }
+          }
+          
+          // PRIORITY 2: Fallback to verified_venues if pool is empty
+          if (mealFallbackVenues.length < 5) {
+            try {
+              const destQuery = resolvedDestination || destination || '';
+              if (destQuery && supabase) {
+                const { data: venues } = await supabase
+                  .from('verified_venues')
+                  .select('name, address, category')
+                  .ilike('city', `%${destQuery}%`)
+                  .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+                  .limit(30);
+                if (venues && venues.length > 0) {
+                  for (const v of venues) {
+                    const nameLower = (v.name || '').toLowerCase();
+                    let mealType = 'any';
+                    if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery')) mealType = 'breakfast';
+                    else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich')) mealType = 'lunch';
+                    else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro')) mealType = 'dinner';
+                    mealFallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
+                  }
+                  console.log(`[generate-day] Supplemented with ${venues.length} verified_venues candidates`);
+                }
+              }
+            } catch (e) {
+              console.warn('[generate-day] Could not pre-fetch venue candidates:', e);
+            }
           }
 
           const mealGuardResult = enforceRequiredMealsFinalGuard(
@@ -10522,7 +10543,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           if (!mealGuardResult.alreadyCompliant) {
             generatedDay.activities = mealGuardResult.activities as any;
             normalizedActivities = generatedDay.activities;
-            console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'real venues' : 'destination-aware fallbacks'} before return`);
+            console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'REAL POOL venues' : 'destination-aware fallbacks'} before return`);
           } else {
             console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
           }
