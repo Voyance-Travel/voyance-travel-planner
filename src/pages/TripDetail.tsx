@@ -2754,7 +2754,7 @@ export default function TripDetail() {
                         // --- Inject hotel check-in/check-out activities into itinerary ---
                         try {
                           const itData = updatedTrip.itinerary_data as Record<string, any> | null;
-                          const currentDays = parseEditorialDays(itData, updatedTrip.start_date);
+                          const currentDays = parseEditorialDays(itData, updatedTrip.start_date, updatedTrip.end_date);
                           if (currentDays.length > 0) {
                             let injectedDays = currentDays;
 
