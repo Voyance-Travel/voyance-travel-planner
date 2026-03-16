@@ -22,7 +22,10 @@ import {
   MapPin,
   MessageCircle,
   ClipboardPaste,
-  Globe
+  Globe,
+  Wallet,
+  BookOpen,
+  Compass
 } from 'lucide-react';
 import useEmblaCarousel from 'embla-carousel-react';
 import { ARCHETYPE_NARRATIVES, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
