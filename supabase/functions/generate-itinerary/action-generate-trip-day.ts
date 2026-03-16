@@ -595,6 +595,23 @@ export async function handleGenerateTripDay(
 
     console.log(`[generate-trip-day] ✅ Trip ${tripId} generation complete: ${totalDays} days`);
 
+    // ── SYNC NORMALIZED TABLES on chain completion ──────────────────
+    // This ensures itinerary_days + itinerary_activities stay in sync
+    // with the JSON snapshot, preventing "Unplanned" days on reload.
+    try {
+      const { handleSyncItineraryTables } = await import('./action-sync-tables.ts');
+      const syncCtx = { supabase, userId, params: { tripId } };
+      const syncResult = await handleSyncItineraryTables(syncCtx);
+      const syncBody = await syncResult.json().catch(() => null);
+      if (syncBody && !syncBody.success) {
+        console.error('[generate-trip-day] Post-completion table sync failed:', syncBody);
+      } else {
+        console.log(`[generate-trip-day] Post-completion table sync OK:`, syncBody);
+      }
+    } catch (syncErr) {
+      console.error('[generate-trip-day] Post-completion table sync error (non-fatal):', syncErr);
+    }
+
     await triggerNextJourneyLeg(supabase, tripId);
 
     return new Response(

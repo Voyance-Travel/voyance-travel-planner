@@ -1249,12 +1249,23 @@ export default function TripDetail() {
                     }
                   }
 
-                  // Persist merged itinerary once at end to prevent stale JSON on next reload
+                  // Persist merged itinerary through backend save (normalization + meal guard + table sync)
                   const mergedItinerary = { ...currentItinData, days: currentDays };
-                  await supabase.from('trips').update({
-                    itinerary_data: mergedItinerary as any,
-                    updated_at: new Date().toISOString(),
-                  }).eq('id', tripId!);
+                  try {
+                    await supabase.functions.invoke('generate-itinerary', {
+                      body: {
+                        action: 'save-itinerary',
+                        tripId: tripId!,
+                        itinerary: mergedItinerary,
+                      },
+                    });
+                  } catch (saveErr) {
+                    console.error('[TripDetail] Backend save after auto-regen failed, falling back to direct write:', saveErr);
+                    await supabase.from('trips').update({
+                      itinerary_data: mergedItinerary as any,
+                      updated_at: new Date().toISOString(),
+                    }).eq('id', tripId!);
+                  }
 
                   // Refresh trip data after regeneration
                   queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
