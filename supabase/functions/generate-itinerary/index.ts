@@ -6400,7 +6400,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
       }
 
       // =====================================================================
-      // STAGE 2.8: Must-Do Validation (logging only — mirrors dietary check)
+      // STAGE 2.8: Must-Do Validation + Injection Safety Net
       // =====================================================================
       if (context.mustDoActivities && context.mustDoActivities.trim()) {
         try {
@@ -6409,16 +6409,62 @@ If the purpose is a specific event, plan at least ONE full day around that event
           if (mustDoCheck.length > 0) {
             const itineraryForValidation = aiResult.days.map((d: any) => ({
               dayNumber: d.dayNumber,
-              activities: (d.activities || []).map((a: any) => ({ title: a.title || a.name || '' })),
+              activities: (d.activities || []).map((a: any) => ({ title: a.title || a.name || '', description: a.description || '' })),
             }));
             const validation = validateMustDosInItinerary(itineraryForValidation, mustDoCheck);
 
             if (!validation.allPresent && validation.missing.length > 0) {
-              console.warn(`[Stage 2.8] ⚠️ MISSING must-do activities in generated itinerary:`);
-              for (const m of validation.missing) {
-                console.warn(`  ❌ "${m.activityName}" (priority: ${m.priority}) — NOT FOUND in any day`);
+              console.warn(`[Stage 2.8] ⚠️ MISSING must-do activities — injecting safety-net placeholders:`);
+
+              // Get schedule assignments for injection targeting
+              const mustDoSchedule = scheduleMustDos(mustDoCheck, context.totalDays);
+              const scheduledMap = new Map<string, number>();
+              for (const s of mustDoSchedule.scheduled) {
+                scheduledMap.set(s.priority.id, s.assignedDay);
               }
-              console.warn(`[Stage 2.8] ${validation.found.length}/${mustDoCheck.filter(x => x.priority === 'must').length} must-priority items found, ${validation.missing.length} missing`);
+
+              for (const m of validation.missing) {
+                const targetDay = scheduledMap.get(m.id) || m.preferredDay || Math.ceil(context.totalDays / 2);
+                const dayObj = aiResult.days.find((d: any) => d.dayNumber === targetDay) || aiResult.days[aiResult.days.length - 1];
+
+                if (!dayObj) continue;
+
+                // Determine injection time based on preferredTime
+                let injectionTime = '14:00';
+                let injectionEndTime = '16:00';
+                if (m.preferredTime === 'morning') { injectionTime = '10:00'; injectionEndTime = '12:00'; }
+                else if (m.preferredTime === 'evening') { injectionTime = '18:00'; injectionEndTime = '20:00'; }
+
+                const injectedActivity = {
+                  id: `injected_${m.id}_${Date.now()}`,
+                  title: m.activityName,
+                  name: m.activityName,
+                  description: m.userDescription || `Must-do activity: ${m.activityName}`,
+                  startTime: injectionTime,
+                  endTime: injectionEndTime,
+                  duration: `${Math.round((m.estimatedDuration || 120) / 60)} hours`,
+                  category: m.requiresBooking ? 'attraction' : 'experience',
+                  source: 'must_do_injection',
+                  cost: { amount: 0, currency: 'USD' },
+                  location: { address: '', neighborhood: m.location || '' },
+                };
+
+                dayObj.activities.push(injectedActivity);
+
+                // Re-sort chronologically
+                dayObj.activities.sort((a: any, b: any) => {
+                  const parseMin = (t?: string) => {
+                    if (!t) return 0;
+                    const match = t.match(/(\d{1,2}):(\d{2})/);
+                    return match ? parseInt(match[1]) * 60 + parseInt(match[2]) : 0;
+                  };
+                  return parseMin(a.startTime) - parseMin(b.startTime);
+                });
+
+                console.warn(`  🔧 Injected "${m.activityName}" into Day ${dayObj.dayNumber} at ${injectionTime}`);
+              }
+
+              console.log(`[Stage 2.8] Injected ${validation.missing.length} must-do placeholder(s) as safety net`);
             } else {
               console.log(`[Stage 2.8] ✓ All must-do activities verified present in itinerary (${validation.found.length} found)`);
             }
