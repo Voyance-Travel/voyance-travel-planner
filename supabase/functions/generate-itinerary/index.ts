@@ -1975,6 +1975,31 @@ These help the traveler prepare for their trip.
         }
       }
 
+      const dayConstraintsForMeals = (context.userConstraints || []).filter((constraint: any) => {
+        if (constraint?.day == null) return false;
+        return Number(constraint.day) === dayNumber;
+      });
+      const lockedHoursForMeals = dayConstraintsForMeals.reduce((sum: number, constraint: any) => {
+        if (constraint?.type === 'full_day_event') return sum + 12;
+        if (constraint?.type === 'time_block') return sum + (Number(constraint.durationHours) || 2);
+        return sum;
+      }, 0);
+      const hasFullDayEventForMeals = dayConstraintsForMeals.some((constraint: any) => constraint?.type === 'full_day_event');
+      const dayMealPolicyInput: MealPolicyInput = {
+        dayNumber,
+        totalDays: context.totalDays,
+        isFirstDay,
+        isLastDay,
+        isTransitionDay,
+        hasFullDayEvent: hasFullDayEventForMeals,
+        arrivalTime24: context.flightData?.arrivalTime24,
+        departureTime24: context.flightData?.departureTime24,
+        lockedHours: lockedHoursForMeals,
+      };
+      const dayMealPolicy = deriveMealPolicy(dayMealPolicyInput);
+      const mealRequirementsBlock = buildMealRequirementsPrompt(dayMealPolicy);
+      console.log(`[Stage 2] Day ${dayNumber} meal policy: mode=${dayMealPolicy.dayMode}, required=[${dayMealPolicy.requiredMeals.join(', ')}], usableHours=${dayMealPolicy.usableHours}`);
+
       // Calculate day-of-week for operating hours awareness
       const dateObj = new Date(date);
       const DAY_NAMES_GEN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
