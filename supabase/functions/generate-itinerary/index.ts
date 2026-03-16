@@ -3,6 +3,17 @@ import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost, CostTracker } from "../_shared/cost-tracker.ts";
 
 // =============================================================================
+// EXTRACTED ACTION HANDLERS — Each action in its own file with explicit params
+// =============================================================================
+import { handleGetTrip } from './action-get-trip.ts';
+import { handleSaveItinerary } from './action-save-itinerary.ts';
+import { handleGetItinerary } from './action-get-itinerary.ts';
+import { handleToggleActivityLock } from './action-toggle-lock.ts';
+import { handleSyncItineraryTables } from './action-sync-tables.ts';
+import { handleRepairTripCosts } from './action-repair-costs.ts';
+import type { ActionContext } from './action-types.ts';
+
+// =============================================================================
 // EXTRACTED MODULES — Reduce bundle size for deploy
 // =============================================================================
 import {
