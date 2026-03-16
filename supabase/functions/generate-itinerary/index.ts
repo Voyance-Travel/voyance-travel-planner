@@ -2879,6 +2879,9 @@ Generate activities for this day following ALL constraints above.`;
           generatedDay = dedupedDay;
         }
 
+        // POST-VALIDATION: Strip keyword-stuffed activity titles
+        generatedDay = sanitizeActivityTitles(generatedDay);
+
         // ====================================================================
         // MEAL FINAL GUARD — shared helper, single source of truth
         // Runs AFTER all post-processing (dedup, etc.) to guarantee meals
