@@ -4135,12 +4135,13 @@ async function finalSaveItinerary(
               // Pad the days array with blank placeholder days so UI always shows all expected days
               for (let padIdx = daysArray.length; padIdx < expectedDays; padIdx++) {
                 const padDate = formatDate(tripRow.start_date, padIdx);
-                const blankDay = {
+              const blankDay = {
                   dayNumber: padIdx + 1,
                   date: padDate,
                   theme: 'Free Day',
                   description: 'This day is yours to explore freely.',
                   activities: [],
+                  status: 'placeholder',
                 };
                 daysArray.push(blankDay);
               }

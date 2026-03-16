@@ -123,12 +123,22 @@ export async function handleGenerateTripDay(
 
   // Guard: check trip is still in "generating" state AND run ID matches
   const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data').eq('id', tripId).single();
-  if (!tripCheck || tripCheck.itinerary_status === 'cancelled' || tripCheck.itinerary_status === 'ready') {
+  if (!tripCheck || tripCheck.itinerary_status === 'cancelled') {
     console.log(`[generate-trip-day] Trip ${tripId} status is ${tripCheck?.itinerary_status}, stopping chain`);
     return new Response(
       JSON.stringify({ status: tripCheck?.itinerary_status || 'cancelled', dayNumber }),
       { headers: jsonHeaders }
     );
+  }
+  
+  // STATUS RECOVERY: If frontend prematurely set status to 'ready' but we still have days to generate,
+  // reset it back to 'generating'. This prevents the frontend self-heal from killing the chain.
+  if (tripCheck.itinerary_status === 'ready' && dayNumber <= totalDays) {
+    console.warn(`[generate-trip-day] ⚠️ STATUS RECOVERY: Trip ${tripId} status was prematurely set to 'ready' while generating day ${dayNumber}/${totalDays} — resetting to 'generating'`);
+    await supabase.from('trips').update({
+      itinerary_status: 'generating',
+      updated_at: new Date().toISOString(),
+    }).eq('id', tripId);
   }
 
   // Run ID idempotency guard
