@@ -186,12 +186,18 @@ export async function getOrGenerateArchetypeGuide(
   if (cached && cached.guide && new Date(cached.expires_at) > new Date()) {
     console.log(`[ArchetypeGuide] Cache hit for ${archetype} × ${destinationName}`);
     
-    // Increment usage count
-    await supabase
-      .from('archetype_destination_guides')
-      .update({ usage_count: supabase.sql`usage_count + 1` })
-      .eq('archetype', archetype)
-      .eq('destination_id', destinationId);
+    // Increment usage count (manual read+write since supabase-js doesn't support SQL expressions in .update)
+    try {
+      const currentCount = cached.usage_count ?? 0;
+      await supabase
+        .from('archetype_destination_guides')
+        .update({ usage_count: currentCount + 1 })
+        .eq('archetype', archetype)
+        .eq('destination_id', destinationId);
+    } catch (countErr) {
+      // Non-blocking — don't let a counter update break generation
+      console.warn('[ArchetypeGuide] Failed to increment usage_count:', countErr);
+    }
     
     return cached.guide as ArchetypeDestinationGuide;
   }

@@ -319,92 +319,122 @@ export async function handleGenerateTripDay(
   }
 
   if (!dayResult) {
-    // This day failed after all retries
+    // This day failed after all retries — but DON'T stop the chain.
+    // Record the failure and CONTINUE to the next day so we don't lose the whole trip.
     console.error(`[generate-trip-day] Day ${dayNumber} failed permanently: ${lastError}`);
     
     const { data: failTrip } = await supabase.from('trips').select('metadata, unlocked_day_count').eq('id', tripId).single();
     const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
     const currentUnlocked = (failTrip as any)?.unlocked_day_count ?? 0;
 
-    await supabase.from('trips').update({
-      itinerary_status: existingDays.length > 0 ? 'partial' : 'failed',
-      unlocked_day_count: Math.max(currentUnlocked, existingDays.length),
-      metadata: {
-        ...failMeta,
-        generation_error: lastError || 'Generation failed',
-        generation_failed_at: new Date().toISOString(),
-        generation_failed_on_day: dayNumber,
-        generation_completed_days: existingDays.length,
-        generation_total_days: totalDays,
-      },
-    }).eq('id', tripId);
+    // Track failed days in metadata (accumulate, don't overwrite)
+    const failedDays: number[] = Array.isArray(failMeta.failed_day_numbers) ? [...(failMeta.failed_day_numbers as number[])] : [];
+    if (!failedDays.includes(dayNumber)) failedDays.push(dayNumber);
 
-    // Server-side refund for ungenerated days
-    const totalCharged = creditsCharged || 0;
-    if (totalCharged > 0) {
-      const effectiveTotalDays = requestedDays || totalDays;
-      const creditsPerDay = Math.round(totalCharged / effectiveTotalDays);
-      const ungenerated = Math.max(0, effectiveTotalDays - existingDays.length);
-      const refundAmount = existingDays.length > 0 ? creditsPerDay * ungenerated : totalCharged;
+    // If this is the LAST day and ALL days failed, mark as failed + refund
+    const isLastDay = dayNumber >= totalDays;
+    const allDaysFailed = isLastDay && failedDays.length >= totalDays;
 
-      if (refundAmount > 0) {
+    if (allDaysFailed) {
+      await supabase.from('trips').update({
+        itinerary_status: 'failed',
+        unlocked_day_count: Math.max(currentUnlocked, existingDays.length),
+        metadata: {
+          ...failMeta,
+          failed_day_numbers: failedDays,
+          generation_error: lastError || 'All days failed',
+          generation_failed_at: new Date().toISOString(),
+          generation_completed_days: existingDays.length,
+          generation_total_days: totalDays,
+        },
+      }).eq('id', tripId);
+
+      // Server-side refund for ALL days
+      const totalCharged = creditsCharged || 0;
+      if (totalCharged > 0) {
         try {
           await supabase.from('credit_purchases').insert({
-            user_id: userId,
-            credit_type: 'refund',
-            amount: refundAmount,
-            remaining: refundAmount,
-            source: 'system_refund',
-            stripe_session_id: null,
+            user_id: userId, credit_type: 'refund', amount: totalCharged, remaining: totalCharged,
+            source: 'system_refund', stripe_session_id: null,
           });
-
           await supabase.from('credit_ledger').insert({
-            user_id: userId,
-            transaction_type: 'refund',
-            credits_delta: refundAmount,
-            is_free_credit: false,
-            action_type: 'refund',
-            trip_id: tripId,
-            notes: `Server-side refund: ${existingDays.length}/${effectiveTotalDays} days completed. +${refundAmount} credits restored.`,
-            metadata: { reason: 'server_generation_failed', error: lastError },
+            user_id: userId, transaction_type: 'refund', credits_delta: totalCharged, is_free_credit: false,
+            action_type: 'refund', trip_id: tripId,
+            notes: `Server-side refund: all ${totalDays} days failed. +${totalCharged} credits restored.`,
+            metadata: { reason: 'server_generation_all_failed', error: lastError },
           });
-
-          // Sync balance cache
-          const now = new Date().toISOString();
-          const { data: purchases } = await supabase
-            .from('credit_purchases')
-            .select('remaining, credit_type, expires_at')
-            .eq('user_id', userId)
-            .gt('remaining', 0);
-
-          let freeCredits = 0;
-          let purchasedCredits = 0;
-          for (const p of (purchases || [])) {
-            if (p.expires_at && new Date(p.expires_at) < new Date()) continue;
-            if (p.credit_type === 'free') {
-              freeCredits += p.remaining;
-            } else {
-              purchasedCredits += p.remaining;
-            }
-          }
-
-          await supabase.from('credit_balances').update({
-            free_credits: freeCredits,
-            purchased_credits: purchasedCredits,
-            updated_at: now,
-          }).eq('user_id', userId);
-
-          console.log(`[generate-trip-day] Refunded ${refundAmount} credits for ${ungenerated} ungenerated days`);
+          console.log(`[generate-trip-day] Full refund: ${totalCharged} credits (all days failed)`);
         } catch (refundErr) {
           console.error(`[generate-trip-day] Refund failed:`, refundErr);
         }
       }
+
+      return new Response(
+        JSON.stringify({ status: 'failed', dayNumber, error: lastError }),
+        { headers: jsonHeaders }
+      );
     }
 
-    return new Response(
-      JSON.stringify({ status: 'failed', dayNumber, error: lastError }),
-      { headers: jsonHeaders }
-    );
+    // NOT the last day (or only some days failed) — update metadata and CONTINUE the chain
+    await supabase.from('trips').update({
+      metadata: {
+        ...failMeta,
+        failed_day_numbers: failedDays,
+        generation_heartbeat: new Date().toISOString(),
+        generation_current_day: dayNumber,
+        last_day_error: `Day ${dayNumber}: ${lastError}`,
+      },
+    }).eq('id', tripId);
+
+    if (!isLastDay) {
+      console.log(`[generate-trip-day] Day ${dayNumber} failed but continuing chain to day ${dayNumber + 1}`);
+      // Fall through to chain logic below — dayResult is null so we skip the save
+      // but still chain to the next day
+    } else {
+      // Last day, some days failed — mark as partial and refund failed days
+      const successfulDays = totalDays - failedDays.length;
+      await supabase.from('trips').update({
+        itinerary_status: existingDays.length > 0 ? 'partial' : 'failed',
+        unlocked_day_count: Math.max(currentUnlocked, existingDays.length),
+        metadata: {
+          ...failMeta,
+          failed_day_numbers: failedDays,
+          generation_error: `${failedDays.length} day(s) failed: ${failedDays.join(', ')}`,
+          generation_failed_at: new Date().toISOString(),
+          generation_completed_days: successfulDays,
+          generation_total_days: totalDays,
+        },
+      }).eq('id', tripId);
+
+      const totalCharged = creditsCharged || 0;
+      if (totalCharged > 0 && failedDays.length > 0) {
+        const effectiveTotalDays = requestedDays || totalDays;
+        const creditsPerDay = Math.round(totalCharged / effectiveTotalDays);
+        const refundAmount = creditsPerDay * failedDays.length;
+        if (refundAmount > 0) {
+          try {
+            await supabase.from('credit_purchases').insert({
+              user_id: userId, credit_type: 'refund', amount: refundAmount, remaining: refundAmount,
+              source: 'system_refund', stripe_session_id: null,
+            });
+            await supabase.from('credit_ledger').insert({
+              user_id: userId, transaction_type: 'refund', credits_delta: refundAmount, is_free_credit: false,
+              action_type: 'refund', trip_id: tripId,
+              notes: `Server-side refund: ${failedDays.length}/${effectiveTotalDays} days failed. +${refundAmount} credits restored.`,
+              metadata: { reason: 'server_generation_partial_fail', failedDays },
+            });
+            console.log(`[generate-trip-day] Partial refund: ${refundAmount} credits for ${failedDays.length} failed days`);
+          } catch (refundErr) {
+            console.error(`[generate-trip-day] Refund failed:`, refundErr);
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ status: 'partial', dayNumber, failedDays, error: lastError }),
+        { headers: jsonHeaders }
+      );
+    }
   }
 
   // Day generated successfully — ensure date is always set
