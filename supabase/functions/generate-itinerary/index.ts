@@ -11206,8 +11206,13 @@ Return ONLY the JSON array, no other text.`;
                     priceRange: r.priceRange || '$$',
                     description: r.description || '',
                     address: r.neighborhood ? `${r.neighborhood}, ${city}` : city,
-                  })).filter((r: any) => r.name.length > 2);
-                  console.log(`[generate-trip] 🍽️ Restaurant pool for "${city}": ${restaurantPoolByCity[city].length} real restaurants`);
+                  })).filter((r: any) => r.name.length > 2 && !isChainRestaurant(r.name));
+                  const preFilterCount = parsed.length;
+                  const postFilterCount = restaurantPoolByCity[city].length;
+                  if (preFilterCount !== postFilterCount) {
+                    console.warn(`[generate-trip] 🚫 Chain filter removed ${preFilterCount - postFilterCount} chain restaurant(s) from "${city}" pool`);
+                  }
+                  console.log(`[generate-trip] 🍽️ Restaurant pool for "${city}": ${postFilterCount} real restaurants (${preFilterCount - postFilterCount} chains removed)`);
 
                   // Cache to verified_venues for future trips (non-blocking)
                   try {
