@@ -5502,6 +5502,7 @@ export function EditorialItinerary({
             destination={destination}
             journeyId={journeyId}
             journeyName={journeyName}
+            jsTotalCostCents={Math.round(jsTotalCost * (travelers || 1) * 100)}
             onActivityRemove={(activityId) => {
               // Remove the activity from itinerary days when deleted from budget
               setDays(prev => {
