@@ -8,6 +8,8 @@
  */
 
 import { corsHeaders } from './action-types.ts';
+import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
+import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -453,6 +455,32 @@ export async function handleGenerateTripDay(
         JSON.stringify({ status: 'stale_run', dayNumber, message: 'A newer generation run has started' }),
         { headers: jsonHeaders }
       );
+    }
+  }
+
+  // ── MEAL COMPLIANCE GUARD (before save) ──────────────────────────
+  // The generate-day action already has a meal guard, but this catches
+  // edge cases where post-processing in this file may have altered days.
+  for (let i = 0; i < updatedDays.length; i++) {
+    const d = updatedDays[i];
+    if (!d?.activities || !Array.isArray(d.activities)) continue;
+    const dn = d.dayNumber || (i + 1);
+    const policy = deriveMealPolicy({
+      dayNumber: dn,
+      totalDays,
+      isFirstDay: dn === 1,
+      isLastDay: dn === totalDays,
+    });
+    if (policy.requiredMeals.length === 0) continue;
+    const detected = detectMealSlots(d.activities);
+    const missing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
+    if (missing.length > 0) {
+      const dest = d.city || cityInfo?.cityName || destination || 'the destination';
+      const result = enforceRequiredMealsFinalGuard(d.activities, policy.requiredMeals, dn, dest, 'USD', policy.dayMode);
+      if (!result.alreadyCompliant) {
+        updatedDays[i] = { ...d, activities: result.activities };
+        console.warn(`[generate-trip-day] 🍽️ MEAL GUARD: Day ${dn} missing [${result.injectedMeals.join(', ')}] — injected before chain save`);
+      }
     }
   }
 

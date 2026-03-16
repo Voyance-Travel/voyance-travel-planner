@@ -603,6 +603,17 @@ export async function regenerateDay(
   
   updatedDays.sort((a, b) => a.dayNumber - b.dayNumber);
   
+  // Run client-side meal compliance guard before saving
+  try {
+    const { enforceItineraryMealCompliance } = await import('@/utils/mealGuard');
+    const mealResult = enforceItineraryMealCompliance(updatedDays as any);
+    if (mealResult.totalInjected > 0) {
+      console.warn(`[itineraryAPI] Meal guard injected ${mealResult.totalInjected} meals before save`);
+    }
+  } catch (e) {
+    console.warn('[itineraryAPI] Meal guard import failed, skipping:', e);
+  }
+
   const updatedItinerary = { ...existingItinerary, days: updatedDays };
   await supabase
     .from('trips')
