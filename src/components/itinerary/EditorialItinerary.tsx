@@ -8923,6 +8923,8 @@ interface ActivityRowProps {
   isPastTrip?: boolean;
   /** Clean preview mode — magazine-style reading card */
   isCleanPreview?: boolean;
+  /** Callback to report a resolved photo URL for batch write-back */
+  onPhotoResolved?: (activityId: string, photoUrl: string) => void;
 }
 
 function ActivityRow({
