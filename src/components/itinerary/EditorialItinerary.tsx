@@ -5498,6 +5498,7 @@ export function EditorialItinerary({
                           onDismissRefresh={() => setRefreshResults(prev => { const next = { ...prev }; delete next[selectedDay.dayNumber]; return next; })}
                           onApplyRefreshChanges={(changes) => handleApplyRefreshChanges(selectedDayIndex, changes)}
                           onPhotoResolved={reportPhoto}
+                          isManualMode={isManualMode}
                         />
                       )}
                     </>
