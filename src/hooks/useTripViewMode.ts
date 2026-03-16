@@ -6,6 +6,8 @@ export type TripViewMode = 'edit' | 'preview';
 interface UseTripViewModeOptions {
   /** Whether the current user owns or can edit this trip */
   isOwner: boolean;
+  /** Whether a collaborator has edit permission (can propose changes) */
+  canEdit?: boolean;
 }
 
 /**
