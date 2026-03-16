@@ -634,16 +634,31 @@ export async function handleGenerateTripDay(
   }
 
   // Check ALL days for completeness before marking ready
+  // STRICT: ready ONLY when (1) day count matches totalDays, (2) every day has activities, (3) no recorded failed days
+  const { data: metaTripPre } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+  const metaPre = (metaTripPre?.metadata as Record<string, unknown>) || {};
+  const failedDayNumbers: number[] = Array.isArray(metaPre.failed_day_numbers) ? (metaPre.failed_day_numbers as number[]) : [];
+  
   const allDaysHaveActivities = dayNumber >= totalDays
     ? updatedDays.every((d: any) => Array.isArray(d.activities) && d.activities.length > 0)
     : true;
+  const dayCountMatches = updatedDays.length >= totalDays;
+  const noFailedDays = failedDayNumbers.length === 0;
   
-  const computedStatus = (dayNumber >= totalDays && allDaysHaveActivities) ? 'ready' : 'generating';
-  if (dayNumber >= totalDays && !allDaysHaveActivities) {
-    const emptyDayNumbers = updatedDays
-      .filter((d: any) => !Array.isArray(d.activities) || d.activities.length === 0)
-      .map((d: any) => d.dayNumber);
-    console.error(`[generate-trip-day] ⚠️ SHELL DAYS DETECTED at chain completion: days ${emptyDayNumbers.join(', ')} have 0 activities. Marking as partial.`);
+  const isComplete = dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && noFailedDays;
+  const computedStatus = isComplete ? 'ready' : (dayNumber >= totalDays ? 'partial' : 'generating');
+  
+  if (dayNumber >= totalDays && !isComplete) {
+    const issues: string[] = [];
+    if (!allDaysHaveActivities) {
+      const emptyDayNumbers = updatedDays
+        .filter((d: any) => !Array.isArray(d.activities) || d.activities.length === 0)
+        .map((d: any) => d.dayNumber);
+      issues.push(`shell days: ${emptyDayNumbers.join(', ')}`);
+    }
+    if (!dayCountMatches) issues.push(`day count ${updatedDays.length} < expected ${totalDays}`);
+    if (!noFailedDays) issues.push(`failed days: ${failedDayNumbers.join(', ')}`);
+    console.error(`[generate-trip-day] ⚠️ INCOMPLETE at chain end: ${issues.join('; ')}. Marking as partial.`);
   }
 
   const partialItinerary = {
