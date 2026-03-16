@@ -610,32 +610,46 @@ export async function handleGenerateTripDay(
     }
   }
 
-  // ── PRE-FETCH REAL VENUE CANDIDATES for meal guard fallbacks ─────
+  // ── BUILD MEAL GUARD FALLBACK VENUES ─────────────────────────────
+  // PRIORITY 1: Use the pre-generated restaurant pool (real, curated)
   let fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
-  try {
-    const destQuery = cityInfo?.cityName || destination || '';
-    if (destQuery) {
-      const { data: venues } = await supabase
-        .from('verified_venues')
-        .select('name, address, category')
-        .ilike('city', `%${destQuery}%`)
-        .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
-        .limit(30);
-      if (venues && venues.length > 0) {
-        // Classify venues by likely meal type based on name/category
-        for (const v of venues) {
-          const nameLower = (v.name || '').toLowerCase();
-          let mealType = 'any';
-          if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery') || nameLower.includes('coffee')) mealType = 'breakfast';
-          else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich') || nameLower.includes('deli')) mealType = 'lunch';
-          else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro') || nameLower.includes('trattoria')) mealType = 'dinner';
-          fallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
-        }
-        console.log(`[generate-trip-day] Pre-fetched ${fallbackVenues.length} real venue candidates for meal guard fallbacks`);
+  if (restaurantPool.length > 0) {
+    const usedSet = new Set(usedRestaurants.map(n => n.toLowerCase()));
+    for (const r of restaurantPool) {
+      if (!usedSet.has((r.name || '').toLowerCase())) {
+        fallbackVenues.push({ name: r.name, address: r.address || r.neighborhood || dayCity, mealType: r.mealType || 'any' });
       }
     }
-  } catch (e) {
-    console.warn('[generate-trip-day] Could not pre-fetch venue candidates:', e);
+    if (fallbackVenues.length > 0) {
+      console.log(`[generate-trip-day] Meal guard using ${fallbackVenues.length} venues from restaurant pool`);
+    }
+  }
+  // PRIORITY 2: Supplement with verified_venues if pool is thin
+  if (fallbackVenues.length < 5) {
+    try {
+      const destQuery = cityInfo?.cityName || destination || '';
+      if (destQuery) {
+        const { data: venues } = await supabase
+          .from('verified_venues')
+          .select('name, address, category')
+          .ilike('city', `%${destQuery}%`)
+          .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+          .limit(30);
+        if (venues && venues.length > 0) {
+          for (const v of venues) {
+            const nameLower = (v.name || '').toLowerCase();
+            let mealType = 'any';
+            if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery') || nameLower.includes('coffee')) mealType = 'breakfast';
+            else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich') || nameLower.includes('deli')) mealType = 'lunch';
+            else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro') || nameLower.includes('trattoria')) mealType = 'dinner';
+            fallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
+          }
+          console.log(`[generate-trip-day] Supplemented with ${venues.length} verified_venues candidates`);
+        }
+      }
+    } catch (e) {
+      console.warn('[generate-trip-day] Could not pre-fetch venue candidates:', e);
+    }
   }
 
   // ── MEAL COMPLIANCE GUARD (before save) ──────────────────────────
