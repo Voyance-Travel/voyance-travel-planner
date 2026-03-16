@@ -655,9 +655,28 @@ export default function DestinationDetail() {
                 <section>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="font-serif text-2xl font-semibold">Top Experiences</h2>
-                    <span className="text-sm text-muted-foreground">{activities.length} experiences</span>
+                    {activities.length > 0 && (
+                      <span className="text-sm text-muted-foreground">{activities.length} experiences</span>
+                    )}
                   </div>
                   
+                  {isEnriching && activities.length === 0 ? (
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="p-5 bg-card rounded-xl border border-border space-y-3">
+                          <Skeleton className="h-5 w-20" />
+                          <Skeleton className="h-5 w-3/4" />
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-5/6" />
+                        </div>
+                      ))}
+                      <p className="col-span-2 text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Discovering top experiences...
+                      </p>
+                    </div>
+                  ) : (
+                  <>
                   {/* Category Filter */}
                   <div className="flex flex-wrap gap-2 mb-6">
                     {categories.map((category) => (
