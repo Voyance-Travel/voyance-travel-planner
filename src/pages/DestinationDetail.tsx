@@ -546,23 +546,37 @@ export default function DestinationDetail() {
                     )}
                   </div>
                   
-                  {/* Local Tips */}
-                  <div className="p-5 bg-card rounded-xl border border-border">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                        <Info className="h-5 w-5 text-muted-foreground" />
+                  {/* Local Tips — only show if we have real data or enriching */}
+                  {(hasRealTips || isEnriching) && (
+                    <div className="p-5 bg-card rounded-xl border border-border">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                          <Info className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <h3 className="font-medium">Local Tips</h3>
                       </div>
-                      <h3 className="font-medium">Local Tips</h3>
+                      {isEnriching && !hasRealTips ? (
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-5/6" />
+                          <Skeleton className="h-4 w-4/6" />
+                          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Enhancing destination info...
+                          </p>
+                        </div>
+                      ) : (
+                        <ul className="text-sm text-muted-foreground space-y-1.5">
+                          {localTips.map((tip, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <span className="text-accent mt-1">•</span>
+                              <span>{tip}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
-                    <ul className="text-sm text-muted-foreground space-y-1.5">
-                      {localTips.map((tip, index) => (
-                        <li key={index} className="flex items-start gap-2">
-                          <span className="text-accent mt-1">•</span>
-                          <span>{tip}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  )}
 
                   {/* Customs & Etiquette — only show if we have real data */}
                   {(destination.tippingCustom || destination.dressCode) && (
