@@ -9005,6 +9005,7 @@ function ActivityRow({
   isPastTrip = false,
   isCleanPreview = false,
   onPhotoResolved,
+  isManualMode = false,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
