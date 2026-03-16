@@ -397,9 +397,15 @@ COMMON CLOSURE PATTERNS TO KNOW:
 - Religious sites: limited access during services (especially Sunday mornings)
 - Restaurant "dead zone": most close between 14:30-18:00 for prep
 
+CONFIRMED CLOSURES ARE HARD FAILURES:
+- If you KNOW a venue is closed on the scheduled day (e.g., Louvre on Monday), DO NOT include it. Pick a different venue.
+- The post-generation validator will REMOVE confirmed-closed activities. Do not rely on closedRisk tagging — the activity will be dropped.
+- Only use \`closedRisk: true\` when you are GENUINELY UNCERTAIN (no hours data available, seasonal hours, etc.)
+
 If you are NOT CERTAIN a venue is open on the scheduled day/time:
 - Set \`closedRisk: true\` in the activity metadata
 - Provide a backup venue in \`closedRiskAlternative\` field (name + address of a nearby alternative that IS open)
+- Note: closedRisk is ONLY for uncertainty. If hours data confirms closure, the activity will be replaced automatically.
 
 EXAMPLES OF WHAT TO AVOID:
 - Scheduling the Louvre on Monday (closed)
