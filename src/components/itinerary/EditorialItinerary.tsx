@@ -5418,7 +5418,7 @@ export function EditorialItinerary({
                           isRegenerating={regeneratingDay === selectedDay.dayNumber}
                           isEditable={effectiveIsEditable}
                           isPreview={effectiveIsPreview}
-                          canViewPremium={canViewPremiumContentForDay(entitlements, selectedDay.dayNumber)}
+                          canViewPremium={canViewDay(selectedDay.dayNumber)}
                           tripId={tripId}
                           onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
                           onUnlockDay={handleUnlockDay}
