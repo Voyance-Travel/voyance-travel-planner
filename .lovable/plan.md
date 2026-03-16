@@ -1,25 +1,36 @@
 
 
-# Voyance Picks Batch 1: Alabama + Florida
+# Voyance Picks Batch 2: Atlanta
 
-## Verified
+## What
 
-- The `voyance_picks` table exists with the correct schema (destination, name, category, why_essential, description, insider_tip, neighborhood, price_range, best_time, tags, priority, etc.)
-- Only one existing entry (Zeerovers / Aruba) — will not be touched
-- None of the 4 new destinations exist yet, so no conflict risk
+Insert 13 founder-curated Atlanta picks into the `voyance_picks` table:
 
-## Plan
+**Attractions (3):**
+- Georgia Aquarium (priority 1)
+- World of Coca-Cola (priority 2)
+- Piedmont Park (priority 2)
 
-Use the data insertion tool to run a single SQL INSERT with 4 rows:
+**Dining (9):**
+- Atlas (priority 1)
+- Bacchanalia (priority 1)
+- Omakase Table (priority 1)
+- Chops Lobster Bar (priority 1)
+- Little Sparrow (priority 1)
+- Taqueria Del Sol (priority 2)
+- Barcelona Wine Bar (priority 2)
+- Marcel (priority 3)
 
-| Destination | Name | Category |
-|---|---|---|
-| Birmingham | Renaissance Birmingham Ross Bridge Golf Resort & Spa | accommodation |
-| Miami | The Ritz-Carlton South Beach | accommodation |
-| Fort Lauderdale | Coconuts | dining |
-| Orlando | Walt Disney World | experience |
+**Experience (1):**
+- Château Élan Winery (priority 2)
 
-All fields match the provided SQL exactly. After insertion, run a verification query to confirm all 4 rows landed correctly.
+## How
 
-This is a data-only operation — no schema changes, no code changes needed.
+Run the provided SQL INSERT as a database migration — single statement, 13 rows. No schema changes needed. Then verify with:
+
+```sql
+SELECT name, category, priority FROM voyance_picks WHERE destination = 'Atlanta' ORDER BY priority, name;
+```
+
+Data-only operation. No code changes required.
 
