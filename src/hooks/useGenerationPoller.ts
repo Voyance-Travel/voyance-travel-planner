@@ -174,16 +174,25 @@ export function useGenerationPoller({
         return;
       }
 
-      // Also check: all days exist even if status wasn't updated
-      if (totalDays > 0 && dayCount >= totalDays && data.itinerary_data) {
-        stalledFiredRef.current = false;
-        autoResumeCountRef.current = 0;
-        setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
-        if (!onReadyCalledRef.current) {
-          onReadyCalledRef.current = true;
-          onReadyRef.current?.();
+      // Also check: all days exist with REAL activities even if status wasn't updated
+      // CRITICAL: Do NOT mark ready from itinerary_days row count alone — shell rows
+      // with empty activities caused the Tokyo 8-day regression (trip appears "ready"
+      // but no activities exist, causing bounce-back to "Ready to plan your adventure").
+      if (totalDays > 0 && data.itinerary_data) {
+        // Check canonical source: itinerary_data.days must have activities
+        const daysWithActivities = partialDays.filter(
+          (d: any) => d && Array.isArray(d.activities) && d.activities.length > 0
+        ).length;
+        if (daysWithActivities >= totalDays) {
+          stalledFiredRef.current = false;
+          autoResumeCountRef.current = 0;
+          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
+          if (!onReadyCalledRef.current) {
+            onReadyCalledRef.current = true;
+            onReadyRef.current?.();
+          }
+          return;
         }
-        return;
       }
 
       if (itineraryStatus === 'failed') {
@@ -201,17 +210,23 @@ export function useGenerationPoller({
           return;
         }
 
-        // Also check itinerary_days table — if all days exist there, generation succeeded
+        // Also check itinerary_days table — but ONLY if they have real activities
+        // Shell rows (activities: []) must NOT be treated as ready
         if (totalDays > 0 && dayCount >= totalDays) {
-          console.log('[useGenerationPoller] Status is "failed" but itinerary_days has all days — treating as ready');
-          stalledFiredRef.current = false;
-          autoResumeCountRef.current = 0;
-          setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
-          if (!onReadyCalledRef.current) {
-            onReadyCalledRef.current = true;
-            onReadyRef.current?.();
+          const daysWithRealActivities = partialDays.filter(
+            (d: any) => d && Array.isArray(d.activities) && d.activities.length > 0
+          ).length;
+          if (daysWithRealActivities >= totalDays) {
+            console.log('[useGenerationPoller] Status is "failed" but itinerary_data has all days with activities — treating as ready');
+            stalledFiredRef.current = false;
+            autoResumeCountRef.current = 0;
+            setState({ status: 'ready', completedDays: totalDays, totalDays, progress: 100, partialDays, generatedDaysList: daysList, currentCity: null });
+            if (!onReadyCalledRef.current) {
+              onReadyCalledRef.current = true;
+              onReadyRef.current?.();
+            }
+            return;
           }
-          return;
         }
 
         // Suppress failed transition if we just resumed from a background tab (grace period)

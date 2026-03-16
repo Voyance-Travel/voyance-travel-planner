@@ -73,6 +73,8 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
       console.warn(`[sync-itinerary-tables] No start_date available — using today for day ${dayNumber}`);
     }
     
+    const activities = d.activities || [];
+    
     const { data: dayRow, error: dayError } = await supabase
       .from('itinerary_days')
       .upsert({
@@ -83,6 +85,9 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
         theme: d.theme,
         description: d.description || null,
         narrative: d.narrative || null,
+        // Mirror activities into itinerary_days.activities column so frontend
+        // reads from one canonical place and never sees stale empty arrays
+        activities: activities.length > 0 ? activities : null,
       }, { onConflict: 'trip_id,day_number' })
       .select('id')
       .single();
@@ -92,7 +97,6 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
       continue;
     }
     
-    const activities = d.activities || [];
     const activityRows = activities.map((act: unknown, idx: number) => {
       const a = act as {
         id?: string; title?: string; name?: string; description?: string;

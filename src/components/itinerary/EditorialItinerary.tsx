@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronUp, ChevronDown, MapPin, Clock, Star, Save,
@@ -1852,6 +1852,27 @@ export function EditorialItinerary({
   // Get entitlements for credit checking
   const { data: entitlements, isPaid } = useEntitlements(tripId);
   
+  // Fetch trip-level unlocked_day_count as fallback for entitlements loading state.
+  // Prevents "unlock days you already paid for" flash when entitlements are slow/failed.
+  const { data: tripUnlockedCount } = useQuery({
+    queryKey: ['trip-unlocked-count', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('trips')
+        .select('unlocked_day_count')
+        .eq('id', tripId)
+        .maybeSingle();
+      return (data as any)?.unlocked_day_count ?? 0;
+    },
+    staleTime: 30_000,
+    enabled: !!tripId,
+  });
+  
+  // Wrapper: always pass trip-level fallback so paid days never show as locked
+  const canViewDay = useCallback((dayNum: number) => {
+    return canViewPremiumContentForDay(entitlements, dayNum, tripUnlockedCount ?? undefined);
+  }, [entitlements, tripUnlockedCount]);
+  
   // Credit system hooks
   const { data: creditData } = useCredits();
   const spendCredits = useSpendCredits();
@@ -3282,7 +3303,7 @@ export function EditorialItinerary({
       const filteredDays = days
         .filter((_d, idx) => {
           const dayNumber = idx + 1;
-          return canViewPremiumContentForDay(entitlements, dayNumber);
+          return canViewDay(dayNumber);
         })
         .map(d => ({
           dayNumber: d.dayNumber,
@@ -4455,7 +4476,7 @@ export function EditorialItinerary({
                           toast.info('Generating PDF...');
                           const { generateConsumerTripPdf } = await import('@/utils/consumerPdfGenerator');
                           const unlockedDayNumbers = new Set(
-                            days.filter(d => canViewPremiumContentForDay(entitlements, d.dayNumber)).map(d => d.dayNumber)
+                            days.filter(d => canViewDay(d.dayNumber)).map(d => d.dayNumber)
                           );
                           await generateConsumerTripPdf({
                             tripName: `Trip to ${destination}`,
@@ -5086,7 +5107,7 @@ export function EditorialItinerary({
             
              {/* Bulk Unlock Banner - hidden in clean preview */}
              {!isCleanPreview && !isActivelyGenerating && (() => {
-              const lockedDayCount = days.filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber)).length;
+              const lockedDayCount = days.filter(d => !canViewDay(d.dayNumber)).length;
               const unlockedCount = days.length - lockedDayCount;
               if (lockedDayCount < 2) return null;
               return (
@@ -5097,7 +5118,7 @@ export function EditorialItinerary({
                   unlockedCount={unlockedCount}
                   onBulkUnlock={() => {
                     const lockedDayNumbers = days
-                      .filter(d => !canViewPremiumContentForDay(entitlements, d.dayNumber))
+                      .filter(d => !canViewDay(d.dayNumber))
                       .map(d => d.dayNumber);
                     bulkUnlock({
                       tripId,
@@ -5289,9 +5310,9 @@ export function EditorialItinerary({
                 {/* Check if this day is locked (placeholder with no content) */}
                 {(() => {
                   const selectedDay = days[selectedDayIndex];
-                  const isLockedDay = selectedDay.metadata?.isLocked && !isManualMode && !canViewPremiumContentForDay(entitlements, selectedDay.dayNumber);
+                  const isLockedDay = selectedDay.metadata?.isLocked && !isManualMode && !canViewDay(selectedDay.dayNumber);
                   const hasActivities = selectedDay.activities && selectedDay.activities.length > 0;
-                  const canViewThisDay = canViewPremiumContentForDay(entitlements, selectedDay.dayNumber);
+                  const canViewThisDay = canViewDay(selectedDay.dayNumber);
 
                   // During active generation, show a generating placeholder instead of locked card
                   if (isActivelyGenerating && isLockedDay && !hasActivities) {
@@ -5397,7 +5418,7 @@ export function EditorialItinerary({
                           isRegenerating={regeneratingDay === selectedDay.dayNumber}
                           isEditable={effectiveIsEditable}
                           isPreview={effectiveIsPreview}
-                          canViewPremium={canViewPremiumContentForDay(entitlements, selectedDay.dayNumber)}
+                          canViewPremium={canViewDay(selectedDay.dayNumber)}
                           tripId={tripId}
                           onUnlockTrip={() => setCreditNudge({ action: 'UNLOCK_DAY' })}
                           onUnlockDay={handleUnlockDay}
@@ -5407,7 +5428,7 @@ export function EditorialItinerary({
                           onToggle={() => toggleDay(selectedDay.dayNumber)}
                           onActivitySwap={(() => {
                             if (aiLocked) return undefined;
-                            if (!canViewPremiumContentForDay(entitlements, selectedDay.dayNumber)) return undefined;
+                            if (!canViewDay(selectedDay.dayNumber)) return undefined;
                             return openSwapDrawer;
                           })()}
                           swapCapInfo={swapCap}
