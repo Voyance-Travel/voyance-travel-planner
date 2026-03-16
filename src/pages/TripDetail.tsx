@@ -764,17 +764,37 @@ export default function TripDetail() {
         .eq('trip_id', trip.id);
 
       if ((count ?? 0) > 0) {
-        // Has days in table — check if itinerary_data also has days (generation completed but status stuck)
-        const itinData = (trip.itinerary_data as { days?: unknown[] }) || {};
-        if (Array.isArray(itinData.days) && itinData.days.length > 0) {
-          // Generation completed, just fix the stale status
-          console.log(`[TripDetail] Stuck-heal: itinerary_data has ${itinData.days.length} days but status is 'generating' — correcting to 'ready'`);
+        // Has days in table — check if itinerary_data also has days with REAL activities (not empty placeholders)
+        const itinData = (trip.itinerary_data as { days?: any[] }) || {};
+        const allDays = Array.isArray(itinData.days) ? itinData.days : [];
+        // Only count days that have actual activities (not empty placeholders)
+        const realDays = allDays.filter((d: any) => 
+          Array.isArray(d?.activities) && d.activities.length > 0 && d.status !== 'placeholder'
+        );
+        // Compute expected day count from trip dates
+        let expectedDayCount = 0;
+        if (trip.start_date && trip.end_date) {
+          try {
+            expectedDayCount = differenceInDays(
+              parseLocalDate(trip.end_date),
+              parseLocalDate(trip.start_date)
+            ) + 1;
+          } catch { expectedDayCount = 0; }
+        }
+        if (!expectedDayCount) {
+          expectedDayCount = ((trip.metadata as any)?.generation_total_days) || allDays.length;
+        }
+        if (realDays.length >= expectedDayCount && expectedDayCount > 0) {
+          // All days have real activities — generation truly completed, fix stale status
+          console.log(`[TripDetail] Stuck-heal: ${realDays.length}/${expectedDayCount} real days complete — correcting to 'ready'`);
           stuckHealAttempted.current = true;
           await supabase.from('trips').update({
             itinerary_status: 'ready',
             updated_at: new Date().toISOString(),
           }).eq('id', trip.id);
           queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
+        } else {
+          console.log(`[TripDetail] Stuck-heal: only ${realDays.length}/${expectedDayCount} real days — NOT marking as ready (generation still in progress)`);
         }
         return; // Has progress, not stuck
       }
