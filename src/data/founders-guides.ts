@@ -162,6 +162,109 @@ My top Barcelona moments: standing inside Sagrada Familia when the light hit, sw
 
 *This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
   },
+  {
+    slug: 'japan',
+    title: "Founder's Guide: Japan",
+    subtitle: 'Three cities, endless wagyu, and 62 miles on foot.',
+    authorName: 'Ashton Lightfoot',
+    authorTitle: 'Co-Founder of Voyance',
+    destination: 'Japan',
+    readTime: '12 min read',
+    coverImage: toSiteImageUrlFromPhotoId('photo-1493976040374-85c8e12f0c0e'),
+    summary: "Japan changed how I think about travel. Everything is intentional - the food, the design, the service, the systems. I spent time in Kyoto, Tokyo, and Osaka, and each city has a completely different personality.",
+    datePublished: '2026-03-16',
+    tags: ['Japan', 'Food', 'Hotels', 'Markets', 'Culture'],
+    content: `# Founder's Guide: Japan
+
+Japan changed how I think about travel. Everything is intentional - the food, the design, the service, the systems. It's a country where a convenience store sandwich can be a genuine highlight of your trip, and I mean that with zero irony.
+
+I spent time in Kyoto, Tokyo, and Osaka. Each city has a completely different personality, and you need all three to understand what makes Japan special.
+
+## Where to Stay
+
+Hotels in Japan can make or break the trip. I stayed at Four Seasons properties in all three cities, and the quality varied.
+
+**Four Seasons Kyoto** was my favorite hotel of the entire trip - maybe any trip I've ever taken. It's set in a temple district with an 800-year-old pond garden, ofuro baths, a world-class spa, and a piano lounge that made me never want to leave. The danger of this hotel is that it's so peaceful and beautiful you have to force yourself to go explore the city. I used the ofuro baths every single day for recovery after walking. If you stay here, have the wagyu katsu sandwich at EMBA - cocktails, live pianist, and one of the best meals of the trip.
+
+**Four Seasons Tokyo at Otemachi** had the best views. Breakfast overlooking the Imperial Palace Gardens is a top-10 Japan moment. It's a calm, modern high-rise above the chaos of Tokyo, and the pool and baths are excellent for recovery.
+
+**The Peninsula Tokyo** is the classic luxury pick. The rooms are noticeably bigger than most Tokyo hotels, and the direct subway connection makes getting around incredibly easy. Polished and grand.
+
+**Four Seasons Osaka** was beautiful with a great spa, but the location was slightly less convenient for getting to Osaka's main dining and nightlife areas. Still worth it for the hotel itself.
+
+## Where to Eat
+
+Japan's food scene is in a different league. Here's what actually stood out.
+
+**EMBA Kyoto Grill** at the Four Seasons Kyoto was one of my most memorable meals. Wagyu katsu sandwich, fries, a cocktail, and a pianist playing in the background. Simple, elegant, perfect. This is the meal I tell everyone about.
+
+**Gyukatsu Motomura** in Tokyo serves fried wagyu cutlet - it comes out rare and you sear it yourself on a hot stone at your table. Add the mustard sauce and wasabi. It's about fifteen dollars and it's one of the most satisfying meals in the city. Go for lunch to avoid the lines.
+
+**Ukai-tei Ginza** is where wagyu gets the fine dining treatment. Tableside teppanyaki grilling in an elegant Ginza setting. Go for lunch - better value, equally impressive.
+
+**Yakiniku Black Hole** is the interactive option - grill wagyu yourself at the table. Fun, casual, great after a big day at DisneySea.
+
+**Ganko Yakiniku** - fabulous. 10 out of 10 recommend. This was one of my favorite discoveries of the trip. A tiny, hidden yakiniku spot that seats just a handful of people. The kind of place you stumble into and immediately know you found something special.
+
+**Kakyo** in Kyoto is traditional kaiseki. Multi-course, seasonal, beautifully plated. The pacing is slow and intentional. This isn't about filling up - it's about the experience. Go for lunch and let it breathe.
+
+**Ramen** - I didn't have one specific "best ramen" moment, but ramen after a long day of walking Tokyo is one of the most comforting things you can experience. Rich broth, quick service, under ten dollars. Pair it with a gyukatsu meal for the ultimate comfort day.
+
+One lesson I learned: traditional omakase wasn't really my thing. I tried a high-end sushi omakase - 20+ courses, rigid pacing, ingredients like eel and abalone that I didn't connect with. If you're not already a sushi purist, you might want to stick with restaurants where you have more control over what you're eating. The wagyu experiences were far more memorable for me.
+
+## The Markets
+
+Markets in Japan were some of my favorite eating experiences of the entire trip.
+
+**Nishiki Market** in Kyoto is a narrow covered street with over a hundred stalls. Chicken nanban, wagyu skewers, gyoza, tempura, toro, sake tastings - it's all there. My advice: do a guided tour your first time. You'll learn what to try and skip past the tourist traps.
+
+**Kuromon Ichiba Market** in Osaka is the rowdier, more energetic version. Wagyu sushi, tempura, yakisoba, and every kind of street snack you can imagine. Walk the full length before you start buying. Bring cash for the smaller stalls. The experience here is just wandering and eating whatever catches your eye.
+
+## The Surprise: Convenience Stores
+
+I'm going to say something that sounds ridiculous: the 7-Eleven egg salad sandwich in Japan is a genuine food recommendation. Japanese convenience stores - they call them konbini - are nothing like what you're used to. Fresh onigiri, premium sandwiches, excellent fried chicken. Also try Famichiki from FamilyMart and Lawson's fried chicken. Available 24/7, costs almost nothing, and legitimately good.
+
+## Experiences
+
+**Tokyo DisneySea** was a huge highlight. I'm a Disney girl at heart, and I'd call this the most beautiful Disney park in the world. The design and attention to detail is on another level - it's architecturally stunning even if you don't ride anything. Surprisingly affordable compared to US Disney parks. Worth it even if you only somewhat like Disney.
+
+**Fushimi Inari Taisha** in Kyoto - thousands of orange torii gates winding up a mountain. Go at sunrise. By 9am it's packed. The higher you climb, the fewer people. You don't need to go all the way to the top.
+
+**Arashiyama Bamboo Grove** - arrive before 8am or don't bother. It's small and gets overwhelmed by mid-morning. But early, with the filtered light and the sound of wind through the bamboo, it's surreal.
+
+**Shibuya Crossing** at night - cross it once for the energy (3,000 people at once), then watch from above. The neon at night makes it cinematic.
+
+**Dotonbori** in Osaka - neon-lit canal district with the famous Glico running man sign. Amazing for one or two nights of sensory overload. Great street food along the strip.
+
+## Recovery
+
+Here's something nobody tells you about Japan: you will walk an insane amount. I logged 62 miles over the trip. My daily ritual was using the hotel pool and ofuro baths for recovery. If you're choosing between two hotels, pick the one with baths. You'll need them.
+
+## Practical Stuff
+
+**Trains** - once you realize that train lines have numbers and stations have numbers, Japan becomes incredibly easy to navigate. Don't be intimidated.
+
+**Tours** - my strategy was one market tour and one cultural tour per city, then explore independently. Student-led tours were excellent value.
+
+**Weather** - I went in September. It was about 90 degrees and humid, with typhoon season active. Bring an umbrella, a neck fan, and lightweight clothes.
+
+**Flights** - about 11 hours outbound, 9 hours return, with a 16-hour time difference. It's a real commitment. My conclusion: one major international trip like this per year is enough.
+
+## Top 10 Japan Moments
+
+- Four Seasons Kyoto - the hotel itself
+- Wagyu katsu sandwich at EMBA
+- Ofuro hot baths after walking
+- Nishiki Market grazing
+- Kuromon Market in Osaka
+- Ramen comfort meal after 25,000 steps
+- Yakiniku dinner - grilling my own wagyu
+- Tokyo DisneySea
+- Shibuya Crossing at night
+- Breakfast at Four Seasons Otemachi overlooking the Imperial Palace
+
+*This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
+  },
 ];
 
 export function getFoundersGuides(): FoundersGuide[] {
