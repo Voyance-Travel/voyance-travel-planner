@@ -307,6 +307,68 @@ Vienna is a city for people who appreciate craft, history, and doing a few thing
 
 *This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
   },
+  {
+    slug: 'las-vegas',
+    title: "Founder's Guide: Las Vegas",
+    subtitle: 'The right hotel, the right meals, and the hidden spots most visitors miss.',
+    authorName: 'Ashton Lightfoot',
+    authorTitle: 'Co-Founder of Voyance',
+    destination: 'Las Vegas',
+    readTime: '5 min read',
+    coverImage: toSiteImageUrlFromPhotoId('photo-1605833556294-ea5c7a74f57d'),
+    summary: "Vegas rewards you for knowing where to go. The right hotel, the right meals, and knowing the hidden spots make all the difference.",
+    datePublished: '2026-03-16',
+    tags: ['Las Vegas', 'Food', 'Hotels', 'Nightlife', 'Nevada'],
+    content: `# Founder's Guide: Las Vegas
+
+I love Las Vegas. The key is knowing which properties are worth the money, which meals are worth the splurge, and which hidden gems most visitors walk right past. If you do it right, Vegas is actually one of the best food and hotel cities in the country.
+
+## Where to Stay
+
+The hotel makes or breaks a Vegas trip. I've stayed at several on the Strip and have strong opinions.
+
+### Wynn Las Vegas
+
+**Wynn Las Vegas** is my favorite hotel in Vegas. It's on the north end of the Strip, and everything about it is a step above - the rooms, the pool, the casino floor, the landscaping. It's refined in a way that most Vegas hotels aren't. Request a higher floor facing the Strip. The pool complex is the best on the Strip.
+
+### Encore at Wynn
+
+**Encore at Wynn** is the sister property, connected to the Wynn but with its own identity. Slightly more intimate, all-suite, with its own pool and nightlife scene. The suites are a good value compared to the main Wynn tower. The Encore Beach Club is the party side if that's your thing.
+
+### The Cosmopolitan
+
+**The Cosmopolitan** is the coolest hotel on the Strip. Modern design, art installations, and the rare Vegas hotel that actually has balcony rooms. I used to stay here all the time. Book a Terrace Suite if you can - having a balcony overlooking the Strip at night is unforgettable. The Chandelier Bar inside is worth a drink even if you're staying elsewhere.
+
+## Where to Eat
+
+### La Cave Wine & Food Hideaway
+
+**La Cave Wine & Food Hideaway** at the Wynn is one of my favorite brunches anywhere. Not just Vegas - anywhere. It's an intimate wine cave with family-style service. They bring dish after dish to your table - charcuterie, shareable plates, and a wine list to match. It's way too much food and it's amazing. The dishes come around to everyone's table and you just pull what you want off. It's a much better experience than any Vegas buffet, and better value than most Strip restaurants. Reserve ahead for weekend brunch.
+
+*This is the meal I recommend to everyone going to Vegas.*
+
+### Gordon Ramsay Fish & Chips
+
+**Gordon Ramsay Fish & Chips** on the LINQ Promenade is the best quick lunch on the Strip. Counter service, classic British fish and chips, and it's actually really good. Perfect when you need a fast, satisfying meal between activities without sitting down for a two-hour dinner.
+
+### Secret Pizza
+
+**Secret Pizza** at the Cosmopolitan is exactly what it sounds like - a hidden, unmarked pizza counter on the third floor with no signage. Look for the hallway with vinyl records on the wall. Walk to the end. Late night pizza there is always a vibe. This is the Vegas late-night secret that everyone should know but most people miss.
+
+### Bellagio Patisserie
+
+**Bellagio Patisserie** - I love the crepes here. They're delicious. Stop in after seeing the Bellagio Conservatory. Quick, sweet, satisfying.
+
+## The Hack
+
+**ResortPass** is the move if you're staying at a hotel without a great pool. It lets you buy day passes and cabanas at top hotel pools without being a guest. Want the Wynn pool experience without the Wynn room rate? This is how. I actually use it regularly - I need to book one starting soon for a trip I have coming up. Book cabanas early on weekends - they sell out.
+
+## The Takeaway
+
+Vegas rewards you for knowing where to go. The difference between a forgettable Vegas trip and a great one comes down to three decisions: the right hotel, the right meals, and knowing the hidden spots. Stay at the Wynn or Cosmo. Brunch at La Cave. Late-night pizza at Secret Pizza. That's a Vegas trip worth remembering.
+
+*This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
+  },
 ];
 
 export function getFoundersGuides(): FoundersGuide[] {
