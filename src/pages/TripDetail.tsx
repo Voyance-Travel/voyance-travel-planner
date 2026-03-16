@@ -1126,10 +1126,10 @@ export default function TripDetail() {
                 .select('id', { count: 'exact', head: true })
                 .eq('trip_id', tripId);
 
-              if (!activityCount || activityCount === 0) {
-                // Tables are empty — do NOT rebuild from them, it would overwrite good JSON
-                console.log(`[TripDetail] Self-heal: itinerary_activities has 0 rows — skipping table rebuild to protect JSON data`);
-              } else {
+              // Always attempt rebuild from itinerary_days — the table stores embedded activities
+              // so itinerary_activities count is irrelevant for rebuild capability
+              {
+                const _activityCount = activityCount; // preserve for logging
                 const { data: fullDayRows } = await supabase
                   .from('itinerary_days')
                   .select('day_number, date, title, theme, description, weather, activities')
