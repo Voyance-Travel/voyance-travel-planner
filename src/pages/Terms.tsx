@@ -8,17 +8,13 @@ export default function Terms() {
     window.scrollTo(0, 0);
   }, []);
 
-  const lastUpdated = new Date().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  const lastUpdated = 'March 16, 2026';
 
   return (
     <MainLayout>
       <Head
         title="Terms of Service | Voyance"
-        description="Voyance terms of service and usage guidelines."
+        description="Voyance terms of service. Read our usage guidelines and service agreements."
       />
       
       <section className="pt-24 pb-16">

@@ -8,17 +8,13 @@ export default function Privacy() {
     window.scrollTo(0, 0);
   }, []);
 
-  const lastUpdated = new Date().toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  const lastUpdated = 'March 16, 2026';
 
   return (
     <MainLayout>
       <Head
         title="Privacy Policy | Voyance"
-        description="Voyance privacy policy and data usage practices."
+        description="Voyance privacy policy. Learn how we protect your data and handle your personal information."
       />
       
       <section className="pt-24 pb-16">
