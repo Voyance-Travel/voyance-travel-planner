@@ -39,6 +39,7 @@ interface RefreshDayDiffViewProps {
   onAcceptAll: (changes: ProposedChange[]) => void;
   onAcceptSelected: (changes: ProposedChange[]) => void;
   onDismiss: () => void;
+  onFindAlternative?: (activityId: string, activityTitle: string) => void;
   className?: string;
 }
 
