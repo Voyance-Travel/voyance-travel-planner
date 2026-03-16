@@ -8306,9 +8306,9 @@ function DayCard({
                    {totalCost > 0 ? `${formatCurrency(displayCost(totalCost), tripCurrency)}${travelers > 1 ? '/pp' : ''}` : 'Free'}
                  </Badge>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <span className="text-xs font-medium">Day Cost Estimate</span>
-              </TooltipContent>
+               <TooltipContent side="bottom">
+                 <span className="text-xs font-medium">Confirmed costs only</span>
+               </TooltipContent>
              </Tooltip>
              )}
              {day.weather && (
