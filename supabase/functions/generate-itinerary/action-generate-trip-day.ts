@@ -617,24 +617,30 @@ export async function handleGenerateTripDay(
   }
 
   if (dayNumber >= totalDays) {
-    // All days complete
+    // All days complete — but only mark ready if all days have real activities
+    const finalStatus = allDaysHaveActivities ? 'ready' : 'partial';
+    const emptyDaysList = updatedDays
+      .filter((d: any) => !Array.isArray(d.activities) || d.activities.length === 0)
+      .map((d: any) => d.dayNumber);
+
     await supabase.from('trips').update({
       itinerary_data: partialItinerary,
-      itinerary_status: 'ready',
+      itinerary_status: finalStatus,
       unlocked_day_count: newUnlocked,
       metadata: {
         ...meta,
-        generation_completed_days: totalDays,
+        generation_completed_days: allDaysHaveActivities ? totalDays : updatedDays.filter((d: any) => Array.isArray(d.activities) && d.activities.length > 0).length,
         generation_completed_at: new Date().toISOString(),
         generation_heartbeat: new Date().toISOString(),
         generation_total_days: totalDays,
         generation_current_city: null,
-        chain_broken_at_day: null,
-        chain_error: null,
+        chain_broken_at_day: allDaysHaveActivities ? null : emptyDaysList[0],
+        chain_error: allDaysHaveActivities ? null : `Shell days detected: ${emptyDaysList.join(', ')} have 0 activities`,
+        empty_days_at_completion: emptyDaysList.length > 0 ? emptyDaysList : null,
       },
     }).eq('id', tripId);
 
-    console.log(`[generate-trip-day] ✅ Trip ${tripId} generation complete: ${totalDays} days`);
+    console.log(`[generate-trip-day] ${allDaysHaveActivities ? '✅' : '⚠️'} Trip ${tripId} generation ${allDaysHaveActivities ? 'complete' : 'partial (shell days)'}: ${totalDays} days, status=${finalStatus}`);
 
     // ── SYNC NORMALIZED TABLES on chain completion ──────────────────
     // This ensures itinerary_days + itinerary_activities stay in sync
