@@ -272,17 +272,22 @@ export function buildMealRequirementsPrompt(policy: MealPolicy): string {
     return lines.join('\n');
   }
 
-  lines.push(`- Required meals: ${policy.requiredMeals.join(', ').toUpperCase()} (${policy.requiredMeals.length} total)`);
+  lines.push(`🚨 MANDATORY MEALS — ${policy.requiredMeals.length} REQUIRED (FAILURE IF ANY ARE MISSING):`);
+  lines.push(`You MUST include ALL of the following as separate dining activities with category="dining".`);
+  lines.push(`Generic names like "Local Café", "Local Restaurant", "Breakfast spot" = AUTOMATIC FAILURE.`);
+  lines.push(`Each meal MUST use a REAL, SPECIFIC restaurant or café name that exists in the destination.`);
 
   if (policy.requiredMeals.includes('breakfast')) {
-    lines.push(`- BREAKFAST: Real restaurant/café name near hotel, ~price, walk time — MUST BE DIFFERENT from any previous day's breakfast`);
+    lines.push(`- 🍳 BREAKFAST (MANDATORY): A real named café/restaurant near the hotel. Include the actual restaurant name, approximate price, and walk time. MUST be DIFFERENT from any previous day's breakfast. Example: "Breakfast at Café de Flore" NOT "Breakfast — Local Café".`);
   }
   if (policy.requiredMeals.includes('lunch')) {
-    lines.push(`- LUNCH: Restaurant near previous activity, ~price, 1 alternative in tips — MUST BE DIFFERENT from any previous day's lunch`);
+    lines.push(`- 🥗 LUNCH (MANDATORY): A real named restaurant near the previous activity. Include actual restaurant name, ~price, 1 alternative in tips. MUST be DIFFERENT from any previous day's lunch. Example: "Lunch at Ichiran Ramen" NOT "Lunch spot".`);
   }
   if (policy.requiredMeals.includes('dinner')) {
-    lines.push(`- DINNER: Restaurant with price range, cuisine type, reservation needed? — MUST BE DIFFERENT from any previous day's dinner`);
+    lines.push(`- 🍽️ DINNER (MANDATORY): A real named restaurant with price range, cuisine type, reservation info. MUST be DIFFERENT from any previous day's dinner. Example: "Dinner at Trattoria dell'Orso" NOT "Dinner — Local Restaurant".`);
   }
+
+  lines.push(`⚠️ CRITICAL: If your response is missing ANY of the above meals, it will be REJECTED and you will be asked to redo the entire day. Save time by including them on the first attempt.`);
 
   if (policy.requiredMeals.length < 3) {
     const missing = (['breakfast', 'lunch', 'dinner'] as RequiredMeal[]).filter(m => !policy.requiredMeals.includes(m));
