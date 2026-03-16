@@ -227,9 +227,19 @@ Deno.serve(async (req: Request) => {
             activityTitle: act.title,
             severity: 'error',
             message: `${act.title} appears to be closed on ${hoursCheck.dayName || 'this day'}.`,
-            suggestion: `Consider swapping this with an alternative activity.`,
+            suggestion: `Find an alternative activity for this time slot.`,
           });
-          // No auto-fix for closures — user must pick alternative
+          // Emit a replacement change so the UI can offer "Find Alternative"
+          proposedChanges.push({
+            id: `change-${++changeCounter}`,
+            type: 'replacement',
+            activityId: act.id,
+            activityTitle: act.title,
+            icon: 'arrow-right-left',
+            description: `${act.title} is closed on ${hoursCheck.dayName || 'this day'} — find an alternative`,
+            patch: { needsSwap: true },
+          });
+          changedIds.add(act.id);
         } else {
           const opensMin = parseTime(hoursCheck.opens!);
           const tooEarly = startMin !== null && opensMin !== null && startMin < opensMin;
