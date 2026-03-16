@@ -1615,13 +1615,21 @@ export default function TripDetail() {
       try {
         console.log('[TripDetail] Force-saving itinerary to backend:', tripId);
         
-        // Fetch current unlocked_day_count to ensure we never decrease it
+        // Fetch current trip data to ensure we never shrink day count or decrease unlocked_day_count
         const { data: currentTrip } = await supabase
           .from('trips')
-          .select('unlocked_day_count')
+          .select('unlocked_day_count, itinerary_data')
           .eq('id', tripId)
           .maybeSingle();
         const existingUnlocked = (currentTrip as any)?.unlocked_day_count ?? 0;
+        
+        // NO-SHRINK GUARD: Never overwrite a larger day array with a smaller one
+        const existingDayCount = ((currentTrip as any)?.itinerary_data as any)?.days?.length || 0;
+        const incomingDayCount = itineraryPayload?.days?.length || 0;
+        if (existingDayCount > incomingDayCount) {
+          console.warn(`[TripDetail] SHRINK BLOCKED: existing=${existingDayCount}, incoming=${incomingDayCount}. Skipping force-save.`);
+          return;
+        }
         const computedUnlocked = isPreview === false 
           ? computeUnlockedDayCount({ isFirstTrip: !!isFirstTrip, isPreview: false, generatedDayCount: nonLockedDays.length }) 
           : undefined;
