@@ -844,6 +844,18 @@ export async function handleGenerateTripDay(
   } else {
     // More days remain — save progress and self-chain
     const nextCityName = dayCityMap?.[dayNumber]?.cityName || null;
+    // Track used restaurants from this day's dining activities
+    const newUsedRestaurants = [...usedRestaurants];
+    const dayActivities = dayResult?.activities || [];
+    for (const act of dayActivities) {
+      if ((act.category || '').toLowerCase() === 'dining' && act.title) {
+        const name = (act.title || '').replace(/^(Breakfast|Lunch|Dinner):\s*/i, '').trim();
+        if (name && !newUsedRestaurants.includes(name)) {
+          newUsedRestaurants.push(name);
+        }
+      }
+    }
+
     await supabase.from('trips').update({
       itinerary_data: partialItinerary,
       unlocked_day_count: newUnlocked,
@@ -853,6 +865,7 @@ export async function handleGenerateTripDay(
         generation_heartbeat: new Date().toISOString(),
         generation_total_days: totalDays,
         generation_current_city: nextCityName,
+        used_restaurants: newUsedRestaurants,
       },
     }).eq('id', tripId);
 
