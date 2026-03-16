@@ -636,6 +636,76 @@ serve(async (req) => {
       }
     }
 
+    // --- Day-of-month validation against raw text ---
+    // The AI sometimes truncates multi-digit days: "June 10" → day 1 instead of 10.
+    // Extract explicit day numbers from the user's raw text and compare.
+    if (parsed.dates?.start) {
+      const monthNamesMap: Record<string, number> = {
+        january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+        july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+        jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+      };
+
+      // Pattern: "Month DD" with optional range "Month DD–DD", "Month DD - DD", "Month DD to DD", "Month DD to Month DD"
+      const monthDayRangeRe = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\s*(?:[–\-—]|to)\s*(?:(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+)?(\d{1,2})(?:st|nd|rd|th)?\b/i;
+      // Pattern: "DD–DD Month" or "DD to DD Month"
+      const dayRangeMonthRe = /\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:[–\-—]|to)\s*(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\b/i;
+      // Pattern: single "Month DD" (no range)
+      const singleMonthDayRe = /\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+
+      let rawStartDay: number | null = null;
+      let rawEndDay: number | null = null;
+      let rawMonth: number | null = null;
+
+      const rangeMatch1 = text.match(monthDayRangeRe);
+      const rangeMatch2 = text.match(dayRangeMonthRe);
+
+      if (rangeMatch1) {
+        rawMonth = monthNamesMap[rangeMatch1[1].toLowerCase()] || null;
+        rawStartDay = parseInt(rangeMatch1[2], 10);
+        rawEndDay = parseInt(rangeMatch1[3], 10);
+      } else if (rangeMatch2) {
+        rawStartDay = parseInt(rangeMatch2[1], 10);
+        rawEndDay = parseInt(rangeMatch2[2], 10);
+        rawMonth = monthNamesMap[rangeMatch2[3].toLowerCase()] || null;
+      } else {
+        const singleMatch = text.match(singleMonthDayRe);
+        if (singleMatch) {
+          rawMonth = monthNamesMap[singleMatch[1].toLowerCase()] || null;
+          rawStartDay = parseInt(singleMatch[2], 10);
+        }
+      }
+
+      if (rawStartDay !== null && rawStartDay >= 1 && rawStartDay <= 31) {
+        const sp = parsed.dates.start.split('-').map(Number);
+        const aiStartDay = sp[2];
+        const monthMatches = rawMonth === null || rawMonth === sp[1];
+        if (monthMatches && aiStartDay !== rawStartDay) {
+          console.log(`[parse-trip-input] Day-of-month fix: start day ${aiStartDay} → ${rawStartDay} (raw text had "${rangeMatch1?.[0] || rangeMatch2?.[0] || text.match(singleMonthDayRe)?.[0]}")`);
+          parsed.dates.start = `${sp[0]}-${String(sp[1]).padStart(2, '0')}-${String(rawStartDay).padStart(2, '0')}`;
+        }
+
+        if (rawEndDay !== null && rawEndDay >= 1 && rawEndDay <= 31 && parsed.dates.end) {
+          const ep = parsed.dates.end.split('-').map(Number);
+          const aiEndDay = ep[2];
+          const endMonthMatches = rawMonth === null || rawMonth === ep[1];
+          if (endMonthMatches && aiEndDay !== rawEndDay) {
+            console.log(`[parse-trip-input] Day-of-month fix: end day ${aiEndDay} → ${rawEndDay}`);
+            parsed.dates.end = `${ep[0]}-${String(ep[1]).padStart(2, '0')}-${String(rawEndDay).padStart(2, '0')}`;
+          }
+        }
+
+        // Recalculate individual day.date values from corrected start
+        if (parsed.days && parsed.dates.start) {
+          const [sy, sm, sd] = parsed.dates.start.split('-').map(Number);
+          for (let i = 0; i < parsed.days.length; i++) {
+            const dayDate = new Date(sy, sm - 1, sd + i);
+            parsed.days[i].date = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, '0')}-${String(dayDate.getDate()).padStart(2, '0')}`;
+          }
+        }
+      }
+    }
+
     // Detect the canonical currency for the destination so that trips to
     // e.g. Austin, Texas are always USD even if the source material used € signs.
     const destinationCurrency = inferDestinationCurrency(parsed.destination || '');
