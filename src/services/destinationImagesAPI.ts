@@ -407,15 +407,18 @@ export function writeBackDestinationCanonicalImage(destinationName: string, imag
   const cityOnly = destinationName.split(',')[0].trim();
 
   // Fire-and-forget
-  supabase
-    .from('destinations')
-    .update({ hero_image_url: imageUrl } as any)
-    .ilike('city', cityOnly)
-    .is('hero_image_url', null)
-    .then(() => {
+  (async () => {
+    try {
+      await supabase
+        .from('destinations')
+        .update({ hero_image_url: imageUrl } as any)
+        .ilike('city', cityOnly)
+        .is('hero_image_url', null);
       console.log('[Images] Wrote back canonical hero for:', cityOnly);
-    })
-    .catch(() => { /* best-effort */ });
+    } catch {
+      /* best-effort */
+    }
+  })();
 }
 
 export default {
