@@ -245,5 +245,4 @@ export function getActivityPlaceholder(category?: string): string {
 export function clearActivityImageCache(): void {
   imageCache.clear();
   pendingRequests.clear();
-  persistedActivityIds.clear();
 }
