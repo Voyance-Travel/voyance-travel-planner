@@ -1,28 +1,21 @@
 
 
-# Voyance Picks Batch 9: Japan (Hotels + Restaurants)
+# Voyance Picks Batch 10: Japan Experiences & Markets
 
 ## What
-Insert 10 founder-curated Japan picks:
+Insert 8 founder-curated Japan picks covering markets, experiences, and cultural highlights:
 
-**Hotels (4)**
-| Destination | Name | Priority |
-|---|---|---|
-| Kyoto | Four Seasons Hotel Kyoto | 1 |
-| Tokyo | Four Seasons Hotel Tokyo at Otemachi | 1 |
-| Tokyo | The Peninsula Tokyo | 2 |
-| Osaka | Four Seasons Hotel Osaka | 2 |
-
-**Restaurants (6)**
-| Destination | Name | Priority |
-|---|---|---|
-| Kyoto | EMBA Kyoto Grill | 1 |
-| Kyoto | Kakyo | 1 |
-| Tokyo | Gyukatsu Motomura | 1 |
-| Tokyo | Ukai-tei Ginza | 2 |
-| Tokyo | Yakiniku Black Hole | 2 |
-| Tokyo | Gyumon Halal Ramen | 2 |
+| Destination | Name | Category | Priority |
+|---|---|---|---|
+| Kyoto | Nishiki Market | experience | 1 |
+| Osaka | Kuromon Ichiba Market | experience | 1 |
+| Tokyo | Tokyo DisneySea | experience | 1 |
+| Kyoto | Fushimi Inari Taisha | activity | 1 |
+| Kyoto | Arashiyama Bamboo Grove | activity | 1 |
+| Tokyo | Shibuya Crossing at Night | experience | 1 |
+| Osaka | Dotonbori | experience | 1 |
+| Tokyo | 7-Eleven Japan | experience | 2 |
 
 ## How
-Single SQL INSERT migration — 10 rows, data only, no schema changes. Verify with provided SELECT query.
+Single SQL INSERT migration — 8 rows, data only, no schema changes. Verify with two queries: full Japan dataset and total pick counts.
 
