@@ -472,16 +472,16 @@ export default function About() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">The People Behind Voyance</span>
+              <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Meet the Founders</span>
               <div className="mt-4 md:mt-8 space-y-4 md:space-y-6 text-sm md:text-lg leading-relaxed">
                 <p className="text-foreground font-medium text-lg md:text-xl">
-                  We're not a big tech company. We're two travelers who got tired of generic recommendations and decided to build something better.
+                  We're Ashton and Clinton - the two people (and one Yorkie) behind Voyance.
                 </p>
                 <p className="text-muted-foreground">
-                  Voyance started because we kept running into the same problem - every travel app gave us the same recycled lists. The same "top 10" articles. The same recommendations that felt like they were written by someone who had never actually been there. We wanted a travel planner that felt like getting advice from a friend who just got back from the trip. So we built one.
+                  People work too hard for their money. Too hard for their vacation. And they have too little of both. When you finally take that trip, you shouldn't be stuck in a tourist trap. You shouldn't be handing your money to something that wasn't worth it. And you definitely shouldn't have spent hours planning just to end up disappointed.
                 </p>
                 <p className="text-muted-foreground">
-                  Every Voyance Pick in our system is a place we've personally been to. Every Founder's Guide is written from real trips, real meals, and real opinions. We don't recommend what we haven't tried.
+                  We built Voyance because we lived that frustration ourselves - and we decided to fix it. You tell us who you are one time. We remember you. We plan your trip around you. And the more you use Voyance, the better we get at knowing exactly what you want.
                 </p>
               </div>
             </motion.div>
