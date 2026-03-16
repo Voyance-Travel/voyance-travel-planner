@@ -254,6 +254,12 @@ export function useTripHeroImage({
       return;
     }
 
+    // Handle canonical image failure
+    if (canonicalUrl && !canonicalFailed) {
+      setCanonicalFailed(true);
+      return;
+    }
+
     // Handle curated image failure - try next in list
     if (hasCurated && !curatedFailed) {
       if (curatedIndex < curatedImages.length - 1) {
@@ -277,7 +283,9 @@ export function useTripHeroImage({
     }
   }, [
     seededHeroUrl, 
-    seededFailed, 
+    seededFailed,
+    canonicalUrl,
+    canonicalFailed,
     hasCurated, 
     curatedFailed, 
     curatedIndex, 
