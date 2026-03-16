@@ -1480,6 +1480,7 @@ import {
   validateGeneratedDay,
   deduplicateActivities,
   detectMealSlots,
+  enforceRequiredMealsFinalGuard,
   type DayValidationResult,
   type StrictDayMinimal,
 } from './day-validation.ts';
