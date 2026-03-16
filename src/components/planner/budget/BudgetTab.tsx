@@ -47,7 +47,9 @@ import { useTripMembers } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BudgetCategory } from '@/services/tripBudgetService';
 import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
-import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+import { usePayableItems } from '@/hooks/usePayableItems';
+import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
+// useTripFinancialSnapshot removed — usePayableItems is now the source of truth
 
 interface ItineraryActivity {
   id: string;
@@ -80,11 +82,25 @@ interface BudgetTabProps {
   hasFlight?: boolean;
   /** Trip destination for AI context */
   destination?: string;
+  /** Destination country for cost estimation */
+  destinationCountry?: string;
+  /** Budget tier for cost estimation */
+  budgetTier?: string;
+  /** Flight selection data for payable items calculation */
+  flightSelection?: {
+    outbound?: { price?: number; airline?: string };
+    return?: { price?: number; airline?: string };
+    totalPrice?: number;
+  } | null;
+  /** Hotel selection data for payable items calculation */
+  hotelSelection?: {
+    name?: string;
+    totalPrice?: number;
+    pricePerNight?: number;
+  } | null;
   /** Journey fields for linked trip budget summary */
   journeyId?: string | null;
   journeyName?: string | null;
-  /** JS-calculated total cost (all travelers, in cents) as fallback when DB snapshot is stale */
-  jsTotalCostCents?: number;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
@@ -187,8 +203,9 @@ function CostsList({ ledger, formatCurrency, categoryColors, categoryIcons, onAc
   );
 }
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, journeyId, journeyName, jsTotalCostCents }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
+  const [payments, setPayments] = useState<TripPayment[]>([]);
   const syncAttempted = useRef(false);
   const { data: rawTripMembers = [] } = useTripMembers(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
@@ -259,35 +276,54 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     refetch,
   } = useTripBudget({ tripId, totalDays, enabled: true });
 
-  // ─── Financial snapshot: single source of truth for expected spend ───
-  const rawSnapshot = useTripFinancialSnapshot(tripId);
-  
-  // Always prefer JS-calculated total as primary source — it reflects the live itinerary.
-  // DB snapshot is only used for paid tracking (which only exists in the DB).
-  const snapshot = useMemo(() => {
-    const useLiveTotal = jsTotalCostCents && jsTotalCostCents > 0;
-    const effectiveTotal = useLiveTotal ? jsTotalCostCents : rawSnapshot.tripTotalCents;
-    const toBePaid = Math.max(0, effectiveTotal - rawSnapshot.paidCents);
-    
-    if (useLiveTotal && effectiveTotal !== rawSnapshot.tripTotalCents) {
-      console.info(`[BudgetTab] Using live itinerary total: ${effectiveTotal}c (DB: ${rawSnapshot.tripTotalCents}c)`);
+  // ─── Fetch payments for payable items calculation ───
+  const fetchPaymentsForBudget = useCallback(async () => {
+    const result = await getTripPayments(tripId);
+    if (result.success) {
+      setPayments(result.payments || []);
     }
-    
+  }, [tripId]);
+
+  useEffect(() => {
+    fetchPaymentsForBudget();
+  }, [fetchPaymentsForBudget]);
+
+  // Listen for payment changes
+  useEffect(() => {
+    const handler = () => fetchPaymentsForBudget();
+    window.addEventListener('booking-changed', handler);
+    return () => window.removeEventListener('booking-changed', handler);
+  }, [fetchPaymentsForBudget]);
+
+  // ─── Payable items: single source of truth matching Payments tab ───
+  const { totalCents: payableTotalCents } = usePayableItems({
+    days: itineraryDays || [],
+    flightSelection,
+    hotelSelection,
+    travelers,
+    payments,
+    budgetTier,
+    destination,
+    destinationCountry,
+  });
+
+  // Build a snapshot-like object from payable items total
+  const snapshot = useMemo(() => {
+    const paidCents = payments
+      .filter(p => p.status === 'paid')
+      .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0);
+    const budgetTotalCents = settings?.budget_total_cents || 0;
+    const toBePaid = Math.max(0, payableTotalCents - paidCents);
+
     return {
-      ...rawSnapshot,
-      tripTotalCents: effectiveTotal,
+      tripTotalCents: payableTotalCents,
+      paidCents,
       toBePaidCents: toBePaid,
-      plannedUnpaidCents: toBePaid,
-      budgetRemainingCents: rawSnapshot.budgetTotalCents - effectiveTotal,
-      paidPercent: effectiveTotal > 0 ? Math.min((rawSnapshot.paidCents / effectiveTotal) * 100, 100) : 0,
+      budgetTotalCents,
+      budgetRemainingCents: budgetTotalCents - payableTotalCents,
+      paidPercent: payableTotalCents > 0 ? Math.min((paidCents / payableTotalCents) * 100, 100) : 0,
     };
-  }, [rawSnapshot, jsTotalCostCents]);
-  
-  // Check if category breakdown totals are misaligned with the live total
-  const categoryTotalCents = useMemo(() => {
-    return allocations.reduce((sum, a) => sum + a.usedCents, 0);
-  }, [allocations]);
-  const isCategorySyncing = snapshot.tripTotalCents > 0 && categoryTotalCents > 0 && (categoryTotalCents / snapshot.tripTotalCents) < 0.2;
+  }, [payableTotalCents, payments, settings?.budget_total_cents]);
 
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
@@ -574,12 +610,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {isCategorySyncing && (
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border text-muted-foreground text-xs">
-                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <p>Category totals are syncing — the Trip Expenses total above reflects your full itinerary.</p>
-              </div>
-            )}
+           {/* Category sync warning removed — totals now come from payable items */}
             {allocations.map((alloc) => {
               const allocated = alloc.allocatedCents;
               const used = alloc.usedCents;

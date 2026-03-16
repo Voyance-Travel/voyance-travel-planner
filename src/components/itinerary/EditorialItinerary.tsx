@@ -1317,17 +1317,30 @@ export function EditorialItinerary({
 
       for (const day of currentDays) {
         for (const act of day.activities) {
-          const costVal = act.cost
-            ? (typeof act.cost === 'number'
-              ? act.cost
-              : (act.cost as any).amount || (act.cost as any).total || (act.cost as any).perPerson || 0)
-            : 0;
+          const costObj = act.cost;
+          let costVal = 0;
+          let basis = 'per_person'; // default assumption
+
+          if (typeof costObj === 'number') {
+            costVal = costObj;
+          } else if (costObj && typeof costObj === 'object') {
+            costVal = (costObj as any).amount || (costObj as any).total || (costObj as any).perPerson || 0;
+            basis = (costObj as any).basis || 'per_person';
+          }
+
           if (costVal >= 0) {
+            // FIX: For flat-rate costs (group totals like dining, entrance fees),
+            // divide by travelers so v_trip_total (cost_per_person_usd * num_travelers)
+            // produces the correct group total instead of double-counting.
+            const costPerPerson = basis === 'flat'
+              ? costVal / Math.max(travelers || 1, 1)
+              : costVal;
+
             activitiesForCostTable.push({
               id: act.id,
               dayNumber: day.dayNumber,
               category: act.category || act.type || 'activities',
-              costPerPersonUsd: costVal,
+              costPerPersonUsd: costPerPerson,
               numTravelers: travelers || 1,
               source: 'itinerary-sync',
             });
@@ -5500,9 +5513,12 @@ export function EditorialItinerary({
             hasHotel={!!(hotelSelection?.pricePerNight || hotelSelection?.name)}
             hasFlight={hasFlightData}
             destination={destination}
+            destinationCountry={destinationCountry}
+            budgetTier={budgetTier}
+            flightSelection={flightSelection}
+            hotelSelection={hotelSelection}
             journeyId={journeyId}
             journeyName={journeyName}
-            jsTotalCostCents={Math.round(jsTotalCost * (travelers || 1) * 100)}
             onActivityRemove={(activityId) => {
               // Remove the activity from itinerary days when deleted from budget
               setDays(prev => {

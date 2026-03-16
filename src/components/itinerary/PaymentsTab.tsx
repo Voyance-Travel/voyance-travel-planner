@@ -5,9 +5,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getAppUrl } from '@/utils/getAppUrl';
-import { estimateCostSync } from '@/lib/cost-estimation';
 
-import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
 import { motion, AnimatePresence } from 'framer-motion';
 import { JourneySpendingSummary } from './JourneySpendingSummary';
 import { FirstUseHint } from './FirstUseHint';
@@ -68,19 +67,7 @@ interface PaymentsTabProps {
   journeyName?: string | null;
 }
 
-interface PayableItem {
-  id: string;
-  type: 'flight' | 'hotel' | 'activity';
-  name: string;
-  amountCents: number;
-  dayNumber?: number;
-  payment?: TripPayment;
-  /** All payments associated with this item (for split tracking) */
-  allPayments: TripPayment[];
-  assignedMemberId?: string;
-  /** All assigned member IDs (for split assignments) */
-  assignedMemberIds: string[];
-}
+// PayableItem type is now imported from usePayableItems
 
 export function PaymentsTab({ 
   tripId, 
@@ -202,222 +189,24 @@ export function PaymentsTab({
     fetchPayments();
   }, [fetchPayments]);
 
-  // Build list of all payable items
-  const payableItems: PayableItem[] = useMemo(() => {
-    const items: PayableItem[] = [];
+  // Use the shared payable items hook — single source of truth for cost totals
+  const { items: payableItems, totalCents: payableTotalCents, essentialItems, activityItems } = usePayableItems({
+    days,
+    flightSelection,
+    hotelSelection,
+    travelers,
+    payments,
+    budgetTier,
+    destination,
+    destinationCountry,
+  });
 
-    // Flight from selection
-    if (flightSelection?.totalPrice) {
-      const flightId = 'flight-selection';
-      const flightPayments = payments.filter(p => p.item_type === 'flight' && p.item_id === flightId);
-      const flightPayment = flightPayments[0];
-      const assignedIds = flightPayments
-        .map(p => (p as any)?.assigned_member_id)
-        .filter(Boolean) as string[];
-      items.push({
-        id: flightId,
-        type: 'flight',
-        name: `Round-trip Flight${flightSelection.outbound?.airline ? ` (${flightSelection.outbound.airline})` : ''}`,
-        amountCents: Math.round((flightSelection.totalPrice || 0) * 100),
-        payment: flightPayment,
-        allPayments: flightPayments,
-        assignedMemberId: assignedIds[0],
-        assignedMemberIds: [...new Set(assignedIds)],
-      });
-    }
-
-    // Hotel from selection
-    if (hotelSelection?.totalPrice || hotelSelection?.pricePerNight) {
-      const hotelId = 'hotel-selection';
-      const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
-      const hotelPayment = hotelPayments[0];
-      const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * days.length;
-      const assignedIds = hotelPayments
-        .map(p => (p as any)?.assigned_member_id)
-        .filter(Boolean) as string[];
-      items.push({
-        id: hotelId,
-        type: 'hotel',
-        name: hotelSelection.name || 'Hotel Accommodation',
-        amountCents: Math.round(hotelPrice * 100),
-        payment: hotelPayment,
-        allPayments: hotelPayments,
-        assignedMemberId: assignedIds[0],
-        assignedMemberIds: [...new Set(assignedIds)],
-      });
-    }
-
-    // Manually added expenses from payments (not tied to flight/hotel selection or itinerary)
-    const manualFlights = payments.filter(p => 
-      p.item_type === 'flight' && p.item_id.startsWith('manual-')
-    );
-    // Group manual payments by item_id
-    const manualFlightGroups = new Map<string, TripPayment[]>();
-    manualFlights.forEach(p => {
-      const group = manualFlightGroups.get(p.item_id) || [];
-      group.push(p);
-      manualFlightGroups.set(p.item_id, group);
-    });
-    manualFlightGroups.forEach((group, itemId) => {
-      const primary = group[0];
-      const assignedIds = group.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
-      items.push({
-        id: itemId,
-        type: 'flight',
-        name: primary.item_name,
-        amountCents: primary.amount_cents,
-        payment: primary,
-        allPayments: group,
-        assignedMemberId: assignedIds[0],
-        assignedMemberIds: [...new Set(assignedIds)],
-      });
-    });
-
-    const manualHotels = payments.filter(p => 
-      p.item_type === 'hotel' && p.item_id.startsWith('manual-')
-    );
-    const manualHotelGroups = new Map<string, TripPayment[]>();
-    manualHotels.forEach(p => {
-      const group = manualHotelGroups.get(p.item_id) || [];
-      group.push(p);
-      manualHotelGroups.set(p.item_id, group);
-    });
-    manualHotelGroups.forEach((group, itemId) => {
-      const primary = group[0];
-      const assignedIds = group.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
-      items.push({
-        id: itemId,
-        type: 'hotel',
-        name: primary.item_name,
-        amountCents: primary.amount_cents,
-        payment: primary,
-        allPayments: group,
-        assignedMemberId: assignedIds[0],
-        assignedMemberIds: [...new Set(assignedIds)],
-      });
-    });
-
-    // Activities from itinerary
-    const NON_PAYABLE_KEYWORDS = [
-      'free time', 'downtime', 'leisure time', 'at leisure', 'rest', 'sleep',
-      'check-in', 'check-out', 'checkin', 'checkout', 'check in', 'check out',
-      'arrival at', 'departure from', 'packing',
-      'walk to', 'walk through', 'stroll', 'walking', 'evening walk', 'neighborhood walk',
-    ];
-    const NON_PAYABLE_CATEGORIES = ['downtime', 'free_time', 'walk', 'walking', 'stroll'];
-
-    // Categories that should never be free - mirrors EditorialItinerary logic
-    const NEVER_FREE_CATEGORIES = [
-      'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee',
-      'cruise', 'boat', 'tour', 'activity', 'experience', 'spa', 'massage', 'show',
-      'performance', 'concert', 'theater', 'theatre', 'nightlife', 'bar', 'club',
-      'transfer', 'transport', 'transportation', 'airport', 'taxi', 'uber', 'rideshare'
-    ];
-    const NEVER_FREE_KEYWORDS = [
-      'breakfast', 'brunch', 'lunch', 'dinner', 'cruise', 'tour',
-      'restaurant', 'café', 'cafe', 'transfer', 'airport', 'taxi',
-      'uber', 'private car', 'shuttle', 'train to', 'bus to'
-    ];
-
-    days.forEach(day => {
-      day.activities.forEach(activity => {
-        let cost = activity.cost?.amount || activity.estimatedCost?.amount || 0;
-        
-        const titleLower = (activity.title || '').toLowerCase();
-        const catLower = (activity.type || activity.category || '').toLowerCase();
-        
-        // Non-payable filter
-        const isNonPayable = NON_PAYABLE_KEYWORDS.some(kw => titleLower.includes(kw)) ||
-          NON_PAYABLE_CATEGORIES.includes(catLower) ||
-          activity.timeBlockType === 'downtime';
-        if (isNonPayable) return;
-
-        // If cost is 0 but the category should never be free, estimate it
-        // This mirrors the header's smart estimation for consistent totals
-        if (cost <= 0) {
-          const shouldNeverBeFree = NEVER_FREE_CATEGORIES.some(nfc => catLower.includes(nfc)) ||
-            NEVER_FREE_KEYWORDS.some(kw => titleLower.includes(kw));
-          
-          if (shouldNeverBeFree) {
-            const priceLevel = (activity as any).priceLevel || (activity as any).price_level;
-            const result = estimateCostSync({
-              category: catLower,
-              title: activity.title,
-              city: destination,
-              country: destinationCountry,
-              travelers,
-              budgetTier: budgetTier as 'budget' | 'moderate' | 'luxury',
-              priceLevel: priceLevel ? Number(priceLevel) : undefined,
-            });
-            cost = result.amount;
-          }
-        }
-
-        if (cost > 0) {
-          // Use composite key to avoid collisions when the same activity ID appears on multiple days
-          const compositeId = `${activity.id}_d${day.dayNumber}`;
-          const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === compositeId);
-          const activityPayment = activityPayments[0];
-          const assignedIds = activityPayments
-            .map(p => (p as any)?.assigned_member_id)
-            .filter(Boolean) as string[];
-          items.push({
-            id: compositeId,
-            type: 'activity',
-            name: activity.title,
-            amountCents: Math.round(cost * 100),
-            dayNumber: day.dayNumber,
-            payment: activityPayment,
-            allPayments: activityPayments,
-            assignedMemberId: assignedIds[0],
-            assignedMemberIds: [...new Set(assignedIds)],
-          });
-        }
-      });
-    });
-
-    // Manual activities
-    const manualActivities = payments.filter(p => 
-      p.item_type === 'activity' && p.item_id.startsWith('manual-')
-    );
-    const manualActivityGroups = new Map<string, TripPayment[]>();
-    manualActivities.forEach(p => {
-      const group = manualActivityGroups.get(p.item_id) || [];
-      group.push(p);
-      manualActivityGroups.set(p.item_id, group);
-    });
-    manualActivityGroups.forEach((group, itemId) => {
-      const primary = group[0];
-      const assignedIds = group.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
-      items.push({
-        id: itemId,
-        type: 'activity',
-        name: primary.item_name,
-        amountCents: primary.amount_cents,
-        payment: primary,
-        allPayments: group,
-        assignedMemberId: assignedIds[0],
-        assignedMemberIds: [...new Set(assignedIds)],
-      });
-    });
-
-    return items;
-  }, [flightSelection, hotelSelection, days, payments]);
-
-  // All totals now come from the unified financial snapshot (activity_costs views)
-
-  // Use the unified financial snapshot as the canonical "Trip Total"
-  // so Payments matches Itinerary header and Budget tab exactly.
-  const financialSnapshot = useTripFinancialSnapshot(tripId);
-  const estimatedTotal = financialSnapshot.tripTotalCents;
+  // Total comes from the shared payable items calculation
+  const estimatedTotal = payableTotalCents;
   // "Paid so far" reflects actual recorded payments from trip_payments
   const paidAmount = totals.paid;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
-
-  // Group items by category
-  const essentialItems = payableItems.filter(i => i.type === 'flight' || i.type === 'hotel');
-  const activityItems = payableItems.filter(i => i.type === 'activity');
 
   /**
    * Map a real trip_members UUID back to the synthetic member.id used in the UI.
@@ -541,7 +330,7 @@ export function PaymentsTab({
       setSelectedMemberId('');
       // Background refetch to sync real IDs and summary
       fetchPayments(300);
-      financialSnapshot.refetch();
+      window.dispatchEvent(new CustomEvent('booking-changed'));
     } catch (err) {
       console.error('Error marking paid:', err);
       toast.error('Failed to update');
@@ -639,7 +428,7 @@ export function PaymentsTab({
 
       toast.success('Payment unmarked');
       await fetchPayments(150);
-      financialSnapshot.refetch();
+      window.dispatchEvent(new CustomEvent('booking-changed'));
       
     } catch (err) {
       console.error('Error unmarking payment:', err);
