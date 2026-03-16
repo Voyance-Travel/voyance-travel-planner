@@ -199,13 +199,22 @@ export async function handleGenerateTripDay(
   // Load existing days from itinerary_data (for context)
   const existingData = (tripCheck.itinerary_data as any) || {};
   const existingDays: any[] = Array.isArray(existingData.days) ? existingData.days : [];
+
+  // CAP previousActivities to last 3 days to prevent prompt bloat on day 8+
+  // The full dedup is handled post-generation by day-validation.ts
+  const PREV_DAY_WINDOW = 3;
+  const recentDays = existingDays.slice(-PREV_DAY_WINDOW);
+  const olderDayCount = Math.max(0, existingDays.length - PREV_DAY_WINDOW);
   const previousActivities: string[] = [];
-  for (const day of existingDays) {
+  for (const day of recentDays) {
     if (day?.activities) {
       day.activities.forEach((act: any) => {
         previousActivities.push(act.title || act.name || '');
       });
     }
+  }
+  if (olderDayCount > 0) {
+    console.log(`[generate-trip-day] Capped previousActivities to last ${PREV_DAY_WINDOW} days (${previousActivities.length} items). ${olderDayCount} older day(s) excluded from prompt.`);
   }
 
   // Update heartbeat before generating
