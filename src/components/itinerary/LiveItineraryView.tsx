@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isBefore, isAfter } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
@@ -370,45 +371,30 @@ export function LiveItineraryView({
   onActivitySkip
 }: LiveItineraryViewProps) {
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
-  // Hydrate completed/skipped state from activity metadata on mount
-  const initialCompleted = useMemo(() => {
-    const ids = new Set<string>();
-    days.forEach(day => day.activities.forEach((a: any) => {
-      if (a.metadata?.completed) ids.add(a.id);
-    }));
-    return ids;
-  }, [days]);
-
-  const initialSkipped = useMemo(() => {
-    const ids = new Set<string>();
-    days.forEach(day => day.activities.forEach((a: any) => {
-      if (a.metadata?.skipped) ids.add(a.id);
-    }));
-    return ids;
-  }, [days]);
-
   const [completedActivities, setCompletedActivities] = useState<Set<string>>(new Set());
   const [skippedActivities, setSkippedActivities] = useState<Set<string>>(new Set());
   const [recentCompletedActivity, setRecentCompletedActivity] = useState<ActivityContext | null>(null);
 
-  // Sync initial state when days data changes (e.g. re-mount or data refresh)
+  // Hydrate completed/skipped state from DB (same pattern as ActiveTrip.tsx)
   useEffect(() => {
-    if (initialCompleted.size > 0) {
-      setCompletedActivities(prev => {
-        const merged = new Set([...prev, ...initialCompleted]);
-        return merged.size !== prev.size ? merged : prev;
+    if (!tripId) return;
+    supabase
+      .from('trip_activities')
+      .select('id, metadata')
+      .eq('trip_id', tripId)
+      .then(({ data }) => {
+        if (!data) return;
+        const completed = new Set<string>();
+        const skipped = new Set<string>();
+        data.forEach((row: any) => {
+          const meta = row.metadata as Record<string, unknown> | null;
+          if (meta?.completed) completed.add(row.id);
+          if (meta?.skipped) skipped.add(row.id);
+        });
+        if (completed.size > 0) setCompletedActivities(prev => new Set([...prev, ...completed]));
+        if (skipped.size > 0) setSkippedActivities(prev => new Set([...prev, ...skipped]));
       });
-    }
-  }, [initialCompleted]);
-
-  useEffect(() => {
-    if (initialSkipped.size > 0) {
-      setSkippedActivities(prev => {
-        const merged = new Set([...prev, ...initialSkipped]);
-        return merged.size !== prev.size ? merged : prev;
-      });
-    }
-  }, [initialSkipped]);
+  }, [tripId]);
   
   const { data: tripFeedback } = useTripFeedback(tripId);
   const { data: insights } = useUserPreferenceInsights();
