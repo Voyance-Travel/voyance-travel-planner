@@ -3,17 +3,20 @@ import { useSearchParams } from 'react-router-dom';
 import MainLayout from '@/components/layout/MainLayout';
 import Head from '@/components/common/Head';
 import { motion } from 'framer-motion';
-import { BookOpen, Clock, MapPin, ArrowRight, Users, Globe } from 'lucide-react';
+import { BookOpen, Clock, MapPin, ArrowRight, Users, Globe, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { guides, getAllCategories } from '@/data/guides';
 import { CommunityGuidesGrid } from '@/components/guides/CommunityGuidesGrid';
+import { getFoundersGuides } from '@/data/founders-guides';
 
 export default function Guides() {
   const [searchParams] = useSearchParams();
-  const defaultTab = searchParams.get('tab') === 'community' ? 'community' : 'voyance';
+  const tabParam = searchParams.get('tab');
+  const defaultTab = tabParam === 'community' ? 'community' : tabParam === 'founders' ? 'founders' : 'voyance';
+  const foundersGuides = getFoundersGuides();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   
   const categories = ['All', ...getAllCategories()];
@@ -94,6 +97,10 @@ export default function Guides() {
                 <Users className="h-3.5 w-3.5" />
                 Community
               </TabsTrigger>
+              <TabsTrigger value="founders" className="gap-1.5">
+                <Heart className="h-3.5 w-3.5" />
+                Founder's
+              </TabsTrigger>
             </TabsList>
 
             {/* ── Voyance Guides Tab (existing editorial content, unchanged) ── */}
@@ -170,6 +177,67 @@ export default function Guides() {
             {/* ── Community Guides Tab ── */}
             <TabsContent value="community" className="mt-0">
               <CommunityGuidesGrid />
+            </TabsContent>
+
+            {/* ── Founder's Guides Tab ── */}
+            <TabsContent value="founders" className="mt-0">
+              {foundersGuides.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">Founder's guides coming soon.</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {foundersGuides.map((guide, index) => (
+                    <motion.article
+                      key={guide.slug}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/50 hover:shadow-lg transition-all"
+                    >
+                      <Link to={`/founders-guides/${guide.slug}`}>
+                        <div className="aspect-[16/10] overflow-hidden relative">
+                          <img
+                            src={guide.coverImage}
+                            alt={guide.destination}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute top-4 left-4">
+                            <span className="bg-background/90 backdrop-blur-sm text-foreground text-xs font-medium px-3 py-1 rounded-full flex items-center gap-1">
+                              <Heart className="h-3 w-3 text-primary" />
+                              Founder's Pick
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-6">
+                          <h3 className="text-xl font-semibold mb-1 group-hover:text-primary transition-colors">
+                            {guide.title}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mb-3">
+                            By {guide.authorName} · {guide.authorTitle}
+                          </p>
+                          <p className="text-muted-foreground text-sm mb-4 line-clamp-2">
+                            {guide.summary}
+                          </p>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <div className="flex items-center gap-4">
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-3.5 w-3.5" />
+                                {guide.destination}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5" />
+                                {guide.readTime}
+                              </span>
+                            </div>
+                            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                          </div>
+                        </div>
+                      </Link>
+                    </motion.article>
+                  ))}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>
