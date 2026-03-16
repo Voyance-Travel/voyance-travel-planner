@@ -303,44 +303,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     enabled: !!tripId && hasBudget,
   });
 
-  // Auto-sync itinerary costs to budget ledger when days are provided
-  useEffect(() => {
-    if (!itineraryDays || itineraryDays.length === 0 || syncAttempted.current) return;
-    if (!hasBudget) return; // Don't sync if no budget is set
-    
-    // Transform itinerary days to the format expected by syncFromItinerary
-    const daysForSync = itineraryDays.map(day => ({
-      dayNumber: day.dayNumber,
-      date: day.date || '',
-      activities: day.activities.map(act => {
-        // Preserve full cost semantics for syncItineraryToBudget
-        let costObj: { amount?: number; total?: number; perPerson?: number; basis?: string; currency?: string } | undefined;
-        if (typeof act.cost === 'number') {
-          costObj = { amount: act.cost, currency: 'USD' };
-        } else if (act.cost && typeof act.cost === 'object') {
-          costObj = {
-            amount: (act.cost as any).amount,
-            total: (act.cost as any).total,
-            perPerson: (act.cost as any).perPerson,
-            basis: (act.cost as any).basis,
-            currency: (act.cost as any).currency || 'USD',
-          };
-        }
-        
-        return {
-          id: act.id,
-          title: act.title || act.name || 'Activity',
-          category: act.category || act.type || 'activities',
-          cost: costObj,
-        };
-      }),
-    }));
-    
-    syncAttempted.current = true;
-    syncFromItinerary(daysForSync).catch(err => {
-      console.error('[BudgetTab] Failed to sync itinerary costs:', err);
-    });
-  }, [itineraryDays, hasBudget, syncFromItinerary]);
+  // Budget ledger is now derived from activity_costs (single source of truth).
+  // No separate sync needed — activity_costs are written by EditorialItinerary's syncBudgetFromDays.
 
   // Hotel/flight costs are now synced to activity_costs via budgetLedgerSync
   // when they are saved — no separate ledger sync needed here.
