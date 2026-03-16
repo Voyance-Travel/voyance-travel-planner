@@ -8132,6 +8132,8 @@ interface DayCardProps {
    isCleanPreview?: boolean;
    /** Whether an edit modal is currently open — disables drag */
    isModalEditing?: boolean;
+   /** Callback to report resolved photo for batch write-back */
+   onPhotoResolved?: (activityId: string, photoUrl: string) => void;
 }
 
 function DayCard({
