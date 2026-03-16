@@ -5428,7 +5428,7 @@ export function EditorialItinerary({
                           onToggle={() => toggleDay(selectedDay.dayNumber)}
                           onActivitySwap={(() => {
                             if (aiLocked) return undefined;
-                            if (!canViewPremiumContentForDay(entitlements, selectedDay.dayNumber)) return undefined;
+                            if (!canViewDay(selectedDay.dayNumber)) return undefined;
                             return openSwapDrawer;
                           })()}
                           swapCapInfo={swapCap}
