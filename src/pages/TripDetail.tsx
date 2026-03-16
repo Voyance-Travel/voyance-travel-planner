@@ -876,17 +876,28 @@ export default function TripDetail() {
     }
   }, [shouldAutoGenerate, trip, isServerGenerating]);
 
-  // Helper to check if trip has itinerary data
+  // Helper to check if trip has itinerary data with real activities (not just shell days)
   function hasItineraryData(t: Trip | null): boolean {
     if (!t) return false;
     const meta = t.itinerary_data as Record<string, unknown> | null;
     if (!meta) return false;
     // Check canonical top-level days first
-    const rawDays = meta.days as unknown[] | undefined;
-    if (Array.isArray(rawDays) && rawDays.length > 0) return true;
+    const rawDays = meta.days as any[] | undefined;
+    if (Array.isArray(rawDays) && rawDays.length > 0) {
+      // Verify at least one day has real activities (not just shell/theme data)
+      const hasRealActivities = rawDays.some(
+        (d: any) => Array.isArray(d.activities) && d.activities.length > 0
+      );
+      return hasRealActivities;
+    }
     // Fallback: check nested itinerary.days (backward compat with older saves)
     const nested = meta.itinerary as Record<string, unknown> | undefined;
-    return Array.isArray(nested?.days) && (nested.days as unknown[]).length > 0;
+    if (Array.isArray(nested?.days) && (nested.days as any[]).length > 0) {
+      return (nested.days as any[]).some(
+        (d: any) => Array.isArray(d.activities) && d.activities.length > 0
+      );
+    }
+    return false;
   }
 
   const loadLocalTrip = (id: string): Trip | null => {

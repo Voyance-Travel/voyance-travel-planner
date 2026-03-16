@@ -218,3 +218,25 @@ Deno.test("malformed JSON → not 500", async () => {
   await res.text();
   assertNotEquals(res.status, 500, "Malformed JSON returned 500 — runtime crash!");
 });
+
+// ---------------------------------------------------------------------------
+// Regression: Shell itinerary detection (Tokyo 8-day bug)
+// generate-trip-day should never mark a trip as "ready" if days have 0 activities
+// ---------------------------------------------------------------------------
+Deno.test("generate-trip-day: fake auth → not 500 (shell day guard)", async () => {
+  const res = await postActionWithFakeAuth("generate-trip-day", {
+    tripId: "00000000-0000-0000-0000-000000000000",
+    dayNumber: 1,
+    totalDays: 8,
+    destination: "Tokyo, Japan",
+    destinationCountry: "Japan",
+    startDate: "2026-04-10",
+    endDate: "2026-04-17",
+    travelers: 1,
+    tripType: "solo",
+    budgetTier: "premium",
+    userId: "00000000-0000-0000-0000-000000000000",
+    generationRunId: "shell-test-run",
+  });
+  assertNotEquals(res.status, 500, "generate-trip-day returned 500 — runtime crash!");
+});
