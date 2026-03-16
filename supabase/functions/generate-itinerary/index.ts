@@ -8911,6 +8911,49 @@ ${(() => {
   return result;
 })()}
 
+${(() => {
+  // RESTAURANT POOL INJECTION: If a pre-generated pool is available, inject it
+  // so the AI picks from real restaurants instead of inventing generic ones
+  if (!paramRestaurantPool || !Array.isArray(paramRestaurantPool) || paramRestaurantPool.length === 0) return '';
+  
+  // Filter out already-used restaurants
+  const usedSet = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
+  const available = paramRestaurantPool.filter((r: any) => !usedSet.has((r.name || '').toLowerCase()));
+  
+  if (available.length === 0) return '';
+  
+  const breakfastSpots = available.filter((r: any) => r.mealType === 'breakfast').slice(0, 8);
+  const lunchSpots = available.filter((r: any) => r.mealType === 'lunch').slice(0, 8);
+  const dinnerSpots = available.filter((r: any) => r.mealType === 'dinner').slice(0, 8);
+  const anySpots = available.filter((r: any) => r.mealType === 'any').slice(0, 6);
+  
+  let poolPrompt = `
+${'='.repeat(70)}
+🍽️ RESTAURANT POOL — PICK FROM THIS LIST (DO NOT INVENT RESTAURANTS)
+${'='.repeat(70)}
+For ALL meals today, you MUST pick a restaurant from this pre-verified list.
+Do NOT make up restaurant names. Do NOT use generic names like "local restaurant" or "dinner spot".
+Each restaurant below is REAL and highly rated (4.5+ stars).
+
+`;
+  if (breakfastSpots.length > 0) {
+    poolPrompt += `BREAKFAST OPTIONS:\n${breakfastSpots.map((r: any) => `  • ${r.name} — ${r.cuisine || 'Local cuisine'}, ${r.neighborhood || ''} (${r.priceRange || '$$'})`).join('\n')}\n\n`;
+  }
+  if (lunchSpots.length > 0) {
+    poolPrompt += `LUNCH OPTIONS:\n${lunchSpots.map((r: any) => `  • ${r.name} — ${r.cuisine || 'Local cuisine'}, ${r.neighborhood || ''} (${r.priceRange || '$$'})`).join('\n')}\n\n`;
+  }
+  if (dinnerSpots.length > 0) {
+    poolPrompt += `DINNER OPTIONS:\n${dinnerSpots.map((r: any) => `  • ${r.name} — ${r.cuisine || 'Local cuisine'}, ${r.neighborhood || ''} (${r.priceRange || '$$'})`).join('\n')}\n\n`;
+  }
+  if (anySpots.length > 0) {
+    poolPrompt += `FLEXIBLE (any meal):\n${anySpots.map((r: any) => `  • ${r.name} — ${r.cuisine || 'Local cuisine'}, ${r.neighborhood || ''} (${r.priceRange || '$$'})`).join('\n')}\n\n`;
+  }
+  poolPrompt += `RULE: Pick ONE restaurant per meal from the lists above. Use the EXACT name as shown. Do NOT modify restaurant names.`;
+  
+  console.log(`[generate-day] Injected restaurant pool: ${available.length} available (${breakfastSpots.length}B/${lunchSpots.length}L/${dinnerSpots.length}D/${anySpots.length}any)`);
+  return poolPrompt;
+})()}
+
 CRITICAL REMINDERS:
 1. ${isFullDay ? `This is a FULL DAY: ${dayMealPolicy?.requiredMeals?.join(' + ') ?? 'breakfast + lunch + dinner'} + 3 paid activities + 2 free activities + transit between all stops + evening activity + next morning preview. Fill EVERY hour.` : dayMealPolicy && !isFirstDay && !isLastDay ? `This is a ${dayMealPolicy.dayMode.replace(/_/g, ' ')} day. Required meals: ${dayMealPolicy.requiredMeals.length > 0 ? dayMealPolicy.requiredMeals.join(', ') : 'none'}. Do NOT add extra meals beyond what the meal policy specifies.` : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
