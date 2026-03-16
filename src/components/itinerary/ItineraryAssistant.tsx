@@ -465,7 +465,7 @@ export function ItineraryAssistant({
                   activitiesForCostTable.push({
                     id: act.id,
                     dayNumber: day.dayNumber,
-                    category: resolveCategory(act.category, act.type),
+                    category: resolveCategory(String(act.category || ''), String(act.type || '')),
                     costPerPersonUsd: costPerPerson,
                     numTravelers: travelers || 1,
                     source: 'chat-sync',
