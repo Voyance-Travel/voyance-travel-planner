@@ -1,17 +1,23 @@
 
 
-# Voyance Picks Batch 7: Rome + Barcelona
+# Voyance Picks Batch 8: Morocco, Tenerife, Vienna, Istanbul, Portugal
 
 ## What
-Insert 9 founder-curated picks:
-- **Rome (4)**: Trevi Fountain, Colosseum, Tonnarello, The Pantheon Iconic Rome Hotel
-- **Barcelona (5)**: La Boqueria, Sagrada Família, Piscina Municipal de Montjuïc, Bar Cañete, Dow Jones Bar
+Insert 11 founder-curated picks across 5 destinations:
+
+| Destination | Name | Category | Priority |
+|---|---|---|---|
+| Marrakech | Atlas Mountains Day Trip | experience | 1 |
+| Marrakech | Hot Air Balloon Ride | experience | 1 |
+| Marrakech | Comptoir Darna | dining | 2 |
+| Tenerife | The Ritz-Carlton Tenerife Abama | accommodation | 1 |
+| Vienna | Imperial Riding School Vienna | accommodation | 1 |
+| Vienna | Bitzinger Würstelstand | dining | 1 |
+| Vienna | Café Sacher | dining | 1 |
+| Vienna | Ganko Yakiniku | dining | 1 |
+| Istanbul | Istanbul Marriott Hotel Sisli | accommodation | 3 |
+| Algarve | Coastal Cave Bars | experience | 1 |
 
 ## How
-Create a new SQL migration file with the provided INSERT statement (9 rows into `voyance_picks`). No schema changes needed — data only.
-
-After migration runs, verify with:
-```sql
-SELECT destination, name, category FROM voyance_picks WHERE destination IN ('Rome', 'Barcelona') ORDER BY destination, priority;
-```
+Single SQL INSERT migration — 11 rows, data only, no schema changes. Verify with provided SELECT query.
 
