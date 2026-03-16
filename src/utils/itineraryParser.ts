@@ -511,7 +511,8 @@ function parseSingleDay(
  */
 export function parseItineraryDays(
   rawData: unknown,
-  tripStartDate?: string
+  tripStartDate?: string,
+  tripEndDate?: string
 ): ParsedDay[] {
   // Validate top-level structure
   if (!rawData || typeof rawData !== 'object') {
