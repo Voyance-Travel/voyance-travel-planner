@@ -523,7 +523,7 @@ export function ItineraryAssistant({
       setMessages(prev => prev.map(msg => {
         if (msg.id === messageId && msg.actions) {
           const newActions = [...msg.actions];
-          newActions[actionIndex] = { ...newActions[actionIndex], status: 'declined' };
+          newActions[actionIndex] = { ...newActions[actionIndex], status: 'failed' };
           return { ...msg, actions: newActions };
         }
         return msg;
