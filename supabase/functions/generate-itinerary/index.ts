@@ -4133,7 +4133,24 @@ async function finalSaveItinerary(
           if (existingEndDate) {
             const expectedDays = calculateDays(tripRow.start_date, existingEndDate);
             if (daysArray.length < expectedDays) {
-              console.warn(`[Stage 6] Generated ${daysArray.length} days but trip has ${expectedDays} expected days (${tripRow.start_date} to ${existingEndDate}). NOT shrinking end_date.`);
+              console.warn(`[Stage 6] Generated ${daysArray.length} days but trip has ${expectedDays} expected days (${tripRow.start_date} to ${existingEndDate}). Padding with blank days.`);
+              // Pad the days array with blank placeholder days so UI always shows all expected days
+              for (let padIdx = daysArray.length; padIdx < expectedDays; padIdx++) {
+                const padDate = formatDate(tripRow.start_date, padIdx);
+                const blankDay = {
+                  dayNumber: padIdx + 1,
+                  date: padDate,
+                  theme: 'Free Day',
+                  description: 'This day is yours to explore freely.',
+                  activities: [],
+                };
+                daysArray.push(blankDay);
+              }
+              // Update the nested copy too
+              if (frontendReadyData?.itinerary?.days) {
+                frontendReadyData.itinerary.days = daysArray;
+              }
+              console.log(`[Stage 6] Padded to ${daysArray.length} days`);
               // Don't set computedEndDate — keep existing end_date
             } else if (daysArray.length > expectedDays) {
               console.log(`[Stage 6] Generated ${daysArray.length} days (more than expected ${expectedDays}). Extending end_date to ${newEndDate}.`);
