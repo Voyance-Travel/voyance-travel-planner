@@ -4,24 +4,6 @@ import { ArrowRight, Compass, Heart, Zap, Shield, Check, X, Sparkles, Globe, Clo
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import Head from '@/components/common/Head';
-import aboutTravel1 from '@/assets/about-travel-1.jpg';
-import aboutTravel2 from '@/assets/about-travel-2.jpg';
-import aboutTravel3 from '@/assets/about-travel-3.jpg';
-import aboutTravel4 from '@/assets/about-travel-4.jpg';
-import aboutTravel5 from '@/assets/about-travel-5.jpg';
-import aboutTravel6 from '@/assets/about-travel-6.jpg';
-import aboutTravel7 from '@/assets/about-travel-7.jpg';
-import aboutTravel8 from '@/assets/about-travel-8.jpg';
-import aboutTravel9 from '@/assets/about-travel-9.jpg';
-
-const travelPhotos = [
-  { src: aboutTravel2, alt: "Travel adventure" },
-  { src: aboutTravel4, alt: "Travel adventure" },
-  { src: aboutTravel5, alt: "Travel adventure" },
-  { src: aboutTravel7, alt: "Travel adventure" },
-  { src: aboutTravel8, alt: "Travel adventure" },
-  { src: aboutTravel9, alt: "Travel adventure" },
-];
 
 // Visual mockup of chaos (before) - Real website style
 function ChaosMockup() {
