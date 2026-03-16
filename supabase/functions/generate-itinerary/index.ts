@@ -2870,59 +2870,30 @@ Generate activities for this day following ALL constraints above.`;
       const smartFinishBlocksReturn = context.isSmartFinish && hasHardErrors;
       if (validation.isValid || (isLastAttempt && !smartFinishBlocksReturn)) {
         // POST-VALIDATION: Strip any duplicate activities that slipped through
-        const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(generatedDay);
+        // Pass requiredMeals so dedup won't remove the sole provider of a required meal
+        const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(generatedDay, dayMealPolicy.requiredMeals);
         if (removedDupes.length > 0) {
           console.warn(`[Stage 2] Day ${dayNumber}: Removed ${removedDupes.length} duplicate(s): ${removedDupes.join(', ')}`);
           generatedDay = dedupedDay;
         }
 
         // ====================================================================
-        // MEAL INJECTION FALLBACK — policy-aware final guard before returning
+        // MEAL FINAL GUARD — shared helper, single source of truth
+        // Runs AFTER all post-processing (dedup, etc.) to guarantee meals
         // ====================================================================
-        if (dayMealPolicy.requiredMeals.length > 0) {
-          const detectedBeforeFallback = detectMealSlots(generatedDay.activities || []);
-          const missingMeals = dayMealPolicy.requiredMeals.filter((meal: RequiredMeal) => !detectedBeforeFallback.includes(meal));
-          const fallbackTimes: Record<RequiredMeal, { start: string; end: string; cost: number }> = {
-            breakfast: { start: '08:30', end: '09:15', cost: 12 },
-            lunch: { start: '12:30', end: '13:30', cost: 18 },
-            dinner: { start: '19:00', end: '20:15', cost: 30 },
-          };
-
-          if (missingMeals.length > 0) {
-            console.warn(`[Stage 2] Day ${dayNumber}: fallback injecting missing meals [${missingMeals.join(', ')}] for ${dayMealPolicy.dayMode}`);
-          }
-
-          for (const mealType of missingMeals) {
-            const slot = fallbackTimes[mealType];
-            const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
-            const destination = context.destination || 'the destination';
-            generatedDay.activities.push({
-              id: `injected-${mealType}-${dayNumber}`,
-              title: `${label} — Local ${mealType === 'breakfast' ? 'Café' : 'Restaurant'}`,
-              startTime: slot.start,
-              endTime: slot.end,
-              category: 'dining',
-              location: { name: `${label} spot in ${destination}`, address: destination },
-              cost: { amount: slot.cost, currency: context.currency || 'USD', source: 'injected_fallback' },
-              description: `${label} was auto-added to satisfy the required meal policy for this ${dayMealPolicy.dayMode.replace(/_/g, ' ')}.`,
-              tags: ['dining', mealType, 'meal-fallback'],
-              bookingRequired: false,
-              transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency: context.currency || 'USD' }, instructions: 'Short walk from the previous activity' },
-              tips: `Ask your hotel for a nearby ${mealType} recommendation if you want to swap this spot.`,
-              _injected: true,
-            } as any);
-          }
-
-          generatedDay.activities.sort((a: any, b: any) => {
-            const parseMin = (t: string) => {
-              const m = (t || '').match(/(\d{1,2}):(\d{2})/);
-              return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
-            };
-            return parseMin(a.startTime) - parseMin(b.startTime);
-          });
-
-          const detectedAfterFallback = detectMealSlots(generatedDay.activities || []);
-          console.log(`[Stage 2] Day ${dayNumber} meal fallback result: required=[${dayMealPolicy.requiredMeals.join(', ')}], detectedAfter=[${detectedAfterFallback.join(', ')}]`);
+        const mealGuardResult = enforceRequiredMealsFinalGuard(
+          generatedDay.activities || [],
+          dayMealPolicy.requiredMeals,
+          dayNumber,
+          context.destination || 'the destination',
+          context.currency || 'USD',
+          dayMealPolicy.dayMode,
+        );
+        if (!mealGuardResult.alreadyCompliant) {
+          generatedDay.activities = mealGuardResult.activities as any;
+          console.warn(`[Stage 2] Day ${dayNumber}: Meal guard injected [${mealGuardResult.injectedMeals.join(', ')}]`);
+        } else {
+          console.log(`[Stage 2] Day ${dayNumber}: Meal guard passed — all required meals present`);
         }
 
         // Tag day with multi-city info
