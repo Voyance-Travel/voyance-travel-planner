@@ -117,6 +117,7 @@ export type Database = {
           destination_id: string
           duration_minutes: number | null
           id: string
+          image_url: string | null
           name: string
           price_range: Json | null
           tags: string | null
@@ -135,6 +136,7 @@ export type Database = {
           destination_id: string
           duration_minutes?: number | null
           id?: string
+          image_url?: string | null
           name: string
           price_range?: Json | null
           tags?: string | null
@@ -153,6 +155,7 @@ export type Database = {
           destination_id?: string
           duration_minutes?: number | null
           id?: string
+          image_url?: string | null
           name?: string
           price_range?: Json | null
           tags?: string | null
@@ -2035,6 +2038,7 @@ export type Database = {
           family_friendly: boolean | null
           group_friendly: boolean | null
           id: string
+          image_url: string | null
           indoor_outdoor: string | null
           latitude: number | null
           longitude: number | null
@@ -2069,6 +2073,7 @@ export type Database = {
           family_friendly?: boolean | null
           group_friendly?: boolean | null
           id?: string
+          image_url?: string | null
           indoor_outdoor?: string | null
           latitude?: number | null
           longitude?: number | null
@@ -2103,6 +2108,7 @@ export type Database = {
           family_friendly?: boolean | null
           group_friendly?: boolean | null
           id?: string
+          image_url?: string | null
           indoor_outdoor?: string | null
           latitude?: number | null
           longitude?: number | null
