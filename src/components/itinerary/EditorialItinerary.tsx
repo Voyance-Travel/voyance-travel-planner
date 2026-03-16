@@ -5500,9 +5500,12 @@ export function EditorialItinerary({
             hasHotel={!!(hotelSelection?.pricePerNight || hotelSelection?.name)}
             hasFlight={hasFlightData}
             destination={destination}
+            destinationCountry={destinationCountry}
+            budgetTier={budgetTier}
+            flightSelection={flightSelection}
+            hotelSelection={hotelSelection}
             journeyId={journeyId}
             journeyName={journeyName}
-            jsTotalCostCents={Math.round(jsTotalCost * (travelers || 1) * 100)}
             onActivityRemove={(activityId) => {
               // Remove the activity from itinerary days when deleted from budget
               setDays(prev => {

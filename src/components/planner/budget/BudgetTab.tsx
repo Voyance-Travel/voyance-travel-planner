@@ -610,12 +610,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {isCategorySyncing && (
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border text-muted-foreground text-xs">
-                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <p>Category totals are syncing — the Trip Expenses total above reflects your full itinerary.</p>
-              </div>
-            )}
+           {/* Category sync warning removed — totals now come from payable items */}
             {allocations.map((alloc) => {
               const allocated = alloc.allocatedCents;
               const used = alloc.usedCents;
