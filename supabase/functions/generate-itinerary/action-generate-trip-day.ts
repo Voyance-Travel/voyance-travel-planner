@@ -199,13 +199,22 @@ export async function handleGenerateTripDay(
   // Load existing days from itinerary_data (for context)
   const existingData = (tripCheck.itinerary_data as any) || {};
   const existingDays: any[] = Array.isArray(existingData.days) ? existingData.days : [];
+
+  // CAP previousActivities to last 3 days to prevent prompt bloat on day 8+
+  // The full dedup is handled post-generation by day-validation.ts
+  const PREV_DAY_WINDOW = 3;
+  const recentDays = existingDays.slice(-PREV_DAY_WINDOW);
+  const olderDayCount = Math.max(0, existingDays.length - PREV_DAY_WINDOW);
   const previousActivities: string[] = [];
-  for (const day of existingDays) {
+  for (const day of recentDays) {
     if (day?.activities) {
       day.activities.forEach((act: any) => {
         previousActivities.push(act.title || act.name || '');
       });
     }
+  }
+  if (olderDayCount > 0) {
+    console.log(`[generate-trip-day] Capped previousActivities to last ${PREV_DAY_WINDOW} days (${previousActivities.length} items). ${olderDayCount} older day(s) excluded from prompt.`);
   }
 
   // Update heartbeat before generating
@@ -248,9 +257,10 @@ export async function handleGenerateTripDay(
     try {
       const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
 
-      // Add AbortController with 150s timeout to prevent hanging on 502/504 upstream errors
+      // Adaptive timeout: later days get more time since they have richer context
+      const timeoutMs = dayNumber <= 3 ? 120_000 : 180_000;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 150_000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       let resp: Response;
       try {
@@ -308,12 +318,22 @@ export async function handleGenerateTripDay(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const isAbort = err instanceof DOMException && err.name === 'AbortError';
-      console.warn(`[generate-trip-day] Day ${dayNumber} attempt ${attempt + 1} failed${isAbort ? ' (timeout)' : ''}: ${msg}`);
-      lastError = isAbort ? `Day ${dayNumber} timed out after 150s` : msg;
+      const timeoutLabel = dayNumber <= 3 ? '120s' : '180s';
+      console.warn(`[generate-trip-day] Day ${dayNumber} attempt ${attempt + 1} failed${isAbort ? ` (timeout ${timeoutLabel})` : ''}: ${msg}`);
+      lastError = isAbort ? `Day ${dayNumber} timed out after ${timeoutLabel}` : msg;
       if (attempt < MAX_RETRIES) {
         // Longer backoff for infrastructure errors
         const backoffMs = msg.includes('(infra)') || isAbort ? 8000 * (attempt + 1) : 5000 * (attempt + 1);
         await new Promise(r => setTimeout(r, backoffMs));
+        
+        // SLIM PROMPT RETRY for day 4+ after first failure: reduce previousActivities
+        // to last 2 days only to shrink the prompt and avoid AI truncation
+        if (dayNumber >= 4 && attempt >= 1 && previousActivities.length > 15) {
+          const slimCount = Math.min(15, previousActivities.length);
+          const removed = previousActivities.length - slimCount;
+          previousActivities.splice(0, removed);
+          console.log(`[generate-trip-day] Slim prompt retry: reduced previousActivities to ${slimCount} items (removed ${removed})`);
+        }
       }
     }
   }
@@ -567,6 +587,34 @@ export async function handleGenerateTripDay(
     }
   }
 
+  // ── PRE-FETCH REAL VENUE CANDIDATES for meal guard fallbacks ─────
+  let fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
+  try {
+    const destQuery = cityInfo?.cityName || destination || '';
+    if (destQuery) {
+      const { data: venues } = await supabase
+        .from('verified_venues')
+        .select('name, address, category')
+        .ilike('city', `%${destQuery}%`)
+        .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+        .limit(30);
+      if (venues && venues.length > 0) {
+        // Classify venues by likely meal type based on name/category
+        for (const v of venues) {
+          const nameLower = (v.name || '').toLowerCase();
+          let mealType = 'any';
+          if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery') || nameLower.includes('coffee')) mealType = 'breakfast';
+          else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich') || nameLower.includes('deli')) mealType = 'lunch';
+          else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro') || nameLower.includes('trattoria')) mealType = 'dinner';
+          fallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
+        }
+        console.log(`[generate-trip-day] Pre-fetched ${fallbackVenues.length} real venue candidates for meal guard fallbacks`);
+      }
+    }
+  } catch (e) {
+    console.warn('[generate-trip-day] Could not pre-fetch venue candidates:', e);
+  }
+
   // ── MEAL COMPLIANCE GUARD (before save) ──────────────────────────
   // The generate-day action already has a meal guard, but this catches
   // edge cases where post-processing in this file may have altered days.
@@ -585,7 +633,7 @@ export async function handleGenerateTripDay(
     const missing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
     if (missing.length > 0) {
       const dest = d.city || cityInfo?.cityName || destination || 'the destination';
-      const result = enforceRequiredMealsFinalGuard(d.activities, policy.requiredMeals, dn, dest, 'USD', policy.dayMode);
+      const result = enforceRequiredMealsFinalGuard(d.activities, policy.requiredMeals, dn, dest, 'USD', policy.dayMode, fallbackVenues);
       if (!result.alreadyCompliant) {
         updatedDays[i] = { ...d, activities: result.activities };
         console.warn(`[generate-trip-day] 🍽️ MEAL GUARD: Day ${dn} missing [${result.injectedMeals.join(', ')}] — injected before chain save`);

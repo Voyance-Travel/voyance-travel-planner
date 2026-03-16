@@ -8895,7 +8895,14 @@ ${(() => {
   }
   let result = '';
   if (nonRecurring.length > 0) {
-    result += `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${nonRecurring.join(', ')}`;
+    // CAP to last 40 items to prevent prompt bloat on day 8+
+    const MAX_AVOID_LIST = 40;
+    const capped = nonRecurring.slice(-MAX_AVOID_LIST);
+    const omitted = nonRecurring.length - capped.length;
+    result += `\nAvoid repeating these specific venues/activities (be creative and pick DIFFERENT ones): ${capped.join(', ')}`;
+    if (omitted > 0) {
+      result += `\n(Plus ${omitted} more from earlier days — avoid ALL previously visited venues, not just the ones listed above.)`;
+    }
   }
   if (recurring.length > 0) {
     result += `\nTHESE ARE MULTI-DAY EVENTS the traveler is attending across multiple days — YOU MUST CREATE A FULL ATTENDANCE ACTIVITY CARD for each (not just transit): ${recurring.join(', ')}`;
@@ -10428,10 +10435,37 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         // MEAL FINAL GUARD — Last line of defense for generate-day path
         // Runs AFTER all post-processing (dedup, personalization strip,
         // opening hours removal, route optimization, etc.)
-        // This is the fix for the persistent "missing meals" bug: previously
-        // only generateSingleDayWithRetry had meal injection; this path did not.
+        // Now pre-fetches real venues from verified_venues table so fallbacks
+        // use REAL restaurant names instead of generic "dinner spot" text.
         // ====================================================================
         if (dayMealPolicy && dayMealPolicy.requiredMeals.length > 0) {
+          // Pre-fetch real venue candidates for better fallbacks
+          let mealFallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
+          try {
+            const destQuery = resolvedDestination || destination || '';
+            if (destQuery && supabase) {
+              const { data: venues } = await supabase
+                .from('verified_venues')
+                .select('name, address, category')
+                .ilike('city', `%${destQuery}%`)
+                .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+                .limit(30);
+              if (venues && venues.length > 0) {
+                for (const v of venues) {
+                  const nameLower = (v.name || '').toLowerCase();
+                  let mealType = 'any';
+                  if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery')) mealType = 'breakfast';
+                  else if (nameLower.includes('ramen') || nameLower.includes('lunch') || nameLower.includes('noodle') || nameLower.includes('sandwich')) mealType = 'lunch';
+                  else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro')) mealType = 'dinner';
+                  mealFallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
+                }
+                console.log(`[generate-day] Pre-fetched ${mealFallbackVenues.length} real venue candidates for meal guard`);
+              }
+            }
+          } catch (e) {
+            console.warn('[generate-day] Could not pre-fetch venue candidates:', e);
+          }
+
           const mealGuardResult = enforceRequiredMealsFinalGuard(
             generatedDay.activities || [],
             dayMealPolicy.requiredMeals,
@@ -10439,11 +10473,12 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             resolvedDestination || destination || 'the destination',
             'USD',
             dayMealPolicy.dayMode,
+            mealFallbackVenues,
           );
           if (!mealGuardResult.alreadyCompliant) {
             generatedDay.activities = mealGuardResult.activities as any;
             normalizedActivities = generatedDay.activities;
-            console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected before return`);
+            console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'real venues' : 'destination-aware fallbacks'} before return`);
           } else {
             console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
           }

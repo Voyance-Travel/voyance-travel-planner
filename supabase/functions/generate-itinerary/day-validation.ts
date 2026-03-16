@@ -603,6 +603,7 @@ export function enforceRequiredMealsFinalGuard(
   destination: string,
   currency: string = 'USD',
   dayMode: string = 'unknown',
+  fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [],
 ): MealGuardResult {
   if (requiredMeals.length === 0) {
     return { activities, injectedMeals: [], alreadyCompliant: true };
@@ -618,7 +619,7 @@ export function enforceRequiredMealsFinalGuard(
   console.warn(
     `[MEAL FINAL GUARD] Day ${dayNumber}: ` +
     `required=[${requiredMeals.join(',')}], detected=[${detected.join(',')}], ` +
-    `MISSING=[${missing.join(',')}] — injecting destination-aware fallback meals (dayMode=${dayMode})`
+    `MISSING=[${missing.join(',')}] — injecting ${fallbackVenues.length > 0 ? 'REAL VENUE' : 'destination-aware'} fallback meals (dayMode=${dayMode})`
   );
 
   const fallbackTimes: Record<RequiredMeal, { start: string; end: string; cost: number }> = {
@@ -627,26 +628,65 @@ export function enforceRequiredMealsFinalGuard(
     dinner:    { start: '19:00', end: '20:15', cost: 30 },
   };
 
+  // Track which venue names have been used to avoid duplicates within this guard call
+  const usedVenueNames = new Set<string>(
+    activities.map(a => (a.title || '').toLowerCase())
+  );
+
   const result = [...activities];
 
   for (const mealType of missing) {
     const slot = fallbackTimes[mealType];
     const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
-    const hint = getDestinationHint(destination, mealType);
+
+    // TRY 1: Use a real venue from fallbackVenues
+    let venueName: string | null = null;
+    let venueAddress: string = destination;
+    let venueDescription: string = '';
+
+    // Find matching venue: prefer specific meal type, then 'any'
+    const matchingVenues = fallbackVenues.filter(v =>
+      (v.mealType === mealType || v.mealType === 'any') &&
+      !usedVenueNames.has(v.name.toLowerCase())
+    );
+    // Prefer meal-type-specific matches first
+    const specificMatch = matchingVenues.find(v => v.mealType === mealType);
+    const venue = specificMatch || matchingVenues[0];
+
+    if (venue) {
+      venueName = venue.name;
+      venueAddress = venue.address || destination;
+      venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
+      usedVenueNames.add(venue.name.toLowerCase());
+      // Remove from fallbackVenues so next meal gets a different one
+      const idx = fallbackVenues.indexOf(venue);
+      if (idx >= 0) fallbackVenues.splice(idx, 1);
+      console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Using REAL venue "${venue.name}" for ${mealType}`);
+    }
+
+    // TRY 2: Fall back to destination-aware hints (but with better naming)
+    if (!venueName) {
+      const hint = getDestinationHint(destination, mealType);
+      venueName = `${label} at a ${hint.venueSuffix}`;
+      venueDescription = hint.description;
+    }
+
     result.push({
       id: `guard-${mealType}-${dayNumber}-${Date.now()}`,
-      title: `${label} at a ${hint.venueSuffix}`,
+      title: venueName!.startsWith(label) ? venueName! : `${label}: ${venueName}`,
       startTime: slot.start,
       endTime: slot.end,
       category: 'dining',
-      location: { name: `${label} spot in ${destination}`, address: destination },
+      location: { name: venueName!, address: venueAddress },
       cost: { amount: slot.cost, currency, source: 'meal_guard_fallback' } as any,
-      description: hint.description,
-      tags: ['dining', mealType, 'meal-guard', 'needs-refinement'],
+      description: venueDescription,
+      tags: ['dining', mealType, 'meal-guard', ...(venue ? [] : ['needs-refinement'])],
       bookingRequired: false,
       transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency }, instructions: 'Short walk from the previous activity' },
-      tips: `This is a placeholder — tap to get a specific restaurant recommendation for this ${mealType}.`,
-      needsRefinement: true,
+      tips: venue
+        ? `Recommended by our venue database — confirm hours before visiting.`
+        : `This is a placeholder — tap to get a specific restaurant recommendation for this ${mealType}.`,
+      needsRefinement: !venue,
     } as StrictActivityMinimal);
   }
 
