@@ -741,6 +741,8 @@ export default function DestinationDetail() {
                       ))}
                     </AnimatePresence>
                   </div>
+                  </>
+                  )}
                 </section>
               )}
             </div>
