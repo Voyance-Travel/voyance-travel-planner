@@ -8223,6 +8223,7 @@ function DayCard({
   isCleanPreview = false,
   isModalEditing = false,
   onPhotoResolved,
+  isManualMode = false,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
