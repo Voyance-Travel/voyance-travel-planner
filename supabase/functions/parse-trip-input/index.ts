@@ -101,6 +101,7 @@ Today's date is ${new Date().toISOString().split('T')[0]}. The current year is $
 - ALL dates in the output MUST be in the future. Zero exceptions.
 - When resolving relative date references (like "next weekend", "this March", "in April"), always use today's date as the reference point.
 - Double-check every date you output: if the year is ${currentYear - 1} or earlier, you have made an error.
+- CRITICAL: When extracting dates like "June 10–15", the start day is 10, NOT 1. Read the FULL number after the month name. "10" is not "1", "15" is not "1", "22" is not "2". Always preserve the complete day-of-month digits.
 
 ## CRITICAL PARSING RULES
 
