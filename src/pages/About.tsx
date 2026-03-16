@@ -4,6 +4,9 @@ import { ArrowRight, Compass, Heart, Zap, Shield, Check, X, Sparkles, Globe, Clo
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import Head from '@/components/common/Head';
+import ashtonHeadshot from '@/assets/ashton-headshot.jpg';
+import clintonHeadshot from '@/assets/clinton-headshot.jpg';
+import grahamHeadshot from '@/assets/graham-headshot.jpg';
 
 // Visual mockup of chaos (before) - Real website style
 function ChaosMockup() {
