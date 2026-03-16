@@ -265,6 +265,48 @@ Here's something nobody tells you about Japan: you will walk an insane amount. I
 
 *This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
   },
+  {
+    slug: 'vienna',
+    title: "Founder's Guide: Vienna",
+    subtitle: 'Imperial charm, legendary sausages, and the coffeehouse ritual.',
+    authorName: 'Ashton Lightfoot',
+    authorTitle: 'Co-Founder of Voyance',
+    destination: 'Vienna',
+    readTime: '5 min read',
+    coverImage: toSiteImageUrlFromPhotoId('photo-1516550893923-42d28e5677af'),
+    summary: "I loved Vienna. The coffeehouse culture, the street food, the architecture - it's a city that moves at its own pace. Also, I would fly back just for the hot dogs. Dead serious.",
+    datePublished: '2026-03-16',
+    tags: ['Vienna', 'Food', 'Coffee', 'Hotels', 'Austria'],
+    content: `# Founder's Guide: Vienna
+
+I loved Vienna. I didn't go in expecting it to become one of my favorite cities, but it has this elegant, old-world atmosphere that just works. The coffeehouse culture, the street food, the architecture - it's a city that moves at its own pace, and once you sync up with it, everything clicks.
+
+Also, I would fly back to Vienna just to eat hot dogs. I'm dead serious. For my upcoming trip, I was desperately trying to get back to Vienna just for the hot dogs. That's how good they are.
+
+## Where to Stay
+
+**Imperial Riding School Vienna** - I loved this hotel. It's a Marriott Autograph Collection property set in a beautifully converted former imperial riding school. High ceilings, real character, historic charm that you don't get from a standard chain hotel. Great location for walking the city center.
+
+## Where to Eat
+
+**Bitzinger Wurstelstand** is the most famous sausage stand in Vienna, and it earns every bit of that reputation. It's right behind the Albertina museum near the State Opera, and you'll see everyone from tourists to people in formalwear grabbing sausages after a show. Order the Kasekrainer - a cheese-stuffed sausage. Eat it standing at the high tables like everyone else. This is street food at its absolute best.
+
+I said it at the top and I'll say it again: I would go back to Vienna just for these. My upcoming trip, I was desperately trying to figure out how to route through Vienna so I could eat here again.
+
+**Cafe Sacher** is the coffeehouse experience I loved the most. It's inside the Hotel Sacher, and the interior feels like a palace - ornate, elegant, old Vienna in every detail. We went upstairs to the top floor and it was wonderful. Order the original Sachertorte and a Viennese coffee. This is about the coffeehouse ritual as much as it is about the cake. Definitely make reservations.
+
+**Ganko Yakiniku** - 10 out of 10 recommend. This was my hidden gem discovery. A tiny Japanese yakiniku restaurant that seats maybe six people. That's how hidden it is - I had to dig to even find it again. It became one of my favorite meals of the entire trip. The intimacy is part of the charm. My plan for the next Vienna visit was honestly just to come back, eat here, get hot dogs at Bitzinger, and do nothing else.
+
+## The Coffeehouse Culture
+
+Vienna's coffeehouse culture is a real thing and worth experiencing. We went to two - one that was more low-key and one that felt more prestigious, almost like a palace setting. I loved the vibe of the more elegant one. Definitely make reservations, but the whole ritual of sitting down, ordering coffee and cake, and just taking your time - that's peak Vienna.
+
+## The Takeaway
+
+Vienna is a city for people who appreciate craft, history, and doing a few things really well rather than rushing through a checklist. My top three Vienna moments: the Kasekrainer at Bitzinger, coffee upstairs at Cafe Sacher, and stumbling into Ganko Yakiniku. None of those were planned. That's the kind of travel I love.
+
+*This guide is based on my real experiences. Every recommendation is a place I've personally been to. That's the Voyance promise - we don't recommend what we haven't tried.*`,
+  },
 ];
 
 export function getFoundersGuides(): FoundersGuide[] {
