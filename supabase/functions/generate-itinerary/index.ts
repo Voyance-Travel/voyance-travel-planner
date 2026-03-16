@@ -2023,7 +2023,7 @@ ${context.isMultiCity ? `5. ALL activities MUST be in ${dayDestination}. Do NOT 
 - Many European museums close on MONDAYS. If today is Monday, do NOT schedule museum visits — use an alternative.
 - Restaurants: do NOT schedule lunch at a place that opens for dinner only, or dinner at a lunch-only spot.
 - Markets often have specific operating days — verify the market is open on ${dayOfWeekName} before including it.
-- If you are unsure whether a venue is open on ${dayOfWeekName}, set closedRisk: true and suggest an alternative.
+- If you are unsure whether a venue is open on ${dayOfWeekName}, set closedRisk: true and suggest an alternative. WARNING: Confirmed-closed venues will be REMOVED from the itinerary in post-processing. Only use closedRisk for genuine uncertainty.
 ${(() => {
   // Inject known venue hours from verified_venues cache
   if (context.venueHoursCache && context.venueHoursCache.length > 0) {
