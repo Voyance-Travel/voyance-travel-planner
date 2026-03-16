@@ -454,7 +454,7 @@ export default function About() {
               <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Meet the Founders</span>
               <div className="mt-4 md:mt-8 space-y-4 md:space-y-6 text-sm md:text-lg leading-relaxed">
                 <p className="text-foreground font-medium text-lg md:text-xl">
-                  We're Ashton and Clinton - the two people (and one Yorkie) behind Voyance.
+                  We're the two people (and one Yorkie) behind Voyance.
                 </p>
                 <p className="text-muted-foreground">
                   People work too hard for their money. Too hard for their vacation. And they have too little of both. When you finally take that trip, you shouldn't be stuck in a tourist trap. You shouldn't be handing your money to something that wasn't worth it. And you definitely shouldn't have spent hours planning just to end up disappointed.
