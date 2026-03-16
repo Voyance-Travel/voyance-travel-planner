@@ -8591,7 +8591,7 @@ function DayCard({
                     return (
                       <InterCityTransportCard
                         key={activityToRender.id}
-                        title={activityToRender.title || activityToRender.name || ''}
+                        title={activityToRender.title || ''}
                         travelMeta={travelMeta}
                         className="mx-2 sm:mx-0 my-1"
                       />
