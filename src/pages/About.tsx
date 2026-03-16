@@ -4,24 +4,6 @@ import { ArrowRight, Compass, Heart, Zap, Shield, Check, X, Sparkles, Globe, Clo
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import Head from '@/components/common/Head';
-import aboutTravel1 from '@/assets/about-travel-1.jpg';
-import aboutTravel2 from '@/assets/about-travel-2.jpg';
-import aboutTravel3 from '@/assets/about-travel-3.jpg';
-import aboutTravel4 from '@/assets/about-travel-4.jpg';
-import aboutTravel5 from '@/assets/about-travel-5.jpg';
-import aboutTravel6 from '@/assets/about-travel-6.jpg';
-import aboutTravel7 from '@/assets/about-travel-7.jpg';
-import aboutTravel8 from '@/assets/about-travel-8.jpg';
-import aboutTravel9 from '@/assets/about-travel-9.jpg';
-
-const travelPhotos = [
-  { src: aboutTravel2, alt: "Travel adventure" },
-  { src: aboutTravel4, alt: "Travel adventure" },
-  { src: aboutTravel5, alt: "Travel adventure" },
-  { src: aboutTravel7, alt: "Travel adventure" },
-  { src: aboutTravel8, alt: "Travel adventure" },
-  { src: aboutTravel9, alt: "Travel adventure" },
-];
 
 // Visual mockup of chaos (before) - Real website style
 function ChaosMockup() {
@@ -472,7 +454,7 @@ export default function About() {
               <span className="text-primary text-xs md:text-sm font-medium uppercase tracking-[0.2em]">Meet the Founders</span>
               <div className="mt-4 md:mt-8 space-y-4 md:space-y-6 text-sm md:text-lg leading-relaxed">
                 <p className="text-foreground font-medium text-lg md:text-xl">
-                  We're Ashton and Clinton - the two people (and one Yorkie) behind Voyance.
+                  We're the two people (and one Yorkie) behind Voyance.
                 </p>
                 <p className="text-muted-foreground">
                   People work too hard for their money. Too hard for their vacation. And they have too little of both. When you finally take that trip, you shouldn't be stuck in a tourist trap. You shouldn't be handing your money to something that wasn't worth it. And you definitely shouldn't have spent hours planning just to end up disappointed.
@@ -483,34 +465,6 @@ export default function About() {
               </div>
             </motion.div>
 
-            {/* Photo Gallery Strip */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="mt-10 md:mt-14 -mx-4 md:-mx-6"
-            >
-              <div
-                className="flex gap-3 md:gap-4 overflow-x-auto px-4 md:px-6 pb-4 scrollbar-hide"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              >
-                {travelPhotos.map((photo, i) => (
-                  <div
-                    key={i}
-                    className="relative overflow-hidden rounded-xl shrink-0 w-[220px] md:w-[280px] aspect-[4/5]"
-                    onContextMenu={(e) => e.preventDefault()}
-                  >
-                    <img
-                      src={photo.src}
-                      alt={photo.alt}
-                      className="w-full h-full object-cover pointer-events-none select-none"
-                      draggable={false}
-                    />
-                    <div className="absolute inset-0" />
-                  </div>
-                ))}
-              </div>
-            </motion.div>
 
             {/* Ashton */}
             <motion.div
@@ -553,7 +507,7 @@ export default function About() {
               className="mt-12 md:mt-16"
             >
               <div className="space-y-3 text-sm md:text-base leading-relaxed">
-                <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Clinton Brooks, Co-Founder</h3>
+                <h3 className="text-foreground font-display font-bold text-lg md:text-xl">The Other Half of Voyance, Co-Founder</h3>
                 <p className="text-muted-foreground">
                   I'm the finance side of Voyance. While Ashton is obsessing over which tiny sushi counter in London has only 20 seats, I make sure the business behind it all actually works.
                 </p>
@@ -572,7 +526,7 @@ export default function About() {
               </div>
             </motion.div>
 
-            {/* Graham */}
+            {/* Graham - hidden for now, can be restored later
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -586,6 +540,7 @@ export default function About() {
                 </p>
               </div>
             </motion.div>
+            */}
 
             {/* Signature */}
             <div className="mt-10 md:mt-14 pt-6 md:pt-8 border-t border-border/50">
