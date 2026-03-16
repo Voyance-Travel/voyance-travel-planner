@@ -49,7 +49,7 @@ import type { BudgetCategory } from '@/services/tripBudgetService';
 import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
 import { usePayableItems } from '@/hooks/usePayableItems';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
-import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+// useTripFinancialSnapshot removed — usePayableItems is now the source of truth
 
 interface ItineraryActivity {
   id: string;
