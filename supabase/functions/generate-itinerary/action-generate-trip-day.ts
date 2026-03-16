@@ -200,6 +200,27 @@ export async function handleGenerateTripDay(
   const existingData = (tripCheck.itinerary_data as any) || {};
   const existingDays: any[] = Array.isArray(existingData.days) ? existingData.days : [];
 
+  // ── RESTAURANT POOL: Load pre-generated pool from trip metadata ───
+  const tripMeta = (tripCheck.metadata as Record<string, unknown>) || {};
+  const restaurantPoolByCity: Record<string, any[]> = (tripMeta.restaurant_pool as any) || {};
+  const usedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
+  
+  // Get the pool for this day's city
+  const dayCity = cityInfo?.cityName || destination || '';
+  let restaurantPool: any[] = restaurantPoolByCity[dayCity] || [];
+  // Also try partial match if exact city not found
+  if (restaurantPool.length === 0 && dayCity) {
+    for (const [poolCity, pool] of Object.entries(restaurantPoolByCity)) {
+      if (poolCity.toLowerCase().includes(dayCity.toLowerCase()) || dayCity.toLowerCase().includes(poolCity.toLowerCase())) {
+        restaurantPool = pool;
+        break;
+      }
+    }
+  }
+  if (restaurantPool.length > 0) {
+    console.log(`[generate-trip-day] Restaurant pool for "${dayCity}": ${restaurantPool.length} venues (${usedRestaurants.length} already used)`);
+  }
+
   // CAP previousActivities to last 3 days to prevent prompt bloat on day 8+
   // The full dedup is handled post-generation by day-validation.ts
   const PREV_DAY_WINDOW = 3;
