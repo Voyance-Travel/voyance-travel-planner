@@ -17,6 +17,16 @@ export interface ConsumerTripPdfData {
   travelers: number;
   days?: EditorialDay[];
   unlockedDayNumbers?: Set<number>;
+  flights?: Array<{
+    airline: string;
+    departureTime: string;
+    arrivalTime: string;
+    departureAirport: string;
+    arrivalAirport: string;
+    date?: string;
+    label?: string;
+  }>;
+  /** @deprecated Use flights[] instead */
   flight?: {
     airline: string;
     departure: string;
