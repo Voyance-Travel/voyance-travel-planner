@@ -6134,13 +6134,13 @@ If the purpose is a specific event, plan at least ONE full day around that event
       }
 
       // =======================================================================
-      // STAGE 2.7: Transit Gap Enforcement
-      // Shift activity start times forward when consecutive activities have
-      // insufficient buffer (< 15 min gap). This catches cases where the AI
-      // ignored the buffer constraints from the personalization enforcer.
+      // STAGE 2.7: Overlap Fix (lightweight)
+      // Only fix true overlaps and zero/negative gaps (< 5 min).
+      // Distance-aware buffer enforcement happens in Stage 4.6 after
+      // coordinates are available from enrichment.
       // =======================================================================
-      const MIN_GAP_MINUTES = 15;
-      let gapFixCount = 0;
+      const MIN_OVERLAP_GAP = 5;
+      let overlapFixCount = 0;
       
       for (const day of aiResult.days) {
         if (!day.activities || day.activities.length < 2) continue;
@@ -6169,11 +6169,9 @@ If the purpose is a specific event, plan at least ONE full day around that event
             return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
           };
           
-          // Compute current activity's end time
           const startMins = parseT(current.startTime);
           if (startMins === null) continue;
           
-          // Parse duration
           let durMins = 60;
           if (current.duration) {
             const d = String(current.duration).toLowerCase();
@@ -6191,23 +6189,23 @@ If the purpose is a specific event, plan at least ONE full day around that event
           
           const gap = nextStartMins - endMins;
           
-          if (gap < MIN_GAP_MINUTES) {
-            const newStart = endMins + MIN_GAP_MINUTES;
+          // Only fix true overlaps / near-zero gaps
+          if (gap < MIN_OVERLAP_GAP) {
+            const newStart = endMins + MIN_OVERLAP_GAP;
             const oldTime = next.startTime;
             next.startTime = fmtT(newStart);
-            // Also update endTime if it exists
             if (next.endTime) {
               const nextDur = (parseT(next.endTime) || (newStart + 60)) - (parseT(oldTime) || newStart);
               next.endTime = fmtT(newStart + Math.max(nextDur, 30));
             }
-            gapFixCount++;
-            console.log(`[Stage 2.7] Day ${day.dayNumber}: Shifted "${next.title || next.name}" from ${oldTime} → ${next.startTime} (gap was ${gap} min)`);
+            overlapFixCount++;
+            console.log(`[Stage 2.7] Day ${day.dayNumber}: Fixed overlap for "${next.title || next.name}" from ${oldTime} → ${next.startTime} (gap was ${gap} min)`);
           }
         }
       }
       
-      if (gapFixCount > 0) {
-        console.log(`[Stage 2.7] Fixed ${gapFixCount} insufficient transit gaps across all days`);
+      if (overlapFixCount > 0) {
+        console.log(`[Stage 2.7] Fixed ${overlapFixCount} overlaps/zero-gaps across all days`);
       }
 
       // =====================================================================
