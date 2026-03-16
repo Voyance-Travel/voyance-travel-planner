@@ -96,6 +96,10 @@ export default function Guides() {
                 <Users className="h-3.5 w-3.5" />
                 Community
               </TabsTrigger>
+              <TabsTrigger value="founders" className="gap-1.5">
+                <Heart className="h-3.5 w-3.5" />
+                Founder's
+              </TabsTrigger>
             </TabsList>
 
             {/* ── Voyance Guides Tab (existing editorial content, unchanged) ── */}
