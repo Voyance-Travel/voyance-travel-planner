@@ -117,7 +117,7 @@ export default function FoundersGuideDetail() {
       <section className="relative">
         <div className="aspect-[21/9] md:aspect-[3/1] w-full overflow-hidden">
           <img
-            src={normalizeUnsplashUrl(guide.coverImage, 1600)}
+            src={normalizeUnsplashUrl(guide.coverImage)}
             alt={guide.destination}
             className="w-full h-full object-cover"
           />
