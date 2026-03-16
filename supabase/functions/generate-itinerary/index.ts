@@ -1479,6 +1479,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
 import {
   validateGeneratedDay,
   deduplicateActivities,
+  sanitizeActivityTitles,
   detectMealSlots,
   enforceRequiredMealsFinalGuard,
   type DayValidationResult,
