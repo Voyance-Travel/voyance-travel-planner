@@ -116,7 +116,9 @@ export function RefreshDayDiffView({
             </h3>
             {hasActionableChanges && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                {actionableChanges.length} change{actionableChanges.length !== 1 ? 's' : ''} suggested
+                {actionableChanges.every(c => c.patch) 
+                  ? 'All issues can be resolved — review the changes below'
+                  : `${actionableChanges.length} change${actionableChanges.length !== 1 ? 's' : ''} suggested`}
                 {errorCount > 0 && ` · ${errorCount} error${errorCount !== 1 ? 's' : ''}`}
                 {warnCount > 0 && ` · ${warnCount} warning${warnCount !== 1 ? 's' : ''}`}
               </p>
