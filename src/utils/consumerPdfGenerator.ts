@@ -218,12 +218,80 @@ export async function generateConsumerTripPdf(data: ConsumerTripPdfData): Promis
     ], y);
   }
 
-  if (data.flight) {
-    y = drawInfoCard('FLIGHT', [
-      data.flight.airline,
-      `${data.flight.departureAirport}  \u2192  ${data.flight.arrivalAirport}`,
-      `Departs ${data.flight.departure}  \u00B7  Arrives ${data.flight.arrival}`,
-    ], y);
+  // ── Flight card(s) — supports multiple legs ────────────
+  const flightLegs = data.flights ?? (data.flight ? [{
+    airline: data.flight.airline,
+    departureTime: data.flight.departure,
+    arrivalTime: data.flight.arrival,
+    departureAirport: data.flight.departureAirport,
+    arrivalAirport: data.flight.arrivalAirport,
+  }] : []);
+
+  if (flightLegs.length > 0) {
+    const cardX = M + 20;
+    const cardW = CW - 40;
+    const legHeight = 22;
+    const cardPadTop = 12;
+    const cardPadBot = 8;
+    const cardH = cardPadTop + flightLegs.length * legHeight + cardPadBot;
+
+    y = checkBreak(y, cardH);
+
+    pdf.setFillColor(...C.cardBg);
+    pdf.roundedRect(cardX, y, cardW, cardH, 3, 3, 'F');
+
+    setFont('bold', 7, C.gold);
+    pdf.text(flightLegs.length > 1 ? 'FLIGHTS' : 'FLIGHT', cardX + 10, y + 9);
+
+    let legY = y + cardPadTop + 6;
+    for (const leg of flightLegs) {
+      // Label (e.g. "Outbound" / "Return")
+      if (leg.label) {
+        setFont('bold', 7, C.muted);
+        pdf.text(leg.label.toUpperCase(), cardX + 10, legY - 3);
+      }
+
+      // Airline
+      const airline = leg.airline?.trim();
+      if (airline) {
+        setFont('bold', 11, C.charcoal);
+        pdf.text(airline, cardX + 10, legY);
+      }
+
+      // Route: DEP to ARR  (using " to " instead of →)
+      const dep = leg.departureAirport?.trim();
+      const arr = leg.arrivalAirport?.trim();
+      if (dep || arr) {
+        const route = [dep, arr].filter(Boolean).join('  to  ');
+        setFont('normal', 9, C.body);
+        const routeX = airline ? cardX + 10 + pdf.getTextWidth(airline + '   ') : cardX + 10;
+        if (airline) {
+          // put route on same line after airline
+          pdf.text(route, routeX, legY);
+        } else {
+          setFont('bold', 11, C.charcoal);
+          pdf.text(route, cardX + 10, legY);
+        }
+      }
+
+      // Times
+      const depTime = leg.departureTime?.trim();
+      const arrTime = leg.arrivalTime?.trim();
+      const datePart = leg.date?.trim();
+      const timeParts: string[] = [];
+      if (depTime) timeParts.push(`Departs ${depTime}`);
+      if (arrTime) timeParts.push(`Arrives ${arrTime}`);
+      if (datePart) timeParts.push(datePart);
+
+      if (timeParts.length > 0) {
+        setFont('normal', 9, C.body);
+        pdf.text(timeParts.join('  \u00B7  '), cardX + 10, legY + 7);
+      }
+
+      legY += legHeight;
+    }
+
+    y += cardH + 8;
   }
 
   // Cover footer ornament
