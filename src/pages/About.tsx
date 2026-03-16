@@ -507,7 +507,7 @@ export default function About() {
               className="mt-12 md:mt-16"
             >
               <div className="space-y-3 text-sm md:text-base leading-relaxed">
-                <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Clinton Brooks, Co-Founder</h3>
+                <h3 className="text-foreground font-display font-bold text-lg md:text-xl">The Other Half of Voyance, Co-Founder</h3>
                 <p className="text-muted-foreground">
                   I'm the finance side of Voyance. While Ashton is obsessing over which tiny sushi counter in London has only 20 seats, I make sure the business behind it all actually works.
                 </p>
