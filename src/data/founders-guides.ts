@@ -1,4 +1,5 @@
 import { toSiteImageUrlFromPhotoId } from '@/utils/unsplash';
+import atlantaSkyline from '@/assets/atlanta-skyline.jpg';
 
 export interface FoundersGuide {
   slug: string;
