@@ -367,6 +367,15 @@ function parseRating(raw: unknown): ParsedRating | number | undefined {
   return undefined;
 }
 
+/** Extract first photo URL from a photos array (string or {url} objects) */
+function resolveFirstPhoto(photos: unknown): string | undefined {
+  if (!Array.isArray(photos) || photos.length === 0) return undefined;
+  const first = photos[0];
+  if (typeof first === 'string' && first.length > 0) return first;
+  if (typeof first === 'object' && first !== null && typeof (first as any).url === 'string') return (first as any).url;
+  return undefined;
+}
+
 // =============================================================================
 // ACTIVITY PARSER
 // =============================================================================
