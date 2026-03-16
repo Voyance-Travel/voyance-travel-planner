@@ -41,6 +41,8 @@ import { toast } from 'sonner';
 import { formatEnumDisplay } from '@/utils/textFormatting';
 import { handleImageError } from '@/utils/imageFallback';
 import { useCachedDestinationImage } from '@/hooks/useCachedImage';
+import { useDestinationEnrichment } from '@/hooks/useDestinationEnrichment';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function DestinationDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -216,6 +218,13 @@ export default function DestinationDetail() {
   // Use cached storage URL if available, otherwise original
   const heroImageUrl = cachedHeroUrl || destination?.imageUrl || '';
 
+  // Auto-enrich thin database destinations
+  const { isEnriching } = useDestinationEnrichment(
+    dbDestination as any,
+    !!staticDestination,
+    activities.length > 0
+  );
+
   // Loading state for database fetch
   if (!staticDestination && isLoadingDb) {
     return (
@@ -269,12 +278,9 @@ export default function DestinationDetail() {
   // Getting around - use structured transport data or fallback text
   const transportData = destination.transportData || null;
   
-  // Local tips - use destination data or generate contextual fallback
-  const localTips = destination.localTips || [
-    `Carry local currency (${destination.currency}) for small purchases`,
-    'Be respectful of local customs and traditions',
-    'Book popular attractions in advance during peak season',
-  ];
+  // Local tips - use destination data, hide generic fallbacks
+  const hasRealTips = destination.localTips && destination.localTips.length > 0;
+  const localTips = destination.localTips || [];
   
   // Helper to get transport icon
   const getTransportIcon = (mode: string) => {
@@ -540,23 +546,37 @@ export default function DestinationDetail() {
                     )}
                   </div>
                   
-                  {/* Local Tips */}
-                  <div className="p-5 bg-card rounded-xl border border-border">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                        <Info className="h-5 w-5 text-muted-foreground" />
+                  {/* Local Tips — only show if we have real data or enriching */}
+                  {(hasRealTips || isEnriching) && (
+                    <div className="p-5 bg-card rounded-xl border border-border">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                          <Info className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <h3 className="font-medium">Local Tips</h3>
                       </div>
-                      <h3 className="font-medium">Local Tips</h3>
+                      {isEnriching && !hasRealTips ? (
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-5/6" />
+                          <Skeleton className="h-4 w-4/6" />
+                          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Enhancing destination info...
+                          </p>
+                        </div>
+                      ) : (
+                        <ul className="text-sm text-muted-foreground space-y-1.5">
+                          {localTips.map((tip, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <span className="text-accent mt-1">•</span>
+                              <span>{tip}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
-                    <ul className="text-sm text-muted-foreground space-y-1.5">
-                      {localTips.map((tip, index) => (
-                        <li key={index} className="flex items-start gap-2">
-                          <span className="text-accent mt-1">•</span>
-                          <span>{tip}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  )}
 
                   {/* Customs & Etiquette — only show if we have real data */}
                   {(destination.tippingCustom || destination.dressCode) && (
@@ -631,13 +651,32 @@ export default function DestinationDetail() {
               </section>
 
               {/* Activities Section */}
-              {activities.length > 0 && (
+              {(activities.length > 0 || isEnriching) && (
                 <section>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="font-serif text-2xl font-semibold">Top Experiences</h2>
-                    <span className="text-sm text-muted-foreground">{activities.length} experiences</span>
+                    {activities.length > 0 && (
+                      <span className="text-sm text-muted-foreground">{activities.length} experiences</span>
+                    )}
                   </div>
                   
+                  {isEnriching && activities.length === 0 ? (
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="p-5 bg-card rounded-xl border border-border space-y-3">
+                          <Skeleton className="h-5 w-20" />
+                          <Skeleton className="h-5 w-3/4" />
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-5/6" />
+                        </div>
+                      ))}
+                      <p className="col-span-2 text-xs text-muted-foreground flex items-center gap-1.5">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Discovering top experiences...
+                      </p>
+                    </div>
+                  ) : (
+                  <>
                   {/* Category Filter */}
                   <div className="flex flex-wrap gap-2 mb-6">
                     {categories.map((category) => (
@@ -702,6 +741,8 @@ export default function DestinationDetail() {
                       ))}
                     </AnimatePresence>
                   </div>
+                  </>
+                  )}
                 </section>
               )}
             </div>
