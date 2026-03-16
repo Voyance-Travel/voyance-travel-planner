@@ -1,25 +1,31 @@
 
 
-# Voyance Picks Batch 4: Philadelphia + Dallas
+# Voyance Picks Batch 5: London
 
 ## What
 
-Insert 4 founder-curated picks:
+Insert 12 founder-curated London picks into the `voyance_picks` table:
 
-| Destination | Name | Category | Priority |
-|---|---|---|---|
-| Philadelphia | Pat's King of Steaks | dining | 1 |
-| Philadelphia | Geno's Steaks | dining | 1 |
-| Philadelphia | Reading Terminal Market | experience | 1 |
-| Dallas | WorldSprings | experience | 2 |
+| Name | Category | Priority |
+|---|---|---|
+| British Museum | activity | 1 |
+| Gordon's Wine Bar | dining | 1 |
+| Noble Rot | dining | 1 |
+| Flat Iron | dining | 1 |
+| Yauatcha | dining | 1 |
+| Ronnie Scott's Jazz Club | nightlife | 1 |
+| Borough Market | experience | 1 |
+| Heathrow Express | experience | 2 |
+| Trafalgar Square | activity | 2 |
+| Fatt Pundit | dining | 2 |
+| Sushi Kyu | dining | 2 |
+| Ladurée | dining | 3 |
 
 ## How
 
-Run the provided SQL INSERT as a single database migration — 4 rows, no schema changes. Then verify with:
+Single SQL INSERT migration — 12 rows, data only, no schema changes. Verify with:
 
 ```sql
-SELECT destination, name, category FROM voyance_picks WHERE destination IN ('Philadelphia', 'Dallas') ORDER BY destination;
+SELECT name, category, priority FROM voyance_picks WHERE destination = 'London' ORDER BY priority, name;
 ```
-
-Data-only operation. No code changes required.
 
