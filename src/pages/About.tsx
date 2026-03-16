@@ -526,7 +526,7 @@ export default function About() {
               </div>
             </motion.div>
 
-            {/* Graham */}
+            {/* Graham - hidden for now, can be restored later
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -540,6 +540,7 @@ export default function About() {
                 </p>
               </div>
             </motion.div>
+            */}
 
             {/* Signature */}
             <div className="mt-10 md:mt-14 pt-6 md:pt-8 border-t border-border/50">
