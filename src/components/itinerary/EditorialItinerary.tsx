@@ -8677,6 +8677,7 @@ function DayCard({
                           isPastTrip={isPastTrip}
                           isCleanPreview={isCleanPreview}
                           onPhotoResolved={onPhotoResolved}
+                          isManualMode={isManualMode}
                         />
                       </div>
                     </div>
