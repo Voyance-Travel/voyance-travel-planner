@@ -2876,48 +2876,42 @@ Generate activities for this day following ALL constraints above.`;
         }
 
         // ====================================================================
-        // MEAL INJECTION FALLBACK — If retries exhausted and meals still missing,
-        // inject stub meal activities so no full day ships without B/L/D
+        // MEAL INJECTION FALLBACK — policy-aware final guard before returning
         // ====================================================================
-        if (isLastAttempt && !isFirstDay && !isLastDay) {
-          const mealSlots: { type: string; keywords: string[]; time: string; endTime: string }[] = [
-            { type: 'Breakfast', keywords: ['breakfast', 'brunch'], time: '08:30', endTime: '09:15' },
-            { type: 'Lunch', keywords: ['lunch'], time: '12:30', endTime: '13:30' },
-            { type: 'Dinner', keywords: ['dinner', 'supper', 'evening meal'], time: '19:00', endTime: '20:15' },
-          ];
+        if (dayMealPolicy.requiredMeals.length > 0) {
+          const detectedBeforeFallback = detectMealSlots(generatedDay.activities || []);
+          const missingMeals = dayMealPolicy.requiredMeals.filter((meal: RequiredMeal) => !detectedBeforeFallback.includes(meal));
+          const fallbackTimes: Record<RequiredMeal, { start: string; end: string; cost: number }> = {
+            breakfast: { start: '08:30', end: '09:15', cost: 12 },
+            lunch: { start: '12:30', end: '13:30', cost: 18 },
+            dinner: { start: '19:00', end: '20:15', cost: 30 },
+          };
 
-          for (const slot of mealSlots) {
-            const hasMeal = generatedDay.activities.some((a: any) => {
-              const title = (a.title || '').toLowerCase();
-              const category = (a.category || '').toLowerCase();
-              const isDining = category === 'dining' || category.includes('dining');
-              const matchesMeal = slot.keywords.some(kw => title.includes(kw) || category.includes(kw));
-              return isDining && matchesMeal;
-            });
-
-            if (!hasMeal) {
-              const destination = context.destination || 'the destination';
-              console.warn(`[Stage 2] Day ${dayNumber}: INJECTING missing ${slot.type} (retries exhausted)`);
-              const stubMeal: any = {
-                id: `injected-${slot.type.toLowerCase()}-${dayNumber}`,
-                title: `${slot.type} — Local Restaurant`,
-                startTime: slot.time,
-                endTime: slot.endTime,
-                category: 'dining',
-                location: { name: `${slot.type} spot in ${destination}`, address: destination },
-                cost: { amount: slot.type === 'Breakfast' ? 12 : slot.type === 'Lunch' ? 18 : 30, currency: context.currency || 'USD', source: 'injected_fallback' },
-                description: `${slot.type} at a well-reviewed local spot. This meal was auto-added to ensure your day includes all three meals.`,
-                tags: ['dining', slot.type.toLowerCase()],
-                bookingRequired: false,
-                transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency: context.currency || 'USD' }, instructions: 'Short walk from previous activity' },
-                tips: `Ask your hotel for a ${slot.type.toLowerCase()} recommendation nearby.`,
-                _injected: true,
-              };
-              generatedDay.activities.push(stubMeal);
-            }
+          if (missingMeals.length > 0) {
+            console.warn(`[Stage 2] Day ${dayNumber}: fallback injecting missing meals [${missingMeals.join(', ')}] for ${dayMealPolicy.dayMode}`);
           }
 
-          // Re-sort activities by start time after injection
+          for (const mealType of missingMeals) {
+            const slot = fallbackTimes[mealType];
+            const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+            const destination = context.destination || 'the destination';
+            generatedDay.activities.push({
+              id: `injected-${mealType}-${dayNumber}`,
+              title: `${label} — Local ${mealType === 'breakfast' ? 'Café' : 'Restaurant'}`,
+              startTime: slot.start,
+              endTime: slot.end,
+              category: 'dining',
+              location: { name: `${label} spot in ${destination}`, address: destination },
+              cost: { amount: slot.cost, currency: context.currency || 'USD', source: 'injected_fallback' },
+              description: `${label} was auto-added to satisfy the required meal policy for this ${dayMealPolicy.dayMode.replace(/_/g, ' ')}.`,
+              tags: ['dining', mealType, 'meal-fallback'],
+              bookingRequired: false,
+              transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency: context.currency || 'USD' }, instructions: 'Short walk from the previous activity' },
+              tips: `Ask your hotel for a nearby ${mealType} recommendation if you want to swap this spot.`,
+              _injected: true,
+            } as any);
+          }
+
           generatedDay.activities.sort((a: any, b: any) => {
             const parseMin = (t: string) => {
               const m = (t || '').match(/(\d{1,2}):(\d{2})/);
@@ -2925,6 +2919,9 @@ Generate activities for this day following ALL constraints above.`;
             };
             return parseMin(a.startTime) - parseMin(b.startTime);
           });
+
+          const detectedAfterFallback = detectMealSlots(generatedDay.activities || []);
+          console.log(`[Stage 2] Day ${dayNumber} meal fallback result: required=[${dayMealPolicy.requiredMeals.join(', ')}], detectedAfter=[${detectedAfterFallback.join(', ')}]`);
         }
 
         // Tag day with multi-city info
