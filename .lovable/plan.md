@@ -1,26 +1,17 @@
 
 
-# Voyance Picks Batch 6: Paris
+# Voyance Picks Batch 7: Rome + Barcelona
 
 ## What
-
-Insert 7 founder-curated Paris picks:
-
-| Name | Category | Priority |
-|---|---|---|
-| Louvre Museum | activity | 1 |
-| Sacré-Cœur | activity | 1 |
-| Seine River | experience | 1 |
-| Angelina | dining | 1 |
-| Le Relais de l'Entrecôte | dining | 1 |
-| Petit Bon | dining | 2 |
-| Sacré Fleur | dining | 2 |
+Insert 9 founder-curated picks:
+- **Rome (4)**: Trevi Fountain, Colosseum, Tonnarello, The Pantheon Iconic Rome Hotel
+- **Barcelona (5)**: La Boqueria, Sagrada Família, Piscina Municipal de Montjuïc, Bar Cañete, Dow Jones Bar
 
 ## How
+Create a new SQL migration file with the provided INSERT statement (9 rows into `voyance_picks`). No schema changes needed — data only.
 
-Single SQL INSERT migration — 7 rows, data only, no schema changes. Verify with:
-
+After migration runs, verify with:
 ```sql
-SELECT name, category, priority FROM voyance_picks WHERE destination = 'Paris' ORDER BY priority, name;
+SELECT destination, name, category FROM voyance_picks WHERE destination IN ('Rome', 'Barcelona') ORDER BY destination, priority;
 ```
 
