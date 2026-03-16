@@ -1,23 +1,28 @@
 
 
-# Voyance Picks Batch 8: Morocco, Tenerife, Vienna, Istanbul, Portugal
+# Voyance Picks Batch 9: Japan (Hotels + Restaurants)
 
 ## What
-Insert 11 founder-curated picks across 5 destinations:
+Insert 10 founder-curated Japan picks:
 
-| Destination | Name | Category | Priority |
-|---|---|---|---|
-| Marrakech | Atlas Mountains Day Trip | experience | 1 |
-| Marrakech | Hot Air Balloon Ride | experience | 1 |
-| Marrakech | Comptoir Darna | dining | 2 |
-| Tenerife | The Ritz-Carlton Tenerife Abama | accommodation | 1 |
-| Vienna | Imperial Riding School Vienna | accommodation | 1 |
-| Vienna | Bitzinger Würstelstand | dining | 1 |
-| Vienna | Café Sacher | dining | 1 |
-| Vienna | Ganko Yakiniku | dining | 1 |
-| Istanbul | Istanbul Marriott Hotel Sisli | accommodation | 3 |
-| Algarve | Coastal Cave Bars | experience | 1 |
+**Hotels (4)**
+| Destination | Name | Priority |
+|---|---|---|
+| Kyoto | Four Seasons Hotel Kyoto | 1 |
+| Tokyo | Four Seasons Hotel Tokyo at Otemachi | 1 |
+| Tokyo | The Peninsula Tokyo | 2 |
+| Osaka | Four Seasons Hotel Osaka | 2 |
+
+**Restaurants (6)**
+| Destination | Name | Priority |
+|---|---|---|
+| Kyoto | EMBA Kyoto Grill | 1 |
+| Kyoto | Kakyo | 1 |
+| Tokyo | Gyukatsu Motomura | 1 |
+| Tokyo | Ukai-tei Ginza | 2 |
+| Tokyo | Yakiniku Black Hole | 2 |
+| Tokyo | Gyumon Halal Ramen | 2 |
 
 ## How
-Single SQL INSERT migration — 11 rows, data only, no schema changes. Verify with provided SELECT query.
+Single SQL INSERT migration — 10 rows, data only, no schema changes. Verify with provided SELECT query.
 
