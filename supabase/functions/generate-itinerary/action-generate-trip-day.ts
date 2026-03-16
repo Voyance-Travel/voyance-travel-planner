@@ -503,6 +503,18 @@ export async function handleGenerateTripDay(
     }
   }
 
+  // ── DATE NORMALIZATION (ensure every day has a date) ─────────────
+  if (startDate) {
+    for (let i = 0; i < updatedDays.length; i++) {
+      if (!updatedDays[i].date) {
+        const derived = new Date(startDate);
+        derived.setDate(derived.getDate() + (updatedDays[i].dayNumber || i + 1) - 1);
+        updatedDays[i].date = derived.toISOString().split('T')[0];
+        console.log(`[generate-trip-day] Derived missing date for existing day ${updatedDays[i].dayNumber}: ${updatedDays[i].date}`);
+      }
+    }
+  }
+
   const partialItinerary = {
     days: updatedDays,
     status: dayNumber >= totalDays ? 'ready' : 'generating',
