@@ -16,7 +16,7 @@ import {
   hasCuratedImages,
   generateDestinationGradient
 } from '@/utils/destinationImages';
-import { getHeroImageByName } from '@/services/destinationImagesAPI';
+import { getHeroImageByName, getDestinationCanonicalImage } from '@/services/destinationImagesAPI';
 import { supabase } from '@/integrations/supabase/client';
 
 interface UseTripHeroImageOptions {
