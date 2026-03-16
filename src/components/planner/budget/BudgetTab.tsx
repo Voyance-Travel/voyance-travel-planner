@@ -271,7 +271,6 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     formattedRemaining,
     updateSettings,
     removeEntry,
-    syncFromItinerary,
     refetch,
   } = useTripBudget({ tripId, totalDays, enabled: true });
 
