@@ -278,12 +278,9 @@ export default function DestinationDetail() {
   // Getting around - use structured transport data or fallback text
   const transportData = destination.transportData || null;
   
-  // Local tips - use destination data or generate contextual fallback
-  const localTips = destination.localTips || [
-    `Carry local currency (${destination.currency}) for small purchases`,
-    'Be respectful of local customs and traditions',
-    'Book popular attractions in advance during peak season',
-  ];
+  // Local tips - use destination data, hide generic fallbacks
+  const hasRealTips = destination.localTips && destination.localTips.length > 0;
+  const localTips = destination.localTips || [];
   
   // Helper to get transport icon
   const getTransportIcon = (mode: string) => {
