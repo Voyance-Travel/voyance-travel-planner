@@ -8955,10 +8955,12 @@ interface ActivityRowProps {
   compact?: boolean;
   /** Whether this is a past trip — shows guide bookmark button */
   isPastTrip?: boolean;
-  /** Clean preview mode — magazine-style reading card */
-  isCleanPreview?: boolean;
-  /** Callback to report a resolved photo URL for batch write-back */
-  onPhotoResolved?: (activityId: string, photoUrl: string) => void;
+   /** Clean preview mode — magazine-style reading card */
+   isCleanPreview?: boolean;
+   /** Callback to report a resolved photo URL for batch write-back */
+   onPhotoResolved?: (activityId: string, photoUrl: string) => void;
+   /** Manual builder mode — skip real photo fetching to avoid API costs */
+   isManualMode?: boolean;
 }
 
 function ActivityRow({
