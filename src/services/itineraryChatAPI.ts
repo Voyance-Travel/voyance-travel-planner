@@ -20,7 +20,7 @@ export interface ChatMessage {
 export interface ItineraryAction {
   type: 'suggest_activity_swap' | 'adjust_day_pacing' | 'apply_filter' | 'regenerate_day' | 'rewrite_day';
   params: Record<string, unknown>;
-  status: 'pending' | 'applied' | 'declined';
+  status: 'pending' | 'applied' | 'declined' | 'failed';
 }
 
 export interface ItineraryContext {

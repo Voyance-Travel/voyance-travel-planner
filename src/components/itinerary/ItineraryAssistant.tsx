@@ -722,6 +722,32 @@ export function ItineraryAssistant({
                                 {isDeclined && (
                                   <Badge variant="secondary" className="mt-2">Declined</Badge>
                                 )}
+                                {isFailed && (
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <Badge variant="destructive">Failed</Badge>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-xs gap-1"
+                                      onClick={() => {
+                                        // Reset to pending then retry
+                                        setMessages(prev => prev.map(msg => {
+                                          if (msg.id === message.id && msg.actions) {
+                                            const newActions = [...msg.actions];
+                                            newActions[idx] = { ...newActions[idx], status: 'pending' };
+                                            return { ...msg, actions: newActions };
+                                          }
+                                          return msg;
+                                        }));
+                                        handleActionApply(message.id, idx, { ...action, status: 'pending' });
+                                      }}
+                                      disabled={isExecuting}
+                                    >
+                                      <RefreshCw className="h-3 w-3" />
+                                      Retry
+                                    </Button>
+                                  </div>
+                                )}
                               </CardContent>
                             </Card>
                           );
