@@ -11,6 +11,8 @@ import { handleGetItinerary } from './action-get-itinerary.ts';
 import { handleToggleActivityLock } from './action-toggle-lock.ts';
 import { handleSyncItineraryTables } from './action-sync-tables.ts';
 import { handleRepairTripCosts } from './action-repair-costs.ts';
+import { handleGenerateTrip } from './action-generate-trip.ts';
+import { handleGenerateTripDay } from './action-generate-trip-day.ts';
 import type { ActionContext } from './action-types.ts';
 
 // =============================================================================
