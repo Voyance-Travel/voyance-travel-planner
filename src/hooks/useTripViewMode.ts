@@ -15,7 +15,7 @@ interface UseTripViewModeOptions {
  * - Owner defaults to 'edit'
  * - Non-owner forced to 'preview' (cannot toggle)
  */
-export function useTripViewMode({ isOwner }: UseTripViewModeOptions) {
+export function useTripViewMode({ isOwner, canEdit = false }: UseTripViewModeOptions) {
   // FIX 22A: Preview mode intentionally disabled while schema-driven generation
   // is being built in isolation. To re-enable, remove the early return below
   // and uncomment the original logic.
