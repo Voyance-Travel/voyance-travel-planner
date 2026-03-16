@@ -1306,6 +1306,8 @@ export function EditorialItinerary({
 
     // Sync to activity_costs table (single source of truth for all cost totals)
     import('@/services/activityCostService').then(async ({ syncActivitiesToCostTable, cleanupRemovedActivityCosts }) => {
+      // Use canonical pricing engine to resolve per-person costs correctly
+      const { resolvePerPersonForDb, resolveCategory } = await import('@/lib/trip-pricing');
       const activitiesForCostTable: Array<{
         id: string;
         dayNumber: number;
@@ -1317,29 +1319,13 @@ export function EditorialItinerary({
 
       for (const day of currentDays) {
         for (const act of day.activities) {
-          const costObj = act.cost;
-          let costVal = 0;
-          let basis = 'per_person'; // default assumption
+          const costPerPerson = resolvePerPersonForDb(act.cost as any, travelers || 1);
 
-          if (typeof costObj === 'number') {
-            costVal = costObj;
-          } else if (costObj && typeof costObj === 'object') {
-            costVal = (costObj as any).amount || (costObj as any).total || (costObj as any).perPerson || 0;
-            basis = (costObj as any).basis || 'per_person';
-          }
-
-          if (costVal >= 0) {
-            // FIX: For flat-rate costs (group totals like dining, entrance fees),
-            // divide by travelers so v_trip_total (cost_per_person_usd * num_travelers)
-            // produces the correct group total instead of double-counting.
-            const costPerPerson = basis === 'flat'
-              ? costVal / Math.max(travelers || 1, 1)
-              : costVal;
-
+          if (costPerPerson >= 0) {
             activitiesForCostTable.push({
               id: act.id,
               dayNumber: day.dayNumber,
-              category: act.category || act.type || 'activities',
+              category: resolveCategory(act.category, act.type),
               costPerPersonUsd: costPerPerson,
               numTravelers: travelers || 1,
               source: 'itinerary-sync',
