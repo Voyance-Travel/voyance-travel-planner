@@ -25,12 +25,14 @@ export function useTripViewMode({ isOwner, canEdit = false }: UseTripViewModeOpt
 
   const rawMode = searchParams.get('mode');
 
+  const hasEditAccess = isOwner || canEdit;
+
   const mode: TripViewMode = useMemo(() => {
     if (!PREVIEW_MODE_ENABLED) return 'edit';
-    if (!isOwner) return 'preview';
+    if (!hasEditAccess) return 'preview';
     if (rawMode === 'preview') return 'preview';
     return 'edit';
-  }, [isOwner, rawMode]);
+  }, [hasEditAccess, rawMode]);
 
   const setMode = useCallback(
     (newMode: TripViewMode) => {
