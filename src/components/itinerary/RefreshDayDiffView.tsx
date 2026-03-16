@@ -52,6 +52,7 @@ export function RefreshDayDiffView({
   onAcceptAll,
   onAcceptSelected,
   onDismiss,
+  onFindAlternative,
   className,
 }: RefreshDayDiffViewProps) {
   const actionableChanges = proposedChanges.filter(c => c.type !== 'no_change');
