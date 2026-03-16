@@ -271,12 +271,20 @@ export function ItineraryAssistant({
       // Credits are only spent when the user clicks "Apply" on an action card.
 
       // Create assistant message with actions
+      const hasActions = response.actions?.length > 0;
+      const messageText = response.message?.trim() || '';
+      const isJsonLeak = messageText.startsWith('{') || messageText.startsWith('[');
+
+      const assistantContent = (messageText && !isJsonLeak)
+        ? response.message
+        : hasActions
+          ? "Here's what I'll change:"
+          : 'Sorry, something went wrong. Please try again.';
+
       const assistantMessage: ChatMessage = {
         id: `msg_${Date.now()}_assistant`,
         role: 'assistant',
-        content: (response.message && !response.message.trim().startsWith('{') && !response.message.trim().startsWith('['))
-          ? response.message
-          : 'Sorry, something went wrong. Please try again.',
+        content: assistantContent,
         actions: response.actions?.map(a => ({
           type: a.type as ItineraryAction['type'],
           params: a.params,
