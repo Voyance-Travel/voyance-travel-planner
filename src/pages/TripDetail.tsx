@@ -1048,10 +1048,14 @@ export default function TripDetail() {
             } catch { canonicalExpected = 0; }
           }
           const effectiveExpected = canonicalExpected > 0 ? canonicalExpected : ((tripData.metadata as any)?.generation_total_days || 0);
-          // Only mark ready if we have ALL expected days (not just "some days exist")
-          const bestDayCount = Math.max(staleJsonDays, itineraryDaysDbCount);
-          if (effectiveExpected > 0 && bestDayCount >= effectiveExpected) {
-            console.warn(`[TripDetail] Self-heal: status is 'generating' but ${bestDayCount} days exist (expected ${effectiveExpected}) — correcting to 'ready'`);
+          // Only mark ready if we have ALL expected days WITH REAL ACTIVITIES (not empty placeholders)
+          const staleAllDays = Array.isArray(staleItinData?.days) ? staleItinData!.days : [];
+          const staleRealDays = staleAllDays.filter((d: any) => 
+            Array.isArray(d?.activities) && d.activities.length > 0 && d.status !== 'placeholder'
+          );
+          const realDayCount = Math.max(staleRealDays.length, itineraryDaysDbCount);
+          if (effectiveExpected > 0 && realDayCount >= effectiveExpected) {
+            console.warn(`[TripDetail] Self-heal: status is 'generating' but ${realDayCount} real days exist (expected ${effectiveExpected}) — correcting to 'ready'`);
             if (tripId) {
               supabase.from('trips').update({
                 itinerary_status: 'ready',
@@ -1061,6 +1065,8 @@ export default function TripDetail() {
             }
             tripData = { ...tripData, itinerary_status: 'ready' };
             setTrip(tripData);
+          } else if (effectiveExpected > 0) {
+            console.log(`[TripDetail] Self-heal: only ${realDayCount}/${effectiveExpected} real days — NOT marking as ready`);
           }
         }
 
