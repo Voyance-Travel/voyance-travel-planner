@@ -1102,76 +1102,76 @@ export default function TripDetail() {
           }
 
           // ── SELF-HEAL: Rebuild itinerary_data.days from itinerary_days table ──
-          // If itinerary_data.days is truncated but itinerary_days has the full set,
-          // rebuild the JSON from the table to recover lost days.
+          // Only rebuild if the table has ACTUAL activity data (via itinerary_activities).
+          // Never overwrite populated JSON days with empty table-backed days.
           if (jsonDayCount > 0 && itineraryDaysDbCount > jsonDayCount && tripId) {
             console.warn(
-              `[TripDetail] Self-heal: itinerary_data.days (${jsonDayCount}) < itinerary_days table (${itineraryDaysDbCount}). Rebuilding from table.`
+              `[TripDetail] Self-heal: itinerary_data.days (${jsonDayCount}) < itinerary_days table (${itineraryDaysDbCount}). Checking table activities before rebuild.`
             );
             try {
-              const { data: fullDayRows } = await supabase
-                .from('itinerary_days')
-                .select('day_number, date, title, theme, description, weather, activities')
-                .eq('trip_id', tripId)
-                .order('day_number');
+              // First check if itinerary_activities actually has data for this trip
+              const { count: activityCount } = await supabase
+                .from('itinerary_activities')
+                .select('id', { count: 'exact', head: true })
+                .eq('trip_id', tripId);
 
-              if (fullDayRows && fullDayRows.length > jsonDayCount) {
-                // Build a lookup from existing JSON days for enrichment metadata (photos, coords, etc.)
-                const jsonDaysByNumber = new Map<number, any>();
-                for (const d of (itinData?.days || []) as any[]) {
-                  if (d?.dayNumber) jsonDaysByNumber.set(d.dayNumber, d);
-                }
+              if (!activityCount || activityCount === 0) {
+                // Tables are empty — do NOT rebuild from them, it would overwrite good JSON
+                console.log(`[TripDetail] Self-heal: itinerary_activities has 0 rows — skipping table rebuild to protect JSON data`);
+              } else {
+                const { data: fullDayRows } = await supabase
+                  .from('itinerary_days')
+                  .select('day_number, date, title, theme, description, weather, activities')
+                  .eq('trip_id', tripId)
+                  .order('day_number');
 
-                const rebuiltDays = fullDayRows.map((row: any) => {
-                  const existingJsonDay = jsonDaysByNumber.get(row.day_number);
-                  const jsonActivities = existingJsonDay?.activities;
-                  const tableActivities = Array.isArray(row.activities) ? row.activities : [];
-                  
-                  // Use the richest activity source available:
-                  // 1) JSON day with non-empty activities (most metadata)
-                  // 2) Table row activities if non-empty
-                  // 3) Keep JSON day structure even if activities are empty (don't downgrade)
-                  const hasJsonActivities = Array.isArray(jsonActivities) && jsonActivities.length > 0;
-                  const hasTableActivities = tableActivities.length > 0;
-                  
-                  if (existingJsonDay && hasJsonActivities) {
-                    return existingJsonDay;
+                if (fullDayRows && fullDayRows.length > jsonDayCount) {
+                  const jsonDaysByNumber = new Map<number, any>();
+                  for (const d of (itinData?.days || []) as any[]) {
+                    if (d?.dayNumber) jsonDaysByNumber.set(d.dayNumber, d);
                   }
-                  if (existingJsonDay && !hasJsonActivities && hasTableActivities) {
-                    // Enrich JSON day with table activities
-                    return { ...existingJsonDay, activities: tableActivities };
-                  }
-                  if (existingJsonDay) {
-                    // JSON day exists but both sources empty — keep JSON day as-is
-                    // (don't replace with a bare table rebuild that loses metadata)
-                    return existingJsonDay;
-                  }
-                  // No JSON day at all — build from table row (new day added to table)
-                  return {
-                    dayNumber: row.day_number,
-                    date: row.date,
-                    theme: row.theme || row.title || `Day ${row.day_number}`,
-                    description: row.description || '',
-                    weather: row.weather || undefined,
-                    activities: tableActivities,
+
+                  const rebuiltDays = fullDayRows.map((row: any) => {
+                    const existingJsonDay = jsonDaysByNumber.get(row.day_number);
+                    const jsonActivities = existingJsonDay?.activities;
+                    const tableActivities = Array.isArray(row.activities) ? row.activities : [];
+                    
+                    const hasJsonActivities = Array.isArray(jsonActivities) && jsonActivities.length > 0;
+                    const hasTableActivities = tableActivities.length > 0;
+                    
+                    if (existingJsonDay && hasJsonActivities) {
+                      return existingJsonDay;
+                    }
+                    if (existingJsonDay && !hasJsonActivities && hasTableActivities) {
+                      return { ...existingJsonDay, activities: tableActivities };
+                    }
+                    if (existingJsonDay) {
+                      return existingJsonDay;
+                    }
+                    return {
+                      dayNumber: row.day_number,
+                      date: row.date,
+                      theme: row.theme || row.title || `Day ${row.day_number}`,
+                      description: row.description || '',
+                      weather: row.weather || undefined,
+                      activities: tableActivities,
+                    };
+                  });
+
+                  const healedItinerary = {
+                    ...(itinData || {}),
+                    days: rebuiltDays,
                   };
-                });
 
-                const healedItinerary = {
-                  ...(itinData || {}),
-                  days: rebuiltDays,
-                };
+                  console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount})`);
+                  await supabase.from('trips').update({
+                    itinerary_data: healedItinerary as any,
+                    updated_at: new Date().toISOString(),
+                  }).eq('id', tripId);
 
-                // Persist healed data back (only when we have MORE days)
-                console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount})`);
-                await supabase.from('trips').update({
-                  itinerary_data: healedItinerary as any,
-                  updated_at: new Date().toISOString(),
-                }).eq('id', tripId);
-
-                // Update local state with healed data
-                const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
-                setTrip(healedTripData);
+                  const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
+                  setTrip(healedTripData);
+                }
               }
             } catch (healErr) {
               console.error('[TripDetail] Self-heal rebuild failed:', healErr);
@@ -1249,12 +1249,23 @@ export default function TripDetail() {
                     }
                   }
 
-                  // Persist merged itinerary once at end to prevent stale JSON on next reload
+                  // Persist merged itinerary through backend save (normalization + meal guard + table sync)
                   const mergedItinerary = { ...currentItinData, days: currentDays };
-                  await supabase.from('trips').update({
-                    itinerary_data: mergedItinerary as any,
-                    updated_at: new Date().toISOString(),
-                  }).eq('id', tripId!);
+                  try {
+                    await supabase.functions.invoke('generate-itinerary', {
+                      body: {
+                        action: 'save-itinerary',
+                        tripId: tripId!,
+                        itinerary: mergedItinerary,
+                      },
+                    });
+                  } catch (saveErr) {
+                    console.error('[TripDetail] Backend save after auto-regen failed, falling back to direct write:', saveErr);
+                    await supabase.from('trips').update({
+                      itinerary_data: mergedItinerary as any,
+                      updated_at: new Date().toISOString(),
+                    }).eq('id', tripId!);
+                  }
 
                   // Refresh trip data after regeneration
                   queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
