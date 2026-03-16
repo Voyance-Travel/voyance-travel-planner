@@ -2988,6 +2988,7 @@ export type Database = {
           dynamic_currency_conversion: Json | null
           dynamic_weather: Json | null
           emergency_numbers: Json | null
+          enriched_at: string | null
           enrichment_priority: number | null
           enrichment_status: Json | null
           featured: boolean | null
@@ -3040,6 +3041,7 @@ export type Database = {
           dynamic_currency_conversion?: Json | null
           dynamic_weather?: Json | null
           emergency_numbers?: Json | null
+          enriched_at?: string | null
           enrichment_priority?: number | null
           enrichment_status?: Json | null
           featured?: boolean | null
@@ -3092,6 +3094,7 @@ export type Database = {
           dynamic_currency_conversion?: Json | null
           dynamic_weather?: Json | null
           emergency_numbers?: Json | null
+          enriched_at?: string | null
           enrichment_priority?: number | null
           enrichment_status?: Json | null
           featured?: boolean | null

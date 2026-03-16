@@ -1,0 +1,1 @@
+ALTER TABLE public.destinations ADD COLUMN IF NOT EXISTS enriched_at timestamptz;
