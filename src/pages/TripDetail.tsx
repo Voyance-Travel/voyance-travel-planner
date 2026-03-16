@@ -47,6 +47,7 @@ import { TripViewModeToggle } from '@/components/trip/TripViewModeToggle';
 import type { SwapSuggestion } from '@/components/trip/SwapReviewDialog';
 import { VersionConflictDialog } from '@/components/trip/VersionConflictDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { getTripPermission } from '@/services/tripCollaboratorsAPI';
 import { setCachedVersion, clearCachedVersion, saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useScrollLockCleanup } from '@/hooks/useScrollLockCleanup';
