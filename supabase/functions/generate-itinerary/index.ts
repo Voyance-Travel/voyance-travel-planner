@@ -2934,6 +2934,15 @@ Generate activities for this day following ALL constraints above.`;
         // POST-VALIDATION: Strip keyword-stuffed activity titles
         generatedDay = sanitizeActivityTitles(generatedDay);
 
+        // POST-VALIDATION: Strip chain restaurants from dining activities
+        {
+          const { filtered: chainFiltered, removedChains } = filterChainRestaurants(generatedDay.activities || []);
+          if (removedChains.length > 0) {
+            console.warn(`[Stage 2] Day ${dayNumber}: 🚫 Chain filter removed ${removedChains.length} chain(s): ${removedChains.join(', ')}`);
+            generatedDay.activities = chainFiltered;
+          }
+        }
+
         // ====================================================================
         // MEAL FINAL GUARD — shared helper, single source of truth
         // Runs AFTER all post-processing (dedup, etc.) to guarantee meals
