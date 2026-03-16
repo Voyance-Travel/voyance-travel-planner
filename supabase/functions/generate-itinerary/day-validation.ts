@@ -392,11 +392,27 @@ export function validateGeneratedDay(
     const checkoutMins = checkoutAct?.startTime ? parseTimeToMinutesLocal(checkoutAct.startTime) : null;
     const airportMins = airportAct?.startTime ? parseTimeToMinutesLocal(airportAct.startTime) : null;
     if (checkoutMins !== null && airportMins !== null && checkoutMins > airportMins) {
-      errors.push('Departure day sequence violation: Hotel checkout must occur before airport transfer.');
+      if (isSmartFinish) {
+        warnings.push('Departure day sequence: Hotel checkout should occur before airport transfer.');
+      } else {
+        errors.push('Departure day sequence violation: Hotel checkout must occur before airport transfer.');
+      }
     }
 
-    if (!hasCheckout) errors.push('Last day MUST include hotel checkout activity');
-    if (!hasDeparture) errors.push('Last day MUST end with departure/airport transfer activity');
+    if (!hasCheckout) {
+      if (isSmartFinish) {
+        warnings.push('Last day should include hotel checkout activity');
+      } else {
+        errors.push('Last day MUST include hotel checkout activity');
+      }
+    }
+    if (!hasDeparture) {
+      if (isSmartFinish) {
+        warnings.push('Last day should end with departure/airport transfer activity');
+      } else {
+        errors.push('Last day MUST end with departure/airport transfer activity');
+      }
+    }
   }
 
   return { isValid: errors.length === 0, errors, warnings };
