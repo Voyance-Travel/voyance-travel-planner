@@ -227,9 +227,19 @@ Deno.serve(async (req: Request) => {
             activityTitle: act.title,
             severity: 'error',
             message: `${act.title} appears to be closed on ${hoursCheck.dayName || 'this day'}.`,
-            suggestion: `Consider swapping this with an alternative activity.`,
+            suggestion: `Find an alternative activity for this time slot.`,
           });
-          // No auto-fix for closures — user must pick alternative
+          // Emit a replacement change so the UI can offer "Find Alternative"
+          proposedChanges.push({
+            id: `change-${++changeCounter}`,
+            type: 'replacement',
+            activityId: act.id,
+            activityTitle: act.title,
+            icon: 'arrow-right-left',
+            description: `${act.title} is closed on ${hoursCheck.dayName || 'this day'} — find an alternative`,
+            patch: { needsSwap: true },
+          });
+          changedIds.add(act.id);
         } else {
           const opensMin = parseTime(hoursCheck.opens!);
           const tooEarly = startMin !== null && opensMin !== null && startMin < opensMin;
@@ -261,16 +271,47 @@ Deno.serve(async (req: Request) => {
             });
             changedIds.add(act.id);
           } else {
-            // Too late — suggest finishing earlier
-            const suggestion = `Adjust to finish by ${hoursCheck.closes}.`;
-            issues.push({
-              type: 'operating_hours',
-              activityId: act.id,
-              activityTitle: act.title,
-              severity: 'warning',
-              message: `${act.title} operates ${hoursCheck.opens}–${hoursCheck.closes} but is scheduled ${act.startTime || '?'}–${act.endTime || '?'}.`,
-              suggestion,
-            });
+            // Too late — calculate an earlier start so activity finishes by closing time
+            const closesMin = parseTime(hoursCheck.closes!);
+            const duration = act.durationMinutes || (endMin !== null && startMin !== null ? endMin - startMin : 60);
+
+            if (closesMin !== null) {
+              const newStart = minutesToTime(closesMin - duration);
+              const newEnd = minutesToTime(closesMin);
+
+              issues.push({
+                type: 'operating_hours',
+                activityId: act.id,
+                activityTitle: act.title,
+                severity: 'warning',
+                message: `${act.title} operates ${hoursCheck.opens}–${hoursCheck.closes} but is scheduled ${act.startTime || '?'}–${act.endTime || '?'}.`,
+                suggestion: `Move to ${newStart}–${newEnd} to finish by closing time.`,
+              });
+
+              if (!changedIds.has(act.id)) {
+                proposedChanges.push({
+                  id: `change-${++changeCounter}`,
+                  type: 'time_shift',
+                  activityId: act.id,
+                  activityTitle: act.title,
+                  icon: 'clock',
+                  description: `${act.title}: ${act.startTime} → ${newStart} (closes at ${hoursCheck.closes})`,
+                  oldValue: `${act.startTime}–${act.endTime || '?'}`,
+                  newValue: `${newStart}–${newEnd}`,
+                  patch: { startTime: newStart, endTime: newEnd },
+                });
+                changedIds.add(act.id);
+              }
+            } else {
+              issues.push({
+                type: 'operating_hours',
+                activityId: act.id,
+                activityTitle: act.title,
+                severity: 'warning',
+                message: `${act.title} operates ${hoursCheck.opens}–${hoursCheck.closes} but is scheduled ${act.startTime || '?'}–${act.endTime || '?'}.`,
+                suggestion: `Adjust to finish by ${hoursCheck.closes}.`,
+              });
+            }
           }
         }
       }

@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { CheckCircle, AlertTriangle, X, ChevronDown, ChevronUp, Clock, Timer, ArrowUpDown, Check, ArrowRight } from 'lucide-react';
+import { CheckCircle, AlertTriangle, X, ChevronDown, ChevronUp, Clock, Timer, ArrowUpDown, Check, ArrowRight, ArrowRightLeft, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,6 +16,7 @@ const iconMap: Record<string, React.ReactNode> = {
   'alert-triangle': <AlertTriangle className="h-4 w-4" />,
   'timer': <Timer className="h-4 w-4" />,
   'arrow-up-down': <ArrowUpDown className="h-4 w-4" />,
+  'arrow-right-left': <ArrowRightLeft className="h-4 w-4" />,
   'check': <Check className="h-4 w-4" />,
 };
 
@@ -38,6 +39,7 @@ interface RefreshDayDiffViewProps {
   onAcceptAll: (changes: ProposedChange[]) => void;
   onAcceptSelected: (changes: ProposedChange[]) => void;
   onDismiss: () => void;
+  onFindAlternative?: (activityId: string, activityTitle: string) => void;
   className?: string;
 }
 
@@ -50,6 +52,7 @@ export function RefreshDayDiffView({
   onAcceptAll,
   onAcceptSelected,
   onDismiss,
+  onFindAlternative,
   className,
 }: RefreshDayDiffViewProps) {
   const actionableChanges = proposedChanges.filter(c => c.type !== 'no_change');
@@ -113,7 +116,9 @@ export function RefreshDayDiffView({
             </h3>
             {hasActionableChanges && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                {actionableChanges.length} change{actionableChanges.length !== 1 ? 's' : ''} suggested
+                {actionableChanges.every(c => c.patch) 
+                  ? 'All issues can be resolved — review the changes below'
+                  : `${actionableChanges.length} change${actionableChanges.length !== 1 ? 's' : ''} suggested`}
                 {errorCount > 0 && ` · ${errorCount} error${errorCount !== 1 ? 's' : ''}`}
                 {warnCount > 0 && ` · ${warnCount} warning${warnCount !== 1 ? 's' : ''}`}
               </p>
@@ -172,13 +177,26 @@ export function RefreshDayDiffView({
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <p className="text-foreground leading-relaxed">{change.description}</p>
-                {change.oldValue && change.newValue && change.type !== 'no_change' && (
+                {change.type === 'replacement' && onFindAlternative ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-7 gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFindAlternative(change.activityId, change.activityTitle);
+                    }}
+                  >
+                    <Search className="h-3 w-3" />
+                    Find Alternative
+                  </Button>
+                ) : change.oldValue && change.newValue && change.type !== 'no_change' ? (
                   <div className="flex items-center gap-2 mt-1 text-xs">
                     <span className="text-destructive/70 line-through">{change.oldValue}</span>
                     <ArrowRight className="h-3 w-3 text-muted-foreground" />
                     <span className="text-primary font-medium">{change.newValue}</span>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           ))}
