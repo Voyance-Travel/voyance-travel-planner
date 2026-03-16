@@ -172,6 +172,7 @@ function ensureDayMeals(
  */
 export function enforceItineraryMealCompliance(
   days: DayMinimal[],
+  destination?: string,
 ): { totalInjected: number; details: Array<{ dayNumber: number; injected: MealType[] }> } {
   const totalDays = days.length;
   const details: Array<{ dayNumber: number; injected: MealType[] }> = [];
@@ -187,7 +188,9 @@ export function enforceItineraryMealCompliance(
 
     if (requiredMeals.length === 0) continue;
 
-    const result = ensureDayMeals(day.activities, requiredMeals, day.dayNumber);
+    // Use per-day city if available, fall back to trip destination
+    const dayDestination = (day as any).city || destination || '';
+    const result = ensureDayMeals(day.activities, requiredMeals, day.dayNumber, dayDestination);
     if (result.injected.length > 0) {
       day.activities = result.activities;
       details.push({ dayNumber: day.dayNumber, injected: result.injected });
