@@ -558,13 +558,19 @@ export default function About() {
               <div className="space-y-3 text-sm md:text-base leading-relaxed">
                 <h3 className="text-foreground font-display font-bold text-lg md:text-xl">Clinton Brooks, Co-Founder</h3>
                 <p className="text-muted-foreground">
-                  Clinton is the finance half of Voyance. While Ashton is obsessing over which tiny sushi counter in London has only 20 seats, Clinton makes sure the business behind it all actually works.
+                  I'm the finance side of Voyance. While Ashton is obsessing over which tiny sushi counter in London has only 20 seats, I make sure the business behind it all actually works.
                 </p>
                 <p className="text-muted-foreground">
-                  He and Ashton have traveled together across the US, Europe, North Africa, the Caribbean, and Japan. A lot of the places in Voyance's curator picks are spots they discovered side by side - from a hidden yakiniku restaurant in Vienna that seats six people to a legendary food market in Barcelona they both want to go back to.
+                  But I'm also part of the reason Voyance exists. I got tired of Ashton telling me a trip would cost one thing and the credit card bill saying something different. I got tired of sitting in spreadsheets, planning everything out line by line, changing one small thing and having to redo all the price calculations. That's why Voyance tracks your budget and trip totals in real time - because we lived that pain.
                 </p>
                 <p className="text-muted-foreground">
-                  His background in finance means Voyance is built to last, not just built to launch. He handles the business strategy and operations so the product can stay focused on what matters - giving travelers recommendations they can actually trust.
+                  And then there was the other problem - whose turn was it? How do we make sure we're both getting what we want out of a trip when we're both working equally hard? That's where our blended travel DNA comes in. Voyance plans trips for everyone in the group from the start, not just one person's preferences.
+                </p>
+                <p className="text-muted-foreground">
+                  We've traveled together across the US, Europe, North Africa, the Caribbean, and Japan. A lot of the places in Voyance's curator picks are spots we discovered side by side - from a hidden yakiniku restaurant in Vienna that seats six people to a legendary food market in Barcelona we both want to go back to.
+                </p>
+                <p className="text-foreground font-medium italic">
+                  My background in finance means Voyance is built to last, not just built to launch. I handle the business strategy and operations so the product can stay focused on what matters - making sure your time and your money are valued.
                 </p>
               </div>
             </motion.div>
