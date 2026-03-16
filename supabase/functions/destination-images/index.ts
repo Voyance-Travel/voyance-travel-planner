@@ -851,6 +851,12 @@ async function cacheImage(
       return;
     }
 
+    // Secondary safety: double-check no raw Google/Places API URLs leak through
+    if (image.url.includes('places.googleapis.com') || image.url.includes('maps.googleapis.com')) {
+      console.warn(`[Images] BLOCKED raw Google URL from cache: ${entityKey}`);
+      return;
+    }
+
     const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
 
     // Cache images for 60 days then refresh

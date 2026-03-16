@@ -367,6 +367,15 @@ function parseRating(raw: unknown): ParsedRating | number | undefined {
   return undefined;
 }
 
+/** Extract first photo URL from a photos array (string or {url} objects) */
+function resolveFirstPhoto(photos: unknown): string | undefined {
+  if (!Array.isArray(photos) || photos.length === 0) return undefined;
+  const first = photos[0];
+  if (typeof first === 'string' && first.length > 0) return first;
+  if (typeof first === 'object' && first !== null && typeof (first as any).url === 'string') return (first as any).url;
+  return undefined;
+}
+
 // =============================================================================
 // ACTIVITY PARSER
 // =============================================================================
@@ -403,7 +412,8 @@ function parseSingleActivity(
     duration: extractString(activityData, ['duration']),
     durationMinutes: extractNumber(activityData, ['durationMinutes', 'duration_minutes']),
     location: parseLocation(activityData.location),
-    imageUrl: extractString(activityData, ['imageUrl', 'image_url', 'image']),
+    imageUrl: extractString(activityData, ['imageUrl', 'image_url', 'image'])
+      || resolveFirstPhoto(activityData.photos),
     tips: activityData.tips as string | string[] | undefined,
     confirmationNumber: extractString(activityData, ['confirmationNumber', 'confirmation_number']),
     voucherUrl: extractString(activityData, ['voucherUrl', 'voucher_url']),

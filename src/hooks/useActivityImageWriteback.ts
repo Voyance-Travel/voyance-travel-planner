@@ -2,109 +2,43 @@
  * useActivityImageWriteback
  * 
  * Collects resolved photo URLs during the itinerary render cycle, then
- * batch-updates itinerary_data.days[].activities[].photos on the trips table.
+ * merges them into the parent component's days state via a callback.
  * 
- * This closes the persist/read disconnect: previously photos were written to
- * trip_activities (which nothing reads) while the UI reads from itinerary_data.
- * Without this, every page view triggered ~30-50 Google Places API calls.
+ * This ensures photos travel with the itinerary data through ALL save
+ * paths (drag-drop, edit, add/remove) instead of being overwritten by
+ * a separate direct DB write.
  */
 
 import { useRef, useCallback, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
-interface ResolvedPhoto {
-  activityId: string;
-  photoUrl: string;
-}
-
-const DEBOUNCE_MS = 4000; // 4s — enough for all activities to resolve
+const DEBOUNCE_MS = 2000;
 
 /**
- * Hook that accepts a tripId and returns a `reportPhoto` callback.
+ * Hook that accepts a callback to update the days state.
  * Call reportPhoto(activityId, url) whenever an activity image resolves.
- * After a debounce, all new photos are batch-written into itinerary_data.
+ * After a debounce, all new photos are merged into the days state.
  */
-export function useActivityImageWriteback(tripId: string | undefined) {
+export function useActivityImageWriteback(
+  onMergePhotos?: (photos: Map<string, string>) => void
+) {
   const pendingRef = useRef<Map<string, string>>(new Map());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const writingRef = useRef(false);
+  const callbackRef = useRef(onMergePhotos);
 
-  const flush = useCallback(async () => {
-    if (!tripId || pendingRef.current.size === 0 || writingRef.current) return;
+  // Keep callback ref fresh without re-creating reportPhoto
+  useEffect(() => {
+    callbackRef.current = onMergePhotos;
+  }, [onMergePhotos]);
 
-    const photosToWrite = new Map(pendingRef.current);
+  const flush = useCallback(() => {
+    if (pendingRef.current.size === 0 || !callbackRef.current) return;
+
+    const photosToMerge = new Map(pendingRef.current);
     pendingRef.current.clear();
-    writingRef.current = true;
 
-    try {
-      // Fetch current itinerary_data
-      const { data: tripRow, error: fetchErr } = await supabase
-        .from('trips')
-        .select('itinerary_data')
-        .eq('id', tripId)
-        .single();
-
-      if (fetchErr || !tripRow?.itinerary_data) {
-        writingRef.current = false;
-        return;
-      }
-
-      const itData = tripRow.itinerary_data as any;
-      if (!itData?.days || !Array.isArray(itData.days)) {
-        writingRef.current = false;
-        return;
-      }
-
-      let changed = false;
-
-      const updatedDays = itData.days.map((day: any) => {
-        if (!day.activities || !Array.isArray(day.activities)) return day;
-
-        const updatedActivities = day.activities.map((act: any) => {
-          const newUrl = photosToWrite.get(act.id);
-          if (!newUrl) return act;
-
-          // Skip if already has the same photo
-          const existing = act.image_url || (act.photos?.[0]?.url ?? act.photos?.[0]);
-          if (existing === newUrl) return act;
-
-          changed = true;
-          return {
-            ...act,
-            image_url: newUrl,
-            photos: [newUrl],
-          };
-        });
-
-        return { ...day, activities: updatedActivities };
-      });
-
-      if (!changed) {
-        writingRef.current = false;
-        return;
-      }
-
-      const updatedItData = { ...itData, days: updatedDays };
-
-      const { error: updateErr } = await supabase
-        .from('trips')
-        .update({
-          itinerary_data: updatedItData as any,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', tripId);
-
-      if (updateErr) {
-        console.warn('[ImageWriteback] Failed to persist photos:', updateErr.message);
-      } else {
-        console.log(`[ImageWriteback] ✅ Persisted ${photosToWrite.size} photos to itinerary_data`);
-      }
-    } catch (err) {
-      console.warn('[ImageWriteback] Error:', err);
-    } finally {
-      writingRef.current = false;
-    }
-  }, [tripId]);
+    callbackRef.current(photosToMerge);
+    console.log(`[ImageWriteback] ✅ Merged ${photosToMerge.size} photos into state`);
+  }, []);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -115,7 +49,7 @@ export function useActivityImageWriteback(tripId: string | undefined) {
 
   const reportPhoto = useCallback(
     (activityId: string, photoUrl: string) => {
-      if (!tripId || !activityId || !photoUrl) return;
+      if (!activityId || !photoUrl) return;
       // Skip fallback/gradient data URIs
       if (photoUrl.startsWith('data:')) return;
 
@@ -125,7 +59,7 @@ export function useActivityImageWriteback(tripId: string | undefined) {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(flush, DEBOUNCE_MS);
     },
-    [tripId, flush]
+    [flush]
   );
 
   return { reportPhoto };
