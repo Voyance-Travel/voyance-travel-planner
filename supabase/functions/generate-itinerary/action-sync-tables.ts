@@ -13,10 +13,10 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
     return errorJson("Missing tripId", 400);
   }
 
-  // Verify ownership
+  // Verify ownership and get start_date for date derivation
   const { data: trip } = await supabase
     .from('trips')
-    .select('user_id, itinerary_data')
+    .select('user_id, itinerary_data, start_date')
     .eq('id', tripId)
     .single();
   

@@ -391,7 +391,16 @@ export async function handleGenerateTripDay(
     );
   }
 
-  // Day generated successfully — save it
+  // Day generated successfully — ensure date is always set
+  if (!dayResult.date && startDate) {
+    const derived = new Date(startDate);
+    derived.setDate(derived.getDate() + dayNumber - 1);
+    dayResult.date = derived.toISOString().split('T')[0];
+    console.log(`[generate-trip-day] Derived missing date for day ${dayNumber}: ${dayResult.date}`);
+  }
+  dayResult.dayNumber = dayNumber;
+
+  // Save it
   const filteredExisting = existingDays.filter((d: any) => d?.dayNumber !== dayNumber);
   
   // LAYER 1: HARD VALIDATION — deduplicate by date AND dayNumber
