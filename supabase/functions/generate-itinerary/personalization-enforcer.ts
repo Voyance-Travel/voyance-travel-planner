@@ -1271,10 +1271,10 @@ export function validateDayPersonalization(
       (requiredMeal === 'dinner' && (title.includes('supper') || title.includes('evening meal')))
     );
     
-    if (!hasMeal && dayNumber > 1) { // Don't require meals on arrival day
+    if (!hasMeal) {
       violations.push({
         type: 'missing_meal',
-        details: `Missing ${requiredMeal} slot (required for this pace)`,
+        details: `Missing ${requiredMeal} slot (required by meal policy)` ,
         severity: 'major'
       });
     }

@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { isRecurringEvent } from './currency-utils.ts';
+import type { RequiredMeal } from './meal-policy.ts';
 
 // Re-declare minimal interfaces needed (avoid circular imports)
 export interface StrictActivityMinimal {
@@ -37,6 +38,42 @@ export interface DayValidationResult {
   warnings: string[];
 }
 
+const MEAL_KEYWORDS: Record<RequiredMeal, string[]> = {
+  breakfast: ['breakfast', 'brunch'],
+  lunch: ['lunch'],
+  dinner: ['dinner', 'supper', 'evening meal'],
+};
+
+export function detectMealSlots(
+  activities: Array<Pick<StrictActivityMinimal, 'title' | 'category'>>
+): RequiredMeal[] {
+  const detected = new Set<RequiredMeal>();
+
+  for (const activity of activities) {
+    const title = (activity.title || '').toLowerCase();
+    const category = (activity.category || '').toLowerCase();
+    const isDining = category === 'dining' || category.includes('dining');
+    if (!isDining) continue;
+
+    for (const mealType of Object.keys(MEAL_KEYWORDS) as RequiredMeal[]) {
+      if (MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword) || category.includes(keyword))) {
+        detected.add(mealType);
+      }
+    }
+  }
+
+  return (['breakfast', 'lunch', 'dinner'] as RequiredMeal[]).filter(meal => detected.has(meal));
+}
+
+function resolveRequiredMealsForValidation(
+  isFirstDay: boolean,
+  isLastDay: boolean,
+  requiredMealsOverride?: RequiredMeal[]
+): RequiredMeal[] {
+  if (requiredMealsOverride) return requiredMealsOverride;
+  return !isFirstDay && !isLastDay ? ['breakfast', 'lunch', 'dinner'] : [];
+}
+
 function parseTimeToMinutesLocal(timeStr: string): number | null {
   if (!timeStr) return null;
   const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
@@ -59,7 +96,8 @@ export function validateGeneratedDay(
   totalDays: number,
   previousDays: StrictDayMinimal[] = [],
   isSmartFinish: boolean = false,
-  mustDoActivities: string[] = []
+  mustDoActivities: string[] = [],
+  requiredMealsOverride?: RequiredMeal[]
 ): DayValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -213,29 +251,16 @@ export function validateGeneratedDay(
   }
 
   // ==========================================================================
-  // REQUIRED MEAL COUNT VALIDATION (Breakfast, Lunch, Dinner)
-  // Full exploration days (not first/last) MUST have all 3 meals explicitly labeled
+  // REQUIRED MEAL COUNT VALIDATION — driven by shared meal policy
   // ==========================================================================
-  if (!isFirstDay && !isLastDay && day.activities?.length) {
-    const mealKeywordMap: Record<string, string[]> = {
-      breakfast: ['breakfast', 'brunch'],
-      lunch: ['lunch'],
-      dinner: ['dinner', 'supper', 'evening meal'],
-    };
+  const requiredMealsForDay = resolveRequiredMealsForValidation(isFirstDay, isLastDay, requiredMealsOverride);
+  const detectedMeals = detectMealSlots(day.activities || []);
 
-    for (const [mealType, keywords] of Object.entries(mealKeywordMap)) {
-      const hasMeal = day.activities.some(act => {
-        const title = (act.title || '').toLowerCase();
-        const category = (act.category || '').toLowerCase();
-        // Check if activity is dining AND title/category references this meal
-        const isDining = category === 'dining' || category.includes('dining');
-        const matchesMeal = keywords.some(kw => title.includes(kw) || category.includes(kw));
-        return isDining && matchesMeal;
-      });
-
-      if (!hasMeal) {
+  if (requiredMealsForDay.length > 0 && day.activities?.length) {
+    for (const mealType of requiredMealsForDay) {
+      if (!detectedMeals.includes(mealType)) {
         errors.push(
-          `MISSING MEAL: Day ${dayNumber} is missing ${mealType.toUpperCase()}. Every full exploration day MUST have breakfast, lunch, AND dinner as explicitly labeled dining activities. Add a ${mealType} at a real restaurant.`
+          `MISSING MEAL: Day ${dayNumber} is missing ${mealType.toUpperCase()}. Required meals for this day are [${requiredMealsForDay.join(', ')}]. Add a clearly labeled ${mealType} dining activity at a real restaurant or café.`
         );
       }
     }
