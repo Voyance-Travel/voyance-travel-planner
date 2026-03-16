@@ -511,7 +511,8 @@ function parseSingleDay(
  */
 export function parseItineraryDays(
   rawData: unknown,
-  tripStartDate?: string
+  tripStartDate?: string,
+  tripEndDate?: string
 ): ParsedDay[] {
   // Validate top-level structure
   if (!rawData || typeof rawData !== 'object') {
@@ -587,11 +588,27 @@ export function parseItineraryDays(
   }
   
   // Step 4: Re-assign sequential dayNumbers and authoritative dates
-  return deduped.map((day, idx) => ({
+  const result = deduped.map((day, idx) => ({
     ...day,
     dayNumber: idx + 1,
     date: calculateDayDate(tripStartDate, idx) || day.date,
   }));
+
+  // Step 5: Day-count mismatch detection (diagnostic only)
+  if (tripStartDate && tripEndDate) {
+    try {
+      const start = new Date(tripStartDate + 'T00:00:00');
+      const end = new Date(tripEndDate + 'T00:00:00');
+      const expectedDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      if (expectedDays > 0 && result.length !== expectedDays) {
+        console.warn(`[itineraryParser] Day count mismatch: parsed ${result.length} days but trip dates (${tripStartDate} to ${tripEndDate}) imply ${expectedDays} days`);
+      }
+    } catch {
+      // Ignore date parsing errors in diagnostic code
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -637,9 +654,10 @@ export function parseActiveTripDays(
  */
 export function parseEditorialDays(
   rawData: unknown,
-  tripStartDate?: string
+  tripStartDate?: string,
+  tripEndDate?: string
 ): EditorialParsedDay[] {
-  const days = parseItineraryDays(rawData, tripStartDate);
+  const days = parseItineraryDays(rawData, tripStartDate, tripEndDate);
   
   return days.map(day => ({
     ...day,

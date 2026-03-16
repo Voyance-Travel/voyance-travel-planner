@@ -2174,7 +2174,7 @@ export default function TripDetail() {
                     </p>
                     <EditorialItinerary
                       tripId={trip.id}
-                      days={parseEditorialDays({ days: generationPoller.partialDays }, trip.start_date) as EditorialDay[]}
+                      days={parseEditorialDays({ days: generationPoller.partialDays }, trip.start_date, trip.end_date) as EditorialDay[]}
                       destination={trip.destination || ''}
                       startDate={trip.start_date}
                       endDate={effectiveEndDate}
@@ -2326,7 +2326,7 @@ export default function TripDetail() {
             /* Editorial Itinerary - Same design as SampleItinerary with editing */
             (() => {
               // Use centralized safe parser for editorial days
-              const editorDays: EditorialDay[] = parseEditorialDays(trip.itinerary_data, trip.start_date) as EditorialDay[];
+              const editorDays: EditorialDay[] = parseEditorialDays(trip.itinerary_data, trip.start_date, trip.end_date) as EditorialDay[];
 
               // Normalize flight_selection using the unified normalizer
               // Supports legs[], {departure, return}, and flat formats
@@ -2754,7 +2754,7 @@ export default function TripDetail() {
                         // --- Inject hotel check-in/check-out activities into itinerary ---
                         try {
                           const itData = updatedTrip.itinerary_data as Record<string, any> | null;
-                          const currentDays = parseEditorialDays(itData, updatedTrip.start_date);
+                          const currentDays = parseEditorialDays(itData, updatedTrip.start_date, updatedTrip.end_date);
                           if (currentDays.length > 0) {
                             let injectedDays = currentDays;
 
