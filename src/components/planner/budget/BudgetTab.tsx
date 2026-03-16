@@ -262,37 +262,32 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // ─── Financial snapshot: single source of truth for expected spend ───
   const rawSnapshot = useTripFinancialSnapshot(tripId);
   
-  // Fallback: if DB snapshot is suspiciously low vs JS-calculated total, use JS total
+  // Always prefer JS-calculated total as primary source — it reflects the live itinerary.
+  // DB snapshot is only used for paid tracking (which only exists in the DB).
   const snapshot = useMemo(() => {
-    if (jsTotalCostCents && jsTotalCostCents > 0 && rawSnapshot.tripTotalCents > 0) {
-      const ratio = rawSnapshot.tripTotalCents / jsTotalCostCents;
-      if (ratio < 0.2) {
-        // DB has less than 20% of JS total — likely stale/incomplete sync
-        console.warn(`[BudgetTab] Snapshot stale: DB=${rawSnapshot.tripTotalCents}c vs JS=${jsTotalCostCents}c, using JS fallback`);
-        const toBePaid = Math.max(0, jsTotalCostCents - rawSnapshot.paidCents);
-        return {
-          ...rawSnapshot,
-          tripTotalCents: jsTotalCostCents,
-          toBePaidCents: toBePaid,
-          plannedUnpaidCents: toBePaid,
-          budgetRemainingCents: rawSnapshot.budgetTotalCents - jsTotalCostCents,
-          paidPercent: jsTotalCostCents > 0 ? Math.min((rawSnapshot.paidCents / jsTotalCostCents) * 100, 100) : 0,
-        };
-      }
+    const useLiveTotal = jsTotalCostCents && jsTotalCostCents > 0;
+    const effectiveTotal = useLiveTotal ? jsTotalCostCents : rawSnapshot.tripTotalCents;
+    const toBePaid = Math.max(0, effectiveTotal - rawSnapshot.paidCents);
+    
+    if (useLiveTotal && effectiveTotal !== rawSnapshot.tripTotalCents) {
+      console.info(`[BudgetTab] Using live itinerary total: ${effectiveTotal}c (DB: ${rawSnapshot.tripTotalCents}c)`);
     }
-    // Also fallback when snapshot is 0 but JS has data
-    if (rawSnapshot.tripTotalCents === 0 && jsTotalCostCents && jsTotalCostCents > 0) {
-      return {
-        ...rawSnapshot,
-        tripTotalCents: jsTotalCostCents,
-        toBePaidCents: jsTotalCostCents,
-        plannedUnpaidCents: jsTotalCostCents,
-        budgetRemainingCents: rawSnapshot.budgetTotalCents - jsTotalCostCents,
-        paidPercent: 0,
-      };
-    }
-    return rawSnapshot;
+    
+    return {
+      ...rawSnapshot,
+      tripTotalCents: effectiveTotal,
+      toBePaidCents: toBePaid,
+      plannedUnpaidCents: toBePaid,
+      budgetRemainingCents: rawSnapshot.budgetTotalCents - effectiveTotal,
+      paidPercent: effectiveTotal > 0 ? Math.min((rawSnapshot.paidCents / effectiveTotal) * 100, 100) : 0,
+    };
   }, [rawSnapshot, jsTotalCostCents]);
+  
+  // Check if category breakdown totals are misaligned with the live total
+  const categoryTotalCents = useMemo(() => {
+    return allocations.reduce((sum, a) => sum + a.usedCents, 0);
+  }, [allocations]);
+  const isCategorySyncing = snapshot.tripTotalCents > 0 && categoryTotalCents > 0 && (categoryTotalCents / snapshot.tripTotalCents) < 0.2;
 
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
