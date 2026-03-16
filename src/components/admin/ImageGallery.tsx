@@ -6,7 +6,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Ban, Search, Loader2, Upload, ImagePlus } from 'lucide-react';
+import { Ban, Search, Loader2, Upload, ImagePlus, HelpCircle, Maximize2, Replace, CheckSquare, SortAsc, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import ImageGalleryCard, { type CuratedImage } from './ImageGalleryCard';
@@ -174,8 +175,57 @@ export default function ImageGallery() {
   // Filter broken images (client-side only)
   const displayImages = brokenOnly ? images.filter(img => brokenIds.has(img.id)) : images;
 
+  const [helpOpen, setHelpOpen] = useState(() => {
+    return localStorage.getItem('admin-image-help-open') !== 'false';
+  });
+
+  const toggleHelp = (open: boolean) => {
+    setHelpOpen(open);
+    localStorage.setItem('admin-image-help-open', String(open));
+  };
+
+  const HELP_ITEMS = [
+    { icon: Maximize2, action: 'Preview', desc: 'Opens a full-size view. Free, no side effects.' },
+    { icon: Replace, action: 'Replace URL', desc: 'Paste a new URL to swap the image link in the database. Old URL is overwritten.' },
+    { icon: Upload, action: 'Upload Replace', desc: 'Upload a file from your computer to replace this image. Goes to your own storage — permanent & free to serve.' },
+    { icon: Ban, action: 'Blacklist', desc: 'Hides the image permanently. Stays in DB but never shown to users again. Use for bad or irrelevant images.' },
+    { icon: ImagePlus, action: 'Upload Image (top bar)', desc: 'Adds a brand-new image. You pick entity name, type, and destination.' },
+    { icon: SortAsc, action: 'Sort: Unreviewed', desc: 'Shows images with fewest votes first — the ones nobody has reviewed yet.' },
+    { icon: AlertTriangle, action: 'Broken Only', desc: 'Filters to images whose URLs failed to load (detected as the page renders).' },
+    { icon: CheckSquare, action: 'Checkbox Select', desc: 'Select multiple images, then bulk-blacklist them all at once.' },
+  ];
+
   return (
     <div className="space-y-4">
+      {/* Help cheat sheet */}
+      <Collapsible open={helpOpen} onOpenChange={toggleHelp}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground">
+            <HelpCircle className="h-4 w-4" />
+            <span className="text-xs font-medium">How this page works</span>
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${helpOpen ? 'rotate-180' : ''}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="rounded-lg border border-border bg-muted/30 p-4 mt-1.5 space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {HELP_ITEMS.map(({ icon: Icon, action, desc }) => (
+                <div key={action} className="flex items-start gap-2.5">
+                  <Icon className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                  <div>
+                    <span className="text-xs font-semibold text-foreground">{action}</span>
+                    <p className="text-xs text-muted-foreground leading-snug">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground border-t border-border pt-2">
+              <strong className="text-foreground">Cost: $0.</strong> All images are cached in your own storage. No external API calls when browsing.
+            </p>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
       {/* Filters bar */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
