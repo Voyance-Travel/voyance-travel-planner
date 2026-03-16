@@ -8160,6 +8160,8 @@ interface DayCardProps {
    isModalEditing?: boolean;
    /** Callback to report resolved photo for batch write-back */
    onPhotoResolved?: (activityId: string, photoUrl: string) => void;
+   /** Manual builder mode — skip real photo fetching to avoid API costs */
+   isManualMode?: boolean;
 }
 
 function DayCard({
