@@ -150,6 +150,70 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     return okJson({ success: true, shrinkBlocked: true, incomingCount, canonicalExisting });
   }
 
+  // ── MEAL COMPLIANCE GUARD ──────────────────────────────────────
+  // Before persisting, ensure every full exploration day has required meals.
+  // This is the last line of defense — catches frontend saves, AI assistant
+  // edits, and any path that bypasses the generation-time meal guard.
+  const itineraryDays: any[] = Array.isArray((itinerary as any)?.days) ? (itinerary as any).days : [];
+  const totalDays = itineraryDays.length;
+  let mealGuardInjections = 0;
+
+  if (totalDays > 0) {
+    // Load trip dates to derive meal policy per day
+    const { data: tripDates } = await supabase
+      .from('trips')
+      .select('start_date, end_date, metadata')
+      .eq('id', tripId)
+      .single();
+
+    for (let i = 0; i < itineraryDays.length; i++) {
+      const day = itineraryDays[i];
+      if (!day?.activities || !Array.isArray(day.activities)) continue;
+
+      const dayNumber = day.dayNumber || (i + 1);
+      const isFirstDay = dayNumber === 1;
+      const isLastDay = dayNumber === totalDays;
+
+      // Derive meal policy for this day
+      const policy = deriveMealPolicy({
+        dayNumber,
+        totalDays,
+        isFirstDay,
+        isLastDay,
+      });
+
+      if (policy.requiredMeals.length === 0) continue;
+
+      const detected = detectMealSlots(day.activities);
+      const missing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
+
+      if (missing.length > 0) {
+        const destination = day.city || day.destination || 'the destination';
+        const result = enforceRequiredMealsFinalGuard(
+          day.activities,
+          policy.requiredMeals,
+          dayNumber,
+          destination,
+          'USD',
+          policy.dayMode,
+        );
+        if (!result.alreadyCompliant) {
+          itineraryDays[i] = { ...day, activities: result.activities };
+          mealGuardInjections += result.injectedMeals.length;
+          console.warn(
+            `[save-itinerary] 🍽️ MEAL GUARD: Day ${dayNumber} was missing [${result.injectedMeals.join(', ')}] — injected before save`
+          );
+        }
+      }
+    }
+
+    if (mealGuardInjections > 0) {
+      console.log(`[save-itinerary] Meal guard total: ${mealGuardInjections} meals injected across trip`);
+      // Update the itinerary with meal-compliant days
+      (itinerary as any).days = itineraryDays;
+    }
+  }
+
   const updatePayload: Record<string, any> = {
     itinerary_data: itinerary,
     itinerary_status: 'ready',

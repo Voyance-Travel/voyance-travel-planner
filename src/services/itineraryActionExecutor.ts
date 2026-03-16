@@ -759,6 +759,17 @@ function sortActivitiesChronologically(days: ItineraryDay[]): ItineraryDay[] {
 // ============================================================================
 
 async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]): Promise<void> {
+  // Run client-side meal compliance guard before saving
+  try {
+    const { enforceItineraryMealCompliance } = await import('@/utils/mealGuard');
+    const mealResult = enforceItineraryMealCompliance(updatedDays as any);
+    if (mealResult.totalInjected > 0) {
+      console.warn(`[ActionExecutor] Meal guard injected ${mealResult.totalInjected} meals before save`);
+    }
+  } catch (e) {
+    console.warn('[ActionExecutor] Meal guard import failed, skipping:', e);
+  }
+
   const sortedDays = sortActivitiesChronologically(updatedDays);
   try {
     const { data: trip, error: fetchError } = await supabase
