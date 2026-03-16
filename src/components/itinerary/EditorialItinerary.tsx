@@ -8513,6 +8513,33 @@ function DayCard({
                   <DayRouteMap activities={day.activities} />
                 )}
               </AnimatePresence>
+              {/* Day-level buffer warning — consolidates per-activity zero-gap noise */}
+              {(() => {
+                if (dayIsPreview || isCleanPreview) return null;
+                const acts = day.activities || [];
+                let zeroGapCount = 0;
+                for (let i = 0; i < acts.length - 1; i++) {
+                  const gap = computeGapMinutes(
+                    acts[i].endTime,
+                    acts[i].startTime || (acts[i] as any).time,
+                    acts[i].duration,
+                    acts[i + 1].startTime || (acts[i + 1] as any).time,
+                  );
+                  if (gap !== null && gap <= 0) {
+                    const sameLocation = !!(acts[i].location?.name && acts[i + 1].location?.name && acts[i].location.name === acts[i + 1].location.name);
+                    if (!sameLocation) zeroGapCount++;
+                  }
+                }
+                if (zeroGapCount < 2) return null;
+                return (
+                  <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/30">
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium">{zeroGapCount} activities</span> have no travel buffer — consider using <span className="font-medium text-primary cursor-pointer">Refresh Day</span> to fix timing.
+                    </p>
+                  </div>
+                );
+              })()}
               <DraggableActivityList
                 items={day.activities}
                 onReorder={(reordered) => onActivityReorder?.(reordered)}
