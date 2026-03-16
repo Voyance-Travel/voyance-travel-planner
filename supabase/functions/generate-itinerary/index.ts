@@ -2872,6 +2872,41 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
+      // ==========================================================================
+      // MUST-DO ENFORCEMENT: Check that must-dos assigned to this day are present
+      // ==========================================================================
+      if (context.mustDoActivities && context.mustDoActivities.trim()) {
+        try {
+          const forceAllMust = !!context.isSmartFinish || !!context.smartFinishRequested;
+          const parsedMustDos = parseMustDoInput(context.mustDoActivities, context.destination, forceAllMust, context.startDate, context.totalDays);
+          if (parsedMustDos.length > 0) {
+            const mustDoSchedule = scheduleMustDos(parsedMustDos, context.totalDays);
+            // Filter to must-dos assigned to THIS day
+            const thisDayMustDos = mustDoSchedule.scheduled
+              .filter(s => s.assignedDay === dayNumber && s.priority.priority === 'must')
+              .map(s => s.priority);
+
+            if (thisDayMustDos.length > 0) {
+              const dayForValidation = [{
+                dayNumber,
+                activities: (generatedDay.activities || []).map((a: any) => ({ title: a.title || a.name || '', description: a.description || '' })),
+              }];
+              const mustDoResult = validateMustDosInItinerary(dayForValidation, thisDayMustDos);
+              if (!mustDoResult.allPresent && mustDoResult.missing.length > 0) {
+                const missingNames = mustDoResult.missing.map(m => `"${m.activityName}"`).join(', ');
+                console.warn(`[Stage 2] Day ${dayNumber}: MISSING must-do activities: ${missingNames} — triggering retry`);
+                validation.errors.push(
+                  `CRITICAL: The user's NON-NEGOTIABLE must-do activities are MISSING from Day ${dayNumber}: ${missingNames}. You MUST include these activities by name. The user explicitly requested them — failing to include them is unacceptable.`
+                );
+                validation.isValid = false;
+              }
+            }
+          }
+        } catch (mustDoCheckErr) {
+          console.warn(`[Stage 2] Day ${dayNumber} must-do check error (non-blocking):`, mustDoCheckErr);
+        }
+      }
+
       lastValidation = validation;
 
       if (validation.errors.length > 0) {
