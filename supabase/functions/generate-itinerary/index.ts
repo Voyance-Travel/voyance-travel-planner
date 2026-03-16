@@ -8206,7 +8206,7 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
           isFirstDay: false,
           isLastDay: false,
           isTransitionDay: resolvedIsTransitionDay,
-          hasFullDayEvent: !!(context.userConstraints || []).find(
+          hasFullDayEvent: !!((metadata?.userConstraints as any[]) || []).find(
             (c: any) => c.type === 'full_day_event' && (c.day === dayNumber || !c.day)
           ),
           earliestAvailable: undefined, // will use defaults
