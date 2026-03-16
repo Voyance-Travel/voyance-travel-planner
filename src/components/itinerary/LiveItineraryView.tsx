@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isBefore, isAfter } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
