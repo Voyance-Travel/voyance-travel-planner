@@ -40,6 +40,7 @@ import Guides from "./pages/Guides";
 import TravelTips from "./pages/TravelTips";
 import GuideDetail from "./pages/GuideDetail";
 import CommunityGuidePublic from "./pages/CommunityGuidePublic";
+import FoundersGuideDetail from "./pages/FoundersGuideDetail";
 import CommunityGuideDetail from "./pages/CommunityGuideDetail";
 import About from "./pages/About";
 import Archetypes from "./pages/Archetypes";
