@@ -177,6 +177,67 @@ export default function Guides() {
             <TabsContent value="community" className="mt-0">
               <CommunityGuidesGrid />
             </TabsContent>
+
+            {/* ── Founder's Guides Tab ── */}
+            <TabsContent value="founders" className="mt-0">
+              {foundersGuides.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">Founder's guides coming soon.</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {foundersGuides.map((guide, index) => (
+                    <motion.article
+                      key={guide.slug}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/50 hover:shadow-lg transition-all"
+                    >
+                      <Link to={`/founders-guides/${guide.slug}`}>
+                        <div className="aspect-[16/10] overflow-hidden relative">
+                          <img
+                            src={guide.coverImage}
+                            alt={guide.destination}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute top-4 left-4">
+                            <span className="bg-background/90 backdrop-blur-sm text-foreground text-xs font-medium px-3 py-1 rounded-full flex items-center gap-1">
+                              <Heart className="h-3 w-3 text-primary" />
+                              Founder's Pick
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-6">
+                          <h3 className="text-xl font-semibold mb-1 group-hover:text-primary transition-colors">
+                            {guide.title}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mb-3">
+                            By {guide.authorName} · {guide.authorTitle}
+                          </p>
+                          <p className="text-muted-foreground text-sm mb-4 line-clamp-2">
+                            {guide.summary}
+                          </p>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <div className="flex items-center gap-4">
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-3.5 w-3.5" />
+                                {guide.destination}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5" />
+                                {guide.readTime}
+                              </span>
+                            </div>
+                            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                          </div>
+                        </div>
+                      </Link>
+                    </motion.article>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
           </Tabs>
         </div>
       </section>

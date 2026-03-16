@@ -183,6 +183,7 @@ function AnimatedRoutes() {
         <Route path="/guides" element={<Guides />} />
         <Route path="/guides/:slug" element={<GuideDetail />} />
         <Route path="/community-guide/:slug" element={<CommunityGuidePublic />} />
+        <Route path="/founders-guides/:slug" element={<FoundersGuideDetail />} />
         <Route path="/community-guides/:guideId" element={<CommunityGuideDetail />} />
         <Route path="/travel-tips" element={<TravelTips />} />
         <Route path="/about" element={<About />} />

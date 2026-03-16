@@ -472,6 +472,31 @@ export default function About() {
         </div>
       </section>
 
+      {/* Find Out What We Love CTA */}
+      <section className="py-10 md:py-16 bg-gradient-to-br from-primary/5 via-accent/5 to-muted">
+        <div className="container mx-auto px-4 md:px-6">
+          <div className="max-w-3xl mx-auto text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <Heart className="w-8 h-8 text-primary mx-auto mb-4" />
+              <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-3">
+                Find Out What We Love
+              </h2>
+              <p className="text-muted-foreground text-sm md:text-base mb-6 max-w-xl mx-auto">
+                Our founders personally test every recommendation. Read their honest, 
+                opinionated guides to cities they can't stop going back to.
+              </p>
+              <Button asChild size="lg">
+                <Link to="/guides?tab=founders">Read Founder's Guides</Link>
+              </Button>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
       {/* Company Credibility Block */}
       <section className="py-10 md:py-16 bg-muted/30 border-y border-border/50">
         <div className="container mx-auto px-4 md:px-6">
