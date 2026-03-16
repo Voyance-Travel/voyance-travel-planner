@@ -51,6 +51,9 @@ const promises = [
   { text: 'Real reviews, not paid placements', icon: Star },
   { text: "Book direct - we don't mark up prices", icon: DollarSign },
   { text: 'Your data stays yours', icon: Lock },
+  { text: 'We learn travel-you, nothing else', icon: Dna },
+  { text: 'Your trips are saved forever', icon: BookOpen },
+  { text: 'Every rating makes your next trip better', icon: Star },
 ];
 
 const ALL_ARCHETYPE_IDS = [
