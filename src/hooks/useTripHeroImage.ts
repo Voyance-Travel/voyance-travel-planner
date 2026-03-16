@@ -69,6 +69,9 @@ export function useTripHeroImage({
   const [seededFailed, setSeededFailed] = useState(false);
   const [curatedIndex, setCuratedIndex] = useState(0);
   const [curatedFailed, setCuratedFailed] = useState(false);
+  const [canonicalUrl, setCanonicalUrl] = useState<string | null>(null);
+  const [canonicalFetched, setCanonicalFetched] = useState(false);
+  const [canonicalFailed, setCanonicalFailed] = useState(false);
   const [dbCuratedUrl, setDbCuratedUrl] = useState<string | null>(null);
   const [dbCuratedFetched, setDbCuratedFetched] = useState(false);
   const [dbCuratedFailed, setDbCuratedFailed] = useState(false);
@@ -80,10 +83,34 @@ export function useTripHeroImage({
   const curatedImages = getCuratedImages(destination);
   const hasCurated = hasCuratedImages(destination);
 
-  // Fetch DB curated image if hardcoded curated not available
+  // Fetch canonical destination hero image (shared across all views)
   useEffect(() => {
     const shouldFetch = 
       (!seededHeroUrl || seededFailed) && 
+      !canonicalFetched;
+
+    if (!shouldFetch || !destination) return;
+
+    let cancelled = false;
+
+    getDestinationCanonicalImage(destination)
+      .then((url) => {
+        if (cancelled) return;
+        setCanonicalFetched(true);
+        if (url) setCanonicalUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setCanonicalFetched(true);
+      });
+
+    return () => { cancelled = true; };
+  }, [destination, seededHeroUrl, seededFailed, canonicalFetched]);
+
+  // Fetch DB curated image if canonical and hardcoded curated not available
+  useEffect(() => {
+    const shouldFetch = 
+      (!seededHeroUrl || seededFailed) && 
+      canonicalFetched && !canonicalUrl &&
       !hasCurated && 
       !dbCuratedFetched;
 
@@ -104,7 +131,7 @@ export function useTripHeroImage({
       });
 
     return () => { cancelled = true; };
-  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched]);
+  }, [destination, seededHeroUrl, seededFailed, hasCurated, dbCuratedFetched, canonicalFetched, canonicalUrl]);
 
   // Fetch from API if DB curated images aren't available either
   useEffect(() => {
