@@ -403,7 +403,8 @@ function parseSingleActivity(
     duration: extractString(activityData, ['duration']),
     durationMinutes: extractNumber(activityData, ['durationMinutes', 'duration_minutes']),
     location: parseLocation(activityData.location),
-    imageUrl: extractString(activityData, ['imageUrl', 'image_url', 'image']),
+    imageUrl: extractString(activityData, ['imageUrl', 'image_url', 'image'])
+      || resolveFirstPhoto(activityData.photos),
     tips: activityData.tips as string | string[] | undefined,
     confirmationNumber: extractString(activityData, ['confirmationNumber', 'confirmation_number']),
     voucherUrl: extractString(activityData, ['voucherUrl', 'voucher_url']),
