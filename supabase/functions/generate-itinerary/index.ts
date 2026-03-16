@@ -2760,10 +2760,19 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       // ==========================================================================
-      // USER PREFERENCE VALIDATION — now triggers retries
+      // USER PREFERENCE VALIDATION — scoped to explicit user preferences only
       // ==========================================================================
       {
-        const userNotes = (preferenceContext || '').toLowerCase();
+        // IMPORTANT: Only check against explicit user preference fields (interests,
+        // focus, avoid), NOT the full preferenceContext which includes venue names,
+        // research notes, and activity titles that would cause false positives.
+        const explicitInterests = (context.userConstraints || [])
+          .filter((c: any) => c?.type === 'preference' || c?.type === 'focus' || c?.type === 'interest')
+          .map((c: any) => (c?.value || c?.text || '').toLowerCase())
+          .join(' ');
+        const coreInterests = (context.travelerDNA?.interests || []).map((i: string) => i.toLowerCase()).join(' ');
+        const userPreferenceText = `${explicitInterests} ${coreInterests}`.trim();
+
         const allActivityText = generatedDay.activities.map((a: any) => 
           `${(a.title || '')} ${(a.description || '')}`
         ).join(' ').toLowerCase();
@@ -2779,15 +2788,21 @@ Generate activities for this day following ALL constraints above.`;
           'diving': ['dive', 'scuba', 'underwater'],
         };
 
-        for (const [activity, keywords] of Object.entries(ACTIVITY_KEYWORDS)) {
-          if (userNotes.includes(activity)) {
-            const dayHasThis = keywords.some(kw => allActivityText.includes(kw));
-            if (!dayHasThis && !isLastDay) {
-              console.warn(`[Stage 2] User requested "${activity}" but Day ${dayNumber} has no matching activities — triggering retry`);
-              validation.errors.push(
-                `User explicitly requested "${activity}" but Day ${dayNumber} contains ZERO ${activity}-related activities. You MUST include at least one ${activity} activity. Check the user's preferences and honor them.`
-              );
-              validation.isValid = false;
+        // Skip this check entirely for Smart Finish — user's venues are already
+        // hard-anchored as must-do activities, so the generation includes them naturally.
+        if (!context.isSmartFinish && userPreferenceText.length > 0) {
+          for (const [activity, keywords] of Object.entries(ACTIVITY_KEYWORDS)) {
+            if (userPreferenceText.includes(activity)) {
+              const dayHasThis = keywords.some(kw => allActivityText.includes(kw));
+              if (!dayHasThis && !isLastDay) {
+                // Downgrade to warning — the trip as a whole should include the activity,
+                // but demanding it on every single day causes infinite retry loops.
+                console.warn(`[Stage 2] User preference includes "${activity}" but Day ${dayNumber} has no matching activities — logged as warning`);
+                validation.warnings.push(
+                  `User preference includes "${activity}" but Day ${dayNumber} has no matching activities. Consider including one if it fits the day's flow.`
+                );
+                // Do NOT set validation.isValid = false — this is advisory only
+              }
             }
           }
         }
