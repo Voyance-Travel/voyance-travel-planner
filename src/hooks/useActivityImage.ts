@@ -62,23 +62,8 @@ function getCacheKey(title: string, destination?: string, cacheId?: string): str
   return normalized;
 }
 
-async function persistPhotoToActivity(activityId: string, photoUrl: string): Promise<void> {
-  if (!activityId || !UUID_REGEX.test(activityId)) return;
-  if (persistedActivityIds.has(activityId)) return;
-  persistedActivityIds.add(activityId);
-  try {
-    const { error } = await supabase
-      .from('trip_activities')
-      .update({ photos: [photoUrl] })
-      .eq('id', activityId);
-    if (error) {
-      persistedActivityIds.delete(activityId);
-      console.warn('[useActivityImage] Failed to persist photo:', error.message);
-    }
-  } catch {
-    persistedActivityIds.delete(activityId);
-  }
-}
+// persistPhotoToActivity removed — photos are now written back to
+// itinerary_data via useActivityImageWriteback at the itinerary level.
 
 // ── NEW: Check curated_images table ──────────────────────────────────────────
 async function fetchFromCuratedImages(
