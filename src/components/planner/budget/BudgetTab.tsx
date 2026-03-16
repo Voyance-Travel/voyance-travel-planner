@@ -82,11 +82,25 @@ interface BudgetTabProps {
   hasFlight?: boolean;
   /** Trip destination for AI context */
   destination?: string;
+  /** Destination country for cost estimation */
+  destinationCountry?: string;
+  /** Budget tier for cost estimation */
+  budgetTier?: string;
+  /** Flight selection data for payable items calculation */
+  flightSelection?: {
+    outbound?: { price?: number; airline?: string };
+    return?: { price?: number; airline?: string };
+    totalPrice?: number;
+  } | null;
+  /** Hotel selection data for payable items calculation */
+  hotelSelection?: {
+    name?: string;
+    totalPrice?: number;
+    pricePerNight?: number;
+  } | null;
   /** Journey fields for linked trip budget summary */
   journeyId?: string | null;
   journeyName?: string | null;
-  /** JS-calculated total cost (all travelers, in cents) as fallback when DB snapshot is stale */
-  jsTotalCostCents?: number;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
