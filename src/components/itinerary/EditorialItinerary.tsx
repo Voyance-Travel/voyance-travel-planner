@@ -1267,8 +1267,27 @@ export function EditorialItinerary({
   const isCleanPreview = viewMode === 'preview';
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
 
-  // Batch write-back of resolved activity photos into itinerary_data
-  const { reportPhoto } = useActivityImageWriteback(tripId);
+  // Batch write-back of resolved activity photos into days state
+  // This merges photos into React state so they survive ALL save paths
+  const mergePhotosIntoDays = useCallback((photos: Map<string, string>) => {
+    setRawDays(prev => {
+      let changed = false;
+      const updated = prev.map(day => ({
+        ...day,
+        activities: (day.activities || []).map(act => {
+          const newUrl = photos.get(act.id);
+          if (!newUrl) return act;
+          // Skip if already has the same photo
+          const existing = (act as any).image_url || ((act.photos as any)?.[0]?.url ?? (act.photos as any)?.[0]);
+          if (existing === newUrl) return act;
+          changed = true;
+          return { ...act, image_url: newUrl, photos: [newUrl] } as any;
+        }),
+      }));
+      return changed ? updated : prev;
+    });
+  }, []);
+  const { reportPhoto } = useActivityImageWriteback(mergePhotosIntoDays);
 
   const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
 
