@@ -257,9 +257,10 @@ export async function handleGenerateTripDay(
     try {
       const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
 
-      // Add AbortController with 150s timeout to prevent hanging on 502/504 upstream errors
+      // Adaptive timeout: later days get more time since they have richer context
+      const timeoutMs = dayNumber <= 3 ? 120_000 : 180_000;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 150_000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       let resp: Response;
       try {
