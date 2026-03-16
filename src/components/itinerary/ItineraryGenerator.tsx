@@ -178,7 +178,7 @@ export function ItineraryGenerator({
       const itData = (tripData?.itinerary_data ?? {}) as Record<string, unknown>;
       const itineraryDays = Array.isArray(itData.days) ? (itData.days as GeneratedDay[]) : [];
 
-      if (itineraryDays.length > 0 && (expectedTotalDays <= 0 || itineraryDays.length >= expectedTotalDays)) {
+      if (itineraryDays.length > 0 && expectedTotalDays > 0 && itineraryDays.length >= expectedTotalDays) {
         return itineraryDays;
       }
 
