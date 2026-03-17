@@ -1256,6 +1256,7 @@ export function EditorialItinerary({
   parsedMetadata,
   onDaysChange,
   onActiveDayChange,
+  onActiveCityChange,
   navigateToSection,
   initialItineraryData,
   itineraryStatus,
