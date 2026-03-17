@@ -423,7 +423,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </div>
           </div>
         );
-      })()
+      })()}
 
       {/* Budget Coach — AI suggestions when over budget */}
       {hasBudget && itineraryDays && itineraryDays.length > 0 && summary && (
