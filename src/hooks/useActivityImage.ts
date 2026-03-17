@@ -128,11 +128,28 @@ async function fetchFromCuratedImages(
   try {
     const cleanTitle = title.trim().replace(/[^a-zA-Z0-9 ]/g, '');
     const normalizedTitle = title.trim().toLowerCase().replace(/\s+/g, '_');
+
+    if (cleanTitle.length < 3) return null;
+
+    // Attempt 1: exact entity_key match (fast)
+    const { data: exactData } = await supabase
+      .from('curated_images')
+      .select('image_url, source')
+      .eq('is_blacklisted', false)
+      .eq('entity_key', normalizedTitle)
+      .order('vote_score', { ascending: false })
+      .limit(1);
+
+    if (exactData?.[0]?.image_url) {
+      return { url: exactData[0].image_url, source: `curated_${exactData[0].source || 'db'}` };
+    }
+
+    // Attempt 2: fuzzy search on entity_key and alt_text (unlocks Place ID-keyed rows)
     const { data, error } = await supabase
       .from('curated_images')
       .select('image_url, source')
       .eq('is_blacklisted', false)
-      .or(`entity_key.eq.${normalizedTitle},entity_key.ilike.%${cleanTitle}%,alt_text.ilike.%${cleanTitle}%`)
+      .or(`entity_key.ilike.%${cleanTitle}%,alt_text.ilike.%${cleanTitle}%`)
       .order('vote_score', { ascending: false })
       .limit(1);
 
