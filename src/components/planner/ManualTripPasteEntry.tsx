@@ -55,6 +55,8 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
   const [editedPreferences, setEditedPreferences] = useState<ParsedPreferences | null>(null);
   const [saveToProfile, setSaveToProfile] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [editedStartDate, setEditedStartDate] = useState('');
+  const [editedEndDate, setEditedEndDate] = useState('');
 
   // Restore draft after auth redirect
   useState(() => {
