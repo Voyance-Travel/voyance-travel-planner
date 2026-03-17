@@ -2041,7 +2041,8 @@ export default function TripDetail() {
           alt={trip.destination || 'Trip destination'}
           onError={onHeroError}
           onLoad={onHeroLoad}
-          className="w-full h-full object-cover !rounded-none"
+          className="w-full h-full object-cover !rounded-none transition-opacity duration-500"
+          key={heroImageUrl}
         />
         </ErrorBoundary>
         {/* Back Button - icon only so hero image stays text-free */}
