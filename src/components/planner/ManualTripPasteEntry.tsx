@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ClipboardPaste, Loader2, Sparkles, X, Check, ArrowRight, PenLine, AlertCircle } from 'lucide-react';
+import { ClipboardPaste, Loader2, Sparkles, X, Check, ArrowRight, PenLine, AlertCircle, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
