@@ -380,7 +380,8 @@ export default function TravelIntelCard({
                     ))}
                   </div>
                 </Section>
-              )}
+                ) : null;
+              })()}
 
               {/* ── Getting Around ── */}
               {intel.gettingAround && (
