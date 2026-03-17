@@ -126,19 +126,19 @@ async function fetchFromCuratedImages(
   destination: string
 ): Promise<{ url: string; source: string } | null> {
   try {
+    const cleanTitle = title.trim().replace(/[^a-zA-Z0-9 ]/g, '');
     const normalizedTitle = title.trim().toLowerCase().replace(/\s+/g, '_');
     const { data, error } = await supabase
       .from('curated_images')
       .select('image_url, source')
       .eq('is_blacklisted', false)
-      .or(`entity_key.eq.${normalizedTitle},entity_key.ilike.%${title.trim().replace(/[^a-zA-Z0-9 ]/g, '')}%`)
+      .or(`entity_key.eq.${normalizedTitle},entity_key.ilike.%${cleanTitle}%,alt_text.ilike.%${cleanTitle}%`)
       .order('vote_score', { ascending: false })
       .limit(1);
 
-    if (error || !data || data.length === 0) return null;
-    const row = data[0];
-    if (!row.image_url) return null;
-    return { url: row.image_url, source: `curated_${row.source || 'db'}` };
+    if (error || !data?.length) return null;
+    if (!data[0].image_url) return null;
+    return { url: data[0].image_url, source: `curated_${data[0].source || 'db'}` };
   } catch {
     return null;
   }
