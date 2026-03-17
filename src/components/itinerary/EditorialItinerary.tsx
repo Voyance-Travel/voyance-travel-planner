@@ -9441,7 +9441,12 @@ function ActivityRow({
               <span className="truncate">{activity.location?.name || activity.location?.address}</span>
             </div>
           )}
-          {activity.tips && !isDowntime && !isTransport && !isCheckIn && (
+          {activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+            <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
+              <VoyancePickCallout tip={activity.tips} />
+            </div>
+          )}
+          {activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
             <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
               <VoyanceInsight tip={activity.tips} />
             </div>
