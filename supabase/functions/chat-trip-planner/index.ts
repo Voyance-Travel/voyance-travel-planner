@@ -114,6 +114,14 @@ Before you call extract_trip_details, run this mental checklist:
 4. Do the nights in cities[] sum to approximately the total trip duration?
 If any check fails, fix it before calling the tool.
 
+DAY TRIP / NEARBY DESTINATION CAPTURE — CRITICAL:
+When the user mentions a town, village, or destination that is NEAR one of their main cities but NOT a separate overnight stop, you MUST capture it in mustDoActivities as a day trip. Examples:
+- User plans Catania (2 nights) and mentions Taormina → mustDoActivities: "Day trip to Taormina from Catania"
+- User plans Paris (4 nights) and mentions Versailles → mustDoActivities: "Day trip to Versailles from Paris"
+- User plans Tokyo (4 nights) and mentions Kamakura → mustDoActivities: "Day trip to Kamakura from Tokyo"
+DO NOT add these as separate cities in the cities[] array — they don't have their own nights. Instead, treat them as must-do activities anchored to the nearest city.
+RULE: If the user mentions ANY place name that you don't include in cities[], it MUST appear in mustDoActivities. No place the user mentions should be silently dropped.
+
 EXTRACTION QUALITY — CRITICAL:
 When calling extract_trip_details, you MUST extract EVERY specific detail the user mentioned:
 

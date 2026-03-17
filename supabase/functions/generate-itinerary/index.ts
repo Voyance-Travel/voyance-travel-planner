@@ -2885,7 +2885,7 @@ Generate activities for this day following ALL constraints above.`;
             const mustDoSchedule = scheduleMustDos(parsedMustDos, context.totalDays);
             // Filter to must-dos assigned to THIS day
             const thisDayMustDos = mustDoSchedule.scheduled
-              .filter(s => s.assignedDay === dayNumber && s.priority.priority === 'must')
+              .filter(s => s.assignedDay === dayNumber && s.priority.priority !== 'nice')
               .map(s => s.priority);
 
             if (thisDayMustDos.length > 0) {

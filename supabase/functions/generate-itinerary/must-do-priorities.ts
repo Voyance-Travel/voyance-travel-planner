@@ -1013,7 +1013,8 @@ export function validateMustDosInItinerary(
   const missing: MustDoPriority[] = [];
   
   for (const mustDo of mustDos) {
-    if (mustDo.priority !== 'must') continue;
+    // Enforce both 'must' AND 'high' priority items — all user-specified items deserve validation
+    if (mustDo.priority === 'nice') continue;
     
     let wasFound = false;
     
