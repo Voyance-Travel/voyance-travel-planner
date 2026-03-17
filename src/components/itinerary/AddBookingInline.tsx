@@ -7,7 +7,7 @@
  * Supports multi-leg flights (multi-city, round-trip, one-way).
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BoardingPassUpload } from './BoardingPassUpload';
 import { useNavigate } from 'react-router-dom';
 import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload, Sparkles, MapPin } from 'lucide-react';
@@ -186,6 +186,21 @@ export function AddFlightInline({
   const [legs, setLegs] = useState<ManualFlightEntry[]>(buildInitialLegs);
   const [expandedLeg, setExpandedLeg] = useState<number | null>(null);
   const [arrivalTimeError, setArrivalTimeError] = useState(false);
+
+  // Reset state when key props change (e.g., switching trips)
+  useEffect(() => {
+    setLegs(buildInitialLegs());
+    setExpandedLeg(null);
+    setShowManualEntry(editMode);
+  }, [
+    tripId,
+    origin,
+    editMode,
+    JSON.stringify(existingLegs),
+    JSON.stringify(multiCityRoute),
+    existingOutbound?.departureAirport,
+    existingReturn?.departureAirport,
+  ]);
 
   const updateLeg = (index: number, patch: Partial<ManualFlightEntry>) => {
     setLegs(prev => prev.map((leg, i) => i === index ? { ...leg, ...patch } : leg));

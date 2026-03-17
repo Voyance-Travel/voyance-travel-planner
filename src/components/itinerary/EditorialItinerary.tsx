@@ -5780,6 +5780,7 @@ export function EditorialItinerary({
                   {/* Hidden AddFlightInline for the dialog */}
                   <div className="hidden">
                     <AddFlightInline
+                      key={tripId}
                       tripId={tripId}
                       destination={destination}
                       startDate={startDate}
@@ -6395,6 +6396,7 @@ export function EditorialItinerary({
               </DialogTitle>
             </DialogHeader>
             <AddFlightInline
+              key={`edit-${tripId}`}
               tripId={tripId}
               destination={destination}
               startDate={startDate}
