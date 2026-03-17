@@ -2102,7 +2102,7 @@ function FlightHotelStep({
 }
 
 export default function Start() {
-  const { state: plannerState, setBasics } = useTripPlanner();
+  const { state: plannerState, setBasics, resetTrip } = useTripPlanner();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -2138,6 +2138,26 @@ export default function Start() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [currentStep]);
+  // Reset stale session state when starting a fresh trip (not from quiz/destination link)
+  useEffect(() => {
+    const isFromQuiz = searchParams.get('fromQuiz') === 'true';
+    const hasDestination = !!searchParams.get('destination');
+    if (!isFromQuiz && !hasDestination) {
+      resetTrip();
+      setDestinationSelection({ display: '', cityName: '', airportCodes: undefined });
+      setStartDate(undefined);
+      setEndDate(undefined);
+      setTravelers(2);
+      setBudgetAmount(undefined);
+      setIsMultiCity(false);
+      setMultiCityDestinations([]);
+      setMultiCityTransports([]);
+      sessionStorage.removeItem('voyance_chat_messages');
+      sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [planMode, setPlanMode] = useState<'single' | 'multi' | 'chat' | 'manual'>('single');
 
   // Trip state
