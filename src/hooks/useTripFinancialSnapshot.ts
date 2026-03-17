@@ -2,10 +2,10 @@
  * useTripFinancialSnapshot
  * 
  * Single source of truth for trip financial numbers across all tabs.
- * Reads from activity_costs via v_trip_total and v_payments_summary views.
+ * Reads from activity_costs directly, respecting budget_include_hotel/flight toggles.
  * 
  * Outputs (all in cents):
- *   - tripTotalCents:       Total expected cost from activity_costs (activities + flights + hotel)
+ *   - tripTotalCents:       Total expected cost (excluding toggled-off hotel/flight)
  *   - paidCents:            Sum of paid amounts in activity_costs (is_paid = true)
  *   - toBePaidCents:        tripTotalCents - paidCents (clamped >= 0)
  *   - budgetTotalCents:     User-set budget from trip settings
@@ -37,38 +37,43 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   const fetchData = useCallback(async () => {
     if (!tripId) return;
     
-    const [tripTotalResult, paymentsSummaryResult, tripResult] = await Promise.all([
-      // v_trip_total: total_all_travelers_usd from activity_costs
-      supabase
-        .from('v_trip_total')
-        .select('total_all_travelers_usd')
-        .eq('trip_id', tripId)
-        .maybeSingle(),
-      // v_payments_summary: paid/unpaid from activity_costs
-      supabase
-        .from('v_payments_summary')
-        .select('total_paid_usd')
-        .eq('trip_id', tripId)
-        .maybeSingle(),
-      // Budget setting from trips table
-      supabase
-        .from('trips')
-        .select('budget_total_cents')
-        .eq('id', tripId)
-        .single(),
-    ]);
+    // 1. Fetch trip settings (budget + inclusion toggles)
+    const { data: tripData } = await supabase
+      .from('trips')
+      .select('budget_total_cents, budget_include_hotel, budget_include_flight')
+      .eq('id', tripId)
+      .single();
 
-    // Trip total from activity_costs view (USD → cents)
-    const totalUsd = Number(tripTotalResult.data?.total_all_travelers_usd) || 0;
-    setTripTotalCents(Math.round(totalUsd * 100));
+    const includeHotel = tripData?.budget_include_hotel ?? true;
+    const includeFlight = tripData?.budget_include_flight ?? false;
 
-    // Paid from activity_costs view (USD → cents)
-    const paidUsd = Number(paymentsSummaryResult.data?.total_paid_usd) || 0;
-    setPaidCents(Math.round(paidUsd * 100));
+    // 2. Fetch all activity_costs for this trip
+    const { data: costs } = await supabase
+      .from('activity_costs')
+      .select('cost_per_person_usd, num_travelers, is_paid, paid_amount_usd, category, day_number')
+      .eq('trip_id', tripId);
 
-    // Budget
-    setBudgetTotalCents(tripResult.data?.budget_total_cents || 0);
+    let totalCents = 0;
+    let paidTotal = 0;
 
+    for (const row of costs || []) {
+      // Skip hotel/flight logistics rows (day_number=0) when toggled off
+      if (row.day_number === 0 && row.category === 'hotel' && !includeHotel) continue;
+      if (row.day_number === 0 && row.category === 'flight' && !includeFlight) continue;
+
+      const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
+      totalCents += Math.round(rowTotal * 100);
+
+      if (row.is_paid) {
+        // Use paid_amount_usd if set, otherwise use the full cost
+        const paidUsd = row.paid_amount_usd != null ? row.paid_amount_usd : rowTotal;
+        paidTotal += Math.round(paidUsd * 100);
+      }
+    }
+
+    setTripTotalCents(totalCents);
+    setPaidCents(paidTotal);
+    setBudgetTotalCents(tripData?.budget_total_cents || 0);
     setLoading(false);
   }, [tripId]);
 

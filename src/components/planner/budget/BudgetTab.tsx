@@ -611,7 +611,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </div>
             <Switch
               checked={settings?.budget_include_hotel ?? true}
-              onCheckedChange={(checked) => updateSettings({ budget_include_hotel: checked })}
+              onCheckedChange={async (checked) => { await updateSettings({ budget_include_hotel: checked }); window.dispatchEvent(new CustomEvent('booking-changed')); }}
             />
           </div>
           
@@ -622,7 +622,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </div>
             <Switch
               checked={settings?.budget_include_flight ?? false}
-              onCheckedChange={(checked) => updateSettings({ budget_include_flight: checked })}
+              onCheckedChange={async (checked) => { await updateSettings({ budget_include_flight: checked }); window.dispatchEvent(new CustomEvent('booking-changed')); }}
             />
           </div>
 
