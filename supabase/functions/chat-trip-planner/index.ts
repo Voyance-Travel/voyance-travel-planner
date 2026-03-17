@@ -155,7 +155,8 @@ When calling extract_trip_details, you MUST extract EVERY specific detail the us
    - "love food and nightlife" → interestCategories: ["food", "nightlife"]
    - "interested in history and architecture" → interestCategories: ["history", "architecture"]
    - "museums and culture" → interestCategories: ["history", "culture"]
-   - Valid values: history, food, nightlife, art, nature, shopping, adventure, culture, relaxation, architecture, music, sports, photography, family, romance
+   - "we love wine" or "vineyard tours" → interestCategories: ["wine"] (do NOT fold into "food")
+   - Valid values: history, food, nightlife, art, nature, shopping, adventure, culture, relaxation, architecture, music, sports, photography, family, romance, wine
 
 7. LOGISTICS & CONSTRAINTS: Put transport needs and constraints in additionalNotes:
    - "need to get from US Open to JFK" → additionalNotes

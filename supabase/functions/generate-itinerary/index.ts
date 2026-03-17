@@ -5652,6 +5652,8 @@ RULES FOR VOYANCE PICKS:
           'shopping': 'Include shopping opportunities (local markets, boutiques, artisan shops)',
           'wellness': 'Include wellness activities (yoga, spa, meditation, hot springs)',
           'art': 'Include art experiences (galleries, street art, studios, art districts)',
+          'wine': 'At least 1 wine experience per city (vineyard tour, wine tasting, wine bar, sommelier-led experience). In wine regions (Tuscany, Sicily/Etna, Bordeaux, Napa, Mendoza, etc.) this should be a HIGHLIGHT activity, not a footnote.',
+          'wine & spirits': 'At least 1 wine/spirits experience per city (vineyard, distillery, tasting room, cocktail masterclass)',
         };
         
         const matchedInterests: string[] = [];
