@@ -35,9 +35,9 @@ export function CategoryBrowse({ selected, onSelect, isLoading }: CategoryBrowse
           onClick={() => onSelect(cat.key)}
           disabled={isLoading}
           className={cn(
-            'gap-1.5 shrink-0 text-xs h-8',
+            'gap-1.5 shrink-0 text-xs h-8 transition-all duration-150',
             selected === cat.key
-              ? 'bg-primary text-primary-foreground'
+              ? 'bg-primary text-primary-foreground ring-2 ring-primary/30 shadow-sm scale-[1.02]'
               : 'hover:bg-primary/10 hover:border-primary/30'
           )}
         >
