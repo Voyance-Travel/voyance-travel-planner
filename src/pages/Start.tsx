@@ -2102,7 +2102,7 @@ function FlightHotelStep({
 }
 
 export default function Start() {
-  const { state: plannerState, setBasics } = useTripPlanner();
+  const { state: plannerState, setBasics, resetTrip } = useTripPlanner();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
