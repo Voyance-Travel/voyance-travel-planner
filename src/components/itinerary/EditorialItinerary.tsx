@@ -452,6 +452,8 @@ export interface EditorialItineraryProps {
   onDaysChange?: (days: EditorialDay[]) => void;
   /** Called when the user switches to a different day (for chat context) */
   onActiveDayChange?: (dayNumber: number) => void;
+  /** Called when the active city changes (for multi-city hero images) */
+  onActiveCityChange?: (cityName: string | null) => void;
   /** Expose a way for parent to programmatically switch to the details tab and scroll to a section */
   navigateToSection?: string | null;
   /** Raw itinerary_data object so we can restore optionSelections on page load */
@@ -1254,6 +1256,7 @@ export function EditorialItinerary({
   parsedMetadata,
   onDaysChange,
   onActiveDayChange,
+  onActiveCityChange,
   navigateToSection,
   initialItineraryData,
   itineraryStatus,
@@ -1649,6 +1652,31 @@ export function EditorialItinerary({
       onActiveDayChange(dayNum);
     }
   }, [selectedDayIndex, days, onActiveDayChange]);
+
+  // Notify parent of active city for multi-city hero image
+  useEffect(() => {
+    if (!onActiveCityChange) return;
+    const day = days[selectedDayIndex];
+    if (!day) return;
+
+    let cityName: string | null = (day as any).city || null;
+    if (!cityName && allHotels && allHotels.length > 1) {
+      const dayDate = day.date ? (() => { try { return parseLocalDate(day.date); } catch { return null; } })() : null;
+      if (dayDate) {
+        const dateStr = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, '0')}-${String(dayDate.getDate()).padStart(2, '0')}`;
+        for (const ch of allHotels) {
+          if (ch.checkInDate && ch.checkOutDate && dateStr >= ch.checkInDate && dateStr < ch.checkOutDate) {
+            cityName = ch.cityName;
+            break;
+          }
+        }
+      }
+      if (!cityName && day.title && allHotels.some(h => day.title?.includes(h.cityName))) {
+        cityName = allHotels.find(h => day.title?.includes(h.cityName))?.cityName || null;
+      }
+    }
+    onActiveCityChange(cityName);
+  }, [selectedDayIndex, days, allHotels, onActiveCityChange]);
 
   const { user } = useAuth();
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
