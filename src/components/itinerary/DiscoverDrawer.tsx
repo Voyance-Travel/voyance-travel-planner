@@ -6,14 +6,14 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Compass, Loader2, AlertCircle, ChevronDown } from 'lucide-react';
+import { Compass, Loader2, AlertCircle, ChevronDown, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ProactivePicks, type ProactiveSuggestion } from './discover/ProactivePicks';
 import { ConversationalInput } from './discover/ConversationalInput';
-import { CategoryBrowse, type Category } from './discover/CategoryBrowse';
+import { CategoryBrowse, CATEGORIES, type Category } from './discover/CategoryBrowse';
 import { Badge } from '@/components/ui/badge';
 import { Star, Plus, MapPin, Clock } from 'lucide-react';
 
