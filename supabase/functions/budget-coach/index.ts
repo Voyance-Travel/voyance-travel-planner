@@ -87,7 +87,12 @@ serve(async (req) => {
     const currentTotal = (current_total_cents / 100).toFixed(0);
     const gap = (gap_cents / 100).toFixed(0);
 
-    const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience. Be specific with real venue/restaurant names when possible.
+    const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience.
+
+CRITICAL NAMING RULE:
+- Every "suggested_swap" MUST be a specific, real venue or experience name (e.g., "Joe's Pizza on Carmine St", "Self-guided walk through Montmartre", "Trattoria da Mario").
+- NEVER use generic descriptions like "Lower cost restaurant", "Cheaper option", "Budget alternative", "Similar restaurant", "Local eatery", or "Affordable café".
+- If you cannot name a specific real venue, describe a specific experience (e.g., "Street food at Jemaa el-Fnaa night market" or "Picnic with provisions from Marché d'Aligre").
 
 CRITICAL COST RULES:
 - You must NEVER invent or guess prices. Use ONLY the reference pricing data provided below.
@@ -165,7 +170,7 @@ Rules:
                           suggested_swap: {
                             type: "string",
                             description:
-                              "Name of the cheaper alternative",
+                              "The specific name of a real venue, restaurant, or experience to replace the current one. Must be a concrete, real place name (e.g. 'Trattoria da Mario', 'Self-guided walk through Montmartre') — NOT a generic description like 'lower cost restaurant' or 'cheaper option'.",
                           },
                           new_cost: {
                             type: "number",
@@ -273,6 +278,22 @@ Rules:
       .map((s: any) => {
         const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
         if (rawNew === null || rawNew < 0) return null;
+
+        // GENERIC NAME FILTER: reject vague swap names
+        const swapName = (s.suggested_swap || "").toLowerCase();
+        const GENERIC_PATTERNS = [
+          "lower cost", "cheaper", "budget", "affordable", "inexpensive",
+          "alternative option", "similar restaurant", "similar cafe", "similar café",
+          "local eatery", "local restaurant", "local cafe", "local café",
+          "generic", "another option", "different restaurant", "different cafe",
+          "mid-range", "moderately priced", "less expensive", "cost-effective",
+          "economy", "no-frills",
+        ];
+        const isGeneric = GENERIC_PATTERNS.some((p) => swapName.includes(p));
+        if (isGeneric) {
+          console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
+          return null;
+        }
 
         // Convert AI's whole-currency value to cents
         const newCostCents = Math.round(rawNew * 100);
