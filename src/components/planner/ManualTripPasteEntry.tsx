@@ -168,7 +168,16 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
         }
       }
 
-      const result = await createTripFromParsed(parsed, user.id);
+      // Merge edited dates back into parsed before creating trip
+      const finalParsed = { ...parsed };
+      if (editedStartDate || editedEndDate) {
+        finalParsed.dates = {
+          start: editedStartDate || parsed.dates?.start || '',
+          end: editedEndDate || parsed.dates?.end || '',
+        };
+      }
+
+      const result = await createTripFromParsed(finalParsed, user.id);
 
       if ('error' in result) {
         toast.error(result.error);
