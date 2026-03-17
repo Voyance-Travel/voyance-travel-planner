@@ -191,10 +191,13 @@ export default function TripDetail() {
   // React hooks-order violation (#310). Uses safe defaults when trip hasn't loaded yet.
   const seededHero = (trip?.metadata as Record<string, unknown>)?.hero_image;
   const seededHeroUrl = typeof seededHero === 'string' && seededHero.length > 0 ? seededHero : null;
+  const [activeCity, setActiveCity] = useState<string | null>(null);
+  // Use per-city destination for multi-city trips, fall back to overall trip destination
+  const heroDestination = activeCity || trip?.destination || '';
   const { imageUrl: heroImageUrl, onError: onHeroError, onLoad: onHeroLoad } = useTripHeroImage({
-    destination: trip?.destination || '',
-    seededHeroUrl,
-    tripId: trip?.id,
+    destination: heroDestination,
+    seededHeroUrl: activeCity ? null : seededHeroUrl, // Don't use seeded hero for per-city resolution
+    tripId: activeCity ? undefined : trip?.id, // Don't write-back per-city heroes to trip metadata
   });
 
   // =========================================================================
