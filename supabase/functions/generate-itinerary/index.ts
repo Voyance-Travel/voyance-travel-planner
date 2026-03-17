@@ -6422,7 +6422,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
               dayNumber: d.dayNumber,
               activities: (d.activities || []).map((a: any) => ({ title: a.title || a.name || '', description: a.description || '' })),
             }));
-            const validation = validateMustDosInItinerary(itineraryForValidation, mustDoCheck);
+            const validation = validateMustDosInItinerary(itineraryForValidation, mustDoCheck, context.destination);
 
             if (!validation.allPresent && validation.missing.length > 0) {
               console.warn(`[Stage 2.8] ⚠️ MISSING must-do activities — injecting safety-net placeholders:`);
