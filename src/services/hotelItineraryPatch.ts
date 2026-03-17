@@ -10,12 +10,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
 
 const ACCOMMODATION_KEYWORDS = [
-  'hotel check-in', 'hotel check in', 'check-in & refresh',
-  'check in & refresh', 'hotel checkout', 'hotel check-out',
-  'check into', 'accommodation', 'settle in',
+  'check-in', 'check in', 'check into',
+  'checkout', 'check-out', 'check out',
+  'accommodation', 'settle in', 'settle into',
 ];
 
-function isAccommodationActivity(title: string): boolean {
+const ACCOMMODATION_CATEGORIES = ['accommodation', 'hotel'];
+
+function isAccommodationActivity(title: string, category?: string): boolean {
+  if (category && ACCOMMODATION_CATEGORIES.includes(category.toLowerCase())) return true;
   const lower = title.toLowerCase();
   return ACCOMMODATION_KEYWORDS.some(k => lower.includes(k));
 }
@@ -54,7 +57,7 @@ export async function patchItineraryWithHotel(
 
       for (const act of activities) {
         const title = String(act.title || act.name || '');
-        if (!isAccommodationActivity(title)) continue;
+        if (!isAccommodationActivity(title, String(act.category || ''))) continue;
 
         const isCheckout = title.toLowerCase().includes('checkout') || title.toLowerCase().includes('check-out');
         
