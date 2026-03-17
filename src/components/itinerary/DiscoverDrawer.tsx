@@ -232,6 +232,14 @@ export function DiscoverDrawer({
 
   // Category browse
   const handleCategorySelect = useCallback(async (cat: Category) => {
+    // Toggle off if same category clicked
+    if (selectedCategory === cat) {
+      setSelectedCategory(null);
+      setCategoryResults([]);
+      setCategoryLoading(false);
+      return;
+    }
+
     setSelectedCategory(cat);
     setCategoryLoading(true);
     setCategoryResults([]);
@@ -267,7 +275,7 @@ export function DiscoverDrawer({
     } finally {
       setCategoryLoading(false);
     }
-  }, [destination, archetype]);
+  }, [destination, archetype, selectedCategory]);
 
   // Add handler
   const handleAdd = (suggestion: ProactiveSuggestion | NearbySuggestion) => {
