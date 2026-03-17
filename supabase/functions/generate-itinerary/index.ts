@@ -6450,7 +6450,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
                   id: `injected_${m.id}_${Date.now()}`,
                   title: m.activityName,
                   name: m.activityName,
-                  description: m.userDescription || `Must-do activity: ${m.activityName}`,
+                  description: m.userDescription || `You mentioned "${m.activityName}" — we've added it to your day. Tap to customize details.`,
                   startTime: injectionTime,
                   endTime: injectionEndTime,
                   duration: `${Math.round((m.estimatedDuration || 120) / 60)} hours`,
@@ -6458,6 +6458,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
                   source: 'must_do_injection',
                   cost: { amount: 0, currency: 'USD' },
                   location: { address: '', neighborhood: m.location || '' },
+                  notes: `You mentioned "${m.activityName}" — we've added it to your day. Tap to customize details.`,
                 };
 
                 dayObj.activities.push(injectedActivity);
