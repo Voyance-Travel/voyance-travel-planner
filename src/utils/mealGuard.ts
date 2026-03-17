@@ -31,18 +31,20 @@ const MEAL_KEYWORDS: Record<MealType, string[]> = {
   dinner: ['dinner', 'supper', 'evening meal'],
 };
 
+const DINING_CATEGORIES = ['dining', 'restaurant', 'food', 'cafe', 'meal'];
+
 function detectMeals(activities: ActivityMinimal[]): MealType[] {
   const detected = new Set<MealType>();
   for (const act of activities) {
     const title = (act.title || act.name || '').toLowerCase();
     const category = (act.category || '').toLowerCase();
-    if (!category.includes('dining') && !['dining', 'food', 'restaurant'].some(k => category.includes(k))) {
-      // Also check title for meal keywords even if category isn't dining
-      const hasMealInTitle = Object.values(MEAL_KEYWORDS).flat().some(kw => title.includes(kw));
-      if (!hasMealInTitle) continue;
-    }
+    const isDining = DINING_CATEGORIES.some(c => category.includes(c));
+
     for (const mealType of Object.keys(MEAL_KEYWORDS) as MealType[]) {
-      if (MEAL_KEYWORDS[mealType].some(kw => title.includes(kw) || category.includes(kw))) {
+      // Title-based keyword match works regardless of category
+      if (MEAL_KEYWORDS[mealType].some(kw => title.includes(kw))) {
+        detected.add(mealType);
+      } else if (isDining && MEAL_KEYWORDS[mealType].some(kw => category.includes(kw))) {
         detected.add(mealType);
       }
     }

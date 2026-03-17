@@ -129,6 +129,8 @@ const MEAL_KEYWORDS: Record<RequiredMeal, string[]> = {
   dinner: ['dinner', 'supper', 'evening meal'],
 };
 
+const DINING_CATEGORIES = ['dining', 'restaurant', 'food', 'cafe', 'meal'];
+
 export function detectMealSlots(
   activities: Array<Pick<StrictActivityMinimal, 'title' | 'category'>>
 ): RequiredMeal[] {
@@ -137,11 +139,13 @@ export function detectMealSlots(
   for (const activity of activities) {
     const title = (activity.title || '').toLowerCase();
     const category = (activity.category || '').toLowerCase();
-    const isDining = category === 'dining' || category.includes('dining');
-    if (!isDining) continue;
+    const isDining = DINING_CATEGORIES.some(c => category.includes(c));
 
     for (const mealType of Object.keys(MEAL_KEYWORDS) as RequiredMeal[]) {
-      if (MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword) || category.includes(keyword))) {
+      // Title-based keyword match works regardless of category
+      if (MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword))) {
+        detected.add(mealType);
+      } else if (isDining && MEAL_KEYWORDS[mealType].some(keyword => category.includes(keyword))) {
         detected.add(mealType);
       }
     }
