@@ -1003,7 +1003,8 @@ function fuzzyMatchMustDo(activityTitle: string, mustDoName: string, destination
 
 export function validateMustDosInItinerary(
   itineraryDays: Array<{ dayNumber: number; activities: Array<{ title: string; description?: string }> }>,
-  mustDos: MustDoPriority[]
+  mustDos: MustDoPriority[],
+  destination?: string
 ): { 
   allPresent: boolean; 
   missing: MustDoPriority[]; 
