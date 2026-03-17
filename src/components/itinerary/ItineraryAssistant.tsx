@@ -272,11 +272,15 @@ export function ItineraryAssistant({
 
       // Create assistant message with actions
       const hasActions = response.actions?.length > 0;
-      const messageText = response.message?.trim() || '';
+      let messageText = response.message?.trim() || '';
+      // Strip embedded JSON tool calls that may leak into AI text
+      messageText = messageText.replace(/```(?:json)?\s*[\s\S]*?```/g, '').trim();
+      messageText = messageText.replace(/\{\s*"action"\s*:[\s\S]*?"action_input"\s*:[\s\S]*?\}/g, '').trim();
+      messageText = messageText.replace(/\n{3,}/g, '\n\n').trim();
       const isJsonLeak = messageText.startsWith('{') || messageText.startsWith('[');
 
       const assistantContent = (messageText && !isJsonLeak)
-        ? response.message
+        ? messageText
         : hasActions
           ? "Here's what I'll change:"
           : 'Sorry, something went wrong. Please try again.';
