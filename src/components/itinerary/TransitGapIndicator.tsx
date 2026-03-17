@@ -84,6 +84,8 @@ interface TransitGapIndicatorProps {
   travelers?: number;
   /** Callback when a transport mode is selected — writes transportation data to the activity */
   onSelectMode?: (mode: string, duration: string, cost: { amount: number; currency: string } | null, instructions?: string) => void;
+  /** When true, suppress rendering of zero-gap rows (day-level banner handles it) */
+  suppressZeroGap?: boolean;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────
