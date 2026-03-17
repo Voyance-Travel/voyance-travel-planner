@@ -178,7 +178,17 @@ export function ItineraryGenerator({
       const itData = (tripData?.itinerary_data ?? {}) as Record<string, unknown>;
       const itineraryDays = Array.isArray(itData.days) ? (itData.days as GeneratedDay[]) : [];
 
-      if (itineraryDays.length > 0 && expectedTotalDays > 0 && itineraryDays.length >= expectedTotalDays) {
+      // Accept data if we have enough days OR if we have N-1 days with real activities
+      // (backend sometimes generates one fewer day than the date range implies)
+      const daysWithActivities = itineraryDays.filter(
+        (d: any) => Array.isArray(d.activities) && d.activities.length > 0
+      );
+      if (
+        itineraryDays.length > 0 &&
+        expectedTotalDays > 0 &&
+        (itineraryDays.length >= expectedTotalDays ||
+          daysWithActivities.length >= expectedTotalDays - 1)
+      ) {
         return itineraryDays;
       }
 
@@ -233,10 +243,27 @@ export function ItineraryGenerator({
       } as GeneratedDay;
     });
 
-    if (expectedTotalDays > 0 && fallbackDays.length < expectedTotalDays) {
-      return [];
+    // Merge activities from itinerary_data JSON into empty fallback day shells
+    // This handles the case where itinerary_days rows exist but activities failed to sync
+    const { data: tripDataForMerge } = await supabase
+      .from('trips')
+      .select('itinerary_data')
+      .eq('id', tripId)
+      .single();
+
+    if (tripDataForMerge?.itinerary_data) {
+      const jsonDays = ((tripDataForMerge.itinerary_data as any).days || []) as any[];
+      for (const fb of fallbackDays) {
+        if (fb.activities.length === 0) {
+          const match = jsonDays.find((jd: any) => jd.dayNumber === fb.dayNumber);
+          if (match?.activities?.length > 0) {
+            fb.activities = match.activities;
+          }
+        }
+      }
     }
 
+    // Don't reject fallback days when we have fewer than expected — show what we have
     return fallbackDays;
   }, [tripId]);
 
