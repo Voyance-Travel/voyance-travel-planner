@@ -8562,7 +8562,7 @@ function DayCard({
                 }
                 // Store on day element for child suppression via data attribute
                 (day as any).__zeroGapCount = zeroGapCount;
-                if (zeroGapCount < 2) return null;
+                if (zeroGapCount < 1) return null;
                 return (
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/30">
                     <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
