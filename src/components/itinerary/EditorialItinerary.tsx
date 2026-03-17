@@ -1413,7 +1413,7 @@ export function EditorialItinerary({
 
   // Inject synthetic travel activity cards on transition days:
   // Check-out → Head to transport → Transport (seat/ticket) → Arrival → Check-in
-  const days = useMemo(() => rawDays.map(day => {
+  const days = useMemo(() => rawDays.map((day, dayIndex) => {
     const d = day as any;
     let updatedActivities = [...day.activities];
 
