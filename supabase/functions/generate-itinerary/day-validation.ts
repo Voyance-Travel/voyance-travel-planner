@@ -802,7 +802,7 @@ export function enforceRequiredMealsFinalGuard(
     }
 
     result.push({
-      id: `guard-${mealType}-${dayNumber}-${Date.now()}`,
+      id: crypto.randomUUID(),
       title: venueName!.startsWith(label) ? venueName! : `${label}: ${venueName}`,
       startTime: slot.start,
       endTime: slot.end,

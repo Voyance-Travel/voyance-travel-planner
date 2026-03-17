@@ -97,6 +97,7 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
       continue;
     }
     
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const activityRows = activities.map((act: unknown, idx: number) => {
       const a = act as {
         id?: string; title?: string; name?: string; description?: string;
@@ -111,8 +112,13 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
         viatorProductCode?: string; suggestedFor?: string;
       };
       
+      // Validate ID is a proper UUID — non-UUID IDs (e.g. "guard-breakfast-5-...")
+      // cause upsert failures on the uuid-typed itinerary_activities.id column
+      const rawId = a.id || '';
+      const id = UUID_RE.test(rawId) ? rawId : crypto.randomUUID();
+
       return {
-        id: a.id || `sync-${tripId}-${dayNumber}-${idx}-${Date.now()}`,
+        id,
         itinerary_day_id: dayRow.id,
         trip_id: tripId,
         sort_order: idx,

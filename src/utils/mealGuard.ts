@@ -138,7 +138,7 @@ function ensureDayMeals(
     const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
     const hint = getClientMealHint(destination || '', mealType);
     result.push({
-      id: `guard-${mealType}-${dayNumber}-${Date.now()}`,
+      id: crypto.randomUUID(),
       title: `${label} at a ${hint.venueSuffix}`,
       startTime: slot.start,
       endTime: slot.end,
