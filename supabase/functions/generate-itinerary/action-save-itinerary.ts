@@ -209,6 +209,13 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // ── STEP 2: MEAL COMPLIANCE GUARD ─────────────────────────────
   let mealGuardInjections = 0;
 
+  // Extract flight times so meal policy respects actual departure/arrival
+  const flightSel = trip?.flight_selection as Record<string, any> | null;
+  const savedArrivalTime24: string | undefined =
+    flightSel?.arrivalTime24 || flightSel?.arrivalTime || flightSel?.outbound?.arrivalTime || undefined;
+  const savedDepartureTime24: string | undefined =
+    flightSel?.returnDepartureTime24 || flightSel?.returnDepartureTime || flightSel?.return?.departureTime || undefined;
+
   if (totalDays > 0) {
     for (let i = 0; i < itineraryDays.length; i++) {
       const day = itineraryDays[i];
@@ -223,6 +230,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         totalDays,
         isFirstDay,
         isLastDay,
+        arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+        departureTime24: isLastDay ? savedDepartureTime24 : undefined,
       });
 
       if (policy.requiredMeals.length === 0) continue;
