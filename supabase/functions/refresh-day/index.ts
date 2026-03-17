@@ -211,6 +211,7 @@ Deno.serve(async (req: Request) => {
 
     // Track which activity IDs already have a proposed change
     const changedIds = new Set<string>();
+    const patchedTimes = new Map<string, { start: number; end: number }>();
 
     for (let i = 0; i < sorted.length; i++) {
       const act = sorted[i];
@@ -270,6 +271,7 @@ Deno.serve(async (req: Request) => {
               patch: { startTime: newStart, endTime: newEnd },
             });
             changedIds.add(act.id);
+            patchedTimes.set(act.id, { start: opensMin!, end: opensMin! + duration });
           } else {
             // Too late — calculate an earlier start so activity finishes by closing time
             const closesMin = parseTime(hoursCheck.closes!);
@@ -301,6 +303,7 @@ Deno.serve(async (req: Request) => {
                   patch: { startTime: newStart, endTime: newEnd },
                 });
                 changedIds.add(act.id);
+                patchedTimes.set(act.id, { start: closesMin! - duration, end: closesMin! });
               }
             } else {
               issues.push({
@@ -319,22 +322,27 @@ Deno.serve(async (req: Request) => {
       // 2. Timing overlap with next activity
       if (i < sorted.length - 1) {
         const next = sorted[i + 1];
-        const nextStart = parseTime(next.startTime);
+        const nextStart = patchedTimes.get(next.id)?.start ?? parseTime(next.startTime);
+        // Use cascaded end time if this activity was already shifted
+        const effectiveEnd = patchedTimes.get(act.id)?.end ?? endMin;
 
-        if (endMin !== null && nextStart !== null && endMin > nextStart) {
+        if (effectiveEnd !== null && nextStart !== null && effectiveEnd > nextStart) {
           issues.push({
             type: 'timing_overlap',
             activityId: act.id,
             activityTitle: act.title,
             severity: 'error',
-            message: `"${act.title}" ends at ${act.endTime} but "${next.title}" starts at ${next.startTime}.`,
-            suggestion: `Move "${next.title}" to ${minutesToTime(endMin + 5)} or later.`,
+            message: `"${act.title}" ends at ${patchedTimes.has(act.id) ? minutesToTime(effectiveEnd) : act.endTime} but "${next.title}" starts at ${patchedTimes.has(next.id) ? minutesToTime(nextStart) : next.startTime}.`,
+            suggestion: `Move "${next.title}" to ${minutesToTime(effectiveEnd + 5)} or later.`,
           });
 
           if (!changedIds.has(next.id)) {
-            const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && nextStart !== null ? parseTime(next.endTime)! - nextStart : 60);
-            const fixedStart = minutesToTime(endMin + 5);
-            const fixedEnd = minutesToTime(endMin + 5 + nextDuration);
+            const origNextStart = parseTime(next.startTime);
+            const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && origNextStart !== null ? parseTime(next.endTime)! - origNextStart : 60);
+            const fixedStartMin = effectiveEnd + 5;
+            const fixedEndMin = fixedStartMin + nextDuration;
+            const fixedStart = minutesToTime(fixedStartMin);
+            const fixedEnd = minutesToTime(fixedEndMin);
 
             proposedChanges.push({
               id: `change-${++changeCounter}`,
@@ -348,6 +356,7 @@ Deno.serve(async (req: Request) => {
               patch: { startTime: fixedStart, endTime: fixedEnd },
             });
             changedIds.add(next.id);
+            patchedTimes.set(next.id, { start: fixedStartMin, end: fixedEndMin });
           }
         }
 
@@ -357,8 +366,10 @@ Deno.serve(async (req: Request) => {
           transitEstimates.push(transit);
 
           // 4. Check if gap is sufficient for transit + buffer
-          if (endMin !== null && nextStart !== null) {
-            const gap = nextStart - endMin;
+          const effectiveEndForBuffer = patchedTimes.get(act.id)?.end ?? endMin;
+          const effectiveNextStart = patchedTimes.get(next.id)?.start ?? parseTime(next.startTime);
+          if (effectiveEndForBuffer !== null && effectiveNextStart !== null) {
+            const gap = effectiveNextStart - effectiveEndForBuffer;
             const minBuffer = getMinBufferMinutes(act.category, next.category);
             const totalNeeded = transit.durationMinutes + minBuffer;
 
@@ -369,13 +380,16 @@ Deno.serve(async (req: Request) => {
                 activityTitle: next.title,
                 severity: gap < transit.durationMinutes ? 'error' : 'warning',
                 message: `Only ${gap} min gap between "${act.title}" and "${next.title}", but transit alone is ~${transit.durationMinutes} min ${transit.method} (${transit.distance}).`,
-                suggestion: `Delay "${next.title}" to ${minutesToTime(endMin + totalNeeded)} for a comfortable transition.`,
+                suggestion: `Delay "${next.title}" to ${minutesToTime(effectiveEndForBuffer + totalNeeded)} for a comfortable transition.`,
               });
 
               if (!changedIds.has(next.id)) {
-                const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && nextStart !== null ? parseTime(next.endTime)! - nextStart : 60);
-                const bufferedStart = minutesToTime(endMin + totalNeeded);
-                const bufferedEnd = minutesToTime(endMin + totalNeeded + nextDuration);
+                const origNextStart = parseTime(next.startTime);
+                const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && origNextStart !== null ? parseTime(next.endTime)! - origNextStart : 60);
+                const bufferedStartMin = effectiveEndForBuffer + totalNeeded;
+                const bufferedEndMin = bufferedStartMin + nextDuration;
+                const bufferedStart = minutesToTime(bufferedStartMin);
+                const bufferedEnd = minutesToTime(bufferedEndMin);
 
                 proposedChanges.push({
                   id: `change-${++changeCounter}`,
@@ -389,6 +403,7 @@ Deno.serve(async (req: Request) => {
                   patch: { startTime: bufferedStart, endTime: bufferedEnd },
                 });
                 changedIds.add(next.id);
+                patchedTimes.set(next.id, { start: bufferedStartMin, end: bufferedEndMin });
               }
             }
           }
