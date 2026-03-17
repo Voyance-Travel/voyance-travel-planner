@@ -124,6 +124,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   const [cityTransports, setCityTransports] = useState<InterCityTransportMode[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevExtractedRef = useRef<TripDetails | null>(null);
 
   // Persist chat messages to sessionStorage
   useEffect(() => {
@@ -262,6 +263,13 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
       if (isToolCall && toolCallArgs) {
         try {
           let details = JSON.parse(toolCallArgs) as TripDetails;
+
+          // Merge with previous extraction so "Fix something" corrections don't lose unchanged fields
+          const prev = prevExtractedRef.current;
+          if (prev) {
+            details = { ...prev, ...details, ...(details.cities ? { cities: details.cities } : {}), ...(details.interestCategories ? { interestCategories: details.interestCategories } : {}) };
+            prevExtractedRef.current = null;
+          }
 
           // Hard date guard: force dates to 2026+ and never in the past
           if (details.startDate && details.endDate) {
@@ -479,6 +487,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
                 onDetailsExtracted({ ...extractedDetails, cityTransports });
               }}
               onEdit={() => {
+                prevExtractedRef.current = extractedDetails;
                 setExtractedDetails(null);
                 setCityTransports([]);
                 setMessages(prev => [
