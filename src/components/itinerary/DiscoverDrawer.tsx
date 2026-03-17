@@ -6,14 +6,14 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Compass, Loader2, AlertCircle, ChevronDown } from 'lucide-react';
+import { Compass, Loader2, AlertCircle, ChevronDown, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ProactivePicks, type ProactiveSuggestion } from './discover/ProactivePicks';
 import { ConversationalInput } from './discover/ConversationalInput';
-import { CategoryBrowse, type Category } from './discover/CategoryBrowse';
+import { CategoryBrowse, CATEGORIES, type Category } from './discover/CategoryBrowse';
 import { Badge } from '@/components/ui/badge';
 import { Star, Plus, MapPin, Clock } from 'lucide-react';
 
@@ -232,6 +232,14 @@ export function DiscoverDrawer({
 
   // Category browse
   const handleCategorySelect = useCallback(async (cat: Category) => {
+    // Toggle off if same category clicked
+    if (selectedCategory === cat) {
+      setSelectedCategory(null);
+      setCategoryResults([]);
+      setCategoryLoading(false);
+      return;
+    }
+
     setSelectedCategory(cat);
     setCategoryLoading(true);
     setCategoryResults([]);
@@ -267,7 +275,7 @@ export function DiscoverDrawer({
     } finally {
       setCategoryLoading(false);
     }
-  }, [destination, archetype]);
+  }, [destination, archetype, selectedCategory]);
 
   // Add handler
   const handleAdd = (suggestion: ProactiveSuggestion | NearbySuggestion) => {
@@ -377,6 +385,22 @@ export function DiscoverDrawer({
                   isLoading={categoryLoading}
                 />
 
+                {/* Active filter header */}
+                {selectedCategory && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary border-primary/20">
+                      {CATEGORIES.find(c => c.key === selectedCategory)?.icon}
+                      <span className="capitalize">{CATEGORIES.find(c => c.key === selectedCategory)?.label}</span> in {destination}
+                      <button
+                        onClick={() => { setSelectedCategory(null); setCategoryResults([]); }}
+                        className="ml-1 hover:text-primary/70 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  </div>
+                )}
+
                 {categoryLoading && (
                   <div className="flex items-center gap-2 py-4 justify-center">
                     <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -385,7 +409,13 @@ export function DiscoverDrawer({
                 )}
 
                 {selectedCategory && !categoryLoading && categoryResults.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-3">No {selectedCategory} spots found nearby.</p>
+                  <div className="flex flex-col items-center py-8 text-center rounded-lg border border-dashed border-border/50 bg-muted/30">
+                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-3">
+                      {CATEGORIES.find(c => c.key === selectedCategory)?.icon || <Compass className="h-4 w-4 text-muted-foreground" />}
+                    </div>
+                    <p className="text-sm font-medium text-foreground mb-1">No {selectedCategory} spots found</p>
+                    <p className="text-xs text-muted-foreground">Try another category or search above</p>
+                  </div>
                 )}
 
                 {categoryResults.map((s) => (
