@@ -1022,7 +1022,7 @@ export function validateMustDosInItinerary(
     for (const day of itineraryDays) {
       for (const activity of day.activities) {
         const textToSearch = `${activity.title} ${activity.description || ''}`;
-        if (fuzzyMatchMustDo(textToSearch, mustDo.activityName)) {
+        if (fuzzyMatchMustDo(textToSearch, mustDo.activityName, destination)) {
           found.push({ priority: mustDo, dayNumber: day.dayNumber });
           wasFound = true;
           break;
