@@ -375,10 +375,10 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
   const normalized = item.toLowerCase();
   
   // Detect priority level from language
-  let priority: 'must' | 'high' | 'nice' = 'high';
-  if (normalized.includes('must') || normalized.includes('have to') || normalized.includes('need to')) {
-    priority = 'must';
-  } else if (normalized.includes('would like') || normalized.includes('if possible') || normalized.includes('nice to')) {
+  // Default ALL user-specified must-do items to 'must' priority — if they typed it, they want it.
+  // Only downgrade to 'nice' for explicitly hedged language.
+  let priority: 'must' | 'high' | 'nice' = 'must';
+  if (normalized.includes('would like') || normalized.includes('if possible') || normalized.includes('nice to') || normalized.includes('maybe') || normalized.includes('if we have time')) {
     priority = 'nice';
   }
   
@@ -946,32 +946,65 @@ function getSignificantWords(text: string): string[] {
  * 2. 80%+ of significant words present (fuzzy threshold)
  * 3. Substring containment (activity name contained in title or vice versa)
  */
-function fuzzyMatchMustDo(activityTitle: string, mustDoName: string): boolean {
+// Known destination/city words to strip before concept matching
+const DESTINATION_NOISE = new Set([
+  'trip', 'day', 'visit', 'from', 'near', 'around', 'area', 'region', 'coast', 'island',
+]);
+
+/**
+ * Strip destination/city names from text to isolate the "concept" (e.g., "wine in Sicily" → "wine").
+ */
+function stripDestinationWords(text: string, destination?: string): string[] {
+  const destWords = destination
+    ? destination.toLowerCase().split(/[\s,]+/).filter(w => w.length > 2)
+    : [];
+  const allNoise = new Set([...DESTINATION_NOISE, ...destWords]);
+  return getSignificantWords(text).filter(w => !allNoise.has(w));
+}
+
+function fuzzyMatchMustDo(activityTitle: string, mustDoName: string, destination?: string): boolean {
   const titleLower = activityTitle.toLowerCase();
   const nameLower = mustDoName.toLowerCase();
 
-  // Strategy 3: Direct substring containment
+  // Strategy 1: Direct substring containment
   if (titleLower.includes(nameLower) || nameLower.includes(titleLower)) {
     return true;
   }
 
-  // Strategy 1 & 2: Word-level matching with stop word removal
+  // Strategy 2 & 3: Word-level matching with stop word removal
   const searchWords = getSignificantWords(mustDoName);
   if (searchWords.length === 0) return false;
 
   const matchCount = searchWords.filter(w => titleLower.includes(w)).length;
 
-  // Strategy 1: All significant words present
+  // Strategy 2: All significant words present
   if (matchCount === searchWords.length) return true;
 
-  // Strategy 2: 80% threshold (minimum 2 words matched)
+  // Strategy 3: 80% threshold (minimum 2 words matched)
   const threshold = Math.max(2, Math.ceil(searchWords.length * 0.8));
-  return matchCount >= threshold;
+  if (matchCount >= threshold) return true;
+
+  // Strategy 4: Semantic keyword matching for short experience requests
+  // Strip destination words and match on core concept (e.g., "wine" from "wine in Sicily")
+  const conceptWords = stripDestinationWords(mustDoName, destination);
+  if (conceptWords.length > 0 && conceptWords.length <= 3) {
+    // For short concept phrases, require ALL concept words to appear in the activity
+    const conceptMatchCount = conceptWords.filter(w => titleLower.includes(w)).length;
+    if (conceptMatchCount === conceptWords.length) return true;
+
+    // Single-word concepts: also match against category
+    if (conceptWords.length === 1 && titleLower.includes(conceptWords[0])) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function validateMustDosInItinerary(
   itineraryDays: Array<{ dayNumber: number; activities: Array<{ title: string; description?: string }> }>,
-  mustDos: MustDoPriority[]
+  mustDos: MustDoPriority[],
+  destination?: string
 ): { 
   allPresent: boolean; 
   missing: MustDoPriority[]; 
@@ -981,14 +1014,15 @@ export function validateMustDosInItinerary(
   const missing: MustDoPriority[] = [];
   
   for (const mustDo of mustDos) {
-    if (mustDo.priority !== 'must') continue;
+    // Enforce both 'must' AND 'high' priority items — all user-specified items deserve validation
+    if (mustDo.priority === 'nice') continue;
     
     let wasFound = false;
     
     for (const day of itineraryDays) {
       for (const activity of day.activities) {
         const textToSearch = `${activity.title} ${activity.description || ''}`;
-        if (fuzzyMatchMustDo(textToSearch, mustDo.activityName)) {
+        if (fuzzyMatchMustDo(textToSearch, mustDo.activityName, destination)) {
           found.push({ priority: mustDo, dayNumber: day.dayNumber });
           wasFound = true;
           break;

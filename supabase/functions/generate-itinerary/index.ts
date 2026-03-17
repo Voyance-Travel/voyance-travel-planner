@@ -2885,7 +2885,7 @@ Generate activities for this day following ALL constraints above.`;
             const mustDoSchedule = scheduleMustDos(parsedMustDos, context.totalDays);
             // Filter to must-dos assigned to THIS day
             const thisDayMustDos = mustDoSchedule.scheduled
-              .filter(s => s.assignedDay === dayNumber && s.priority.priority === 'must')
+              .filter(s => s.assignedDay === dayNumber && s.priority.priority !== 'nice')
               .map(s => s.priority);
 
             if (thisDayMustDos.length > 0) {
@@ -2893,7 +2893,7 @@ Generate activities for this day following ALL constraints above.`;
                 dayNumber,
                 activities: (generatedDay.activities || []).map((a: any) => ({ title: a.title || a.name || '', description: a.description || '' })),
               }];
-              const mustDoResult = validateMustDosInItinerary(dayForValidation, thisDayMustDos);
+              const mustDoResult = validateMustDosInItinerary(dayForValidation, thisDayMustDos, context.destination);
               if (!mustDoResult.allPresent && mustDoResult.missing.length > 0) {
                 const missingNames = mustDoResult.missing.map(m => `"${m.activityName}"`).join(', ');
                 console.warn(`[Stage 2] Day ${dayNumber}: MISSING must-do activities: ${missingNames} — triggering retry`);
@@ -6422,7 +6422,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
               dayNumber: d.dayNumber,
               activities: (d.activities || []).map((a: any) => ({ title: a.title || a.name || '', description: a.description || '' })),
             }));
-            const validation = validateMustDosInItinerary(itineraryForValidation, mustDoCheck);
+            const validation = validateMustDosInItinerary(itineraryForValidation, mustDoCheck, context.destination);
 
             if (!validation.allPresent && validation.missing.length > 0) {
               console.warn(`[Stage 2.8] ⚠️ MISSING must-do activities — injecting safety-net placeholders:`);
@@ -6450,7 +6450,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
                   id: `injected_${m.id}_${Date.now()}`,
                   title: m.activityName,
                   name: m.activityName,
-                  description: m.userDescription || `Must-do activity: ${m.activityName}`,
+                  description: m.userDescription || `You mentioned "${m.activityName}" — we've added it to your day. Tap to customize details.`,
                   startTime: injectionTime,
                   endTime: injectionEndTime,
                   duration: `${Math.round((m.estimatedDuration || 120) / 60)} hours`,
@@ -6458,6 +6458,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
                   source: 'must_do_injection',
                   cost: { amount: 0, currency: 'USD' },
                   location: { address: '', neighborhood: m.location || '' },
+                  notes: `You mentioned "${m.activityName}" — we've added it to your day. Tap to customize details.`,
                 };
 
                 dayObj.activities.push(injectedActivity);
