@@ -375,10 +375,10 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
   const normalized = item.toLowerCase();
   
   // Detect priority level from language
-  let priority: 'must' | 'high' | 'nice' = 'high';
-  if (normalized.includes('must') || normalized.includes('have to') || normalized.includes('need to')) {
-    priority = 'must';
-  } else if (normalized.includes('would like') || normalized.includes('if possible') || normalized.includes('nice to')) {
+  // Default ALL user-specified must-do items to 'must' priority — if they typed it, they want it.
+  // Only downgrade to 'nice' for explicitly hedged language.
+  let priority: 'must' | 'high' | 'nice' = 'must';
+  if (normalized.includes('would like') || normalized.includes('if possible') || normalized.includes('nice to') || normalized.includes('maybe') || normalized.includes('if we have time')) {
     priority = 'nice';
   }
   
