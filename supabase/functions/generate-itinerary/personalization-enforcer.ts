@@ -726,7 +726,7 @@ export function deriveForcedSlots(
     
     // Learning & Experiences
     'cooking': { tags: ['cooking', 'culinary', 'class', 'workshop', 'food-experience'], description: 'Cooking class or food workshop', cadence: 4 },
-    'wine': { tags: ['wine', 'vineyard', 'tasting', 'winery', 'sommelier'], description: 'Wine tasting experience', cadence: 3 },
+    'wine': { tags: ['wine', 'vineyard', 'tasting', 'winery', 'sommelier'], description: 'Wine tasting experience', cadence: 2 },
     'craft': { tags: ['craft', 'workshop', 'artisan', 'handmade', 'diy'], description: 'Craft or artisan workshop', cadence: 4 },
     
     // Nightlife & Entertainment
