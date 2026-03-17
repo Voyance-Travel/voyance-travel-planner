@@ -401,6 +401,30 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         ) : null;
       })()}
 
+      {/* Over-budget explainer — actionable guidance when expenses far exceed budget */}
+      {(() => {
+        const budgetCents = settings?.budget_total_cents || 0;
+        if (budgetCents <= 0 || snapshot.tripTotalCents <= budgetCents) return null;
+        const overageCents = snapshot.tripTotalCents - budgetCents;
+        const overagePct = Math.round((overageCents / budgetCents) * 100);
+        // Only show when significantly over (>15%)
+        if (overagePct < 15) return null;
+        return (
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/5 border border-destructive/20">
+            <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-destructive">
+                Trip expenses exceed your budget by {formatCurrency(overageCents)} ({overagePct}%)
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Your budget is {formattedBudget} but the estimated cost for {travelers} traveler{travelers !== 1 ? 's' : ''} is {formatCurrency(snapshot.tripTotalCents)}. 
+                Use the Budget Coach below to find savings, or adjust your budget to match your plans.
+              </p>
+            </div>
+          </div>
+        );
+      })()
+
       {/* Budget Coach — AI suggestions when over budget */}
       {hasBudget && itineraryDays && itineraryDays.length > 0 && summary && (
         <BudgetCoach
