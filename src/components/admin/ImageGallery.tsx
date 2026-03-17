@@ -77,7 +77,16 @@ export default function ImageGallery() {
       if (error) throw error;
 
       const fetched = (data || []) as CuratedImage[];
-      setImages(prev => append ? [...prev, ...fetched] : fetched);
+      // Deduplicate by image_url — keep first occurrence (highest ranked per sort)
+      const deduped = Array.from(
+        new Map(fetched.map(img => [img.image_url, img])).values()
+      );
+      setImages(prev => {
+        if (!append) return deduped;
+        const existing = new Map(prev.map(img => [img.image_url, img]));
+        deduped.forEach(img => { if (!existing.has(img.image_url)) existing.set(img.image_url, img); });
+        return Array.from(existing.values());
+      });
       setHasMore(fetched.length === PAGE_SIZE);
       if (count !== null) setTotalCount(count);
     } catch (err) {
