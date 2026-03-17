@@ -122,7 +122,7 @@ export async function handleGenerateTripDay(
   console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'})`);
 
   // Guard: check trip is still in "generating" state AND run ID matches
-  const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data').eq('id', tripId).single();
+  const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data, flight_selection').eq('id', tripId).single();
   if (!tripCheck || tripCheck.itinerary_status === 'cancelled') {
     console.log(`[generate-trip-day] Trip ${tripId} status is ${tripCheck?.itinerary_status}, stopping chain`);
     return new Response(
@@ -655,6 +655,13 @@ export async function handleGenerateTripDay(
   // ── MEAL COMPLIANCE GUARD (before save) ──────────────────────────
   // The generate-day action already has a meal guard, but this catches
   // edge cases where post-processing in this file may have altered days.
+  // Extract flight times so meal policy respects actual departure/arrival
+  const flightSel = (tripCheck?.flight_selection as Record<string, any>) || null;
+  const savedArrivalTime24: string | undefined =
+    flightSel?.arrivalTime24 || flightSel?.arrivalTime || flightSel?.outbound?.arrivalTime || undefined;
+  const savedDepartureTime24: string | undefined =
+    flightSel?.returnDepartureTime24 || flightSel?.returnDepartureTime || flightSel?.return?.departureTime || undefined;
+
   for (let i = 0; i < updatedDays.length; i++) {
     const d = updatedDays[i];
     if (!d?.activities || !Array.isArray(d.activities)) continue;
@@ -664,6 +671,8 @@ export async function handleGenerateTripDay(
       totalDays,
       isFirstDay: dn === 1,
       isLastDay: dn === totalDays,
+      arrivalTime24: dn === 1 ? savedArrivalTime24 : undefined,
+      departureTime24: dn === totalDays ? savedDepartureTime24 : undefined,
     });
     if (policy.requiredMeals.length === 0) continue;
     const detected = detectMealSlots(d.activities);
