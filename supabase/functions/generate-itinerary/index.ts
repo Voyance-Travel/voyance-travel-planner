@@ -4365,6 +4365,36 @@ async function finalSaveItinerary(
         }
       }
 
+      // ─── POST-GENERATION BUDGET VALIDATION ───
+      // If the user set a real budget, scale down AI costs that overshoot it
+      if (costRows.length > 0 && context.actualDailyBudgetPerPerson != null && context.actualDailyBudgetPerPerson > 0) {
+        const budgetCap = context.actualDailyBudgetPerPerson; // per person, dollars
+        const tolerance = 1.2; // allow 20% over before scaling
+
+        // Group cost rows by day
+        const dayGroups = new Map<number, typeof costRows>();
+        for (const row of costRows) {
+          const dayNum = row.day_number as number;
+          if (!dayGroups.has(dayNum)) dayGroups.set(dayNum, []);
+          dayGroups.get(dayNum)!.push(row);
+        }
+
+        for (const [dayNum, rows] of dayGroups) {
+          const dayTotal = rows.reduce((sum, r) => sum + (r.cost_per_person_usd as number), 0);
+          const cappedTotal = budgetCap * tolerance; // 110% → target after scaling
+
+          if (dayTotal > budgetCap * tolerance) {
+            // Scale all costs proportionally to fit within 110% of daily cap
+            const scaleFactor = (budgetCap * 1.1) / dayTotal;
+            console.log(`[Budget Validation] Day ${dayNum}: $${dayTotal.toFixed(0)}/pp exceeds cap $${budgetCap.toFixed(0)}/pp by ${Math.round((dayTotal / budgetCap - 1) * 100)}%. Scaling by ${scaleFactor.toFixed(2)}`);
+            for (const row of rows) {
+              (row as any).cost_per_person_usd = Math.round((row.cost_per_person_usd as number) * scaleFactor * 100) / 100;
+              (row as any).notes = ((row as any).notes || '') + ` [Budget-scaled from $${((row.cost_per_person_usd as number) / scaleFactor).toFixed(0)}]`;
+            }
+          }
+        }
+      }
+
       if (costRows.length > 0) {
         // Delete existing rows for this trip, then insert fresh
         await supabase.from('activity_costs').delete().eq('trip_id', tripId);
