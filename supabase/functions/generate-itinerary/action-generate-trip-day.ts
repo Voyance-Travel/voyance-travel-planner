@@ -122,7 +122,7 @@ export async function handleGenerateTripDay(
   console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'})`);
 
   // Guard: check trip is still in "generating" state AND run ID matches
-  const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data').eq('id', tripId).single();
+  const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data, flight_selection').eq('id', tripId).single();
   if (!tripCheck || tripCheck.itinerary_status === 'cancelled') {
     console.log(`[generate-trip-day] Trip ${tripId} status is ${tripCheck?.itinerary_status}, stopping chain`);
     return new Response(
