@@ -124,6 +124,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
   const [cityTransports, setCityTransports] = useState<InterCityTransportMode[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevExtractedRef = useRef<TripDetails | null>(null);
 
   // Persist chat messages to sessionStorage
   useEffect(() => {
