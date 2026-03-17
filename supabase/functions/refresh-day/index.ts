@@ -303,6 +303,7 @@ Deno.serve(async (req: Request) => {
                   patch: { startTime: newStart, endTime: newEnd },
                 });
                 changedIds.add(act.id);
+                patchedTimes.set(act.id, { start: closesMin! - duration, end: closesMin! });
               }
             } else {
               issues.push({
