@@ -271,6 +271,7 @@ Deno.serve(async (req: Request) => {
               patch: { startTime: newStart, endTime: newEnd },
             });
             changedIds.add(act.id);
+            patchedTimes.set(act.id, { start: opensMin!, end: opensMin! + duration });
           } else {
             // Too late — calculate an earlier start so activity finishes by closing time
             const closesMin = parseTime(hoursCheck.closes!);
