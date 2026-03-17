@@ -7,7 +7,7 @@
  * Supports multi-leg flights (multi-city, round-trip, one-way).
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BoardingPassUpload } from './BoardingPassUpload';
 import { useNavigate } from 'react-router-dom';
 import { Plane, Hotel, Plus, ArrowRight, Loader2, CalendarIcon, ChevronDown, ChevronUp, Upload, Sparkles, MapPin } from 'lucide-react';
