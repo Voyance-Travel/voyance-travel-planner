@@ -353,10 +353,14 @@ export default function TravelIntelCard({
               )}
 
               {/* ── Events & Happenings ── */}
-              {intel.eventsAndHappenings?.length > 0 && (
+              {(() => {
+                const filteredEvents = (intel.eventsAndHappenings || []).filter(
+                  ev => isEventInDateRange(ev.dates, startDate, endDate)
+                );
+                return filteredEvents.length > 0 ? (
                 <Section icon={CalendarDays} title="During Your Trip" iconColor="text-rose-500">
                   <div className="space-y-2.5">
-                    {intel.eventsAndHappenings.map((ev, i) => (
+                    {filteredEvents.map((ev, i) => (
                       <div key={i} className="flex items-start gap-2.5">
                         {(() => { const EvIcon = eventTypeIcon[ev.type] || Pin; return <EvIcon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />; })()}
                         <div className="flex-1 min-w-0">
