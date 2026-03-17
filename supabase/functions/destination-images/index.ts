@@ -60,30 +60,55 @@ async function checkCuratedCache(
 ): Promise<DestinationImage | null> {
   try {
     const normalizedKey = entityKey.toLowerCase().trim().replace(/[^a-z0-9\s]/g, "").slice(0, 100);
+    const cleanName = entityKey.trim().replace(/[^a-zA-Z0-9 ]/g, "");
+    const nowIso = new Date().toISOString();
 
+    // --- Attempt 1: exact entity_key match (fast, indexed) ---
     let query = supabase
       .from("curated_images")
       .select("*")
       .eq("entity_type", entityType)
-      // IMPORTANT: exact match to avoid returning unrelated cached images
       .eq("entity_key", normalizedKey)
-      // Exclude blacklisted images (voted down by admins)
       .eq("is_blacklisted", false)
-      // Only return non-expired entries (or entries without expiry)
-      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
 
     if (destination) {
-      // Keep flexible destination matching (some cached entries may include country)
       query = query.ilike("destination", `%${destination}%`);
     }
 
-    // Prefer higher-quality and vote score, then newer cache entries
     query = query
       .order("vote_score", { ascending: false, nullsFirst: false })
       .order("quality_score", { ascending: false, nullsFirst: false })
       .order("updated_at", { ascending: false });
 
-    const { data, error } = await query.limit(5);
+    let { data, error } = await query.limit(5);
+
+    // --- Attempt 2: fallback to alt_text fuzzy search (unlocks Place ID-keyed rows) ---
+    if ((!data || data.length === 0) && cleanName.length >= 3) {
+      console.log(`[Images] No exact entity_key match for "${normalizedKey}", trying alt_text search...`);
+      let altQuery = supabase
+        .from("curated_images")
+        .select("*")
+        .eq("entity_type", entityType)
+        .eq("is_blacklisted", false)
+        .ilike("alt_text", `%${cleanName}%`)
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+
+      if (destination) {
+        altQuery = altQuery.ilike("destination", `%${destination}%`);
+      }
+
+      altQuery = altQuery
+        .order("vote_score", { ascending: false, nullsFirst: false })
+        .order("quality_score", { ascending: false, nullsFirst: false })
+        .order("updated_at", { ascending: false });
+
+      const altResult = await altQuery.limit(5);
+      if (!altResult.error && altResult.data && altResult.data.length > 0) {
+        data = altResult.data;
+        console.log(`[Images] ✅ alt_text fallback found ${data.length} match(es) for "${cleanName}"`);
+      }
+    }
 
     if (error || !data || data.length === 0) {
       return null;
