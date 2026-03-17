@@ -1652,6 +1652,31 @@ export function EditorialItinerary({
     }
   }, [selectedDayIndex, days, onActiveDayChange]);
 
+  // Notify parent of active city for multi-city hero image
+  useEffect(() => {
+    if (!onActiveCityChange) return;
+    const day = days[selectedDayIndex];
+    if (!day) return;
+
+    let cityName: string | null = (day as any).city || null;
+    if (!cityName && allHotels && allHotels.length > 1) {
+      const dayDate = day.date ? (() => { try { return parseLocalDate(day.date); } catch { return null; } })() : null;
+      if (dayDate) {
+        const dateStr = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, '0')}-${String(dayDate.getDate()).padStart(2, '0')}`;
+        for (const ch of allHotels) {
+          if (ch.checkInDate && ch.checkOutDate && dateStr >= ch.checkInDate && dateStr < ch.checkOutDate) {
+            cityName = ch.cityName;
+            break;
+          }
+        }
+      }
+      if (!cityName && day.title && allHotels.some(h => day.title?.includes(h.cityName))) {
+        cityName = allHotels.find(h => day.title?.includes(h.cityName))?.cityName || null;
+      }
+    }
+    onActiveCityChange(cityName);
+  }, [selectedDayIndex, days, allHotels, onActiveCityChange]);
+
   const { user } = useAuth();
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
   const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
