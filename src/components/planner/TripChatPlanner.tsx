@@ -487,6 +487,7 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
                 onDetailsExtracted({ ...extractedDetails, cityTransports });
               }}
               onEdit={() => {
+                prevExtractedRef.current = extractedDetails;
                 setExtractedDetails(null);
                 setCityTransports([]);
                 setMessages(prev => [
