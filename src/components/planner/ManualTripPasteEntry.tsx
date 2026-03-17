@@ -5,10 +5,10 @@
  * itinerary scaffold, and creates a trip in manual builder mode.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ClipboardPaste, Loader2, Sparkles, X, Check, ArrowRight, PenLine, AlertCircle } from 'lucide-react';
+import { ClipboardPaste, Loader2, Sparkles, X, Check, ArrowRight, PenLine, AlertCircle, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +55,8 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
   const [editedPreferences, setEditedPreferences] = useState<ParsedPreferences | null>(null);
   const [saveToProfile, setSaveToProfile] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [editedStartDate, setEditedStartDate] = useState('');
+  const [editedEndDate, setEditedEndDate] = useState('');
 
   // Restore draft after auth redirect
   useState(() => {
@@ -129,6 +131,8 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
 
       setParsed(result);
       setEditedPreferences(result.preferences || null);
+      setEditedStartDate(result.dates?.start || '');
+      setEditedEndDate(result.dates?.end || '');
       setStep('review');
     } catch (err) {
       console.error('[ManualPaste] Exception:', err);
@@ -164,7 +168,16 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
         }
       }
 
-      const result = await createTripFromParsed(parsed, user.id);
+      // Merge edited dates back into parsed before creating trip
+      const finalParsed = { ...parsed };
+      if (editedStartDate || editedEndDate) {
+        finalParsed.dates = {
+          start: editedStartDate || parsed.dates?.start || '',
+          end: editedEndDate || parsed.dates?.end || '',
+        };
+      }
+
+      const result = await createTripFromParsed(finalParsed, user.id);
 
       if ('error' in result) {
         toast.error(result.error);
@@ -286,6 +299,48 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
                   {parsed.days.length} {parsed.days.length === 1 ? 'day' : 'days'} · {totalActivities} activities
                 </Badge>
               </div>
+
+              {/* Editable dates */}
+              <div className="flex items-center gap-2 text-sm">
+                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                {editedStartDate ? (
+                  <input
+                    type="date"
+                    value={editedStartDate}
+                    onChange={(e) => setEditedStartDate(e.target.value)}
+                    className="bg-transparent border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                ) : (
+                  <button
+                    onClick={() => setEditedStartDate(new Date().toISOString().split('T')[0])}
+                    className="text-xs text-muted-foreground underline decoration-dashed hover:text-foreground transition-colors"
+                  >
+                    Add start date
+                  </button>
+                )}
+                <span className="text-muted-foreground">→</span>
+                {editedEndDate ? (
+                  <input
+                    type="date"
+                    value={editedEndDate}
+                    onChange={(e) => setEditedEndDate(e.target.value)}
+                    className="bg-transparent border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                ) : (
+                  <button
+                    onClick={() => setEditedEndDate(new Date().toISOString().split('T')[0])}
+                    className="text-xs text-muted-foreground underline decoration-dashed hover:text-foreground transition-colors"
+                  >
+                    Add end date
+                  </button>
+                )}
+              </div>
+              {!editedStartDate && !editedEndDate && (
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  No dates detected — add them now or edit later
+                </p>
+              )}
 
               {/* Day preview */}
               <div className="space-y-2">
