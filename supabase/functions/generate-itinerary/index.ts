@@ -2893,7 +2893,7 @@ Generate activities for this day following ALL constraints above.`;
                 dayNumber,
                 activities: (generatedDay.activities || []).map((a: any) => ({ title: a.title || a.name || '', description: a.description || '' })),
               }];
-              const mustDoResult = validateMustDosInItinerary(dayForValidation, thisDayMustDos);
+              const mustDoResult = validateMustDosInItinerary(dayForValidation, thisDayMustDos, context.destination);
               if (!mustDoResult.allPresent && mustDoResult.missing.length > 0) {
                 const missingNames = mustDoResult.missing.map(m => `"${m.activityName}"`).join(', ');
                 console.warn(`[Stage 2] Day ${dayNumber}: MISSING must-do activities: ${missingNames} — triggering retry`);
