@@ -8787,6 +8787,7 @@ function DayCard({
                         isEditable={isEditable}
                         tripCurrency={tripCurrency}
                         travelers={travelers}
+                        suppressZeroGap={((day as any).__zeroGapCount ?? 0) >= 2}
                         onSelectMode={isEditable && onSetActivityTransportation ? (mode, duration, cost, instructions) => {
                           onSetActivityTransportation(dayIndex, activityIndex, {
                             method: mode,

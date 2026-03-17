@@ -345,6 +345,8 @@ export function TransitGapIndicator({
 
   // Early returns after all hooks
   if (shouldHide) return null;
+  // Suppress zero-gap inline rows when day-level banner is already shown
+  if (suppressZeroGap && isZeroGap) return null;
 
   return (
     <div>
