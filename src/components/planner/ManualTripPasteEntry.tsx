@@ -131,6 +131,8 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
 
       setParsed(result);
       setEditedPreferences(result.preferences || null);
+      setEditedStartDate(result.dates?.start || '');
+      setEditedEndDate(result.dates?.end || '');
       setStep('review');
     } catch (err) {
       console.error('[ManualPaste] Exception:', err);
