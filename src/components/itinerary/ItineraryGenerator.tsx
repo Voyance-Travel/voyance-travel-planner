@@ -178,7 +178,17 @@ export function ItineraryGenerator({
       const itData = (tripData?.itinerary_data ?? {}) as Record<string, unknown>;
       const itineraryDays = Array.isArray(itData.days) ? (itData.days as GeneratedDay[]) : [];
 
-      if (itineraryDays.length > 0 && expectedTotalDays > 0 && itineraryDays.length >= expectedTotalDays) {
+      // Accept data if we have enough days OR if we have N-1 days with real activities
+      // (backend sometimes generates one fewer day than the date range implies)
+      const daysWithActivities = itineraryDays.filter(
+        (d: any) => Array.isArray(d.activities) && d.activities.length > 0
+      );
+      if (
+        itineraryDays.length > 0 &&
+        expectedTotalDays > 0 &&
+        (itineraryDays.length >= expectedTotalDays ||
+          daysWithActivities.length >= expectedTotalDays - 1)
+      ) {
         return itineraryDays;
       }
 
