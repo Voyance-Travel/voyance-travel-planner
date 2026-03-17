@@ -452,6 +452,8 @@ export interface EditorialItineraryProps {
   onDaysChange?: (days: EditorialDay[]) => void;
   /** Called when the user switches to a different day (for chat context) */
   onActiveDayChange?: (dayNumber: number) => void;
+  /** Called when the active city changes (for multi-city hero images) */
+  onActiveCityChange?: (cityName: string | null) => void;
   /** Expose a way for parent to programmatically switch to the details tab and scroll to a section */
   navigateToSection?: string | null;
   /** Raw itinerary_data object so we can restore optionSelections on page load */
