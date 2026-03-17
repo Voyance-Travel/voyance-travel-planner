@@ -187,6 +187,21 @@ export function AddFlightInline({
   const [expandedLeg, setExpandedLeg] = useState<number | null>(null);
   const [arrivalTimeError, setArrivalTimeError] = useState(false);
 
+  // Reset state when key props change (e.g., switching trips)
+  useEffect(() => {
+    setLegs(buildInitialLegs());
+    setExpandedLeg(null);
+    setShowManualEntry(editMode);
+  }, [
+    tripId,
+    origin,
+    editMode,
+    JSON.stringify(existingLegs),
+    JSON.stringify(multiCityRoute),
+    existingOutbound?.departureAirport,
+    existingReturn?.departureAirport,
+  ]);
+
   const updateLeg = (index: number, patch: Partial<ManualFlightEntry>) => {
     setLegs(prev => prev.map((leg, i) => i === index ? { ...leg, ...patch } : leg));
   };
