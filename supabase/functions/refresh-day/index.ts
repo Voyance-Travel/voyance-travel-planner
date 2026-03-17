@@ -211,6 +211,7 @@ Deno.serve(async (req: Request) => {
 
     // Track which activity IDs already have a proposed change
     const changedIds = new Set<string>();
+    const patchedTimes = new Map<string, { start: number; end: number }>();
 
     for (let i = 0; i < sorted.length; i++) {
       const act = sorted[i];
