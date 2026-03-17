@@ -1602,6 +1602,90 @@ export function EditorialItinerary({
       }
     }
 
+    // === Final departure day: inject return flight/train card on last day ===
+    if (dayIndex === rawDays.length - 1 && !d.isDepartureDay && !d.isTransitionDay && flightSelection) {
+      if (!updatedActivities.some(a => (a as any).__syntheticFinalDeparture)) {
+        // Find the return leg: prefer isDestinationDeparture-marked leg, then flightSelection.return, then last leg
+        const allLegs = flightSelection.legs || [];
+        const returnLeg: FlightLegDisplay | undefined =
+          allLegs.find(l => l.isDestinationDeparture) ||
+          flightSelection.return ||
+          (allLegs.length >= 2 ? allLegs[allLegs.length - 1] : undefined);
+
+        if (returnLeg) {
+          const dn = day.dayNumber;
+          const carrier = returnLeg.airline || '';
+          const flightNum = returnLeg.flightNumber || '';
+          const depTime = returnLeg.departure?.time || '';
+          const arrTime = returnLeg.arrival?.time || '';
+          const depAirport = returnLeg.departure?.airport || '';
+          const arrAirport = returnLeg.arrival?.airport || '';
+          const dur = returnLeg.duration || '';
+          const seatInfo = returnLeg.cabinClass || returnLeg.seat || '';
+          const bookingRef = returnLeg.confirmationCode || '';
+          const price = returnLeg.price;
+
+          // Detect transport type from carrier/flight number
+          const hasFlightNum = !!(flightNum || (carrier && !carrier.toLowerCase().includes('train')));
+          const tType = hasFlightNum ? 'flight' : 'train';
+          const transportLabel = tType.charAt(0).toUpperCase() + tType.slice(1);
+          const title = arrAirport ? `${transportLabel} to ${arrAirport}` : `${transportLabel} home`;
+          const cardTime = depTime || '18:00';
+
+          const depInterCityCategory = tType === 'flight' ? 'inter_city_flight' : 'inter_city_train';
+
+          const departureCard: EditorialActivity = {
+            id: `final-departure-${dn}`,
+            title,
+            name: title,
+            type: depInterCityCategory,
+            category: depInterCityCategory,
+            isLocked: false,
+            startTime: cardTime,
+            endTime: arrTime || undefined,
+            duration: dur || '~',
+            description: [
+              carrier && flightNum ? `${carrier} ${flightNum}` : carrier || '',
+              dur || '',
+            ].filter(Boolean).join(' · '),
+            location: undefined,
+            __syntheticFinalDeparture: true,
+            __interCityTransport: true,
+            __travelMeta: {
+              from: depAirport,
+              to: arrAirport,
+              transportName: transportLabel,
+              hubLabel: tType === 'flight' ? 'airport' : 'station',
+              carrier,
+              flightNum,
+              depTime,
+              arrTime,
+              dur,
+              seatInfo,
+              bookingRef,
+              price,
+              currency: 'USD',
+            },
+          } as any;
+
+          // Insert chronologically
+          const cardMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+          let insertIndex = updatedActivities.length;
+          for (let i = 0; i < updatedActivities.length; i++) {
+            const actTime = updatedActivities[i].startTime;
+            if (actTime) {
+              const actMinutes = parseInt(actTime.split(':')[0]) * 60 + parseInt(actTime.split(':')[1] || '0');
+              if (actMinutes > cardMinutes) {
+                insertIndex = i;
+                break;
+              }
+            }
+          }
+          updatedActivities.splice(insertIndex, 0, departureCard);
+        }
+      }
+    }
+
     return {
       ...day,
       activities: updatedActivities,
