@@ -8532,12 +8532,27 @@ function DayCard({
                     if (!sameLocation) zeroGapCount++;
                   }
                 }
+                // Store on day element for child suppression via data attribute
+                (day as any).__zeroGapCount = zeroGapCount;
                 if (zeroGapCount < 2) return null;
                 return (
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/30">
                     <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <p className="text-xs text-muted-foreground">
-                      <span className="font-medium">{zeroGapCount} activities</span> have no travel buffer — consider using <span className="font-medium text-primary cursor-pointer">Refresh Day</span> to fix timing.
+                      <span className="font-medium">{zeroGapCount} activities</span> have no travel buffer —{' '}
+                      {onRefreshDay ? (
+                        <button
+                          type="button"
+                          onClick={onRefreshDay}
+                          disabled={isRefreshingDay}
+                          className="font-medium text-primary hover:underline cursor-pointer disabled:opacity-50 bg-transparent border-none p-0 inline"
+                        >
+                          Refresh Day
+                        </button>
+                      ) : (
+                        <span className="font-medium text-primary">Refresh Day</span>
+                      )}
+                      {' '}to fix timing.
                     </p>
                   </div>
                 );
@@ -8772,6 +8787,7 @@ function DayCard({
                         isEditable={isEditable}
                         tripCurrency={tripCurrency}
                         travelers={travelers}
+                        suppressZeroGap={((day as any).__zeroGapCount ?? 0) >= 2}
                         onSelectMode={isEditable && onSetActivityTransportation ? (mode, duration, cost, instructions) => {
                           onSetActivityTransportation(dayIndex, activityIndex, {
                             method: mode,

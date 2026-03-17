@@ -84,6 +84,8 @@ interface TransitGapIndicatorProps {
   travelers?: number;
   /** Callback when a transport mode is selected — writes transportation data to the activity */
   onSelectMode?: (mode: string, duration: string, cost: { amount: number; currency: string } | null, instructions?: string) => void;
+  /** When true, suppress rendering of zero-gap rows (day-level banner handles it) */
+  suppressZeroGap?: boolean;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────
@@ -201,6 +203,7 @@ export function TransitGapIndicator({
   tripCurrency = 'USD',
   travelers = 1,
   onSelectMode,
+  suppressZeroGap = false,
 }: TransitGapIndicatorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [options, setOptions] = useState<TransportOptionData[]>([]);
@@ -342,6 +345,8 @@ export function TransitGapIndicator({
 
   // Early returns after all hooks
   if (shouldHide) return null;
+  // Suppress zero-gap inline rows when day-level banner is already shown
+  if (suppressZeroGap && isZeroGap) return null;
 
   return (
     <div>
