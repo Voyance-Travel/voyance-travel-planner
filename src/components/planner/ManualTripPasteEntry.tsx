@@ -5,7 +5,7 @@
  * itinerary scaffold, and creates a trip in manual builder mode.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ClipboardPaste, Loader2, Sparkles, X, Check, ArrowRight, PenLine, AlertCircle } from 'lucide-react';
