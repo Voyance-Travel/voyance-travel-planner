@@ -593,6 +593,18 @@ ${itineraryDescription}
       textContent = "I'm working on updating your itinerary. Let me try that again.";
     }
 
+    // Strip embedded JSON tool calls that leak into natural-language text
+    // Case 1: markdown-fenced JSON blocks (```json ... ```)
+    textContent = textContent.replace(/```(?:json)?\s*[\s\S]*?```/g, '').trim();
+    // Case 2: inline tool-call objects ({ "action": "...", "action_input": "..." })
+    textContent = textContent.replace(/\{\s*"action"\s*:[\s\S]*?"action_input"\s*:[\s\S]*?\}/g, '').trim();
+    // Clean up leftover whitespace / empty lines
+    textContent = textContent.replace(/\n{3,}/g, '\n\n').trim();
+
+    if (!textContent && toolCalls.length > 0) {
+      textContent = "Here's what I'll change:";
+    }
+
     const actions: Array<{
       type: string;
       params: Record<string, any>;
