@@ -170,7 +170,7 @@ Rules:
                           suggested_swap: {
                             type: "string",
                             description:
-                              "Name of the cheaper alternative",
+                              "The specific name of a real venue, restaurant, or experience to replace the current one. Must be a concrete, real place name (e.g. 'Trattoria da Mario', 'Self-guided walk through Montmartre') — NOT a generic description like 'lower cost restaurant' or 'cheaper option'.",
                           },
                           new_cost: {
                             type: "number",
