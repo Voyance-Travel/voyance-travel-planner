@@ -111,6 +111,89 @@ interface TravelIntelCardProps {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+const MONTH_NAMES: Record<string, number> = {
+  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+  jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+};
+
+/**
+ * Best-effort check whether a freeform event date string overlaps with the trip window.
+ * Returns true (keep event) when:
+ *  - The string is recurring ("Every …", "Daily", "Weekends", etc.)
+ *  - The string can't be parsed (safe default — don't hide what we can't validate)
+ *  - The parsed dates overlap with [tripStart, tripEnd]
+ */
+function isEventInDateRange(eventDates: string, tripStart: string, tripEnd: string): boolean {
+  if (!eventDates) return true;
+  const lower = eventDates.toLowerCase().trim();
+
+  // Recurring / ongoing → always keep
+  if (/\b(every|daily|weekends?|weekdays?|ongoing|all\s+(month|year|season)|nightly)\b/i.test(lower)) {
+    return true;
+  }
+
+  const tripStartDate = new Date(tripStart + 'T00:00:00');
+  const tripEndDate = new Date(tripEnd + 'T23:59:59');
+  if (isNaN(tripStartDate.getTime()) || isNaN(tripEndDate.getTime())) return true;
+
+  // Try to extract month + day(s) from the string
+  // Patterns: "March 15", "March 15-17", "March 15 - April 2", "15 March", "Jun 3 – Jun 10"
+  const monthDayRangeRe = /([a-z]+)\s+(\d{1,2})\s*[-–—]\s*(?:([a-z]+)\s+)?(\d{1,2})/i;
+  const singleDateRe = /([a-z]+)\s+(\d{1,2})/i;
+  const dayMonthRe = /(\d{1,2})\s+([a-z]+)/i;
+
+  // Helper: resolve month+day to a Date using the trip's year context
+  const resolve = (monthStr: string, day: number): Date | null => {
+    const m = MONTH_NAMES[monthStr.toLowerCase()];
+    if (m === undefined) return null;
+    // Use trip start year; if event month < trip start month, might be next year
+    let year = tripStartDate.getFullYear();
+    const d = new Date(year, m, day);
+    // If date is way before trip start, try next year
+    if (d.getTime() < tripStartDate.getTime() - 180 * 86400000) {
+      return new Date(year + 1, m, day);
+    }
+    return d;
+  };
+
+  // Try range: "March 15-17" or "March 15 - April 2"
+  const rangeMatch = eventDates.match(monthDayRangeRe);
+  if (rangeMatch) {
+    const startMonth = rangeMatch[1];
+    const startDay = parseInt(rangeMatch[2], 10);
+    const endMonth = rangeMatch[3] || startMonth;
+    const endDay = parseInt(rangeMatch[4], 10);
+    const evStart = resolve(startMonth, startDay);
+    const evEnd = resolve(endMonth, endDay);
+    if (evStart && evEnd) {
+      // Check overlap: event range overlaps trip range
+      return evStart <= tripEndDate && evEnd >= tripStartDate;
+    }
+  }
+
+  // Try single date: "March 15"
+  const singleMatch = eventDates.match(singleDateRe);
+  if (singleMatch) {
+    const evDate = resolve(singleMatch[1], parseInt(singleMatch[2], 10));
+    if (evDate) {
+      return evDate >= tripStartDate && evDate <= tripEndDate;
+    }
+  }
+
+  // Try day-month order: "15 March"
+  const dayMonthMatch = eventDates.match(dayMonthRe);
+  if (dayMonthMatch) {
+    const evDate = resolve(dayMonthMatch[2], parseInt(dayMonthMatch[1], 10));
+    if (evDate) {
+      return evDate >= tripStartDate && evDate <= tripEndDate;
+    }
+  }
+
+  // Can't parse → keep (safe default)
+  return true;
+}
+
 const eventTypeIcon: Record<string, React.ElementType> = {
   festival: Gift, exhibition: Palette, sports: Trophy, concert: Music,
   theatre: Theater, market: ShoppingBag, holiday: Sparkles, other: Pin,
@@ -270,10 +353,14 @@ export default function TravelIntelCard({
               )}
 
               {/* ── Events & Happenings ── */}
-              {intel.eventsAndHappenings?.length > 0 && (
+              {(() => {
+                const filteredEvents = (intel.eventsAndHappenings || []).filter(
+                  ev => isEventInDateRange(ev.dates, startDate, endDate)
+                );
+                return filteredEvents.length > 0 ? (
                 <Section icon={CalendarDays} title="During Your Trip" iconColor="text-rose-500">
                   <div className="space-y-2.5">
-                    {intel.eventsAndHappenings.map((ev, i) => (
+                    {filteredEvents.map((ev, i) => (
                       <div key={i} className="flex items-start gap-2.5">
                         {(() => { const EvIcon = eventTypeIcon[ev.type] || Pin; return <EvIcon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />; })()}
                         <div className="flex-1 min-w-0">
@@ -293,7 +380,8 @@ export default function TravelIntelCard({
                     ))}
                   </div>
                 </Section>
-              )}
+                ) : null;
+              })()}
 
               {/* ── Getting Around ── */}
               {intel.gettingAround && (

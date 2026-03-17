@@ -173,6 +173,7 @@ RULES:
 - ALL information must be specific to ${locationContext} during ${startDate} to ${endDate}
 - Weather/packing must reflect the ACTUAL season for those dates, not generic "best time to visit"
 - Events must be real events actually happening during those dates. If unsure, don't fabricate — include fewer but accurate ones
+- Do NOT include events that end before ${startDate} or start after ${endDate}. Every event MUST overlap with the travel window ${startDate} to ${endDate}
 - eventsAndHappenings: 3-6 events. Include festivals, exhibitions, sporting events, seasonal markets, holidays
 - bookNowVsWalkUp: 3-5 items in each list
 - localCustomsAndEtiquette: 3-5 do/don't pairs
