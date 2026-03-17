@@ -8567,7 +8567,7 @@ function DayCard({
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/30">
                     <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <p className="text-xs text-muted-foreground">
-                      <span className="font-medium">{zeroGapCount} activities</span> have no travel buffer —{' '}
+                      <span className="font-medium">{zeroGapCount} {zeroGapCount === 1 ? 'activity' : 'activities'}</span> {zeroGapCount === 1 ? 'has' : 'have'} no travel buffer —{' '}
                       {onRefreshDay ? (
                         <button
                           type="button"
