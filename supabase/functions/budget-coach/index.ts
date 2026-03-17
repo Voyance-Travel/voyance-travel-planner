@@ -279,6 +279,22 @@ Rules:
         const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
         if (rawNew === null || rawNew < 0) return null;
 
+        // GENERIC NAME FILTER: reject vague swap names
+        const swapName = (s.suggested_swap || "").toLowerCase();
+        const GENERIC_PATTERNS = [
+          "lower cost", "cheaper", "budget", "affordable", "inexpensive",
+          "alternative option", "similar restaurant", "similar cafe", "similar café",
+          "local eatery", "local restaurant", "local cafe", "local café",
+          "generic", "another option", "different restaurant", "different cafe",
+          "mid-range", "moderately priced", "less expensive", "cost-effective",
+          "economy", "no-frills",
+        ];
+        const isGeneric = GENERIC_PATTERNS.some((p) => swapName.includes(p));
+        if (isGeneric) {
+          console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
+          return null;
+        }
+
         // Convert AI's whole-currency value to cents
         const newCostCents = Math.round(rawNew * 100);
 
