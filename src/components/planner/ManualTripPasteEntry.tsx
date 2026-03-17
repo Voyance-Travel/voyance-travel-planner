@@ -300,6 +300,48 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
                 </Badge>
               </div>
 
+              {/* Editable dates */}
+              <div className="flex items-center gap-2 text-sm">
+                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                {editedStartDate ? (
+                  <input
+                    type="date"
+                    value={editedStartDate}
+                    onChange={(e) => setEditedStartDate(e.target.value)}
+                    className="bg-transparent border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                ) : (
+                  <button
+                    onClick={() => setEditedStartDate(new Date().toISOString().split('T')[0])}
+                    className="text-xs text-muted-foreground underline decoration-dashed hover:text-foreground transition-colors"
+                  >
+                    Add start date
+                  </button>
+                )}
+                <span className="text-muted-foreground">→</span>
+                {editedEndDate ? (
+                  <input
+                    type="date"
+                    value={editedEndDate}
+                    onChange={(e) => setEditedEndDate(e.target.value)}
+                    className="bg-transparent border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                ) : (
+                  <button
+                    onClick={() => setEditedEndDate(new Date().toISOString().split('T')[0])}
+                    className="text-xs text-muted-foreground underline decoration-dashed hover:text-foreground transition-colors"
+                  >
+                    Add end date
+                  </button>
+                )}
+              </div>
+              {!editedStartDate && !editedEndDate && (
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  No dates detected — add them now or edit later
+                </p>
+              )}
+
               {/* Day preview */}
               <div className="space-y-2">
                 {parsed.days.map((day) => (
