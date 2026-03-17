@@ -57,7 +57,7 @@ export async function patchItineraryWithHotel(
 
       for (const act of activities) {
         const title = String(act.title || act.name || '');
-        if (!isAccommodationActivity(title)) continue;
+        if (!isAccommodationActivity(title, String(act.category || ''))) continue;
 
         const isCheckout = title.toLowerCase().includes('checkout') || title.toLowerCase().includes('check-out');
         
