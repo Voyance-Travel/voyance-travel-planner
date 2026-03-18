@@ -1955,11 +1955,23 @@ export function EditorialItinerary({
       const patchedActivities = day.activities.map(activity => {
         const change = changes.find(c => c.activityId === activity.id && c.patch);
         if (!change?.patch) return activity;
-        return {
+        const patched = {
           ...activity,
           ...(change.patch.startTime ? { startTime: change.patch.startTime as string, time: change.patch.startTime as string } : {}),
           ...(change.patch.endTime ? { endTime: change.patch.endTime as string } : {}),
         };
+        // Auto-fix: if patch resulted in end <= start, restore original duration
+        const pStart = patched.startTime || patched.time || '12:00';
+        const pEnd = patched.endTime;
+        if (pStart && pEnd) {
+          const sMin = timeToMinutes(pStart);
+          const eMin = timeToMinutes(pEnd);
+          if (eMin <= sMin) {
+            const origDuration = activity.durationMinutes || 30;
+            patched.endTime = minutesToTime(sMin + origDuration);
+          }
+        }
+        return patched;
       });
       // Sort chronologically after applying time patches
       patchedActivities.sort((a, b) => {
@@ -4310,6 +4322,14 @@ export function EditorialItinerary({
 
   // Update activity time — with optional cascade to shift all following activities
   const handleUpdateActivityTime = useCallback((dayIndex: number, activityIndex: number, startTime: string, endTime: string, cascade = false) => {
+    const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+
+    // Guard: reject end time <= start time
+    if (parseTime(endTime) <= parseTime(startTime)) {
+      toast.error('End time must be after start time');
+      return;
+    }
+
     setDays(prev => prev.map((day, dIdx) => {
       if (dIdx !== dayIndex) return day;
 
@@ -4317,7 +4337,6 @@ export function EditorialItinerary({
       if (!targetActivity) return day;
 
       const oldStartStr = targetActivity.startTime || targetActivity.time || '12:00';
-      const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
       const formatTime = (mins: number) => {
         const c = Math.max(0, Math.min(mins, 23 * 60 + 59));
         return `${String(Math.floor(c / 60)).padStart(2, '0')}:${String(c % 60).padStart(2, '0')}`;
@@ -4339,6 +4358,12 @@ export function EditorialItinerary({
               const aEnd = activity.endTime;
               const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
               const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
+              // Clamp: ensure shifted end >= shifted start (preserve original duration)
+              if (newStart && newEnd && parseTime(newEnd) <= parseTime(newStart)) {
+                const origDuration = aEnd && aStart ? parseTime(aEnd) - parseTime(aStart) : 30;
+                const fixedEnd = formatTime(parseTime(newStart) + Math.max(origDuration, 15));
+                return { ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time };
+              }
               return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
             }
             return activity;
@@ -10397,9 +10422,18 @@ function TimeEditModal({ isOpen, activity, onClose, onSave }: TimeEditModalProps
             </div>
           )}
         </div>
+
+          {/* Validation: end time must be after start time */}
+          {timeToMinutes(endTime) <= timeToMinutes(startTime) && (
+            <p className="text-sm text-destructive font-medium">End time must be after start time</p>
+          )}
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave(startTime, endTime, cascade && deltaMinutes !== 0)}>
+          <Button
+            disabled={timeToMinutes(endTime) <= timeToMinutes(startTime)}
+            onClick={() => onSave(startTime, endTime, cascade && deltaMinutes !== 0)}
+          >
             {cascade && deltaMinutes !== 0 ? 'Shift Schedule' : 'Save Time'}
           </Button>
         </DialogFooter>
