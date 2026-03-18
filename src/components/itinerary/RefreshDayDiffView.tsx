@@ -97,7 +97,7 @@ export function RefreshDayDiffView({
       transition={{ duration: 0.25 }}
       className={cn(
         'rounded-xl border p-4 space-y-4',
-        hasActionableChanges
+        hasIssues
           ? 'bg-card border-border shadow-lg'
           : 'bg-primary/5 border-primary/20',
         className
