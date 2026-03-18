@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { Footprints, Train, Car, Bus, AlertTriangle, ArrowDown, Loader2, MapPin } from 'lucide-react';
+import { formatDuration } from '@/utils/plannerUtils';
 import { cn } from '@/lib/utils';
 import { useTransitEstimate, getRecommendedTransit, checkScheduleConflict, type TransitEstimate } from '@/hooks/useTransitEstimate';
 import { computeGapMinutes } from './TransitGapIndicator';
