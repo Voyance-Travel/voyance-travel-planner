@@ -1449,15 +1449,17 @@ export function EditorialItinerary({
 
         const sel = d.transportComparison?.find((o: any) => o.id === d.selectedTransportId) || d.transportComparison?.[0];
         const tType = sel?.mode || sel?.type || d.transportType || 'transfer';
-        const carrier = sel?.carrier || d.transportDetails?.carrier || '';
-        const flightNum = sel?.flightNumber || d.transportDetails?.flightNumber || '';
-        const depTime = sel?.departureTime || d.transportDetails?.departureTime || '';
-        const arrTime = sel?.arrivalTime || d.transportDetails?.arrivalTime || '';
-        const dur = sel?.duration || d.transportDetails?.duration || '';
-        const seatInfo = d.transportDetails?.seatClass || d.transportDetails?.seat || '';
-        const bookingRef = d.transportDetails?.bookingRef || d.transportDetails?.confirmationNumber || '';
-        const price = sel?.price ?? d.transportCostCents ? (d.transportCostCents / 100) : undefined;
-        const currency = sel?.currency || d.transportCurrency || 'USD';
+        const rawTd = d.transportDetails || {};
+        const carrier = sel?.carrier || rawTd.carrier || rawTd.operator || '';
+        const flightNum = sel?.flightNumber || rawTd.flightNumber || '';
+        const depTime = sel?.departureTime || rawTd.departureTime || '';
+        const arrTime = sel?.arrivalTime || rawTd.arrivalTime || '';
+        const dur = sel?.duration || rawTd.duration || rawTd.inTransitDuration || rawTd.doorToDoorDuration || '';
+        const seatInfo = rawTd.seatClass || rawTd.seat || rawTd.seatNumber || '';
+        const bookingRef = rawTd.bookingRef || rawTd.confirmationNumber || '';
+        const rawPrice = sel?.price ?? rawTd.totalCost ?? rawTd.costPerPerson ?? (d.transportCostCents ? (d.transportCostCents / 100) : undefined);
+        const price = rawPrice != null && rawPrice > 0 ? rawPrice : undefined;
+        const currency = sel?.currency || rawTd.currency || d.transportCurrency || 'USD';
 
         const hubLabel = tType === 'flight' ? 'airport' : tType === 'train' ? 'train station' : tType === 'ferry' ? 'ferry terminal' : 'station';
         const transportName = tType.charAt(0).toUpperCase() + tType.slice(1);
