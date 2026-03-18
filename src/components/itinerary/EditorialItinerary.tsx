@@ -1943,6 +1943,7 @@ export function EditorialItinerary({
     kept: EditorialActivity[];
     source: 'time_edit' | 'add_activity';
   } | null>(null);
+  const [discoverDrawerOpen, setDiscoverDrawerOpen] = useState(false);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [payments, setPayments] = useState<TripPayment[]>([]);
