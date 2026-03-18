@@ -4358,11 +4358,22 @@ export function EditorialItinerary({
               const aEnd = activity.endTime;
               const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
               const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
+              // Helper to recalculate duration fields from new times
+              const recalcDuration = (s: string, e: string) => {
+                const durMins = parseTime(e) - parseTime(s);
+                const durStr = durMins >= 60
+                  ? `${Math.floor(durMins / 60)}h${durMins % 60 ? ` ${durMins % 60}m` : ''}`
+                  : `${durMins} min`;
+                return { durationMinutes: durMins, duration: durStr };
+              };
               // Clamp: ensure shifted end >= shifted start (preserve original duration)
               if (newStart && newEnd && parseTime(newEnd) <= parseTime(newStart)) {
-                const origDuration = aEnd && aStart ? parseTime(aEnd) - parseTime(aStart) : 30;
+                const origDuration = aEnd && aStart ? Math.max(parseTime(aEnd) - parseTime(aStart), 15) : 30;
                 const fixedEnd = formatTime(parseTime(newStart) + Math.max(origDuration, 15));
-                return { ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time };
+                return { ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time, ...recalcDuration(newStart, fixedEnd) };
+              }
+              if (newStart && newEnd) {
+                return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time, ...recalcDuration(newStart, newEnd) };
               }
               return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
             }
