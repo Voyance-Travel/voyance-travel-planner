@@ -4286,7 +4286,12 @@ export function EditorialItinerary({
         }
         activities.splice(insertIndex, 0, newActivity);
         // GAP 2: Fix overlaps after inserting a new activity
+        const beforeCount = activities.length;
         const cascaded = cascadeFixOverlaps(activities);
+        const dropped = beforeCount - cascaded.length;
+        if (dropped > 0) {
+          toast.info(`${dropped} activit${dropped === 1 ? 'y' : 'ies'} removed — no longer fit in this day's schedule.`);
+        }
         return { ...day, activities: cascaded };
       });
       // Sync budget with updated days
