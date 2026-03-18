@@ -51,20 +51,24 @@ const TOUR_STEPS: TourStep[] = [
     position: 'bottom',
     onBeforeStep: () => {
       // On mobile, the health panel is inside a collapsed MobileTripOverview.
-      // Expand it so the health score is visible.
       const isMobile = window.innerWidth < 640;
       if (isMobile) {
-        // Dispatch event to expand the mobile overview section
         window.dispatchEvent(new CustomEvent('tour-expand-mobile-overview'));
       }
-      // Also expand the health panel itself if it's collapsed
-      const healthEl = document.querySelector('[data-tour="health-score"]');
-      if (healthEl) {
-        // Ensure it's scrolled into view after a brief delay for expansion animation
-        setTimeout(() => {
+      // Open the Trip Completion collapsible that wraps the health panel
+      const collapsibleTriggers = document.querySelectorAll('[data-state="closed"]');
+      collapsibleTriggers.forEach(trigger => {
+        if (trigger.textContent?.includes('Trip Completion') || trigger.textContent?.includes('Trip Health')) {
+          (trigger as HTMLElement).click();
+        }
+      });
+      // Wait for collapsible animation, then scroll into view
+      setTimeout(() => {
+        const healthEl = document.querySelector('[data-tour="health-score"]');
+        if (healthEl) {
           healthEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 300);
-      }
+        }
+      }, 400);
     },
   },
   {
