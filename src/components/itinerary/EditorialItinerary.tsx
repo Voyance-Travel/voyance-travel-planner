@@ -1408,8 +1408,14 @@ export function EditorialItinerary({
             console.log(`[EditorialItinerary] Cleaned ${cleaned} orphaned cost rows`);
           }
           
-          // Refetch financial snapshot so Budget tab updates immediately
-          window.dispatchEvent(new CustomEvent('booking-changed'));
+           // Compute optimistic total from the data we just wrote to DB
+           const optimisticTotalCents = activitiesForCostTable.reduce(
+             (sum, a) => sum + Math.round(a.costPerPersonUsd * (a.numTravelers || 1) * 100), 0
+           );
+           // Dispatch with optimistic payload for instant UI update
+           window.dispatchEvent(new CustomEvent('booking-changed', { 
+             detail: { tripId, optimisticTotalCents } 
+           }));
         } catch (err) {
           console.error('[EditorialItinerary] Activity cost sync failed:', err);
         }
