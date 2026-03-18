@@ -1449,15 +1449,17 @@ export function EditorialItinerary({
 
         const sel = d.transportComparison?.find((o: any) => o.id === d.selectedTransportId) || d.transportComparison?.[0];
         const tType = sel?.mode || sel?.type || d.transportType || 'transfer';
-        const carrier = sel?.carrier || d.transportDetails?.carrier || '';
-        const flightNum = sel?.flightNumber || d.transportDetails?.flightNumber || '';
-        const depTime = sel?.departureTime || d.transportDetails?.departureTime || '';
-        const arrTime = sel?.arrivalTime || d.transportDetails?.arrivalTime || '';
-        const dur = sel?.duration || d.transportDetails?.duration || '';
-        const seatInfo = d.transportDetails?.seatClass || d.transportDetails?.seat || '';
-        const bookingRef = d.transportDetails?.bookingRef || d.transportDetails?.confirmationNumber || '';
-        const price = sel?.price ?? d.transportCostCents ? (d.transportCostCents / 100) : undefined;
-        const currency = sel?.currency || d.transportCurrency || 'USD';
+        const rawTd = d.transportDetails || {};
+        const carrier = sel?.carrier || rawTd.carrier || rawTd.operator || '';
+        const flightNum = sel?.flightNumber || rawTd.flightNumber || '';
+        const depTime = sel?.departureTime || rawTd.departureTime || '';
+        const arrTime = sel?.arrivalTime || rawTd.arrivalTime || '';
+        const dur = sel?.duration || rawTd.duration || rawTd.inTransitDuration || rawTd.doorToDoorDuration || '';
+        const seatInfo = rawTd.seatClass || rawTd.seat || rawTd.seatNumber || '';
+        const bookingRef = rawTd.bookingRef || rawTd.confirmationNumber || '';
+        const rawPrice = sel?.price ?? rawTd.totalCost ?? rawTd.costPerPerson ?? (d.transportCostCents ? (d.transportCostCents / 100) : undefined);
+        const price = rawPrice != null && rawPrice > 0 ? rawPrice : undefined;
+        const currency = sel?.currency || rawTd.currency || d.transportCurrency || 'USD';
 
         const hubLabel = tType === 'flight' ? 'airport' : tType === 'train' ? 'train station' : tType === 'ferry' ? 'ferry terminal' : 'station';
         const transportName = tType.charAt(0).toUpperCase() + tType.slice(1);
@@ -1529,9 +1531,10 @@ export function EditorialItinerary({
         const details = d.departureTransportDetails || {};
         const depTime = (details.departureTime as string) || '';
         const arrTime = (details.arrivalTime as string) || '';
-        const carrier = (details.carrier as string) || '';
+        const carrier = (details.carrier as string) || (details.operator as string) || '';
         const flightNum = (details.flightNumber as string) || '';
-        const dur = (details.duration as string) || '';
+        const dur = (details.duration as string) || (details.inTransitDuration as string) || (details.doorToDoorDuration as string) || '';
+        const depFrom = (details.departureStation as string) || (details.departureAirport as string) || (d.city as string) || '';
         const transportLabel = tType.charAt(0).toUpperCase() + tType.slice(1);
         const title = `${transportLabel} to ${to}`;
         const cardTime = depTime || '18:00';
@@ -1572,19 +1575,19 @@ export function EditorialItinerary({
           __syntheticDeparture: true,
           __interCityTransport: true,
           __travelMeta: {
-            from: '',
+            from: depFrom || d.city || '',
             to,
             transportName: transportLabel,
-            hubLabel: '',
+            hubLabel: tType === 'flight' ? 'airport' : tType === 'train' ? 'station' : '',
             carrier,
             flightNum,
             depTime,
             arrTime,
             dur,
-            seatInfo: '',
-            bookingRef: '',
-            price: undefined,
-            currency: 'USD',
+            seatInfo: (details.seatClass as string) || (details.seatNumber as string) || '',
+            bookingRef: (details.bookingRef as string) || (details.confirmationNumber as string) || '',
+            price: details.totalCost != null ? (details.totalCost as number) : details.costPerPerson != null ? (details.costPerPerson as number) : undefined,
+            currency: (details.currency as string) || 'USD',
           },
           __departureTransportType: tType,
         } as any;
@@ -1723,6 +1726,24 @@ export function EditorialItinerary({
           }
 
           updatedActivities.splice(insertIndex, 0, departureCard);
+
+          // Trim non-synthetic activities after checkout on the final day
+          const finalDepMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+          const finalBufferMinutes = tType === 'flight' ? 90 : tType === 'train' ? 45 : 30;
+          const finalCutoffMinutes = finalDepMinutes - finalBufferMinutes;
+
+          updatedActivities = updatedActivities.filter(act => {
+            if ((act as any).__syntheticTravel || (act as any).__syntheticDeparture ||
+                (act as any).__syntheticFinalDeparture || (act as any).__interCityTransport ||
+                (act as any).__hotelCheckout || (act as any).__hotelCheckin ||
+                act.id.startsWith('hotel-') || act.id.startsWith('departure-') ||
+                act.id.startsWith('travel-') || act.id.startsWith('final-departure-')) {
+              return true;
+            }
+            if (!act.startTime) return true;
+            const actMin = parseInt(act.startTime.split(':')[0]) * 60 + parseInt(act.startTime.split(':')[1] || '0');
+            return actMin < finalCutoffMinutes;
+          });
         }
       }
     }
