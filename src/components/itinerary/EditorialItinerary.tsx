@@ -8898,7 +8898,7 @@ function DayCard({
                         hasTransitBadge={hasTransitBadgeVisible}
                         currentCategory={activityToRender.category || activityToRender.type}
                         nextCategory={nextActivity?.category || nextActivity?.type}
-                        sameLocation={!!(activityToRender.location?.name && nextActivity?.location?.name && activityToRender.location.name === nextActivity.location.name)}
+                        sameLocation={isFuzzyLocationMatch(activityToRender.location, nextActivity?.location)}
                         city={cleanDestination}
                         originName={activityToRender.location?.name || activityToRender.title}
                         destinationName={nextActivity?.location?.name || nextActivity?.title}
