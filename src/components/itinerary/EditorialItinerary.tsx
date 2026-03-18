@@ -3952,7 +3952,7 @@ export function EditorialItinerary({
     // Rebuild the raw array with reordered visible slots
     const visibleSlotIndices: number[] = [];
     activities.forEach((a, i) => {
-      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities)) {
+      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities) && !isTransportActivity(a)) {
         visibleSlotIndices.push(i);
       }
     });
