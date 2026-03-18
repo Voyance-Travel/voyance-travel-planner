@@ -2016,18 +2016,19 @@ function FlightHotelStep({
                 {/* Price & Budget Inclusion */}
                 <div className="space-y-3 pt-3 border-t border-border">
                   <div>
-                    <Label className="text-[10px] sm:text-xs text-muted-foreground">Hotel Total Price</Label>
+                    <Label className="text-[10px] sm:text-xs text-muted-foreground">Price Per Night (USD)</Label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         type="number"
                         min={0}
-                        placeholder="e.g. 450"
+                        placeholder="e.g. 150"
                         className="pl-9 text-xs h-8"
                         value={currentHotel.pricePerNight || ''}
                         onChange={(e) => setCurrentHotel({ ...currentHotel, pricePerNight: e.target.value ? Number(e.target.value) : undefined })}
                       />
                     </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">Enter the nightly rate — we'll calculate the total automatically</p>
                   </div>
 
                   <label className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">
