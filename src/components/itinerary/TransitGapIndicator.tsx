@@ -241,6 +241,12 @@ export function TransitGapIndicator({
     }
   }, [transportation]);
 
+  // Reset auto-fetch when route endpoints change (e.g. after reorder swaps direction)
+  useEffect(() => {
+    setAutoTransit(null);
+    autoFetchAttempted.current = false;
+  }, [originName, destinationName]);
+
   // Use autoTransit as fallback when transportation is null
   const resolvedTransportation = transportation || autoTransit;
 
