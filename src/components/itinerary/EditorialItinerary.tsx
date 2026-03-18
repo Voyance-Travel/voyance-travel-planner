@@ -9616,7 +9616,9 @@ function ActivityRow({
       return null;
     })();
 
-    const locationText = activity.location?.name || activity.location?.address;
+    const rawLocationName = activity.location?.name?.trim();
+    const dedupedLocationName = (rawLocationName && rawLocationName !== activityTitle) ? rawLocationName : '';
+    const locationText = dedupedLocationName || activity.location?.address;
 
     return (
       <div className="py-2">
