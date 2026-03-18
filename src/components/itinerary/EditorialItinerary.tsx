@@ -4262,6 +4262,7 @@ export function EditorialItinerary({
           endTime: activity.endTime || '',
           location: activity.location || { name: '', address: '' },
           cost: activity.cost || { amount: 0, currency: tripCurrency },
+          costSource: 'imported' as const,
           bookingRequired: false,
           tags: [],
           isLocked: false,
