@@ -9996,9 +9996,8 @@ function ActivityRow({
                 
                 if (isNonReviewable || aiLocked || !canViewPremium) return null;
                 
-                // In compact mode, always show "See Reviews" instead of inline star ratings
-                // Show rating badge if we have a rating and NOT in compact mode
-                if (rating && !compact) {
+                // Show rating badge whenever a numeric rating exists (including compact mode)
+                if (rating) {
                   return (
                     <Badge 
                       variant="secondary" 
