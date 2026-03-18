@@ -4271,7 +4271,10 @@ export function EditorialItinerary({
         const day = updated[dayIndex];
         if (!day) continue;
         if (mode === 'replace') {
-          updated[dayIndex] = { ...day, activities: newActivities };
+          const lockedActivities = day.activities.filter(a => a.isLocked);
+          const merged = [...lockedActivities, ...newActivities];
+          merged.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+          updated[dayIndex] = { ...day, activities: merged };
         } else {
           const combined = [...day.activities, ...newActivities];
           combined.sort((a, b) => {
