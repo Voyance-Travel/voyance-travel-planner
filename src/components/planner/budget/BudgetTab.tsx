@@ -706,8 +706,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </Card>
       )}
 
-      {/* Recent Expenses */}
-      {ledger.length > 0 && (
+      {/* Recent Expenses (hidden in manual mode — auto-synced costs don't apply) */}
+      {!isManualMode && ledger.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-medium flex items-center gap-2">
