@@ -347,6 +347,13 @@ export default function GuideBuilder() {
         .replace(/^-|-$/g, '')
         .slice(0, 80) + '-' + tripId.slice(0, 8);
 
+      // Helper: only keep storage-backed URLs
+      const safeImageUrl = (url: string | null | undefined): string | null => {
+        if (!url) return null;
+        if (url.includes('/storage/v1/object/public/')) return url;
+        return null;
+      };
+
       // Build content from sections (for backward compatibility with published view)
       const content = {
         activities: sections
@@ -356,7 +363,7 @@ export default function GuideBuilder() {
             name: s.title,
             description: s.body || s.activitySnapshot?.tips || null,
             category: s.activitySnapshot?.category || null,
-            image_url: s.photoUrl || (s.photos[0]?.url) || null,
+            image_url: safeImageUrl(s.photoUrl || (s.photos[0]?.url)),
             note: s.userExperience || null,
             user_rating: s.userRating,
             recommended: s.recommended,

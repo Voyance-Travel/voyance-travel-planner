@@ -182,20 +182,13 @@ export default function CommunityGuideDetail() {
     return (guide?.content?.activities || []) as Activity[];
   }, [guide]);
 
-  // Filter to only show activities with user content (experience, rating, photos, or recommendation)
-  const enrichedActivities = useMemo(() => {
-    return activities.filter(a =>
-      a.note || a.user_rating || a.recommended || (a.photos && a.photos.length > 0)
-    );
-  }, [activities]);
-
   const customTips = useMemo(() => {
     return activities.filter(a => a.is_manual);
   }, [activities]);
 
   const regularActivities = useMemo(() => {
-    return enrichedActivities.filter(a => !a.is_manual);
-  }, [enrichedActivities]);
+    return activities.filter(a => !a.is_manual);
+  }, [activities]);
 
   const dayGroups = useMemo(() => groupByDay(regularActivities), [regularActivities]);
 
@@ -462,7 +455,7 @@ export default function CommunityGuideDetail() {
                 ))}
               </div>
             ))
-          ) : enrichedActivities.length === 0 && customTips.length === 0 ? (
+          ) : regularActivities.length === 0 && customTips.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-sm">This guide doesn't have any personal reviews yet.</p>
             </div>
