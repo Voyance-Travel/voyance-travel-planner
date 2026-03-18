@@ -4581,20 +4581,21 @@ export function EditorialItinerary({
 
     // If cascade, check for overflow before applying
     if (cascade) {
-      const { kept, dropped: droppedActivities } = previewCascadeOverflow(shifted);
-      if (droppedActivities.length > 0) {
+      const { kept, truncated, dropped: droppedActivities } = previewCascadeOverflow(shifted);
+      if (droppedActivities.length > 0 || truncated.length > 0) {
         setPendingCascade({
           dayIndex,
           activityIndex,
           startTime,
           endTime,
           dropped: droppedActivities,
-          kept,
+          truncated,
+          kept: [...kept, ...truncated],
           source: 'time_edit',
         });
         return; // Don't apply — wait for user confirmation
       }
-      shifted = kept;
+      shifted = [...kept, ...truncated];
     }
 
     // Apply directly (no overflow)
