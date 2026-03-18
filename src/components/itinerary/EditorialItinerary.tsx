@@ -3817,10 +3817,11 @@ export function EditorialItinerary({
       const newStart = fmtTime(cursor);
       const newEnd = fmtTime(cursor + duration);
       
-      // Use the NEXT activity's transportation duration as the gap,
-      // falling back to 20 min (a realistic urban average) instead of static 15
-      const nextActivity = withTimes[idx + 1]?.activity;
-      const transitGap = parseTransitDuration(nextActivity?.transportation?.duration) ?? 20;
+      // Use the CURRENT activity's transportation duration as the gap (it describes the route FROM this activity TO its next neighbor)
+      // For the last activity, no transit gap is needed
+      const transitGap = (idx < withTimes.length - 1)
+        ? (parseTransitDuration(activity.transportation?.duration) ?? 15)
+        : 0;
       cursor += duration + transitGap;
       
       return {
