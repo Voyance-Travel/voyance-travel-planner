@@ -83,6 +83,7 @@ export interface DiscoverDrawerProps {
     title: string;
     description: string;
     category: string;
+    rating?: number;
     cost?: { amount: number; currency: string };
     location?: { name: string; address?: string };
   }) => void;
