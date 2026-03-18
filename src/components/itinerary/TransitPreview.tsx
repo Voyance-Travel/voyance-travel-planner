@@ -107,7 +107,9 @@ function TransitSection({
   const recommended = getRecommendedTransit(estimates);
   const conflict = recommended && gapMinutes !== null
     ? checkScheduleConflict(recommended.durationMinutes, gapMinutes)
-    : undefined;
+    : gapMinutes !== null && gapMinutes < 0
+      ? { hasConflict: true, message: `These activities overlap by ${Math.abs(gapMinutes)} minutes. Consider adjusting the timing.` }
+      : undefined;
 
   return (
     <div className="space-y-2">
