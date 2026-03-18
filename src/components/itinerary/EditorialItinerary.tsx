@@ -5190,13 +5190,21 @@ export function EditorialItinerary({
                  </span>
                  {!isCleanPreview && (
                  <div className="flex items-center gap-1.5">
-                   {canUndoDay && (
-                     <DayUndoButton
-                       onClick={handleUndo}
-                       isLoading={isUndoing}
-                       showLabel
-                     />
-                   )}
+                    {canUndoDate && (
+                      <DayUndoButton
+                        onClick={handleUndoDate}
+                        isLoading={isUndoingDate}
+                        showLabel
+                        label="Undo Dates"
+                      />
+                    )}
+                    {canUndoDay && (
+                      <DayUndoButton
+                        onClick={handleUndo}
+                        isLoading={isUndoing}
+                        showLabel
+                      />
+                    )}
                    <Button
                      variant="ghost"
                      size="sm"
