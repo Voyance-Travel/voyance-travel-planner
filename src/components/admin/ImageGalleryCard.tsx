@@ -28,8 +28,13 @@ interface Props {
   onUploadReplace?: (image: CuratedImage) => void;
 }
 
+const STORAGE_PATTERN = '/storage/v1/object/public/';
+
+export const isExternalUrl = (url: string) => !url.includes(STORAGE_PATTERN);
+
 export default function ImageGalleryCard({ image, selected, onSelect, onReplace, onBlacklist, onPreview, onUploadReplace }: Props) {
   const [broken, setBroken] = useState(false);
+  const isExternal = isExternalUrl(image.image_url);
 
   const sourceBadgeColor = (source: string) => {
     if (source.includes('google')) return 'bg-blue-500/20 text-blue-700 dark:text-blue-300';
@@ -97,6 +102,15 @@ export default function ImageGalleryCard({ image, selected, onSelect, onReplace,
           <Badge className={`text-[10px] px-1.5 py-0 border-0 ${sourceBadgeColor(image.source)}`}>
             {image.source}
           </Badge>
+          {isExternal ? (
+            <Badge className="text-[10px] px-1.5 py-0 border-0 bg-amber-500/20 text-amber-700 dark:text-amber-300">
+              External
+            </Badge>
+          ) : (
+            <Badge className="text-[10px] px-1.5 py-0 border-0 bg-green-500/20 text-green-700 dark:text-green-300">
+              Cached
+            </Badge>
+          )}
         </div>
         {image.destination && (
           <p className="text-xs text-muted-foreground truncate">{image.destination}</p>
