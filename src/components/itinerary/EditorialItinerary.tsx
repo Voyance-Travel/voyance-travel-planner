@@ -4475,26 +4475,40 @@ export function EditorialItinerary({
             }
             return activity;
           });
-          // GAP 1 & 4: Fix any remaining overlaps after cascade shift
+          // GAP 1 & 4: Preview overlaps after cascade shift
           if (cascade) {
-            const beforeCount = updated.length;
-            updated = cascadeFixOverlaps(updated);
-            const dropped = beforeCount - updated.length;
-            if (dropped > 0) {
-              setTimeout(() => toast.info(`${dropped} activit${dropped === 1 ? 'y' : 'ies'} removed — no longer fit in this day's schedule.`), 100);
+            const { kept, dropped: droppedActivities } = previewCascadeOverflow(updated);
+            if (droppedActivities.length > 0) {
+              // Defer to confirmation dialog
+              setPendingCascade({
+                dayIndex,
+                activityIndex,
+                startTime,
+                endTime,
+                dropped: droppedActivities,
+                kept,
+                source: 'time_edit',
+              });
+              // Return original activities unchanged
+              return day.activities;
             }
+            updated = kept;
           }
           return updated;
         })(),
       };
     }));
-    setHasChanges(true);
-    setTimeEditModal(null);
 
-    if (cascade) {
-      toast.success('Schedule shifted');
-    } else {
-      toast.success('Activity time updated');
+    // If pendingCascade was set, the state update above was a no-op (returned original activities)
+    // so we skip the success path
+    if (!pendingCascade) {
+      setHasChanges(true);
+      setTimeEditModal(null);
+      if (cascade) {
+        toast.success('Schedule shifted');
+      } else {
+        toast.success('Activity time updated');
+      }
     }
   }, []);
 
