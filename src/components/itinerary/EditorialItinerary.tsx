@@ -10129,16 +10129,19 @@ function ActivityRow({
                   )}
 
                   {/* Location — in compact mode show only location name, no full address */}
-                  {(activity.location?.name || hasAddress) && (
+                  {(() => {
+                    const locName = activity.location?.name?.trim();
+                    const effectiveLocName = (locName && locName !== activityTitle) ? locName : '';
+                    return (effectiveLocName || hasAddress) ? (
                     <div className={cn(
                       "mt-1.5",
                       !canViewPremium && "blur-sm pointer-events-none select-none"
                     )}>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
-                        <span className="truncate">{activity.location?.name || address}</span>
+                        <span className="truncate">{effectiveLocName || address}</span>
                       </div>
-                      {!compact && activity.location?.name && hasAddress && address !== activity.location?.name && (
+                      {!compact && effectiveLocName && hasAddress && address !== effectiveLocName && (
                         <div className="hidden sm:block pl-5 mt-0.5 text-xs text-muted-foreground/70 leading-snug">
                           {address}
                         </div>
