@@ -291,6 +291,10 @@ export function DiscoverDrawer({
       events: 'activity',
     };
     const cat = CATEGORY_MAP[suggestion.category] || suggestion.category || 'activity';
+    // Build address with fallback to distance info
+    const rawAddress = 'address' in suggestion ? (suggestion as any).address : undefined;
+    const distanceText = 'distance' in suggestion ? (suggestion as any).distance : undefined;
+    const addressText = rawAddress || (distanceText ? `${distanceText} away` : undefined);
     onAddActivity({
       title: suggestion.name,
       description: suggestion.description,
@@ -299,7 +303,7 @@ export function DiscoverDrawer({
       cost: ('priceLevel' in suggestion && suggestion.priceLevel) ? { amount: suggestion.priceLevel * 15, currency: tripCurrency } : undefined,
       location: {
         name: '',
-        address: 'address' in suggestion ? (suggestion as any).address : undefined,
+        address: addressText,
       },
     });
     setAddedIds(prev => new Set(prev).add(suggestion.id));
