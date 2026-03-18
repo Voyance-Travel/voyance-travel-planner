@@ -3974,6 +3974,11 @@ export function EditorialItinerary({
       syncBudgetFromDays(updated);
       return updated;
     });
+    // Clear stale refresh result for this day
+    const dayNum = days[dayIndex]?.dayNumber;
+    if (dayNum) {
+      setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
+    }
     setHasChanges(true);
     setNeedsOptimization(true);
     toast.success('Activity removed');
