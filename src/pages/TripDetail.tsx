@@ -49,6 +49,7 @@ import { VersionConflictDialog } from '@/components/trip/VersionConflictDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { getTripPermission } from '@/services/tripCollaboratorsAPI';
 import { setCachedVersion, clearCachedVersion, saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
+import { saveTripDateVersion, restoreTripDateVersion } from '@/services/tripDateVersionHistory';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useScrollLockCleanup } from '@/hooks/useScrollLockCleanup';
 import { useTripLearning } from '@/services/tripLearningsAPI';
