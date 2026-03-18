@@ -6745,14 +6745,36 @@ export function EditorialItinerary({
             <AlertDialogTitle>Schedule overflow</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div>
-                <p className="mb-2">
-                  Shifting the schedule would remove <strong>{pendingCascade?.dropped.length}</strong> activit{pendingCascade?.dropped.length === 1 ? 'y' : 'ies'} that no longer fit before midnight:
-                </p>
-                <ul className="list-disc pl-5 space-y-1 text-sm">
-                  {pendingCascade?.dropped.map((act) => (
-                    <li key={act.id}>{act.title || 'Untitled activity'}</li>
-                  ))}
-                </ul>
+                {(pendingCascade?.dropped.length ?? 0) > 0 && (
+                  <>
+                    <p className="mb-2">
+                      Shifting the schedule would remove <strong>{pendingCascade?.dropped.length}</strong> activit{pendingCascade?.dropped.length === 1 ? 'y' : 'ies'} that no longer fit before midnight:
+                    </p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {pendingCascade?.dropped.map((act) => (
+                        <li key={act.id}>{act.title || 'Untitled activity'}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {(() => {
+                  const truncated = pendingCascade?.kept.filter((a: any) => a.__truncatedAtMidnight) || [];
+                  if (truncated.length === 0) return null;
+                  return (
+                    <div className={pendingCascade?.dropped.length ? 'mt-3' : ''}>
+                      <p className="mb-2 text-amber-600 dark:text-amber-400">
+                        {truncated.length === 1 ? 'This activity' : 'These activities'} will be shortened to fit before midnight:
+                      </p>
+                      <ul className="list-disc pl-5 space-y-1 text-sm text-amber-600 dark:text-amber-400">
+                        {truncated.map((act: any) => (
+                          <li key={act.id}>
+                            {act.title || 'Untitled'} — {act.durationMinutes} min (was {act.__originalDurationMinutes} min)
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
