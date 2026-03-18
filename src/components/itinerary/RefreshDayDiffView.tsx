@@ -58,6 +58,7 @@ export function RefreshDayDiffView({
   const actionableChanges = proposedChanges.filter(c => c.type !== 'no_change');
   const unchangedActivities = proposedChanges.filter(c => c.type === 'no_change');
   const hasActionableChanges = actionableChanges.length > 0;
+  const hasIssues = hasActionableChanges || issues.length > 0 || buffers.filter(b => b.isInsufficient).length > 0;
 
   const [mode, setMode] = useState<'summary' | 'review'>('summary');
   const [accepted, setAccepted] = useState<Set<string>>(
@@ -96,7 +97,7 @@ export function RefreshDayDiffView({
       transition={{ duration: 0.25 }}
       className={cn(
         'rounded-xl border p-4 space-y-4',
-        hasActionableChanges
+        hasIssues
           ? 'bg-card border-border shadow-lg'
           : 'bg-primary/5 border-primary/20',
         className
@@ -105,14 +106,14 @@ export function RefreshDayDiffView({
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          {hasActionableChanges ? (
+          {hasIssues ? (
             <AlertTriangle className="h-4.5 w-4.5 text-destructive shrink-0" />
           ) : (
             <CheckCircle className="h-4.5 w-4.5 text-primary shrink-0" />
           )}
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-foreground truncate">
-              Day {dayNumber}: {hasActionableChanges ? 'Proposed Changes' : 'All Good'}
+              Day {dayNumber}: {hasIssues ? (hasActionableChanges ? 'Proposed Changes' : 'Issues Found') : 'All Good'}
             </h3>
             {hasActionableChanges && (
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -123,6 +124,13 @@ export function RefreshDayDiffView({
                 {warnCount > 0 && ` · ${warnCount} warning${warnCount !== 1 ? 's' : ''}`}
               </p>
             )}
+            {!hasActionableChanges && hasIssues && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {insufficientBuffers > 0 && `${insufficientBuffers} buffer${insufficientBuffers !== 1 ? 's' : ''} too short`}
+                {warnCount > 0 && `${insufficientBuffers > 0 ? ' · ' : ''}${warnCount} warning${warnCount !== 1 ? 's' : ''}`}
+                {errorCount > 0 && ` · ${errorCount} error${errorCount !== 1 ? 's' : ''}`}
+              </p>
+            )}
           </div>
         </div>
         <Button variant="ghost" size="sm" onClick={onDismiss} className="h-7 w-7 p-0 shrink-0">
@@ -131,7 +139,7 @@ export function RefreshDayDiffView({
       </div>
 
       {/* No changes needed */}
-      {!hasActionableChanges && (
+      {!hasIssues && (
         <p className="text-sm text-muted-foreground">
           No timing issues or buffer problems detected. Your day looks great!
         </p>
