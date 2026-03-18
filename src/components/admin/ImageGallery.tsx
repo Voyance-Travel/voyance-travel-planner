@@ -27,7 +27,10 @@ export default function ImageGallery() {
   const [entityType, setEntityType] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [brokenOnly, setBrokenOnly] = useState(false);
+  const [externalOnly, setExternalOnly] = useState(false);
   const [sortBy, setSortBy] = useState<string>('newest');
+  const [healing, setHealing] = useState(false);
+  const [healProgress, setHealProgress] = useState({ done: 0, total: 0 });
 
   // Selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
