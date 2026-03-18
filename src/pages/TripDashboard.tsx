@@ -269,7 +269,7 @@ function canDeleteTrip(trip: Trip): { canDelete: boolean; reason?: string } {
    return { canDelete: true };
 }
 
-function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; onDelete?: (tripId: string) => void }) {
+function TripCard({ trip, index = 0, onDelete, isAdmin, onClone }: { trip: Trip; index?: number; onDelete?: (tripId: string) => void; isAdmin?: boolean; onClone?: (tripId: string) => void }) {
   const navigate = useNavigate();
   const displayStatus = mapToDisplayStatus(trip.status, trip.startDate, trip.endDate);
   const deleteCheck = canDeleteTrip(trip);
@@ -537,6 +537,24 @@ function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; o
 
         {/* Actions - mobile optimized touch targets */}
         <div className="flex gap-2 pt-1 sm:pt-2">
+          {/* Admin-only Re-run button */}
+          {isAdmin && onClone && (
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => onClone(trip.id)}
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 sm:h-11 sm:w-11 shrink-0"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Re-run (clone &amp; regenerate)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {trip.itineraryStatus === 'failed' ? (
             <>
               <Button 
@@ -727,6 +745,7 @@ export default function TripDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
 
@@ -741,6 +760,68 @@ export default function TripDashboard() {
       return next;
     });
   };
+  // Admin role check
+  useEffect(() => {
+    async function checkAdmin() {
+      if (!user?.id) return;
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin');
+      setIsAdmin((roles?.length ?? 0) > 0);
+    }
+    checkAdmin();
+  }, [user?.id]);
+
+  // Clone trip handler (admin only)
+  const handleCloneTrip = useCallback(async (sourceId: string) => {
+    if (!user?.id) return;
+    try {
+      toast.info('Cloning trip…');
+      const { data: source, error: fetchErr } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('id', sourceId)
+        .single();
+      if (fetchErr || !source) throw fetchErr || new Error('Trip not found');
+
+      const { id, created_at, updated_at, share_token, itinerary_data, itinerary_status, itinerary_version, ...cloneData } = source as any;
+      const { data: newTrip, error: insertErr } = await supabase
+        .from('trips')
+        .insert([{
+          ...cloneData,
+          user_id: user.id,
+          status: 'draft',
+          itinerary_data: null,
+          itinerary_status: null,
+          itinerary_version: 0,
+          name: `${source.name || source.destination} (re-run)`,
+        }])
+        .select()
+        .single();
+      if (insertErr || !newTrip) throw insertErr || new Error('Failed to create trip');
+
+      // Copy trip_cities if multi-city
+      const { data: cities } = await supabase
+        .from('trip_cities')
+        .select('*')
+        .eq('trip_id', sourceId);
+      if (cities && cities.length > 0) {
+        const cityInserts = cities.map(({ id: _id, trip_id: _tid, created_at: _ca, ...rest }: any) => ({
+          ...rest,
+          trip_id: newTrip.id,
+        }));
+        await supabase.from('trip_cities').insert(cityInserts);
+      }
+
+      toast.success('Trip cloned! Navigating…');
+      navigate(`/trip/${newTrip.id}?generate=true`);
+    } catch (err: any) {
+      console.error('Clone failed:', err);
+      toast.error('Failed to clone trip');
+    }
+  }, [user?.id, navigate]);
 
   // Fetch trips directly from Supabase
   useEffect(() => {
@@ -1345,7 +1426,7 @@ export default function TripDashboard() {
                             }
                             return (
                               <div key={item.trip.id} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <TripCard trip={item.trip} index={idx} onDelete={handleTripDelete} />
+                                <TripCard trip={item.trip} index={idx} onDelete={handleTripDelete} isAdmin={isAdmin} onClone={handleCloneTrip} />
                               </div>
                             );
                           })}
@@ -1393,7 +1474,7 @@ export default function TripDashboard() {
                                 <CollapsibleContent>
                                   <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {group.trips.map((trip, i) => (
-                                       <TripCard key={trip.id} trip={trip} index={i} onDelete={handleTripDelete} />
+                                       <TripCard key={trip.id} trip={trip} index={i} onDelete={handleTripDelete} isAdmin={isAdmin} onClone={handleCloneTrip} />
                                     ))}
                                   </div>
                                 </CollapsibleContent>
@@ -1407,7 +1488,7 @@ export default function TripDashboard() {
                               transition={{ delay: groupIndex * 0.05 }}
                               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
                             >
-                               <TripCard trip={group.trips[0]} index={0} onDelete={handleTripDelete} />
+                               <TripCard trip={group.trips[0]} index={0} onDelete={handleTripDelete} isAdmin={isAdmin} onClone={handleCloneTrip} />
                             </motion.div>
                           )
                         ))
@@ -1415,7 +1496,7 @@ export default function TripDashboard() {
                         // Flat view when no duplicates
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {filteredTrips.map((trip, i) => (
-                             <TripCard key={trip.id} trip={trip} index={i} onDelete={handleTripDelete} />
+                             <TripCard key={trip.id} trip={trip} index={i} onDelete={handleTripDelete} isAdmin={isAdmin} onClone={handleCloneTrip} />
                           ))}
                         </div>
                       )}
