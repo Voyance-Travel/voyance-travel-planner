@@ -537,6 +537,24 @@ function TripCard({ trip, index = 0, onDelete, isAdmin, onClone }: { trip: Trip;
 
         {/* Actions - mobile optimized touch targets */}
         <div className="flex gap-2 pt-1 sm:pt-2">
+          {/* Admin-only Re-run button */}
+          {isAdmin && onClone && (
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => onClone(trip.id)}
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 sm:h-11 sm:w-11 shrink-0"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Re-run (clone &amp; regenerate)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {trip.itineraryStatus === 'failed' ? (
             <>
               <Button 
