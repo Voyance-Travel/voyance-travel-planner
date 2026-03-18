@@ -3763,6 +3763,21 @@ export function EditorialItinerary({
       a.id.startsWith('travel-') || a.id.startsWith('final-departure-');
   }, []);
 
+  // Detect hidden option-group alternatives that aren't currently selected
+  const isHiddenOptionAlternative = useCallback((a: EditorialActivity, allActivities: EditorialActivity[]): boolean => {
+    if (!a.isOption || !a.optionGroup) return false;
+    const selectedId = optionSelections[a.optionGroup];
+    if (selectedId) return a.id !== selectedId;
+    // Default: first in group is selected
+    const firstInGroup = allActivities.find(x => x.optionGroup === a.optionGroup);
+    return firstInGroup?.id !== a.id;
+  }, [optionSelections]);
+
+  // Get only the visible, reorderable activities (what the user actually sees as cards)
+  const getVisibleReorderableActivities = useCallback((activities: EditorialActivity[]): EditorialActivity[] => {
+    return activities.filter(a => !isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities));
+  }, [isSyntheticActivity, isHiddenOptionAlternative]);
+
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
   const handleActivityReorder = useCallback(async (dayIndex: number, reorderedActivities: EditorialActivity[]) => {
     // Save version snapshot before reorder for undo
@@ -3810,30 +3825,29 @@ export function EditorialItinerary({
       return total > 0 ? total : null;
     };
 
-    // Partition: synthetic items keep original times, only real activities get recalculated
-    const syntheticIds = new Set(
-      reorderedActivities.filter(a => isSyntheticActivity(a)).map(a => a.id)
-    );
-    const realActivities = reorderedActivities.filter(a => !syntheticIds.has(a.id));
+    // === KEY FIX: operate on visible reorderable activities only ===
+    const currentActivities = days[dayIndex]?.activities || [];
+    const oldVisible = getVisibleReorderableActivities(currentActivities);
+    
+    // Derive the new visible order from reorderedActivities (filter same way)
+    const newVisible = getVisibleReorderableActivities(reorderedActivities);
 
-    // Collect original durations (in minutes) for each REAL activity
-    const withTimes = realActivities.map(a => {
+    // Recalculate times only for visible reorderable activities
+    const withTimes = newVisible.map(a => {
       const s = toMins(a.startTime || a.time);
       const e = toMins(a.endTime);
-      const dur = (s !== null && e !== null && e > s) ? e - s : 30; // default 30 min
+      const dur = (s !== null && e !== null && e > s) ? e - s : 30;
       return { activity: a, duration: dur };
     });
 
-    // Start from the earliest original time across REAL activities, or 09:00
-    const allStarts = realActivities.map(a => toMins(a.startTime || a.time)).filter((v): v is number => v !== null);
+    // Start from earliest original time across visible activities, or 09:00
+    const allStarts = newVisible.map(a => toMins(a.startTime || a.time)).filter((v): v is number => v !== null);
     let cursor = allStarts.length > 0 ? Math.min(...allStarts) : 9 * 60;
 
-    const realUpdated = withTimes.map(({ activity, duration }, idx) => {
+    const visibleUpdated = withTimes.map(({ activity, duration }, idx) => {
       const newStart = fmtTime(cursor);
       const newEnd = fmtTime(cursor + duration);
       
-      // Use the CURRENT activity's transportation duration as the gap (it describes the route FROM this activity TO its next neighbor)
-      // For the last activity, no transit gap is needed
       const transitGap = (idx < withTimes.length - 1)
         ? (parseTransitDuration(activity.transportation?.duration) ?? 15)
         : 0;
@@ -3847,11 +3861,35 @@ export function EditorialItinerary({
       };
     });
 
-    // Merge back: real activities get recalculated times, synthetic keep originals
-    const realUpdatedMap = new Map(realUpdated.map(a => [a.id, a]));
-    const updated = reorderedActivities.map(a =>
-      syntheticIds.has(a.id) ? a : (realUpdatedMap.get(a.id) || a)
-    );
+    // Clear transportation for activities whose visible neighbor changed
+    const oldAdj = new Map<string, string>();
+    oldVisible.forEach((a, i) => { if (i < oldVisible.length - 1) oldAdj.set(a.id, oldVisible[i + 1].id); });
+    
+    const visibleUpdatedMap = new Map(visibleUpdated.map(a => [a.id, a]));
+    const finalVisible = visibleUpdated.map((a, i) => {
+      const oldNext = oldAdj.get(a.id);
+      const newNext = i < visibleUpdated.length - 1 ? visibleUpdated[i + 1].id : undefined;
+      if (oldNext !== newNext) {
+        return { ...a, transportation: undefined };
+      }
+      return a;
+    });
+    const finalVisibleMap = new Map(finalVisible.map(a => [a.id, a]));
+
+    // Rebuild raw array: replace visible reorderable slots with new order, keep everything else in place
+    const visibleSlotIndices: number[] = [];
+    currentActivities.forEach((a, i) => {
+      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, currentActivities)) {
+        visibleSlotIndices.push(i);
+      }
+    });
+
+    const updated = [...currentActivities];
+    visibleSlotIndices.forEach((rawIdx, slotIdx) => {
+      if (slotIdx < finalVisible.length) {
+        updated[rawIdx] = finalVisible[slotIdx];
+      }
+    });
 
     setDays(prev => {
       const newDays = prev.map((day, idx) => {
@@ -3868,45 +3906,54 @@ export function EditorialItinerary({
     }
     setHasChanges(true);
     setNeedsOptimization(true);
-  }, [syncBudgetFromDays, isSyntheticActivity]);
+  }, [syncBudgetFromDays, isSyntheticActivity, isHiddenOptionAlternative, getVisibleReorderableActivities, days]);
 
-  // Move activity up/down — delegates to reorder handler for proper time reassignment
+  // Move activity up/down — operates on visible card order, not raw array
   const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
     const day = days[dayIndex];
     if (!day) return;
 
     const activities = [...day.activities];
-    const actIdx = activities.findIndex(a => a.id === activityId);
-    if (actIdx === -1) return;
+    
+    // Build the visible reorderable list
+    const visible = getVisibleReorderableActivities(activities);
+    const visIdx = visible.findIndex(a => a.id === activityId);
+    if (visIdx === -1) return;
 
-    // Skip if source is synthetic (defensive)
-    if (isSyntheticActivity(activities[actIdx])) return;
+    // Determine swap target in visible order
+    const newVisIdx = direction === 'up' ? visIdx - 1 : visIdx + 1;
+    if (newVisIdx < 0 || newVisIdx >= visible.length) return;
 
-    // Find visible neighbor to swap with (skip synthetic/hidden items)
-    let newIdx = direction === 'up' ? actIdx - 1 : actIdx + 1;
-    while (newIdx >= 0 && newIdx < activities.length && isSyntheticActivity(activities[newIdx])) {
-      newIdx += direction === 'up' ? -1 : 1;
+    // Swap in the visible list
+    const reorderedVisible = [...visible];
+    [reorderedVisible[visIdx], reorderedVisible[newVisIdx]] = [reorderedVisible[newVisIdx], reorderedVisible[visIdx]];
+
+    // Clear transport for swapped pair and the one before the swap range
+    const minVisIdx = Math.min(visIdx, newVisIdx);
+    reorderedVisible[minVisIdx] = { ...reorderedVisible[minVisIdx], transportation: undefined };
+    reorderedVisible[Math.max(visIdx, newVisIdx)] = { ...reorderedVisible[Math.max(visIdx, newVisIdx)], transportation: undefined };
+    if (minVisIdx > 0) {
+      reorderedVisible[minVisIdx - 1] = { ...reorderedVisible[minVisIdx - 1], transportation: undefined };
     }
-    if (newIdx < 0 || newIdx >= activities.length) return;
 
-    const minIdx = Math.min(actIdx, newIdx);
-    const maxIdx = Math.max(actIdx, newIdx);
-
-    // Swap positions
-    [activities[actIdx], activities[newIdx]] = [activities[newIdx], activities[actIdx]];
-
-    // Clear ALL stale transport data for affected positions — routes are direction-specific
-    // (A→B ≠ B→A), so old transport is invalid after swap. TransitGapIndicator auto-fetches.
-    activities[minIdx] = { ...activities[minIdx], transportation: undefined };
-    activities[maxIdx] = { ...activities[maxIdx], transportation: undefined };
-    // Activity before swap range now points to a different next neighbor
-    if (minIdx > 0) {
-      activities[minIdx - 1] = { ...activities[minIdx - 1], transportation: undefined };
-    }
+    // Rebuild the raw array with reordered visible slots
+    const visibleSlotIndices: number[] = [];
+    activities.forEach((a, i) => {
+      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities)) {
+        visibleSlotIndices.push(i);
+      }
+    });
+    
+    const rebuilt = [...activities];
+    visibleSlotIndices.forEach((rawIdx, slotIdx) => {
+      if (slotIdx < reorderedVisible.length) {
+        rebuilt[rawIdx] = reorderedVisible[slotIdx];
+      }
+    });
 
     // Delegate to reorder handler which reassigns times and saves version snapshot
-    handleActivityReorder(dayIndex, activities);
-  }, [days, handleActivityReorder, isSyntheticActivity]);
+    handleActivityReorder(dayIndex, rebuilt);
+  }, [days, handleActivityReorder, isSyntheticActivity, isHiddenOptionAlternative, getVisibleReorderableActivities]);
 
   // Move activity to a different day
   const handleMoveToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
