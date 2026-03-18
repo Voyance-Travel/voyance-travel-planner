@@ -3841,17 +3841,21 @@ export function EditorialItinerary({
     const newIdx = direction === 'up' ? actIdx - 1 : actIdx + 1;
     if (newIdx < 0 || newIdx >= activities.length) return;
 
+    // Capture original transport data before swap
+    const minIdx = Math.min(actIdx, newIdx);
+    const maxIdx = Math.max(actIdx, newIdx);
+    const formerMinTransport = activities[minIdx]?.transportation;
+    const formerMaxTransport = activities[maxIdx]?.transportation;
+
     // Swap positions
     [activities[actIdx], activities[newIdx]] = [activities[newIdx], activities[actIdx]];
 
-    // Clear stale transportation only on activities whose next neighbor changed
-    const minIdx = Math.min(actIdx, newIdx);
-    const maxIdx = Math.max(actIdx, newIdx);
-    // The activity at minIdx now has a different next neighbor
-    activities[minIdx] = { ...activities[minIdx], transportation: undefined };
-    // The activity at maxIdx now has a different next neighbor
-    activities[maxIdx] = { ...activities[maxIdx], transportation: undefined };
-    // The activity before the swap range also has a new next neighbor
+    // Preserve transit data for the swapped pair (same two locations, symmetric distance)
+    // New occupant of minIdx gets the old minIdx transport (describes minIdx→maxIdx pair)
+    activities[minIdx] = { ...activities[minIdx], transportation: formerMinTransport };
+    // New occupant of maxIdx keeps old maxIdx transport (its next neighbor beyond swap is unchanged)
+    activities[maxIdx] = { ...activities[maxIdx], transportation: formerMaxTransport };
+    // Activity before the swap range has a genuinely new next neighbor — clear its transport
     if (minIdx > 0) {
       activities[minIdx - 1] = { ...activities[minIdx - 1], transportation: undefined };
     }
