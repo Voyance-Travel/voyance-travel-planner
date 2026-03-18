@@ -113,7 +113,8 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
 
     if (currStart < prevEnd) {
       const newStart = Math.min(prevEnd, MAX_TIME);
-      const origDuration = result[i].durationMinutes || 30;
+      // Use preserved original duration if activity was already truncated upstream
+      const origDuration = (result[i] as any).__originalDurationMinutes || result[i].durationMinutes || 30;
       const newEnd = Math.min(newStart + origDuration, MAX_TIME);
       const actualDuration = newEnd - newStart;
       const wasTruncated = (newStart + origDuration) > MAX_TIME && actualDuration < origDuration;
@@ -140,7 +141,8 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
     const act = result[i];
     if ((act as any).__truncatedAtMidnight) continue;
     const start = timeToMinutes(act.startTime);
-    const origDuration = act.durationMinutes || 30;
+    // Use preserved original duration if available
+    const origDuration = (act as any).__originalDurationMinutes || act.durationMinutes || 30;
     if (start + origDuration > MAX_TIME) {
       const actualDuration = MAX_TIME - start;
       if (actualDuration < origDuration) {
