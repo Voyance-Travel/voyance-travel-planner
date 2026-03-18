@@ -2472,6 +2472,31 @@ export default function TripDetail() {
               // Build per-city hotel info — prefer trip_cities DB data, fallback to string splitting
               const isMultiCity = !!(trip as any).is_multi_city || tripCities.length > 1;
               const cityHotels: import('@/components/itinerary/EditorialItinerary').CityHotelInfo[] = (() => {
+                // For single-city trips with multiple hotels (split stays), build cityHotels too
+                if (!isMultiCity && allNormalizedHotels.length > 1) {
+                  return allNormalizedHotels.map((hotel, idx) => ({
+                    cityName: (trip.destination || '').split(/\s*[→→,]\s*/)[0]?.trim() || 'Destination',
+                    cityOrder: idx,
+                    checkInDate: hotel.checkInDate,
+                    checkOutDate: hotel.checkOutDate,
+                    nights: hotel.checkInDate && hotel.checkOutDate
+                      ? Math.max(1, Math.ceil((new Date(hotel.checkOutDate).getTime() - new Date(hotel.checkInDate).getTime()) / (1000 * 60 * 60 * 24)))
+                      : undefined,
+                    hotel: {
+                      name: hotel.name,
+                      address: hotel.address,
+                      rating: hotel.rating,
+                      imageUrl: hotel.imageUrl,
+                      images: hotel.images,
+                      website: hotel.website,
+                      googleMapsUrl: hotel.googleMapsUrl,
+                      checkIn: hotel.checkInTime || '3:00 PM',
+                      checkOut: hotel.checkOutTime || '11:00 AM',
+                      pricePerNight: hotel.pricePerNight,
+                      amenities: (hotel as any)?.amenities,
+                    } as any,
+                  }));
+                }
                 if (!isMultiCity) return [];
 
                 // When is_multi_city is true but tripCities hasn't loaded yet, skip the
