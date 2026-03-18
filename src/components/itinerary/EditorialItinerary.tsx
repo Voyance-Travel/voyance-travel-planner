@@ -3966,7 +3966,7 @@ export function EditorialItinerary({
 
     // Delegate to reorder handler which reassigns times and saves version snapshot
     handleActivityReorder(dayIndex, rebuilt);
-  }, [days, handleActivityReorder, isSyntheticActivity, isHiddenOptionAlternative, getVisibleReorderableActivities]);
+  }, [days, handleActivityReorder, isSyntheticActivity, isHiddenOptionAlternative, isTransportActivity, getVisibleReorderableActivities]);
 
   // Move activity to a different day
   const handleMoveToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
