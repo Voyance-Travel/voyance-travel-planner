@@ -117,7 +117,17 @@ import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationS
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { TransitModePicker } from './TransitModePicker';
 
-import { cascadeFixOverlaps } from '@/utils/injectHotelActivities';
+import { cascadeFixOverlaps, previewCascadeOverflow } from '@/utils/injectHotelActivities';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { NewMemberSuggestionsCard } from './NewMemberSuggestionsCard';
 import { calculateItineraryValueStats } from '@/utils/intelligenceAnalytics';

@@ -129,7 +129,7 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
     }
   }
 
-  // Filter out activities that no longer fit in the day
+// Filter out activities that no longer fit in the day
   return result.filter(act => {
     const isStructural = act.tags?.some(t => STRUCTURAL_TAGS.includes(t));
     if (isStructural) return true;
@@ -142,6 +142,20 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
     if (actualDuration < MIN_USEFUL_DURATION && start >= 22 * 60) return false;
     return true;
   });
+}
+
+/**
+ * Dry-run version of cascadeFixOverlaps.
+ * Returns the kept and dropped activity lists without modifying state.
+ */
+export function previewCascadeOverflow(activities: EditorialActivity[]): {
+  kept: EditorialActivity[];
+  dropped: EditorialActivity[];
+} {
+  const kept = cascadeFixOverlaps(activities);
+  const keptIds = new Set(kept.map(a => a.id));
+  const dropped = activities.filter(a => !keptIds.has(a.id));
+  return { kept, dropped };
 }
 
 function buildCheckOutActivity(hotel: HotelForInjection): EditorialActivity {
