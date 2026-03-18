@@ -179,6 +179,9 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
     return () => { cancelled = true; };
   }, [user]);
 
+  // Subscribe to activePopup so we can retry when the slot frees up
+  const activePopup = usePopupCoordination((s) => s.activePopup);
+
   // Show entry banner instead of auto-starting tour
   useEffect(() => {
     if (!shouldShowWhenAllowed || isVisible || showBanner) return;
@@ -186,11 +189,11 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
     const timer = setTimeout(() => {
       const allowed = requestPopup('itinerary_tour');
       if (allowed) setShowBanner(true);
-    }, 1500);
+    }, activePopup === null ? 500 : 1500);
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldShowWhenAllowed]);
+  }, [shouldShowWhenAllowed, activePopup]);
 
   const startTour = useCallback(() => {
     setShowBanner(false);
