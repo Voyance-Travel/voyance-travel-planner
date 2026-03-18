@@ -4301,55 +4301,53 @@ export function EditorialItinerary({
       isLocked: false,
     };
 
-    setDays(prev => {
-      const updated = prev.map((day, idx) => {
-        if (idx !== dayIndex) return day;
-        // Insert in chronological order by startTime
-        const activities = [...day.activities];
-        const newTime = newActivity.startTime || '23:59';
-        let insertIndex = activities.length; // default: end
-        for (let i = 0; i < activities.length; i++) {
-          const existingTime = activities[i].startTime || '23:59';
-          if (newTime <= existingTime) {
-            insertIndex = i;
-            break;
-          }
-        }
-        activities.splice(insertIndex, 0, newActivity);
-        // GAP 2: Preview overlaps after inserting a new activity
-        const { kept, dropped: droppedActivities } = previewCascadeOverflow(activities);
-        if (droppedActivities.length > 0) {
-          // Defer to confirmation dialog instead of silently dropping
-          setPendingCascade({
-            dayIndex,
-            activityIndex: insertIndex,
-            startTime: newActivity.startTime || '12:00',
-            endTime: newActivity.endTime || '13:00',
-            dropped: droppedActivities,
-            kept,
-            source: 'add_activity',
-          });
-          return day; // Don't apply yet
-        }
-        return { ...day, activities: kept };
-      });
-      if (!pendingCascade) {
-        // Only finalize if no confirmation needed
-        syncBudgetFromDays(updated);
+    // Compute insertion and preview outside setDays
+    const day = days[dayIndex];
+    if (!day) return;
+    const activities = [...day.activities];
+    const newTime = newActivity.startTime || '23:59';
+    let insertIndex = activities.length;
+    for (let i = 0; i < activities.length; i++) {
+      const existingTime = activities[i].startTime || '23:59';
+      if (newTime <= existingTime) {
+        insertIndex = i;
+        break;
       }
+    }
+    activities.splice(insertIndex, 0, newActivity);
+
+    // Preview overflow
+    const { kept, dropped: droppedActivities } = previewCascadeOverflow(activities);
+    if (droppedActivities.length > 0) {
+      setPendingCascade({
+        dayIndex,
+        activityIndex: insertIndex,
+        startTime: newActivity.startTime || '12:00',
+        endTime: newActivity.endTime || '13:00',
+        dropped: droppedActivities,
+        kept,
+        source: 'add_activity',
+      });
+      return; // Wait for user confirmation
+    }
+
+    // No overflow — apply directly
+    setDays(prev => {
+      const updated = prev.map((d, idx) => {
+        if (idx !== dayIndex) return d;
+        return { ...d, activities: kept };
+      });
+      syncBudgetFromDays(updated);
       return updated;
     });
-    if (!pendingCascade) {
-      // Clear stale refresh result for this day
-      const dayNum = days[dayIndex]?.dayNumber;
-      if (dayNum) {
-        setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
-      }
-      setHasChanges(true);
-      setNeedsOptimization(true);
-      setAddActivityModal(null);
-      toast.success('Activity added!');
+    const dayNum = days[dayIndex]?.dayNumber;
+    if (dayNum) {
+      setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
     }
+    setHasChanges(true);
+    setNeedsOptimization(true);
+    setAddActivityModal(null);
+    toast.success('Activity added!');
   }, [tripCurrency, spendCredits, tripId, days, syncBudgetFromDays]);
 
   const handleImportActivities = useCallback(async (imports: Array<{ dayIndex: number; activities: Array<Partial<EditorialActivity>>; mode: ImportMode }>) => {
