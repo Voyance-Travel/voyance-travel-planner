@@ -210,18 +210,19 @@ export function TransitGapIndicator({
   const [aiRecommendation, setAiRecommendation] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
+  const [userSelectedMode, setUserSelectedMode] = useState<string | null>(null);
 
   // Compute derived values before any hooks that depend on them
   const eitherIsTransit = isTransitCategory(currentCategory) || isTransitCategory(nextCategory);
   const skipBufferWarning = sameLocation;
   const isZeroGap = !skipBufferWarning && gapMinutes <= 0;
   const isTightGap = !skipBufferWarning && gapMinutes > 0 && gapMinutes < 15;
-  const transportMethod = transportation?.method;
-  const modeLabel = getGapTransportLabel(transportMethod, gapMinutes);
-  const modeIcon = getGapTransportIcon(transportMethod, gapMinutes);
+  const effectiveMethod = userSelectedMode || transportation?.method;
+  const modeLabel = getGapTransportLabel(effectiveMethod, gapMinutes);
+  const modeIcon = getGapTransportIcon(effectiveMethod, gapMinutes);
   const durationLabel = transportation?.duration || `${Math.abs(gapMinutes)} min`;
   const canExpand = isEditable && !!city && !!destinationName;
-  const shouldHide = hasTransitBadge || eitherIsTransit;
+  const shouldHide = hasTransitBadge || eitherIsTransit || sameLocation;
 
   const [expandedOptionId, setExpandedOptionId] = useState<string | null>(null);
   const [routeDetailsCache, setRouteDetailsCache] = useState<Record<string, RouteDetails | null>>({});
@@ -629,6 +630,7 @@ export function TransitGapIndicator({
                                   const instructions = routeDetailsCache[option.id]?.steps
                                     ?.map(s => s.instruction)
                                     .join(' → ') || option.route || undefined;
+                                  setUserSelectedMode(option.mode);
                                   onSelectMode(option.mode, option.duration, cost, instructions);
                                   setIsExpanded(false);
                                 }}

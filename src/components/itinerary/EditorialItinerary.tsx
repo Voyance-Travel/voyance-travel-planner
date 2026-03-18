@@ -541,6 +541,23 @@ function sanitizeAiText(text: string | undefined): string {
   return text.replace(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g, '').trim();
 }
 
+/** Fuzzy location match — handles "Mandarin Oriental, Marrakech" vs "Mandarin Oriental" vs "Mandarin" */
+function isFuzzyLocationMatch(
+  a?: { name?: string; address?: string } | null,
+  b?: { name?: string; address?: string } | null,
+): boolean {
+  if (!a || !b) return false;
+  if (a.name && b.name && a.name === b.name) return true;
+  if (a.address && b.address && a.address === b.address) return true;
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (a.name && b.name) {
+    const an = normalize(a.name);
+    const bn = normalize(b.name);
+    if (an.length >= 4 && bn.length >= 4 && (an.includes(bn) || bn.includes(an))) return true;
+  }
+  return false;
+}
+
 // Exchange rates relative to USD (1 USD = X units of target currency)
 // These are approximate rates - updated periodically
 const EXCHANGE_RATES_FROM_USD: Record<string, number> = {
@@ -8898,7 +8915,7 @@ function DayCard({
                         hasTransitBadge={hasTransitBadgeVisible}
                         currentCategory={activityToRender.category || activityToRender.type}
                         nextCategory={nextActivity?.category || nextActivity?.type}
-                        sameLocation={!!(activityToRender.location?.name && nextActivity?.location?.name && activityToRender.location.name === nextActivity.location.name)}
+                        sameLocation={isFuzzyLocationMatch(activityToRender.location, nextActivity?.location)}
                         city={cleanDestination}
                         originName={activityToRender.location?.name || activityToRender.title}
                         destinationName={nextActivity?.location?.name || nextActivity?.title}
