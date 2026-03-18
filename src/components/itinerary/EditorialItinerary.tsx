@@ -3919,7 +3919,7 @@ export function EditorialItinerary({
     }
     setHasChanges(true);
     setNeedsOptimization(true);
-  }, [syncBudgetFromDays, isSyntheticActivity, isHiddenOptionAlternative, getVisibleReorderableActivities, days]);
+  }, [syncBudgetFromDays, isSyntheticActivity, isHiddenOptionAlternative, isTransportActivity, getVisibleReorderableActivities, days]);
 
   // Move activity up/down — operates on visible card order, not raw array
   const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
