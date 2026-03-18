@@ -1940,6 +1940,7 @@ export function EditorialItinerary({
     startTime: string;
     endTime: string;
     dropped: EditorialActivity[];
+    truncated: EditorialActivity[];
     kept: EditorialActivity[];
     source: 'time_edit' | 'add_activity';
   } | null>(null);
