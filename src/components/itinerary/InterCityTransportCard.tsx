@@ -98,7 +98,7 @@ function resolveTheme(transportName?: string) {
   return TRANSPORT_THEMES.train; // default
 }
 
-export function InterCityTransportCard({ title, travelMeta, className }: InterCityTransportCardProps) {
+export function InterCityTransportCard({ title, travelMeta, className, variant = 'default' }: InterCityTransportCardProps) {
   const [expanded, setExpanded] = useState(false);
   const theme = resolveTheme(travelMeta.transportName);
   const { Icon } = theme;
@@ -119,18 +119,28 @@ export function InterCityTransportCard({ title, travelMeta, className }: InterCi
       }).format(travelMeta.price)
     : null;
 
+  const isFinal = variant === 'final';
+
   return (
     <div
       className={cn(
-        'rounded-xl border border-border border-l-[3px] overflow-hidden transition-shadow',
-        theme.bg,
-        theme.border,
+        'rounded-xl border overflow-hidden transition-shadow',
+        isFinal
+          ? 'border-primary/20 border-l-[4px] border-l-primary bg-gradient-to-r from-primary/[0.06] to-primary/[0.02] shadow-sm'
+          : cn('border-border border-l-[3px]', theme.bg, theme.border),
         hasExpandableDetails && 'cursor-pointer',
         className,
       )}
       onClick={hasExpandableDetails ? () => setExpanded(prev => !prev) : undefined}
     >
-      <div className="px-4 py-3.5">
+      <div className={cn('px-4', isFinal ? 'py-4' : 'py-3.5')}>
+        {/* "Heading Home" label for final variant */}
+        {isFinal && (
+          <p className="text-[10px] font-bold uppercase tracking-widest text-primary/60 mb-2">
+            Heading Home
+          </p>
+        )}
+
         {/* Header row: icon + title + price */}
         <div className="flex items-center gap-3 mb-2.5">
           <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0', theme.iconBg)}>
