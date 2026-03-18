@@ -6728,8 +6728,67 @@ export function EditorialItinerary({
           }
         }}
       />
+
+      {/* Cascade Overflow Confirmation Dialog */}
+      <AlertDialog open={!!pendingCascade} onOpenChange={(open) => { if (!open) setPendingCascade(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Schedule overflow</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p className="mb-2">
+                  Shifting the schedule would remove <strong>{pendingCascade?.dropped.length}</strong> activit{pendingCascade?.dropped.length === 1 ? 'y' : 'ies'} that no longer fit before midnight:
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  {pendingCascade?.dropped.map((act) => (
+                    <li key={act.id}>{act.title || 'Untitled activity'}</li>
+                  ))}
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingCascade(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!pendingCascade) return;
+                const { dayIndex, kept, source } = pendingCascade;
+                // Save version snapshot for undo
+                const day = days[dayIndex];
+                if (tripId && day) {
+                  await saveDayVersion(tripId, {
+                    dayNumber: day.dayNumber,
+                    title: day.title,
+                    theme: day.theme,
+                    activities: day.activities as any,
+                  }, 'before_cascade');
+                  await refreshUndoState();
+                }
+                // Apply the cascade
+                setDays(prev => prev.map((d, idx) => {
+                  if (idx !== dayIndex) return d;
+                  return { ...d, activities: kept };
+                }));
+                setHasChanges(true);
+                if (source === 'time_edit') {
+                  setTimeEditModal(null);
+                  toast.success('Schedule shifted');
+                } else {
+                  setAddActivityModal(null);
+                  setNeedsOptimization(true);
+                  toast.success('Activity added!');
+                }
+                toast.info(`${pendingCascade.dropped.length} activit${pendingCascade.dropped.length === 1 ? 'y was' : 'ies were'} removed. Use Undo to restore.`);
+                setPendingCascade(null);
+              }}
+            >
+              Shift anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
-      {/* Hotel Gallery Modal */}
       <HotelGalleryModal
         isOpen={hotelGalleryOpen}
         onClose={() => setHotelGalleryOpen(false)}
