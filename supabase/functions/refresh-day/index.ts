@@ -409,7 +409,48 @@ Deno.serve(async (req: Request) => {
           }
         }
       }
-    }
+        } else {
+          // No coordinates — still check time-based buffer
+          const effectiveEndForBuffer = patchedTimes.get(act.id)?.end ?? endMin;
+          const effectiveNextStart = patchedTimes.get(next.id)?.start ?? parseTime(next.startTime);
+          if (effectiveEndForBuffer !== null && effectiveNextStart !== null) {
+            const gap = effectiveNextStart - effectiveEndForBuffer;
+            const minBuffer = getMinBufferMinutes(act.category, next.category);
+            if (gap < minBuffer && gap >= 0 && minBuffer > 0) {
+              issues.push({
+                type: 'insufficient_buffer',
+                activityId: next.id,
+                activityTitle: next.title,
+                severity: 'warning',
+                message: `Only ${gap} min between "${act.title}" and "${next.title}" (${minBuffer} min buffer recommended).`,
+                suggestion: `Delay "${next.title}" to ${minutesToTime(effectiveEndForBuffer + minBuffer)}.`,
+              });
+
+              if (!changedIds.has(next.id)) {
+                const origNextStart = parseTime(next.startTime);
+                const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && origNextStart !== null ? parseTime(next.endTime)! - origNextStart : 60);
+                const bufferedStartMin = effectiveEndForBuffer + minBuffer;
+                const bufferedEndMin = bufferedStartMin + nextDuration;
+                const bufferedStart = minutesToTime(bufferedStartMin);
+                const bufferedEnd = minutesToTime(bufferedEndMin);
+
+                proposedChanges.push({
+                  id: `change-${++changeCounter}`,
+                  type: 'buffer_added',
+                  activityId: next.id,
+                  activityTitle: next.title,
+                  icon: 'timer',
+                  description: `Added ${minBuffer - gap} min buffer before "${next.title}"`,
+                  oldValue: next.startTime,
+                  newValue: bufferedStart,
+                  patch: { startTime: bufferedStart, endTime: bufferedEnd },
+                });
+                changedIds.add(next.id);
+                patchedTimes.set(next.id, { start: bufferedStartMin, end: bufferedEndMin });
+              }
+            }
+          }
+        }
 
     // 5. Check checkout before airport on last day equivalent
     const checkoutIdx = sorted.findIndex(a => /check.?out/i.test(a.title));
