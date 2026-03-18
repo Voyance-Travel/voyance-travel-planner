@@ -1726,6 +1726,24 @@ export function EditorialItinerary({
           }
 
           updatedActivities.splice(insertIndex, 0, departureCard);
+
+          // Trim non-synthetic activities after checkout on the final day
+          const finalDepMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+          const finalBufferMinutes = tType === 'flight' ? 90 : tType === 'train' ? 45 : 30;
+          const finalCutoffMinutes = finalDepMinutes - finalBufferMinutes;
+
+          updatedActivities = updatedActivities.filter(act => {
+            if ((act as any).__syntheticTravel || (act as any).__syntheticDeparture ||
+                (act as any).__syntheticFinalDeparture || (act as any).__interCityTransport ||
+                (act as any).__hotelCheckout || (act as any).__hotelCheckin ||
+                act.id.startsWith('hotel-') || act.id.startsWith('departure-') ||
+                act.id.startsWith('travel-') || act.id.startsWith('final-departure-')) {
+              return true;
+            }
+            if (!act.startTime) return true;
+            const actMin = parseInt(act.startTime.split(':')[0]) * 60 + parseInt(act.startTime.split(':')[1] || '0');
+            return actMin < finalCutoffMinutes;
+          });
         }
       }
     }
