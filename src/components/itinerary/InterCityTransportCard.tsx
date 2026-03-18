@@ -28,6 +28,8 @@ interface InterCityTransportCardProps {
   title: string;
   travelMeta: TravelMeta;
   className?: string;
+  /** Visual variant — 'final' adds a "Heading Home" header and elevated styling */
+  variant?: 'default' | 'final';
 }
 
 const TRANSPORT_THEMES: Record<string, {

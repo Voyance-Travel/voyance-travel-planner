@@ -1626,7 +1626,10 @@ export function EditorialItinerary({
     }
 
     // === Final departure day: inject return flight/train card on last day ===
-    if (dayIndex === rawDays.length - 1 && !d.isDepartureDay && !d.isTransitionDay && flightSelection) {
+    // Multi-city guard: only inject on the last day if it belongs to the final city
+    const isLastCity = !allHotels || allHotels.length <= 1 ||
+      (d.city && allHotels.length > 0 && d.city.toLowerCase() === allHotels[allHotels.length - 1]?.cityName?.toLowerCase());
+    if (dayIndex === rawDays.length - 1 && !d.isDepartureDay && !d.isTransitionDay && isLastCity && flightSelection) {
       if (!updatedActivities.some(a => (a as any).__syntheticFinalDeparture)) {
         // Find the return leg: prefer isDestinationDeparture-marked leg, then flightSelection.return, then last leg
         const allLegs = flightSelection.legs || [];
@@ -1704,6 +1707,21 @@ export function EditorialItinerary({
               }
             }
           }
+
+          // Ensure the card is inserted AFTER any hotel checkout activity
+          const checkoutKeywords = ['check out', 'checkout', 'check-out'];
+          while (insertIndex < updatedActivities.length) {
+            const actAtIdx = updatedActivities[insertIndex];
+            const isCheckout = (actAtIdx as any).__hotelCheckout ||
+              actAtIdx.id?.startsWith('hotel-checkout') ||
+              checkoutKeywords.some(kw => (actAtIdx.title || '').toLowerCase().includes(kw));
+            if (isCheckout) {
+              insertIndex++;
+            } else {
+              break;
+            }
+          }
+
           updatedActivities.splice(insertIndex, 0, departureCard);
         }
       }
