@@ -466,6 +466,8 @@ export interface EditorialItineraryProps {
   journeyName?: string | null;
   /** Date editing props — renders inline pencil icon next to date display */
   onDateChange?: (result: import('@/components/trip/TripDateEditor').DateChangeResult) => Promise<void>;
+  /** Called when user wants to undo a date change (restores dates + itinerary) */
+  onUndoDateChange?: () => Promise<void>;
   hasItinerary?: boolean;
   dateEditorFlightSelection?: Record<string, unknown> | null;
   dateEditorCities?: Array<{ id: string; city_name: string; nights?: number }>;

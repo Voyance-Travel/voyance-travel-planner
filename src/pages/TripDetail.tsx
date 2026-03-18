@@ -2808,6 +2808,7 @@ export default function TripDetail() {
                   journeyId={trip.journey_id}
                   journeyName={trip.journey_name}
                   onDateChange={handleDateChange}
+                  onUndoDateChange={handleUndoDateChange}
                   hasItinerary={hasItinerary}
                   dateEditorFlightSelection={trip.flight_selection as Record<string, unknown> | null}
                   dateEditorCities={tripCities}
