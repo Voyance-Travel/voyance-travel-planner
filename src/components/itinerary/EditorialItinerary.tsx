@@ -3814,16 +3814,6 @@ export function EditorialItinerary({
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
     };
 
-    // Parse a transit duration string like "25 min" or "1h 30m" to minutes
-    const parseTransitDuration = (dur?: string): number | null => {
-      if (!dur) return null;
-      const hm = dur.match(/(\d+)\s*h(?:ours?|r)?/i);
-      const mm = dur.match(/(\d+)\s*m(?:in(?:ute)?s?)?/i);
-      let total = 0;
-      if (hm) total += parseInt(hm[1], 10) * 60;
-      if (mm) total += parseInt(mm[1], 10);
-      return total > 0 ? total : null;
-    };
 
     // === KEY FIX: operate on visible reorderable activities only ===
     const currentActivities = days[dayIndex]?.activities || [];
@@ -3832,32 +3822,31 @@ export function EditorialItinerary({
     // Derive the new visible order from reorderedActivities (filter same way)
     const newVisible = getVisibleReorderableActivities(reorderedActivities);
 
-    // Recalculate times only for visible reorderable activities
-    const withTimes = newVisible.map(a => {
+    // Capture original visible slot start times BEFORE reorder
+    const originalSlotStarts = oldVisible.map(a => toMins(a.startTime || a.time) ?? 9 * 60);
+
+    // Compute each activity's own duration
+    const withDurations = newVisible.map(a => {
       const s = toMins(a.startTime || a.time);
       const e = toMins(a.endTime);
       const dur = (s !== null && e !== null && e > s) ? e - s : 30;
       return { activity: a, duration: dur };
     });
 
-    // Start from earliest original time across visible activities, or 09:00
-    const allStarts = newVisible.map(a => toMins(a.startTime || a.time)).filter((v): v is number => v !== null);
-    let cursor = allStarts.length > 0 ? Math.min(...allStarts) : 9 * 60;
+    // Slot-anchored reorder: assign each reordered activity to the original slot's
+    // start time, but push forward if the previous activity overruns the slot.
+    let previousEnd = 0;
+    const visibleUpdated = withDurations.map(({ activity, duration }, idx) => {
+      const slotStart = idx < originalSlotStarts.length ? originalSlotStarts[idx] : previousEnd;
+      const actualStart = Math.max(slotStart, previousEnd);
+      const actualEnd = actualStart + duration;
+      previousEnd = actualEnd;
 
-    const visibleUpdated = withTimes.map(({ activity, duration }, idx) => {
-      const newStart = fmtTime(cursor);
-      const newEnd = fmtTime(cursor + duration);
-      
-      const transitGap = (idx < withTimes.length - 1)
-        ? (parseTransitDuration(activity.transportation?.duration) ?? 15)
-        : 0;
-      cursor += duration + transitGap;
-      
       return {
         ...activity,
-        startTime: newStart,
-        endTime: newEnd,
-        time: newStart,
+        startTime: fmtTime(actualStart),
+        endTime: fmtTime(actualEnd),
+        time: fmtTime(actualStart),
       };
     });
 
