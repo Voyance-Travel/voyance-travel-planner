@@ -10397,9 +10397,18 @@ function TimeEditModal({ isOpen, activity, onClose, onSave }: TimeEditModalProps
             </div>
           )}
         </div>
+
+          {/* Validation: end time must be after start time */}
+          {timeToMinutes(endTime) <= timeToMinutes(startTime) && (
+            <p className="text-sm text-destructive font-medium">End time must be after start time</p>
+          )}
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSave(startTime, endTime, cascade && deltaMinutes !== 0)}>
+          <Button
+            disabled={timeToMinutes(endTime) <= timeToMinutes(startTime)}
+            onClick={() => onSave(startTime, endTime, cascade && deltaMinutes !== 0)}
+          >
             {cascade && deltaMinutes !== 0 ? 'Shift Schedule' : 'Save Time'}
           </Button>
         </DialogFooter>
