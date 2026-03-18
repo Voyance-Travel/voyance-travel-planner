@@ -9997,9 +9997,9 @@ function ActivityRow({
                   activityTypeLower.includes(t) || titleLower.includes(t)
                 ) || titleLower.includes('check in') || titleLower.includes('check out');
                 
-                if (isNonReviewable || aiLocked || !canViewPremium) return null;
+                if (isNonReviewable) return null;
                 
-                // Show rating badge whenever a numeric rating exists (including compact mode)
+                // Show existing numeric rating even when aiLocked (Discover-sourced ratings are real data)
                 if (rating) {
                   return (
                     <Badge 
