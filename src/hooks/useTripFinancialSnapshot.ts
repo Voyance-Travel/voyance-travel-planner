@@ -28,11 +28,20 @@ export interface FinancialSnapshot {
   refetch: () => void;
 }
 
+interface SnapshotData {
+  tripTotalCents: number;
+  paidCents: number;
+  budgetTotalCents: number;
+  loading: boolean;
+}
+
 export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
-  const [paidCents, setPaidCents] = useState(0);
-  const [budgetTotalCents, setBudgetTotalCents] = useState(0);
-  const [tripTotalCents, setTripTotalCents] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<SnapshotData>({
+    tripTotalCents: 0,
+    paidCents: 0,
+    budgetTotalCents: 0,
+    loading: true,
+  });
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
@@ -71,10 +80,13 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       }
     }
 
-    setTripTotalCents(totalCents);
-    setPaidCents(paidTotal);
-    setBudgetTotalCents(tripData?.budget_total_cents || 0);
-    setLoading(false);
+    // Atomic update — all values in one setState call
+    setData({
+      tripTotalCents: totalCents,
+      paidCents: paidTotal,
+      budgetTotalCents: tripData?.budget_total_cents || 0,
+      loading: false,
+    });
   }, [tripId]);
 
   useEffect(() => {
@@ -82,8 +94,15 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   }, [fetchData]);
 
   // Re-fetch when bookings change (hotel/flight added)
+  // Also accept optimistic totals via event detail for instant UI updates
   useEffect(() => {
-    const handler = () => fetchData();
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.optimisticTotalCents != null) {
+        setData(prev => ({ ...prev, tripTotalCents: detail.optimisticTotalCents }));
+      }
+      fetchData(); // Still fetch for full accuracy
+    };
     window.addEventListener('booking-changed', handler);
     return () => window.removeEventListener('booking-changed', handler);
   }, [fetchData]);
@@ -91,20 +110,20 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   const refetch = useCallback(() => fetchData(), [fetchData]);
 
   return useMemo(() => {
-    const toBePaid = Math.max(0, tripTotalCents - paidCents);
-    const budgetRemaining = budgetTotalCents - tripTotalCents;
-    const paidPct = tripTotalCents > 0 ? (paidCents / tripTotalCents) * 100 : 0;
+    const toBePaid = Math.max(0, data.tripTotalCents - data.paidCents);
+    const budgetRemaining = data.budgetTotalCents - data.tripTotalCents;
+    const paidPct = data.tripTotalCents > 0 ? (data.paidCents / data.tripTotalCents) * 100 : 0;
 
     return {
-      tripTotalCents,
-      paidCents,
+      tripTotalCents: data.tripTotalCents,
+      paidCents: data.paidCents,
       toBePaidCents: toBePaid,
-      budgetTotalCents,
+      budgetTotalCents: data.budgetTotalCents,
       budgetRemainingCents: budgetRemaining,
       plannedUnpaidCents: toBePaid,
       paidPercent: Math.min(paidPct, 100),
-      loading,
+      loading: data.loading,
       refetch,
     };
-  }, [tripTotalCents, paidCents, budgetTotalCents, loading, refetch]);
+  }, [data, refetch]);
 }
