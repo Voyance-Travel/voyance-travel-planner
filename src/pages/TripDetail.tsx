@@ -1901,6 +1901,54 @@ export default function TripDetail() {
     }
   }, [trip, tripId, syncCitiesAfterDateChange, queryClient]);
 
+  // Handle undoing a trip date change — restores dates, itinerary, and hotel selection
+  const handleUndoDateChange = useCallback(async () => {
+    if (!tripId) return;
+    const result = await restoreTripDateVersion(tripId);
+    if (!result.success || !result.snapshot) {
+      toast.error(result.error || 'No date change to undo');
+      return;
+    }
+    const { startDate, endDate, itineraryData, hotelSelection } = result.snapshot;
+
+    // Update local state
+    setTrip(prev => prev ? {
+      ...prev,
+      start_date: startDate,
+      end_date: endDate,
+      itinerary_data: (itineraryData ?? prev.itinerary_data) as any,
+      hotel_selection: (hotelSelection ?? prev.hotel_selection) as any,
+    } : null);
+
+    // Persist to DB
+    try {
+      const updatePayload: Record<string, unknown> = {
+        start_date: startDate,
+        end_date: endDate,
+        updated_at: new Date().toISOString(),
+      };
+      if (itineraryData) updatePayload.itinerary_data = itineraryData;
+      if (hotelSelection !== undefined) updatePayload.hotel_selection = hotelSelection;
+
+      const { error } = await supabase
+        .from('trips')
+        .update(updatePayload as any)
+        .eq('id', tripId);
+
+      if (error) {
+        console.error('[TripDetail] Failed to undo date change:', error);
+        toast.error('Failed to undo date change');
+      } else {
+        toast.success('Date change undone');
+        queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+        queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
+      }
+    } catch (err) {
+      console.error('[TripDetail] Undo date change error:', err);
+      toast.error('Failed to undo date change');
+    }
+  }, [tripId, queryClient]);
+
   // Handle applying hotel-based swap suggestions to itinerary
   const handleApplySwaps = useCallback((swaps: SwapSuggestion[]) => {
     if (!trip) return;
