@@ -6777,7 +6777,7 @@ export function EditorialItinerary({
       <TimeEditModal
         isOpen={!!timeEditModal}
         activity={timeEditModal?.activity || null}
-        onClose={() => setTimeEditModal(null)}
+        onClose={() => { setTimeEditModal(null); setPendingCascade(null); }}
         onSave={(startTime, endTime, cascade) => {
           if (timeEditModal) {
             handleUpdateActivityTime(timeEditModal.dayIndex, timeEditModal.activityIndex, startTime, endTime, cascade);
