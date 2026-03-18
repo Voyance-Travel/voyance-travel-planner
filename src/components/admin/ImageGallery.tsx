@@ -349,11 +349,20 @@ export default function ImageGallery() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Badge variant="secondary">{totalCount} total</Badge>
+          {externalCount > 0 && (
+            <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border-0">{externalCount} external</Badge>
+          )}
           {brokenIds.size > 0 && (
             <Badge variant="destructive">{brokenIds.size} broken detected</Badge>
           )}
         </div>
         <div className="flex items-center gap-2">
+          {externalCount > 0 && (
+            <Button variant="outline" size="sm" onClick={healBrokenImages} disabled={healing}>
+              {healing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5 mr-1.5" />}
+              {healing ? `Healing ${healProgress.done}/${healProgress.total}...` : `Heal ${externalCount} external`}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleNewUpload}>
             <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
             Upload Image
