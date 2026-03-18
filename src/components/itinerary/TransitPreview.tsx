@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { Footprints, Train, Car, Bus, AlertTriangle, ArrowDown, Loader2, MapPin } from 'lucide-react';
+import { formatDuration } from '@/utils/plannerUtils';
 import { cn } from '@/lib/utils';
 import { useTransitEstimate, getRecommendedTransit, checkScheduleConflict, type TransitEstimate } from '@/hooks/useTransitEstimate';
 import { computeGapMinutes } from './TransitGapIndicator';
@@ -105,10 +106,13 @@ function TransitSection({
   gapMinutes: number | null;
 }) {
   const recommended = getRecommendedTransit(estimates);
+  const overlapFormatted = gapMinutes !== null && gapMinutes < 0
+    ? formatDuration(Math.abs(gapMinutes))
+    : null;
   const conflict = recommended && gapMinutes !== null
     ? checkScheduleConflict(recommended.durationMinutes, gapMinutes)
-    : gapMinutes !== null && gapMinutes < 0
-      ? { hasConflict: true, message: `These activities overlap by ${Math.abs(gapMinutes)} minutes. Consider adjusting the timing.` }
+    : overlapFormatted
+      ? { hasConflict: true, message: `These activities would overlap by ${overlapFormatted}. Consider adjusting the timing.` }
       : undefined;
 
   return (
