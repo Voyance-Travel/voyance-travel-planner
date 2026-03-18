@@ -334,8 +334,14 @@ export default function ImageGallery() {
         </Select>
 
         <div className="flex items-center gap-2">
-          <Switch id="broken-only" checked={brokenOnly} onCheckedChange={setBrokenOnly} />
+          <Switch id="broken-only" checked={brokenOnly} onCheckedChange={v => { setBrokenOnly(v); if (v) setExternalOnly(false); }} />
           <Label htmlFor="broken-only" className="text-sm">Broken only</Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Switch id="external-only" checked={externalOnly} onCheckedChange={v => { setExternalOnly(v); if (v) setBrokenOnly(false); }} />
+          <Label htmlFor="external-only" className="text-sm flex items-center gap-1">
+            <Globe className="h-3.5 w-3.5" /> External only
+          </Label>
         </div>
       </div>
 
