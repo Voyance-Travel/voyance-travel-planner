@@ -179,8 +179,6 @@ export function ItineraryOnboardingTour({ tripId, onComplete }: ItineraryOnboard
     return () => { cancelled = true; };
   }, [user]);
 
-  // Subscribe to activePopup so we can retry when the slot frees up
-  const activePopup = usePopupCoordination((s) => s.activePopup);
 
   // Show entry banner instead of auto-starting tour
   useEffect(() => {
