@@ -3875,7 +3875,7 @@ export function EditorialItinerary({
     // Rebuild raw array: replace visible reorderable slots with new order, keep everything else in place
     const visibleSlotIndices: number[] = [];
     currentActivities.forEach((a, i) => {
-      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, currentActivities)) {
+      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, currentActivities) && !isTransportActivity(a)) {
         visibleSlotIndices.push(i);
       }
     });
@@ -3886,6 +3886,23 @@ export function EditorialItinerary({
         updated[rawIdx] = finalVisible[slotIdx];
       }
     });
+
+    // Adjust transport activities to fit between their new non-transport neighbors
+    for (let i = 0; i < updated.length; i++) {
+      if (!isTransportActivity(updated[i])) continue;
+      const prev = updated.slice(0, i).reverse().find(a => !isTransportActivity(a) && !isSyntheticActivity(a));
+      if (prev?.endTime) {
+        const pEnd = toMins(prev.endTime) ?? 0;
+        const tDur = updated[i].durationMinutes || 15;
+        updated[i] = {
+          ...updated[i],
+          startTime: fmtTime(pEnd),
+          endTime: fmtTime(pEnd + tDur),
+          time: fmtTime(pEnd),
+          transportation: undefined, // clear stale route for refetch
+        };
+      }
+    }
 
     setDays(prev => {
       const newDays = prev.map((day, idx) => {
