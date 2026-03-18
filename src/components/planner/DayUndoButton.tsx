@@ -36,7 +36,7 @@ export function DayUndoButton({
       <Undo2 className={cn('h-4 w-4', isLoading && 'animate-pulse')} />
       {showLabel && (
         <span className="hidden sm:inline">
-          {isLoading ? 'Restoring...' : 'Undo'}
+          {isLoading ? 'Restoring...' : (label || 'Undo')}
         </span>
       )}
     </Button>
