@@ -119,7 +119,9 @@ function TransitSection({
           {direction === 'from' ? `From "${activityTitle}"` : `To "${activityTitle}"`}
         </span>
         {gapMinutes !== null && (
-          <span className="text-muted-foreground/60">({gapMinutes} min gap)</span>
+          <span className="text-muted-foreground/60">
+            {gapMinutes < 0 ? '(times overlap)' : `(${gapMinutes} min gap)`}
+          </span>
         )}
       </div>
 
