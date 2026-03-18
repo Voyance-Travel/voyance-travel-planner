@@ -51,20 +51,24 @@ const TOUR_STEPS: TourStep[] = [
     position: 'bottom',
     onBeforeStep: () => {
       // On mobile, the health panel is inside a collapsed MobileTripOverview.
-      // Expand it so the health score is visible.
       const isMobile = window.innerWidth < 640;
       if (isMobile) {
-        // Dispatch event to expand the mobile overview section
         window.dispatchEvent(new CustomEvent('tour-expand-mobile-overview'));
       }
-      // Also expand the health panel itself if it's collapsed
-      const healthEl = document.querySelector('[data-tour="health-score"]');
-      if (healthEl) {
-        // Ensure it's scrolled into view after a brief delay for expansion animation
-        setTimeout(() => {
+      // Open the Trip Completion collapsible that wraps the health panel
+      const collapsibleTriggers = document.querySelectorAll('[data-state="closed"]');
+      collapsibleTriggers.forEach(trigger => {
+        if (trigger.textContent?.includes('Trip Completion') || trigger.textContent?.includes('Trip Health')) {
+          (trigger as HTMLElement).click();
+        }
+      });
+      // Wait for collapsible animation, then scroll into view
+      setTimeout(() => {
+        const healthEl = document.querySelector('[data-tour="health-score"]');
+        if (healthEl) {
           healthEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 300);
-      }
+        }
+      }, 400);
     },
   },
   {
@@ -91,19 +95,22 @@ const TOUR_STEPS: TourStep[] = [
     selector: '[data-tour="activity-card"]',
     position: 'bottom',
     onBeforeStep: () => {
-      // On mobile, expand the first activity card so users can see the detail view
       const isMobile = window.innerWidth < 640;
       if (isMobile) {
         const activityCard = document.querySelector('[data-tour="activity-card"]');
         if (activityCard) {
-          // Click the mobile header button to expand if not already expanded
-          const mobileButton = activityCard.querySelector('button.sm\\:hidden');
-          const expandedSection = activityCard.querySelector('.sm\\:hidden.px-3.pb-3');
-          if (mobileButton && !expandedSection) {
+          // Use direct child button query instead of escaped CSS class selector
+          const mobileButton = activityCard.querySelector(':scope > button');
+          if (mobileButton) {
             (mobileButton as HTMLElement).click();
           }
         }
       }
+      // Scroll activity card into view after expansion
+      setTimeout(() => {
+        const el = document.querySelector('[data-tour="activity-card"]');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
     },
   },
   {
