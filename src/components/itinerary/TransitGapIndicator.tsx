@@ -4,7 +4,7 @@
  * Mirrors the TransitModePicker UX so all transit gaps are consistent.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import {
@@ -211,16 +211,48 @@ export function TransitGapIndicator({
   const [isLoading, setIsLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
   const [userSelectedMode, setUserSelectedMode] = useState<string | null>(null);
+  
+  // Auto-fetched walking estimate when transportation is null (e.g. after reorder)
+  const [autoTransit, setAutoTransit] = useState<{ method: string; duration: string } | null>(null);
+  const autoFetchAttempted = useRef(false);
+
+  // Auto-fetch walking estimate when transportation was cleared (e.g. after move up/down)
+  useEffect(() => {
+    if (transportation || autoFetchAttempted.current || !originName || !destinationName || !city) return;
+    autoFetchAttempted.current = true;
+
+    const origin = originName + ', ' + city;
+    const destination = destinationName + ', ' + city;
+
+    supabase.functions.invoke('route-details', {
+      body: { origin, destination, mode: 'walking' },
+    }).then(({ data, error }) => {
+      if (!error && data?.totalDuration) {
+        setAutoTransit({ method: 'walk', duration: data.totalDuration });
+      }
+    }).catch(() => {});
+  }, [transportation, originName, destinationName, city]);
+
+  // Reset auto-fetch state when transportation prop is set externally
+  useEffect(() => {
+    if (transportation) {
+      setAutoTransit(null);
+      autoFetchAttempted.current = false;
+    }
+  }, [transportation]);
+
+  // Use autoTransit as fallback when transportation is null
+  const resolvedTransportation = transportation || autoTransit;
 
   // Compute derived values before any hooks that depend on them
   const eitherIsTransit = isTransitCategory(currentCategory) || isTransitCategory(nextCategory);
   const skipBufferWarning = sameLocation;
   const isZeroGap = !skipBufferWarning && gapMinutes <= 0;
   const isTightGap = !skipBufferWarning && gapMinutes > 0 && gapMinutes < 15;
-  const effectiveMethod = userSelectedMode || transportation?.method;
+  const effectiveMethod = userSelectedMode || resolvedTransportation?.method;
   const modeLabel = getGapTransportLabel(effectiveMethod, gapMinutes);
   const modeIcon = getGapTransportIcon(effectiveMethod, gapMinutes);
-  const durationLabel = transportation?.duration || `${Math.abs(gapMinutes)} min`;
+  const durationLabel = resolvedTransportation?.duration || `${Math.abs(gapMinutes)} min`;
   const canExpand = isEditable && !!city && !!destinationName;
   const shouldHide = hasTransitBadge || eitherIsTransit || sameLocation;
 
