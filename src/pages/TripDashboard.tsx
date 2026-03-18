@@ -1496,7 +1496,7 @@ export default function TripDashboard() {
                         // Flat view when no duplicates
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {filteredTrips.map((trip, i) => (
-                             <TripCard key={trip.id} trip={trip} index={i} onDelete={handleTripDelete} />
+                             <TripCard key={trip.id} trip={trip} index={i} onDelete={handleTripDelete} isAdmin={isAdmin} onClone={handleCloneTrip} />
                           ))}
                         </div>
                       )}
