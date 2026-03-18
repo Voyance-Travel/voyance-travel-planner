@@ -489,7 +489,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           </CardContent>
         </Card>
 
-        {/* Trip Expenses Card — total estimated cost from live itinerary */}
+        {/* Trip Expenses Card — total estimated cost from live itinerary (hidden in manual mode) */}
+        {!isManualMode && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -528,8 +529,10 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             )}
           </CardContent>
         </Card>
+        )}
 
-        {/* Budget Remaining Card — budget minus trip expenses */}
+        {/* Budget Remaining Card — budget minus trip expenses (hidden in manual mode) */}
+        {!isManualMode && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -559,6 +562,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </p>
           </CardContent>
         </Card>
+        )}
       </div>
 
       {/* Category Breakdown */}
