@@ -1,7 +1,7 @@
 /**
  * EditorialPreviewModal — full-screen editorial preview with publish/regenerate actions.
  */
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, RefreshCw, ArrowRight, Loader2, BookOpen } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
