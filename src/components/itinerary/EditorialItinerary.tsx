@@ -10133,14 +10133,19 @@ function ActivityRow({
                   {(() => {
                     const locName = activity.location?.name?.trim();
                     const effectiveLocName = (locName && locName !== activityTitle) ? locName : '';
-                    return (effectiveLocName || hasAddress) ? (
+                    // Fallback: use distance or walkTime from activity metadata if no address
+                    const locationFallback = !effectiveLocName && !hasAddress
+                      ? ((activity as any).distance || (activity as any).walkTime || '')
+                      : '';
+                    const showLocation = effectiveLocName || hasAddress || locationFallback;
+                    return showLocation ? (
                     <div className={cn(
                       "mt-1.5",
                       !canViewPremium && "blur-sm pointer-events-none select-none"
                     )}>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
-                        <span className="truncate">{effectiveLocName || address}</span>
+                        <span className="truncate">{effectiveLocName || address || locationFallback}</span>
                       </div>
                       {!compact && effectiveLocName && hasAddress && address !== effectiveLocName && (
                         <div className="hidden sm:block pl-5 mt-0.5 text-xs text-muted-foreground/70 leading-snug">
