@@ -134,6 +134,31 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
     }
   }
 
+  // Second pass: flag ANY activity whose end time is clamped by MAX_TIME
+  // (catches non-overlapping activities that naturally extend past midnight)
+  for (let i = 0; i < result.length; i++) {
+    const act = result[i];
+    if ((act as any).__truncatedAtMidnight) continue;
+    const start = timeToMinutes(act.startTime);
+    const origDuration = act.durationMinutes || 30;
+    if (start + origDuration > MAX_TIME) {
+      const actualDuration = MAX_TIME - start;
+      if (actualDuration < origDuration) {
+        const durationStr = actualDuration >= 60
+          ? `${Math.floor(actualDuration / 60)} hr${actualDuration % 60 ? ` ${actualDuration % 60} min` : ''}`
+          : `${actualDuration} min`;
+        result[i] = {
+          ...result[i],
+          endTime: minutesToTime(MAX_TIME),
+          durationMinutes: actualDuration,
+          duration: durationStr,
+          __truncatedAtMidnight: true,
+          __originalDurationMinutes: origDuration,
+        } as any;
+      }
+    }
+  }
+
   // Filter out activities that no longer fit in the day
   return result.filter(act => {
     const isStructural = act.tags?.some(t => STRUCTURAL_TAGS.includes(t));
