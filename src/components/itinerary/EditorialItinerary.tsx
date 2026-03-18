@@ -1940,6 +1940,7 @@ export function EditorialItinerary({
     startTime: string;
     endTime: string;
     dropped: EditorialActivity[];
+    truncated: EditorialActivity[];
     kept: EditorialActivity[];
     source: 'time_edit' | 'add_activity';
   } | null>(null);
@@ -3775,8 +3776,10 @@ export function EditorialItinerary({
 
   // Check if an activity is a transport/transit row (Metro, Walk, Taxi, etc.)
   const isTransportActivity = useCallback((a: EditorialActivity): boolean => {
-    const cat = (a.category || a.type || '').toLowerCase();
-    return cat === 'transportation' || cat === 'transport';
+    const cat = (a.category || '').toLowerCase();
+    const typ = (a.type || '').toLowerCase();
+    return cat === 'transportation' || cat === 'transport' || cat === 'transit'
+      || typ === 'transportation' || typ === 'transport' || typ === 'transit';
   }, []);
 
   // Get only the visible, reorderable activities (what the user actually sees as cards)
@@ -4402,15 +4405,16 @@ export function EditorialItinerary({
     activities.splice(insertIndex, 0, newActivity);
 
     // Preview overflow
-    const { kept, dropped: droppedActivities } = previewCascadeOverflow(activities);
-    if (droppedActivities.length > 0) {
+    const { kept, truncated, dropped: droppedActivities } = previewCascadeOverflow(activities);
+    if (droppedActivities.length > 0 || truncated.length > 0) {
       setPendingCascade({
         dayIndex,
         activityIndex: insertIndex,
         startTime: newActivity.startTime || '12:00',
         endTime: newActivity.endTime || '13:00',
         dropped: droppedActivities,
-        kept,
+        truncated,
+        kept: [...kept, ...truncated],
         source: 'add_activity',
       });
       return; // Wait for user confirmation
@@ -4577,20 +4581,21 @@ export function EditorialItinerary({
 
     // If cascade, check for overflow before applying
     if (cascade) {
-      const { kept, dropped: droppedActivities } = previewCascadeOverflow(shifted);
-      if (droppedActivities.length > 0) {
+      const { kept, truncated, dropped: droppedActivities } = previewCascadeOverflow(shifted);
+      if (droppedActivities.length > 0 || truncated.length > 0) {
         setPendingCascade({
           dayIndex,
           activityIndex,
           startTime,
           endTime,
           dropped: droppedActivities,
-          kept,
+          truncated,
+          kept: [...kept, ...truncated],
           source: 'time_edit',
         });
         return; // Don't apply — wait for user confirmation
       }
-      shifted = kept;
+      shifted = [...kept, ...truncated];
     }
 
     // Apply directly (no overflow)
@@ -6839,24 +6844,20 @@ export function EditorialItinerary({
                     </ul>
                   </>
                 )}
-                {(() => {
-                  const truncated = pendingCascade?.kept.filter((a: any) => a.__truncatedAtMidnight) || [];
-                  if (truncated.length === 0) return null;
-                  return (
-                    <div className={pendingCascade?.dropped.length ? 'mt-3' : ''}>
-                      <p className="mb-2 text-amber-600 dark:text-amber-400">
-                        {truncated.length === 1 ? 'This activity' : 'These activities'} will be shortened to fit before midnight:
-                      </p>
-                      <ul className="list-disc pl-5 space-y-1 text-sm text-amber-600 dark:text-amber-400">
-                        {truncated.map((act: any) => (
-                          <li key={act.id}>
-                            {act.title || 'Untitled'} — {act.durationMinutes} min (was {act.__originalDurationMinutes} min)
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })()}
+                {(pendingCascade?.truncated?.length ?? 0) > 0 && (
+                  <div className={pendingCascade?.dropped.length ? 'mt-3' : ''}>
+                    <p className="mb-2 text-amber-600 dark:text-amber-400">
+                      {pendingCascade!.truncated.length === 1 ? 'This activity' : 'These activities'} will be shortened to fit before midnight:
+                    </p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm text-amber-600 dark:text-amber-400">
+                      {pendingCascade!.truncated.map((act: any) => (
+                        <li key={act.id}>
+                          {act.title || 'Untitled'} — {act.durationMinutes} min (was {act.__originalDurationMinutes} min)
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -6896,8 +6897,7 @@ export function EditorialItinerary({
                   toast.info(`${pendingCascade.dropped.length} activit${pendingCascade.dropped.length === 1 ? 'y was' : 'ies were'} removed. Use Undo to restore.`);
                 }
                 // Warn about truncated activities
-                const truncatedActs = kept.filter((a: any) => a.__truncatedAtMidnight);
-                truncatedActs.forEach((a: any) => {
+                (pendingCascade.truncated || []).forEach((a: any) => {
                   toast.warning(`"${a.title}" shortened to ${a.durationMinutes} min (was ${a.__originalDurationMinutes} min) to fit before midnight`);
                 });
                 setPendingCascade(null);
