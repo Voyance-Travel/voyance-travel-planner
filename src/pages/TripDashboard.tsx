@@ -745,6 +745,7 @@ export default function TripDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
 
