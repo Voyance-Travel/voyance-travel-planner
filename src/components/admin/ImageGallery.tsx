@@ -10,7 +10,7 @@ import { Ban, Search, Loader2, Upload, ImagePlus, HelpCircle, Maximize2, Replace
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import ImageGalleryCard, { type CuratedImage } from './ImageGalleryCard';
+import ImageGalleryCard, { type CuratedImage, isExternalUrl } from './ImageGalleryCard';
 import ImageUploadDialog from './ImageUploadDialog';
 
 const PAGE_SIZE = 50;
