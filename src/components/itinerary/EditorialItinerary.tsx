@@ -8789,11 +8789,13 @@ function DayCard({
                       : travelMeta.transportName?.toLowerCase() === 'ferry' ? Ship
                       : Car;
 
+                    const isFinalDeparture = !!(activityToRender as any).__syntheticFinalDeparture;
                     return (
                       <InterCityTransportCard
                         key={activityToRender.id}
                         title={activityToRender.title || ''}
                         travelMeta={travelMeta}
+                        variant={isFinalDeparture ? 'final' : 'default'}
                         className="mx-2 sm:mx-0 my-1"
                       />
                     );
