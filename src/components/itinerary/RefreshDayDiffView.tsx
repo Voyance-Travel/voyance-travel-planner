@@ -58,6 +58,7 @@ export function RefreshDayDiffView({
   const actionableChanges = proposedChanges.filter(c => c.type !== 'no_change');
   const unchangedActivities = proposedChanges.filter(c => c.type === 'no_change');
   const hasActionableChanges = actionableChanges.length > 0;
+  const hasIssues = hasActionableChanges || issues.length > 0 || buffers.filter(b => b.isInsufficient).length > 0;
 
   const [mode, setMode] = useState<'summary' | 'review'>('summary');
   const [accepted, setAccepted] = useState<Set<string>>(
