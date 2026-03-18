@@ -1900,6 +1900,28 @@ export function EditorialItinerary({
       setHasChanges(true);
     }, [selectedDayIndex]),
   });
+
+  // Trip-level date undo
+  const [canUndoDate, setCanUndoDate] = useState(false);
+  const [isUndoingDate, setIsUndoingDate] = useState(false);
+  useEffect(() => {
+    if (!tripId || !onUndoDateChange) { setCanUndoDate(false); return; }
+    import('@/services/tripDateVersionHistory').then(({ canUndoDateChange }) => {
+      canUndoDateChange(tripId).then(setCanUndoDate);
+    });
+  }, [tripId, onUndoDateChange, days.length, startDate, endDate]);
+
+  const handleUndoDate = useCallback(async () => {
+    if (!onUndoDateChange) return;
+    setIsUndoingDate(true);
+    try {
+      await onUndoDateChange();
+      setCanUndoDate(false);
+    } finally {
+      setIsUndoingDate(false);
+    }
+  }, [onUndoDateChange]);
+
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [discoverDrawerOpen, setDiscoverDrawerOpen] = useState(false);
