@@ -1882,7 +1882,7 @@ export default function TripDetail() {
       console.error('[TripDetail] Date change error:', err);
       toast.error('Failed to update dates');
     }
-  }, [trip, tripId, syncCitiesAfterDateChange]);
+  }, [trip, tripId, syncCitiesAfterDateChange, queryClient]);
 
   // Handle applying hotel-based swap suggestions to itinerary
   const handleApplySwaps = useCallback((swaps: SwapSuggestion[]) => {
