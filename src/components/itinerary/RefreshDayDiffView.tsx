@@ -139,7 +139,7 @@ export function RefreshDayDiffView({
       </div>
 
       {/* No changes needed */}
-      {!hasActionableChanges && (
+      {!hasIssues && (
         <p className="text-sm text-muted-foreground">
           No timing issues or buffer problems detected. Your day looks great!
         </p>
