@@ -6745,14 +6745,36 @@ export function EditorialItinerary({
             <AlertDialogTitle>Schedule overflow</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div>
-                <p className="mb-2">
-                  Shifting the schedule would remove <strong>{pendingCascade?.dropped.length}</strong> activit{pendingCascade?.dropped.length === 1 ? 'y' : 'ies'} that no longer fit before midnight:
-                </p>
-                <ul className="list-disc pl-5 space-y-1 text-sm">
-                  {pendingCascade?.dropped.map((act) => (
-                    <li key={act.id}>{act.title || 'Untitled activity'}</li>
-                  ))}
-                </ul>
+                {(pendingCascade?.dropped.length ?? 0) > 0 && (
+                  <>
+                    <p className="mb-2">
+                      Shifting the schedule would remove <strong>{pendingCascade?.dropped.length}</strong> activit{pendingCascade?.dropped.length === 1 ? 'y' : 'ies'} that no longer fit before midnight:
+                    </p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {pendingCascade?.dropped.map((act) => (
+                        <li key={act.id}>{act.title || 'Untitled activity'}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {(() => {
+                  const truncated = pendingCascade?.kept.filter((a: any) => a.__truncatedAtMidnight) || [];
+                  if (truncated.length === 0) return null;
+                  return (
+                    <div className={pendingCascade?.dropped.length ? 'mt-3' : ''}>
+                      <p className="mb-2 text-amber-600 dark:text-amber-400">
+                        {truncated.length === 1 ? 'This activity' : 'These activities'} will be shortened to fit before midnight:
+                      </p>
+                      <ul className="list-disc pl-5 space-y-1 text-sm text-amber-600 dark:text-amber-400">
+                        {truncated.map((act: any) => (
+                          <li key={act.id}>
+                            {act.title || 'Untitled'} — {act.durationMinutes} min (was {act.__originalDurationMinutes} min)
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -6788,7 +6810,14 @@ export function EditorialItinerary({
                   setNeedsOptimization(true);
                   toast.success('Activity added!');
                 }
-                toast.info(`${pendingCascade.dropped.length} activit${pendingCascade.dropped.length === 1 ? 'y was' : 'ies were'} removed. Use Undo to restore.`);
+                if (pendingCascade.dropped.length > 0) {
+                  toast.info(`${pendingCascade.dropped.length} activit${pendingCascade.dropped.length === 1 ? 'y was' : 'ies were'} removed. Use Undo to restore.`);
+                }
+                // Warn about truncated activities
+                const truncatedActs = kept.filter((a: any) => a.__truncatedAtMidnight);
+                truncatedActs.forEach((a: any) => {
+                  toast.warning(`"${a.title}" shortened to ${a.durationMinutes} min (was ${a.__originalDurationMinutes} min) to fit before midnight`);
+                });
                 setPendingCascade(null);
               }}
             >
