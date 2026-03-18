@@ -181,16 +181,32 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
 
 /**
  * Dry-run version of cascadeFixOverlaps.
- * Returns the kept and dropped activity lists without modifying state.
+ * Returns kept, truncated, and dropped activity lists without modifying state.
+ * - `kept`: activities that survive fully (or nearly so)
+ * - `truncated`: activities that survive but are shortened at midnight
+ * - `dropped`: activities that no longer fit
  */
 export function previewCascadeOverflow(activities: EditorialActivity[]): {
   kept: EditorialActivity[];
+  truncated: EditorialActivity[];
   dropped: EditorialActivity[];
 } {
-  const kept = cascadeFixOverlaps(activities);
-  const keptIds = new Set(kept.map(a => a.id));
-  const dropped = activities.filter(a => !keptIds.has(a.id));
-  return { kept, dropped };
+  const survived = cascadeFixOverlaps(activities);
+  const survivedIds = new Set(survived.map(a => a.id));
+  const dropped = activities.filter(a => !survivedIds.has(a.id));
+
+  // Separate survivors into kept vs truncated
+  const kept: EditorialActivity[] = [];
+  const truncated: EditorialActivity[] = [];
+  for (const a of survived) {
+    if ((a as any).__truncatedAtMidnight) {
+      truncated.push(a);
+    } else {
+      kept.push(a);
+    }
+  }
+
+  return { kept, truncated, dropped };
 }
 
 function buildCheckOutActivity(hotel: HotelForInjection): EditorialActivity {
