@@ -117,7 +117,17 @@ import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationS
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
 import { TransitModePicker } from './TransitModePicker';
 
-import { cascadeFixOverlaps } from '@/utils/injectHotelActivities';
+import { cascadeFixOverlaps, previewCascadeOverflow } from '@/utils/injectHotelActivities';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import { WhyWeSkippedSection } from './WhyWeSkippedSection';
 import { NewMemberSuggestionsCard } from './NewMemberSuggestionsCard';
 import { calculateItineraryValueStats } from '@/utils/intelligenceAnalytics';
@@ -1924,6 +1934,15 @@ export function EditorialItinerary({
 
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
+  const [pendingCascade, setPendingCascade] = useState<{
+    dayIndex: number;
+    activityIndex: number;
+    startTime: string;
+    endTime: string;
+    dropped: EditorialActivity[];
+    kept: EditorialActivity[];
+    source: 'time_edit' | 'add_activity';
+  } | null>(null);
   const [discoverDrawerOpen, setDiscoverDrawerOpen] = useState(false);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -4282,35 +4301,45 @@ export function EditorialItinerary({
       isLocked: false,
     };
 
-    setDays(prev => {
-      const updated = prev.map((day, idx) => {
-        if (idx !== dayIndex) return day;
-        // Insert in chronological order by startTime
-        const activities = [...day.activities];
-        const newTime = newActivity.startTime || '23:59';
-        let insertIndex = activities.length; // default: end
-        for (let i = 0; i < activities.length; i++) {
-          const existingTime = activities[i].startTime || '23:59';
-          if (newTime <= existingTime) {
-            insertIndex = i;
-            break;
-          }
-        }
-        activities.splice(insertIndex, 0, newActivity);
-        // GAP 2: Fix overlaps after inserting a new activity
-        const beforeCount = activities.length;
-        const cascaded = cascadeFixOverlaps(activities);
-        const dropped = beforeCount - cascaded.length;
-        if (dropped > 0) {
-          toast.info(`${dropped} activit${dropped === 1 ? 'y' : 'ies'} removed — no longer fit in this day's schedule.`);
-        }
-        return { ...day, activities: cascaded };
+    // Compute insertion and preview outside setDays
+    const day = days[dayIndex];
+    if (!day) return;
+    const activities = [...day.activities];
+    const newTime = newActivity.startTime || '23:59';
+    let insertIndex = activities.length;
+    for (let i = 0; i < activities.length; i++) {
+      const existingTime = activities[i].startTime || '23:59';
+      if (newTime <= existingTime) {
+        insertIndex = i;
+        break;
+      }
+    }
+    activities.splice(insertIndex, 0, newActivity);
+
+    // Preview overflow
+    const { kept, dropped: droppedActivities } = previewCascadeOverflow(activities);
+    if (droppedActivities.length > 0) {
+      setPendingCascade({
+        dayIndex,
+        activityIndex: insertIndex,
+        startTime: newActivity.startTime || '12:00',
+        endTime: newActivity.endTime || '13:00',
+        dropped: droppedActivities,
+        kept,
+        source: 'add_activity',
       });
-      // Sync budget with updated days
+      return; // Wait for user confirmation
+    }
+
+    // No overflow — apply directly
+    setDays(prev => {
+      const updated = prev.map((d, idx) => {
+        if (idx !== dayIndex) return d;
+        return { ...d, activities: kept };
+      });
       syncBudgetFromDays(updated);
       return updated;
     });
-    // Clear stale refresh result for this day
     const dayNum = days[dayIndex]?.dayNumber;
     if (dayNum) {
       setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
@@ -4395,77 +4424,77 @@ export function EditorialItinerary({
       return;
     }
 
-    setDays(prev => prev.map((day, dIdx) => {
-      if (dIdx !== dayIndex) return day;
+    // Compute the shifted activities for the target day
+    const day = days[dayIndex];
+    if (!day) return;
 
-      const targetActivity = day.activities[activityIndex];
-      if (!targetActivity) return day;
+    const targetActivity = day.activities[activityIndex];
+    if (!targetActivity) return;
 
-      const oldStartStr = targetActivity.startTime || targetActivity.time || '12:00';
-      const formatTime = (mins: number) => {
-        const c = Math.max(0, Math.min(mins, 23 * 60 + 59));
-        return `${String(Math.floor(c / 60)).padStart(2, '0')}:${String(c % 60).padStart(2, '0')}`;
-      };
-      const deltaMinutes = parseTime(startTime) - parseTime(oldStartStr);
+    const oldStartStr = targetActivity.startTime || targetActivity.time || '12:00';
+    const formatTime = (mins: number) => {
+      const c = Math.max(0, Math.min(mins, 23 * 60 + 59));
+      return `${String(Math.floor(c / 60)).padStart(2, '0')}:${String(c % 60).padStart(2, '0')}`;
+    };
+    const deltaMinutes = parseTime(startTime) - parseTime(oldStartStr);
 
-      return {
-        ...day,
-        activities: (() => {
-          let updated = day.activities.map((activity, aIdx) => {
-            // The edited activity itself
-            if (aIdx === activityIndex) {
-              const newDuration = parseTime(endTime) - parseTime(startTime);
-              return { ...activity, startTime, endTime, time: startTime, durationMinutes: Math.max(newDuration, 0) };
-            }
-            // Cascade: shift all activities after the edited one
-            if (cascade && aIdx > activityIndex && deltaMinutes !== 0) {
-              const aStart = activity.startTime || activity.time;
-              const aEnd = activity.endTime;
-              const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
-              const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
-              // Helper to recalculate duration fields from new times
-              const recalcDuration = (s: string, e: string) => {
-                const durMins = parseTime(e) - parseTime(s);
-                const durStr = durMins >= 60
-                  ? `${Math.floor(durMins / 60)}h${durMins % 60 ? ` ${durMins % 60}m` : ''}`
-                  : `${durMins} min`;
-                return { durationMinutes: durMins, duration: durStr };
-              };
-              // Clamp: ensure shifted end >= shifted start (preserve original duration)
-              if (newStart && newEnd && parseTime(newEnd) <= parseTime(newStart)) {
-                const origDuration = aEnd && aStart ? Math.max(parseTime(aEnd) - parseTime(aStart), 15) : 30;
-                const fixedEnd = formatTime(parseTime(newStart) + Math.max(origDuration, 15));
-                return { ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time, ...recalcDuration(newStart, fixedEnd) };
-              }
-              if (newStart && newEnd) {
-                return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time, ...recalcDuration(newStart, newEnd) };
-              }
-              return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
-            }
-            return activity;
-          });
-          // GAP 1 & 4: Fix any remaining overlaps after cascade shift
-          if (cascade) {
-            const beforeCount = updated.length;
-            updated = cascadeFixOverlaps(updated);
-            const dropped = beforeCount - updated.length;
-            if (dropped > 0) {
-              setTimeout(() => toast.info(`${dropped} activit${dropped === 1 ? 'y' : 'ies'} removed — no longer fit in this day's schedule.`), 100);
-            }
-          }
-          return updated;
-        })(),
-      };
+    let shifted = day.activities.map((activity, aIdx) => {
+      if (aIdx === activityIndex) {
+        const newDuration = parseTime(endTime) - parseTime(startTime);
+        return { ...activity, startTime, endTime, time: startTime, durationMinutes: Math.max(newDuration, 0) };
+      }
+      if (cascade && aIdx > activityIndex && deltaMinutes !== 0) {
+        const aStart = activity.startTime || activity.time;
+        const aEnd = activity.endTime;
+        const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
+        const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
+        const recalcDuration = (s: string, e: string) => {
+          const durMins = parseTime(e) - parseTime(s);
+          const durStr = durMins >= 60
+            ? `${Math.floor(durMins / 60)}h${durMins % 60 ? ` ${durMins % 60}m` : ''}`
+            : `${durMins} min`;
+          return { durationMinutes: durMins, duration: durStr };
+        };
+        if (newStart && newEnd && parseTime(newEnd) <= parseTime(newStart)) {
+          const origDuration = aEnd && aStart ? Math.max(parseTime(aEnd) - parseTime(aStart), 15) : 30;
+          const fixedEnd = formatTime(parseTime(newStart) + Math.max(origDuration, 15));
+          return { ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time, ...recalcDuration(newStart, fixedEnd) };
+        }
+        if (newStart && newEnd) {
+          return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time, ...recalcDuration(newStart, newEnd) };
+        }
+        return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
+      }
+      return activity;
+    });
+
+    // If cascade, check for overflow before applying
+    if (cascade) {
+      const { kept, dropped: droppedActivities } = previewCascadeOverflow(shifted);
+      if (droppedActivities.length > 0) {
+        setPendingCascade({
+          dayIndex,
+          activityIndex,
+          startTime,
+          endTime,
+          dropped: droppedActivities,
+          kept,
+          source: 'time_edit',
+        });
+        return; // Don't apply — wait for user confirmation
+      }
+      shifted = kept;
+    }
+
+    // Apply directly (no overflow)
+    setDays(prev => prev.map((d, dIdx) => {
+      if (dIdx !== dayIndex) return d;
+      return { ...d, activities: shifted };
     }));
     setHasChanges(true);
     setTimeEditModal(null);
-
-    if (cascade) {
-      toast.success('Schedule shifted');
-    } else {
-      toast.success('Activity time updated');
-    }
-  }, []);
+    toast.success(cascade ? 'Schedule shifted' : 'Activity time updated');
+  }, [days]);
 
   // Update existing activity (full edit)
   const handleUpdateActivity = useCallback((dayIndex: number, activityIndex: number, updates: Partial<EditorialActivity>) => {
@@ -6683,8 +6712,67 @@ export function EditorialItinerary({
           }
         }}
       />
+
+      {/* Cascade Overflow Confirmation Dialog */}
+      <AlertDialog open={!!pendingCascade} onOpenChange={(open) => { if (!open) setPendingCascade(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Schedule overflow</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p className="mb-2">
+                  Shifting the schedule would remove <strong>{pendingCascade?.dropped.length}</strong> activit{pendingCascade?.dropped.length === 1 ? 'y' : 'ies'} that no longer fit before midnight:
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  {pendingCascade?.dropped.map((act) => (
+                    <li key={act.id}>{act.title || 'Untitled activity'}</li>
+                  ))}
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingCascade(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!pendingCascade) return;
+                const { dayIndex, kept, source } = pendingCascade;
+                // Save version snapshot for undo
+                const day = days[dayIndex];
+                if (tripId && day) {
+                  await saveDayVersion(tripId, {
+                    dayNumber: day.dayNumber,
+                    title: day.title,
+                    theme: day.theme,
+                    activities: day.activities as any,
+                  }, 'before_cascade');
+                  await refreshUndoState();
+                }
+                // Apply the cascade
+                setDays(prev => prev.map((d, idx) => {
+                  if (idx !== dayIndex) return d;
+                  return { ...d, activities: kept };
+                }));
+                setHasChanges(true);
+                if (source === 'time_edit') {
+                  setTimeEditModal(null);
+                  toast.success('Schedule shifted');
+                } else {
+                  setAddActivityModal(null);
+                  setNeedsOptimization(true);
+                  toast.success('Activity added!');
+                }
+                toast.info(`${pendingCascade.dropped.length} activit${pendingCascade.dropped.length === 1 ? 'y was' : 'ies were'} removed. Use Undo to restore.`);
+                setPendingCascade(null);
+              }}
+            >
+              Shift anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
-      {/* Hotel Gallery Modal */}
       <HotelGalleryModal
         isOpen={hotelGalleryOpen}
         onClose={() => setHotelGalleryOpen(false)}
