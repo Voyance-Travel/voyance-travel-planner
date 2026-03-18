@@ -133,6 +133,7 @@ import { TransitGapIndicator, computeGapMinutes } from './TransitGapIndicator';
 import { DayRouteMap } from './DayRouteMap';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
+import { useTripVenueBank } from '@/hooks/useTripVenueBank';
 import { AddActivityModal } from './AddActivityModal';
 import { EditActivityModal } from './EditActivityModal';
 import { DiscoverDrawer } from './DiscoverDrawer';
@@ -1786,6 +1787,7 @@ export function EditorialItinerary({
 
   const { user } = useAuth();
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
+  const venueBank = useTripVenueBank(days);
   const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -6460,6 +6462,8 @@ export function EditorialItinerary({
           }
         }}
         currency={tripCurrency}
+        venueBank={venueBank}
+        tripId={tripId}
       />
 
       {/* Discover Nearby Drawer */}
@@ -9622,7 +9626,7 @@ function ActivityRow({
       </div>
 
       {/* Thumbnail Column - Hidden on mobile, consistent width on desktop */}
-      <div className="hidden sm:block w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative">
+      <div className="hidden sm:block w-24 h-24 shrink-0 border-r border-border bg-muted/30 overflow-hidden relative group/thumb">
         {showThumbnail && thumbnailUrl && !thumbnailError ? (
           <>
             <img
@@ -9652,6 +9656,16 @@ function ActivityRow({
             className="w-full h-full object-cover"
             loading="lazy"
           />
+        )}
+        {/* Photo swap overlay — opens Edit Details modal */}
+        {isEditable && !isPreview && (
+          <button
+            onClick={() => onEdit(dayIndex, activityIndex, activity)}
+            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity cursor-pointer"
+            title="Change photo"
+          >
+            <Camera className="h-5 w-5 text-white" />
+          </button>
         )}
       </div>
 
