@@ -4426,91 +4426,77 @@ export function EditorialItinerary({
       return;
     }
 
-    setDays(prev => prev.map((day, dIdx) => {
-      if (dIdx !== dayIndex) return day;
+    // Compute the shifted activities for the target day
+    const day = days[dayIndex];
+    if (!day) return;
 
-      const targetActivity = day.activities[activityIndex];
-      if (!targetActivity) return day;
+    const targetActivity = day.activities[activityIndex];
+    if (!targetActivity) return;
 
-      const oldStartStr = targetActivity.startTime || targetActivity.time || '12:00';
-      const formatTime = (mins: number) => {
-        const c = Math.max(0, Math.min(mins, 23 * 60 + 59));
-        return `${String(Math.floor(c / 60)).padStart(2, '0')}:${String(c % 60).padStart(2, '0')}`;
-      };
-      const deltaMinutes = parseTime(startTime) - parseTime(oldStartStr);
+    const oldStartStr = targetActivity.startTime || targetActivity.time || '12:00';
+    const formatTime = (mins: number) => {
+      const c = Math.max(0, Math.min(mins, 23 * 60 + 59));
+      return `${String(Math.floor(c / 60)).padStart(2, '0')}:${String(c % 60).padStart(2, '0')}`;
+    };
+    const deltaMinutes = parseTime(startTime) - parseTime(oldStartStr);
 
-      return {
-        ...day,
-        activities: (() => {
-          let updated = day.activities.map((activity, aIdx) => {
-            // The edited activity itself
-            if (aIdx === activityIndex) {
-              const newDuration = parseTime(endTime) - parseTime(startTime);
-              return { ...activity, startTime, endTime, time: startTime, durationMinutes: Math.max(newDuration, 0) };
-            }
-            // Cascade: shift all activities after the edited one
-            if (cascade && aIdx > activityIndex && deltaMinutes !== 0) {
-              const aStart = activity.startTime || activity.time;
-              const aEnd = activity.endTime;
-              const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
-              const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
-              // Helper to recalculate duration fields from new times
-              const recalcDuration = (s: string, e: string) => {
-                const durMins = parseTime(e) - parseTime(s);
-                const durStr = durMins >= 60
-                  ? `${Math.floor(durMins / 60)}h${durMins % 60 ? ` ${durMins % 60}m` : ''}`
-                  : `${durMins} min`;
-                return { durationMinutes: durMins, duration: durStr };
-              };
-              // Clamp: ensure shifted end >= shifted start (preserve original duration)
-              if (newStart && newEnd && parseTime(newEnd) <= parseTime(newStart)) {
-                const origDuration = aEnd && aStart ? Math.max(parseTime(aEnd) - parseTime(aStart), 15) : 30;
-                const fixedEnd = formatTime(parseTime(newStart) + Math.max(origDuration, 15));
-                return { ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time, ...recalcDuration(newStart, fixedEnd) };
-              }
-              if (newStart && newEnd) {
-                return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time, ...recalcDuration(newStart, newEnd) };
-              }
-              return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
-            }
-            return activity;
-          });
-          // GAP 1 & 4: Preview overlaps after cascade shift
-          if (cascade) {
-            const { kept, dropped: droppedActivities } = previewCascadeOverflow(updated);
-            if (droppedActivities.length > 0) {
-              // Defer to confirmation dialog
-              setPendingCascade({
-                dayIndex,
-                activityIndex,
-                startTime,
-                endTime,
-                dropped: droppedActivities,
-                kept,
-                source: 'time_edit',
-              });
-              // Return original activities unchanged
-              return day.activities;
-            }
-            updated = kept;
-          }
-          return updated;
-        })(),
-      };
-    }));
-
-    // If pendingCascade was set, the state update above was a no-op (returned original activities)
-    // so we skip the success path
-    if (!pendingCascade) {
-      setHasChanges(true);
-      setTimeEditModal(null);
-      if (cascade) {
-        toast.success('Schedule shifted');
-      } else {
-        toast.success('Activity time updated');
+    let shifted = day.activities.map((activity, aIdx) => {
+      if (aIdx === activityIndex) {
+        const newDuration = parseTime(endTime) - parseTime(startTime);
+        return { ...activity, startTime, endTime, time: startTime, durationMinutes: Math.max(newDuration, 0) };
       }
+      if (cascade && aIdx > activityIndex && deltaMinutes !== 0) {
+        const aStart = activity.startTime || activity.time;
+        const aEnd = activity.endTime;
+        const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
+        const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
+        const recalcDuration = (s: string, e: string) => {
+          const durMins = parseTime(e) - parseTime(s);
+          const durStr = durMins >= 60
+            ? `${Math.floor(durMins / 60)}h${durMins % 60 ? ` ${durMins % 60}m` : ''}`
+            : `${durMins} min`;
+          return { durationMinutes: durMins, duration: durStr };
+        };
+        if (newStart && newEnd && parseTime(newEnd) <= parseTime(newStart)) {
+          const origDuration = aEnd && aStart ? Math.max(parseTime(aEnd) - parseTime(aStart), 15) : 30;
+          const fixedEnd = formatTime(parseTime(newStart) + Math.max(origDuration, 15));
+          return { ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time, ...recalcDuration(newStart, fixedEnd) };
+        }
+        if (newStart && newEnd) {
+          return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time, ...recalcDuration(newStart, newEnd) };
+        }
+        return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
+      }
+      return activity;
+    });
+
+    // If cascade, check for overflow before applying
+    if (cascade) {
+      const { kept, dropped: droppedActivities } = previewCascadeOverflow(shifted);
+      if (droppedActivities.length > 0) {
+        setPendingCascade({
+          dayIndex,
+          activityIndex,
+          startTime,
+          endTime,
+          dropped: droppedActivities,
+          kept,
+          source: 'time_edit',
+        });
+        return; // Don't apply — wait for user confirmation
+      }
+      shifted = kept;
     }
-  }, []);
+
+    // Apply directly (no overflow)
+    setDays(prev => prev.map((d, dIdx) => {
+      if (dIdx !== dayIndex) return d;
+      return { ...d, activities: shifted };
+    }));
+    setHasChanges(true);
+    setTimeEditModal(null);
+    toast.success(cascade ? 'Schedule shifted' : 'Activity time updated');
+  }, [days]);
 
   // Update existing activity (full edit)
   const handleUpdateActivity = useCallback((dayIndex: number, activityIndex: number, updates: Partial<EditorialActivity>) => {
