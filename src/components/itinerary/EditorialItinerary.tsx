@@ -3844,9 +3844,17 @@ export function EditorialItinerary({
     // Swap positions
     [activities[actIdx], activities[newIdx]] = [activities[newIdx], activities[actIdx]];
 
-    // Clear stale transportation on swapped activities so TransitGapIndicator re-fetches
-    activities[actIdx] = { ...activities[actIdx], transportation: undefined };
-    activities[newIdx] = { ...activities[newIdx], transportation: undefined };
+    // Clear stale transportation only on activities whose next neighbor changed
+    const minIdx = Math.min(actIdx, newIdx);
+    const maxIdx = Math.max(actIdx, newIdx);
+    // The activity at minIdx now has a different next neighbor
+    activities[minIdx] = { ...activities[minIdx], transportation: undefined };
+    // The activity at maxIdx now has a different next neighbor
+    activities[maxIdx] = { ...activities[maxIdx], transportation: undefined };
+    // The activity before the swap range also has a new next neighbor
+    if (minIdx > 0) {
+      activities[minIdx - 1] = { ...activities[minIdx - 1], transportation: undefined };
+    }
 
     // Delegate to reorder handler which reassigns times and saves version snapshot
     handleActivityReorder(dayIndex, activities);
