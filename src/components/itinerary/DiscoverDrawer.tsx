@@ -279,7 +279,17 @@ export function DiscoverDrawer({
 
   // Add handler
   const handleAdd = (suggestion: ProactiveSuggestion | NearbySuggestion) => {
-    const cat = suggestion.category === 'coffee' ? 'dining' : suggestion.category === 'wander' ? 'sightseeing' : suggestion.category === 'drinks' ? 'nightlife' : 'dining';
+    const CATEGORY_MAP: Record<string, string> = {
+      coffee: 'dining',
+      food: 'dining',
+      snacks: 'dining',
+      wander: 'sightseeing',
+      attractions: 'sightseeing',
+      drinks: 'nightlife',
+      nightlife: 'nightlife',
+      events: 'activity',
+    };
+    const cat = CATEGORY_MAP[suggestion.category] || suggestion.category || 'activity';
     onAddActivity({
       title: suggestion.name,
       description: suggestion.description,
