@@ -4405,15 +4405,16 @@ export function EditorialItinerary({
     activities.splice(insertIndex, 0, newActivity);
 
     // Preview overflow
-    const { kept, dropped: droppedActivities } = previewCascadeOverflow(activities);
-    if (droppedActivities.length > 0) {
+    const { kept, truncated, dropped: droppedActivities } = previewCascadeOverflow(activities);
+    if (droppedActivities.length > 0 || truncated.length > 0) {
       setPendingCascade({
         dayIndex,
         activityIndex: insertIndex,
         startTime: newActivity.startTime || '12:00',
         endTime: newActivity.endTime || '13:00',
         dropped: droppedActivities,
-        kept,
+        truncated,
+        kept: [...kept, ...truncated],
         source: 'add_activity',
       });
       return; // Wait for user confirmation
