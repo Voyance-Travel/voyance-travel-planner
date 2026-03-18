@@ -3763,6 +3763,21 @@ export function EditorialItinerary({
       a.id.startsWith('travel-') || a.id.startsWith('final-departure-');
   }, []);
 
+  // Detect hidden option-group alternatives that aren't currently selected
+  const isHiddenOptionAlternative = useCallback((a: EditorialActivity, allActivities: EditorialActivity[]): boolean => {
+    if (!a.isOption || !a.optionGroup) return false;
+    const selectedId = optionSelections[a.optionGroup];
+    if (selectedId) return a.id !== selectedId;
+    // Default: first in group is selected
+    const firstInGroup = allActivities.find(x => x.optionGroup === a.optionGroup);
+    return firstInGroup?.id !== a.id;
+  }, [optionSelections]);
+
+  // Get only the visible, reorderable activities (what the user actually sees as cards)
+  const getVisibleReorderableActivities = useCallback((activities: EditorialActivity[]): EditorialActivity[] => {
+    return activities.filter(a => !isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities));
+  }, [isSyntheticActivity, isHiddenOptionAlternative]);
+
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
   const handleActivityReorder = useCallback(async (dayIndex: number, reorderedActivities: EditorialActivity[]) => {
     // Save version snapshot before reorder for undo
