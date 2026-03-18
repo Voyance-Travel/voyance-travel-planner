@@ -1320,6 +1320,8 @@ export function EditorialItinerary({
 
   // Re-sync budget ledger from current days state (fire-and-forget)
   const syncBudgetFromDays = useCallback((currentDays: EditorialDay[]) => {
+    // Manual mode: user manages their own budget — skip auto-sync
+    if (isManualMode) return;
     const daysForSync = currentDays.map(day => ({
       dayNumber: day.dayNumber,
       date: day.date || '',
