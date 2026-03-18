@@ -3775,8 +3775,10 @@ export function EditorialItinerary({
 
   // Check if an activity is a transport/transit row (Metro, Walk, Taxi, etc.)
   const isTransportActivity = useCallback((a: EditorialActivity): boolean => {
-    const cat = (a.category || a.type || '').toLowerCase();
-    return cat === 'transportation' || cat === 'transport';
+    const cat = (a.category || '').toLowerCase();
+    const typ = (a.type || '').toLowerCase();
+    return cat === 'transportation' || cat === 'transport' || cat === 'transit'
+      || typ === 'transportation' || typ === 'transport' || typ === 'transit';
   }, []);
 
   // Get only the visible, reorderable activities (what the user actually sees as cards)
