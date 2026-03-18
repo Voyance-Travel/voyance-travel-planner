@@ -3814,16 +3814,6 @@ export function EditorialItinerary({
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
     };
 
-    // Parse a transit duration string like "25 min" or "1h 30m" to minutes
-    const parseTransitDuration = (dur?: string): number | null => {
-      if (!dur) return null;
-      const hm = dur.match(/(\d+)\s*h(?:ours?|r)?/i);
-      const mm = dur.match(/(\d+)\s*m(?:in(?:ute)?s?)?/i);
-      let total = 0;
-      if (hm) total += parseInt(hm[1], 10) * 60;
-      if (mm) total += parseInt(mm[1], 10);
-      return total > 0 ? total : null;
-    };
 
     // === KEY FIX: operate on visible reorderable activities only ===
     const currentActivities = days[dayIndex]?.activities || [];
