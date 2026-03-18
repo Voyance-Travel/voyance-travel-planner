@@ -385,8 +385,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 py-6"
     >
-      {/* Over-budget Warning Banner — use snapshot as canonical source */}
-      {(() => {
+      {/* Over-budget Warning Banner — use snapshot as canonical source (hidden in manual mode) */}
+      {!isManualMode && (() => {
         const budgetCents = settings?.budget_total_cents || 0;
         const snapshotUsedPct = budgetCents > 0 ? (snapshot.tripTotalCents / budgetCents) * 100 : 0;
         const snapshotStatus: 'green' | 'yellow' | 'red' = snapshotUsedPct >= 100 ? 'red' : snapshotUsedPct >= 85 ? 'yellow' : 'green';
@@ -403,8 +403,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         ) : null;
       })()}
 
-      {/* Over-budget explainer — actionable guidance when expenses far exceed budget */}
-      {(() => {
+      {/* Over-budget explainer — actionable guidance when expenses far exceed budget (hidden in manual mode) */}
+      {!isManualMode && (() => {
         const budgetCents = settings?.budget_total_cents || 0;
         if (budgetCents <= 0 || snapshot.tripTotalCents <= budgetCents) return null;
         const overageCents = snapshot.tripTotalCents - budgetCents;
@@ -427,8 +427,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         );
       })()}
 
-      {/* Budget Coach — AI suggestions when over budget */}
-      {hasBudget && itineraryDays && itineraryDays.length > 0 && summary && (
+      {/* Budget Coach — AI suggestions when over budget (hidden in manual mode) */}
+      {!isManualMode && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && (
         <BudgetCoach
           tripId={tripId}
           budgetTargetCents={summary.budgetTotalCents}
