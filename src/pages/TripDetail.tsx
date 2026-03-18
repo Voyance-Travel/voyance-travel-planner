@@ -1555,11 +1555,17 @@ export default function TripDetail() {
             parseLocalDate(currentTrip.start_date)
           ) + 1;
         }
-        // If expected is known and days are partial, do NOT finalize — trigger stalled/resume
-        if (expectedTotal > 0 && generatedDays.length < expectedTotal) {
+        // If expected is known and days are significantly partial, do NOT finalize — trigger stalled/resume.
+        // Allow N-1 tolerance: the backend marks status='ready' when complete, but the JSON blob
+        // may lag by one day due to the shrink-guard or write timing. Accepting N-1 prevents
+        // infinite resume loops while still catching truly incomplete generations.
+        if (expectedTotal > 0 && generatedDays.length < expectedTotal - 1) {
           console.warn(`[TripDetail] handleGenerationComplete called with partial data: ${generatedDays.length}/${expectedTotal} days. Triggering resume instead.`);
           setGenerationStalled(true);
           return;
+        }
+        if (expectedTotal > 0 && generatedDays.length < expectedTotal) {
+          console.info(`[TripDetail] Accepting near-complete itinerary: ${generatedDays.length}/${expectedTotal} days (within N-1 tolerance)`);
         }
       } catch (e) {
         // FAIL-CLOSED: If we can't verify day count, do NOT finalize as ready.
