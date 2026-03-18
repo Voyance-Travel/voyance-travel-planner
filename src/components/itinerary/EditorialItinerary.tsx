@@ -3817,10 +3817,11 @@ export function EditorialItinerary({
       const newStart = fmtTime(cursor);
       const newEnd = fmtTime(cursor + duration);
       
-      // Use the NEXT activity's transportation duration as the gap,
-      // falling back to 20 min (a realistic urban average) instead of static 15
-      const nextActivity = withTimes[idx + 1]?.activity;
-      const transitGap = parseTransitDuration(nextActivity?.transportation?.duration) ?? 20;
+      // Use the CURRENT activity's transportation duration as the gap (it describes the route FROM this activity TO its next neighbor)
+      // For the last activity, no transit gap is needed
+      const transitGap = (idx < withTimes.length - 1)
+        ? (parseTransitDuration(activity.transportation?.duration) ?? 15)
+        : 0;
       cursor += duration + transitGap;
       
       return {
@@ -3860,21 +3861,17 @@ export function EditorialItinerary({
     const newIdx = direction === 'up' ? actIdx - 1 : actIdx + 1;
     if (newIdx < 0 || newIdx >= activities.length) return;
 
-    // Capture original transport data before swap
     const minIdx = Math.min(actIdx, newIdx);
     const maxIdx = Math.max(actIdx, newIdx);
-    const formerMinTransport = activities[minIdx]?.transportation;
-    const formerMaxTransport = activities[maxIdx]?.transportation;
 
     // Swap positions
     [activities[actIdx], activities[newIdx]] = [activities[newIdx], activities[actIdx]];
 
-    // Preserve transit data for the swapped pair (same two locations, symmetric distance)
-    // New occupant of minIdx gets the old minIdx transport (describes minIdx→maxIdx pair)
-    activities[minIdx] = { ...activities[minIdx], transportation: formerMinTransport };
-    // New occupant of maxIdx keeps old maxIdx transport (its next neighbor beyond swap is unchanged)
-    activities[maxIdx] = { ...activities[maxIdx], transportation: formerMaxTransport };
-    // Activity before the swap range has a genuinely new next neighbor — clear its transport
+    // Clear ALL stale transport data for affected positions — routes are direction-specific
+    // (A→B ≠ B→A), so old transport is invalid after swap. TransitGapIndicator auto-fetches.
+    activities[minIdx] = { ...activities[minIdx], transportation: undefined };
+    activities[maxIdx] = { ...activities[maxIdx], transportation: undefined };
+    // Activity before swap range now points to a different next neighbor
     if (minIdx > 0) {
       activities[minIdx - 1] = { ...activities[minIdx - 1], transportation: undefined };
     }
