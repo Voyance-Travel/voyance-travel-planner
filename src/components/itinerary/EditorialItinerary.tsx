@@ -6462,6 +6462,8 @@ export function EditorialItinerary({
           }
         }}
         currency={tripCurrency}
+        venueBank={venueBank}
+        tripId={tripId}
       />
 
       {/* Discover Nearby Drawer */}
