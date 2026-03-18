@@ -9806,15 +9806,19 @@ function ActivityRow({
               !canViewPremium && "blur-sm pointer-events-none select-none"
             )}>{activity.description}</p>
           )}
-          {(dedupedLocationName || activity.location?.address) && (
+          {(() => {
+            const locN = activity.location?.name?.trim();
+            const dedupLocName = (locN && locN !== activityTitle) ? locN : '';
+            return (dedupLocName || activity.location?.address) ? (
             <div className={cn(
               "flex items-center gap-1.5 text-xs text-muted-foreground",
               !canViewPremium && "blur-sm pointer-events-none select-none"
             )}>
               <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
-              <span className="truncate">{dedupedLocationName || activity.location?.address}</span>
+              <span className="truncate">{dedupLocName || activity.location?.address}</span>
             </div>
-          )}
+            ) : null;
+          })()}
           {activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
             <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
               <VoyancePickCallout tip={activity.tips} />
