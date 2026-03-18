@@ -2868,6 +2868,7 @@ export default function TripDetail() {
                     setTrip(prev => prev ? {
                       ...prev,
                       itinerary_data: enrichedItinerary as any,
+                      itinerary_status: 'ready', // Prevent self-heal from triggering generation
                     } : prev);
                   }}
                   onPaymentRequest={async (activityId) => {

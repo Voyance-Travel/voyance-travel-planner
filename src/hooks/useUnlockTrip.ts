@@ -245,13 +245,14 @@ export function useUnlockTrip() {
       });
 
       const itineraryToSave = {
+        ...existingItineraryData, // Preserve summary, highlights, currency, etc.
         days: cleanedDays,
         generatedAt: new Date().toISOString(),
         destination: params.destination,
         isPreview: false, // Clear preview flag
       };
 
-      const { error: saveError } = await supabase.functions.invoke('generate-itinerary', {
+      const { data: saveResult, error: saveError } = await supabase.functions.invoke('generate-itinerary', {
         body: {
           action: 'save-itinerary',
           tripId: params.tripId,
@@ -262,6 +263,23 @@ export function useUnlockTrip() {
       if (saveError) {
         console.error('[UnlockTrip] Save failed:', saveError);
         // Non-fatal — data is still available
+      }
+
+      // If shrink guard blocked the save, re-fetch server state instead of using stale local data
+      if (saveResult?.shrinkBlocked) {
+        console.warn('[UnlockTrip] Shrink guard blocked save — re-fetching trip data');
+        queryClient.invalidateQueries({ queryKey: ['trip', params.tripId] });
+        // Don't call onComplete with potentially incomplete data
+        setState({
+          step: 'complete',
+          progress: 100,
+          currentDay: params.totalDays,
+          totalDays: params.totalDays,
+          message: 'Itinerary unlocked!',
+          error: null,
+        });
+        toast.success('🎉 Itinerary unlocked! Full details are now available.');
+        return true;
       }
 
       // Update unlocked_day_count so entitlements reflect the unlock
