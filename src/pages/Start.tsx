@@ -1713,7 +1713,7 @@ function FlightHotelStep({
                           </div>
                           {hotel.pricePerNight && hotel.pricePerNight > 0 && (
                             <div className="text-xs text-muted-foreground">
-                              ${hotel.pricePerNight} total
+                              ${hotel.pricePerNight}/night
                               {hotel.includeInBudget && (
                                 <span className="ml-1 text-primary">· In budget</span>
                               )}
