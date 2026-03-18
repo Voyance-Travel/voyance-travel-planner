@@ -1739,6 +1739,16 @@ export default function TripDetail() {
   const handleDateChange = useCallback(async (result: DateChangeResult) => {
     if (!trip || !tripId) return;
 
+    // Snapshot current trip dates/itinerary before changing for undo support
+    const currentDays = ((trip.itinerary_data as Record<string, unknown>)?.days as any[]) || [];
+    await saveTripDateVersion(tripId, {
+      startDate: trip.start_date,
+      endDate: trip.end_date,
+      dayCount: currentDays.length,
+      itineraryData: trip.itinerary_data as Record<string, unknown> | undefined,
+      hotelSelection: trip.hotel_selection,
+    });
+
     const { newStartDate, newEndDate, daysAdded, isShiftOnly, insertPosition, removedDayNumbers } = result;
     const metadata = trip.itinerary_data as Record<string, unknown> | null;
     let days = [...((metadata?.days as any[]) || [])];
