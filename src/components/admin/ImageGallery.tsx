@@ -184,8 +184,53 @@ export default function ImageGallery() {
     setUploadOpen(true);
   };
 
-  // Filter broken images (client-side only)
-  const displayImages = brokenOnly ? images.filter(img => brokenIds.has(img.id)) : images;
+  // Heal broken/external images by re-caching them to storage
+  const healBrokenImages = async () => {
+    const externals = images.filter(img => isExternalUrl(img.image_url));
+    if (externals.length === 0) {
+      toast({ title: 'No external images to heal' });
+      return;
+    }
+    setHealing(true);
+    setHealProgress({ done: 0, total: externals.length });
+    let healed = 0;
+    const BATCH = 3;
+    for (let i = 0; i < externals.length; i += BATCH) {
+      const batch = externals.slice(i, i + BATCH);
+      await Promise.all(batch.map(async (img) => {
+        try {
+          const { data, error } = await supabase.functions.invoke('cache-destination-image', {
+            body: {
+              destinationSlug: img.destination || img.entity_key,
+              originalUrl: img.image_url,
+              imageType: img.entity_type,
+            },
+          });
+          if (!error && data?.url) {
+            await supabase.from('curated_images')
+              .update({ image_url: data.url, source: 'admin_healed', updated_at: new Date().toISOString() })
+              .eq('id', img.id);
+            healed++;
+          }
+        } catch (e) {
+          console.warn(`[Heal] Failed for ${img.entity_key}:`, e);
+        }
+      }));
+      setHealProgress({ done: Math.min(i + BATCH, externals.length), total: externals.length });
+    }
+    toast({ title: `Healed ${healed} of ${externals.length} images` });
+    setHealing(false);
+    fetchImages(0);
+  };
+
+  // Filter broken / external images (client-side only)
+  const displayImages = brokenOnly
+    ? images.filter(img => brokenIds.has(img.id))
+    : externalOnly
+      ? images.filter(img => isExternalUrl(img.image_url))
+      : images;
+
+  const externalCount = images.filter(img => isExternalUrl(img.image_url)).length;
 
   const [helpOpen, setHelpOpen] = useState(() => {
     return localStorage.getItem('admin-image-help-open') !== 'false';
