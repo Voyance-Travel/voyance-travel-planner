@@ -5665,6 +5665,7 @@ export function EditorialItinerary({
             tripId={tripId}
             travelers={travelers}
             totalDays={days.length}
+            isManualMode={isManualMode}
             itineraryDays={days}
             hasHotel={
               !!(hotelSelection?.pricePerNight || hotelSelection?.name) ||
