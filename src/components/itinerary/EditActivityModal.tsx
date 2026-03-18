@@ -2,16 +2,19 @@
  * EditActivityModal — Edit an existing activity's details inline.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Edit3, Link2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Edit3, Link2, CheckCircle2, AlertTriangle, Camera, X, Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { validateCostUpdate } from '@/services/activityCostService';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import type { VenueBank } from '@/hooks/useTripVenueBank';
 
 interface EditableActivity {
   id?: string;
@@ -22,6 +25,7 @@ interface EditableActivity {
   endTime?: string;
   cost?: { amount: number; currency: string };
   location?: { name?: string; address?: string };
+  image_url?: string;
   [key: string]: any;
 }
 
@@ -31,9 +35,44 @@ interface EditActivityModalProps {
   onClose: () => void;
   onSave: (updates: Partial<EditableActivity>) => void;
   currency?: string;
+  venueBank?: VenueBank;
+  tripId?: string;
 }
 
-export function EditActivityModal({ isOpen, activity, onClose, onSave, currency = 'USD' }: EditActivityModalProps) {
+/** Suggestion chips component for auto-fill */
+function SuggestionChips({ 
+  suggestions, 
+  onSelect, 
+  currentValue 
+}: { 
+  suggestions: string[]; 
+  onSelect: (value: string) => void;
+  currentValue: string;
+}) {
+  const filtered = suggestions.filter(s => 
+    s.toLowerCase() !== currentValue.toLowerCase().trim() && 
+    s.toLowerCase().includes(currentValue.toLowerCase().trim())
+  ).slice(0, 4);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {filtered.map(s => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onSelect(s)}
+          className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors truncate max-w-[200px]"
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function EditActivityModal({ isOpen, activity, onClose, onSave, currency = 'USD', venueBank, tripId }: EditActivityModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('activity');
@@ -46,6 +85,13 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
   const [reservationMade, setReservationMade] = useState(false);
   const [locationName, setLocationName] = useState('');
   const [locationAddress, setLocationAddress] = useState('');
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
+
+  // Track which fields are focused for showing suggestions
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   useEffect(() => {
     if (activity) {
@@ -59,6 +105,7 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
       setReservationMade(activity.reservationMade ?? false);
       setLocationName(activity.location?.name || '');
       setLocationAddress(activity.location?.address || '');
+      setPhotoUrl(activity.image_url || null);
     }
   }, [activity]);
 
@@ -86,6 +133,59 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
     }
   };
 
+  // Venue bank: when a venue name is selected, auto-fill address and website
+  const handleVenueSelect = useCallback((name: string) => {
+    setLocationName(name);
+    if (venueBank) {
+      const venue = venueBank.getVenue(name);
+      if (venue?.address && !locationAddress) setLocationAddress(venue.address);
+      if (venue?.website && !website) setWebsite(venue.website);
+    }
+  }, [venueBank, locationAddress, website]);
+
+  // Photo upload
+  const handlePhotoUpload = async (file: File) => {
+    if (!user?.id || !tripId) {
+      toast.error('Unable to upload photo');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Photo must be under 5MB');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const timestamp = Date.now();
+      const ext = file.name.split('.').pop() || 'jpg';
+      const storagePath = `${user.id}/${tripId}/activity_${activity?.id || 'new'}_${timestamp}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('trip-photos')
+        .upload(storagePath, file, { cacheControl: '3600', upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = await supabase.storage
+        .from('trip-photos')
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
+
+      if (urlData?.signedUrl) {
+        setPhotoUrl(urlData.signedUrl);
+        toast.success('Photo uploaded!');
+      }
+    } catch (err: any) {
+      console.error('Photo upload failed:', err);
+      toast.error(err.message || 'Failed to upload photo');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = () => {
     if (!title.trim()) {
       toast.error('Please enter an activity title');
@@ -110,8 +210,14 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
         name: locationName,
         address: locationAddress,
       },
+      ...(photoUrl ? { image_url: photoUrl, photos: [photoUrl] } : {}),
     });
   };
+
+  // Build suggestion lists from venue bank
+  const venueNames = venueBank?.venues.map(v => v.name) || [];
+  const addressList = venueBank?.addresses || [];
+  const websiteList = venueBank?.websites || [];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -123,6 +229,67 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
+          {/* Photo */}
+          <div>
+            <label className="text-sm font-medium mb-1 block">Photo</label>
+            <div className="flex items-center gap-3">
+              <div 
+                className="relative w-20 h-20 rounded-lg overflow-hidden bg-muted/30 border border-border shrink-0 cursor-pointer group"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {photoUrl ? (
+                  <>
+                    <img src={photoUrl} alt="Activity" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Camera className="h-5 w-5 text-white" />
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                    <Camera className="h-6 w-6" />
+                  </div>
+                )}
+                {uploading && (
+                  <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-1">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  {photoUrl ? 'Change Photo' : 'Upload Photo'}
+                </Button>
+                {photoUrl && (
+                  <button 
+                    type="button"
+                    onClick={() => setPhotoUrl(null)} 
+                    className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+                  >
+                    <X className="h-3 w-3" /> Remove
+                  </button>
+                )}
+                <p className="text-xs text-muted-foreground">JPEG, PNG, WebP · Max 5MB</p>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handlePhotoUpload(file);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          </div>
+
           {/* Title */}
           <div>
             <label className="text-sm font-medium mb-1 block">Title</label>
@@ -163,11 +330,37 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
           <div className="space-y-3">
             <div>
               <label className="text-sm font-medium mb-1 block">Venue Name</label>
-              <Input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="e.g. Louvre Museum" />
+              <Input 
+                value={locationName} 
+                onChange={(e) => setLocationName(e.target.value)} 
+                placeholder="e.g. Louvre Museum" 
+                onFocus={() => setFocusedField('venue')}
+                onBlur={() => setTimeout(() => setFocusedField(null), 150)}
+              />
+              {focusedField === 'venue' && venueNames.length > 0 && (
+                <SuggestionChips 
+                  suggestions={venueNames} 
+                  onSelect={handleVenueSelect}
+                  currentValue={locationName}
+                />
+              )}
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block">Address</label>
-              <Input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="e.g. Rue de Rivoli, Paris" />
+              <Input 
+                value={locationAddress} 
+                onChange={(e) => setLocationAddress(e.target.value)} 
+                placeholder="e.g. Rue de Rivoli, Paris" 
+                onFocus={() => setFocusedField('address')}
+                onBlur={() => setTimeout(() => setFocusedField(null), 150)}
+              />
+              {focusedField === 'address' && addressList.length > 0 && (
+                <SuggestionChips 
+                  suggestions={addressList} 
+                  onSelect={setLocationAddress}
+                  currentValue={locationAddress}
+                />
+              )}
             </div>
           </div>
 
@@ -194,8 +387,22 @@ export function EditActivityModal({ isOpen, activity, onClose, onSave, currency 
             <label className="text-sm font-medium mb-1 block">Website / Link</label>
             <div className="relative">
               <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." className="pl-9" />
+              <Input 
+                value={website} 
+                onChange={(e) => setWebsite(e.target.value)} 
+                placeholder="https://..." 
+                className="pl-9" 
+                onFocus={() => setFocusedField('website')}
+                onBlur={() => setTimeout(() => setFocusedField(null), 150)}
+              />
             </div>
+            {focusedField === 'website' && websiteList.length > 0 && (
+              <SuggestionChips 
+                suggestions={websiteList} 
+                onSelect={setWebsite}
+                currentValue={website}
+              />
+            )}
           </div>
 
           {/* Reservation confirmation */}
