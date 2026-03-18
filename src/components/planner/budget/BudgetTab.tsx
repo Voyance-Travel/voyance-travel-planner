@@ -100,6 +100,8 @@ interface BudgetTabProps {
   /** Journey fields for linked trip budget summary */
   journeyId?: string | null;
   journeyName?: string | null;
+  /** Manual builder mode — skip auto-calculated expenses */
+  isManualMode?: boolean;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
