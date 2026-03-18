@@ -17,6 +17,7 @@ export interface ProactiveSuggestion {
   rating?: number;
   distance?: string;
   walkTime?: string;
+  address?: string;
 }
 
 interface ProactivePicksProps {

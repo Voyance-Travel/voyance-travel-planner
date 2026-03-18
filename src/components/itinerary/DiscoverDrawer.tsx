@@ -295,6 +295,7 @@ export function DiscoverDrawer({
       title: suggestion.name,
       description: suggestion.description,
       category: cat,
+      rating: suggestion.rating,
       cost: ('priceLevel' in suggestion && suggestion.priceLevel) ? { amount: suggestion.priceLevel * 15, currency: tripCurrency } : undefined,
       location: {
         name: suggestion.name,

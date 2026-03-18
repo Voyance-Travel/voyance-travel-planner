@@ -115,7 +115,8 @@ OUTPUT FORMAT (JSON only, no markdown):
       "scheduleFit": "Perfect for the 2pm gap between museum and dinner",
       "rating": 4.5,
       "distance": "1.2 km from your lunch spot",
-      "walkTime": "15 min walk"${blendedDna?.isBlended ? ',\n      "forTraveler": "Traveler Name"' : ''}
+      "walkTime": "15 min walk",
+      "address": "23 Rue Example, Quartier Name"${blendedDna?.isBlended ? ',\n      "forTraveler": "Traveler Name"' : ''}
     }
   ],
   "nearSchedule": [...],

@@ -4265,6 +4265,7 @@ export function EditorialItinerary({
       location: activity.location || { name: '', address: '' },
       cost: activity.cost || { amount: 0, currency: tripCurrency },
       bookingRequired: activity.bookingRequired || false,
+      rating: activity.rating,
       tags: activity.tags || [],
       isLocked: false,
     };
