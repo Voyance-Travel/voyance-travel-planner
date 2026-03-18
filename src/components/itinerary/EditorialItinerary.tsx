@@ -3754,6 +3754,15 @@ export function EditorialItinerary({
     }
   }, [tripId, days]);
 
+  // Detect synthetic/pinned items that should not participate in reorder or time recalculation
+  const isSyntheticActivity = useCallback((a: EditorialActivity): boolean => {
+    return !!(a as any).__syntheticTravel || !!(a as any).__syntheticDeparture ||
+      !!(a as any).__syntheticFinalDeparture || !!(a as any).__interCityTransport ||
+      !!(a as any).__hotelCheckout || !!(a as any).__hotelCheckin ||
+      a.id.startsWith('hotel-') || a.id.startsWith('departure-') ||
+      a.id.startsWith('travel-') || a.id.startsWith('final-departure-');
+  }, []);
+
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
   const handleActivityReorder = useCallback(async (dayIndex: number, reorderedActivities: EditorialActivity[]) => {
     // Save version snapshot before reorder for undo
@@ -3801,19 +3810,25 @@ export function EditorialItinerary({
       return total > 0 ? total : null;
     };
 
-    // Collect original durations (in minutes) for each activity
-    const withTimes = reorderedActivities.map(a => {
+    // Partition: synthetic items keep original times, only real activities get recalculated
+    const syntheticIds = new Set(
+      reorderedActivities.filter(a => isSyntheticActivity(a)).map(a => a.id)
+    );
+    const realActivities = reorderedActivities.filter(a => !syntheticIds.has(a.id));
+
+    // Collect original durations (in minutes) for each REAL activity
+    const withTimes = realActivities.map(a => {
       const s = toMins(a.startTime || a.time);
       const e = toMins(a.endTime);
       const dur = (s !== null && e !== null && e > s) ? e - s : 30; // default 30 min
       return { activity: a, duration: dur };
     });
 
-    // Start from the earliest original time across the day, or first activity's time, or 09:00
-    const allStarts = reorderedActivities.map(a => toMins(a.startTime || a.time)).filter((v): v is number => v !== null);
+    // Start from the earliest original time across REAL activities, or 09:00
+    const allStarts = realActivities.map(a => toMins(a.startTime || a.time)).filter((v): v is number => v !== null);
     let cursor = allStarts.length > 0 ? Math.min(...allStarts) : 9 * 60;
 
-    const updated = withTimes.map(({ activity, duration }, idx) => {
+    const realUpdated = withTimes.map(({ activity, duration }, idx) => {
       const newStart = fmtTime(cursor);
       const newEnd = fmtTime(cursor + duration);
       
@@ -3832,6 +3847,12 @@ export function EditorialItinerary({
       };
     });
 
+    // Merge back: real activities get recalculated times, synthetic keep originals
+    const realUpdatedMap = new Map(realUpdated.map(a => [a.id, a]));
+    const updated = reorderedActivities.map(a =>
+      syntheticIds.has(a.id) ? a : (realUpdatedMap.get(a.id) || a)
+    );
+
     setDays(prev => {
       const newDays = prev.map((day, idx) => {
         if (idx !== dayIndex) return day;
@@ -3847,7 +3868,7 @@ export function EditorialItinerary({
     }
     setHasChanges(true);
     setNeedsOptimization(true);
-  }, [syncBudgetFromDays]);
+  }, [syncBudgetFromDays, isSyntheticActivity]);
 
   // Move activity up/down — delegates to reorder handler for proper time reassignment
   const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
@@ -3858,7 +3879,14 @@ export function EditorialItinerary({
     const actIdx = activities.findIndex(a => a.id === activityId);
     if (actIdx === -1) return;
 
-    const newIdx = direction === 'up' ? actIdx - 1 : actIdx + 1;
+    // Skip if source is synthetic (defensive)
+    if (isSyntheticActivity(activities[actIdx])) return;
+
+    // Find visible neighbor to swap with (skip synthetic/hidden items)
+    let newIdx = direction === 'up' ? actIdx - 1 : actIdx + 1;
+    while (newIdx >= 0 && newIdx < activities.length && isSyntheticActivity(activities[newIdx])) {
+      newIdx += direction === 'up' ? -1 : 1;
+    }
     if (newIdx < 0 || newIdx >= activities.length) return;
 
     const minIdx = Math.min(actIdx, newIdx);
@@ -3878,7 +3906,7 @@ export function EditorialItinerary({
 
     // Delegate to reorder handler which reassigns times and saves version snapshot
     handleActivityReorder(dayIndex, activities);
-  }, [days, handleActivityReorder]);
+  }, [days, handleActivityReorder, isSyntheticActivity]);
 
   // Move activity to a different day
   const handleMoveToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
