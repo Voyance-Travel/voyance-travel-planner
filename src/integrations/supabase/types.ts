@@ -4302,7 +4302,7 @@ export type Database = {
             foreignKeyName: "guide_sections_guide_id_fkey"
             columns: ["guide_id"]
             isOneToOne: false
-            referencedRelation: "guides"
+            referencedRelation: "community_guides"
             referencedColumns: ["id"]
           },
         ]

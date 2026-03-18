@@ -1,7 +1,7 @@
 /**
  * EditorialPreviewModal — full-screen editorial preview with publish/regenerate actions.
  */
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, RefreshCw, ArrowRight, Loader2, BookOpen } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -50,6 +50,7 @@ export default function EditorialPreviewModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl w-full h-[95vh] p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogDescription className="sr-only">Preview of your editorial guide</DialogDescription>
         {/* Top bar */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shrink-0">
           <Button variant="ghost" size="sm" className="gap-1.5 text-sm" onClick={close}>
