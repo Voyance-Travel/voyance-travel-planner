@@ -4,7 +4,7 @@
  * Mirrors the TransitModePicker UX so all transit gaps are consistent.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import {
