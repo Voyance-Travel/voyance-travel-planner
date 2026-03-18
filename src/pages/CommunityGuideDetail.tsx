@@ -455,7 +455,7 @@ export default function CommunityGuideDetail() {
                 ))}
               </div>
             ))
-          ) : enrichedActivities.length === 0 && customTips.length === 0 ? (
+          ) : regularActivities.length === 0 && customTips.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-sm">This guide doesn't have any personal reviews yet.</p>
             </div>
