@@ -1840,6 +1840,7 @@ export function EditorialItinerary({
   const initialDaysFingerprint = useMemo(() => {
     return JSON.stringify(initialDays.map(d => ({
       n: d.dayNumber,
+      d: d.date,
       a: d.activities.map(a => a.id),
     })));
   }, [initialDays]);
