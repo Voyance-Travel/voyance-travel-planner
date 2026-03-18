@@ -1287,6 +1287,7 @@ export function EditorialItinerary({
   journeyId,
   journeyName,
   onDateChange,
+  onUndoDateChange,
   hasItinerary: hasItineraryProp,
   dateEditorFlightSelection,
   dateEditorCities,
