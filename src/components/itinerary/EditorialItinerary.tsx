@@ -1934,7 +1934,15 @@ export function EditorialItinerary({
 
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
-  const [discoverDrawerOpen, setDiscoverDrawerOpen] = useState(false);
+  const [pendingCascade, setPendingCascade] = useState<{
+    dayIndex: number;
+    activityIndex: number;
+    startTime: string;
+    endTime: string;
+    dropped: EditorialActivity[];
+    kept: EditorialActivity[];
+    source: 'time_edit' | 'add_activity';
+  } | null>(null);
   const [hotelGalleryOpen, setHotelGalleryOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [payments, setPayments] = useState<TripPayment[]>([]);
