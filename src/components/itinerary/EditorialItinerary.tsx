@@ -1531,9 +1531,10 @@ export function EditorialItinerary({
         const details = d.departureTransportDetails || {};
         const depTime = (details.departureTime as string) || '';
         const arrTime = (details.arrivalTime as string) || '';
-        const carrier = (details.carrier as string) || '';
+        const carrier = (details.carrier as string) || (details.operator as string) || '';
         const flightNum = (details.flightNumber as string) || '';
-        const dur = (details.duration as string) || '';
+        const dur = (details.duration as string) || (details.inTransitDuration as string) || (details.doorToDoorDuration as string) || '';
+        const depFrom = (details.departureStation as string) || (details.departureAirport as string) || (d.city as string) || '';
         const transportLabel = tType.charAt(0).toUpperCase() + tType.slice(1);
         const title = `${transportLabel} to ${to}`;
         const cardTime = depTime || '18:00';
