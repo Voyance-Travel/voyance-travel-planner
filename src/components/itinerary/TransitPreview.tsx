@@ -105,10 +105,13 @@ function TransitSection({
   gapMinutes: number | null;
 }) {
   const recommended = getRecommendedTransit(estimates);
+  const overlapFormatted = gapMinutes !== null && gapMinutes < 0
+    ? formatDuration(Math.abs(gapMinutes))
+    : null;
   const conflict = recommended && gapMinutes !== null
     ? checkScheduleConflict(recommended.durationMinutes, gapMinutes)
-    : gapMinutes !== null && gapMinutes < 0
-      ? { hasConflict: true, message: `These activities overlap by ${Math.abs(gapMinutes)} minutes. Consider adjusting the timing.` }
+    : overlapFormatted
+      ? { hasConflict: true, message: `These activities would overlap by ${overlapFormatted}. Consider adjusting the timing.` }
       : undefined;
 
   return (

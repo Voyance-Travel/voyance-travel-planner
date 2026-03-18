@@ -89,10 +89,17 @@ export function checkScheduleConflict(
   transitMinutes: number,
   gapMinutes: number
 ): { hasConflict: boolean; message: string } {
+  if (gapMinutes < 0) {
+    const overlapFormatted = formatDuration(Math.abs(gapMinutes));
+    return {
+      hasConflict: true,
+      message: `This is ${transitMinutes} min away, and these activities would overlap by ${overlapFormatted}. Consider adjusting the timing.`,
+    };
+  }
   if (transitMinutes > gapMinutes) {
     return {
       hasConflict: true,
-      message: `This is ${transitMinutes} min away but you only have a ${gapMinutes} min gap. Consider adjusting the timing.`,
+      message: `This is ${transitMinutes} min away but you only have a ${formatDuration(gapMinutes)} gap. Consider adjusting the timing.`,
     };
   }
   return { hasConflict: false, message: '' };
