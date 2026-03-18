@@ -3773,10 +3773,17 @@ export function EditorialItinerary({
     return firstInGroup?.id !== a.id;
   }, [optionSelections]);
 
+  // Check if an activity is a transport/transit row (Metro, Walk, Taxi, etc.)
+  const isTransportActivity = useCallback((a: EditorialActivity): boolean => {
+    const cat = (a.category || a.type || '').toLowerCase();
+    return cat === 'transportation' || cat === 'transport';
+  }, []);
+
   // Get only the visible, reorderable activities (what the user actually sees as cards)
+  // Excludes synthetic, hidden alternatives, AND transport rows
   const getVisibleReorderableActivities = useCallback((activities: EditorialActivity[]): EditorialActivity[] => {
-    return activities.filter(a => !isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities));
-  }, [isSyntheticActivity, isHiddenOptionAlternative]);
+    return activities.filter(a => !isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities) && !isTransportActivity(a));
+  }, [isSyntheticActivity, isHiddenOptionAlternative, isTransportActivity]);
 
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
   const handleActivityReorder = useCallback(async (dayIndex: number, reorderedActivities: EditorialActivity[]) => {
