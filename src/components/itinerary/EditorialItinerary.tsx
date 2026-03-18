@@ -3735,22 +3735,6 @@ export function EditorialItinerary({
     }
   }, [tripId, days]);
 
-  const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
-    setDays(prev => prev.map((day, idx) => {
-      if (idx !== dayIndex) return day;
-      const activities = [...day.activities];
-      const actIdx = activities.findIndex(a => a.id === activityId);
-      if (actIdx === -1) return day;
-      
-      const newIdx = direction === 'up' ? actIdx - 1 : actIdx + 1;
-      if (newIdx < 0 || newIdx >= activities.length) return day;
-      
-      [activities[actIdx], activities[newIdx]] = [activities[newIdx], activities[actIdx]];
-      return { ...day, activities };
-    }));
-    setHasChanges(true);
-  }, []);
-
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
   const handleActivityReorder = useCallback(async (dayIndex: number, reorderedActivities: EditorialActivity[]) => {
     // Save version snapshot before reorder for undo
@@ -3839,6 +3823,29 @@ export function EditorialItinerary({
     setHasChanges(true);
     setNeedsOptimization(true);
   }, [syncBudgetFromDays]);
+
+  // Move activity up/down — delegates to reorder handler for proper time reassignment
+  const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
+    const day = days[dayIndex];
+    if (!day) return;
+
+    const activities = [...day.activities];
+    const actIdx = activities.findIndex(a => a.id === activityId);
+    if (actIdx === -1) return;
+
+    const newIdx = direction === 'up' ? actIdx - 1 : actIdx + 1;
+    if (newIdx < 0 || newIdx >= activities.length) return;
+
+    // Swap positions
+    [activities[actIdx], activities[newIdx]] = [activities[newIdx], activities[actIdx]];
+
+    // Clear stale transportation on swapped activities so TransitGapIndicator re-fetches
+    activities[actIdx] = { ...activities[actIdx], transportation: undefined };
+    activities[newIdx] = { ...activities[newIdx], transportation: undefined };
+
+    // Delegate to reorder handler which reassigns times and saves version snapshot
+    handleActivityReorder(dayIndex, activities);
+  }, [days, handleActivityReorder]);
 
   // Move activity to a different day
   const handleMoveToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
