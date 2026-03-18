@@ -221,7 +221,7 @@ export function TransitGapIndicator({
   const modeIcon = getGapTransportIcon(transportMethod, gapMinutes);
   const durationLabel = transportation?.duration || `${Math.abs(gapMinutes)} min`;
   const canExpand = isEditable && !!city && !!destinationName;
-  const shouldHide = hasTransitBadge || eitherIsTransit;
+  const shouldHide = hasTransitBadge || eitherIsTransit || sameLocation;
 
   const [expandedOptionId, setExpandedOptionId] = useState<string | null>(null);
   const [routeDetailsCache, setRouteDetailsCache] = useState<Record<string, RouteDetails | null>>({});
