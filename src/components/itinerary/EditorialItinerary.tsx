@@ -10147,7 +10147,8 @@ function ActivityRow({
                         </div>
                       )}
                     </div>
-                  )}
+                    ) : null;
+                  })()}
                 </>
               );
             })()}
