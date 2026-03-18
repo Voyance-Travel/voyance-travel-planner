@@ -1955,11 +1955,23 @@ export function EditorialItinerary({
       const patchedActivities = day.activities.map(activity => {
         const change = changes.find(c => c.activityId === activity.id && c.patch);
         if (!change?.patch) return activity;
-        return {
+        const patched = {
           ...activity,
           ...(change.patch.startTime ? { startTime: change.patch.startTime as string, time: change.patch.startTime as string } : {}),
           ...(change.patch.endTime ? { endTime: change.patch.endTime as string } : {}),
         };
+        // Auto-fix: if patch resulted in end <= start, restore original duration
+        const pStart = patched.startTime || patched.time || '12:00';
+        const pEnd = patched.endTime;
+        if (pStart && pEnd) {
+          const sMin = timeToMinutes(pStart);
+          const eMin = timeToMinutes(pEnd);
+          if (eMin <= sMin) {
+            const origDuration = activity.durationMinutes || 30;
+            patched.endTime = minutesToTime(sMin + origDuration);
+          }
+        }
+        return patched;
       });
       // Sort chronologically after applying time patches
       patchedActivities.sort((a, b) => {
