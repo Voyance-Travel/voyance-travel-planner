@@ -9780,7 +9780,7 @@ function ActivityRow({
               if (venue) {
                 return (
                   <>
-                    <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{venue}</h4>
+                    <h4 className="font-serif text-base sm:text-lg font-medium text-foreground leading-snug">{activityTitle}</h4>
                     {/* Mobile-only attribution dot — skip for logistical activities */}
                     {activity.suggestedFor && collaboratorColorMap && !isCheckIn && !isAirport && !isAccommodation && !isTransport && !isDowntime && (() => {
                       const ids = activity.suggestedFor!.split(',').map(s => s.trim()).filter(id => collaboratorColorMap.has(id));
@@ -9798,7 +9798,12 @@ function ActivityRow({
                         </span>
                       );
                     })()}
-                    <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 italic line-clamp-1">{activityTitle}</p>
+                    {venue !== activityTitle && (
+                      <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 flex items-center gap-1 line-clamp-1">
+                        <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
+                        {venue}
+                      </p>
+                    )}
                     {/* Address gated by premium access — hidden in compact mode */}
                     {hasAddress && address !== venue && !compact && (
                       <div className={cn(
