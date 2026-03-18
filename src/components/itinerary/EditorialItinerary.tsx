@@ -1321,7 +1321,10 @@ export function EditorialItinerary({
   // Re-sync budget ledger from current days state (fire-and-forget)
   const syncBudgetFromDays = useCallback((currentDays: EditorialDay[]) => {
     // Manual mode: user manages their own budget — skip auto-sync
-    if (isManualMode) return;
+    const manualMode = (tripId ? useManualBuilderStore.getState().isManualBuilder(tripId) : false)
+      || creationSource === 'manual_paste'
+      || creationSource === 'manual';
+    if (manualMode) return;
     const daysForSync = currentDays.map(day => ({
       dayNumber: day.dayNumber,
       date: day.date || '',
