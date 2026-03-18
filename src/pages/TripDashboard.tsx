@@ -269,7 +269,7 @@ function canDeleteTrip(trip: Trip): { canDelete: boolean; reason?: string } {
    return { canDelete: true };
 }
 
-function TripCard({ trip, index = 0, onDelete }: { trip: Trip; index?: number; onDelete?: (tripId: string) => void }) {
+function TripCard({ trip, index = 0, onDelete, isAdmin, onClone }: { trip: Trip; index?: number; onDelete?: (tripId: string) => void; isAdmin?: boolean; onClone?: (tripId: string) => void }) {
   const navigate = useNavigate();
   const displayStatus = mapToDisplayStatus(trip.status, trip.startDate, trip.endDate);
   const deleteCheck = canDeleteTrip(trip);
