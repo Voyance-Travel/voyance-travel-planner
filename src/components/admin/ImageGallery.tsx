@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Ban, Search, Loader2, Upload, ImagePlus, HelpCircle, Maximize2, Replace, CheckSquare, SortAsc, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Ban, Search, Loader2, Upload, ImagePlus, HelpCircle, Maximize2, Replace, CheckSquare, SortAsc, AlertTriangle, ChevronDown, Wrench, Globe } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
