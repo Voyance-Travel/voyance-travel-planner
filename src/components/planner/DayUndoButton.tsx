@@ -14,6 +14,7 @@ interface DayUndoButtonProps {
   disabled?: boolean;
   className?: string;
   showLabel?: boolean;
+  label?: string;
 }
 
 export function DayUndoButton({
@@ -22,6 +23,7 @@ export function DayUndoButton({
   disabled = false,
   className,
   showLabel = false,
+  label,
 }: DayUndoButtonProps) {
   const button = (
     <Button
