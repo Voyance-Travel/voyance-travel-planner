@@ -1039,6 +1039,10 @@ function getActivityCostInfo(
     return { amount: costAmount, isEstimated: false, confidence: 'high', basis };
   }
   
+  // If cost is explicitly 0 and source is imported/user-override, respect it as-is
+  if (costAmount === 0 && ((activity as any).costSource === 'imported' || (activity as any).costSource === 'user_override')) {
+    return { amount: 0, isEstimated: false, confidence: 'high', basis };
+  }
   // If cost is explicitly 0 but category should never be free, skip to estimation
   if (costAmount === 0 && shouldNeverBeFree) {
     // Fall through to estimation engine below
@@ -4262,6 +4266,7 @@ export function EditorialItinerary({
           endTime: activity.endTime || '',
           location: activity.location || { name: '', address: '' },
           cost: activity.cost || { amount: 0, currency: tripCurrency },
+          costSource: 'imported' as const,
           bookingRequired: false,
           tags: [],
           isLocked: false,
@@ -4270,7 +4275,10 @@ export function EditorialItinerary({
         const day = updated[dayIndex];
         if (!day) continue;
         if (mode === 'replace') {
-          updated[dayIndex] = { ...day, activities: newActivities };
+          const lockedActivities = day.activities.filter(a => a.isLocked);
+          const merged = [...lockedActivities, ...newActivities];
+          merged.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+          updated[dayIndex] = { ...day, activities: merged };
         } else {
           const combined = [...day.activities, ...newActivities];
           combined.sort((a, b) => {
