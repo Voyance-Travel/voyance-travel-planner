@@ -106,14 +106,14 @@ export function RefreshDayDiffView({
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          {hasActionableChanges ? (
+          {hasIssues ? (
             <AlertTriangle className="h-4.5 w-4.5 text-destructive shrink-0" />
           ) : (
             <CheckCircle className="h-4.5 w-4.5 text-primary shrink-0" />
           )}
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-foreground truncate">
-              Day {dayNumber}: {hasActionableChanges ? 'Proposed Changes' : 'All Good'}
+              Day {dayNumber}: {hasIssues ? (hasActionableChanges ? 'Proposed Changes' : 'Issues Found') : 'All Good'}
             </h3>
             {hasActionableChanges && (
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -122,6 +122,13 @@ export function RefreshDayDiffView({
                   : `${actionableChanges.length} change${actionableChanges.length !== 1 ? 's' : ''} suggested`}
                 {errorCount > 0 && ` · ${errorCount} error${errorCount !== 1 ? 's' : ''}`}
                 {warnCount > 0 && ` · ${warnCount} warning${warnCount !== 1 ? 's' : ''}`}
+              </p>
+            )}
+            {!hasActionableChanges && hasIssues && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {insufficientBuffers > 0 && `${insufficientBuffers} buffer${insufficientBuffers !== 1 ? 's' : ''} too short`}
+                {warnCount > 0 && `${insufficientBuffers > 0 ? ' · ' : ''}${warnCount} warning${warnCount !== 1 ? 's' : ''}`}
+                {errorCount > 0 && ` · ${errorCount} error${errorCount !== 1 ? 's' : ''}`}
               </p>
             )}
           </div>
