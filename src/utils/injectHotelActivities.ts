@@ -141,7 +141,8 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
     const act = result[i];
     if ((act as any).__truncatedAtMidnight) continue;
     const start = timeToMinutes(act.startTime);
-    const origDuration = act.durationMinutes || 30;
+    // Use preserved original duration if available
+    const origDuration = (act as any).__originalDurationMinutes || act.durationMinutes || 30;
     if (start + origDuration > MAX_TIME) {
       const actualDuration = MAX_TIME - start;
       if (actualDuration < origDuration) {
