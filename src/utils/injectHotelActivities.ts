@@ -116,6 +116,7 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
       const origDuration = result[i].durationMinutes || 30;
       const newEnd = Math.min(newStart + origDuration, MAX_TIME);
       const actualDuration = newEnd - newStart;
+      const wasTruncated = (newStart + origDuration) > MAX_TIME && actualDuration < origDuration;
       const durationStr = actualDuration >= 60
         ? `${Math.floor(actualDuration / 60)} hr${actualDuration % 60 ? ` ${actualDuration % 60} min` : ''}`
         : `${actualDuration} min`;
@@ -125,18 +126,25 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
         endTime: minutesToTime(newEnd),
         durationMinutes: actualDuration,
         duration: durationStr,
+        ...(wasTruncated ? {
+          __truncatedAtMidnight: true,
+          __originalDurationMinutes: origDuration,
+        } as any : {}),
       };
     }
   }
 
-// Filter out activities that no longer fit in the day
+  // Filter out activities that no longer fit in the day
   return result.filter(act => {
     const isStructural = act.tags?.some(t => STRUCTURAL_TAGS.includes(t));
     if (isStructural) return true;
     const start = timeToMinutes(act.startTime);
+    const origDuration = (act as any).__originalDurationMinutes || act.durationMinutes || 30;
     const duration = act.durationMinutes || 30;
     const end = Math.min(start + duration, MAX_TIME);
     const actualDuration = end - start;
+    // Drop if truncated to less than 50% of original duration
+    if ((act as any).__truncatedAtMidnight && actualDuration < origDuration * 0.5) return false;
     // Drop if starts too late or duration too short after clamping
     if (start >= 23 * 60 && actualDuration < MIN_USEFUL_DURATION) return false;
     if (actualDuration < MIN_USEFUL_DURATION && start >= 22 * 60) return false;

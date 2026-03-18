@@ -6810,7 +6810,14 @@ export function EditorialItinerary({
                   setNeedsOptimization(true);
                   toast.success('Activity added!');
                 }
-                toast.info(`${pendingCascade.dropped.length} activit${pendingCascade.dropped.length === 1 ? 'y was' : 'ies were'} removed. Use Undo to restore.`);
+                if (pendingCascade.dropped.length > 0) {
+                  toast.info(`${pendingCascade.dropped.length} activit${pendingCascade.dropped.length === 1 ? 'y was' : 'ies were'} removed. Use Undo to restore.`);
+                }
+                // Warn about truncated activities
+                const truncatedActs = kept.filter((a: any) => a.__truncatedAtMidnight);
+                truncatedActs.forEach((a: any) => {
+                  toast.warning(`"${a.title}" shortened to ${a.durationMinutes} min (was ${a.__originalDurationMinutes} min) to fit before midnight`);
+                });
                 setPendingCascade(null);
               }}
             >
