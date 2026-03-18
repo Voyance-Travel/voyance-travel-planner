@@ -4507,8 +4507,17 @@ export function EditorialItinerary({
       if (cascade && aIdx > activityIndex && deltaMinutes !== 0) {
         const aStart = activity.startTime || activity.time;
         const aEnd = activity.endTime;
-        const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
-        const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
+        const rawNewStart = aStart ? parseTime(aStart) + deltaMinutes : null;
+        const rawNewEnd = aEnd ? parseTime(aEnd) + deltaMinutes : null;
+        const newStart = rawNewStart !== null ? formatTime(rawNewStart) : aStart;
+        const newEnd = rawNewEnd !== null ? formatTime(rawNewEnd) : aEnd;
+
+        // Preserve original duration before any clamping
+        const MAX_MINS = 23 * 60 + 59;
+        const origDuration = aEnd && aStart
+          ? Math.max(parseTime(aEnd) - parseTime(aStart), 15)
+          : (activity.durationMinutes || 30);
+
         const recalcDuration = (s: string, e: string) => {
           const durMins = parseTime(e) - parseTime(s);
           const durStr = durMins >= 60
@@ -4516,13 +4525,26 @@ export function EditorialItinerary({
             : `${durMins} min`;
           return { durationMinutes: durMins, duration: durStr };
         };
+
+        // Detect if formatTime clamped the end time past midnight
+        const endWasClamped = rawNewEnd !== null && rawNewEnd > MAX_MINS;
+        const startWasClamped = rawNewStart !== null && rawNewStart > MAX_MINS;
+
         if (newStart && newEnd && parseTime(newEnd) <= parseTime(newStart)) {
-          const origDuration = aEnd && aStart ? Math.max(parseTime(aEnd) - parseTime(aStart), 15) : 30;
           const fixedEnd = formatTime(parseTime(newStart) + Math.max(origDuration, 15));
-          return { ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time, ...recalcDuration(newStart, fixedEnd) };
+          return {
+            ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time,
+            ...recalcDuration(newStart, fixedEnd),
+            ...(endWasClamped || startWasClamped ? { __truncatedAtMidnight: true, __originalDurationMinutes: origDuration } : {}),
+          };
         }
         if (newStart && newEnd) {
-          return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time, ...recalcDuration(newStart, newEnd) };
+          const actualDuration = parseTime(newEnd) - parseTime(newStart);
+          return {
+            ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time,
+            ...recalcDuration(newStart, newEnd),
+            ...(endWasClamped ? { __truncatedAtMidnight: true, __originalDurationMinutes: origDuration } : {}),
+          };
         }
         return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
       }
