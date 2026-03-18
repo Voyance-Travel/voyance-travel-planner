@@ -356,7 +356,7 @@ export default function GuideBuilder() {
             name: s.title,
             description: s.body || s.activitySnapshot?.tips || null,
             category: s.activitySnapshot?.category || null,
-            image_url: s.photoUrl || (s.photos[0]?.url) || null,
+            image_url: safeImageUrl(s.photoUrl || (s.photos[0]?.url)),
             note: s.userExperience || null,
             user_rating: s.userRating,
             recommended: s.recommended,
