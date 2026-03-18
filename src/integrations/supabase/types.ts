@@ -6556,6 +6556,57 @@ export type Database = {
           },
         ]
       }
+      trip_date_versions: {
+        Row: {
+          created_at: string | null
+          created_by_action: string | null
+          day_count: number
+          end_date: string
+          hotel_selection: Json | null
+          id: string
+          itinerary_data: Json | null
+          start_date: string
+          trip_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by_action?: string | null
+          day_count: number
+          end_date: string
+          hotel_selection?: Json | null
+          id?: string
+          itinerary_data?: Json | null
+          start_date: string
+          trip_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by_action?: string | null
+          day_count?: number
+          end_date?: string
+          hotel_selection?: Json | null
+          id?: string
+          itinerary_data?: Json | null
+          start_date?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_date_versions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_date_versions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_day_summaries: {
         Row: {
           created_at: string

@@ -466,6 +466,8 @@ export interface EditorialItineraryProps {
   journeyName?: string | null;
   /** Date editing props — renders inline pencil icon next to date display */
   onDateChange?: (result: import('@/components/trip/TripDateEditor').DateChangeResult) => Promise<void>;
+  /** Called when user wants to undo a date change (restores dates + itinerary) */
+  onUndoDateChange?: () => Promise<void>;
   hasItinerary?: boolean;
   dateEditorFlightSelection?: Record<string, unknown> | null;
   dateEditorCities?: Array<{ id: string; city_name: string; nights?: number }>;
@@ -1285,6 +1287,7 @@ export function EditorialItinerary({
   journeyId,
   journeyName,
   onDateChange,
+  onUndoDateChange,
   hasItinerary: hasItineraryProp,
   dateEditorFlightSelection,
   dateEditorCities,
@@ -1897,6 +1900,28 @@ export function EditorialItinerary({
       setHasChanges(true);
     }, [selectedDayIndex]),
   });
+
+  // Trip-level date undo
+  const [canUndoDate, setCanUndoDate] = useState(false);
+  const [isUndoingDate, setIsUndoingDate] = useState(false);
+  useEffect(() => {
+    if (!tripId || !onUndoDateChange) { setCanUndoDate(false); return; }
+    import('@/services/tripDateVersionHistory').then(({ canUndoDateChange }) => {
+      canUndoDateChange(tripId).then(setCanUndoDate);
+    });
+  }, [tripId, onUndoDateChange, days.length, startDate, endDate]);
+
+  const handleUndoDate = useCallback(async () => {
+    if (!onUndoDateChange) return;
+    setIsUndoingDate(true);
+    try {
+      await onUndoDateChange();
+      setCanUndoDate(false);
+    } finally {
+      setIsUndoingDate(false);
+    }
+  }, [onUndoDateChange]);
+
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [discoverDrawerOpen, setDiscoverDrawerOpen] = useState(false);
@@ -5165,13 +5190,21 @@ export function EditorialItinerary({
                  </span>
                  {!isCleanPreview && (
                  <div className="flex items-center gap-1.5">
-                   {canUndoDay && (
-                     <DayUndoButton
-                       onClick={handleUndo}
-                       isLoading={isUndoing}
-                       showLabel
-                     />
-                   )}
+                    {canUndoDate && (
+                      <DayUndoButton
+                        onClick={handleUndoDate}
+                        isLoading={isUndoingDate}
+                        showLabel
+                        label="Undo Dates"
+                      />
+                    )}
+                    {canUndoDay && (
+                      <DayUndoButton
+                        onClick={handleUndo}
+                        isLoading={isUndoing}
+                        showLabel
+                      />
+                    )}
                    <Button
                      variant="ghost"
                      size="sm"

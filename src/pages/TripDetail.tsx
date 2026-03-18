@@ -49,6 +49,7 @@ import { VersionConflictDialog } from '@/components/trip/VersionConflictDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { getTripPermission } from '@/services/tripCollaboratorsAPI';
 import { setCachedVersion, clearCachedVersion, saveItineraryOptimistic, fetchAndCacheVersion } from '@/services/itineraryOptimisticUpdate';
+import { saveTripDateVersion, restoreTripDateVersion } from '@/services/tripDateVersionHistory';
 import { useScheduleNotifications } from '@/services/tripNotificationsAPI';
 import { useScrollLockCleanup } from '@/hooks/useScrollLockCleanup';
 import { useTripLearning } from '@/services/tripLearningsAPI';
@@ -1738,6 +1739,16 @@ export default function TripDetail() {
   const handleDateChange = useCallback(async (result: DateChangeResult) => {
     if (!trip || !tripId) return;
 
+    // Snapshot current trip dates/itinerary before changing for undo support
+    const currentDays = ((trip.itinerary_data as Record<string, unknown>)?.days as any[]) || [];
+    await saveTripDateVersion(tripId, {
+      startDate: trip.start_date,
+      endDate: trip.end_date,
+      dayCount: currentDays.length,
+      itineraryData: trip.itinerary_data as Record<string, unknown> | undefined,
+      hotelSelection: trip.hotel_selection,
+    });
+
     const { newStartDate, newEndDate, daysAdded, isShiftOnly, insertPosition, removedDayNumbers } = result;
     const metadata = trip.itinerary_data as Record<string, unknown> | null;
     let days = [...((metadata?.days as any[]) || [])];
@@ -1889,6 +1900,54 @@ export default function TripDetail() {
       toast.error('Failed to update dates');
     }
   }, [trip, tripId, syncCitiesAfterDateChange, queryClient]);
+
+  // Handle undoing a trip date change — restores dates, itinerary, and hotel selection
+  const handleUndoDateChange = useCallback(async () => {
+    if (!tripId) return;
+    const result = await restoreTripDateVersion(tripId);
+    if (!result.success || !result.snapshot) {
+      toast.error(result.error || 'No date change to undo');
+      return;
+    }
+    const { startDate, endDate, itineraryData, hotelSelection } = result.snapshot;
+
+    // Update local state
+    setTrip(prev => prev ? {
+      ...prev,
+      start_date: startDate,
+      end_date: endDate,
+      itinerary_data: (itineraryData ?? prev.itinerary_data) as any,
+      hotel_selection: (hotelSelection ?? prev.hotel_selection) as any,
+    } : null);
+
+    // Persist to DB
+    try {
+      const updatePayload: Record<string, unknown> = {
+        start_date: startDate,
+        end_date: endDate,
+        updated_at: new Date().toISOString(),
+      };
+      if (itineraryData) updatePayload.itinerary_data = itineraryData;
+      if (hotelSelection !== undefined) updatePayload.hotel_selection = hotelSelection;
+
+      const { error } = await supabase
+        .from('trips')
+        .update(updatePayload as any)
+        .eq('id', tripId);
+
+      if (error) {
+        console.error('[TripDetail] Failed to undo date change:', error);
+        toast.error('Failed to undo date change');
+      } else {
+        toast.success('Date change undone');
+        queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+        queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
+      }
+    } catch (err) {
+      console.error('[TripDetail] Undo date change error:', err);
+      toast.error('Failed to undo date change');
+    }
+  }, [tripId, queryClient]);
 
   // Handle applying hotel-based swap suggestions to itinerary
   const handleApplySwaps = useCallback((swaps: SwapSuggestion[]) => {
@@ -2749,6 +2808,7 @@ export default function TripDetail() {
                   journeyId={trip.journey_id}
                   journeyName={trip.journey_name}
                   onDateChange={handleDateChange}
+                  onUndoDateChange={handleUndoDateChange}
                   hasItinerary={hasItinerary}
                   dateEditorFlightSelection={trip.flight_selection as Record<string, unknown> | null}
                   dateEditorCities={tripCities}
