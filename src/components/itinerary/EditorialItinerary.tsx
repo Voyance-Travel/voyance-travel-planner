@@ -1787,6 +1787,7 @@ export function EditorialItinerary({
 
   const { user } = useAuth();
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
+  const venueBank = useTripVenueBank(days);
   const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
