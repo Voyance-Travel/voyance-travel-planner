@@ -4310,6 +4310,14 @@ export function EditorialItinerary({
 
   // Update activity time — with optional cascade to shift all following activities
   const handleUpdateActivityTime = useCallback((dayIndex: number, activityIndex: number, startTime: string, endTime: string, cascade = false) => {
+    const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+
+    // Guard: reject end time <= start time
+    if (parseTime(endTime) <= parseTime(startTime)) {
+      toast.error('End time must be after start time');
+      return;
+    }
+
     setDays(prev => prev.map((day, dIdx) => {
       if (dIdx !== dayIndex) return day;
 
@@ -4317,7 +4325,6 @@ export function EditorialItinerary({
       if (!targetActivity) return day;
 
       const oldStartStr = targetActivity.startTime || targetActivity.time || '12:00';
-      const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
       const formatTime = (mins: number) => {
         const c = Math.max(0, Math.min(mins, 23 * 60 + 59));
         return `${String(Math.floor(c / 60)).padStart(2, '0')}:${String(c % 60).padStart(2, '0')}`;
@@ -4339,6 +4346,12 @@ export function EditorialItinerary({
               const aEnd = activity.endTime;
               const newStart = aStart ? formatTime(parseTime(aStart) + deltaMinutes) : aStart;
               const newEnd = aEnd ? formatTime(parseTime(aEnd) + deltaMinutes) : aEnd;
+              // Clamp: ensure shifted end >= shifted start (preserve original duration)
+              if (newStart && newEnd && parseTime(newEnd) <= parseTime(newStart)) {
+                const origDuration = aEnd && aStart ? parseTime(aEnd) - parseTime(aStart) : 30;
+                const fixedEnd = formatTime(parseTime(newStart) + Math.max(origDuration, 15));
+                return { ...activity, startTime: newStart, endTime: fixedEnd, time: newStart || activity.time };
+              }
               return { ...activity, startTime: newStart, endTime: newEnd, time: newStart || activity.time };
             }
             return activity;
