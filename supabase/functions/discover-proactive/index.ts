@@ -96,6 +96,7 @@ For each suggestion, provide:
 - How it fits with their schedule
 - Estimated distance from the nearest itinerary activity that day (e.g. "1.2 km", "800m")
 - Estimated walking time from the nearest activity (e.g. "15 min walk", "5 min walk")
+- Street address or area name (e.g. "23 Rue de Rivoli" or "Le Marais district")
 ${blendedDna?.isBlended ? '- "forTraveler": Name of the traveler this is best suited for (for "forYou" category)' : ''}
 
 CRITICAL: Be opinionated. Don't suggest things every tourist does. Suggest things that make the traveler feel like Voyance truly knows them.
