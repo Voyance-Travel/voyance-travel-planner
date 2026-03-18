@@ -10020,7 +10020,9 @@ function ActivityRow({
                   );
                 }
                 
-                // Always show "See Reviews" for reviewable activities - reviews are fetched on-demand
+                // "See Reviews" button — still gated behind aiLocked and premium
+                if (aiLocked || !canViewPremium) return null;
+                
                 return (
                   <button
                     onClick={(e) => {
