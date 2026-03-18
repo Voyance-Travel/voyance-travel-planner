@@ -1393,7 +1393,7 @@ export function EditorialItinerary({
         }
       }
     });
-  }, [tripId, queryClient, travelers, isManualMode]);
+  }, [tripId, queryClient, travelers, creationSource]);
 
   // Auto-sync budget ledger on initial load so stale planned entries are replaced
   const budgetSyncedRef = useRef(false);
