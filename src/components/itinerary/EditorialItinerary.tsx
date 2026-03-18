@@ -133,6 +133,7 @@ import { TransitGapIndicator, computeGapMinutes } from './TransitGapIndicator';
 import { DayRouteMap } from './DayRouteMap';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
+import { useTripVenueBank } from '@/hooks/useTripVenueBank';
 import { AddActivityModal } from './AddActivityModal';
 import { EditActivityModal } from './EditActivityModal';
 import { DiscoverDrawer } from './DiscoverDrawer';
