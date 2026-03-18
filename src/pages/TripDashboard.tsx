@@ -760,6 +760,68 @@ export default function TripDashboard() {
       return next;
     });
   };
+  // Admin role check
+  useEffect(() => {
+    async function checkAdmin() {
+      if (!user?.id) return;
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin');
+      setIsAdmin((roles?.length ?? 0) > 0);
+    }
+    checkAdmin();
+  }, [user?.id]);
+
+  // Clone trip handler (admin only)
+  const handleCloneTrip = useCallback(async (sourceId: string) => {
+    if (!user?.id) return;
+    try {
+      toast.info('Cloning trip…');
+      const { data: source, error: fetchErr } = await supabase
+        .from('trips')
+        .select('*')
+        .eq('id', sourceId)
+        .single();
+      if (fetchErr || !source) throw fetchErr || new Error('Trip not found');
+
+      const { id, created_at, updated_at, share_token, itinerary_data, itinerary_status, itinerary_version, ...cloneData } = source as any;
+      const { data: newTrip, error: insertErr } = await supabase
+        .from('trips')
+        .insert([{
+          ...cloneData,
+          user_id: user.id,
+          status: 'draft',
+          itinerary_data: null,
+          itinerary_status: null,
+          itinerary_version: 0,
+          name: `${source.name || source.destination} (re-run)`,
+        }])
+        .select()
+        .single();
+      if (insertErr || !newTrip) throw insertErr || new Error('Failed to create trip');
+
+      // Copy trip_cities if multi-city
+      const { data: cities } = await supabase
+        .from('trip_cities')
+        .select('*')
+        .eq('trip_id', sourceId);
+      if (cities && cities.length > 0) {
+        const cityInserts = cities.map(({ id: _id, trip_id: _tid, created_at: _ca, ...rest }: any) => ({
+          ...rest,
+          trip_id: newTrip.id,
+        }));
+        await supabase.from('trip_cities').insert(cityInserts);
+      }
+
+      toast.success('Trip cloned! Navigating…');
+      navigate(`/trip/${newTrip.id}?generate=true`);
+    } catch (err: any) {
+      console.error('Clone failed:', err);
+      toast.error('Failed to clone trip');
+    }
+  }, [user?.id, navigate]);
 
   // Fetch trips directly from Supabase
   useEffect(() => {
