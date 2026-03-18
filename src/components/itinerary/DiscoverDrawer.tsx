@@ -298,8 +298,8 @@ export function DiscoverDrawer({
       rating: suggestion.rating,
       cost: ('priceLevel' in suggestion && suggestion.priceLevel) ? { amount: suggestion.priceLevel * 15, currency: tripCurrency } : undefined,
       location: {
-        name: suggestion.name,
-        address: 'address' in suggestion ? suggestion.address : undefined,
+        name: '',
+        address: 'address' in suggestion ? (suggestion as any).address : undefined,
       },
     });
     setAddedIds(prev => new Set(prev).add(suggestion.id));

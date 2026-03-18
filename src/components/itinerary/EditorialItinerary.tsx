@@ -9616,7 +9616,9 @@ function ActivityRow({
       return null;
     })();
 
-    const locationText = activity.location?.name || activity.location?.address;
+    const rawLocationName = activity.location?.name?.trim();
+    const dedupedLocationName = (rawLocationName && rawLocationName !== activityTitle) ? rawLocationName : '';
+    const locationText = dedupedLocationName || activity.location?.address;
 
     return (
       <div className="py-2">
@@ -9804,15 +9806,19 @@ function ActivityRow({
               !canViewPremium && "blur-sm pointer-events-none select-none"
             )}>{activity.description}</p>
           )}
-          {(activity.location?.name || activity.location?.address) && (
+          {(() => {
+            const locN = activity.location?.name?.trim();
+            const dedupLocName = (locN && locN !== activityTitle) ? locN : '';
+            return (dedupLocName || activity.location?.address) ? (
             <div className={cn(
               "flex items-center gap-1.5 text-xs text-muted-foreground",
               !canViewPremium && "blur-sm pointer-events-none select-none"
             )}>
               <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
-              <span className="truncate">{activity.location?.name || activity.location?.address}</span>
+              <span className="truncate">{dedupLocName || activity.location?.address}</span>
             </div>
-          )}
+            ) : null;
+          })()}
           {activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
             <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
               <VoyancePickCallout tip={activity.tips} />
@@ -9996,9 +10002,8 @@ function ActivityRow({
                 
                 if (isNonReviewable || aiLocked || !canViewPremium) return null;
                 
-                // In compact mode, always show "See Reviews" instead of inline star ratings
-                // Show rating badge if we have a rating and NOT in compact mode
-                if (rating && !compact) {
+                // Show rating badge whenever a numeric rating exists (including compact mode)
+                if (rating) {
                   return (
                     <Badge 
                       variant="secondary" 
@@ -10128,22 +10133,26 @@ function ActivityRow({
                   )}
 
                   {/* Location — in compact mode show only location name, no full address */}
-                  {(activity.location?.name || hasAddress) && (
+                  {(() => {
+                    const locName = activity.location?.name?.trim();
+                    const effectiveLocName = (locName && locName !== activityTitle) ? locName : '';
+                    return (effectiveLocName || hasAddress) ? (
                     <div className={cn(
                       "mt-1.5",
                       !canViewPremium && "blur-sm pointer-events-none select-none"
                     )}>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
-                        <span className="truncate">{activity.location?.name || address}</span>
+                        <span className="truncate">{effectiveLocName || address}</span>
                       </div>
-                      {!compact && activity.location?.name && hasAddress && address !== activity.location?.name && (
+                      {!compact && effectiveLocName && hasAddress && address !== effectiveLocName && (
                         <div className="hidden sm:block pl-5 mt-0.5 text-xs text-muted-foreground/70 leading-snug">
                           {address}
                         </div>
                       )}
                     </div>
-                  )}
+                    ) : null;
+                  })()}
                 </>
               );
             })()}
