@@ -1320,6 +1320,11 @@ export function EditorialItinerary({
 
   // Re-sync budget ledger from current days state (fire-and-forget)
   const syncBudgetFromDays = useCallback((currentDays: EditorialDay[]) => {
+    // Manual mode: user manages their own budget — skip auto-sync
+    const manualMode = (tripId ? useManualBuilderStore.getState().isManualBuilder(tripId) : false)
+      || creationSource === 'manual_paste'
+      || creationSource === 'manual';
+    if (manualMode) return;
     const daysForSync = currentDays.map(day => ({
       dayNumber: day.dayNumber,
       date: day.date || '',
@@ -1388,7 +1393,7 @@ export function EditorialItinerary({
         }
       }
     });
-  }, [tripId, queryClient, travelers]);
+  }, [tripId, queryClient, travelers, creationSource]);
 
   // Auto-sync budget ledger on initial load so stale planned entries are replaced
   const budgetSyncedRef = useRef(false);
@@ -5663,6 +5668,7 @@ export function EditorialItinerary({
             tripId={tripId}
             travelers={travelers}
             totalDays={days.length}
+            isManualMode={isManualMode}
             itineraryDays={days}
             hasHotel={
               !!(hotelSelection?.pricePerNight || hotelSelection?.name) ||

@@ -100,6 +100,8 @@ interface BudgetTabProps {
   /** Journey fields for linked trip budget summary */
   journeyId?: string | null;
   journeyName?: string | null;
+  /** Manual builder mode — skip auto-calculated expenses */
+  isManualMode?: boolean;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
@@ -202,7 +204,7 @@ function CostsList({ ledger, formatCurrency, categoryColors, categoryIcons, onAc
   );
 }
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName, isManualMode = false }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [payments, setPayments] = useState<TripPayment[]>([]);
   
@@ -383,8 +385,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 py-6"
     >
-      {/* Over-budget Warning Banner — use snapshot as canonical source */}
-      {(() => {
+      {/* Over-budget Warning Banner — use snapshot as canonical source (hidden in manual mode) */}
+      {!isManualMode && (() => {
         const budgetCents = settings?.budget_total_cents || 0;
         const snapshotUsedPct = budgetCents > 0 ? (snapshot.tripTotalCents / budgetCents) * 100 : 0;
         const snapshotStatus: 'green' | 'yellow' | 'red' = snapshotUsedPct >= 100 ? 'red' : snapshotUsedPct >= 85 ? 'yellow' : 'green';
@@ -401,8 +403,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         ) : null;
       })()}
 
-      {/* Over-budget explainer — actionable guidance when expenses far exceed budget */}
-      {(() => {
+      {/* Over-budget explainer — actionable guidance when expenses far exceed budget (hidden in manual mode) */}
+      {!isManualMode && (() => {
         const budgetCents = settings?.budget_total_cents || 0;
         if (budgetCents <= 0 || snapshot.tripTotalCents <= budgetCents) return null;
         const overageCents = snapshot.tripTotalCents - budgetCents;
@@ -425,8 +427,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         );
       })()}
 
-      {/* Budget Coach — AI suggestions when over budget */}
-      {hasBudget && itineraryDays && itineraryDays.length > 0 && summary && (
+      {/* Budget Coach — AI suggestions when over budget (hidden in manual mode) */}
+      {!isManualMode && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && (
         <BudgetCoach
           tripId={tripId}
           budgetTargetCents={summary.budgetTotalCents}
@@ -487,7 +489,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           </CardContent>
         </Card>
 
-        {/* Trip Expenses Card — total estimated cost from live itinerary */}
+        {/* Trip Expenses Card — total estimated cost from live itinerary (hidden in manual mode) */}
+        {!isManualMode && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -526,8 +529,10 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             )}
           </CardContent>
         </Card>
+        )}
 
-        {/* Budget Remaining Card — budget minus trip expenses */}
+        {/* Budget Remaining Card — budget minus trip expenses (hidden in manual mode) */}
+        {!isManualMode && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -557,6 +562,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             </p>
           </CardContent>
         </Card>
+        )}
       </div>
 
       {/* Category Breakdown */}
@@ -700,8 +706,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </Card>
       )}
 
-      {/* Recent Expenses */}
-      {ledger.length > 0 && (
+      {/* Recent Expenses (hidden in manual mode — auto-synced costs don't apply) */}
+      {!isManualMode && ledger.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-medium flex items-center gap-2">
