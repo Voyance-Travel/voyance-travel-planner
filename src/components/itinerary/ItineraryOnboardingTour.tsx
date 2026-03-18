@@ -95,19 +95,22 @@ const TOUR_STEPS: TourStep[] = [
     selector: '[data-tour="activity-card"]',
     position: 'bottom',
     onBeforeStep: () => {
-      // On mobile, expand the first activity card so users can see the detail view
       const isMobile = window.innerWidth < 640;
       if (isMobile) {
         const activityCard = document.querySelector('[data-tour="activity-card"]');
         if (activityCard) {
-          // Click the mobile header button to expand if not already expanded
-          const mobileButton = activityCard.querySelector('button.sm\\:hidden');
-          const expandedSection = activityCard.querySelector('.sm\\:hidden.px-3.pb-3');
-          if (mobileButton && !expandedSection) {
+          // Use direct child button query instead of escaped CSS class selector
+          const mobileButton = activityCard.querySelector(':scope > button');
+          if (mobileButton) {
             (mobileButton as HTMLElement).click();
           }
         }
       }
+      // Scroll activity card into view after expansion
+      setTimeout(() => {
+        const el = document.querySelector('[data-tour="activity-card"]');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
     },
   },
   {
