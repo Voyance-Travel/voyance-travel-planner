@@ -630,6 +630,7 @@ export function TransitGapIndicator({
                                   const instructions = routeDetailsCache[option.id]?.steps
                                     ?.map(s => s.instruction)
                                     .join(' → ') || option.route || undefined;
+                                  setUserSelectedMode(option.mode);
                                   onSelectMode(option.mode, option.duration, cost, instructions);
                                   setIsExpanded(false);
                                 }}
