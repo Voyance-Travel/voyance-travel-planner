@@ -1488,7 +1488,7 @@ export default function TripDashboard() {
                               transition={{ delay: groupIndex * 0.05 }}
                               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
                             >
-                               <TripCard trip={group.trips[0]} index={0} onDelete={handleTripDelete} />
+                               <TripCard trip={group.trips[0]} index={0} onDelete={handleTripDelete} isAdmin={isAdmin} onClone={handleCloneTrip} />
                             </motion.div>
                           )
                         ))
