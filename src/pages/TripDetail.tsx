@@ -1857,6 +1857,10 @@ export default function TripDetail() {
             : `${Math.abs(daysAdded)} day${Math.abs(daysAdded) > 1 ? 's' : ''} removed${archivedDays ? ' (archived)' : ''}`;
         toast.success(msg);
 
+        // Invalidate query cache so all consumers see fresh dates
+        queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+        queryClient.invalidateQueries({ queryKey: ['trips-lightweight'] });
+
         // Sync trip_cities nights/dates
         await syncCitiesAfterDateChange(result);
 
@@ -1878,7 +1882,7 @@ export default function TripDetail() {
       console.error('[TripDetail] Date change error:', err);
       toast.error('Failed to update dates');
     }
-  }, [trip, tripId, syncCitiesAfterDateChange]);
+  }, [trip, tripId, syncCitiesAfterDateChange, queryClient]);
 
   // Handle applying hotel-based swap suggestions to itinerary
   const handleApplySwaps = useCallback((swaps: SwapSuggestion[]) => {
