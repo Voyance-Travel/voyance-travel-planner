@@ -101,7 +101,9 @@ function adjustActivitiesAroundCheckIn(
  * Ensures a minimum 0-min gap (no overlaps) between consecutive activities.
  */
 export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialActivity[] {
-  const MAX_TIME = 23 * 60;
+  const MAX_TIME = 23 * 60 + 59; // 23:59
+  const STRUCTURAL_TAGS = ['check-out', 'checkout', 'departure', 'structural'];
+  const MIN_USEFUL_DURATION = 15;
   const result = [...activities];
 
   for (let i = 1; i < result.length; i++) {
@@ -111,11 +113,35 @@ export function cascadeFixOverlaps(activities: EditorialActivity[]): EditorialAc
 
     if (currStart < prevEnd) {
       const newStart = Math.min(prevEnd, MAX_TIME);
-      result[i] = { ...result[i], startTime: minutesToTime(newStart) };
+      const origDuration = result[i].durationMinutes || 30;
+      const newEnd = Math.min(newStart + origDuration, MAX_TIME);
+      const actualDuration = newEnd - newStart;
+      const durationStr = actualDuration >= 60
+        ? `${Math.floor(actualDuration / 60)} hr${actualDuration % 60 ? ` ${actualDuration % 60} min` : ''}`
+        : `${actualDuration} min`;
+      result[i] = {
+        ...result[i],
+        startTime: minutesToTime(newStart),
+        endTime: minutesToTime(newEnd),
+        durationMinutes: actualDuration,
+        duration: durationStr,
+      };
     }
   }
 
-  return result;
+  // Filter out activities that no longer fit in the day
+  return result.filter(act => {
+    const isStructural = act.tags?.some(t => STRUCTURAL_TAGS.includes(t));
+    if (isStructural) return true;
+    const start = timeToMinutes(act.startTime);
+    const duration = act.durationMinutes || 30;
+    const end = Math.min(start + duration, MAX_TIME);
+    const actualDuration = end - start;
+    // Drop if starts too late or duration too short after clamping
+    if (start >= 23 * 60 && actualDuration < MIN_USEFUL_DURATION) return false;
+    if (actualDuration < MIN_USEFUL_DURATION && start >= 22 * 60) return false;
+    return true;
+  });
 }
 
 function buildCheckOutActivity(hotel: HotelForInjection): EditorialActivity {
