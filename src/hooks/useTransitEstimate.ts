@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { formatDuration } from '@/utils/plannerUtils';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface TransitEstimate {
