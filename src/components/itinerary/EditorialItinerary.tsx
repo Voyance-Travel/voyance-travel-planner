@@ -3773,10 +3773,17 @@ export function EditorialItinerary({
     return firstInGroup?.id !== a.id;
   }, [optionSelections]);
 
+  // Check if an activity is a transport/transit row (Metro, Walk, Taxi, etc.)
+  const isTransportActivity = useCallback((a: EditorialActivity): boolean => {
+    const cat = (a.category || a.type || '').toLowerCase();
+    return cat === 'transportation' || cat === 'transport';
+  }, []);
+
   // Get only the visible, reorderable activities (what the user actually sees as cards)
+  // Excludes synthetic, hidden alternatives, AND transport rows
   const getVisibleReorderableActivities = useCallback((activities: EditorialActivity[]): EditorialActivity[] => {
-    return activities.filter(a => !isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities));
-  }, [isSyntheticActivity, isHiddenOptionAlternative]);
+    return activities.filter(a => !isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities) && !isTransportActivity(a));
+  }, [isSyntheticActivity, isHiddenOptionAlternative, isTransportActivity]);
 
   // Handle drag-and-drop reorder of activities within a day — dynamically reassign times
   const handleActivityReorder = useCallback(async (dayIndex: number, reorderedActivities: EditorialActivity[]) => {
@@ -3868,7 +3875,7 @@ export function EditorialItinerary({
     // Rebuild raw array: replace visible reorderable slots with new order, keep everything else in place
     const visibleSlotIndices: number[] = [];
     currentActivities.forEach((a, i) => {
-      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, currentActivities)) {
+      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, currentActivities) && !isTransportActivity(a)) {
         visibleSlotIndices.push(i);
       }
     });
@@ -3879,6 +3886,23 @@ export function EditorialItinerary({
         updated[rawIdx] = finalVisible[slotIdx];
       }
     });
+
+    // Adjust transport activities to fit between their new non-transport neighbors
+    for (let i = 0; i < updated.length; i++) {
+      if (!isTransportActivity(updated[i])) continue;
+      const prev = updated.slice(0, i).reverse().find(a => !isTransportActivity(a) && !isSyntheticActivity(a));
+      if (prev?.endTime) {
+        const pEnd = toMins(prev.endTime) ?? 0;
+        const tDur = updated[i].durationMinutes || 15;
+        updated[i] = {
+          ...updated[i],
+          startTime: fmtTime(pEnd),
+          endTime: fmtTime(pEnd + tDur),
+          time: fmtTime(pEnd),
+          transportation: undefined, // clear stale route for refetch
+        };
+      }
+    }
 
     setDays(prev => {
       const newDays = prev.map((day, idx) => {
@@ -3895,7 +3919,7 @@ export function EditorialItinerary({
     }
     setHasChanges(true);
     setNeedsOptimization(true);
-  }, [syncBudgetFromDays, isSyntheticActivity, isHiddenOptionAlternative, getVisibleReorderableActivities, days]);
+  }, [syncBudgetFromDays, isSyntheticActivity, isHiddenOptionAlternative, isTransportActivity, getVisibleReorderableActivities, days]);
 
   // Move activity up/down — operates on visible card order, not raw array
   const handleActivityMove = useCallback((dayIndex: number, activityId: string, direction: 'up' | 'down') => {
@@ -3928,7 +3952,7 @@ export function EditorialItinerary({
     // Rebuild the raw array with reordered visible slots
     const visibleSlotIndices: number[] = [];
     activities.forEach((a, i) => {
-      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities)) {
+      if (!isSyntheticActivity(a) && !isHiddenOptionAlternative(a, activities) && !isTransportActivity(a)) {
         visibleSlotIndices.push(i);
       }
     });
@@ -3942,7 +3966,7 @@ export function EditorialItinerary({
 
     // Delegate to reorder handler which reassigns times and saves version snapshot
     handleActivityReorder(dayIndex, rebuilt);
-  }, [days, handleActivityReorder, isSyntheticActivity, isHiddenOptionAlternative, getVisibleReorderableActivities]);
+  }, [days, handleActivityReorder, isSyntheticActivity, isHiddenOptionAlternative, isTransportActivity, getVisibleReorderableActivities]);
 
   // Move activity to a different day
   const handleMoveToDay = useCallback((fromDayIndex: number, activityId: string, toDayIndex: number) => {
