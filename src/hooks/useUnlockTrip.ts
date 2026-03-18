@@ -147,6 +147,7 @@ export function useUnlockTrip() {
 
     // First, fetch existing itinerary to preserve already-free days
     let existingDays: any[] = [];
+    let existingItineraryData: any = {};
     try {
       const { data: tripData } = await supabase
         .from('trips')
@@ -155,6 +156,7 @@ export function useUnlockTrip() {
         .maybeSingle();
       
       const itinData = tripData?.itinerary_data as any;
+      existingItineraryData = itinData || {};
       existingDays = itinData?.days || [];
     } catch (err) {
       console.warn('[UnlockTrip] Could not fetch existing days:', err);
