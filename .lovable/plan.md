@@ -1,36 +1,35 @@
 
 
-## Fix: Same-start-time activities not detected as overlap by Refresh Day
+## Fix: Suggestion deadline not persisting — missing UPDATE RLS policy
 
-### Root cause
+### Root Cause
 
-In `supabase/functions/refresh-day/index.ts`, the overlap check at line 329 only triggers when:
-```
-effectiveEnd > nextStart
-```
+The `trip_suggestions` table has **no UPDATE policy**. Only SELECT and INSERT policies exist. When a user clicks "Set deadline" on an existing suggestion card, `handleUpdateDeadline` calls `.update()` on `trip_suggestions`, but RLS silently blocks it (returns success with 0 rows affected). The deadline is never saved.
 
-When "Taxi to the Left Bank" and "Stroll through Saint-Germain-des-Prés" both start at 3:15 PM, the taxi (a short-duration transit activity) likely has `endTime === nextStartTime` or the taxi's `endTime` also equals its `startTime` (zero-duration transport stub). Since `915 > 915` is `false`, no overlap is flagged.
-
-Additionally, `getMinBufferMinutes` returns `0` for transit categories, so the buffer check also passes silently.
+This also means the "Set deadline" button at creation time **does** work (it's an INSERT), but post-creation deadline changes via the popover fail silently.
 
 ### Fix
 
-**File: `supabase/functions/refresh-day/index.ts`** — Add a same-start-time detection before the existing overlap check (around line 323).
+**1. Add UPDATE RLS policy (database migration)**
 
-When two consecutive sorted activities share the exact same start time, immediately flag a `timing_overlap` error and propose shifting the second activity to start after the first one ends. This runs before the existing `effectiveEnd > nextStart` check.
+Create an UPDATE policy allowing suggestion owners (and trip owners) to update their suggestions:
 
+```sql
+CREATE POLICY "Users can update their own suggestions"
+ON public.trip_suggestions
+FOR UPDATE
+TO authenticated
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
 ```
-// Inside the loop, after getting nextStart:
-const currStartMin = patchedTimes.get(act.id)?.start ?? startMin;
-if (currStartMin !== null && nextStart !== null && currStartMin === nextStart) {
-  // Same start time = always a conflict
-  // → propose shifting next activity to after current ends
-}
-```
 
-The proposed fix shifts the second activity's start to `effectiveEnd + 5` (or `currStartMin + duration + 5` if effectiveEnd is unavailable), reusing the existing `time_shift` proposedChange pattern already in the file. The `changedIds` and `patchedTimes` maps are updated so downstream cascade checks remain accurate.
+This lets authenticated users update suggestions they created. Trip owners who want to moderate deadlines on others' suggestions would need a broader policy, but for now scoping to the suggestion author is safest.
+
+**2. Add error handling in `handleUpdateDeadline` (`TripSuggestions.tsx`)**
+
+Currently the function at line 308 doesn't check if the update actually affected any rows. After adding the RLS policy the update will work, but we should also add a `.select().single()` or check the response to surface failures instead of silently swallowing them.
 
 ### Scope
-
-Single file change: `supabase/functions/refresh-day/index.ts`. Redeploy the edge function.
+- One database migration (add UPDATE policy)
+- Minor improvement to error feedback in `TripSuggestions.tsx`
 
