@@ -247,7 +247,7 @@ export default function EnhancedFlightCard({
             {isOverBudget && (
               <div className="flex items-center justify-end gap-1 mt-0.5">
                 <TrendingUp className="h-2.5 w-2.5 text-amber-500" />
-                <span className="text-[9px] text-amber-600 font-medium">+{budgetExcessPercent}% over</span>
+                <span className="text-[9px] text-amber-600 font-medium">+{budgetExcessPercent}% over allocation</span>
               </div>
             )}
           </div>

@@ -337,7 +337,7 @@ export default function EnhancedHotelCard({
                 {isOverBudget && (
                   <div className="flex items-center gap-1 mt-0.5">
                     <TrendingUp className="h-3 w-3 text-amber-500" />
-                    <span className="text-xs text-amber-600 font-medium">+{budgetExcessPercent}% over budget</span>
+                    <span className="text-xs text-amber-600 font-medium">+{budgetExcessPercent}% over hotel allocation</span>
                   </div>
                 )}
               </div>
