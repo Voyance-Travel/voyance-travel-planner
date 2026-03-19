@@ -109,19 +109,47 @@ export default function ActivityAlternativesDrawer({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadingType, setLoadingType] = useState<'initial' | 'similar' | 'different' | 'filter' | 'search'>('initial');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Track active request to cancel stale ones
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cancel any in-flight request
+  const cancelPendingRequest = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
 
   // Fetch both similar and different alternatives when drawer opens
   useEffect(() => {
     if (open && activity) {
       fetchInitialAlternatives();
     } else {
-      // Reset state when drawer closes
+      cancelPendingRequest();
       setSimilarAlternatives([]);
       setDifferentAlternatives([]);
       setActiveFilter(null);
       setSearchQuery('');
     }
+    return () => cancelPendingRequest();
   }, [open, activity]);
+
+  const invokeWithCancel = async (body: Record<string, unknown>) => {
+    cancelPendingRequest();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
+      body,
+    });
+
+    // If this request was cancelled, don't process result
+    if (controller.signal.aborted) return null;
+
+    if (error) throw error;
+    return data;
+  };
 
   const fetchInitialAlternatives = async () => {
     if (!activity) return;
@@ -132,61 +160,55 @@ export default function ActivityAlternativesDrawer({
     setDifferentAlternatives([]);
 
     try {
-      // Fetch both similar and different alternatives in parallel
-      const [similarResult, differentResult] = await Promise.all([
-        supabase.functions.invoke('get-activity-alternatives', {
-          body: {
-            currentActivity: {
-              id: activity.id,
-              name: activity.title,
-              type: activity.type,
-              description: activity.description,
-              time: activity.time,
-            },
-            destination,
-            searchQuery: null, // Get similar alternatives
-            excludeActivities: existingActivities,
-            suggestionMode: 'similar',
-          },
-        }),
-        supabase.functions.invoke('get-activity-alternatives', {
-          body: {
-            currentActivity: {
-              id: activity.id,
-              name: activity.title,
-              type: activity.type,
-              description: activity.description,
-              time: activity.time,
-            },
-            destination,
-            searchQuery: 'completely_different',
-            excludeActivities: existingActivities,
-            suggestionMode: 'different',
-          },
-        }),
-      ]);
+      // Single call for similar alternatives first (fast), then different in background
+      const baseBody = {
+        currentActivity: {
+          id: activity.id,
+          name: activity.title,
+          type: activity.type,
+          description: activity.description,
+          time: activity.time,
+        },
+        destination,
+        excludeActivities: existingActivities,
+      };
 
-      if (similarResult.data?.alternatives) {
+      const similarData = await invokeWithCancel({
+        ...baseBody,
+        searchQuery: null,
+        suggestionMode: 'similar',
+      });
+
+      if (similarData?.alternatives) {
         setSimilarAlternatives(
-          similarResult.data.alternatives.map((a: AlternativeActivity) => ({
+          similarData.alternatives.map((a: AlternativeActivity) => ({
             ...a,
             suggestionType: 'similar' as const,
           }))
         );
       }
+      
+      // Loading done for the user — fetch "different" in background without blocking
+      setIsLoading(false);
+      
+      const differentData = await invokeWithCancel({
+        ...baseBody,
+        searchQuery: 'completely_different',
+        suggestionMode: 'different',
+      });
 
-      if (differentResult.data?.alternatives) {
+      if (differentData?.alternatives) {
         setDifferentAlternatives(
-          differentResult.data.alternatives.map((a: AlternativeActivity) => ({
+          differentData.alternatives.map((a: AlternativeActivity) => ({
             ...a,
             suggestionType: 'different' as const,
           }))
         );
       }
     } catch (error) {
+      if ((error as Error)?.name === 'AbortError') return;
       console.error('Error fetching alternatives:', error);
       toast.error('Failed to load suggestions');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -194,10 +216,10 @@ export default function ActivityAlternativesDrawer({
   const handleQuickFilter = async (suggestion: typeof QUICK_SUGGESTIONS[0]) => {
     if (!activity) return;
 
-    // If clicking the same filter, deselect it
+    // If clicking the same filter, deselect it and reload initial
     if (activeFilter === suggestion.label) {
       setActiveFilter(null);
-      await fetchInitialAlternatives();
+      fetchInitialAlternatives();
       return;
     }
 
@@ -206,26 +228,23 @@ export default function ActivityAlternativesDrawer({
     setLoadingType('filter');
 
     try {
-      const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
-        body: {
-          currentActivity: {
-            id: activity.id,
-            name: activity.title,
-            type: activity.type,
-            description: activity.description,
-            time: activity.time,
-          },
-          destination,
-          searchQuery: suggestion.query,
-          excludeActivities: existingActivities,
-          suggestionMode: suggestion.type || 'filter',
+      const data = await invokeWithCancel({
+        currentActivity: {
+          id: activity.id,
+          name: activity.title,
+          type: activity.type,
+          description: activity.description,
+          time: activity.time,
         },
+        destination,
+        searchQuery: suggestion.query,
+        excludeActivities: existingActivities,
+        suggestionMode: suggestion.type || 'filter',
       });
 
-      if (error) {
-        console.error('Error fetching alternatives:', error);
-        toast.error('Failed to load suggestions');
-      } else if (data?.alternatives) {
+      if (!data) return; // Request was cancelled
+
+      if (data?.alternatives) {
         if (suggestion.type === 'similar') {
           setSimilarAlternatives(data.alternatives);
           setDifferentAlternatives([]);
@@ -233,12 +252,12 @@ export default function ActivityAlternativesDrawer({
           setSimilarAlternatives([]);
           setDifferentAlternatives(data.alternatives);
         } else {
-          // For category filters, show all in similar section
           setSimilarAlternatives(data.alternatives);
           setDifferentAlternatives([]);
         }
       }
     } catch (error) {
+      if ((error as Error)?.name === 'AbortError') return;
       console.error('Error:', error);
       toast.error('Failed to load suggestions');
     } finally {
