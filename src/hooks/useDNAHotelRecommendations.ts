@@ -137,47 +137,43 @@ function scoreAndRankHotels(
     userBudgetTier: budgetTier as 'budget' | 'moderate' | 'premium' | 'luxury',
   };
 
-  const scored: DNARecommendedHotel[] = hotels.map(hotel => {
+  // First pass: compute raw scores
+  const scoredWithRaw: Array<{ hotel: HotelOption; rawScore: number; matchReasons: string[]; metadata: ReturnType<typeof mapHotelToMetadata> }> = hotels.map(hotel => {
     const metadata = mapHotelToMetadata(hotel, context);
 
-    // Weighted DNA alignment score
+    // Weighted DNA alignment score — quadratic distance for better differentiation
     const dimensions = [
-      { hotelScore: metadata.comfortScore, userTrait: traitScores.comfort, weight: 0.15 },
+      { hotelScore: metadata.comfortScore, userTrait: traitScores.comfort, weight: 0.20 },
       { hotelScore: metadata.adventureScore, userTrait: traitScores.adventure, weight: 0.12 },
       { hotelScore: metadata.cultureScore, userTrait: traitScores.culture, weight: 0.10 },
-      { hotelScore: metadata.socialScore, userTrait: traitScores.social, weight: 0.12 },
-      { hotelScore: metadata.priceScore, userTrait: 1.0, weight: 0.18 },
-      { hotelScore: metadata.paceScore, userTrait: traitScores.pace, weight: 0.10 },
+      { hotelScore: metadata.socialScore, userTrait: traitScores.social, weight: 0.08 },
+      { hotelScore: metadata.priceScore, userTrait: traitScores.budget, weight: 0.20 },
+      { hotelScore: metadata.paceScore, userTrait: traitScores.pace, weight: 0.08 },
       { hotelScore: metadata.authenticityScore, userTrait: traitScores.authenticity, weight: 0.13 },
-      { hotelScore: metadata.simplicityScore, userTrait: 1 - traitScores.planning, weight: 0.10 },
+      { hotelScore: metadata.simplicityScore, userTrait: 1 - traitScores.planning, weight: 0.09 },
     ];
 
     let totalScore = 0;
     let totalWeight = 0;
     for (const { hotelScore, userTrait, weight } of dimensions) {
       const clampedTrait = Math.max(0, Math.min(1, userTrait));
-      // Pure alignment scoring — no prioritization penalty
-      const alignment = Math.max(0, Math.min(1, 1 - Math.abs(hotelScore - clampedTrait)));
+      const diff = Math.abs(hotelScore - clampedTrait);
+      const alignment = Math.max(0, 1 - diff * diff); // Quadratic penalty
       totalScore += alignment * weight;
       totalWeight += weight;
     }
 
     let rawScore = (totalScore / totalWeight) * 100;
-    
-    // Scale to use more of the 0-100 range (typical raw range 40-80 → 45-95)
-    rawScore = Math.min(100, rawScore * 1.25 + 12);
 
-    // Quality bonus
-    if (metadata.qualityScore >= 0.8) rawScore += 3;
+    // Quality bonus (capped)
+    if (metadata.qualityScore >= 0.8) rawScore += 2;
     else if (metadata.qualityScore >= 0.7) rawScore += 1;
 
-    // Neighborhood bonus from AI profile
+    // Neighborhood bonus from AI profile (capped)
     const lowerNeighborhood = (hotel.neighborhood || '').toLowerCase();
     if (profile.idealNeighborhoods.some(n => lowerNeighborhood.includes(n.toLowerCase()))) {
-      rawScore += 8;
+      rawScore += 5;
     }
-
-    const dnaMatchScore = Math.max(15, Math.min(99, Math.round(isNaN(rawScore) ? 50 : rawScore)));
 
     // Generate match reasons
     const matchReasons: string[] = [];
@@ -191,10 +187,21 @@ function scoreAndRankHotels(
     if (traitScores.social >= 0.7 && metadata.socialScore >= 0.7) matchReasons.push('Social atmosphere you\'ll love');
     if (matchReasons.length === 0) matchReasons.push('Good overall match');
 
+    return { hotel, rawScore: isNaN(rawScore) ? 50 : rawScore, matchReasons: matchReasons.slice(0, 3), metadata };
+  });
+
+  // Second pass: percentile-based rescaling to spread scores across 50-98
+  const rawScores = scoredWithRaw.map(h => h.rawScore);
+  const minRaw = Math.min(...rawScores);
+  const maxRaw = Math.max(...rawScores);
+  const range = maxRaw - minRaw || 1;
+
+  const scored: DNARecommendedHotel[] = scoredWithRaw.map(({ hotel, rawScore, matchReasons }) => {
+    const dnaMatchScore = Math.max(15, Math.min(98, Math.round(50 + ((rawScore - minRaw) / range) * 48)));
     return {
       ...hotel,
       dnaMatchScore,
-      matchReasons: matchReasons.slice(0, 3),
+      matchReasons,
       isTopPick: false,
     };
   });
