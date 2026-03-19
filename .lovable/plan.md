@@ -1,35 +1,41 @@
 
 
-## Fix: Suggestion deadline not persisting — missing UPDATE RLS policy
+## Fix: "Over Budget" label fires on sub-budget allocations, not total budget
 
-### Root Cause
+### Problem
 
-The `trip_suggestions` table has **no UPDATE policy**. Only SELECT and INSERT policies exist. When a user clicks "Set deadline" on an existing suggestion card, `handleUpdateDeadline` calls `.update()` on `trip_suggestions`, but RLS silently blocks it (returns success with 0 rows affected). The deadline is never saved.
+Hotel and flight selection cards show "**+X% over budget**" with a TrendingUp icon when the item price exceeds an **arbitrary sub-budget allocation** — even though the overall trip budget has plenty of room (e.g. $341 remaining of $2,500).
 
-This also means the "Set deadline" button at creation time **does** work (it's an INSERT), but post-creation deadline changes via the popover fail silently.
+The sub-budgets are hardcoded:
+- **Hotels**: `tripBudget * 0.6` (60% of total) — `PlannerHotelEnhanced.tsx:182`
+- **Flights**: `tripBudget * 0.4` (40% of total) — `PlannerFlightEnhanced.tsx:247`
+
+These percentages don't reflect the user's actual budget allocations and together already exceed 100%. A hotel that costs more than 60% of the budget will show "over budget" regardless of how the user has actually allocated their funds.
 
 ### Fix
 
-**1. Add UPDATE RLS policy (database migration)**
+**Replace the hardcoded sub-budget splits with the user's actual category allocations** from the budget settings. If no allocations are set, fall back to the real allocation percentages from `tripBudgetService`. If the overall budget still has headroom, suppress the warning entirely.
 
-Create an UPDATE policy allowing suggestion owners (and trip owners) to update their suggestions:
+**Files to change:**
 
-```sql
-CREATE POLICY "Users can update their own suggestions"
-ON public.trip_suggestions
-FOR UPDATE
-TO authenticated
-USING (user_id = auth.uid())
-WITH CHECK (user_id = auth.uid());
-```
+1. **`src/pages/planner/PlannerHotelEnhanced.tsx`** (line ~182)
+   - Replace `tripBudget * 0.6` with the actual hotel allocation from budget settings
+   - If no explicit hotel allocation exists, use a reasonable fallback but **also check if the overall budget is still under 100% used** before showing warnings
+   - Add a condition: only show per-item "over budget" when the overall budget is also in warning/red status
 
-This lets authenticated users update suggestions they created. Trip owners who want to moderate deadlines on others' suggestions would need a broader policy, but for now scoping to the suggestion author is safest.
+2. **`src/pages/planner/PlannerFlightEnhanced.tsx`** (line ~247)
+   - Same treatment for flights: replace `tripBudget * 0.4` with actual flight allocation
+   - Gate the warning on overall budget status
 
-**2. Add error handling in `handleUpdateDeadline` (`TripSuggestions.tsx`)**
+3. **`src/components/planner/hotel/EnhancedHotelCard.tsx`** (lines 337-341)
+   - Change the label from "+X% over budget" → "+X% over hotel allocation" to clarify scope
+   - Or suppress entirely when `budgetPerNight` is not provided
 
-Currently the function at line 308 doesn't check if the update actually affected any rows. After adding the RLS policy the update will work, but we should also add a `.select().single()` or check the response to surface failures instead of silently swallowing them.
+4. **`src/components/planner/flight/EnhancedFlightCard.tsx`** (lines 247-251)
+   - Same label change: "+X% over" → "+X% over flight allocation"
+   - Or suppress when no flight budget is set
 
-### Scope
-- One database migration (add UPDATE policy)
-- Minor improvement to error feedback in `TripSuggestions.tsx`
+### Approach
+
+The simplest, most impactful change: **suppress the "over budget" badge entirely when the overall budget is within limits** (green or on_track status). Only show per-item sub-budget warnings when the total budget is also in yellow/red territory. This prevents the misleading message while preserving useful warnings when the trip is genuinely over budget.
 
