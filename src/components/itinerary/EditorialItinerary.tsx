@@ -5709,10 +5709,7 @@ export function EditorialItinerary({
                         allHotels={allHotels}
                         destination={destination}
                          onNavigateToBookings={() => setActiveTab('details')}
-                         onAddFlightInline={() => {
-                           const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
-                           if (btn) btn.click(); else setActiveTab('details');
-                         }}
+                         onAddFlightInline={() => setAddFlightDialogOpen(true)}
                       />
                     );
                   }
