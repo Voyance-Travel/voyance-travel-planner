@@ -1,37 +1,39 @@
 
 
-## Fix: "Add Flight" in Day 1 should open modal in-context
+## Fix: Chat auto-scrolls away from sent message
 
 ### Root cause
 
-The `ArrivalGamePlan` component's "Add Flight" button (line ~8537) calls `onNavigateToBookings`, which is wired to `setActiveTab('details')` — switching the user to the Flights & Hotels tab instead of opening the flight entry modal in place.
+The auto-scroll `useEffect` (line 91-93) fires on every `messages` change using `scrollIntoView({ behavior: 'smooth' })` on a `bottomRef` div. The problem is twofold:
 
-The Flights & Hotels tab already has an `AddFlightInline` component with a hidden trigger (`data-add-flight-trigger`) that opens a modal dialog. The same pattern is used in the empty-state CTA (line ~6217).
+1. **Realtime duplicate**: After sending (optimistic update), the realtime subscription fires an INSERT event for the same message. The dedup check (line 78) prevents a duplicate entry, but `setMessages` still triggers the effect with a new array reference, causing a second scroll.
+2. **ScrollArea mismatch**: `scrollIntoView` targets the `bottomRef` inside `ScrollArea`, but `ScrollArea` uses a custom viewport container. `scrollIntoView` may scroll the wrong scrollable ancestor (e.g. the page), pulling the entire view away from the chat.
 
 ### Fix
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
+**File: `src/components/chat/TripChat.tsx`**
 
-1. **Add `onAddFlight` callback to `ArrivalGamePlanProps`** (optional, alongside existing `onNavigateToBookings`):
-   - New prop: `onAddFlight?: () => void`
+1. **Replace `scrollIntoView` with direct `ScrollArea` viewport scroll**: Instead of `bottomRef.current?.scrollIntoView()`, find the scroll viewport (`[data-radix-scroll-area-viewport]`) inside `scrollRef` and set its `scrollTop` to `scrollHeight`.
 
-2. **Embed a hidden `AddFlightInline` inside `ArrivalGamePlan`** (same pattern as line 6227–6240), and wire the "Add Flight" / "Add Hotel" buttons to click its `data-add-flight-trigger` instead of calling `onNavigateToBookings`.
+2. **Only auto-scroll when near the bottom** (or when the user just sent a message): Add a `justSent` ref that's set to `true` in `handleSend` and cleared after scroll. This prevents forced scrolling when receiving others' messages while the user is reading history.
 
-   Alternatively (simpler): **Replace `onNavigateToBookings` with a callback that clicks the existing hidden trigger**. At lines 5695/5708/5732, change:
-   ```tsx
-   onNavigateToBookings={() => {
-     const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
-     if (btn) btn.click();
-     else setActiveTab('details'); // fallback
-   }}
-   ```
+```tsx
+const justSentRef = useRef(false);
 
-3. **Update the three call sites** (lines ~5695, ~5708, ~5732) that pass `onNavigateToBookings` to `ArrivalGamePlan`.
+// In handleSend, before optimistic update:
+justSentRef.current = true;
 
-4. **Keep "Finish Details" button** (line 8514, shown when flight exists but is incomplete) pointing to `setActiveTab('details')` — that one is intentional since the user needs the full form.
+// Replace the auto-scroll useEffect:
+useEffect(() => {
+  const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+  if (!viewport) return;
+  const isNearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 150;
+  if (justSentRef.current || isNearBottom) {
+    viewport.scrollTop = viewport.scrollHeight;
+    justSentRef.current = false;
+  }
+}, [messages]);
+```
 
-### Result
-- "Add Flight" from Day 1 opens the flight entry modal in-context
-- No tab navigation disruption
-- "Finish Details" still navigates to the full Flights & Hotels tab as intended
+Remove `bottomRef` entirely since it's no longer needed.
 
