@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import type { ParsedTripInput, ParsedActivity, ParsedDay } from '@/types/parsedTrip';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
+import { normalizeTimeTo24h } from '@/utils/timeFormat';
 
 interface ItineraryActivity {
   id: string;
