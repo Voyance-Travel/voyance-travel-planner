@@ -8605,11 +8605,11 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                 <p className="text-xs text-muted-foreground">Get transfer times and check-in recommendations</p>
               </div>
             </div>
-            {onNavigateToBookings && (
+            {(onAddFlightInline || onNavigateToBookings) && (
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={onNavigateToBookings}
+                onClick={onAddFlightInline || onNavigateToBookings}
                 className="shrink-0"
               >
                 Add Hotel
