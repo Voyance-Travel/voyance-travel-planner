@@ -58,6 +58,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isToday, addDays, isPast, startOfDay } from 'date-fns';
 import { safeFormatDate, parseLocalDate } from '@/utils/dateUtils';
+import { parseTimeToMinutes } from '@/utils/timeFormat';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
