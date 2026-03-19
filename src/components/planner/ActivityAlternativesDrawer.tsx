@@ -268,36 +268,33 @@ export default function ActivityAlternativesDrawer({
   const handleCustomSearch = async () => {
     if (!activity || !searchQuery.trim()) return;
     
-    // Clear filters when doing custom search
     setActiveFilter(null);
     setIsLoading(true);
     setLoadingType('search');
 
     try {
-      const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
-        body: {
-          currentActivity: {
-            id: activity.id,
-            name: activity.title,
-            type: activity.type,
-            description: activity.description,
-            time: activity.time,
-          },
-          destination,
-          searchQuery: searchQuery.trim(),
-          excludeActivities: existingActivities,
-          suggestionMode: 'search',
+      const data = await invokeWithCancel({
+        currentActivity: {
+          id: activity.id,
+          name: activity.title,
+          type: activity.type,
+          description: activity.description,
+          time: activity.time,
         },
+        destination,
+        searchQuery: searchQuery.trim(),
+        excludeActivities: existingActivities,
+        suggestionMode: 'search',
       });
 
-      if (error) {
-        console.error('Error searching alternatives:', error);
-        toast.error('Failed to search');
-      } else if (data?.alternatives) {
+      if (!data) return; // cancelled
+
+      if (data?.alternatives) {
         setSimilarAlternatives(data.alternatives);
         setDifferentAlternatives([]);
       }
     } catch (error) {
+      if ((error as Error)?.name === 'AbortError') return;
       console.error('Error:', error);
       toast.error('Failed to search');
     } finally {
