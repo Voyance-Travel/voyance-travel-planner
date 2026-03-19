@@ -312,6 +312,9 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
         .update({ vote_deadline: newDeadline })
         .eq('id', suggestionId);
       if (error) throw error;
+      setSuggestions(prev => prev.map(s =>
+        s.id === suggestionId ? { ...s, vote_deadline: newDeadline } : s
+      ));
       toast.success(newDeadline ? 'Deadline updated' : 'Deadline removed');
       setEditingDeadlineId(null);
       setEditDeadlineValue('');
