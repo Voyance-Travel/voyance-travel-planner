@@ -1,34 +1,40 @@
 
 
-## Fix: Contradictory "Trending Over Budget" and "On target" messages
+## Fix: "Split All Evenly" destroys existing "Paid" payments
 
 ### Root cause
 
-Two independent components compute budget status using different thresholds:
+The "Split All Evenly" handler iterates over all items in the `unassigned` bucket. A paid item can land in "unassigned" if its `assigned_member_id` doesn't resolve to a known synthetic member ID. The handler then:
 
-- **BudgetWarning** (banner): Shows "Trending Over Budget" when usage is **85–99%** (yellow zone)
-- **BudgetCoach** (card below): Shows "On target" when `currentTotalCents <= budgetTargetCents` (i.e., usage **< 100%**)
+1. **Deletes all existing `trip_payments`** for that item (line 1127-1129) — including the `status: 'paid'` row
+2. Inserts new rows with `status: 'pending'` — effectively resetting the $800 hotel payment to $0 paid
 
-So at 85–99% usage, both render simultaneously — one warning, one reassuring.
+Additionally, the unique constraint `(trip_id, item_type, item_id)` means only one payment row can exist per item, so splitting among N members via upsert silently overwrites rather than creating N rows.
 
-### Fix
+### Two-part fix
 
-**File: `src/components/planner/budget/BudgetTab.tsx`**
+**File: `src/components/itinerary/PaymentsTab.tsx`**
 
-Pass the computed `snapshotStatus` to BudgetCoach (or conditionally hide it). The simplest correct fix: **don't render BudgetCoach when the warning banner is visible**. BudgetCoach's "On target" message is redundant/contradictory in the yellow zone, and its suggestions panel only activates when truly over budget anyway.
+#### 1. Skip paid items in "Split All Evenly"
 
-Change the BudgetCoach render condition (around line 431) to also require that the snapshot status is not `yellow`:
+In the split handler (line 1125), filter out any item that already has a `paid` payment. Paid items should never be reassigned or deleted by a bulk split action.
 
-```tsx
-{!isManualMode && hasBudget && itineraryDays?.length > 0 && summary && snapshotStatus !== 'yellow' && (
-  <BudgetCoach ... />
-)}
+```ts
+// Before splitting, filter to only truly unassigned/unpaid items
+const splittableItems = unassigned.items.filter(({ item }) =>
+  !item.allPayments.some(p => p.status === 'paid')
+);
 ```
 
-This requires hoisting `snapshotStatus` out of the IIFE on line 392 so it's accessible at line 431. Extract the budget status computation (lines 390–392) into a `useMemo` above both render blocks.
+Then iterate over `splittableItems` instead of `unassigned.items`.
+
+#### 2. Preserve paid status when splitting already-paid items individually
+
+Add a guard at the top of the delete block: if any payment in `item.allPayments` has `status === 'paid'`, skip the item entirely and show a toast warning ("Hotel is already paid — skipping").
 
 ### Result
-- At 85–99%: Only "Trending Over Budget" banner shows
-- At 100%+: Both the red "Over Budget" banner and BudgetCoach suggestions show (no contradiction — both agree you're over)
-- Under 85%: Neither warning nor coach renders
+
+- Paid items are never touched by "Split All Evenly"
+- The $800 hotel payment is preserved
+- Only genuinely unassigned/pending items get split
 
