@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import type { ParsedTripInput, ParsedActivity, ParsedDay } from '@/types/parsedTrip';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
+import { normalizeTimeTo24h } from '@/utils/timeFormat';
 
 interface ItineraryActivity {
   id: string;
@@ -63,7 +64,7 @@ function activityToItinerary(activity: ParsedActivity, isSelected: boolean): Iti
     name: activity.name,
     title: activity.name, // keep for backward compat
     description: combinedDescription,
-    startTime: activity.time || undefined,
+    startTime: normalizeTimeTo24h(activity.time) || activity.time || undefined,
     category: mapCategory(activity.category),
     type: mapCategory(activity.category) as any,
     estimatedCost: activity.cost !== undefined

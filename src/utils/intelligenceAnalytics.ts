@@ -10,18 +10,18 @@
 import type { ItineraryValueStats } from '@/components/itinerary/ItineraryValueHeader';
 import type { SkippedItem } from '@/components/itinerary/WhyWeSkippedSection';
 import type { ActivityIntelligence } from '@/components/itinerary/IntelligenceBadge';
+import { parseTimeToMinutes } from '@/utils/timeFormat';
 
 /**
  * Detect time of day from scheduled time
  */
 export function getTimeOfDay(time: string): 'morning' | 'afternoon' | 'evening' | 'night' {
-  const hour = parseInt(time.split(':')[0], 10);
-  const isPM = time.toLowerCase().includes('pm');
-  const normalizedHour = isPM && hour !== 12 ? hour + 12 : hour;
+  const minutes = parseTimeToMinutes(time);
+  const hour = Math.floor(minutes / 60);
   
-  if (normalizedHour < 12) return 'morning';
-  if (normalizedHour < 17) return 'afternoon';
-  if (normalizedHour < 21) return 'evening';
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  if (hour < 21) return 'evening';
   return 'night';
 }
 

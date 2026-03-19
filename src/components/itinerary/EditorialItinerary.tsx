@@ -58,6 +58,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isToday, addDays, isPast, startOfDay } from 'date-fns';
 import { safeFormatDate, parseLocalDate } from '@/utils/dateUtils';
+import { parseTimeToMinutes } from '@/utils/timeFormat';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
@@ -1616,12 +1617,12 @@ export function EditorialItinerary({
         } as any;
 
         // Insert chronologically
-        const cardMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+        const cardMinutes = parseTimeToMinutes(cardTime);
         let insertIndex = updatedActivities.length;
         for (let i = 0; i < updatedActivities.length; i++) {
           const actTime = updatedActivities[i].startTime;
           if (actTime) {
-            const actMinutes = parseInt(actTime.split(':')[0]) * 60 + parseInt(actTime.split(':')[1] || '0');
+            const actMinutes = parseTimeToMinutes(actTime);
             if (actMinutes > cardMinutes) {
               insertIndex = i;
               break;
@@ -1631,7 +1632,7 @@ export function EditorialItinerary({
         updatedActivities.splice(insertIndex, 0, departureCard);
 
         // Trim activities that occur at or after departure (traveler has left the city)
-        const depMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+        const depMinutes = parseTimeToMinutes(cardTime);
         const bufferMinutes = tType === 'flight' ? 90 : tType === 'train' ? 45 : 30;
         const cutoffMinutes = depMinutes - bufferMinutes;
 
@@ -1645,7 +1646,7 @@ export function EditorialItinerary({
           }
           // No time = keep (safe fallback)
           if (!act.startTime) return true;
-          const actMin = parseInt(act.startTime.split(':')[0]) * 60 + parseInt(act.startTime.split(':')[1] || '0');
+          const actMin = parseTimeToMinutes(act.startTime);
           return actMin < cutoffMinutes;
         });
       }
@@ -1721,12 +1722,12 @@ export function EditorialItinerary({
           } as any;
 
           // Insert chronologically
-          const cardMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+          const cardMinutes = parseTimeToMinutes(cardTime);
           let insertIndex = updatedActivities.length;
           for (let i = 0; i < updatedActivities.length; i++) {
             const actTime = updatedActivities[i].startTime;
             if (actTime) {
-              const actMinutes = parseInt(actTime.split(':')[0]) * 60 + parseInt(actTime.split(':')[1] || '0');
+              const actMinutes = parseTimeToMinutes(actTime);
               if (actMinutes > cardMinutes) {
                 insertIndex = i;
                 break;
@@ -1751,7 +1752,7 @@ export function EditorialItinerary({
           updatedActivities.splice(insertIndex, 0, departureCard);
 
           // Trim non-synthetic activities after checkout on the final day
-          const finalDepMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+          const finalDepMinutes = parseTimeToMinutes(cardTime);
           const finalBufferMinutes = tType === 'flight' ? 90 : tType === 'train' ? 45 : 30;
           const finalCutoffMinutes = finalDepMinutes - finalBufferMinutes;
 
@@ -1764,7 +1765,7 @@ export function EditorialItinerary({
               return true;
             }
             if (!act.startTime) return true;
-            const actMin = parseInt(act.startTime.split(':')[0]) * 60 + parseInt(act.startTime.split(':')[1] || '0');
+            const actMin = parseTimeToMinutes(act.startTime);
             return actMin < finalCutoffMinutes;
           });
         }
@@ -9174,8 +9175,8 @@ function DayCard({
 
                   // Compute time-of-day label for section headers
                   const activityTime = activityToRender.startTime || activityToRender.time || '';
-                  const hour = parseInt(activityTime.split(':')[0], 10);
-                  const timeOfDay = isNaN(hour) ? '' : hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
+                  const hour = Math.floor(parseTimeToMinutes(activityTime) / 60);
+                  const timeOfDay = isNaN(hour) || !activityTime ? '' : hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
                   
                   // Determine previous activity's time-of-day for section header logic
                   const prevVisibleActivity = activityIndex > 0 ? (() => {
@@ -9190,8 +9191,8 @@ function DayCard({
                     return null;
                   })() : null;
                   const prevTime = prevVisibleActivity ? (prevVisibleActivity.startTime || (prevVisibleActivity as any).time || '') : '';
-                  const prevHour = parseInt(prevTime.split(':')[0], 10);
-                  const prevTimeOfDay = isNaN(prevHour) ? '' : prevHour < 12 ? 'Morning' : prevHour < 17 ? 'Afternoon' : 'Evening';
+                  const prevHour = Math.floor(parseTimeToMinutes(prevTime) / 60);
+                  const prevTimeOfDay = isNaN(prevHour) || !prevTime ? '' : prevHour < 12 ? 'Morning' : prevHour < 17 ? 'Afternoon' : 'Evening';
                   const showTimeOfDayHeader = timeOfDay && timeOfDay !== prevTimeOfDay;
 
                   // Compact inter-city transport card (unified for transition + departure)
