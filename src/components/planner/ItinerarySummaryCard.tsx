@@ -65,7 +65,8 @@ export default function ItinerarySummaryCard({
   };
 
   const getActivityTimeOfDay = (time: string) => {
-    const hour = parseInt(time.split(':')[0]);
+    const minutes = parseTimeToMinutes(time);
+    const hour = Math.floor(minutes / 60);
     if (hour < 12) return 'Morning';
     if (hour < 17) return 'Afternoon';
     return 'Evening';
