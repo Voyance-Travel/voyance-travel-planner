@@ -266,7 +266,7 @@ export default function TripChat({ tripId, tripType, shareToken, className }: Tr
                 </div>
               );
             })}
-            <div ref={bottomRef} />
+            <div />
           </div>
         )}
       </ScrollArea>
