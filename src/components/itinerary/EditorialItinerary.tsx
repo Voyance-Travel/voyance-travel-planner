@@ -8229,7 +8229,7 @@ interface ArrivalGamePlanProps {
   dayNumber?: number;
 }
 
-function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destination, onNavigateToBookings, arrivalCityInfo, dayNumber = 1 }: ArrivalGamePlanProps) {
+function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destination, onNavigateToBookings, onAddFlightInline, arrivalCityInfo, dayNumber = 1 }: ArrivalGamePlanProps) {
   const outbound = flightSelection?.outbound;
   const fallbackCityHotel = allHotels?.find(h => !!h.hotel?.name)?.hotel || null;
   const effectiveHotelSelection = hotelSelection?.name ? hotelSelection : fallbackCityHotel;
