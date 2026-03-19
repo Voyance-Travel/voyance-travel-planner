@@ -1,41 +1,40 @@
 
 
-## Fix: "Over Budget" label fires on sub-budget allocations, not total budget
+## Fix: Prevent AI from silently overwriting day titles during minor edits
 
 ### Problem
 
-Hotel and flight selection cards show "**+X% over budget**" with a TrendingUp icon when the item price exceeds an **arbitrary sub-budget allocation** — even though the overall trip budget has plenty of room (e.g. $341 remaining of $2,500).
+When the AI processes a minor edit like "add a coffee stop," the `rewrite_day` executor at line 282 of `itineraryActionExecutor.ts` does:
+```
+updatedDays[dayIndex] = { ...day, ...data.day, activities: newActivities };
+```
+The `...data.day` spread overwrites **all** day-level metadata — including `headline`, `theme`, and `description` — with whatever the AI regenerated. The diff system (`computeDayDiff`) only compares activities, so the title change is invisible in both auto-apply and review-first modes.
 
-The sub-budgets are hardcoded:
-- **Hotels**: `tripBudget * 0.6` (60% of total) — `PlannerHotelEnhanced.tsx:182`
-- **Flights**: `tripBudget * 0.4` (40% of total) — `PlannerFlightEnhanced.tsx:247`
+### Fix (2 files)
 
-These percentages don't reflect the user's actual budget allocations and together already exceed 100%. A hotel that costs more than 60% of the budget will show "over budget" regardless of how the user has actually allocated their funds.
+**1. `src/services/itineraryActionExecutor.ts` — Preserve day metadata during rewrite**
 
-### Fix
+Replace the blind spread at line 282 with selective merging that preserves the original day's `headline`, `theme`, and `description` unless the rewrite instructions explicitly mention renaming or re-theming the day.
 
-**Replace the hardcoded sub-budget splits with the user's actual category allocations** from the budget settings. If no allocations are set, fall back to the real allocation percentages from `tripBudgetService`. If the overall budget still has headroom, suppress the warning entirely.
+```typescript
+// Only take activities from data.day; preserve original day metadata
+const preserveKeys = ['headline', 'theme', 'description'];
+const mergedDay = { ...day, activities: newActivities };
+// Only accept AI's new metadata if it actually differs AND instructions explicitly asked for it
+const themeKeywords = /rename|retheme|new theme|change.*title|new.*title/i;
+if (themeKeywords.test(instructions || '')) {
+  // User asked for a title change — accept AI's values
+  Object.assign(mergedDay, pick(data.day, preserveKeys));
+}
+updatedDays[dayIndex] = mergedDay;
+```
 
-**Files to change:**
+This ensures "add a coffee stop" never touches the day title, while "retheme this day around food" still allows it.
 
-1. **`src/pages/planner/PlannerHotelEnhanced.tsx`** (line ~182)
-   - Replace `tripBudget * 0.6` with the actual hotel allocation from budget settings
-   - If no explicit hotel allocation exists, use a reasonable fallback but **also check if the overall budget is still under 100% used** before showing warnings
-   - Add a condition: only show per-item "over budget" when the overall budget is also in warning/red status
+**2. `src/services/itineraryActionExecutor.ts` — Surface day title changes in diff**
 
-2. **`src/pages/planner/PlannerFlightEnhanced.tsx`** (line ~247)
-   - Same treatment for flights: replace `tripBudget * 0.4` with actual flight allocation
-   - Gate the warning on overall budget status
+Enhance `computeDayDiff` (or add a check in `executeRewriteDayAction`) to detect when `data.day.headline` differs from `day.headline`, and include a `modified` diff entry with type context so the review card can show "Day title changed from X → Y" when it does happen.
 
-3. **`src/components/planner/hotel/EnhancedHotelCard.tsx`** (lines 337-341)
-   - Change the label from "+X% over budget" → "+X% over hotel allocation" to clarify scope
-   - Or suppress entirely when `budgetPerNight` is not provided
-
-4. **`src/components/planner/flight/EnhancedFlightCard.tsx`** (lines 247-251)
-   - Same label change: "+X% over" → "+X% over flight allocation"
-   - Or suppress when no flight budget is set
-
-### Approach
-
-The simplest, most impactful change: **suppress the "over budget" badge entirely when the overall budget is within limits** (green or on_track status). Only show per-item sub-budget warnings when the total budget is also in yellow/red territory. This prevents the misleading message while preserving useful warnings when the trip is genuinely over budget.
+### Scope
+Single file: `src/services/itineraryActionExecutor.ts`. No edge function changes needed — the issue is entirely in the client-side executor.
 
