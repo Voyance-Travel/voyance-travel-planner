@@ -379,6 +379,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
 
   const remainingPercent = summary ? Math.max(0, 100 - summary.usedPercent) : 100;
 
+  // Hoist budget status so it's accessible to both BudgetWarning and BudgetCoach render blocks
+  const budgetCents = settings?.budget_total_cents || 0;
+  const snapshotUsedPct = budgetCents > 0 ? (snapshot.tripTotalCents / budgetCents) * 100 : 0;
+  const snapshotStatus: 'green' | 'yellow' | 'red' = snapshotUsedPct >= 100 ? 'red' : snapshotUsedPct >= 85 ? 'yellow' : 'green';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -387,9 +392,6 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     >
       {/* Over-budget Warning Banner — use snapshot as canonical source (hidden in manual mode) */}
       {!isManualMode && (() => {
-        const budgetCents = settings?.budget_total_cents || 0;
-        const snapshotUsedPct = budgetCents > 0 ? (snapshot.tripTotalCents / budgetCents) * 100 : 0;
-        const snapshotStatus: 'green' | 'yellow' | 'red' = snapshotUsedPct >= 100 ? 'red' : snapshotUsedPct >= 85 ? 'yellow' : 'green';
         const showWarning = settings?.budget_warnings_enabled !== false
           && settings?.budget_warning_threshold !== 'off'
           && (snapshotStatus === 'red' || (snapshotStatus === 'yellow' && settings?.budget_warning_threshold !== 'red_only'));
