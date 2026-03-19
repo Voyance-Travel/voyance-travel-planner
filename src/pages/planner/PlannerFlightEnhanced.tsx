@@ -243,8 +243,9 @@ export default function PlannerFlightEnhanced() {
   const travelers = Number(searchParams.get('travelers') || plannerState.basics.travelers || 1);
   const tripBudget = Number(searchParams.get('budget')) || plannerState.basics.budgetAmount;
   
-  // Calculate flight budget (assume ~40% of total budget for flights if budget is set)
-  const flightBudget = tripBudget ? Math.round(tripBudget * 0.4) : undefined;
+  // Flight sub-budget: only use explicit user-defined allocation, not hardcoded splits.
+  // Passing undefined suppresses per-card "over budget" badges when no real allocation exists.
+  const flightBudget: number | undefined = undefined;
 
   // Load user flight preferences from database
   useEffect(() => {

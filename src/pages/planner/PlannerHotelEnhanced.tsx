@@ -178,8 +178,9 @@ export default function PlannerHotelEnhanced() {
   const origin = searchParams.get('origin') || plannerState.basics.originCity || 'JFK';
   const tripBudget = Number(searchParams.get('budget')) || plannerState.basics.budgetAmount;
   
-  // Calculate hotel budget (assume ~60% of total budget for hotels if budget is set)
-  const hotelBudget = tripBudget ? Math.round(tripBudget * 0.6) : undefined;
+  // Hotel sub-budget: only use explicit user-defined allocation, not hardcoded splits.
+  // Passing undefined suppresses per-card "over budget" badges when no real allocation exists.
+  const hotelBudget: number | undefined = undefined;
 
   // Load user preferences for personalization
   useEffect(() => {
