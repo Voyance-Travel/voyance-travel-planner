@@ -9175,8 +9175,8 @@ function DayCard({
 
                   // Compute time-of-day label for section headers
                   const activityTime = activityToRender.startTime || activityToRender.time || '';
-                  const hour = parseInt(activityTime.split(':')[0], 10);
-                  const timeOfDay = isNaN(hour) ? '' : hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
+                  const hour = Math.floor(parseTimeToMinutes(activityTime) / 60);
+                  const timeOfDay = isNaN(hour) || !activityTime ? '' : hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
                   
                   // Determine previous activity's time-of-day for section header logic
                   const prevVisibleActivity = activityIndex > 0 ? (() => {
