@@ -1,26 +1,39 @@
 
 
-## Fix: "Trending Over Budget" message misleading when under budget
+## Fix: Walk segment ⋯ menu appears to control the activity below it
 
 ### Problem
 
-The yellow warning triggers at 85% budget usage (correct threshold), but the messaging is wrong:
-1. **"Trending Over Budget"** — misleading when actually $341 under budget
-2. **"-14% over"** — shows a negative number because it computes `usedPercent - 100` (86% - 100% = -14%)
+Walk/transit segments render as slim connector rows (via `TransitModePicker`) between full activity cards. The ⋯ menu on these rows **does** correctly target the walk activity itself — but users perceive it as belonging to the next activity card because:
 
-The warning *should* appear at 85%+ to alert users they're approaching the limit, but the copy implies they've already exceeded it.
+1. The walk row is visually minimal (icon + label + duration pill), making the ⋯ button look like it's floating near the top of the card below
+2. On desktop, the ⋯ only appears on hover (`sm:opacity-0 sm:group-hover/activity:opacity-100`), and the hover zone bleeds into the next card's visual space
+3. The menu items ("Edit Details", "Move Up", "Move Down") feel odd for a transit connector — reinforcing the impression it's controlling the wrong thing
 
 ### Fix
 
-**File: `src/components/planner/budget/BudgetWarning.tsx`**
+**File: `src/components/itinerary/TransitModePicker.tsx`**
 
-Update the yellow-status messaging to reflect "approaching" rather than "over":
+Two changes to reduce confusion:
 
-1. Change title from `"Trending Over Budget"` → `"Approaching Budget Limit"`
-2. Fix the percentage to show proximity instead of negative overage: `"You've used 86% of your budget — $341 remaining."`
-3. Keep the red-status messaging ("Over Budget", actual overage amount) unchanged since that's accurate when truly over.
+1. **Hide the ⋯ menu on walk/transit rows entirely.** These are lightweight connectors, not user-managed activities. Users can already:
+   - Tap the row to expand transport options (TransitModePicker's expand feature)
+   - Use the `TransitGapIndicator` between activities for mode switching
+   - Edit/remove activities via the activity cards themselves
 
-**Specifically:**
-- For yellow status, compute `remainingCents = summary.budgetTotalCents - summary.totalCommittedCents - summary.plannedTotalCents` and `usedPercent` (already available) to show: *"You've used {usedPercent}% of your budget — {remainingFormatted} remaining."*
-- For red status, keep existing overage messaging as-is (it's correct when over 100%).
+   Remove the DropdownMenu block (lines 360–408) from the transit row. This eliminates the visual ambiguity completely.
+
+2. **If full removal is too aggressive**, alternatively scope the menu to transit-relevant actions only and add a visual label:
+   - Replace "Edit Details" → "Change transport mode" (triggers the expand)
+   - Remove "Move Up" / "Move Down" (transit segments shouldn't be reordered independently)
+   - Keep "Remove" as "Remove transit step"
+   - Add a subtle label like `"⋯ Walk"` so it's clear what the menu targets
+
+### Recommended approach
+
+Option 1 (remove the ⋯ entirely) is cleaner. The expand-on-tap already provides all the transport editing UX needed. The ⋯ menu on transit rows adds no unique value and creates confusion.
+
+### Changes
+
+**`src/components/itinerary/TransitModePicker.tsx`** — Remove the `{isEditable && !activity.isLocked && (<DropdownMenu>...</DropdownMenu>)}` block (lines 359–408) from the transit row's flex container.
 
