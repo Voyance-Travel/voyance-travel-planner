@@ -8543,11 +8543,11 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                 <p className="text-xs text-muted-foreground">We'll plan your arrival day around your landing time</p>
               </div>
             </div>
-            {onNavigateToBookings && (
+            {(onAddFlightInline || onNavigateToBookings) && (
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={onNavigateToBookings}
+                onClick={onAddFlightInline || onNavigateToBookings}
                 className="shrink-0"
               >
                 Add Flight
