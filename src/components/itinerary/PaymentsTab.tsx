@@ -1121,9 +1121,15 @@ export function PaymentsTab({
                                 }
                                 if (resolvedIds.length < 2) { toast.error('Need at least 2 members'); return; }
 
-                                // Batch assign all unassigned items
-                                for (const { item } of unassigned.items) {
-                                  // Delete existing payments
+                                // Filter out paid items — never touch them in bulk split
+                                const splittableItems = unassigned.items.filter(({ item }) =>
+                                  !item.allPayments.some(p => p.status === 'paid')
+                                );
+                                const skippedCount = unassigned.items.length - splittableItems.length;
+
+                                // Batch assign only unpaid unassigned items
+                                for (const { item } of splittableItems) {
+                                  // Delete existing pending/failed payments
                                   if (item.allPayments.length > 0) {
                                     const deleteIds = item.allPayments.map(p => p.id);
                                     await supabase.from('trip_payments').delete().in('id', deleteIds);
@@ -1145,7 +1151,11 @@ export function PaymentsTab({
                                   const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id' });
                                   if (error) console.error('Failed to assign item:', item.name, error);
                                 }
-                                toast.success(`Split ${unassigned.items.length} items evenly among ${resolvedIds.length} members`);
+                                if (skippedCount > 0) {
+                                  toast.success(`Split ${splittableItems.length} items evenly — skipped ${skippedCount} already-paid item${skippedCount > 1 ? 's' : ''}`);
+                                } else {
+                                  toast.success(`Split ${splittableItems.length} items evenly among ${resolvedIds.length} members`);
+                                }
                                 await fetchPayments(0);
                               } catch (err) {
                                 console.error('Error splitting all:', err);
