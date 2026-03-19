@@ -87,9 +87,15 @@ export default function TripChat({ tripId, tripType, shareToken, className }: Tr
     };
   }, [tripId]);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom only when user just sent or is near bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+    if (!viewport) return;
+    const isNearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 150;
+    if (justSentRef.current || isNearBottom) {
+      viewport.scrollTop = viewport.scrollHeight;
+      justSentRef.current = false;
+    }
   }, [messages]);
 
   const loadMessages = async () => {
