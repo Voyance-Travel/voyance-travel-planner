@@ -121,6 +121,7 @@ export default function TripChat({ tripId, tripType, shareToken, className }: Tr
       return;
     }
 
+    justSentRef.current = true;
     setSending(true);
     try {
       // Optimistic update: show message immediately
