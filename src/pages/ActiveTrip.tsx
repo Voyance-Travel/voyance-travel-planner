@@ -915,7 +915,7 @@ function TodayView({
     let currentGroup = '';
     
     for (const activity of todaysItinerary.activities) {
-      const hour = activity.startTime ? parseInt(activity.startTime.split(':')[0], 10) : 9;
+      const hour = activity.startTime ? Math.floor(parseTimeToMinutes(activity.startTime) / 60) : 9;
       let group: string;
       if (hour < 12) group = 'Morning';
       else if (hour < 17) group = 'Afternoon';
