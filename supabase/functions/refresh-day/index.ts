@@ -407,8 +407,6 @@ Deno.serve(async (req: Request) => {
               }
             }
           }
-        }
-      }
         } else {
           // No coordinates — still check time-based buffer
           const effectiveEndForBuffer = patchedTimes.get(act.id)?.end ?? endMin;
@@ -451,6 +449,7 @@ Deno.serve(async (req: Request) => {
             }
           }
         }
+      }
 
     // 5. Check checkout before airport on last day equivalent
     const checkoutIdx = sorted.findIndex(a => /check.?out/i.test(a.title));
