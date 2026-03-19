@@ -430,7 +430,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
       {/* Budget Coach — AI suggestions when over budget (hidden in manual mode) */}
-      {!isManualMode && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && (
+      {!isManualMode && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && snapshotStatus !== 'yellow' && (
         <BudgetCoach
           tripId={tripId}
           budgetTargetCents={summary.budgetTotalCents}
