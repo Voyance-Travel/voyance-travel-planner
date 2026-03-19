@@ -1622,7 +1622,7 @@ export function EditorialItinerary({
         for (let i = 0; i < updatedActivities.length; i++) {
           const actTime = updatedActivities[i].startTime;
           if (actTime) {
-            const actMinutes = parseInt(actTime.split(':')[0]) * 60 + parseInt(actTime.split(':')[1] || '0');
+            const actMinutes = parseTimeToMinutes(actTime);
             if (actMinutes > cardMinutes) {
               insertIndex = i;
               break;
