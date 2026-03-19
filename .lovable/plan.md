@@ -1,40 +1,29 @@
 
 
-## Fix: "Split All Evenly" destroys existing "Paid" payments
+## Fix: "All Good" refresh result contradicts "no travel buffer" banner
 
 ### Root cause
 
-The "Split All Evenly" handler iterates over all items in the `unassigned` bucket. A paid item can land in "unassigned" if its `assigned_member_id` doesn't resolve to a known synthetic member ID. The handler then:
+Two independent UI elements display simultaneously with conflicting messages:
 
-1. **Deletes all existing `trip_payments`** for that item (line 1127-1129) — including the `status: 'paid'` row
-2. Inserts new rows with `status: 'pending'` — effectively resetting the $800 hotel payment to $0 paid
+1. **Day-level buffer warning banner** (line ~9050): Runs a local `computeGapMinutes` check and shows "7 activities have no travel buffer" whenever any consecutive pair has gap ≤ 0.
+2. **RefreshDayDiffView** (line ~9459): Shows the edge function's validation result, which may report "All Good" because its `insufficient_buffer` detection uses different logic (category-aware minimum buffers, coordinate checks, etc.).
 
-Additionally, the unique constraint `(trip_id, item_type, item_id)` means only one payment row can exist per item, so splitting among N members via upsert silently overwrites rather than creating N rows.
+After the user clicks "Refresh Day", both are visible at the same time — the banner saying there are problems, the diff view saying everything is fine.
 
-### Two-part fix
+### Fix
 
-**File: `src/components/itinerary/PaymentsTab.tsx`**
+**File: `src/components/itinerary/EditorialItinerary.tsx`**
 
-#### 1. Skip paid items in "Split All Evenly"
+Suppress the day-level buffer warning banner when a refresh result is active for that day. The refresh result is the authoritative validation — if it says "All Good", the simpler heuristic banner should not contradict it.
 
-In the split handler (line 1125), filter out any item that already has a `paid` payment. Paid items should never be reassigned or deleted by a bulk split action.
+At line ~9051, add a check: if `refreshResult` exists and its `dayNumber` matches the current day, return `null` early (skip rendering the banner).
 
-```ts
-// Before splitting, filter to only truly unassigned/unpaid items
-const splittableItems = unassigned.items.filter(({ item }) =>
-  !item.allPayments.some(p => p.status === 'paid')
-);
+```tsx
+if (dayIsPreview || isCleanPreview) return null;
+// Hide banner when refresh result is active — it's the authoritative source
+if (refreshResult && refreshResult.dayNumber === day.dayNumber) return null;
 ```
 
-Then iterate over `splittableItems` instead of `unassigned.items`.
-
-#### 2. Preserve paid status when splitting already-paid items individually
-
-Add a guard at the top of the delete block: if any payment in `item.allPayments` has `status === 'paid'`, skip the item entirely and show a toast warning ("Hotel is already paid — skipping").
-
-### Result
-
-- Paid items are never touched by "Split All Evenly"
-- The $800 hotel payment is preserved
-- Only genuinely unassigned/pending items get split
+One line addition. The banner reappears if the user dismisses the refresh result or mutates the itinerary (which already clears `refreshResults`).
 
