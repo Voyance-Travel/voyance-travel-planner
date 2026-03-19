@@ -63,12 +63,12 @@ export function BudgetWarning({
 
       <div className="flex-1 min-w-0">
         <p className="font-medium">
-          {isRed ? 'Over Budget' : 'Trending Over Budget'}
+          {isRed ? 'Over Budget' : 'Approaching Budget Limit'}
         </p>
         <p className="text-sm opacity-80">
           {isRed 
             ? `You're ${formatCurrency(Math.abs(overageCents))} (${overagePercent}%) over your budget.`
-            : `You're trending ${overagePercent}% over. Consider some swaps.`
+            : `You've used ${usedPercent}% of your budget — ${formatCurrency(Math.max(0, remainingCents))} remaining.`
           }
         </p>
       </div>
