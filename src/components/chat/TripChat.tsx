@@ -45,7 +45,7 @@ export default function TripChat({ tripId, tripType, shareToken, className }: Tr
   });
   const [showNameInput, setShowNameInput] = useState(!user && !anonName);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const justSentRef = useRef(false);
 
   const isAnon = !user;
   const displayName = user
