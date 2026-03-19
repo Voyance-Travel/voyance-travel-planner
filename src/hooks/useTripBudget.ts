@@ -114,6 +114,7 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
         queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] }),
         queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] }),
       ]);
+      window.dispatchEvent(new CustomEvent('booking-changed'));
     },
     onError: () => {
       toast.error('Failed to update budget settings');
