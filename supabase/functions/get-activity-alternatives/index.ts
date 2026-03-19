@@ -53,12 +53,9 @@ serve(async (req) => {
       excludeCount: excludeActivities?.length || 0,
     });
 
-    // ==========================================================================
-    // PHASE 9: Fetch Traveler DNA for personalized alternatives
-    // ==========================================================================
+    // Fetch Traveler DNA for personalized alternatives
     let travelerDNA: TravelerDNA | null = null;
     
-    // Get user from auth header - pass to client for proper token validation
     const authHeader = req.headers.get("Authorization");
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -73,7 +70,6 @@ serve(async (req) => {
       userId = user?.id || null;
     }
 
-    // If we have a tripId but no userId, try to get trip owner
     if (!userId && tripId) {
       const { data: trip } = await supabase
         .from('trips')
@@ -83,16 +79,14 @@ serve(async (req) => {
       userId = trip?.user_id || null;
     }
 
-    // Fetch DNA if we have a user
+    // Fetch DNA with a 3s timeout to avoid blocking
     if (userId) {
       try {
-        const dnaResult = await fetchTravelerDNA(supabase, userId);
-        if (dnaResult.hasData) {
+        const dnaPromise = fetchTravelerDNA(supabase, userId);
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
+        const dnaResult = await Promise.race([dnaPromise, timeoutPromise]);
+        if (dnaResult && typeof dnaResult === 'object' && 'hasData' in dnaResult && dnaResult.hasData) {
           travelerDNA = dnaResult.dna;
-          console.log('[get-activity-alternatives] DNA loaded:', {
-            archetype: dnaResult.dna.primaryArchetype,
-            confidence: dnaResult.confidence,
-          });
         }
       } catch (dnaError) {
         console.warn('[get-activity-alternatives] DNA fetch failed:', dnaError);
@@ -105,7 +99,8 @@ serve(async (req) => {
     
     if (LOVABLE_API_KEY) {
       try {
-        alternatives = await getAIAlternatives(
+        // Race AI call against a 12s timeout — fall back to templates if too slow
+        const aiPromise = getAIAlternatives(
           currentActivity, 
           destination, 
           searchQuery, 
@@ -114,6 +109,15 @@ serve(async (req) => {
           suggestionMode,
           travelerDNA
         );
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 12000));
+        const result = await Promise.race([aiPromise, timeoutPromise]);
+        
+        if (result) {
+          alternatives = result;
+        } else {
+          console.warn('[get-activity-alternatives] AI timed out, using templates');
+          alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
+        }
       } catch (aiError) {
         console.error('[get-activity-alternatives] AI fallback to templates:', aiError);
         alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
@@ -275,7 +279,7 @@ Be specific with real place names when possible.`;
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: "google/gemini-2.5-flash-lite",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
