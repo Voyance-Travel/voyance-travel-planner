@@ -1,40 +1,35 @@
 
 
-## Fix: Prevent AI from silently overwriting day titles during minor edits
+## Fix: Normalize imported times to 24h at storage, harden all time consumers
 
-### Problem
+### Root Cause
 
-When the AI processes a minor edit like "add a coffee stop," the `rewrite_day` executor at line 282 of `itineraryActionExecutor.ts` does:
-```
-updatedDays[dayIndex] = { ...day, ...data.day, activities: newActivities };
-```
-The `...data.day` spread overwrites **all** day-level metadata — including `headline`, `theme`, and `description` — with whatever the AI regenerated. The diff system (`computeDayDiff`) only compares activities, so the title change is invisible in both auto-apply and review-first modes.
+`createTripFromParsed.ts` line 66 stores raw AI output (`"11:00 AM"`, `"1:00 PM"`) directly as `startTime` without converting to 24h format. Multiple downstream consumers then use `parseInt(time.split(':')[0])` — which gives wrong results for any 12h string with PM, and provides no validation against AI mis-extractions like "1:00 AM" for "11:00 AM".
 
-### Fix (2 files)
+### Changes
 
-**1. `src/services/itineraryActionExecutor.ts` — Preserve day metadata during rewrite**
+**1. Create shared `normalizeTimeTo24h` in `src/utils/timeFormat.ts`**
 
-Replace the blind spread at line 282 with selective merging that preserves the original day's `headline`, `theme`, and `description` unless the rewrite instructions explicitly mention renaming or re-theming the day.
+Add a single reusable function that converts any time string (12h or 24h) to `"HH:MM"` 24-hour format. This already exists in scattered inline forms across the codebase — consolidate into one.
 
-```typescript
-// Only take activities from data.day; preserve original day metadata
-const preserveKeys = ['headline', 'theme', 'description'];
-const mergedDay = { ...day, activities: newActivities };
-// Only accept AI's new metadata if it actually differs AND instructions explicitly asked for it
-const themeKeywords = /rename|retheme|new theme|change.*title|new.*title/i;
-if (themeKeywords.test(instructions || '')) {
-  // User asked for a title change — accept AI's values
-  Object.assign(mergedDay, pick(data.day, preserveKeys));
-}
-updatedDays[dayIndex] = mergedDay;
-```
+**2. Normalize at storage in `src/utils/createTripFromParsed.ts`** (line 66)
 
-This ensures "add a coffee stop" never touches the day title, while "retheme this day around food" still allows it.
+Change `startTime: activity.time || undefined` to pass through the new normalizer. This ensures all imported activities are stored in consistent 24h format regardless of what the AI returns.
 
-**2. `src/services/itineraryActionExecutor.ts` — Surface day title changes in diff**
+**3. Normalize at import in `src/components/itinerary/ImportActivitiesModal.tsx`**
 
-Enhance `computeDayDiff` (or add a check in `executeRewriteDayAction`) to detect when `data.day.headline` differs from `day.headline`, and include a `modified` diff entry with type context so the review card can show "Day title changed from X → Y" when it does happen.
+The existing `normalizeTime` function already does this correctly, but add the shared utility as a safety net for the final output.
+
+**4. Fix naive `parseInt(split(':')[0])` consumers**
+
+Replace bare `parseInt` time parsing in these files with the proper `parseTimeToMinutes` that handles AM/PM:
+- `src/components/itinerary/EditorialItinerary.tsx` (lines 1619, 1624, 1634, 1648, 1724, 1729, 1754, 1767, 9177, 9193)
+- `src/utils/intelligenceAnalytics.ts` (line 18)
+- `src/components/planner/ItinerarySummaryCard.tsx` (line 68)
+- `src/pages/ActiveTrip.tsx` (line 918)
 
 ### Scope
-Single file: `src/services/itineraryActionExecutor.ts`. No edge function changes needed — the issue is entirely in the client-side executor.
+- 1 utility addition (`timeFormat.ts`)
+- 1 storage fix (`createTripFromParsed.ts`)
+- 4 files with naive time parsing hardened
 
