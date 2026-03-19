@@ -450,6 +450,7 @@ Deno.serve(async (req: Request) => {
           }
         }
       }
+    }
 
     // 5. Check checkout before airport on last day equivalent
     const checkoutIdx = sorted.findIndex(a => /check.?out/i.test(a.title));
