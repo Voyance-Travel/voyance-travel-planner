@@ -9049,6 +9049,8 @@ function DayCard({
               {/* Day-level buffer warning — consolidates per-activity zero-gap noise */}
               {(() => {
                 if (dayIsPreview || isCleanPreview) return null;
+                // Hide heuristic banner when authoritative refresh result is active
+                if (refreshResult && refreshResult.dayNumber === day.dayNumber) return null;
                 const acts = day.activities || [];
                 let zeroGapCount = 0;
                 for (let i = 0; i < acts.length - 1; i++) {
