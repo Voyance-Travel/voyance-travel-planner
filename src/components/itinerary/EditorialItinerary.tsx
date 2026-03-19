@@ -2054,6 +2054,8 @@ export function EditorialItinerary({
   // Edit Flight/Hotel modal state
   const [editFlightOpen, setEditFlightOpen] = useState(false);
   const [editHotelOpen, setEditHotelOpen] = useState(false);
+  // Add Flight dialog (accessible from any tab, e.g. ArrivalGamePlan on Day 1)
+  const [addFlightDialogOpen, setAddFlightDialogOpen] = useState(false);
   
   // Inter-city transport editor state
   const [transportEditorOpen, setTransportEditorOpen] = useState(false);
@@ -5693,10 +5695,7 @@ export function EditorialItinerary({
                         allHotels={allHotels}
                         destination={destination}
                          onNavigateToBookings={() => setActiveTab('details')}
-                         onAddFlightInline={() => {
-                           const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
-                           if (btn) btn.click(); else setActiveTab('details');
-                         }}
+                         onAddFlightInline={() => setAddFlightDialogOpen(true)}
                       />
                     );
                   }
@@ -5710,10 +5709,7 @@ export function EditorialItinerary({
                         allHotels={allHotels}
                         destination={destination}
                          onNavigateToBookings={() => setActiveTab('details')}
-                         onAddFlightInline={() => {
-                           const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
-                           if (btn) btn.click(); else setActiveTab('details');
-                         }}
+                         onAddFlightInline={() => setAddFlightDialogOpen(true)}
                       />
                     );
                   }
@@ -5738,10 +5734,7 @@ export function EditorialItinerary({
                           allHotels={allHotels}
                           destination={arrivingCity.cityName}
                            onNavigateToBookings={() => setActiveTab('details')}
-                           onAddFlightInline={() => {
-                             const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
-                             if (btn) btn.click(); else setActiveTab('details');
-                           }}
+                           onAddFlightInline={() => setAddFlightDialogOpen(true)}
                           arrivalCityInfo={arrivingCity}
                           dayNumber={selectedDayIndex + 1}
                         />
@@ -6999,6 +6992,42 @@ export function EditorialItinerary({
                 arrivalTime: flightSelection.return.arrival?.time || '',
                 departureDate: flightSelection.return.departure?.date || endDate,
               } : undefined}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Add Flight Dialog (accessible from any tab) */}
+      {addFlightDialogOpen && (
+        <Dialog open={addFlightDialogOpen} onOpenChange={setAddFlightDialogOpen}>
+          <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[500px] max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plane className="h-5 w-5 text-primary" />
+                Add Flight Details
+              </DialogTitle>
+            </DialogHeader>
+            <AddFlightInline
+              key={`add-inline-${tripId}`}
+              tripId={tripId}
+              destination={destination}
+              startDate={startDate}
+              endDate={endDate}
+              travelers={travelers}
+              origin={originCity}
+              onFlightAdded={() => {
+                setAddFlightDialogOpen(false);
+                onBookingAdded?.();
+              }}
+              multiCityRoute={allHotels && allHotels.length > 1 ? (() => {
+                const route: Array<{ from: string; to: string; date?: string }> = [];
+                if (originCity) route.push({ from: originCity, to: allHotels[0].cityName, date: startDate });
+                for (let i = 0; i < allHotels.length - 1; i++) {
+                  route.push({ from: allHotels[i].cityName, to: allHotels[i + 1].cityName, date: allHotels[i].checkOutDate });
+                }
+                if (originCity) route.push({ from: allHotels[allHotels.length - 1].cityName, to: originCity, date: endDate });
+                return route;
+              })() : undefined}
             />
           </DialogContent>
         </Dialog>
