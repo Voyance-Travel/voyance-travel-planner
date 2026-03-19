@@ -2054,6 +2054,8 @@ export function EditorialItinerary({
   // Edit Flight/Hotel modal state
   const [editFlightOpen, setEditFlightOpen] = useState(false);
   const [editHotelOpen, setEditHotelOpen] = useState(false);
+  // Add Flight dialog (accessible from any tab, e.g. ArrivalGamePlan on Day 1)
+  const [addFlightDialogOpen, setAddFlightDialogOpen] = useState(false);
   
   // Inter-city transport editor state
   const [transportEditorOpen, setTransportEditorOpen] = useState(false);
