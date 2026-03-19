@@ -9191,8 +9191,8 @@ function DayCard({
                     return null;
                   })() : null;
                   const prevTime = prevVisibleActivity ? (prevVisibleActivity.startTime || (prevVisibleActivity as any).time || '') : '';
-                  const prevHour = parseInt(prevTime.split(':')[0], 10);
-                  const prevTimeOfDay = isNaN(prevHour) ? '' : prevHour < 12 ? 'Morning' : prevHour < 17 ? 'Afternoon' : 'Evening';
+                  const prevHour = Math.floor(parseTimeToMinutes(prevTime) / 60);
+                  const prevTimeOfDay = isNaN(prevHour) || !prevTime ? '' : prevHour < 12 ? 'Morning' : prevHour < 17 ? 'Afternoon' : 'Evening';
                   const showTimeOfDayHeader = timeOfDay && timeOfDay !== prevTimeOfDay;
 
                   // Compact inter-city transport card (unified for transition + departure)
