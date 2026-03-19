@@ -1,34 +1,23 @@
 
 
-## Fix: "Add Flight" from Day 1 falls back to Flights tab instead of opening the flight dialog
+## Fix: Suggestion deadline doesn't update display after setting
 
 ### Root cause
 
-The `ArrivalGamePlan` component on Day 1 uses `onAddFlightInline` which does:
-```typescript
-const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
-if (btn) btn.click(); else setActiveTab('details');
-```
-
-The `[data-add-flight-trigger]` button only exists inside a `<div className="hidden">` within the **Flights tab** content (line 6239). When the user is on the **Itinerary tab**, that DOM element isn't rendered (tab content is conditionally shown), so `querySelector` returns null and the fallback `setActiveTab('details')` fires — navigating away to the Flights tab without opening any dialog.
+In `src/components/suggestions/TripSuggestions.tsx`, `handleUpdateDeadline` (line 308) successfully updates the database but never updates the local `suggestions` state. The card continues rendering based on stale data where `vote_deadline` is null.
 
 ### Fix
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
+**File: `src/components/suggestions/TripSuggestions.tsx`** — Add an optimistic state update inside `handleUpdateDeadline` after the successful DB write:
 
-1. **Add a state variable** to control the flight-add dialog from anywhere:
-   ```typescript
-   const [addFlightDialogOpen, setAddFlightDialogOpen] = useState(false);
-   ```
+```typescript
+// After line 314 (if (error) throw error):
+setSuggestions(prev => prev.map(s =>
+  s.id === suggestionId ? { ...s, vote_deadline: newDeadline } : s
+));
+```
 
-2. **Update all `onAddFlightInline` callbacks** (lines ~5696, 5713, 5741) to set this state instead of using fragile DOM querying:
-   ```typescript
-   onAddFlightInline={() => setAddFlightDialogOpen(true)}
-   ```
+This ensures the card immediately re-renders showing the deadline date instead of "Set deadline", and also correctly switches from the "add deadline" popover (line 582, `!suggestion.vote_deadline`) to the "edit/remove deadline" UI.
 
-3. **Render an `AddFlightInline` instance outside the tab content** (at the component root level, alongside other modals) so it's always available regardless of active tab. Pass `addFlightDialogOpen` and `setAddFlightDialogOpen` to control its visibility.
-
-4. **Keep the existing hidden trigger in the Flights tab** for the empty-state CTA there (line 6226), which works fine since it's already on the right tab.
-
-This ensures clicking "Add Flight" from Day 1's ArrivalGamePlan opens the flight dialog inline without navigating away.
+Single line addition — no other files affected.
 
