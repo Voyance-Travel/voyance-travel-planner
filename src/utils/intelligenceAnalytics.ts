@@ -10,6 +10,7 @@
 import type { ItineraryValueStats } from '@/components/itinerary/ItineraryValueHeader';
 import type { SkippedItem } from '@/components/itinerary/WhyWeSkippedSection';
 import type { ActivityIntelligence } from '@/components/itinerary/IntelligenceBadge';
+import { parseTimeToMinutes } from '@/utils/timeFormat';
 
 /**
  * Detect time of day from scheduled time
