@@ -8222,6 +8222,7 @@ interface ArrivalGamePlanProps {
   allHotels?: CityHotelInfo[];
   destination: string;
   onNavigateToBookings?: () => void;
+  onAddFlightInline?: () => void;
   /** For multi-city arrivals: the city being arrived at */
   arrivalCityInfo?: CityHotelInfo;
   /** Day number (1-indexed), defaults to 1 */
