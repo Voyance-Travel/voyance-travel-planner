@@ -307,11 +307,17 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
 
   const handleUpdateDeadline = useCallback(async (suggestionId: string, newDeadline: string | null) => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('trip_suggestions')
         .update({ vote_deadline: newDeadline })
-        .eq('id', suggestionId);
+        .eq('id', suggestionId)
+        .select('id')
+        .maybeSingle();
       if (error) throw error;
+      if (!data) {
+        toast.error('Could not update deadline — you may not have permission');
+        return;
+      }
       setSuggestions(prev => prev.map(s =>
         s.id === suggestionId ? { ...s, vote_deadline: newDeadline } : s
       ));
