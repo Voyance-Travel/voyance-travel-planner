@@ -106,7 +106,7 @@ export function TripOverview({
     const now = new Date();
     const start = parseLocalDate(startDate);
     const end = parseLocalDate(endDate);
-    const totalDays = differenceInDays(end, start);
+    const totalDays = differenceInDays(end, start) + 1;
     const currentDayNumber = Math.max(1, Math.min(differenceInDays(now, start) + 1, totalDays));
     const daysRemaining = Math.max(0, differenceInDays(end, now));
     const progressPercent = (currentDayNumber / totalDays) * 100;

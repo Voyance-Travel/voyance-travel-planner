@@ -58,7 +58,7 @@ export function useFeedbackTrigger({
     const end = parseISO(endDate);
     
     const currentDayNumber = Math.max(1, differenceInDays(now, start) + 1);
-    const totalDays = differenceInDays(end, start);
+    const totalDays = differenceInDays(end, start) + 1;
 
     return {
       tripId,
