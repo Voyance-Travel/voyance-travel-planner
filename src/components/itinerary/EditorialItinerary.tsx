@@ -5734,10 +5734,7 @@ export function EditorialItinerary({
                           allHotels={allHotels}
                           destination={arrivingCity.cityName}
                            onNavigateToBookings={() => setActiveTab('details')}
-                           onAddFlightInline={() => {
-                             const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
-                             if (btn) btn.click(); else setActiveTab('details');
-                           }}
+                           onAddFlightInline={() => setAddFlightDialogOpen(true)}
                           arrivalCityInfo={arrivingCity}
                           dayNumber={selectedDayIndex + 1}
                         />
