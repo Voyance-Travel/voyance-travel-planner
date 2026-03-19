@@ -1752,7 +1752,7 @@ export function EditorialItinerary({
           updatedActivities.splice(insertIndex, 0, departureCard);
 
           // Trim non-synthetic activities after checkout on the final day
-          const finalDepMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+          const finalDepMinutes = parseTimeToMinutes(cardTime);
           const finalBufferMinutes = tType === 'flight' ? 90 : tType === 'train' ? 45 : 30;
           const finalCutoffMinutes = finalDepMinutes - finalBufferMinutes;
 
