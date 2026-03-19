@@ -274,12 +274,40 @@ async function executeRewriteDayAction(
   }
 
   const diff = computeDayDiff(target_day, day.activities, newActivities);
+
+  // Surface day-level metadata changes (headline/theme/description) in the diff
+  const metadataKeys = ['headline', 'theme', 'description'] as const;
+  for (const key of metadataKeys) {
+    const oldVal = (day as any)[key];
+    const newVal = (data.day as any)?.[key];
+    if (newVal && oldVal && newVal !== oldVal) {
+      diff.push({
+        type: 'modified',
+        dayNumber: target_day,
+        activityTitle: `Day ${key}: "${oldVal}" → "${newVal}"`,
+        category: 'metadata',
+      });
+    }
+  }
+
   const costBefore = computeDayCost(day.activities);
   const costAfter = computeDayCost(newActivities);
   const costDelta = costAfter - costBefore;
 
+  // Preserve original day metadata unless the user explicitly asked for a title/theme change
+  const themeKeywords = /rename|retheme|new theme|change.*title|new.*title|retitle/i;
+  const allowMetadataOverwrite = themeKeywords.test(instructions || '');
+  const mergedDay = { ...day, activities: newActivities };
+  if (allowMetadataOverwrite && data.day) {
+    for (const key of metadataKeys) {
+      if ((data.day as any)[key]) {
+        (mergedDay as any)[key] = (data.day as any)[key];
+      }
+    }
+  }
+
   const updatedDays = [...currentDays];
-  updatedDays[dayIndex] = { ...day, ...data.day, activities: newActivities };
+  updatedDays[dayIndex] = mergedDay;
   await updateTripItinerary(tripId, updatedDays);
 
   return {
