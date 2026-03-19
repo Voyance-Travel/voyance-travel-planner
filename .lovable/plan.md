@@ -1,29 +1,37 @@
 
 
-## Fix: "All Good" refresh result contradicts "no travel buffer" banner
+## Fix: "Add Flight" in Day 1 should open modal in-context
 
 ### Root cause
 
-Two independent UI elements display simultaneously with conflicting messages:
+The `ArrivalGamePlan` component's "Add Flight" button (line ~8537) calls `onNavigateToBookings`, which is wired to `setActiveTab('details')` — switching the user to the Flights & Hotels tab instead of opening the flight entry modal in place.
 
-1. **Day-level buffer warning banner** (line ~9050): Runs a local `computeGapMinutes` check and shows "7 activities have no travel buffer" whenever any consecutive pair has gap ≤ 0.
-2. **RefreshDayDiffView** (line ~9459): Shows the edge function's validation result, which may report "All Good" because its `insufficient_buffer` detection uses different logic (category-aware minimum buffers, coordinate checks, etc.).
-
-After the user clicks "Refresh Day", both are visible at the same time — the banner saying there are problems, the diff view saying everything is fine.
+The Flights & Hotels tab already has an `AddFlightInline` component with a hidden trigger (`data-add-flight-trigger`) that opens a modal dialog. The same pattern is used in the empty-state CTA (line ~6217).
 
 ### Fix
 
 **File: `src/components/itinerary/EditorialItinerary.tsx`**
 
-Suppress the day-level buffer warning banner when a refresh result is active for that day. The refresh result is the authoritative validation — if it says "All Good", the simpler heuristic banner should not contradict it.
+1. **Add `onAddFlight` callback to `ArrivalGamePlanProps`** (optional, alongside existing `onNavigateToBookings`):
+   - New prop: `onAddFlight?: () => void`
 
-At line ~9051, add a check: if `refreshResult` exists and its `dayNumber` matches the current day, return `null` early (skip rendering the banner).
+2. **Embed a hidden `AddFlightInline` inside `ArrivalGamePlan`** (same pattern as line 6227–6240), and wire the "Add Flight" / "Add Hotel" buttons to click its `data-add-flight-trigger` instead of calling `onNavigateToBookings`.
 
-```tsx
-if (dayIsPreview || isCleanPreview) return null;
-// Hide banner when refresh result is active — it's the authoritative source
-if (refreshResult && refreshResult.dayNumber === day.dayNumber) return null;
-```
+   Alternatively (simpler): **Replace `onNavigateToBookings` with a callback that clicks the existing hidden trigger**. At lines 5695/5708/5732, change:
+   ```tsx
+   onNavigateToBookings={() => {
+     const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
+     if (btn) btn.click();
+     else setActiveTab('details'); // fallback
+   }}
+   ```
 
-One line addition. The banner reappears if the user dismisses the refresh result or mutates the itinerary (which already clears `refreshResults`).
+3. **Update the three call sites** (lines ~5695, ~5708, ~5732) that pass `onNavigateToBookings` to `ArrivalGamePlan`.
+
+4. **Keep "Finish Details" button** (line 8514, shown when flight exists but is incomplete) pointing to `setActiveTab('details')` — that one is intentional since the user needs the full form.
+
+### Result
+- "Add Flight" from Day 1 opens the flight entry modal in-context
+- No tab navigation disruption
+- "Finish Details" still navigates to the full Flights & Hotels tab as intended
 
