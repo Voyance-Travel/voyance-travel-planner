@@ -319,27 +319,42 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // 2. Timing overlap with next activity
+      // 2. Timing overlap with next activity (including same-start-time conflicts)
       if (i < sorted.length - 1) {
         const next = sorted[i + 1];
         const nextStart = patchedTimes.get(next.id)?.start ?? parseTime(next.startTime);
         // Use cascaded end time if this activity was already shifted
         const effectiveEnd = patchedTimes.get(act.id)?.end ?? endMin;
+        const currStartMin = patchedTimes.get(act.id)?.start ?? startMin;
 
-        if (effectiveEnd !== null && nextStart !== null && effectiveEnd > nextStart) {
+        // 2a. Same start time = always a conflict (catches 0-duration transit stubs)
+        const isSameStart = currStartMin !== null && nextStart !== null && currStartMin === nextStart;
+        // 2b. Standard overlap: current ends after next starts
+        const isOverlap = effectiveEnd !== null && nextStart !== null && effectiveEnd > nextStart;
+
+        if (isSameStart || isOverlap) {
+          const overlapLabel = isSameStart
+            ? `"${act.title}" and "${next.title}" both start at ${minutesToTime(currStartMin!)}.`
+            : `"${act.title}" ends at ${patchedTimes.has(act.id) ? minutesToTime(effectiveEnd!) : act.endTime} but "${next.title}" starts at ${patchedTimes.has(next.id) ? minutesToTime(nextStart!) : next.startTime}.`;
+
+          // For same-start, compute a safe anchor: use effectiveEnd if available, else currStart + duration
+          const anchorEnd = isSameStart
+            ? (effectiveEnd ?? (currStartMin! + (act.durationMinutes || 30)))
+            : effectiveEnd!;
+
           issues.push({
             type: 'timing_overlap',
             activityId: act.id,
             activityTitle: act.title,
             severity: 'error',
-            message: `"${act.title}" ends at ${patchedTimes.has(act.id) ? minutesToTime(effectiveEnd) : act.endTime} but "${next.title}" starts at ${patchedTimes.has(next.id) ? minutesToTime(nextStart) : next.startTime}.`,
-            suggestion: `Move "${next.title}" to ${minutesToTime(effectiveEnd + 5)} or later.`,
+            message: overlapLabel,
+            suggestion: `Move "${next.title}" to ${minutesToTime(anchorEnd + 5)} or later.`,
           });
 
           if (!changedIds.has(next.id)) {
             const origNextStart = parseTime(next.startTime);
             const nextDuration = next.durationMinutes || (parseTime(next.endTime) !== null && origNextStart !== null ? parseTime(next.endTime)! - origNextStart : 60);
-            const fixedStartMin = effectiveEnd + 5;
+            const fixedStartMin = anchorEnd + 5;
             const fixedEndMin = fixedStartMin + nextDuration;
             const fixedStart = minutesToTime(fixedStartMin);
             const fixedEnd = minutesToTime(fixedEndMin);
