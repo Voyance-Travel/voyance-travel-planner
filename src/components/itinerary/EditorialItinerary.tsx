@@ -5692,7 +5692,11 @@ export function EditorialItinerary({
                         hotelSelection={hotelSelection}
                         allHotels={allHotels}
                         destination={destination}
-                        onNavigateToBookings={() => setActiveTab('details')}
+                         onNavigateToBookings={() => setActiveTab('details')}
+                         onAddFlightInline={() => {
+                           const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
+                           if (btn) btn.click(); else setActiveTab('details');
+                         }}
                       />
                     );
                   }
@@ -5705,7 +5709,11 @@ export function EditorialItinerary({
                         hotelSelection={hotelSelection}
                         allHotels={allHotels}
                         destination={destination}
-                        onNavigateToBookings={() => setActiveTab('details')}
+                         onNavigateToBookings={() => setActiveTab('details')}
+                         onAddFlightInline={() => {
+                           const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
+                           if (btn) btn.click(); else setActiveTab('details');
+                         }}
                       />
                     );
                   }
@@ -5729,7 +5737,11 @@ export function EditorialItinerary({
                           hotelSelection={arrivingCity.hotel}
                           allHotels={allHotels}
                           destination={arrivingCity.cityName}
-                          onNavigateToBookings={() => setActiveTab('details')}
+                           onNavigateToBookings={() => setActiveTab('details')}
+                           onAddFlightInline={() => {
+                             const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
+                             if (btn) btn.click(); else setActiveTab('details');
+                           }}
                           arrivalCityInfo={arrivingCity}
                           dayNumber={selectedDayIndex + 1}
                         />
@@ -8210,13 +8222,14 @@ interface ArrivalGamePlanProps {
   allHotels?: CityHotelInfo[];
   destination: string;
   onNavigateToBookings?: () => void;
+  onAddFlightInline?: () => void;
   /** For multi-city arrivals: the city being arrived at */
   arrivalCityInfo?: CityHotelInfo;
   /** Day number (1-indexed), defaults to 1 */
   dayNumber?: number;
 }
 
-function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destination, onNavigateToBookings, arrivalCityInfo, dayNumber = 1 }: ArrivalGamePlanProps) {
+function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destination, onNavigateToBookings, onAddFlightInline, arrivalCityInfo, dayNumber = 1 }: ArrivalGamePlanProps) {
   const outbound = flightSelection?.outbound;
   const fallbackCityHotel = allHotels?.find(h => !!h.hotel?.name)?.hotel || null;
   const effectiveHotelSelection = hotelSelection?.name ? hotelSelection : fallbackCityHotel;
@@ -8530,11 +8543,11 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                 <p className="text-xs text-muted-foreground">We'll plan your arrival day around your landing time</p>
               </div>
             </div>
-            {onNavigateToBookings && (
+            {(onAddFlightInline || onNavigateToBookings) && (
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={onNavigateToBookings}
+                onClick={onAddFlightInline || onNavigateToBookings}
                 className="shrink-0"
               >
                 Add Flight
@@ -8592,11 +8605,11 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                 <p className="text-xs text-muted-foreground">Get transfer times and check-in recommendations</p>
               </div>
             </div>
-            {onNavigateToBookings && (
+            {(onAddFlightInline || onNavigateToBookings) && (
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={onNavigateToBookings}
+                onClick={onAddFlightInline || onNavigateToBookings}
                 className="shrink-0"
               >
                 Add Hotel
