@@ -1,46 +1,34 @@
 
 
-## Fix: Refresh Day says "All Good" despite zero-buffer activities
+## Fix: "Add Flight" from Day 1 falls back to Flights tab instead of opening the flight dialog
 
 ### Root cause
 
-There is a **brace scoping bug** in `supabase/functions/refresh-day/index.ts`. The no-coordinates buffer check (the `else` branch of `if (transit)`) is placed outside the `if (i < sorted.length - 1)` block due to a mismatched closing brace:
-
-```
-line 323: if (i < sorted.length - 1) {
-line 329:   if (effectiveEnd > nextStart) { ... }      // overlap check
-line 364:   const transit = estimateTransit(act, next);
-line 365:   if (transit) {                               // HAS coordinates
-line 410:   }                                            // closes if(transit)
-line 411: }                                              // closes if(i < sorted.length-1)
-line 412:   } else {                                     // ← ORPHANED — no-coords path
-line 413:     // buffer check without coordinates
-line 451:   }
+The `ArrivalGamePlan` component on Day 1 uses `onAddFlightInline` which does:
+```typescript
+const btn = document.querySelector('[data-add-flight-trigger]') as HTMLButtonElement;
+if (btn) btn.click(); else setActiveTab('details');
 ```
 
-The `} else {` on line 412 is outside the consecutive-pair guard, so `next` is undefined. Activities without lat/lng coordinates (which is most activities) **never get their buffers checked**. The page's heuristic uses a simple zero-gap check that works regardless of coordinates, which is why it correctly detects the issue while Refresh misses it entirely.
+The `[data-add-flight-trigger]` button only exists inside a `<div className="hidden">` within the **Flights tab** content (line 6239). When the user is on the **Itinerary tab**, that DOM element isn't rendered (tab content is conditionally shown), so `querySelector` returns null and the fallback `setActiveTab('details')` fires — navigating away to the Flights tab without opening any dialog.
 
 ### Fix
 
-**File: `supabase/functions/refresh-day/index.ts`** — restructure the brace nesting so the no-coordinates buffer check is inside the `if (i < sorted.length - 1)` block as the proper `else` of `if (transit)`:
+**File: `src/components/itinerary/EditorialItinerary.tsx`**
 
-1. Remove the premature `}` on line 411 that closes the consecutive-pair block too early.
-2. Keep the `} else {` on line 412 as the else branch of `if (transit)`.
-3. Close the `if (i < sorted.length - 1)` block after the else branch ends (after line 451).
+1. **Add a state variable** to control the flight-add dialog from anywhere:
+   ```typescript
+   const [addFlightDialogOpen, setAddFlightDialogOpen] = useState(false);
+   ```
 
-The corrected structure:
+2. **Update all `onAddFlightInline` callbacks** (lines ~5696, 5713, 5741) to set this state instead of using fragile DOM querying:
+   ```typescript
+   onAddFlightInline={() => setAddFlightDialogOpen(true)}
+   ```
 
-```
-if (i < sorted.length - 1) {
-  // overlap check
-  const transit = estimateTransit(act, next);
-  if (transit) {
-    // buffer check WITH transit estimates
-  } else {
-    // buffer check WITHOUT coordinates (time-based only)
-  }
-}  // closes if (i < sorted.length - 1)
-```
+3. **Render an `AddFlightInline` instance outside the tab content** (at the component root level, alongside other modals) so it's always available regardless of active tab. Pass `addFlightDialogOpen` and `setAddFlightDialogOpen` to control its visibility.
 
-This ensures all consecutive activity pairs get buffer-checked, whether or not they have coordinates. After the fix, activities with 0-minute gaps will correctly produce `insufficient_buffer` issues instead of "All Good."
+4. **Keep the existing hidden trigger in the Flights tab** for the empty-state CTA there (line 6226), which works fine since it's already on the right tab.
+
+This ensures clicking "Add Flight" from Day 1's ArrivalGamePlan opens the flight dialog inline without navigating away.
 
