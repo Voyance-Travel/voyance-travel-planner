@@ -1617,7 +1617,7 @@ export function EditorialItinerary({
         } as any;
 
         // Insert chronologically
-        const cardMinutes = parseInt(cardTime.split(':')[0]) * 60 + parseInt(cardTime.split(':')[1] || '0');
+        const cardMinutes = parseTimeToMinutes(cardTime);
         let insertIndex = updatedActivities.length;
         for (let i = 0; i < updatedActivities.length; i++) {
           const actTime = updatedActivities[i].startTime;
