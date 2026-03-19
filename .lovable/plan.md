@@ -1,39 +1,36 @@
 
 
-## Fix: Walk segment ⋯ menu appears to control the activity below it
+## Fix: Same-start-time activities not detected as overlap by Refresh Day
 
-### Problem
+### Root cause
 
-Walk/transit segments render as slim connector rows (via `TransitModePicker`) between full activity cards. The ⋯ menu on these rows **does** correctly target the walk activity itself — but users perceive it as belonging to the next activity card because:
+In `supabase/functions/refresh-day/index.ts`, the overlap check at line 329 only triggers when:
+```
+effectiveEnd > nextStart
+```
 
-1. The walk row is visually minimal (icon + label + duration pill), making the ⋯ button look like it's floating near the top of the card below
-2. On desktop, the ⋯ only appears on hover (`sm:opacity-0 sm:group-hover/activity:opacity-100`), and the hover zone bleeds into the next card's visual space
-3. The menu items ("Edit Details", "Move Up", "Move Down") feel odd for a transit connector — reinforcing the impression it's controlling the wrong thing
+When "Taxi to the Left Bank" and "Stroll through Saint-Germain-des-Prés" both start at 3:15 PM, the taxi (a short-duration transit activity) likely has `endTime === nextStartTime` or the taxi's `endTime` also equals its `startTime` (zero-duration transport stub). Since `915 > 915` is `false`, no overlap is flagged.
+
+Additionally, `getMinBufferMinutes` returns `0` for transit categories, so the buffer check also passes silently.
 
 ### Fix
 
-**File: `src/components/itinerary/TransitModePicker.tsx`**
+**File: `supabase/functions/refresh-day/index.ts`** — Add a same-start-time detection before the existing overlap check (around line 323).
 
-Two changes to reduce confusion:
+When two consecutive sorted activities share the exact same start time, immediately flag a `timing_overlap` error and propose shifting the second activity to start after the first one ends. This runs before the existing `effectiveEnd > nextStart` check.
 
-1. **Hide the ⋯ menu on walk/transit rows entirely.** These are lightweight connectors, not user-managed activities. Users can already:
-   - Tap the row to expand transport options (TransitModePicker's expand feature)
-   - Use the `TransitGapIndicator` between activities for mode switching
-   - Edit/remove activities via the activity cards themselves
+```
+// Inside the loop, after getting nextStart:
+const currStartMin = patchedTimes.get(act.id)?.start ?? startMin;
+if (currStartMin !== null && nextStart !== null && currStartMin === nextStart) {
+  // Same start time = always a conflict
+  // → propose shifting next activity to after current ends
+}
+```
 
-   Remove the DropdownMenu block (lines 360–408) from the transit row. This eliminates the visual ambiguity completely.
+The proposed fix shifts the second activity's start to `effectiveEnd + 5` (or `currStartMin + duration + 5` if effectiveEnd is unavailable), reusing the existing `time_shift` proposedChange pattern already in the file. The `changedIds` and `patchedTimes` maps are updated so downstream cascade checks remain accurate.
 
-2. **If full removal is too aggressive**, alternatively scope the menu to transit-relevant actions only and add a visual label:
-   - Replace "Edit Details" → "Change transport mode" (triggers the expand)
-   - Remove "Move Up" / "Move Down" (transit segments shouldn't be reordered independently)
-   - Keep "Remove" as "Remove transit step"
-   - Add a subtle label like `"⋯ Walk"` so it's clear what the menu targets
+### Scope
 
-### Recommended approach
-
-Option 1 (remove the ⋯ entirely) is cleaner. The expand-on-tap already provides all the transport editing UX needed. The ⋯ menu on transit rows adds no unique value and creates confusion.
-
-### Changes
-
-**`src/components/itinerary/TransitModePicker.tsx`** — Remove the `{isEditable && !activity.isLocked && (<DropdownMenu>...</DropdownMenu>)}` block (lines 359–408) from the transit row's flex container.
+Single file change: `supabase/functions/refresh-day/index.ts`. Redeploy the edge function.
 
