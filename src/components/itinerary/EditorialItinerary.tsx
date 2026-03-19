@@ -1765,7 +1765,7 @@ export function EditorialItinerary({
               return true;
             }
             if (!act.startTime) return true;
-            const actMin = parseInt(act.startTime.split(':')[0]) * 60 + parseInt(act.startTime.split(':')[1] || '0');
+            const actMin = parseTimeToMinutes(act.startTime);
             return actMin < finalCutoffMinutes;
           });
         }
