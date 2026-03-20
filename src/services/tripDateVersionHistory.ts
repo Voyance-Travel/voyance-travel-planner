@@ -103,6 +103,13 @@ export async function restoreTripDateVersion(
       .delete()
       .eq('id', version.id);
 
+    // Clean up all older snapshots to prevent stale session artifacts
+    await supabase
+      .from('trip_date_versions')
+      .delete()
+      .eq('trip_id', tripId)
+      .lt('created_at', version.created_at);
+
     return {
       success: true,
       snapshot: {
