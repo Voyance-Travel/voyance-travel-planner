@@ -1,30 +1,35 @@
 
 
-## Fix: Make transport recommendations contextual instead of generic
+## Fix: Transport segment header shows wrong cost from estimation engine
 
 ### Problem
 
-The `airport-transfers` edge function returns the same `aiRecommendation` text for all city transit segments using just 3 hardcoded templates (lines 483-497). It never considers:
-- Walking distance/duration (walk options are added client-side, not server-side)
-- The actual origin/destination names
-- The specific mode the user is likely to use
+Transport activities like "Evening Descent to the Seine" pass through `getActivityCostInfo`, which runs the general cost estimation engine. Because the title sounds like a sightseeing activity, it estimates ~€28. This cost is then displayed in the `TransitModePicker` header. Meanwhile, the actual transport mode costs (€3 metro, €2 bus, etc.) come from the `airport-transfers` edge function and are shown only when expanded — creating a visible mismatch.
 
-So a 13-minute walk between nearby restaurants still gets "The metro/train is a great option here — affordable and avoids traffic."
+### Root cause
+
+In `EditorialItinerary.tsx` line 9912:
+```typescript
+const transportCost = isWalkingTransport ? null : (cost > 0 ? cost : null);
+```
+
+`cost` comes from `getActivityCostInfo` (line 9662-9663), which doesn't distinguish transport activities from dining/sightseeing. It feeds the title into the estimation engine, which returns an irrelevant estimate.
 
 ### Fix
 
-**File: `supabase/functions/airport-transfers/index.ts` (lines 476-498)**
+**File: `src/components/itinerary/EditorialItinerary.tsx` (~line 9910-9912)**
 
-Replace the 3-template city-route recommendation logic with context-aware recommendations:
+Replace the transport cost derivation to use the activity's actual `transportation.estimatedCost` data (which comes from route data) instead of the general estimation engine. If no transport-specific cost exists, show nothing rather than a misleading estimate.
 
-1. **Add walk detection**: Check if the taxi duration is ≤20 minutes (city routes have scaled durations). If taxi is ≤5 min, recommend walking with the actual origin→destination names.
-2. **Use location names**: Interpolate `origin` and `destination` into the recommendation text so it reads as specific advice, not a template.
-3. **Expand the decision tree**:
-   - Taxi ≤5 min → "It's a short walk from {origin} to {destination} — no transport needed."
-   - Taxi ≤10 min → "A quick taxi ride, or walk it in about {walkEstimate} minutes."
-   - Train available and competitive → "The {trainLine or metro} is a solid option between {origin} and {destination} — affordable and avoids traffic."
-   - Default taxi → "A taxi or rideshare is the easiest way from {origin} to {destination}."
+```typescript
+// Use transport-specific cost from route data, NOT the general estimation engine
+const transportEstCost = activity.transportation?.estimatedCost?.amount;
+const transportCost = isWalkingTransport ? null
+  : (transportEstCost && transportEstCost > 0 ? transportEstCost : null);
+```
+
+This ensures the header cost matches what the expanded modes show, and displays nothing when no real transport cost is available.
 
 ### Scope
-Single file: `supabase/functions/airport-transfers/index.ts`. Redeploy edge function.
+Single line change in `src/components/itinerary/EditorialItinerary.tsx`.
 
