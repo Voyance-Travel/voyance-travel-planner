@@ -264,6 +264,8 @@ export interface EditorialActivity {
     tags?: string[];
     confidence?: number;
   };
+  /** Placeholder activity that needs a real recommendation */
+  needsRefinement?: boolean;
 }
 
 export interface TransportOption {
