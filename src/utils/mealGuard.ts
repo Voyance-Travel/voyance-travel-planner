@@ -150,7 +150,7 @@ function ensureDayMeals(
       description: hint.description,
       tags: ['dining', mealType, 'meal-guard', 'needs-refinement'],
       bookingRequired: false,
-      tips: `This is a placeholder — tap to get a specific restaurant recommendation for this ${mealType}.`,
+      tips: `Tap "Find a real restaurant" below to get a personalized ${mealType} recommendation.`,
       needsRefinement: true,
     });
   }

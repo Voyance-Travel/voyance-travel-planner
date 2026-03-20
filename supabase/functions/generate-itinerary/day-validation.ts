@@ -819,7 +819,7 @@ export function enforceRequiredMealsFinalGuard(
       transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency }, instructions: 'Short walk from the previous activity' },
       tips: venue
         ? `Recommended by our venue database — confirm hours before visiting.`
-        : `This is a placeholder — tap to get a specific restaurant recommendation for this ${mealType}.`,
+        : `Tap "Find a real restaurant" below to get a personalized ${mealType} recommendation.`,
       needsRefinement: !venue,
     } as StrictActivityMinimal);
   }
