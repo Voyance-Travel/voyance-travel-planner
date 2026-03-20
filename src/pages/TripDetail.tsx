@@ -1903,7 +1903,17 @@ export default function TripDetail() {
 
   // Handle undoing a trip date change — restores dates, itinerary, and hotel selection
   const handleUndoDateChange = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId || !trip) return;
+
+    // Save current state before restoring so the undo is meaningful
+    await saveTripDateVersion(tripId, {
+      startDate: trip.start_date,
+      endDate: trip.end_date,
+      dayCount: trip.total_days ?? 0,
+      itineraryData: trip.itinerary_data as Record<string, unknown> | undefined,
+      hotelSelection: trip.hotel_selection,
+    });
+
     const result = await restoreTripDateVersion(tripId);
     if (!result.success || !result.snapshot) {
       toast.error(result.error || 'No date change to undo');
