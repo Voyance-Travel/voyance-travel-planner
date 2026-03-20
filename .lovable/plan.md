@@ -1,24 +1,57 @@
 
+Fix: Make Swap Activity category filters resolve reliably instead of spinning indefinitely
 
-## Fix: Add confirmation dialog for activity removal + ensure copy toast is visible
+What’s going wrong
 
-### Problem
-1. **Remove** — Clicking "Remove" in the ⋯ menu immediately deletes the activity with no confirmation. The only safety net is undo (via version snapshots).
-2. **Copy to Day** — Already has a toast (`toast.success('Copied to Day X')` at line 4077), so this part is actually working. The user may not have noticed it.
+I traced the issue to the swap drawer flow in `src/components/planner/ActivityAlternativesDrawer.tsx` and the `get-activity-alternatives` backend function.
 
-### Changes
+Root causes:
+1. The drawer creates an `AbortController`, but the signal is never passed into the request. So category clicks do not truly cancel the previous request — they only mark a local flag.
+2. There is no hard client-side timeout around `supabase.functions.invoke(...)`, so if a request stalls, `isLoading` can stay `true` forever and the drawer remains stuck on “Searching for options...”.
+3. The initial drawer load fetches “similar” results, then starts a background “different” request using the same request helper. That means background preload and user-triggered category clicks compete for the same request lifecycle and can race each other.
+4. In `supabase/functions/get-activity-alternatives/index.ts`, the AI call is raced against a timeout, but the underlying fetch itself is not actually aborted. That makes fallback less reliable under slow AI/network conditions.
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
+Implementation plan
 
-1. **Add state for pending removal** — Add a `pendingRemove` state (`{ dayIndex: number; activityId: string; activityTitle: string } | null`) near the other dialog states (around line 3500–3600).
+1. Stabilize request handling in `src/components/planner/ActivityAlternativesDrawer.tsx`
+- Replace the current “single abort controller + local aborted check” approach with explicit request IDs / sequence guards.
+- Add a dedicated request wrapper with a hard timeout for foreground actions:
+  - initial similar load
+  - category chip filters
+  - custom search
+- Ensure every foreground request always exits loading state in `finally`, even on timeout/stall.
 
-2. **Replace immediate delete with confirmation** — Change `handleActivityRemove` (line 4080) to set `pendingRemove` state instead of immediately deleting. Create a new `confirmActivityRemove` function that contains the current delete logic (lines 4081–4112).
+2. Separate background preload from interactive filter requests
+- Keep the fast “similar” load first.
+- Move the “different” preload into its own background path so it does not share the same active request state as chip clicks.
+- Ignore preload responses if the user has already selected a filter or started a search.
+- Do not let background preload re-enable or block the main loading spinner.
 
-3. **Add AlertDialog** — Add a confirmation dialog (reusing the already-imported `AlertDialog` components) near the other dialogs (around line 6834). Content:
-   - Title: "Remove activity?"
-   - Description: "Remove **{activityTitle}** from Day {dayNumber}? You can undo this action."
-   - Cancel button + destructive "Remove" button that calls `confirmActivityRemove`
+3. Add a guaranteed fast fallback path
+- If a filter/search request exceeds the timeout, immediately fall back to template alternatives instead of leaving the spinner up.
+- Show a lightweight toast/message only if needed, e.g. “Showing fast suggestions instead.”
 
-### Scope
-Single file: `src/components/itinerary/EditorialItinerary.tsx`. No new imports needed — `AlertDialog` is already imported.
+4. Harden `supabase/functions/get-activity-alternatives/index.ts`
+- Add a real `AbortController` to the AI gateway `fetch(...)` and pass `signal`.
+- Clear timeout properly and abort the fetch when the limit is reached.
+- Keep template fallback, but make it deterministic for slow category/search mode requests.
+- Add concise logs for:
+  - request mode
+  - query/filter
+  - whether AI succeeded, timed out, or fell back to templates
 
+Files to update
+- `src/components/planner/ActivityAlternativesDrawer.tsx`
+- `supabase/functions/get-activity-alternatives/index.ts`
+
+Expected result
+- Category chip clicks resolve quickly instead of hanging.
+- The spinner always stops.
+- Slow AI responses degrade gracefully into fallback alternatives.
+- Background preload no longer interferes with user-selected filters.
+
+Validation
+- Open Swap Activity and confirm initial results load.
+- Click multiple category chips in sequence and verify only the latest one wins.
+- Confirm no indefinite “Finding the best alternatives...” / “Searching for options...” state.
+- Confirm slow backend responses fall back to usable alternatives instead of freezing the panel.
