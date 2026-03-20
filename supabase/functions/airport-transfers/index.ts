@@ -481,19 +481,28 @@ serve(async (req) => {
       recommendation = archResult.recommendation;
       recommendedId = archResult.recommendedId;
     } else {
-      // City route: recommend based on duration
+      // City route: context-aware recommendation using origin/destination names and duration
       const taxiOpt = options.find(o => o.id === 'taxi');
       const trainOpt = options.find(o => o.id === 'train');
       const taxiMins = taxiOpt?.durationMinutes || 99;
-      if (taxiMins <= 10) {
+      const origName = origin || 'your current location';
+      const destName = destination || 'your next stop';
+      const walkEstimate = Math.round(taxiMins * 3.5); // rough walk time from taxi duration
+
+      if (taxiMins <= 5) {
+        // Very short distance — walking is best
+        recommendedId = trainOpt ? 'train' : 'taxi';
+        recommendation = `It's a short walk from ${origName} to ${destName} — no transport needed unless you prefer a quick ride.`;
+      } else if (taxiMins <= 10) {
         recommendedId = 'taxi';
-        recommendation = `It's a short ride — a taxi or rideshare is quick and easy.`;
+        recommendation = `A quick taxi ride from ${origName} to ${destName}, or walk it in about ${walkEstimate} minutes.`;
       } else if (trainOpt && trainOpt.durationMinutes < taxiMins * 1.5) {
+        const trainLabel = trainOpt.label || 'The metro';
         recommendedId = 'train';
-        recommendation = `The metro/train is a great option here — affordable and avoids traffic.`;
+        recommendation = `${trainLabel} is a solid option between ${origName} and ${destName} — affordable and avoids traffic.`;
       } else {
         recommendedId = 'taxi';
-        recommendation = `A taxi or rideshare is the most convenient way to get between these two spots.`;
+        recommendation = `A taxi or rideshare is the easiest way from ${origName} to ${destName}.`;
       }
     }
 
