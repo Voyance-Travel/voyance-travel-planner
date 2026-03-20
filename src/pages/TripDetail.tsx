@@ -1957,7 +1957,7 @@ export default function TripDetail() {
       console.error('[TripDetail] Undo date change error:', err);
       toast.error('Failed to undo date change');
     }
-  }, [tripId, queryClient]);
+  }, [tripId, trip, queryClient]);
 
   // Handle applying hotel-based swap suggestions to itinerary
   const handleApplySwaps = useCallback((swaps: SwapSuggestion[]) => {

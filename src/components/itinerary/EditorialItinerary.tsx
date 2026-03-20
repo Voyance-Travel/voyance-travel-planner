@@ -5392,7 +5392,7 @@ export function EditorialItinerary({
                         onClick={handleUndoDate}
                         isLoading={isUndoingDate}
                         showLabel
-                        label="Undo Dates"
+                        label="Undo Date Change"
                       />
                     )}
                     {canUndoDay && (
