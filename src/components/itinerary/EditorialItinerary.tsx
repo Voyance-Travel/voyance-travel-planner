@@ -6922,6 +6922,28 @@ export function EditorialItinerary({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Remove Activity Confirmation Dialog */}
+      <AlertDialog open={!!pendingRemove} onOpenChange={(open) => { if (!open) setPendingRemove(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove activity?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove <strong>{pendingRemove?.activityTitle}</strong> from Day {pendingRemove ? pendingRemove.dayIndex + 1 : ''}? You can undo this action.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmActivityRemove}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       
       <HotelGalleryModal
         isOpen={hotelGalleryOpen}
