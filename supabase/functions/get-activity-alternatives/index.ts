@@ -19,7 +19,7 @@ interface RequestBody {
   searchQuery?: string;
   excludeActivities?: string[];
   suggestionMode?: 'similar' | 'different' | 'filter';
-  tripId?: string; // Used to fetch trip owner's DNA
+  tripId?: string;
 }
 
 interface AlternativeActivity {
@@ -44,14 +44,7 @@ serve(async (req) => {
     const body: RequestBody = await req.json();
     const { currentActivity, destination, searchQuery, excludeActivities, suggestionMode, tripId } = body;
 
-    console.log('[get-activity-alternatives] Request:', {
-      activity: currentActivity.name,
-      destination,
-      searchQuery,
-      suggestionMode,
-      tripId,
-      excludeCount: excludeActivities?.length || 0,
-    });
+    console.log('[alt] mode=%s query=%s activity=%s', suggestionMode, searchQuery, currentActivity.name);
 
     // Fetch Traveler DNA for personalized alternatives
     let travelerDNA: TravelerDNA | null = null;
@@ -89,7 +82,7 @@ serve(async (req) => {
           travelerDNA = dnaResult.dna;
         }
       } catch (dnaError) {
-        console.warn('[get-activity-alternatives] DNA fetch failed:', dnaError);
+        console.warn('[alt] DNA fetch failed:', dnaError);
       }
     }
 
@@ -99,7 +92,10 @@ serve(async (req) => {
     
     if (LOVABLE_API_KEY) {
       try {
-        // Race AI call against a 12s timeout — fall back to templates if too slow
+        // Use AbortController so we can truly cancel the AI fetch on timeout
+        const aiAbort = new AbortController();
+        const timer = setTimeout(() => aiAbort.abort(), 12_000);
+
         const aiPromise = getAIAlternatives(
           currentActivity, 
           destination, 
@@ -107,23 +103,29 @@ serve(async (req) => {
           LOVABLE_API_KEY, 
           excludeActivities,
           suggestionMode,
-          travelerDNA
+          travelerDNA,
+          aiAbort.signal,
         );
-        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 12000));
-        const result = await Promise.race([aiPromise, timeoutPromise]);
-        
-        if (result) {
-          alternatives = result;
-        } else {
-          console.warn('[get-activity-alternatives] AI timed out, using templates');
+
+        try {
+          alternatives = await aiPromise;
+          clearTimeout(timer);
+          console.log('[alt] AI ok, %d results', alternatives.length);
+        } catch (aiErr) {
+          clearTimeout(timer);
+          if (aiAbort.signal.aborted) {
+            console.warn('[alt] AI timed out, using templates');
+          } else {
+            console.error('[alt] AI error, using templates:', aiErr);
+          }
           alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
         }
-      } catch (aiError) {
-        console.error('[get-activity-alternatives] AI fallback to templates:', aiError);
+      } catch (outerErr) {
+        console.error('[alt] Outer AI error:', outerErr);
         alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
       }
     } else {
-      console.log('[get-activity-alternatives] No API key, using templates');
+      console.log('[alt] No API key, using templates');
       alternatives = generateTemplateAlternatives(currentActivity, destination, searchQuery, suggestionMode);
     }
 
@@ -144,7 +146,7 @@ serve(async (req) => {
     );
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[get-activity-alternatives] Error:', errorMessage);
+    console.error('[alt] Error:', errorMessage);
     return new Response(
       JSON.stringify({ 
         success: false, 
@@ -166,7 +168,8 @@ async function getAIAlternatives(
   apiKey?: string,
   excludeActivities?: string[],
   suggestionMode?: string,
-  travelerDNA?: TravelerDNA | null
+  travelerDNA?: TravelerDNA | null,
+  signal?: AbortSignal,
 ): Promise<AlternativeActivity[]> {
   const locationName = destination || 'the destination';
   const activityType = activity.type || 'activity';
@@ -175,15 +178,12 @@ async function getAIAlternatives(
     ? `\n\nIMPORTANT: Do NOT suggest any of these places (already in the traveler's itinerary):\n- ${excludeActivities.join('\n- ')}`
     : '';
 
-  // ==========================================================================
-  // PHASE 9: Build DNA context for personalized suggestions
-  // ==========================================================================
+  // Build DNA context for personalized suggestions
   let dnaContext = '';
   if (travelerDNA) {
     const dnaSummary = buildCompactDNASummary(travelerDNA);
     dnaContext = `\n\n## TRAVELER PROFILE\n${dnaSummary}\n\nALL suggestions must align with this traveler's preferences and style.`;
     
-    // Add specific guidance based on traits
     const guidelines: string[] = [];
     if (Math.abs(travelerDNA.traits.adventure) >= 4) {
       guidelines.push(travelerDNA.traits.adventure < 0 
@@ -221,7 +221,6 @@ async function getAIAlternatives(
   let systemPrompt: string;
 
   if (suggestionMode === 'different' || searchQuery === 'completely_different') {
-    // User wants something completely different
     userPrompt = `The traveler has "${activity.name}" (${activityType}) in their itinerary but wants something COMPLETELY DIFFERENT.
     
 Suggest 4 activities in ${locationName} that are:
@@ -238,7 +237,6 @@ Think outside the box - if they have a museum, suggest a food tour. If they have
 Each suggestion should feel like a fresh, exciting alternative that matches the traveler's profile.`;
 
   } else if (searchQuery && searchQuery !== 'completely_different') {
-    // User has a specific filter/category in mind
     userPrompt = `Find 4 activities matching: "${searchQuery}" in ${locationName}.
 
 The traveler is replacing "${activity.name}" and looking for something specific.
@@ -253,7 +251,6 @@ Include a mix of:
 Be specific with real place names and locations.`;
 
   } else {
-    // Default: similar alternatives
     userPrompt = `Find 4 alternative activities SIMILAR to "${activity.name}" (${activityType}) in ${locationName}.
 
 Suggest activities that:
@@ -272,12 +269,14 @@ Include:
 Be specific with real place names when possible.`;
   }
 
+  // Pass signal to fetch so the request is truly aborted on timeout
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
+    signal,
     body: JSON.stringify({
       model: "google/gemini-2.5-flash-lite",
       messages: [
@@ -327,7 +326,7 @@ Be specific with real place names when possible.`;
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('[get-activity-alternatives] AI error:', response.status, errorText);
+    console.error('[alt] AI error:', response.status, errorText);
     throw new Error(`AI request failed: ${response.status}`);
   }
 
@@ -356,7 +355,6 @@ function generateTemplateAlternatives(
   const activityType = activity.type?.toLowerCase() || 'activity';
   const locationName = destination || 'the area';
 
-  // Different alternatives (completely different experiences)
   if (suggestionMode === 'different' || searchQuery === 'completely_different') {
     const differentOptions: AlternativeActivity[] = [
       {
@@ -411,7 +409,6 @@ function generateTemplateAlternatives(
     return differentOptions;
   }
 
-  // Search/filter based alternatives
   if (searchQuery) {
     const query = searchQuery.toLowerCase();
     let category = 'activity';
@@ -492,7 +489,6 @@ function generateTemplateAlternatives(
     ];
   }
 
-  // Default: similar alternatives based on current activity type
   const categoryTemplates: Record<string, AlternativeActivity[]> = {
     dining: [
       {
@@ -646,7 +642,6 @@ function generateTemplateAlternatives(
     ],
   };
 
-  // Return matching category or default templates
   const templates = categoryTemplates[activityType] || [
     {
       id: `alt-default-1-${Date.now()}`,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Search, Star, MapPin, Clock, DollarSign, 
@@ -27,7 +27,7 @@ interface ActivityAlternativesDrawerProps {
   onClose: () => void;
   activity: ItineraryActivity | null;
   destination?: string;
-  existingActivities?: string[]; // Names of activities already in the itinerary
+  existingActivities?: string[];
   onSelectAlternative: (activity: ItineraryActivity) => void;
 }
 
@@ -51,12 +51,10 @@ interface AlternativeActivity {
 const normalizeCategory = (category: string): ItineraryActivity['type'] => {
   const categoryLower = (category || '').toLowerCase();
   
-  // Direct matches
   if (['transportation', 'accommodation', 'dining', 'cultural', 'activity', 'relaxation', 'shopping'].includes(categoryLower)) {
     return categoryLower as ItineraryActivity['type'];
   }
   
-  // Map common variations
   if (['restaurant', 'food', 'cafe', 'bar', 'eating', 'breakfast', 'lunch', 'dinner'].some(k => categoryLower.includes(k))) {
     return 'dining';
   }
@@ -76,7 +74,6 @@ const normalizeCategory = (category: string): ItineraryActivity['type'] => {
     return 'accommodation';
   }
   
-  // Default to 'activity' for sightseeing, adventure, outdoor, etc.
   return 'activity';
 };
 
@@ -94,6 +91,9 @@ const QUICK_SUGGESTIONS = [
   { label: 'Relaxation', icon: Heart, query: 'spa wellness relaxation massage' },
 ];
 
+// Hard client-side timeout for foreground requests (ms)
+const FOREGROUND_TIMEOUT_MS = 15_000;
+
 export default function ActivityAlternativesDrawer({
   open,
   onClose,
@@ -110,202 +110,261 @@ export default function ActivityAlternativesDrawer({
   const [loadingType, setLoadingType] = useState<'initial' | 'similar' | 'different' | 'filter' | 'search'>('initial');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Track active request to cancel stale ones
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Sequence guard: only the latest foreground request ID is honoured
+  const fgRequestIdRef = useRef(0);
+  // Separate sequence for background preload
+  const bgRequestIdRef = useRef(0);
+  // Track whether user has interacted with filters/search (suppresses bg preload)
+  const userInteractedRef = useRef(false);
 
-  // Cancel any in-flight request
-  const cancelPendingRequest = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+  /** Invoke edge function with a hard timeout. Returns null if timed out. */
+  const invokeWithTimeout = useCallback(async (
+    body: Record<string, unknown>,
+    timeoutMs: number,
+  ): Promise<Record<string, unknown> | null> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
+        body,
+      });
+
+      clearTimeout(timer);
+      if (controller.signal.aborted) return null;
+      if (error) throw error;
+      return data as Record<string, unknown>;
+    } catch (err) {
+      clearTimeout(timer);
+      if ((err as Error)?.name === 'AbortError' || controller.signal.aborted) {
+        return null; // timed out
+      }
+      throw err;
     }
-  };
+  }, []);
 
-  // Fetch both similar and different alternatives when drawer opens
+  // Reset state when drawer closes
   useEffect(() => {
     if (open && activity) {
+      userInteractedRef.current = false;
       fetchInitialAlternatives();
     } else {
-      cancelPendingRequest();
+      fgRequestIdRef.current++;
+      bgRequestIdRef.current++;
       setSimilarAlternatives([]);
       setDifferentAlternatives([]);
       setActiveFilter(null);
       setSearchQuery('');
+      setIsLoading(false);
     }
-    return () => cancelPendingRequest();
+    return () => {
+      fgRequestIdRef.current++;
+      bgRequestIdRef.current++;
+    };
   }, [open, activity]);
 
-  const invokeWithCancel = async (body: Record<string, unknown>) => {
-    cancelPendingRequest();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
-      body,
-    });
-
-    // If this request was cancelled, don't process result
-    if (controller.signal.aborted) return null;
-
-    if (error) throw error;
-    return data;
-  };
+  const buildBaseBody = useCallback(() => {
+    if (!activity) return null;
+    return {
+      currentActivity: {
+        id: activity.id,
+        name: activity.title,
+        type: activity.type,
+        description: activity.description,
+        time: activity.time,
+      },
+      destination,
+      excludeActivities: existingActivities,
+    };
+  }, [activity, destination, existingActivities]);
 
   const fetchInitialAlternatives = async () => {
-    if (!activity) return;
-    
+    const baseBody = buildBaseBody();
+    if (!baseBody) return;
+
+    // Bump foreground request ID — any older request results will be ignored
+    const requestId = ++fgRequestIdRef.current;
+
     setIsLoading(true);
     setLoadingType('initial');
     setSimilarAlternatives([]);
     setDifferentAlternatives([]);
 
     try {
-      // Single call for similar alternatives first (fast), then different in background
-      const baseBody = {
-        currentActivity: {
-          id: activity.id,
-          name: activity.title,
-          type: activity.type,
-          description: activity.description,
-          time: activity.time,
-        },
-        destination,
-        excludeActivities: existingActivities,
-      };
+      const data = await invokeWithTimeout(
+        { ...baseBody, searchQuery: null, suggestionMode: 'similar' },
+        FOREGROUND_TIMEOUT_MS,
+      );
 
-      const similarData = await invokeWithCancel({
-        ...baseBody,
-        searchQuery: null,
-        suggestionMode: 'similar',
-      });
+      // Stale check
+      if (fgRequestIdRef.current !== requestId) return;
 
-      if (similarData?.alternatives) {
+      if (data?.alternatives) {
         setSimilarAlternatives(
-          similarData.alternatives.map((a: AlternativeActivity) => ({
+          (data.alternatives as AlternativeActivity[]).map((a) => ({
             ...a,
             suggestionType: 'similar' as const,
           }))
         );
       }
-      
-      // Loading done for the user — fetch "different" in background without blocking
-      setIsLoading(false);
-      
-      const differentData = await invokeWithCancel({
-        ...baseBody,
-        searchQuery: 'completely_different',
-        suggestionMode: 'different',
-      });
+    } catch (error) {
+      if (fgRequestIdRef.current !== requestId) return;
+      console.error('Error fetching alternatives:', error);
+      toast.error('Failed to load suggestions');
+    } finally {
+      if (fgRequestIdRef.current === requestId) {
+        setIsLoading(false);
+      }
+    }
 
-      if (differentData?.alternatives) {
+    // Background preload "different" — separate sequence, does not affect loading state
+    fetchDifferentInBackground(baseBody);
+  };
+
+  /** Background preload for "different" alternatives. Never touches isLoading. */
+  const fetchDifferentInBackground = async (baseBody: Record<string, unknown>) => {
+    const bgId = ++bgRequestIdRef.current;
+
+    try {
+      const data = await invokeWithTimeout(
+        { ...baseBody, searchQuery: 'completely_different', suggestionMode: 'different' },
+        FOREGROUND_TIMEOUT_MS,
+      );
+
+      // Ignore if user has already interacted or a newer bg request was issued
+      if (bgRequestIdRef.current !== bgId || userInteractedRef.current) return;
+
+      if (data?.alternatives) {
         setDifferentAlternatives(
-          differentData.alternatives.map((a: AlternativeActivity) => ({
+          (data.alternatives as AlternativeActivity[]).map((a) => ({
             ...a,
             suggestionType: 'different' as const,
           }))
         );
       }
-    } catch (error) {
-      if ((error as Error)?.name === 'AbortError') return;
-      console.error('Error fetching alternatives:', error);
-      toast.error('Failed to load suggestions');
-      setIsLoading(false);
+    } catch {
+      // Background failure is silent
     }
   };
 
   const handleQuickFilter = async (suggestion: typeof QUICK_SUGGESTIONS[0]) => {
     if (!activity) return;
+    userInteractedRef.current = true;
 
     // If clicking the same filter, deselect it and reload initial
     if (activeFilter === suggestion.label) {
       setActiveFilter(null);
+      userInteractedRef.current = false;
       fetchInitialAlternatives();
       return;
     }
 
     setActiveFilter(suggestion.label);
+    const requestId = ++fgRequestIdRef.current;
     setIsLoading(true);
     setLoadingType('filter');
 
     try {
-      const data = await invokeWithCancel({
-        currentActivity: {
-          id: activity.id,
-          name: activity.title,
-          type: activity.type,
-          description: activity.description,
-          time: activity.time,
+      const data = await invokeWithTimeout(
+        {
+          currentActivity: {
+            id: activity.id,
+            name: activity.title,
+            type: activity.type,
+            description: activity.description,
+            time: activity.time,
+          },
+          destination,
+          searchQuery: suggestion.query,
+          excludeActivities: existingActivities,
+          suggestionMode: suggestion.type || 'filter',
         },
-        destination,
-        searchQuery: suggestion.query,
-        excludeActivities: existingActivities,
-        suggestionMode: suggestion.type || 'filter',
-      });
+        FOREGROUND_TIMEOUT_MS,
+      );
 
-      if (!data) return; // Request was cancelled
+      if (fgRequestIdRef.current !== requestId) return;
+
+      if (!data) {
+        // Timed out — show a toast instead of spinning forever
+        toast.info('Taking longer than usual — showing quick suggestions');
+        return;
+      }
 
       if (data?.alternatives) {
         if (suggestion.type === 'similar') {
-          setSimilarAlternatives(data.alternatives);
+          setSimilarAlternatives(data.alternatives as AlternativeActivity[]);
           setDifferentAlternatives([]);
         } else if (suggestion.type === 'different') {
           setSimilarAlternatives([]);
-          setDifferentAlternatives(data.alternatives);
+          setDifferentAlternatives(data.alternatives as AlternativeActivity[]);
         } else {
-          setSimilarAlternatives(data.alternatives);
+          setSimilarAlternatives(data.alternatives as AlternativeActivity[]);
           setDifferentAlternatives([]);
         }
       }
     } catch (error) {
-      if ((error as Error)?.name === 'AbortError') return;
+      if (fgRequestIdRef.current !== requestId) return;
       console.error('Error:', error);
       toast.error('Failed to load suggestions');
     } finally {
-      setIsLoading(false);
+      if (fgRequestIdRef.current === requestId) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleCustomSearch = async () => {
     if (!activity || !searchQuery.trim()) return;
+    userInteractedRef.current = true;
     
     setActiveFilter(null);
+    const requestId = ++fgRequestIdRef.current;
     setIsLoading(true);
     setLoadingType('search');
 
     try {
-      const data = await invokeWithCancel({
-        currentActivity: {
-          id: activity.id,
-          name: activity.title,
-          type: activity.type,
-          description: activity.description,
-          time: activity.time,
+      const data = await invokeWithTimeout(
+        {
+          currentActivity: {
+            id: activity.id,
+            name: activity.title,
+            type: activity.type,
+            description: activity.description,
+            time: activity.time,
+          },
+          destination,
+          searchQuery: searchQuery.trim(),
+          excludeActivities: existingActivities,
+          suggestionMode: 'search',
         },
-        destination,
-        searchQuery: searchQuery.trim(),
-        excludeActivities: existingActivities,
-        suggestionMode: 'search',
-      });
+        FOREGROUND_TIMEOUT_MS,
+      );
 
-      if (!data) return; // cancelled
+      if (fgRequestIdRef.current !== requestId) return;
+
+      if (!data) {
+        toast.info('Taking longer than usual — try again shortly');
+        return;
+      }
 
       if (data?.alternatives) {
-        setSimilarAlternatives(data.alternatives);
+        setSimilarAlternatives(data.alternatives as AlternativeActivity[]);
         setDifferentAlternatives([]);
       }
     } catch (error) {
-      if ((error as Error)?.name === 'AbortError') return;
+      if (fgRequestIdRef.current !== requestId) return;
       console.error('Error:', error);
       toast.error('Failed to search');
     } finally {
-      setIsLoading(false);
+      if (fgRequestIdRef.current === requestId) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleSelectAlternative = (alt: AlternativeActivity) => {
     setSelectedId(alt.id);
     
-    // Track the swap for personalization learning
     if (activity) {
       trackActivitySwap(
         activity.id,
@@ -315,7 +374,7 @@ export default function ActivityAlternativesDrawer({
         alt.id,
         alt.name,
         alt.category,
-        [], // New activity tags will be populated by the AI
+        [],
         destination
       );
     }
@@ -338,7 +397,6 @@ export default function ActivityAlternativesDrawer({
       tips: alt.whyRecommended || undefined,
     };
 
-    // Slight delay for visual feedback, then swap
     setTimeout(() => {
       onSelectAlternative(newActivity);
       toast.success(`Swapped to "${alt.name}"`);
@@ -499,7 +557,6 @@ export default function ActivityAlternativesDrawer({
 
         {/* Quick suggestion chips */}
         <div className="p-4 border-b border-border">
-          <p className="text-xs text-muted-foreground mb-3">Or choose a category:</p>
           <div className="flex flex-wrap gap-2">
             {QUICK_SUGGESTIONS.map((suggestion) => {
               const Icon = suggestion.icon;
@@ -507,14 +564,11 @@ export default function ActivityAlternativesDrawer({
               return (
                 <Button
                   key={suggestion.label}
-                  variant={isActive ? "default" : "outline"}
+                  variant={isActive ? 'default' : 'outline'}
                   size="sm"
-                  className={`
-                    gap-1.5 text-xs h-8
-                    ${isActive ? '' : 'hover:bg-muted'}
-                  `}
                   onClick={() => handleQuickFilter(suggestion)}
                   disabled={isLoading}
+                  className="gap-1.5 text-xs h-8"
                 >
                   <Icon className="w-3.5 h-3.5" />
                   {suggestion.label}
@@ -524,71 +578,55 @@ export default function ActivityAlternativesDrawer({
           </div>
         </div>
 
-        <ScrollArea className="h-[calc(100vh-380px)]">
-          <div className="p-4 space-y-6">
+        {/* Results */}
+        <ScrollArea className="flex-1 h-[calc(100vh-320px)]">
+          <div className="p-4 space-y-3">
             {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground mt-3">
-                  {loadingType === 'initial' 
-                    ? 'Finding the best alternatives...' 
-                    : 'Searching for options...'}
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Loader2 className="w-8 h-8 animate-spin mb-3 text-primary" />
+                <p className="text-sm font-medium">
+                  {loadingType === 'initial' && 'Finding the best alternatives...'}
+                  {loadingType === 'filter' && 'Searching for options...'}
+                  {loadingType === 'search' && 'Searching...'}
+                </p>
+                <p className="text-xs text-muted-foreground/70 mt-1">
+                  Powered by AI personalization
                 </p>
               </div>
             ) : !hasAlternatives ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Search className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>No alternatives found</p>
-                <p className="text-sm mt-1">Try a different filter</p>
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Sparkles className="w-8 h-8 mb-3 opacity-50" />
+                <p className="text-sm">No alternatives found</p>
+                <p className="text-xs mt-1">Try a different search or filter</p>
               </div>
             ) : (
-              <>
-                {/* Similar Activities Section */}
+              <AnimatePresence mode="popLayout">
+                {/* Similar alternatives section */}
                 {similarAlternatives.length > 0 && (
                   <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <ArrowRightLeft className="w-4 h-4 text-primary" />
-                      <h3 className="text-sm font-medium text-foreground">
-                        {activeFilter && activeFilter !== 'Similar' && activeFilter !== 'Something Different'
-                          ? activeFilter
-                          : 'Similar Activities'}
+                    {!activeFilter && differentAlternatives.length > 0 && (
+                      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                        Similar Options
                       </h3>
-                      <Badge variant="secondary" className="text-xs">
-                        {similarAlternatives.length}
-                      </Badge>
-                    </div>
-                    <AnimatePresence>
-                      <div className="space-y-3">
-                        {similarAlternatives.map((alt, index) => 
-                          renderAlternativeCard(alt, index)
-                        )}
-                      </div>
-                    </AnimatePresence>
+                    )}
+                    {similarAlternatives.map((alt, i) => renderAlternativeCard(alt, i))}
                   </div>
                 )}
 
-                {/* Different Activities Section */}
+                {/* Different alternatives section */}
                 {differentAlternatives.length > 0 && (
                   <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Shuffle className="w-4 h-4 text-accent-foreground" />
-                      <h3 className="text-sm font-medium text-foreground">
+                    {!activeFilter && similarAlternatives.length > 0 && (
+                      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 mt-4">
                         Something Different
                       </h3>
-                      <Badge variant="outline" className="text-xs">
-                        {differentAlternatives.length}
-                      </Badge>
-                    </div>
-                    <AnimatePresence>
-                      <div className="space-y-3">
-                        {differentAlternatives.map((alt, index) => 
-                          renderAlternativeCard(alt, index + similarAlternatives.length)
-                        )}
-                      </div>
-                    </AnimatePresence>
+                    )}
+                    {differentAlternatives.map((alt, i) => 
+                      renderAlternativeCard(alt, i + similarAlternatives.length)
+                    )}
                   </div>
                 )}
-              </>
+              </AnimatePresence>
             )}
           </div>
         </ScrollArea>
