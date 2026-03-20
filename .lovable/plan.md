@@ -1,57 +1,48 @@
 
-Fix: Make Swap Activity category filters resolve reliably instead of spinning indefinitely
 
-What’s going wrong
+## Fix: "Undo Dates" restores stale checkpoint instead of last change
 
-I traced the issue to the swap drawer flow in `src/components/planner/ActivityAlternativesDrawer.tsx` and the `get-activity-alternatives` backend function.
+### Problem
 
-Root causes:
-1. The drawer creates an `AbortController`, but the signal is never passed into the request. So category clicks do not truly cancel the previous request — they only mark a local flag.
-2. There is no hard client-side timeout around `supabase.functions.invoke(...)`, so if a request stalls, `isLoading` can stay `true` forever and the drawer remains stuck on “Searching for options...”.
-3. The initial drawer load fetches “similar” results, then starts a background “different” request using the same request helper. That means background preload and user-triggered category clicks compete for the same request lifecycle and can race each other.
-4. In `supabase/functions/get-activity-alternatives/index.ts`, the AI call is raced against a timeout, but the underlying fetch itself is not actually aborted. That makes fallback less reliable under slow AI/network conditions.
+The `trip_date_versions` table accumulates snapshots across sessions but never cleans up old ones. When the user clicks "Undo Dates," `restoreTripDateVersion` pops the **most recent** row — which is the snapshot saved *before* the last change. That's correct for one undo. But old snapshots from previous sessions remain in the table, so after the first undo succeeds, clicking again jumps back to an arbitrarily old state (e.g. Jul 8–12 from a prior session).
 
-Implementation plan
+The core issue: **undo does not save the current state before restoring.** A proper undo should push the current state onto the stack so that "redo" or repeated undo works predictably. Without that, the pop-only behavior makes it a one-way time machine into old checkpoints.
 
-1. Stabilize request handling in `src/components/planner/ActivityAlternativesDrawer.tsx`
-- Replace the current “single abort controller + local aborted check” approach with explicit request IDs / sequence guards.
-- Add a dedicated request wrapper with a hard timeout for foreground actions:
-  - initial similar load
-  - category chip filters
-  - custom search
-- Ensure every foreground request always exits loading state in `finally`, even on timeout/stall.
+Additionally, old snapshots are never pruned, so `canUndoDateChange` returns `true` even when the remaining versions are stale session artifacts.
 
-2. Separate background preload from interactive filter requests
-- Keep the fast “similar” load first.
-- Move the “different” preload into its own background path so it does not share the same active request state as chip clicks.
-- Ignore preload responses if the user has already selected a filter or started a search.
-- Do not let background preload re-enable or block the main loading spinner.
+### Fix
 
-3. Add a guaranteed fast fallback path
-- If a filter/search request exceeds the timeout, immediately fall back to template alternatives instead of leaving the spinner up.
-- Show a lightweight toast/message only if needed, e.g. “Showing fast suggestions instead.”
+**1. `src/pages/TripDetail.tsx` — Save current state before restoring (lines 1905-1950)**
 
-4. Harden `supabase/functions/get-activity-alternatives/index.ts`
-- Add a real `AbortController` to the AI gateway `fetch(...)` and pass `signal`.
-- Clear timeout properly and abort the fetch when the limit is reached.
-- Keep template fallback, but make it deterministic for slow category/search mode requests.
-- Add concise logs for:
-  - request mode
-  - query/filter
-  - whether AI succeeded, timed out, or fell back to templates
+Before calling `restoreTripDateVersion`, snapshot the *current* trip dates so the user can undo-the-undo. This mirrors how `restoreVersion` in the per-day system works (it inserts a new version before restoring).
 
-Files to update
-- `src/components/planner/ActivityAlternativesDrawer.tsx`
-- `supabase/functions/get-activity-alternatives/index.ts`
+```
+handleUndoDateChange:
+  1. Save current dates as a new snapshot (action: 'undo_restore')
+  2. Then call restoreTripDateVersion (which pops the PREVIOUS snapshot)
+```
 
-Expected result
-- Category chip clicks resolve quickly instead of hanging.
-- The spinner always stops.
-- Slow AI responses degrade gracefully into fallback alternatives.
-- Background preload no longer interferes with user-selected filters.
+But this creates infinite undo loops. Better approach: **limit to single undo** — after restoring, delete ALL remaining snapshots for this trip so `canUndoDateChange` returns false and the button disappears.
 
-Validation
-- Open Swap Activity and confirm initial results load.
-- Click multiple category chips in sequence and verify only the latest one wins.
-- Confirm no indefinite “Finding the best alternatives...” / “Searching for options...” state.
-- Confirm slow backend responses fall back to usable alternatives instead of freezing the panel.
+**2. `src/services/tripDateVersionHistory.ts` — Add cleanup after restore**
+
+After the pop-and-restore in `restoreTripDateVersion`, delete all remaining versions for this trip older than the one just restored. This prevents stale session artifacts from being accessible.
+
+```typescript
+// After deleting the restored version, also clean up older ones
+await supabase
+  .from('trip_date_versions')
+  .delete()
+  .eq('trip_id', tripId)
+  .lt('created_at', version.created_at);
+```
+
+**3. `src/components/itinerary/EditorialItinerary.tsx` — Update button label (line ~1925 area)**
+
+Change "Undo Dates" label to "Undo Date Change" to better communicate single-step undo semantics.
+
+### Scope
+- `src/services/tripDateVersionHistory.ts` — prune old snapshots after restore
+- `src/pages/TripDetail.tsx` — save current state before undo so the restore is reversible, then clean up
+- Minor label tweak in `EditorialItinerary.tsx`
+
