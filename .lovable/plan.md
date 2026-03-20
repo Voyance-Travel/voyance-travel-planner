@@ -1,48 +1,55 @@
 
 
-## Fix: "Undo Dates" restores stale checkpoint instead of last change
+## Analysis: Placeholder Restaurants — Why They Happen and Why Tapping Does Nothing
 
-### Problem
+### Why placeholders appear (especially at end of itinerary)
 
-The `trip_date_versions` table accumulates snapshots across sessions but never cleans up old ones. When the user clicks "Undo Dates," `restoreTripDateVersion` pops the **most recent** row — which is the snapshot saved *before* the last change. That's correct for one undo. But old snapshots from previous sessions remain in the table, so after the first undo succeeds, clicking again jumps back to an arbitrarily old state (e.g. Jul 8–12 from a prior session).
+The system has a two-layer meal guard:
 
-The core issue: **undo does not save the current state before restoring.** A proper undo should push the current state onto the stack so that "redo" or repeated undo works predictably. Without that, the pop-only behavior makes it a one-way time machine into old checkpoints.
+1. **Backend (day-validation.ts)**: After AI generates each day, a "Final Guard" checks if all required meals (breakfast, lunch, dinner) are present. If any are missing, it tries to inject a real venue from the pre-generated restaurant pool (~40 venues per city, fetched at Stage 1.95). If the pool is **exhausted** (all venues already used on earlier days), it falls back to a generic placeholder like "Breakfast at a local patisserie."
 
-Additionally, old snapshots are never pruned, so `canUndoDateChange` returns `true` even when the remaining versions are stale session artifacts.
+2. **Client (mealGuard.ts)**: A second safety net runs client-side. If somehow a day still lacks a required meal after backend processing, it injects placeholders with `needsRefinement: true`.
 
-### Fix
+**Why later days get placeholders**: The restaurant pool is ~40 venues. A 7-day trip needs ~21 meals (3/day). If some venues get filtered (chains, duplicates, wrong meal type), the pool runs dry by day 5-6. The `usedRestaurants` tracking correctly prevents duplicates, but this means later days hit the generic fallback path.
 
-**1. `src/pages/TripDetail.tsx` — Save current state before restoring (lines 1905-1950)**
+### Why tapping does nothing
 
-Before calling `restoreTripDateVersion`, snapshot the *current* trip dates so the user can undo-the-undo. This mirrors how `restoreVersion` in the per-day system works (it inserts a new version before restoring).
+The placeholder sets:
+- `tips: "This is a placeholder — tap to get a specific restaurant recommendation for this breakfast."`
+- `needsRefinement: true`
 
-```
-handleUndoDateChange:
-  1. Save current dates as a new snapshot (action: 'undo_restore')
-  2. Then call restoreTripDateVersion (which pops the PREVIOUS snapshot)
-```
+But **no UI component reads `needsRefinement`**. The `tips` field renders as static italic text inside `VoyanceInsight` or the inline tip display in `EditorialItinerary.tsx`. There is no click handler, no modal trigger, no API call — the "tap to get" CTA is a dead promise.
 
-But this creates infinite undo loops. Better approach: **limit to single undo** — after restoring, delete ALL remaining snapshots for this trip so `canUndoDateChange` returns false and the button disappears.
+### Fix Plan (2 parts)
 
-**2. `src/services/tripDateVersionHistory.ts` — Add cleanup after restore**
+**Part 1: Make placeholder tap functional — wire `needsRefinement` to the Swap drawer**
 
-After the pop-and-restore in `restoreTripDateVersion`, delete all remaining versions for this trip older than the one just restored. This prevents stale session artifacts from being accessible.
+File: `src/components/itinerary/EditorialItinerary.tsx`
 
-```typescript
-// After deleting the restored version, also clean up older ones
-await supabase
-  .from('trip_date_versions')
-  .delete()
-  .eq('trip_id', tripId)
-  .lt('created_at', version.created_at);
-```
+- Detect activities with `needsRefinement === true` (or tags containing `'needs-refinement'`)
+- Replace the static tip text with a clickable CTA button: "Get a restaurant recommendation"
+- On click, open the existing `ActivityAlternativesDrawer` pre-filtered to dining/restaurant category for that meal type
+- This reuses existing infrastructure — no new edge function needed
 
-**3. `src/components/itinerary/EditorialItinerary.tsx` — Update button label (line ~1925 area)**
+**Part 2: Reduce placeholder frequency — increase restaurant pool size**
 
-Change "Undo Dates" label to "Undo Date Change" to better communicate single-step undo semantics.
+File: `supabase/functions/generate-itinerary/index.ts` (pool generation)
+
+- Increase pool target from ~40 to ~60 venues per city for trips ≥5 days
+- Scale pool size to `max(40, totalDays * 5)` so longer trips have enough runway
+- This is a minor parameter tweak in the pool generation stage
+
+**Part 3: Fix the misleading tip text for non-interactive state**
+
+Files: `src/utils/mealGuard.ts`, `supabase/functions/generate-itinerary/day-validation.ts`
+
+- Change the tip text from "tap to get a specific restaurant recommendation" to something actionable that matches the new CTA, or a neutral message when no action is wired
+- For the backend guard with real venues: keep current tip ("Recommended by our venue database")
+- For placeholder fallbacks: use "Tap 'Find Restaurant' below to get a personalized recommendation"
 
 ### Scope
-- `src/services/tripDateVersionHistory.ts` — prune old snapshots after restore
-- `src/pages/TripDetail.tsx` — save current state before undo so the restore is reversible, then clean up
-- Minor label tweak in `EditorialItinerary.tsx`
+- `src/components/itinerary/EditorialItinerary.tsx` — add clickable CTA for `needsRefinement` activities
+- `src/utils/mealGuard.ts` — update tip text
+- `supabase/functions/generate-itinerary/day-validation.ts` — update tip text
+- `supabase/functions/generate-itinerary/index.ts` — scale pool size to trip length
 
