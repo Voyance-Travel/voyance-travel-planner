@@ -1935,6 +1935,7 @@ export function EditorialItinerary({
 
   const [editActivityModal, setEditActivityModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
   const [timeEditModal, setTimeEditModal] = useState<{ dayIndex: number; activityIndex: number; activity: EditorialActivity } | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<{ dayIndex: number; activityId: string; activityTitle: string } | null>(null);
   const [pendingCascade, setPendingCascade] = useState<{
     dayIndex: number;
     activityIndex: number;
