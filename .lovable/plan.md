@@ -1,23 +1,24 @@
 
 
-## Fix: Date headers show interval count (nights) instead of inclusive day count
+## Fix: Add confirmation dialog for activity removal + ensure copy toast is visible
 
 ### Problem
-"Jul 1–5" shows as "4 days" instead of "5 days" in two components. They calculate `endDate - startDate` which gives nights (intervals), not calendar days.
+1. **Remove** — Clicking "Remove" in the ⋯ menu immediately deletes the activity with no confirmation. The only safety net is undo (via version snapshots).
+2. **Copy to Day** — Already has a toast (`toast.success('Copied to Day X')` at line 4077), so this part is actually working. The user may not have noticed it.
 
 ### Changes
 
-**1. `src/components/planner/ItineraryPreviewHeader.tsx` (line 32-33)**
-Add `+1` to the duration calculation:
-```typescript
-const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-```
+**File: `src/components/itinerary/EditorialItinerary.tsx`**
 
-**2. `src/components/booking/DestinationWelcome.tsx` (line 34)**
-Same fix — add `+1` for inclusive day count:
-```typescript
-return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-```
+1. **Add state for pending removal** — Add a `pendingRemove` state (`{ dayIndex: number; activityId: string; activityTitle: string } | null`) near the other dialog states (around line 3500–3600).
 
-Both align with the existing convention used in `TripStatusCards.tsx`, `useFeedbackTrigger.ts`, and the itinerary generator where `differenceInDays + 1` is the standard.
+2. **Replace immediate delete with confirmation** — Change `handleActivityRemove` (line 4080) to set `pendingRemove` state instead of immediately deleting. Create a new `confirmActivityRemove` function that contains the current delete logic (lines 4081–4112).
+
+3. **Add AlertDialog** — Add a confirmation dialog (reusing the already-imported `AlertDialog` components) near the other dialogs (around line 6834). Content:
+   - Title: "Remove activity?"
+   - Description: "Remove **{activityTitle}** from Day {dayNumber}? You can undo this action."
+   - Cancel button + destructive "Remove" button that calls `confirmActivityRemove`
+
+### Scope
+Single file: `src/components/itinerary/EditorialItinerary.tsx`. No new imports needed — `AlertDialog` is already imported.
 
