@@ -4078,7 +4078,16 @@ export function EditorialItinerary({
     toast.success(`Copied to Day ${toDayIndex + 1}`);
   }, []);
 
-  const handleActivityRemove = useCallback(async (dayIndex: number, activityId: string) => {
+  const handleActivityRemove = useCallback((dayIndex: number, activityId: string) => {
+    const activity = days[dayIndex]?.activities.find(a => a.id === activityId);
+    setPendingRemove({ dayIndex, activityId, activityTitle: activity?.title || 'this activity' });
+  }, [days]);
+
+  const confirmActivityRemove = useCallback(async () => {
+    if (!pendingRemove) return;
+    const { dayIndex, activityId } = pendingRemove;
+    setPendingRemove(null);
+
     // Save version snapshot before delete for undo
     if (tripId) {
       const day = days[dayIndex];
@@ -4098,11 +4107,9 @@ export function EditorialItinerary({
         if (idx !== dayIndex) return day;
         return { ...day, activities: day.activities.filter(act => act.id !== activityId) };
       });
-      // Sync budget with updated days
       syncBudgetFromDays(updated);
       return updated;
     });
-    // Clear stale refresh result for this day
     const dayNum = days[dayIndex]?.dayNumber;
     if (dayNum) {
       setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
@@ -4110,7 +4117,7 @@ export function EditorialItinerary({
     setHasChanges(true);
     setNeedsOptimization(true);
     toast.success('Activity removed');
-  }, [syncBudgetFromDays]);
+  }, [pendingRemove, syncBudgetFromDays, days, tripId]);
 
   // Check if user can regenerate (has enough credits)
   const canRegenerate = useCallback(() => {
