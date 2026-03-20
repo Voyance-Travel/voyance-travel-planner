@@ -1,35 +1,21 @@
 
 
-## Fix: Transport segment header shows wrong cost from estimation engine
+## Fix: Add feedback when "Include Flights" toggle has no effect
 
 ### Problem
-
-Transport activities like "Evening Descent to the Seine" pass through `getActivityCostInfo`, which runs the general cost estimation engine. Because the title sounds like a sightseeing activity, it estimates ~€28. This cost is then displayed in the `TransitModePicker` header. Meanwhile, the actual transport mode costs (€3 metro, €2 bus, etc.) come from the `airport-transfers` edge function and are shown only when expanded — creating a visible mismatch.
-
-### Root cause
-
-In `EditorialItinerary.tsx` line 9912:
-```typescript
-const transportCost = isWalkingTransport ? null : (cost > 0 ? cost : null);
-```
-
-`cost` comes from `getActivityCostInfo` (line 9662-9663), which doesn't distinguish transport activities from dining/sightseeing. It feeds the title into the estimation engine, which returns an irrelevant estimate.
+The toggle logic is correct — it filters `activity_costs` rows with `category='flight'`. But no flight cost rows exist in the database (flights aren't auto-priced like hotels). When the user toggles "Include Flights" ON, nothing changes and there's no explanation, making it feel broken.
 
 ### Fix
 
-**File: `src/components/itinerary/EditorialItinerary.tsx` (~line 9910-9912)**
+**File: `src/components/planner/budget/BudgetTab.tsx` (lines 650-658)**
 
-Replace the transport cost derivation to use the activity's actual `transportation.estimatedCost` data (which comes from route data) instead of the general estimation engine. If no transport-specific cost exists, show nothing rather than a misleading estimate.
+Add a helper note beneath the toggle when it's ON but no flight cost exists. After the switch's `onCheckedChange` fires, check whether any flight cost row exists for this trip. If not, show a small inline hint: "No flight cost added yet. Add one in the Flights & Hotels tab."
 
-```typescript
-// Use transport-specific cost from route data, NOT the general estimation engine
-const transportEstCost = activity.transportation?.estimatedCost?.amount;
-const transportCost = isWalkingTransport ? null
-  : (transportEstCost && transportEstCost > 0 ? transportEstCost : null);
-```
-
-This ensures the header cost matches what the expanded modes show, and displays nothing when no real transport cost is available.
+Specifically:
+1. Query `activity_costs` for `category='flight'` rows for this trip (can reuse existing data from the budget summary, or add a simple derived check from the committed flight cents already computed).
+2. Look at the existing `summary.committedFlightCents` — if it's `0` and the toggle is ON, render a `<p>` hint below the switch row.
+3. Style: `text-xs text-amber-600` to draw gentle attention without being alarming.
 
 ### Scope
-Single line change in `src/components/itinerary/EditorialItinerary.tsx`.
+Single file: `src/components/planner/budget/BudgetTab.tsx`. ~5 lines added.
 
