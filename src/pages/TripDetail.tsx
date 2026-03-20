@@ -1909,7 +1909,7 @@ export default function TripDetail() {
     await saveTripDateVersion(tripId, {
       startDate: trip.start_date,
       endDate: trip.end_date,
-      dayCount: trip.total_days ?? 0,
+      dayCount: ((trip.itinerary_data as Record<string, unknown>)?.days as any[] || []).length,
       itineraryData: trip.itinerary_data as Record<string, unknown> | undefined,
       hotelSelection: trip.hotel_selection,
     });
