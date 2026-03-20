@@ -11206,12 +11206,16 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         for (const city of cities) {
           try {
             const budgetLabel = budgetTier === 'luxury' ? 'luxury' : budgetTier === 'budget' ? 'budget-friendly' : 'mid-range';
-            const poolPrompt = `List exactly 40 real, currently operating restaurants in ${city}${destinationCountry ? `, ${destinationCountry}` : ''} for a ${budgetLabel} traveler.
+            const poolSize = Math.max(40, totalDays * 5);
+            const breakfastCount = Math.ceil(poolSize * 0.3);
+            const lunchCount = Math.ceil(poolSize * 0.35);
+            const dinnerCount = poolSize - breakfastCount - lunchCount;
+            const poolPrompt = `List exactly ${poolSize} real, currently operating restaurants in ${city}${destinationCountry ? `, ${destinationCountry}` : ''} for a ${budgetLabel} traveler.
 
 REQUIREMENTS:
 - ONLY real restaurants that exist right now (no fictional names)
 - 4.5+ star rated preferred
-- Include 12 breakfast/brunch spots, 14 lunch spots, 14 dinner spots
+- Include ${breakfastCount} breakfast/brunch spots, ${lunchCount} lunch spots, ${dinnerCount} dinner spots
 - Mix of cuisines: local specialties, international, street food, fine dining
 - Spread across different neighborhoods
 - **ABSOLUTELY NO chain or franchise restaurants** (e.g., McDonald's, Five Guys, Starbucks, Subway, Chili's, Applebee's, Olive Garden, Cheesecake Factory, etc.). Only independent, locally-owned, or locally-iconic establishments. If it has more than 3 locations worldwide, do NOT include it.
