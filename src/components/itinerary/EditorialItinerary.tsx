@@ -6629,30 +6629,17 @@ export function EditorialItinerary({
                       </div>
                     )}
                     
-                    {(hotelSelection.website || hotelSelection.googleMapsUrl || hotelCost > 0) && (
+                    {(hotelSelection.website || hotelSelection.googleMapsUrl) && (
                       <div className="flex items-center gap-2 pt-3 border-t border-border">
-                        {(hotelSelection.website || hotelSelection.googleMapsUrl) && (
-                          <a
-                            href={hotelSelection.website || hotelSelection.googleMapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-border hover:bg-secondary/50 transition-colors"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                            {hotelSelection.website ? 'Website' : 'Maps'}
-                          </a>
-                        )}
-                        {hotelCost > 0 && (
-                          <VendorBookingLink
-                            activityName={hotelSelection.name || 'Hotel'}
-                            destination={destination}
-                            estimatedPrice={hotelCost}
-                            preferredVendor="tripadvisor"
-                            className="flex-1 text-xs"
-                          >
-                            Find Similar
-                          </VendorBookingLink>
-                        )}
+                        <a
+                          href={hotelSelection.website || hotelSelection.googleMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-border hover:bg-secondary/50 transition-colors"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          {hotelSelection.website ? 'Website' : 'Maps'}
+                        </a>
                       </div>
                     )}
                   </div>
