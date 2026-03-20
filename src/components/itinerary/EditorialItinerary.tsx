@@ -9909,7 +9909,10 @@ function ActivityRow({
 
     // Walking is always free — override any AI-hallucinated cost
     const isWalkingTransport = activityTitle.toLowerCase().includes('walk') || activityTitle.toLowerCase().includes('stroll');
-    const transportCost = isWalkingTransport ? null : (cost > 0 ? cost : null);
+    // Use transport-specific cost from route data, NOT the general estimation engine
+    const transportEstCost = activity.transportation?.estimatedCost?.amount;
+    const transportCost = isWalkingTransport ? null
+      : (transportEstCost && transportEstCost > 0 ? transportEstCost : null);
 
     const transitOrigin = transitOriginProp || destination;
 
