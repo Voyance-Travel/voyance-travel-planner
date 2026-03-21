@@ -120,8 +120,22 @@ export function useSpendCredits() {
       }
     },
     retry: false, // CRITICAL: Disable React Query retries for credit mutations
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       if (user?.id) {
+        // Immediately update cache with server-returned balance to prevent flicker
+        if (data.newBalance) {
+          queryClient.setQueryData(['credits', user.id], (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              totalCredits: data.newBalance.total,
+              purchasedCredits: data.newBalance.purchased,
+              effectiveFreeCredits: data.newBalance.free,
+              freeCredits: data.newBalance.free,
+            };
+          });
+        }
+        // Background refresh for full data consistency (purchases list, etc.)
         queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
         queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
         if (variables.tripId) {
