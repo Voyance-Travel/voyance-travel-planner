@@ -8530,6 +8530,7 @@ Add your flight and hotel details for a more complete last day.`;
           dayConstraints += `\n\n🏨 CITY DEPARTURE — CHECKOUT DAY:
 - This is the LAST DAY in ${destination}. The traveler departs for ${nextCity} by ${transportLabel}.
 - REQUIRED: Include "Hotel Checkout" activity in the morning (typically by 11:00 AM).
+- REQUIRED: Include a farewell meal or café stop AFTER checkout (11:15-12:15) — a proper goodbye to ${destination}.
 - Plan morning activities around checkout. Luggage storage may be needed.
 - Use "${mcHotelName}" for the checkout activity. Do NOT invent a different hotel.${isNonFlight ? departureInstructions : ''}`;
         }
