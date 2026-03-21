@@ -771,7 +771,7 @@ function AssistantVisual() {
             <div className="space-y-1.5">
               <div className="flex items-center gap-2 text-xs">
                 <div className="w-1.5 h-1.5 rounded-full bg-destructive/60" />
-                <span className="text-muted-foreground line-through">Kinkaku-ji Temple Tour — 3 hrs</span>
+                <span className="text-muted-foreground line-through">Kinkaku-ji Temple Tour, 3 hrs</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
