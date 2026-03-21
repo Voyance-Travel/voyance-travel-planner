@@ -7353,6 +7353,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       let resolvedNextLegTransport = '';
       let resolvedNextLegCity = '';
       let resolvedIsMultiCity = !!paramIsMultiCity;
+      let resolvedIsLastDayInCity = !!paramIsLastDayInCity;
       let resolvedDestination = destination;
       let resolvedCountry = destinationCountry;
 
@@ -7377,6 +7378,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                   resolvedCountry = (city as any).country || destinationCountry;
                   // Check if this is the last day in this city — capture next leg transport
                   if (n === cityNights - 1) {
+                    resolvedIsLastDayInCity = true;
                     const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
                     if (nextCity) {
                       const isSameCountry = nextCity.country === city.country;
@@ -7867,7 +7869,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
         console.log(`[generate-day] Using departure time from preferences: ${preferences.departureTime}, latest activity: ${latestActivity}`);
       }
       
-      console.log(`[generate-day] Day ${dayNumber}/${totalDays}, isFirst=${isFirstDay}, isLast=${isLastDay}, lockedCount=${lockedActivities.length}`);
+      console.log(`[generate-day] Day ${dayNumber}/${totalDays}, isFirst=${isFirstDay}, isLast=${isLastDay}, isLastInCity=${resolvedIsLastDayInCity}, nextLegTransport=${resolvedNextLegTransport}, nextLegCity=${resolvedNextLegCity}, lockedCount=${lockedActivities.length}`);
       if (flightContext.arrivalTime) {
         console.log(`[generate-day] Flight arrival: ${flightContext.arrivalTime}, earliest activity: ${flightContext.earliestFirstActivityTime}`);
       }
@@ -8145,7 +8147,7 @@ STRUCTURE:
 
 Start the day at 10:00 AM.`;
         }
-      } else if (isLastDay) {
+      } else if (isLastDay || resolvedIsLastDayInCity) {
         // ===== LAST DAY: DEPARTURE LOGIC WITH LUGGAGE REALITY =====
         const hasReturnFlight = !!(flightContext.returnDepartureTime || flightContext.returnDepartureTime24);
         const hasHotelData = !!(flightContext.hotelName || flightContext.hotelAddress);
@@ -8545,7 +8547,10 @@ Add your flight and hotel details for a more complete last day.`;
 - Use "${mcHotelName}" for ALL hotel references. Do NOT invent a different hotel.`;
         }
 
-        if (paramIsLastDayInCity && !isLastDay) {
+        if (resolvedIsLastDayInCity && !isLastDay && !(isLastDay || resolvedIsLastDayInCity)) {
+          // NOTE: This block is now unreachable because resolvedIsLastDayInCity days enter the
+          // departure-day prompt block above (line 8148). Kept for safety but should not fire.
+          // The departure-day block already includes checkout, farewell, and transport-specific instructions.
           const nextTransport = resolvedNextLegTransport || 'flight';
           const nextCity = resolvedNextLegCity || 'the next destination';
           const transportLabel = nextTransport.toUpperCase();
@@ -10767,7 +10772,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         // If this is the last day of the trip OR last day in a city, ensure checkout exists
         // =====================================================================
         const activitiesForCheckout = generatedDay?.activities || [];
-        const needsCheckoutGuarantee = isLastDay || (paramIsLastDayInCity && !resolvedIsTransitionDay);
+        const needsCheckoutGuarantee = isLastDay || (resolvedIsLastDayInCity && !resolvedIsTransitionDay);
 
         if (needsCheckoutGuarantee && activitiesForCheckout.length > 0) {
           const hasCheckout = activitiesForCheckout.some((a: any) => {
@@ -10908,7 +10913,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         // ====================================================================
         // NON-FLIGHT DEPARTURE DAY: Strip airport activities (generate-day path)
         // ====================================================================
-        if (paramIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
+        if (resolvedIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
           const beforeCount = generatedDay.activities.length;
           generatedDay.activities = generatedDay.activities.filter((a: any) => {
             const t = (a.title || '').toLowerCase();
