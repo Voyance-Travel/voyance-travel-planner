@@ -6923,7 +6923,7 @@ export function EditorialItinerary({
                     <ul className="list-disc pl-5 space-y-1 text-sm text-amber-600 dark:text-amber-400">
                       {pendingCascade!.truncated.map((act: any) => (
                         <li key={act.id}>
-                          {act.title || 'Untitled'} — {act.durationMinutes} min (was {act.__originalDurationMinutes} min)
+                          {act.title || 'Untitled'}: {act.durationMinutes} min (was {act.__originalDurationMinutes} min)
                         </li>
                       ))}
                     </ul>
