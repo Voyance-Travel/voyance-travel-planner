@@ -1,43 +1,42 @@
 
 
-## Fix: "De Kas" Replaced by Generic Placeholder in Smart Finish
+## Fix: Auto-Route Optimizer Illogically Reorders Dining/Evening Activities
 
 ### Problem
-Smart Finish correctly receives "De Kas" as a must-do activity but the Meal Final Guard then injects a generic "Dinner at a restaurant" placeholder because `detectMealSlots()` fails to recognize "De Kas" as dinner.
+The auto-route optimizer reorders activities by geographic proximity, then reassigns the original time slots to the new positions. This causes a canal boat tour (originally 6 PM) to be swapped into a 10:45 PM slot after dinner, because the optimizer treats both as "flexible" activities.
 
 ### Root Cause
-`detectMealSlots()` in `day-validation.ts` (line 134) only detects meals via keyword matching — it checks if the activity **title** contains "dinner", "supper", or "evening meal". A restaurant like "De Kas" with `category: "dining"` scheduled at 19:00 doesn't contain any dinner keywords, so it's invisible to the detector.
-
-The Final Guard sees "dinner is missing", injects a generic placeholder, and the original "De Kas" activity either gets pushed aside or the duplicate confuses the output.
+`FIXED_CATEGORIES` in `auto-route-optimizer.ts` does not include `dining`. Meal and dining activities are treated as freely reorderable, but meals have natural time windows that shouldn't be disrupted by geographic optimization.
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/day-validation.ts` — `detectMealSlots()` (~line 134)**
+**File: `supabase/functions/generate-itinerary/auto-route-optimizer.ts`**
 
-Add time-based meal detection for dining-category activities. If an activity has `category` in `DINING_CATEGORIES` and its `startTime` falls within a meal window, count it as that meal:
+**Change 1: Add `dining` to `FIXED_CATEGORIES` (line 37)**
 
+Add dining-related categories so meals stay in their assigned time slots:
 ```typescript
-// After keyword matching loop, add time-based detection for dining activities:
-if (isDining) {
-  const startTime = (activity as any).startTime || '';
-  const minutes = parseTimeToMinutesLocal(startTime);
-  if (minutes !== null) {
-    if (minutes >= 6*60 && minutes < 11*60) detected.add('breakfast');
-    else if (minutes >= 11*60 && minutes < 15*60) detected.add('lunch');
-    else if (minutes >= 17*60 && minutes <= 22*60) detected.add('dinner');
-  }
-}
+'dining',
+'food',
+'restaurant',
 ```
 
-This means "De Kas" at 19:00 with `category: "dining"` will be detected as dinner, preventing the Final Guard from injecting a duplicate.
+**Change 2: Add meal-related title patterns to `FIXED_TITLE_PATTERNS` (line 49)**
 
-**Update the type signature** of the `activities` parameter to include optional `startTime`:
+Catch activities with meal keywords in their titles:
 ```typescript
-activities: Array<Pick<StrictActivityMinimal, 'title' | 'category'> & { startTime?: string }>
+/dinner\b/i,
+/lunch\b/i,
+/breakfast\b/i,
+/brunch\b/i,
+/supper\b/i,
 ```
 
-`parseTimeToMinutesLocal` already exists at line 166 in the same file.
+This ensures that:
+- Activities categorized as dining stay at their assigned times
+- Activities with meal words in titles (e.g., "Dinner at De Kas") stay put
+- Non-meal activities like "Canal Boat Tour" (category: `activity`/`sightseeing`) remain flexible for geographic optimization — but won't get swapped into a dining slot since the dining activity anchoring that slot is now fixed
 
 ### Scope
-1 file, ~10 lines added. No client-side or database changes.
+1 file, ~8 lines added. No client-side or database changes.
 
