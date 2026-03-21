@@ -428,7 +428,7 @@ export function BudgetCoach({
                               variant="secondary"
                               className="text-xs text-emerald-600 dark:text-emerald-400"
                             >
-                              Save {formatCurrency(s.savings)}
+                              Save {formatCurrency(s.savings * travelers)}{travelers > 1 ? ' total' : ''}
                             </Badge>
                             <span className="text-[10px] text-muted-foreground">
                               Day {s.day_number}
