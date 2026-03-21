@@ -8410,7 +8410,7 @@ DEPARTURE DAY ACTIVITIES: 2-3 maximum, but CONDENSED
 ⚠️ All activities after checkout must be in ONE area.
 ⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
 ⚠️ No reservations that can't be cancelled.
-⚠️ CHECKOUT must happen BEFORE luggage collection/transfer. VIOLATION = REGENERATION.
+⚠️ CHECKOUT must happen BEFORE luggage collection/transfer. This is auto-enforced by post-processing.
 THE TRAVELER IS LEAVING. A gentle goodbye, not a marathon.`;
           }
           
