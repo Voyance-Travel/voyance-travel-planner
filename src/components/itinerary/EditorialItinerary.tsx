@@ -2410,7 +2410,7 @@ export function EditorialItinerary({
             activities: d.activities.map(act => {
               const optAct = optimizedDay.activities?.find((oa: any) => oa.id === act.id);
               if (optAct?.transportation && act.id === activityId) {
-                const updatedAct = { ...act, transportation: optAct.transportation };
+                const updatedAct = { ...act, transportation: { ...optAct.transportation, method: newMode } };
                 const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
                 if (destMatch) {
                   const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
