@@ -246,7 +246,7 @@ export default function TravelIntelCard({
 
       if (data?.success && data?.data) {
         setIntel(data.data);
-        setIsCached(!!data.cached);
+        
         fetchedRef.current = true;
       } else {
         setError(data?.error || 'Failed to load intel');
