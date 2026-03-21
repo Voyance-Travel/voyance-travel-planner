@@ -1130,9 +1130,10 @@ function getActivityCost(
   travelers: number = 1,
   budgetTier: string = 'moderate',
   destinationCity?: string,
-  destinationCountry?: string
+  destinationCountry?: string,
+  isManualMode: boolean = false
 ): number {
-  return getActivityCostInfo(activity, travelers, budgetTier, destinationCity, destinationCountry).amount;
+  return getActivityCostInfo(activity, travelers, budgetTier, destinationCity, destinationCountry, isManualMode).amount;
 }
 
 function getActivityType(activity: EditorialActivity): string {
