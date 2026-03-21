@@ -610,7 +610,7 @@ function CustomizeVisual() {
           {/* Voyance Tip */}
           <div className="mt-2 pl-3 border-l-2 border-primary/20">
             <p className="text-[11px] italic text-muted-foreground">
-              <span className="text-primary font-medium not-italic">Voyance Tip</span> — Arrive by 8:45 AM to walk the upper trails almost solo
+              <span className="text-primary font-medium not-italic">Voyance Tip</span> · Arrive by 8:45 AM to walk the upper trails almost solo
             </p>
           </div>
         </div>
