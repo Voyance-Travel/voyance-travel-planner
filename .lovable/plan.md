@@ -1,21 +1,38 @@
 
 
-## Fix: Add feedback when "Include Flights" toggle has no effect
+## Fix: Suggestion deadline not displayed after setting it
 
-### Problem
-The toggle logic is correct — it filters `activity_costs` rows with `category='flight'`. But no flight cost rows exist in the database (flights aren't auto-priced like hotels). When the user toggles "Include Flights" ON, nothing changes and there's no explanation, making it feel broken.
+### Root cause
+
+After `handleUpdateDeadline` succeeds, two things happen nearly simultaneously:
+1. **Optimistic update** — `setSuggestions` sets `vote_deadline` on the suggestion locally (line 321)
+2. **Realtime reload** — the DB write triggers a `postgres_changes` event (line 138-143) which calls `loadSuggestions()`, re-fetching all suggestions from the database
+
+The realtime reload fires within milliseconds. If it reads from a replica that hasn't synced the write yet, it overwrites the optimistic state with stale data (where `vote_deadline` is still null). The deadline briefly flashes then reverts to "Set deadline."
 
 ### Fix
 
-**File: `src/components/planner/budget/BudgetTab.tsx` (lines 650-658)**
+**File: `src/components/suggestions/TripSuggestions.tsx`**
 
-Add a helper note beneath the toggle when it's ON but no flight cost exists. After the switch's `onCheckedChange` fires, check whether any flight cost row exists for this trip. If not, show a small inline hint: "No flight cost added yet. Add one in the Flights & Hotels tab."
+1. Add a `skipRealtimeUntil` ref that holds a timestamp
+2. In `handleUpdateDeadline` (and `handleSubmit`), set `skipRealtimeUntil` to `Date.now() + 2000` (2-second suppression window)
+3. In the realtime handler (line 143/148), check `if (Date.now() < skipRealtimeRef.current) return;` — skip the reload if we're within the suppression window
+4. This lets the optimistic update persist. The next genuine realtime event (or manual refresh) will pick up the correct DB state.
 
-Specifically:
-1. Query `activity_costs` for `category='flight'` rows for this trip (can reuse existing data from the budget summary, or add a simple derived check from the committed flight cents already computed).
-2. Look at the existing `summary.committedFlightCents` — if it's `0` and the toggle is ON, render a `<p>` hint below the switch row.
-3. Style: `text-xs text-amber-600` to draw gentle attention without being alarming.
+```typescript
+// Add ref
+const skipRealtimeRef = useRef(0);
+
+// In realtime handler
+}, () => {
+  if (Date.now() < skipRealtimeRef.current) return;
+  loadSuggestions();
+})
+
+// In handleUpdateDeadline, after optimistic update
+skipRealtimeRef.current = Date.now() + 2000;
+```
 
 ### Scope
-Single file: `src/components/planner/budget/BudgetTab.tsx`. ~5 lines added.
+Single file: `src/components/suggestions/TripSuggestions.tsx` — ~6 lines added.
 
