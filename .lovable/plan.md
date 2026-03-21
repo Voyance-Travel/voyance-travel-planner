@@ -1,25 +1,35 @@
 
 
-## Fix: Budget Coach Swap Leaves "Lunch" in Location Name and Transit Labels
+## Fix: Single-Day Generation Doesn't Auto-Fix Hours Conflicts (Only Tags Warnings)
 
 ### Problem
-The meal coherence guard fixes the `title` and `name` fields, but two other places still use the raw `suggestion.suggested_swap` text ("Lunch at Osteria Beccafico"):
-1. **Line 6216**: `location.name` is set to raw `suggestion.suggested_swap` — this feeds transit labels ("Walk to Lunch at Osteria Beccafico · 23 min")
-2. **Line 6210**: `description` falls back to raw `suggestion.suggested_swap`
+When a venue hours conflict is detected (e.g., "Nightcap at Caffè Florian" at 9 PM but venue closes at 8:30 PM), the full-generation path (Stage 4.5) has auto-fix logic that shifts the activity into the venue's open window or removes it. But the **single-day generation path** (line 9630-9665) only removes confirmed-closed-all-day activities and tags time conflicts as `closedRisk` warnings — it never attempts to shift the activity into the venue's open window.
 
-So even though the title is corrected to "Dinner at Osteria Beccafico", the location name and transit segment still say "Lunch."
+The yellow warning banner is the result: the system knows the conflict but doesn't fix it.
 
-### Fix (1 file, ~3 lines)
+### Root Cause
+Two code paths, one fix:
+- **Full generation** (Stage 4.5, line 6770-6900): Parses opening hours, calculates venue open/close in minutes, shifts activity start/end to fit, or removes if duration doesn't fit.
+- **Single-day generation** (line 9630-9665): Only checks `isVenueOpenOnDay()` → if not open all day, removes; if time conflict only, sets `closedRisk = true` and moves on. **No time-shift logic.**
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
+### Fix (1 file, ~30 lines)
 
-Apply the same `coherentTitle` to `location.name` and the description fallback:
+**File: `supabase/functions/generate-itinerary/index.ts` (~line 9652)**
 
-- **Line 6210**: Change `suggestion.suggested_description || suggestion.suggested_swap` → `suggestion.suggested_description || coherentTitle`
-- **Line 6216**: Change `name: suggestion.suggested_swap` → `name: coherentTitle`
+In the single-day generation's "time conflict only" branch, replicate the same time-shift logic from Stage 4.5:
 
-This ensures every user-visible text field that displays the activity name uses the meal-corrected version, including transit segment labels that derive from `location.name`.
+1. Parse the day's opening hours entry to get `venueOpenMins` and `venueCloseMins`
+2. Calculate the activity's current start in minutes and its duration
+3. If scheduled after close (or overlapping close): shift to `venueCloseMins - duration - 15`
+4. If scheduled before open: shift to `venueOpenMins + 10`
+5. If the activity duration doesn't fit in the open window at all: remove the activity instead of leaving a warning
+6. Only fall through to `closedRisk` tagging if parsing fails (no parseable hours data)
+
+This ensures both generation paths apply identical enforcement. The warning banner becomes a last resort for truly ambiguous cases (e.g., hours data couldn't be parsed), not for clear conflicts with known hours.
+
+### Technical Detail
+The parsing logic already exists in Stage 4.5 (lines 6798-6882). Extract the relevant time-parsing and shifting into a shared helper to avoid duplicating ~40 lines. Both Stage 4.5 and the single-day path call the same helper.
 
 ### Files
-- `src/components/itinerary/EditorialItinerary.tsx` — use `coherentTitle` in location.name and description fallback
+- `supabase/functions/generate-itinerary/index.ts` — add time-shift fix to single-day hours validation; extract shared helper from Stage 4.5
 
