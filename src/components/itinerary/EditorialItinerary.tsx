@@ -9925,7 +9925,7 @@ function ActivityRow({
         <h4 className="font-serif text-xl font-semibold text-foreground leading-snug">
           {activityTitle}
         </h4>
-        {venueNameForDining && venueNameForDining !== activityTitle && (
+        {venueNameForDining && venueNameForDining !== activityTitle && !isPlaceholderLocation(venueNameForDining) && (
           <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1">
             <MapPin className="h-3 w-3 text-primary/60 shrink-0" />
             {venueNameForDining}
