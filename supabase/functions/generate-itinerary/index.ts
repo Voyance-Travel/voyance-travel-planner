@@ -7899,40 +7899,35 @@ DO NOT plan activities before ${arrival24}.`;
         } else if (hasHotelData) {
           // ===== NO FLIGHT, BUT HOTEL PROVIDED =====
           // We know WHERE they're staying but not WHEN they arrive
-          // Apply conservative assumptions based on standard check-in
-          const defaultCheckIn = '15:00'; // Standard hotel check-in
-          const settleInEnd = addMinutesToHHMM(defaultCheckIn, 30);
-          const earliestActivity = addMinutesToHHMM(settleInEnd, 30);
+          // Assume morning arrival — travelers want to drop bags first
+          const luggageDropTime = '10:00';
+          const luggageDropEnd = addMinutesToHHMM(luggageDropTime, 30);
+          const earliestActivity = addMinutesToHHMM(luggageDropEnd, 15);
           
-          console.log(`[Day1-Decision] Hotel provided but no flight - using standard check-in (${defaultCheckIn})`);
+          console.log(`[Day1-Decision] Hotel provided but no flight - luggage drop first at ${luggageDropTime}`);
           
           dayConstraints = `
-HOTEL PROVIDED BUT ARRIVAL TIME UNKNOWN:
+HOTEL PROVIDED — LUGGAGE DROP FIRST:
 - Hotel: ${flightContext.hotelName}
 - Address: ${flightContext.hotelAddress || 'Address on file'}
 
 The traveler has a hotel but has NOT provided flight/arrival details.
-We cannot assume morning availability.
-
-SAFE ASSUMPTIONS:
-- Standard hotel check-in: 3:00 PM (15:00)
-- The traveler may be traveling to the destination during morning/early afternoon
-- DO NOT schedule activities before 15:00
+Assume they arrive in the morning and head to the hotel first to drop bags.
 
 REQUIRED FIRST ACTIVITY:
-1. "Hotel Check-in & Settle In"
-   - startTime: "${defaultCheckIn}", endTime: "${settleInEnd}"
+1. "Hotel Check-in & Refresh"
+   - startTime: "${luggageDropTime}", endTime: "${luggageDropEnd}"
    - category: "accommodation"
+   - description: "Head to hotel to drop bags. Most hotels store luggage before official check-in; early check-in is often available on request."
    - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
 
 DAY 1 GUIDELINES:
-- After check-in (${settleInEnd}), plan light afternoon activities
-- Earliest sightseeing: ${earliestActivity}
-- Focus on the hotel neighborhood
-- End with dinner nearby
-- This is an orientation day, not a full exploration day
+- After luggage drop (${luggageDropEnd}), plan a full day of activities starting from ${earliestActivity}
+- Include a "Return to Hotel" activity around 15:00-15:30 for official check-in/freshen up if the day is long enough
+- The traveler is free to explore all day after dropping bags
+- End with dinner
 
-DO NOT plan activities before ${defaultCheckIn}.`;
+Start the day at ${luggageDropTime} with the hotel luggage drop.`;
         } else {
           // ===== NO FLIGHT AND NO HOTEL =====
           // Apply most conservative "safe day one" assumptions
