@@ -7208,7 +7208,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
         isMultiCity: paramIsMultiCity, isTransitionDay: paramIsTransitionDay, transitionFrom: paramTransitionFrom, transitionTo: paramTransitionTo, transitionMode: paramTransitionMode,
         mustDoActivities: paramMustDoActivities, interestCategories: paramInterestCategories, generationRules: paramGenerationRules,
         pacing: paramPacing, isFirstTimeVisitor: paramIsFirstTimeVisitor,
-        hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity,
+        hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: resolvedIsLastDayInCity,
         restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants } = params;
       
       // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
@@ -7353,7 +7353,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       let resolvedNextLegTransport = '';
       let resolvedNextLegCity = '';
       let resolvedIsMultiCity = !!paramIsMultiCity;
-      let resolvedIsLastDayInCity = !!paramIsLastDayInCity;
+      let resolvedIsLastDayInCity = !!resolvedIsLastDayInCity;
       let resolvedDestination = destination;
       let resolvedCountry = destinationCountry;
 
@@ -8147,7 +8147,7 @@ STRUCTURE:
 
 Start the day at 10:00 AM.`;
         }
-      } else if (isLastDay || paramIsLastDayInCity) {
+      } else if (isLastDay || resolvedIsLastDayInCity) {
         // ===== LAST DAY: DEPARTURE LOGIC WITH LUGGAGE REALITY =====
         const hasReturnFlight = !!(flightContext.returnDepartureTime || flightContext.returnDepartureTime24);
         const hasHotelData = !!(flightContext.hotelName || flightContext.hotelAddress);
@@ -8547,8 +8547,8 @@ Add your flight and hotel details for a more complete last day.`;
 - Use "${mcHotelName}" for ALL hotel references. Do NOT invent a different hotel.`;
         }
 
-        if (paramIsLastDayInCity && !isLastDay && !(isLastDay || paramIsLastDayInCity)) {
-          // NOTE: This block is now unreachable because paramIsLastDayInCity days enter the
+        if (resolvedIsLastDayInCity && !isLastDay && !(isLastDay || resolvedIsLastDayInCity)) {
+          // NOTE: This block is now unreachable because resolvedIsLastDayInCity days enter the
           // departure-day prompt block above (line 8148). Kept for safety but should not fire.
           // The departure-day block already includes checkout, farewell, and transport-specific instructions.
           const nextTransport = resolvedNextLegTransport || 'flight';
@@ -10772,7 +10772,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         // If this is the last day of the trip OR last day in a city, ensure checkout exists
         // =====================================================================
         const activitiesForCheckout = generatedDay?.activities || [];
-        const needsCheckoutGuarantee = isLastDay || (paramIsLastDayInCity && !resolvedIsTransitionDay);
+        const needsCheckoutGuarantee = isLastDay || (resolvedIsLastDayInCity && !resolvedIsTransitionDay);
 
         if (needsCheckoutGuarantee && activitiesForCheckout.length > 0) {
           const hasCheckout = activitiesForCheckout.some((a: any) => {
@@ -10913,7 +10913,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         // ====================================================================
         // NON-FLIGHT DEPARTURE DAY: Strip airport activities (generate-day path)
         // ====================================================================
-        if (paramIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
+        if (resolvedIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
           const beforeCount = generatedDay.activities.length;
           generatedDay.activities = generatedDay.activities.filter((a: any) => {
             const t = (a.title || '').toLowerCase();
