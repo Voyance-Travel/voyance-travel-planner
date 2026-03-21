@@ -2411,7 +2411,6 @@ export function EditorialItinerary({
               const optAct = optimizedDay.activities?.find((oa: any) => oa.id === act.id);
               if (optAct?.transportation && act.id === activityId) {
                 const updatedAct = { ...act, transportation: optAct.transportation };
-                // Update title/location to reflect new transport mode
                 const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
                 if (destMatch) {
                   const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
@@ -2420,6 +2419,18 @@ export function EditorialItinerary({
                   if (updatedAct.location) updatedAct.location = { ...updatedAct.location, name: newTitle };
                 }
                 return updatedAct;
+              }
+              // Fallback: optimize API returned data but no matching activity ID — apply local update
+              if (act.id === activityId && act.transportation) {
+                const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
+                const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
+                const newTitle = destMatch ? `${mLabels[newMode.toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
+                return {
+                  ...act,
+                  title: newTitle,
+                  location: act.location ? { ...act.location, name: newTitle } : act.location,
+                  transportation: { ...act.transportation, method: newMode },
+                };
               }
               return act;
             }),
