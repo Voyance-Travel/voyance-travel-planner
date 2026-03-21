@@ -1544,7 +1544,33 @@ export function EditorialItinerary({
           } as any),
         ];
 
-        updatedActivities = [...travelCards, ...updatedActivities];
+        // Insert travel cards AFTER any checkout activity (same logic as departure day)
+        const checkoutKw = ['check out', 'checkout', 'check-out'];
+        const checkoutIdx = updatedActivities.findIndex(a =>
+          (a as any).__hotelCheckout ||
+          a.id?.startsWith('hotel-checkout') ||
+          checkoutKw.some(kw => (a.title || '').toLowerCase().includes(kw))
+        );
+
+        if (checkoutIdx !== -1) {
+          // Ensure checkout time is before transport departure
+          const depTimeStr = travelCards[0]?.startTime;
+          if (depTimeStr) {
+            const depMin = parseTimeToMinutes(depTimeStr);
+            const coTime = updatedActivities[checkoutIdx].startTime;
+            const coMin = coTime ? parseTimeToMinutes(coTime) : depMin;
+            if (coMin >= depMin) {
+              // Push checkout 60 min before departure, minimum 07:00
+              const newCoMin = Math.max(depMin - 60, 420);
+              const hh = String(Math.floor(newCoMin / 60)).padStart(2, '0');
+              const mm = String(newCoMin % 60).padStart(2, '0');
+              updatedActivities[checkoutIdx] = { ...updatedActivities[checkoutIdx], startTime: `${hh}:${mm}` };
+            }
+          }
+          updatedActivities.splice(checkoutIdx + 1, 0, ...travelCards);
+        } else {
+          updatedActivities = [...travelCards, ...updatedActivities];
+        }
       }
     }
 
