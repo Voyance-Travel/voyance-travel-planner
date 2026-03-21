@@ -49,9 +49,10 @@ export async function addTripCity(city: TripCityInsert): Promise<TripCity> {
  * Add multiple cities at once (e.g., when creating a multi-city trip)
  */
 export async function addTripCities(cities: TripCityInsert[]): Promise<TripCity[]> {
+  const enriched = cities.map(c => enrichCityCountry(c));
   const { data, error } = await supabase
     .from('trip_cities')
-    .insert(cities as any[])
+    .insert(enriched as any[])
     .select();
 
   if (error) throw new Error(`Failed to add cities: ${error.message}`);
