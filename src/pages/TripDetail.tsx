@@ -2020,9 +2020,10 @@ export default function TripDetail() {
       if (actIdx === -1) continue;
 
       // Replace the activity name/location, keep everything else
+      const coherentName = enforceMealTimeCoherence(swap.suggestedActivity, activities[actIdx].startTime || activities[actIdx].time);
       activities[actIdx] = {
         ...activities[actIdx],
-        name: swap.suggestedActivity,
+        name: coherentName,
         location: {
           ...(activities[actIdx].location || {}),
           name: swap.suggestedLocation || activities[actIdx].location?.name,

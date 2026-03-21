@@ -3191,7 +3191,7 @@ export function EditorialItinerary({
           return {
             ...a,
             id: newActivity.id, // Use new activity ID
-            title: newActivity.title,
+            title: enforceMealTimeCoherence(newActivity.title || '', preservedStartTime),
             description: newActivity.description,
             category: newActivity.type,
             type: newActivity.type,
