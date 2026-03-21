@@ -6872,10 +6872,20 @@ If the purpose is a specific event, plan at least ONE full day around that event
                   
                   if (newStartMins >= 0 && newStartMins !== oldMins) {
                     // Hard-constraint check: ensure shifted time doesn't squeeze against checkout/departure
+                    // But ONLY treat checkout as hard stop if day has a flight departure
+                    // (no-flight days deliberately schedule farewell activities AFTER checkout)
+                    const dayHasFlightDeparture = day.activities.some((a: StrictActivity) => {
+                      const tLower = (a.title || a.name || '').toLowerCase();
+                      const cLower = (a.category || '').toLowerCase();
+                      return cLower === 'transport' && (tLower.includes('airport') || tLower.includes('flight'));
+                    });
+                    
                     const hardStopAct = day.activities.find((a: StrictActivity) => {
                       const catLower = (a.category || '').toLowerCase();
                       const titleLower = (a.title || a.name || '').toLowerCase();
-                      return (catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout')))
+                      const isCheckout = catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout'));
+                      if (isCheckout && !dayHasFlightDeparture) return false;
+                      return isCheckout
                         || (catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train')));
                     });
                     if (hardStopAct && hardStopAct.startTime) {
