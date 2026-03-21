@@ -1,48 +1,85 @@
 
 
-## Fix: Credit Counter Flicker During Retry Flows
+## Fix: Multi-City Departure Day — Duplicate Checkout & Airport References on Train Departure
 
-### Problem
-When a retry flow triggers multiple credit operations, the credit counter shows unexpected intermediate values before settling to the correct final number. The display "bounces" because each operation calls `invalidateQueries(['credits', userId])`, which triggers an async refetch from the database. Between the invalidation and refetch completing, the UI shows stale cached data — or worse, a mid-transaction snapshot from a concurrent refetch.
+### Problem (from screenshot)
+On a Rome → Florence departure day (next leg = train), three issues:
+1. **Duplicate checkout**: Both "Checkout & Departure Preparation" (category: activity, ~$40) AND "Hotel Checkout from" (category: accommodation, Free) appear
+2. **Airport reference**: Transit gap shows "Private Transfer to Fiumicino Airport (FCO)" despite the next leg being a train to Florence
+3. **Bloated day**: The minimum-activity validator requires 5 real activities for this day (treats it as a normal mid-trip day), forcing the AI to pad with extra logistics
 
-### Root Cause
-`useSpendCredits.onSuccess` uses `invalidateQueries` (async refetch) instead of `setQueryData` (immediate cache update). The `spend-credits` endpoint already returns the authoritative `newBalance` in every response, but this data is discarded — the client refetches from the DB instead.
+### Root Causes
 
-During retries:
-1. Spend call #1 succeeds → invalidate → refetch starts (shows old balance)
-2. Spend call #2 succeeds → invalidate → refetch starts (may return balance after call #1 but before #2)
-3. Final refetch settles to correct value
+**Issue 1 & 3 — Minimum activity count too high for multi-city departure days**
+Line 2740 in `index.ts`:
+```typescript
+const minimumRealActivities = isLastDay ? 1 : (isFirstDay ? 3 : 5);
+```
+A multi-city departure day (`isLastDayInCity && !isLastDay`) gets the "5 activities" requirement. The AI overstuffs the day and generates duplicate checkout activities to fill the quota.
 
-### Fix
+**Issue 2 — No post-processing dedup for checkout activities**
+When the AI generates both a generic "Checkout & Departure Preparation" (category: activity) and a proper "Hotel Checkout" (category: accommodation), nothing strips the duplicate.
 
-**File: `src/hooks/useSpendCredits.ts` — `onSuccess` callback (~line 123)**
+**Issue 3 — Airport transit gap on non-flight departure**
+The `transportation` field on the generated "Checkout & Departure Preparation" activity likely references the airport. The strip filter at line 2680 removes activities with "airport" in the title, but "Checkout & Departure Preparation" doesn't contain "airport" — the airport reference is in the transit gap between activities, populated from the activity's location data pointing at Fiumicino.
 
-Replace the `invalidateQueries` call with an immediate `setQueryData` using the `newBalance` returned by the server, then invalidate as a background refresh:
+### Fix (1 file, ~25 lines)
+
+**File: `supabase/functions/generate-itinerary/index.ts`**
+
+**Change 1: Lower minimum activity count for multi-city departure days (line 2740)**
 
 ```typescript
-onSuccess: (data, variables) => {
-  if (user?.id && data.newBalance) {
-    // Immediately update cache with server-returned balance
-    queryClient.setQueryData(['credits', user.id], (old: any) => {
-      if (!old) return old;
-      return {
-        ...old,
-        totalCredits: data.newBalance.total,
-        purchasedCredits: data.newBalance.purchased,
-        effectiveFreeCredits: data.newBalance.free,
-        freeCredits: data.newBalance.free,
-      };
-    });
-    // Background refresh for full data consistency (purchases list, etc.)
-    queryClient.invalidateQueries({ queryKey: ['credits', user.id] });
-    queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
-    // ...existing action-cap invalidation
-  }
-},
+// Before:
+const minimumRealActivities = isLastDay ? 1 : (isFirstDay ? 3 : 5);
+
+// After:
+const isMultiCityDepartureDay = paramIsLastDayInCity && !isLastDay;
+const minimumRealActivities = isLastDay ? 1 : (isMultiCityDepartureDay ? 1 : (isFirstDay ? 3 : 5));
 ```
 
-This ensures the credit counter updates instantly to the correct value from the server response, eliminating the visual flicker window. The subsequent `invalidateQueries` still runs to refresh the full `purchases` array and other derived fields, but the user-visible balance is already correct.
+This allows the AI to generate a light departure morning (breakfast + checkout + transfer to station) without padding.
+
+**Change 2: Post-processing — dedup checkout activities (after line 2697)**
+
+Add a dedup pass that keeps only one checkout activity per day on multi-city departure days. When multiple checkout-like activities exist, keep the one with category `accommodation` and strip the others:
+
+```typescript
+if (isLastDayInCity) {
+  const checkoutActivities = generatedDay.activities.filter((a: any) => {
+    const t = (a.title || '').toLowerCase();
+    return t.includes('checkout') || t.includes('check-out') || t.includes('check out') ||
+           t.includes('departure preparation');
+  });
+  if (checkoutActivities.length > 1) {
+    // Keep the accommodation-category one; remove duplicates
+    const keepId = checkoutActivities.find((a: any) => a.category === 'accommodation')?.id 
+                   || checkoutActivities[0].id;
+    const removeIds = new Set(checkoutActivities.filter((a: any) => a.id !== keepId).map((a: any) => a.id));
+    generatedDay.activities = generatedDay.activities.filter((a: any) => !removeIds.has(a.id));
+    console.log(`[Stage 2] Day ${dayNumber}: Deduped ${removeIds.size} duplicate checkout activities`);
+  }
+}
+```
+
+**Change 3: Extend airport stripping to include location-based airport references (line 2682)**
+
+Broaden the non-flight departure filter to also catch activities whose location references an airport:
+
+```typescript
+generatedDay.activities = generatedDay.activities.filter((a: any) => {
+  const t = (a.title || '').toLowerCase();
+  const locName = (a.location?.name || '').toLowerCase();
+  const desc = (a.description || '').toLowerCase();
+  const isAirportRef =
+    t.includes('airport') || t.includes('flight departure') || t.includes('head to airport') ||
+    (a.category === 'transport' && (locName.includes('airport') || locName.includes('aeroporto') || locName.includes('aéroport')));
+  // Also strip transport activities whose description mentions airport when next leg isn't flight
+  const descAirportRef = a.category === 'transport' && desc.includes('airport');
+  return !isAirportRef && !descAirportRef;
+});
+```
 
 ### Scope
-1 file, ~8 lines changed. No backend changes.
+1 edge function file, ~25 lines changed. No client-side or database changes.
 
