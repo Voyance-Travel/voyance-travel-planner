@@ -1,38 +1,71 @@
 
 
-## Fix: Suggestion deadline not displayed after setting it
+## Fix: Swap Activity panel slow/broken — AbortController not connected
 
 ### Root cause
 
-After `handleUpdateDeadline` succeeds, two things happen nearly simultaneously:
-1. **Optimistic update** — `setSuggestions` sets `vote_deadline` on the suggestion locally (line 321)
-2. **Realtime reload** — the DB write triggers a `postgres_changes` event (line 138-143) which calls `loadSuggestions()`, re-fetching all suggestions from the database
+The `invokeWithTimeout` function in `ActivityAlternativesDrawer.tsx` creates an `AbortController` but **never passes the signal to the actual request**. `supabase.functions.invoke()` doesn't accept an `AbortSignal` parameter, so:
 
-The realtime reload fires within milliseconds. If it reads from a replica that hasn't synced the write yet, it overwrites the optimistic state with stale data (where `vote_deadline` is still null). The deadline briefly flashes then reverts to "Set deadline."
+- The 15-second client timeout is a no-op — it sets a flag but the HTTP request continues indefinitely
+- When a user clicks a filter chip, the previous request keeps running (wasting resources, potentially blocking)
+- The edge function itself has internal timeouts (12s AI + 3s DNA = up to 15s), but if the Supabase gateway is slow or cold-starting, there's no client-side cancellation
+
+This means the spinner can hang until the edge function's own gateway timeout (which can be 30s+).
 
 ### Fix
 
-**File: `src/components/suggestions/TripSuggestions.tsx`**
+**File: `src/components/planner/ActivityAlternativesDrawer.tsx` (lines 120-144)**
 
-1. Add a `skipRealtimeUntil` ref that holds a timestamp
-2. In `handleUpdateDeadline` (and `handleSubmit`), set `skipRealtimeUntil` to `Date.now() + 2000` (2-second suppression window)
-3. In the realtime handler (line 143/148), check `if (Date.now() < skipRealtimeRef.current) return;` — skip the reload if we're within the suppression window
-4. This lets the optimistic update persist. The next genuine realtime event (or manual refresh) will pick up the correct DB state.
+Replace `supabase.functions.invoke` with a direct `fetch` call to the edge function URL, passing the `AbortController.signal` so the request is genuinely cancelled on timeout or when a new filter is clicked.
 
 ```typescript
-// Add ref
-const skipRealtimeRef = useRef(0);
+const invokeWithTimeout = useCallback(async (
+  body: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<Record<string, unknown> | null> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-// In realtime handler
-}, () => {
-  if (Date.now() < skipRealtimeRef.current) return;
-  loadSuggestions();
-})
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    const { data: { session } } = await supabase.auth.getSession();
 
-// In handleUpdateDeadline, after optimistic update
-skipRealtimeRef.current = Date.now() + 2000;
+    const response = await fetch(
+      `${supabaseUrl}/functions/v1/get-activity-alternatives`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${session?.access_token || supabaseKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,  // Actually connected now
+      }
+    );
+
+    clearTimeout(timer);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } catch (err) {
+    clearTimeout(timer);
+    if ((err as Error)?.name === 'AbortError') return null;
+    throw err;
+  }
+}, []);
+```
+
+Additionally, store the current `AbortController` in a ref so that when a new filter/search request starts, the previous one is explicitly aborted (not just ignored by stale ID check, but actually cancelled at the network level):
+
+```typescript
+const activeAbortRef = useRef<AbortController | null>(null);
+
+// At start of each request:
+activeAbortRef.current?.abort();
+activeAbortRef.current = controller;
 ```
 
 ### Scope
-Single file: `src/components/suggestions/TripSuggestions.tsx` — ~6 lines added.
+Single file: `src/components/planner/ActivityAlternativesDrawer.tsx`. No edge function changes needed — the issue is entirely client-side request handling.
 
