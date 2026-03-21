@@ -7869,7 +7869,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
         console.log(`[generate-day] Using departure time from preferences: ${preferences.departureTime}, latest activity: ${latestActivity}`);
       }
       
-      console.log(`[generate-day] Day ${dayNumber}/${totalDays}, isFirst=${isFirstDay}, isLast=${isLastDay}, lockedCount=${lockedActivities.length}`);
+      console.log(`[generate-day] Day ${dayNumber}/${totalDays}, isFirst=${isFirstDay}, isLast=${isLastDay}, isLastInCity=${resolvedIsLastDayInCity}, nextLegTransport=${resolvedNextLegTransport}, nextLegCity=${resolvedNextLegCity}, lockedCount=${lockedActivities.length}`);
       if (flightContext.arrivalTime) {
         console.log(`[generate-day] Flight arrival: ${flightContext.arrivalTime}, earliest activity: ${flightContext.earliestFirstActivityTime}`);
       }
