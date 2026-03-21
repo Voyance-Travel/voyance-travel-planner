@@ -2681,14 +2681,18 @@ Generate activities for this day following ALL constraints above.`;
         const beforeCount = generatedDay.activities.length;
         generatedDay.activities = generatedDay.activities.filter((a: any) => {
           const t = (a.title || '').toLowerCase();
+          const locName = (a.location?.name || '').toLowerCase();
+          const desc = (a.description || '').toLowerCase();
           const isAirportRef =
             t.includes('airport') ||
             t.includes('taxi to airport') ||
             t.includes('transfer to airport') ||
             t.includes('departure transfer to airport') ||
             t.includes('flight departure') ||
-            t.includes('head to airport');
-          return !isAirportRef;
+            t.includes('head to airport') ||
+            (a.category === 'transport' && (locName.includes('airport') || locName.includes('aeroporto') || locName.includes('aéroport')));
+          const descAirportRef = a.category === 'transport' && desc.includes('airport');
+          return !isAirportRef && !descAirportRef;
         });
         const removed = beforeCount - generatedDay.activities.length;
         if (removed > 0) {
