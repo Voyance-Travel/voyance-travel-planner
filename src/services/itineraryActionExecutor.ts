@@ -47,6 +47,14 @@ function isMealActivity(activity: Activity): boolean {
   return MEAL_KEYWORDS.some(k => title.includes(k));
 }
 
+function isAccommodationActivity(activity: Activity): boolean {
+  const cat = norm(activity.category);
+  const title = norm(activityTitle(activity));
+  return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
+    || title.includes('hotel check') || title.includes('check-in at')
+    || title.includes('check into') || title.includes('check in at');
+}
+
 function hasKeywordInDay(day: ItineraryDay, keyword: string): boolean {
   const k = norm(keyword);
   return day.activities.some(a => norm(activityTitle(a)).includes(k));
