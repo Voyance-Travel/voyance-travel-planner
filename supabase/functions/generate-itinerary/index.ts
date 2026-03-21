@@ -8432,35 +8432,51 @@ NOTE: Add your flight details to unlock more of the day if departing later.`;
           
         } else {
           // ===== NO FLIGHT AND NO HOTEL =====
-          // Most conservative: assume midday departure
+          // Still plan a proper farewell morning with checkout and departure
+          
+          // City-specific departure hint
+          const destLowerNoHotel = (destination || '').toLowerCase();
+          let genericDepartureHint = 'airport or station';
+          if (destLowerNoHotel.includes('venice')) genericDepartureHint = 'Santa Lucia Station or Marco Polo Airport';
+          
           dayConstraints = `
 === DEPARTURE DAY: NO FLIGHT OR HOTEL INFORMATION ===
 
-⚠️ SAFE ASSUMPTION: Midday departure
+⚠️ Plan a proper farewell morning — don't just stop mid-morning.
 
-Without flight or hotel details, we're planning conservatively
-to ensure you don't miss your departure.
+TIMELINE:
+- Breakfast: 08:30 - 09:30
+- Final farewell activity: 09:30 - 10:30
+- Checkout: 11:00
+- Farewell meal or last experience: 11:15 - 12:00
+- Departure Transfer: 12:30
 
-CONSERVATIVE TIMELINE:
-- Assume checkout around 11:00 AM
-- Assume you need to leave for airport by 11:30 AM
-- Last activity should end by 10:00 AM
-
-DEPARTURE DAY ACTIVITIES: 1 maximum (breakfast)
+DEPARTURE DAY ACTIVITIES: 2-3 activities (breakfast + 1-2 farewell experiences)
 
 STRUCTURE:
-1. "Breakfast" 
+1. "Breakfast"
    - 08:30 - 09:30
 
-2. (Optional) "Final morning stroll"
-   - 09:30 - 10:00
-   - Very nearby, flexible
+2. "Farewell [stroll/café] in [neighborhood]"
+   - 09:30 - 10:30
+   - Nearby, flexible, low-stakes
 
 3. "Checkout & Departure Preparation"
-   - 10:30 - 11:00
+   - 11:00 - 11:15
+   - category: "accommodation"
 
-⚠️ DO NOT schedule activities after 10:30 AM.
-⚠️ Keep the morning light and stress-free.
+4. "Farewell [meal] at [specific place]"
+   - 11:15 - 12:00
+   - A specific restaurant or café for a final meal
+
+5. "Departure Transfer"
+   - 12:30
+   - category: "transport"
+   - description: "Transfer to ${genericDepartureHint}"
+
+⚠️ Last scheduled activity ends by 12:30 PM.
+⚠️ Keep the morning light and stress-free but NOT empty.
+⚠️ Include a REAL farewell meal — not just "departure preparation."
 
 Add your flight and hotel details for a more complete last day.`;
         }
