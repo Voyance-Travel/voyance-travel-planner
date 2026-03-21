@@ -2028,7 +2028,7 @@ function FlightHotelStep({
                         onChange={(e) => setCurrentHotel({ ...currentHotel, pricePerNight: e.target.value ? Number(e.target.value) : undefined })}
                       />
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">Enter the nightly rate — we'll calculate the total automatically</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Enter the nightly rate. We'll calculate the total automatically</p>
                   </div>
 
                   <label className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors">

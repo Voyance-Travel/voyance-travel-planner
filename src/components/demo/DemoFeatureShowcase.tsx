@@ -380,7 +380,7 @@ function GenerationVisual() {
 
   const activities = [
     { time: '9:00 AM', name: 'Fushimi Inari Shrine', type: 'Culture', tip: 'Arrive early to walk the torii gates with fewer crowds' },
-    { time: '12:30 PM', name: 'Nishiki Market', type: 'Food', tip: 'Try the dashimaki tamago at Marutama — a local staple' },
+    { time: '12:30 PM', name: 'Nishiki Market', type: 'Food', tip: 'Try the dashimaki tamago at Marutama, a local staple' },
     { time: '3:00 PM', name: 'Arashiyama Bamboo Grove', type: 'Nature', tip: 'The light is magical between 3–4 PM for photos' },
   ];
 
@@ -471,7 +471,7 @@ function GenerationVisual() {
                 {/* Voyance Tip */}
                 <div className="mt-2 pl-3 border-l-2 border-primary/20">
                   <p className="text-[11px] italic text-muted-foreground">
-                    <span className="text-primary font-medium not-italic">Voyance Tip</span> — {act.tip}
+                    <span className="text-primary font-medium not-italic">Voyance Tip</span> · {act.tip}
                   </p>
                 </div>
               </div>
@@ -610,7 +610,7 @@ function CustomizeVisual() {
           {/* Voyance Tip */}
           <div className="mt-2 pl-3 border-l-2 border-primary/20">
             <p className="text-[11px] italic text-muted-foreground">
-              <span className="text-primary font-medium not-italic">Voyance Tip</span> — Arrive by 8:45 AM to walk the upper trails almost solo
+              <span className="text-primary font-medium not-italic">Voyance Tip</span> · Arrive by 8:45 AM to walk the upper trails almost solo
             </p>
           </div>
         </div>
@@ -638,7 +638,7 @@ function CustomizeVisual() {
             <div className="flex-1 min-w-0">
               <span className="text-[10px] font-mono text-muted-foreground">12:30 PM</span>
               <p className="font-serif text-sm font-medium">
-                {swapped ? 'Izuju Sushi — Kyoto Style' : 'Nishiki Market Lunch'}
+                {swapped ? 'Izuju Sushi, Kyoto Style' : 'Nishiki Market Lunch'}
               </p>
               <Badge variant="secondary" className="text-[10px] mt-0.5 px-1.5 py-0">Food</Badge>
             </div>
@@ -771,11 +771,11 @@ function AssistantVisual() {
             <div className="space-y-1.5">
               <div className="flex items-center gap-2 text-xs">
                 <div className="w-1.5 h-1.5 rounded-full bg-destructive/60" />
-                <span className="text-muted-foreground line-through">Kinkaku-ji Temple Tour — 3 hrs</span>
+                <span className="text-muted-foreground line-through">Kinkaku-ji Temple Tour, 3 hrs</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span className="text-foreground font-medium">Zen Garden Meditation — 1.5 hrs</span>
+                <span className="text-foreground font-medium">Zen Garden Meditation, 1.5 hrs</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

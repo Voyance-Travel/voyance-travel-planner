@@ -658,7 +658,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             />
           </div>
           {(settings?.budget_include_flight ?? false) && !hasFlight && (
-            <p className="text-xs text-amber-600 -mt-1 ml-1">No flight cost added yet — add one in the Flights &amp; Hotels tab.</p>
+            <p className="text-xs text-amber-600 -mt-1 ml-1">No flight cost added yet. Add one in the Flights &amp; Hotels tab.</p>
           )}
 
           <div className="flex items-center justify-between">
@@ -698,7 +698,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mb-2">
-                    {city.nights} night{city.nights !== 1 ? 's' : ''} — {formatCurrency(city.allocatedBudgetCents)} allocated
+                    {city.nights} night{city.nights !== 1 ? 's' : ''}, {formatCurrency(city.allocatedBudgetCents)} allocated
                   </div>
                   <Progress
                     value={usedPercent}

@@ -31,7 +31,7 @@ export default function EditorialShareSection({ guideId, editorialTitle }: Edito
   }, [guideUrl]);
 
   const handleShareX = useCallback(() => {
-    const text = encodeURIComponent(`"${editorialTitle}" — my travel guide on Voyance`);
+    const text = encodeURIComponent(`"${editorialTitle}" - my travel guide on Voyance`);
     const url = encodeURIComponent(guideUrl);
     window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank', 'noopener');
   }, [editorialTitle, guideUrl]);
@@ -41,7 +41,7 @@ export default function EditorialShareSection({ guideId, editorialTitle }: Edito
       try {
         await navigator.share({
           title: editorialTitle,
-          text: `${editorialTitle} — a travel guide on Voyance`,
+          text: `${editorialTitle} - a travel guide on Voyance`,
           url: guideUrl,
         });
       } catch {

@@ -187,7 +187,7 @@ export function MidTripDNA({ tripId, className }: DailyBriefingProps) {
             {briefing.todaySchedule.activityCount} activities planned
           </p>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {briefing.todaySchedule.firstActivity} — {briefing.todaySchedule.lastActivity}
+            {briefing.todaySchedule.firstActivity} to {briefing.todaySchedule.lastActivity}
           </p>
         </div>
       )}

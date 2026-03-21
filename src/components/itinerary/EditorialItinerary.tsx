@@ -6923,7 +6923,7 @@ export function EditorialItinerary({
                     <ul className="list-disc pl-5 space-y-1 text-sm text-amber-600 dark:text-amber-400">
                       {pendingCascade!.truncated.map((act: any) => (
                         <li key={act.id}>
-                          {act.title || 'Untitled'} — {act.durationMinutes} min (was {act.__originalDurationMinutes} min)
+                          {act.title || 'Untitled'}: {act.durationMinutes} min (was {act.__originalDurationMinutes} min)
                         </li>
                       ))}
                     </ul>
@@ -9202,7 +9202,7 @@ function DayCard({
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/30">
                     <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <p className="text-xs text-muted-foreground">
-                      <span className="font-medium">{zeroGapCount} {zeroGapCount === 1 ? 'activity' : 'activities'}</span> {zeroGapCount === 1 ? 'has' : 'have'} no travel buffer —{' '}
+                      <span className="font-medium">{zeroGapCount} {zeroGapCount === 1 ? 'activity' : 'activities'}</span> {zeroGapCount === 1 ? 'has' : 'have'} no travel buffer.{' '}
                       {onRefreshDay ? (
                         <button
                           type="button"
@@ -9856,7 +9856,7 @@ function ActivityRow({
     existingPhoto,
     shouldFetchRealPhoto ? destination : undefined,
     activity.id,
-    activity.id  // activityId — for DB write-back of fetched photo URLs
+    activity.id  // activityId - for DB write-back of fetched photo URLs
   );
 
   const thumbnailUrl = fetchedImageUrl;

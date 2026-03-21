@@ -183,7 +183,7 @@ export default function PublicTravelGuide() {
         {/* Voyance Footer CTA */}
         <div className="border-t pt-8 pb-4 text-center">
           <p className="text-sm text-muted-foreground mb-3">
-            This guide was created with Voyance — the AI travel planner
+            This guide was created with Voyance, the AI travel planner
           </p>
           <Link to="/start">
             <Button>

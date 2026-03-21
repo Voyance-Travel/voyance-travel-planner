@@ -425,7 +425,7 @@ export default function AcceptInvite() {
                   // Owner opened their own invite link
                   <div className="space-y-3">
                     <p className="text-sm text-center text-muted-foreground">
-                      This is your trip — no need to join!
+                      This is your trip, no need to join!
                     </p>
                     <Button className="w-full" size="lg" onClick={handleGoToTrip}>
                       Open Your Trip

@@ -155,7 +155,7 @@ export function ItineraryAssistant({
     // Check for packed days (6+ activities)
     for (const day of currentDays) {
       if (day.activities.length >= 6) {
-        observations.push(`I see Day ${day.dayNumber} is packed with ${day.activities.length} activities — want me to space things out a bit?`);
+        observations.push(`I see Day ${day.dayNumber} is packed with ${day.activities.length} activities. Want me to space things out a bit?`);
         break;
       }
     }
@@ -164,7 +164,7 @@ export function ItineraryAssistant({
     if (observations.length < 2) {
       for (const day of currentDays) {
         if (day.activities.length > 0 && day.activities.length < 3) {
-          observations.push(`Day ${day.dayNumber} has some free time — want me to suggest something fun to fill the gap?`);
+          observations.push(`Day ${day.dayNumber} has some free time. Want me to suggest something fun to fill the gap?`);
           break;
         }
       }
@@ -179,7 +179,7 @@ export function ItineraryAssistant({
           return cat.includes('dinner') || cat.includes('dining') || title.includes('dinner');
         });
         if (!hasDinner && day.activities.length > 0) {
-          observations.push(`Day ${day.dayNumber} doesn't have dinner planned yet — want me to find a spot${accommodationInfo?.neighborhood ? ` near ${accommodationInfo.neighborhood}` : ''}?`);
+          observations.push(`Day ${day.dayNumber} doesn't have dinner planned yet. Want me to find a spot${accommodationInfo?.neighborhood ? ` near ${accommodationInfo.neighborhood}` : ''}?`);
           break;
         }
       }
@@ -194,11 +194,11 @@ export function ItineraryAssistant({
     if (observations.length < 2 && blendedDna?.blendedTraits) {
       const traits = blendedDna.blendedTraits;
       if ((traits.adventure ?? 0) >= 7) {
-        observations.push(`Your Travel DNA says you love adventure — I'll keep an eye out for thrill-seeking options!`);
+        observations.push(`Your Travel DNA says you love adventure. I'll keep an eye out for thrill-seeking options!`);
       } else if ((traits.authenticity ?? 0) >= 7) {
-        observations.push(`Your DNA leans toward authentic local experiences — let me know if any activity feels too touristy.`);
+        observations.push(`Your DNA leans toward authentic local experiences. Let me know if any activity feels too touristy.`);
       } else if ((traits.comfort ?? 0) >= 7) {
-        observations.push(`I see you value comfort — I'll make sure your days have a nice rhythm without too much rushing.`);
+        observations.push(`I see you value comfort. I'll make sure your days have a nice rhythm without too much rushing.`);
       }
     }
 
@@ -603,7 +603,7 @@ export function ItineraryAssistant({
                   Customize your {destination} itinerary
                 </SheetDescription>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  💬 Chat is free — actions cost credits
+                  💬 Chat is free. Actions cost credits
                 </p>
               </div>
               <div className="flex items-center gap-2">
