@@ -9650,10 +9650,77 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 console.log(`[generate-day] ✗ "${act.title}" — REMOVED (confirmed closed all day)`);
                 activitiesToRemove.push(act.id);
               } else {
-                // Time conflict only → uncertain warning
-                console.warn(`[generate-day] ⚠️ "${act.title}" time conflict: ${result.reason}`);
-                (act as any).closedRisk = true;
-                (act as any).closedRiskReason = result.reason;
+                // Time conflict only → try shifting into venue's open window (same logic as Stage 4.5)
+                const DAY_NAMES_SD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                const dayNameSD = DAY_NAMES_SD[dayOfWeek];
+                const dayEntrySD = act.openingHours.find((h: string) => h.toLowerCase().startsWith(dayNameSD.toLowerCase()));
+                let didFix = false;
+
+                if (dayEntrySD && act.startTime) {
+                  const entryLowerSD = dayEntrySD.toLowerCase();
+                  // Parse opening time
+                  let venueOpenMins = -1;
+                  let venueCloseMins = -1;
+                  const timeMatchSD = entryLowerSD.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+                  if (timeMatchSD) {
+                    let oh = parseInt(timeMatchSD[1]);
+                    const om = parseInt(timeMatchSD[2]);
+                    const op = timeMatchSD[3]?.toUpperCase();
+                    if (op === 'PM' && oh !== 12) oh += 12;
+                    if (op === 'AM' && oh === 12) oh = 0;
+                    venueOpenMins = oh * 60 + om;
+                  }
+                  const closeMatchSD = entryLowerSD.match(/[–\-−to]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+                  if (closeMatchSD) {
+                    let ch = parseInt(closeMatchSD[1]);
+                    const cm = parseInt(closeMatchSD[2]);
+                    const cp = closeMatchSD[3]?.toUpperCase();
+                    if (cp === 'PM' && ch !== 12) ch += 12;
+                    if (cp === 'AM' && ch === 12) ch = 0;
+                    venueCloseMins = ch * 60 + cm;
+                    if (venueCloseMins === 0) venueCloseMins = 1440;
+                  }
+
+                  if (venueOpenMins >= 0 && venueCloseMins > 0) {
+                    const oldMinsSD = parseInt(act.startTime.split(':')[0]) * 60 + parseInt(act.startTime.split(':')[1]);
+                    const durationSD = act.endTime
+                      ? (parseInt(act.endTime.split(':')[0]) * 60 + parseInt(act.endTime.split(':')[1])) - oldMinsSD
+                      : 60;
+                    let newStartMinsSD = -1;
+
+                    if (oldMinsSD < venueOpenMins) {
+                      newStartMinsSD = venueOpenMins + 10;
+                    } else if (oldMinsSD >= venueCloseMins || (oldMinsSD + durationSD) > venueCloseMins) {
+                      const latestStartSD = venueCloseMins - durationSD - 15;
+                      if (latestStartSD >= venueOpenMins + 10) {
+                        newStartMinsSD = latestStartSD;
+                      } else {
+                        // Duration doesn't fit → remove
+                        console.log(`[generate-day] ✗ "${act.title}" — REMOVED (duration ${durationSD}min doesn't fit in venue hours)`);
+                        activitiesToRemove.push(act.id);
+                        didFix = true;
+                      }
+                    }
+
+                    if (!didFix && newStartMinsSD >= 0 && newStartMinsSD !== oldMinsSD) {
+                      const newST = `${Math.floor(newStartMinsSD / 60).toString().padStart(2, '0')}:${(newStartMinsSD % 60).toString().padStart(2, '0')}`;
+                      const newEndMinsSD = newStartMinsSD + durationSD;
+                      act.startTime = newST;
+                      if (act.endTime) {
+                        act.endTime = `${Math.floor(newEndMinsSD / 60).toString().padStart(2, '0')}:${(newEndMinsSD % 60).toString().padStart(2, '0')}`;
+                      }
+                      console.log(`[generate-day] ✓ "${act.title}" shifted to ${newST} (venue hours: ${Math.floor(venueOpenMins / 60).toString().padStart(2, '0')}:${(venueOpenMins % 60).toString().padStart(2, '0')}–${Math.floor(venueCloseMins / 60).toString().padStart(2, '0')}:${(venueCloseMins % 60).toString().padStart(2, '0')})`);
+                      didFix = true;
+                    }
+                  }
+                }
+
+                if (!didFix) {
+                  // Couldn't parse hours → fall back to warning tag
+                  console.warn(`[generate-day] ⚠️ "${act.title}" time conflict (unparseable hours): ${result.reason}`);
+                  (act as any).closedRisk = true;
+                  (act as any).closedRiskReason = result.reason;
+                }
               }
             }
           }
