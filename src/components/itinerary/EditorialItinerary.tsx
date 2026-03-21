@@ -6201,10 +6201,11 @@ export function EditorialItinerary({
                       const originalBasis = typeof act.cost === 'object' && act.cost !== null
                         ? (act.cost as any).basis
                         : undefined;
+                      const coherentTitle = enforceMealTimeCoherence(suggestion.suggested_swap, act.startTime || act.time);
                       return {
                         ...act,
-                        title: suggestion.suggested_swap,
-                        name: suggestion.suggested_swap,
+                        title: coherentTitle,
+                        name: coherentTitle,
                         description: suggestion.suggested_description || suggestion.suggested_swap,
                         cost: typeof act.cost === 'object' && act.cost !== null
                           ? { ...(act.cost as any), amount: newCostWhole, basis: originalBasis }
