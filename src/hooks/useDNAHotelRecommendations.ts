@@ -190,25 +190,36 @@ function scoreAndRankHotels(
     return { hotel, rawScore: isNaN(rawScore) ? 50 : rawScore, matchReasons: matchReasons.slice(0, 3), metadata };
   });
 
-  // Second pass: percentile-based rescaling to spread scores across 50-98
+  // Second pass: percentile-based rescaling to spread scores across 35-96
   const rawScores = scoredWithRaw.map(h => h.rawScore);
   const minRaw = Math.min(...rawScores);
   const maxRaw = Math.max(...rawScores);
   const range = maxRaw - minRaw || 1;
 
-  const scored: DNARecommendedHotel[] = scoredWithRaw.map(({ hotel, rawScore, matchReasons }) => {
-    const dnaMatchScore = Math.max(15, Math.min(98, Math.round(50 + ((rawScore - minRaw) / range) * 48)));
-    return {
-      ...hotel,
-      dnaMatchScore,
-      matchReasons,
-      isTopPick: false,
-    };
-  });
+  // Compute scaled scores
+  const scaledScores = scoredWithRaw.map(({ rawScore }) =>
+    Math.round(35 + ((rawScore - minRaw) / range) * 61)
+  );
+
+  // Sort indices by raw score descending for tie-breaking
+  const sortedIndices = rawScores.map((_, i) => i).sort((a, b) => rawScores[b] - rawScores[a]);
+  for (let i = 1; i < sortedIndices.length; i++) {
+    const cur = sortedIndices[i];
+    const prev = sortedIndices[i - 1];
+    if (scaledScores[cur] >= scaledScores[prev]) {
+      scaledScores[cur] = Math.max(15, scaledScores[prev] - 3);
+    }
+  }
+
+  const scored: DNARecommendedHotel[] = scoredWithRaw.map(({ hotel, matchReasons }, idx) => ({
+    ...hotel,
+    dnaMatchScore: Math.max(15, Math.min(96, scaledScores[idx])),
+    matchReasons,
+    isTopPick: false,
+  }));
 
   scored.sort((a, b) => b.dnaMatchScore - a.dnaMatchScore);
 
-  // Mark top pick
   if (scored.length > 0) {
     scored[0].isTopPick = true;
   }
