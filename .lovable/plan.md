@@ -1,37 +1,44 @@
 
 
-## Fix: Inline Transport Mode Buttons Only Work Once
-
-### Root cause
-
-In `handleTransportModeChange` (EditorialItinerary.tsx, line 2413), the success path takes the optimize API's `transportation` object **wholesale**:
-
-```typescript
-const updatedAct = { ...act, transportation: optAct.transportation };
-```
-
-This replaces the entire transportation object with whatever the API returned — including `method`. If the optimize API returns `method: 'metro'` (because it considers metro optimal for that route), the user's click on "Walk" is silently overridden. The title gets updated correctly to "Walk to X" (line 2417), but the `transportation.method` stays as the API's choice.
-
-On the **next** click, TransitBadge reads `transportation.method` → still 'metro' → the metro button appears active → the user clicks something else → the API returns metro again → stuck forever.
-
-The title update masks the bug: the label says "Walk to X" but the underlying method is still 'metro', so TransitBadge highlights metro.
-
-### Fix
-
-**File: `src/components/itinerary/EditorialItinerary.tsx` (~line 2413)**
-
-Force the user's chosen mode onto the API response instead of trusting the API's method:
-
-```typescript
-// Before (broken):
-const updatedAct = { ...act, transportation: optAct.transportation };
-
-// After (fixed):
-const updatedAct = { ...act, transportation: { ...optAct.transportation, method: newMode } };
-```
-
-One line change. The API's route details (duration, cost, instructions) are still used, but the method is always what the user clicked.
+## Remove All Em Dashes from User-Facing UI
 
 ### Scope
-Single line change in `EditorialItinerary.tsx`.
+Replace every em dash (—) in rendered UI text across all non-admin `.tsx` files. Comments are left alone. Each em dash is replaced with a comma, period, or restructured phrasing per Voyance editorial standards.
+
+### Files and Changes
+
+**1. `src/pages/FoundersGuideDetail.tsx` (line 199)**
+- `"That's the Voyance promise — we don't..."` → `"That's the Voyance promise. We don't..."`
+
+**2. `src/components/itinerary/EditorialItinerary.tsx` (line 9205)**
+- `"have no travel buffer —"` → `"have no travel buffer."`
+
+**3. `src/components/guides/EditorialStatusCard.tsx` (line 103)**
+- `"...to unlock your editorial — a polished..."` → `"...to unlock your editorial, a polished..."`
+
+**4. `src/components/trips/TripOverview.tsx` (line 269)**
+- `"Free day — explore at your pace"` → `"Free day. Explore at your pace"`
+
+**5. `src/components/planner/budget/BudgetTab.tsx` (line 661)**
+- `"No flight cost added yet — add one..."` → `"No flight cost added yet. Add one..."`
+
+**6. `src/components/demo/DemoFeatureShowcase.tsx` (lines 774, 778)**
+- `"Kinkaku-ji Temple Tour — 3 hrs"` → `"Kinkaku-ji Temple Tour, 3 hrs"`
+- `"Zen Garden Meditation — 1.5 hrs"` → `"Zen Garden Meditation, 1.5 hrs"`
+
+**7. `src/pages/Start.tsx` (line 2031)**
+- `"Enter the nightly rate — we'll calculate..."` → `"Enter the nightly rate. We'll calculate..."`
+
+**8. `src/components/planner/ManualTripPasteEntry.tsx` (line 341)**
+- `"No dates detected — add them now..."` → `"No dates detected. Add them now..."`
+
+**9. `src/components/itinerary/RefreshDayDiffView.tsx` (line 121)**
+- `"All issues can be resolved — review..."` → `"All issues can be resolved. Review..."`
+
+**10. `src/components/guides/EditorialShareSection.tsx` (lines 34, 44)**
+- `"${title}" — my travel guide on Voyance"` → `"${title}" - my travel guide on Voyance"`
+- `"${title} — a travel guide on Voyance"` → `"${title} - a travel guide on Voyance"`
+
+### Total
+10 files, ~12 string replacements. No logic changes.
 
