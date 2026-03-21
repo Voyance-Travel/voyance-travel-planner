@@ -148,8 +148,13 @@ function isDescriptionLine(line: string): boolean {
   return false;
 }
 
+/** Strip invisible Unicode chars that break time parsing (ZWSP, soft hyphens, BOM, etc.) */
+function sanitizeInvisibleChars(text: string): string {
+  return text.replace(/[\u200B\u200C\u200D\u00AD\u2060\uFEFF\u200E\u200F\u2028\u2029\u202A-\u202E]/g, '');
+}
+
 function cleanMarkdown(line: string): string {
-  return line
+  return sanitizeInvisibleChars(line)
     .replace(/^#+\s*/, '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
@@ -262,6 +267,19 @@ function parsePastedTextGrouped(text: string, currency: string, knownCities: str
         workingLine = workingLine.replace(times[0], '').trim();
       }
     }
+
+    // Cross-check: if parsed time is single-digit hour but raw text has two-digit hour, fix it
+    if (startTime) {
+      const sanitizedRaw = sanitizeInvisibleChars(raw);
+      const twoDigitMatch = sanitizedRaw.match(/\b(1[0-2]):(\d{2})\s*(am|pm)/i);
+      if (twoDigitMatch) {
+        const crossCheck = normalizeTime(twoDigitMatch[0]);
+        if (crossCheck && crossCheck !== startTime) {
+          startTime = crossCheck;
+        }
+      }
+    }
+
     if (!startTime && currentSectionTime) startTime = currentSectionTime;
 
     // Extract cost
