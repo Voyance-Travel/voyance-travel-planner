@@ -571,6 +571,11 @@ export default function PlannerHotelEnhanced() {
             checkOut: endDate,
             totalPrice: pricePerNight * nights,
           } as any).catch(err => console.warn('[PlannerHotel] Budget sync failed:', err));
+          patchItineraryWithHotel(tripId, {
+            name: hotelSelection.name,
+            address: hotelSelection.address,
+          }).catch(err => console.warn('[PlannerHotel] Itinerary patch failed:', err));
+          window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
         }
       }
     } catch (err) {
