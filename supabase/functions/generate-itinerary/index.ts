@@ -8365,51 +8365,68 @@ THE TRAVELER IS LEAVING. A gentle goodbye, not a marathon.`;
           
         } else if (hasHotelData) {
           // ===== NO RETURN FLIGHT BUT HOTEL PROVIDED =====
-          // SAFE ASSUMPTION: Midday departure (not evening!)
-          // Better to under-schedule than have traveler miss flight
+          // Plan a proper farewell morning with checkout, farewell meal, and departure transfer
           
-          const assumedDeparture = '14:00'; // Assume 2 PM flight
-          const safeTransfer = 45; // Default transfer time
-          const checkInBuffer = 180; // 3 hours
-          const leaveBy = addMinutesToHHMM(assumedDeparture, -(checkInBuffer + safeTransfer + 30));
           const checkout = '11:00';
-          const latestActivity = addMinutesToHHMM(checkout, -60);
+          
+          // Determine departure mode from multi-city context or default
+          let departureMode = 'airport';
+          let departureLabel = 'Transfer to Airport';
+          if (paramIsMultiCity && resolvedNextLegTransport) {
+            const mode = resolvedNextLegTransport;
+            if (mode === 'train') { departureMode = 'train station'; departureLabel = 'Transfer to Train Station'; }
+            else if (mode === 'bus') { departureMode = 'bus station'; departureLabel = 'Transfer to Bus Station'; }
+            else if (mode === 'ferry') { departureMode = 'ferry terminal'; departureLabel = 'Transfer to Ferry Terminal'; }
+          }
+          // City-specific transport overrides for well-known non-airport cities
+          const destLower = (destination || '').toLowerCase();
+          if (destLower.includes('venice') && departureMode === 'airport') {
+            departureMode = 'train station (Santa Lucia) or airport (Marco Polo)';
+            departureLabel = 'Departure Transfer';
+          }
           
           dayConstraints = `
 === DEPARTURE DAY: NO FLIGHT DETAILS PROVIDED ===
 
-⚠️ SAFE ASSUMPTION: Midday departure (~2:00 PM flight)
+⚠️ Plan a proper farewell morning — the traveler deserves closure, not an abrupt stop.
 
-We don't have your flight details, so we're keeping this day VERY light
-to ensure you don't miss your flight.
-
-CONSERVATIVE TIMELINE:
-- Last activity ends: ${latestActivity}
+TIMELINE:
+- Breakfast: 08:30 - 09:30
+- Post-breakfast farewell activity: 09:30 - 10:30 (stroll, café, or nearby attraction)
 - Hotel checkout: ${checkout}
-- Leave for airport: ${leaveBy} (assuming 2 PM flight)
+- Farewell meal or final experience: 11:15 - 12:15
+- ${departureLabel}: 12:30 onwards
 
-DEPARTURE DAY ACTIVITIES: 1 maximum
+DEPARTURE DAY ACTIVITIES: 2-3 activities (breakfast + 1-2 farewell experiences)
 
 REALISTIC STRUCTURE:
-1. "Breakfast at hotel or nearby"
+1. "Breakfast at hotel or nearby café"
    - 08:30 - 09:30
+   - Near hotel
 
-2. "Final stroll around hotel neighborhood" (OPTIONAL)
-   - Must end by ${latestActivity}
-   - Walking distance from hotel only
+2. "Farewell [stroll/café/experience] in [neighborhood]"
+   - 09:30 - 10:30
+   - Walking distance from hotel
+   - A gentle goodbye to the city — NOT a major attraction
 
 3. "Hotel Checkout"
    - startTime: "${checkout}", endTime: "11:15"
    - category: "accommodation"
    - location: { name: "${flightContext.hotelName || 'Hotel'}" }
 
-4. "Transfer to Airport"
-   - startTime: "${leaveBy}"
-   - category: "transport"
+4. "Farewell [meal type] at [specific restaurant]"
+   - 11:15 - 12:15
+   - A sit-down farewell meal near the hotel or en route to ${departureMode}
+   - Pick a REAL, specific restaurant — not generic "farewell lunch"
 
-⚠️ DO NOT schedule activities after 10:00 AM.
-⚠️ Plan ONLY near-hotel activities.
-⚠️ Assume the traveler needs to leave by ${leaveBy}.
+5. "${departureLabel}"
+   - startTime: "12:30"
+   - category: "transport"
+   - description: "Transfer to ${departureMode} for departure"
+
+⚠️ All post-checkout activities must be NEAR the hotel or en route to departure.
+⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
+⚠️ CHECKOUT must happen BEFORE departure transfer. VIOLATION = REGENERATION.
 
 NOTE: Add your flight details to unlock more of the day if departing later.`;
           
