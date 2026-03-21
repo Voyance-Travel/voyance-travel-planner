@@ -60,6 +60,7 @@ const SUGGESTION_TYPES = [
 
 export default function TripSuggestions({ tripId, tripType, shareToken, className }: TripSuggestionsProps) {
   const { user } = useAuth();
+  const skipRealtimeRef = useRef(0);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
