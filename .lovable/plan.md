@@ -1,33 +1,38 @@
 
 
-## Fix: Import Time Parsing — "11:00 AM" Parsed as "1:00 AM"
+## Fix: Find Alternative Search Text Filter Doesn't Apply
+
+### Problem
+The search input in the Find Alternative drawer only fires on explicit form submit (Enter key or Search button click). Typing text does **not** filter the already-loaded 25 results in real-time. Users expect instant filtering as they type, similar to standard search/filter patterns.
 
 ### Root cause
-
-This is the **same class of AI truncation bug** that was already fixed for dates (the "June 10 → June 1" fix at `parse-trip-input/index.ts` lines 639-706). The AI model in `parse-trip-input` sometimes truncates multi-digit hour values: "11:00 AM" → "1:00 AM" (dropping the leading "1" from "11"). The backend has no post-AI time validation step to catch this.
-
-Evidence:
-- The `normalizeTimeTo24h()` function itself is correct — "11:00 AM" → "11:00" works fine
-- The `ImportActivitiesModal` client-side parser regex also handles "11:00 AM" correctly
-- The AI's extracted `time` field is the only plausible source of "1:00 AM"
-- The codebase already has a date-truncation fix ("June 10 → June 1") confirming this AI behavior pattern
-- No time-validation step exists in `parse-trip-input` (unlike dates which have 3 correction passes)
+`searchQuery` state is only consumed in `handleCustomSearch()` (line 335), which is called on form submit. The rendered results list (lines 622-648) displays `similarAlternatives` and `differentAlternatives` directly with no client-side filtering applied.
 
 ### Fix
 
-**File: `supabase/functions/parse-trip-input/index.ts`** — Add a time-validation pass after the AI extraction (after line 486, before the date fixing section)
+**File: `src/components/planner/ActivityAlternativesDrawer.tsx`**
 
-1. **Extract explicit times from raw text** — scan the user's pasted text for time patterns like "11:00 AM", "2:30 PM", "14:00"
-2. **Cross-reference with AI-extracted times** — for each activity with a `time` field, check if a corresponding time exists in the raw text near the activity name
-3. **Fix truncated hours** — if the raw text says "11:00 AM" near "Harajuku" but the AI returned "1:00 AM", override with "11:00 AM"
+1. **Add client-side filtering** — derive `filteredSimilar` and `filteredDifferent` from the search query, filtering by `alt.name`, `alt.category`, `alt.description`, and `alt.location`:
 
-The matching logic:
-- For each activity, find its name (or keywords from its name) in the raw text
-- Look for a time pattern within ~100 characters of that name match
-- If the raw-text time's minutes match but the hour differs, and the raw hour is a multi-digit number where the AI's hour is a suffix (e.g., raw=11, AI=1), replace with the raw time
+```typescript
+const filterByQuery = (alts: AlternativeActivity[]) => {
+  if (!searchQuery.trim()) return alts;
+  const q = searchQuery.toLowerCase();
+  return alts.filter(a =>
+    a.name?.toLowerCase().includes(q) ||
+    a.category?.toLowerCase().includes(q) ||
+    a.description?.toLowerCase().includes(q) ||
+    a.location?.toLowerCase().includes(q)
+  );
+};
+const filteredSimilar = filterByQuery(similarAlternatives);
+const filteredDifferent = filterByQuery(differentAlternatives);
+```
 
-**File: `src/utils/createTripFromParsed.ts`** — No changes needed (the `normalizeTimeTo24h` call is correct; the bug is upstream)
+2. **Use filtered lists in render** — replace `similarAlternatives` / `differentAlternatives` with `filteredSimilar` / `filteredDifferent` in the results section (lines 624-647) and in `hasAlternatives` (line 521).
+
+3. **Keep server-side search on submit** — the existing `handleCustomSearch()` still fires on Enter/button click for when the user wants to search for something not in the current results. This gives the best of both worlds: instant local filtering + deeper AI search on submit.
 
 ### Scope
-Single backend file: `supabase/functions/parse-trip-input/index.ts`. ~40 lines of post-processing validation added after the sanitization pass. Follows the exact same pattern as the existing day-of-month validation.
+Single file, ~15 lines added/changed. No backend changes.
 
