@@ -681,6 +681,18 @@ export default function PlannerHotelEnhanced() {
         }
       }
 
+      // Sync budget + itinerary for manual hotels
+      const manualTripId = searchParams.get('tripId') || plannerState.tripId;
+      if (manualTripId && manualHotel.name) {
+        syncHotelToLedger(manualTripId, manualHotel as any)
+          .catch(err => console.warn('[PlannerHotel] Manual hotel budget sync failed:', err));
+        patchItineraryWithHotel(manualTripId, {
+          name: manualHotel.name,
+          address: manualHotel.address,
+        }).catch(err => console.warn('[PlannerHotel] Manual hotel itinerary patch failed:', err));
+        window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId: manualTripId } }));
+      }
+
       toast.success('Hotel details saved');
     }
     
