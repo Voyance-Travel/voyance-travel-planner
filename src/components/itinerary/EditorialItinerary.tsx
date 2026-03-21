@@ -4276,14 +4276,7 @@ export function EditorialItinerary({
         // CRITICAL: Preserve locked activities by passing both:
         // - keepActivities: IDs of locked activities
         // - currentActivities: full activity objects in BACKEND format so backend can merge them back
-        // Helper to identify accommodation/hotel activities
-        const isAccommodationLike = (a: EditorialActivity) => {
-          const cat = (a.category || '').toLowerCase();
-          const title = (a.title || '').toLowerCase();
-          return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
-            || title.includes('hotel check') || title.includes('check-in at')
-            || title.includes('check into');
-        };
+        // isAccommodationLike is defined above both branches
 
         // Filter out accommodation from keepActivities to prevent duplication
         const keepActivities = (day.activities || [])

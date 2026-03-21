@@ -348,9 +348,35 @@ export function ItineraryEditor({
 
     setRegeneratingDay(day.dayNumber);
     try {
+      // Helper to identify accommodation/hotel activities
+      const isAccommodationLike = (a: any) => {
+        const cat = (a.category || '').toLowerCase();
+        const title = (a.title || a.name || '').toLowerCase();
+        return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
+          || title.includes('hotel check') || title.includes('check-in at')
+          || title.includes('check into');
+      };
+
+      const sanitizeRegeneratedDay = (newDay: any) => {
+        // Deduplicate accommodation: keep only the original hotel
+        const originalHotel = (day.activities || []).find(isAccommodationLike);
+        if (originalHotel && newDay.activities) {
+          newDay.activities = newDay.activities.filter((a: any) => !isAccommodationLike(a));
+          newDay.activities.push(originalHotel);
+          newDay.activities.sort((a: any, b: any) =>
+            (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
+          );
+        }
+        // Preserve original day title/theme
+        newDay.title = day.title;
+        newDay.theme = day.theme;
+        return newDay;
+      };
+
       if (onRegenerateDay) {
         const newDay = await onRegenerateDay(day.dayNumber);
         if (newDay) {
+          sanitizeRegeneratedDay(newDay);
           setDays(prev => prev.map((d, idx) => idx === dayIndex ? newDay : d));
           setHasChanges(true);
           toast.success(`Day ${day.dayNumber} regenerated!`);
@@ -373,13 +399,14 @@ export function ItineraryEditor({
             date: day.date,
             travelers,
             budgetTier,
-            previousDayActivities: currentDayActivities, // Force different venues
-            variationNonce: Date.now(), // Force new randomness
+            previousDayActivities: currentDayActivities,
+            variationNonce: Date.now(),
           }
         });
 
         if (error) throw error;
         if (data?.day) {
+          sanitizeRegeneratedDay(data.day);
           setDays(prev => prev.map((d, idx) => idx === dayIndex ? data.day : d));
           setHasChanges(true);
           toast.success(`Day ${day.dayNumber} regenerated!`);
