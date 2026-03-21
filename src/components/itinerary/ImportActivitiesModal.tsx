@@ -162,7 +162,7 @@ function cleanMarkdown(line: string): string {
     .replace(/^\d+\.\s+/, '')
     .replace(/^>\s*/, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/^[\p{Emoji}\s]{1,4}(?=\w)/u, '')
+    .replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]{1,4}(?=\w)/u, '')
     .trim();
 }
 
