@@ -116,7 +116,7 @@ Suggest 5-8 specific cost-cutting swaps. For each:
 
 Types of swaps to consider:
 - Private/guided tours → general admission or self-guided
-- Expensive dinner restaurants → the same restaurant for lunch
+- Expensive dinner restaurants → the same restaurant for lunch (keep the original venue name — do NOT prefix with "Lunch at"; explain the lunch-price saving in the "reason" field)
 - Fine dining → great local spots or street food
 - Taxi rides → metro/walking if distance is reasonable
 - Paid activities → free alternatives in the same area

@@ -59,6 +59,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO, isToday, addDays, isPast, startOfDay } from 'date-fns';
 import { safeFormatDate, parseLocalDate } from '@/utils/dateUtils';
 import { parseTimeToMinutes } from '@/utils/timeFormat';
+import { enforceMealTimeCoherence } from '@/utils/mealTimeCoherence';
 import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } from '@/types/itinerary';
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
@@ -3191,7 +3192,7 @@ export function EditorialItinerary({
           return {
             ...a,
             id: newActivity.id, // Use new activity ID
-            title: newActivity.title,
+            title: enforceMealTimeCoherence(newActivity.title || '', preservedStartTime),
             description: newActivity.description,
             category: newActivity.type,
             type: newActivity.type,
@@ -6201,10 +6202,11 @@ export function EditorialItinerary({
                       const originalBasis = typeof act.cost === 'object' && act.cost !== null
                         ? (act.cost as any).basis
                         : undefined;
+                      const coherentTitle = enforceMealTimeCoherence(suggestion.suggested_swap, act.startTime || act.time);
                       return {
                         ...act,
-                        title: suggestion.suggested_swap,
-                        name: suggestion.suggested_swap,
+                        title: coherentTitle,
+                        name: coherentTitle,
                         description: suggestion.suggested_description || suggestion.suggested_swap,
                         cost: typeof act.cost === 'object' && act.cost !== null
                           ? { ...(act.cost as any), amount: newCostWhole, basis: originalBasis }

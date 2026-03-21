@@ -7,6 +7,7 @@ import { NightsRedistributionModal } from '@/components/trip/NightsRedistributio
 import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
+import { enforceMealTimeCoherence } from '@/utils/mealTimeCoherence';
 import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, PenLine, Coins, Calendar, Clock } from 'lucide-react';
 import { CREDIT_COSTS } from '@/config/pricing';
 import {
@@ -2020,9 +2021,10 @@ export default function TripDetail() {
       if (actIdx === -1) continue;
 
       // Replace the activity name/location, keep everything else
+      const coherentName = enforceMealTimeCoherence(swap.suggestedActivity, activities[actIdx].startTime || activities[actIdx].time);
       activities[actIdx] = {
         ...activities[actIdx],
-        name: swap.suggestedActivity,
+        name: coherentName,
         location: {
           ...(activities[actIdx].location || {}),
           name: swap.suggestedLocation || activities[actIdx].location?.name,
