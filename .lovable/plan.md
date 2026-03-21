@@ -1,69 +1,40 @@
 
 
-## Fix: Regenerate Day creates duplicate hotel entries and renames day title
-
-### Problem
-The Regenerate Day flow in `EditorialItinerary.tsx` (line 4239-4284) has the same hotel duplication bug that was fixed in `itineraryActionExecutor.ts` — but through a completely separate code path. When clicking the ↻ Regenerate button:
-
-1. Locked activities are preserved via `keepActivities`, but accommodation isn't excluded — so the backend receives the hotel ID as "kept" AND generates a new hotel entry
-2. The backend returns a fully new day object (including a new title like "Tokyo Heights & Market Bites"), which replaces the original day wholesale at line 4284
-3. No post-merge dedup runs, so duplicate hotels appear (tripling the cost)
+## Fix: DNA Match Scores Clustered at 98% — Insufficient Differentiation
 
 ### Root cause
-Two issues in `handleDayRegenerateInternal` (lines 4230-4292):
-- `keepActivities` includes accommodation/hotel activities, causing the same duplication as the Trip Assistant rewrite
-- The raw `data.day` from the backend replaces the entire day, including the title, without preserving the original title
+
+Two separate scoring paths exist, both with inflation problems:
+
+**1. `useTravelDNAHotelRanking.ts` (main hotel page)** — lines 216-237:
+- Uses **linear** alignment: `1 - |diff|` — a 0.2 difference only costs 20%, so most hotels score 70-85 raw
+- Static inflation: `rawScore * 1.25 + 12` pushes 70 raw → 99.5 display — everything above ~70 raw hits 98-99
+- `priceScore` user trait is **hardcoded to 1.0** (line 207), meaning budget hotels always score high on this 18%-weighted dimension, while luxury hotels are penalized regardless of the user's actual budget preference
+- Quality bonus adds +3 on top, further compressing into the ceiling
+
+**2. `useDNAHotelRecommendations.ts` (DNA picks sidebar)** — lines 144-200:
+- Uses **quadratic** penalty (`1 - diff²`) — better, but when raw scores cluster tightly (e.g., 85-92), the percentile rescaling `50 + ((raw - min) / range) * 48` stretches them to fill 50-98 — so the top 3 all hit 98
 
 ### Fix
 
-**File: `src/components/itinerary/EditorialItinerary.tsx` (lines ~4239-4284)**
+**File 1: `src/hooks/useTravelDNAHotelRanking.ts`** (main scoring)
 
-1. **Filter accommodation from keepActivities** — reuse the same `isAccommodationActivity` pattern from `itineraryActionExecutor.ts`:
+1. Switch from linear to **quadratic** alignment (match the DNA picks formula): `1 - diff * diff`
+2. Replace hardcoded `userTrait: 1.0` for price with `traitScores.budget` — use the user's actual budget preference
+3. Replace static inflation (`* 1.25 + 12`) with **percentile rescaling** (same approach as DNA picks): map raw scores across the result set to a 30-95 range, guaranteeing spread
+4. Increase quality bonus cap differentiation: 5-star → +4, 4-star → +2, 3-star → 0
 
-```typescript
-const keepActivities = (day.activities || [])
-  .filter(a => a.isLocked && !isAccommodationLike(a))
-  .map(a => a.id)
-  .filter(Boolean);
-```
+**File 2: `src/hooks/useDNAHotelRecommendations.ts`** (sidebar picks)
 
-Add a local helper:
-```typescript
-const isAccommodationLike = (a: EditorialActivity) => {
-  const cat = (a.category || '').toLowerCase();
-  const title = (a.title || '').toLowerCase();
-  return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
-    || title.includes('hotel check') || title.includes('check-in at')
-    || title.includes('check into');
-};
-```
+1. Widen the rescaling output range from `50-98` to `35-96` — this gives more room for meaningful gaps between hotels
+2. Add a **minimum gap** rule: if top N scores would be identical after rounding, apply a tie-breaking spread (e.g., 96, 93, 90 instead of 98, 98, 98)
 
-2. **Post-regeneration accommodation dedup** — after receiving `data.day`, deduplicate hotel entries (keep original, remove AI duplicate):
-
-```typescript
-if (data?.day) {
-  const originalHotel = day.activities.find(isAccommodationLike);
-  if (originalHotel && data.day.activities) {
-    // Remove AI-generated duplicate hotel
-    const dupeIdx = data.day.activities.findIndex(a =>
-      isAccommodationLike(a) && a.id !== originalHotel.id
-    );
-    if (dupeIdx !== -1) {
-      data.day.activities.splice(dupeIdx, 1);
-      if (!data.day.activities.some(a => a.id === originalHotel.id)) {
-        data.day.activities.push(originalHotel);
-      }
-    }
-  }
-  // Preserve original day title (don't let backend rename it)
-  data.day.title = day.title;
-  data.day.theme = day.theme;
-  ...
-}
-```
-
-3. **Preserve day title/theme** — the backend shouldn't rename a day the user hasn't asked to rename. Set `data.day.title = day.title` and `data.day.theme = day.theme` before applying.
+### Expected result
+- Top hotel might score 92-95%, second hotel 85-88%, third 78-82% — meaningful visual differentiation
+- Luxury hotels won't be penalized if the user's DNA indicates a premium budget preference
+- Airport/budget hotels score lower for comfort-oriented travelers, not arbitrarily
+- No hotel can trivially hit 98% without genuinely matching most traits
 
 ### Scope
-Single file: `src/components/itinerary/EditorialItinerary.tsx`, ~20 lines added around the `handleDayRegenerateInternal` function.
+Two files: `useTravelDNAHotelRanking.ts` and `useDNAHotelRecommendations.ts`. No backend changes.
 
