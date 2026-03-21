@@ -2701,6 +2701,24 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       // ==========================================================================
+      // MULTI-CITY DEPARTURE DAY: Dedup checkout activities
+      // ==========================================================================
+      if (isLastDayInCity) {
+        const checkoutActivities = (generatedDay.activities || []).filter((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return t.includes('checkout') || t.includes('check-out') || t.includes('check out') ||
+                 t.includes('departure preparation');
+        });
+        if (checkoutActivities.length > 1) {
+          const keepId = checkoutActivities.find((a: any) => a.category === 'accommodation')?.id 
+                         || checkoutActivities[0].id;
+          const removeIds = new Set(checkoutActivities.filter((a: any) => a.id !== keepId).map((a: any) => a.id));
+          generatedDay.activities = generatedDay.activities.filter((a: any) => !removeIds.has(a.id));
+          console.log(`[Stage 2] Day ${dayNumber}: Deduped ${removeIds.size} duplicate checkout activities`);
+        }
+      }
+
+      // ==========================================================================
       // ARRIVAL DAY: Strip arrival/baggage/transfer activities — handled by Arrival Game Plan UI
       // ==========================================================================
       if (isFirstDay && generatedDay.activities.length > 0) {
