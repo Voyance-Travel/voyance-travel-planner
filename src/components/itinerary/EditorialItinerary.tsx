@@ -1025,7 +1025,8 @@ function getActivityCostInfo(
   travelers: number = 1,
   budgetTier: string = 'moderate',
   destinationCity?: string,
-  destinationCountry?: string
+  destinationCountry?: string,
+  isManualMode: boolean = false
 ): CostInfo {
   const category = activity.category || activity.type || 'activity';
   const title = activity.title || '';
