@@ -81,7 +81,8 @@ export function sanitizeActivityName(name: string | undefined | null): string {
   if (trimWords.length >= 2) {
     const lastWord = trimWords[trimWords.length - 1];
     const withoutLast = trimWords.slice(0, -1).join(' ');
-    if (withoutLast.toLowerCase().includes(lastWord.toLowerCase())) {
+    const precedingWords = withoutLast.toLowerCase().split(/\s+/);
+    if (precedingWords.includes(lastWord.toLowerCase())) {
       sanitized = withoutLast;
     }
   }
