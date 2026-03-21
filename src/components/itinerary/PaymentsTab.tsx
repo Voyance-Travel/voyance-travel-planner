@@ -1155,7 +1155,7 @@ export function PaymentsTab({
                                     status: 'pending' as const,
                                     assigned_member_id: realMemberId,
                                   }));
-                                  const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id' });
+                                  const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id,assigned_member_id' });
                                   if (error) console.error('Failed to assign item:', item.name, error);
                                 }
                                 if (skippedCount > 0) {
