@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ClipboardPaste, Check, RefreshCw, Merge, ArrowRight, ChevronRight, AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { normalizeTimeTo24h, formatTime12h } from '@/utils/timeFormat';
 
 // =============================================================================
 // TYPES
