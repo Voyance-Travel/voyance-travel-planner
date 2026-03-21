@@ -1,85 +1,65 @@
 
+Fix the “days become unplanned after navigation” regression by making the recovery path restore data instead of silently regenerating over it.
 
-## Fix: Multi-City Departure Day — Duplicate Checkout & Airport References on Train Departure
+What I found
+- The affected trip currently has 4 JSON days in the backend, but Day 3 and Day 4 were overwritten with generic meal-fallback content.
+- Version history proves those days were originally fully planned:
+  - Day 3 version snapshot had 15 activities
+  - Day 4 version snapshot had 4 activities
+- The likely destructive path is in `src/pages/TripDetail.tsx`:
+  - on load, “empty day” self-heal treats `activities: []` as unplanned
+  - it then auto-calls `regenerate-day`
+  - that rewrite can replace a previously complete day with generic fallback cards
+- This is too aggressive for a trip already marked `ready`.
 
-### Problem (from screenshot)
-On a Rome → Florence departure day (next leg = train), three issues:
-1. **Duplicate checkout**: Both "Checkout & Departure Preparation" (category: activity, ~$40) AND "Hotel Checkout from" (category: accommodation, Free) appear
-2. **Airport reference**: Transit gap shows "Private Transfer to Fiumicino Airport (FCO)" despite the next leg being a train to Florence
-3. **Bloated day**: The minimum-activity validator requires 5 real activities for this day (treats it as a normal mid-trip day), forcing the AI to pad with extra logistics
+Plan
 
-### Root Causes
+1. Make TripDetail recovery non-destructive
+- File: `src/pages/TripDetail.tsx`
+- Remove the current behavior that auto-regenerates empty days on page load for ready trips.
+- Replace it with:
+  1. try restoring the day from the latest non-empty version snapshot
+  2. if no version exists, try rebuilding from stored activity sources
+  3. only if nothing recoverable exists, show a non-destructive warning/banner instead of regenerating automatically
 
-**Issue 1 & 3 — Minimum activity count too high for multi-city departure days**
-Line 2740 in `index.ts`:
-```typescript
-const minimumRealActivities = isLastDay ? 1 : (isFirstDay ? 3 : 5);
-```
-A multi-city departure day (`isLastDayInCity && !isLastDay`) gets the "5 activities" requirement. The AI overstuffs the day and generates duplicate checkout activities to fill the quota.
+2. Add a “latest non-empty version” restore helper
+- File: `src/services/itineraryVersionHistory.ts`
+- Add a helper that fetches the newest version for a day where `activities.length > 0`.
+- Reuse this in TripDetail self-heal so navigation restores the original planned day instead of inventing a new one.
 
-**Issue 2 — No post-processing dedup for checkout activities**
-When the AI generates both a generic "Checkout & Departure Preparation" (category: activity) and a proper "Hotel Checkout" (category: accommodation), nothing strips the duplicate.
+3. Tighten “real day” detection everywhere
+- Files:
+  - `src/pages/TripDetail.tsx`
+  - `src/hooks/useGenerationPoller.ts`
+- Stop using raw `itinerary_days` row count as evidence that a day is complete.
+- Count only days that actually contain recoverable activities.
+- This prevents shell/empty days from being treated as safe or complete.
 
-**Issue 3 — Airport transit gap on non-flight departure**
-The `transportation` field on the generated "Checkout & Departure Preparation" activity likely references the airport. The strip filter at line 2680 removes activities with "airport" in the title, but "Checkout & Departure Preparation" doesn't contain "airport" — the airport reference is in the transit gap between activities, populated from the activity's location data pointing at Fiumicino.
+4. Stop trusting stale embedded day activity blobs for healing
+- File: `src/pages/TripDetail.tsx`
+- The current rebuild path reads `itinerary_days.activities` directly, but that payload can be stale/incomplete.
+- Prefer this order:
+  1. version snapshot
+  2. canonical trip JSON day if non-empty
+  3. normalized activity source
+  4. never silent regeneration on a ready trip
 
-### Fix (1 file, ~25 lines)
+5. Add guarded logging so this can’t silently recur
+- File: `src/pages/TripDetail.tsx`
+- Log which source healed the day (`version_history`, `json_day`, `normalized_rows`, `none`)
+- Log when destructive regeneration is skipped for safety
+- This makes future regressions diagnosable without overwriting user data
 
-**File: `supabase/functions/generate-itinerary/index.ts`**
+Why this approach
+- The current problem is not just “days show unplanned”; it is “navigation can trigger a destructive rewrite.”
+- The safest fix is to restore existing authored data first and remove silent regeneration from the ready-trip load path.
 
-**Change 1: Lower minimum activity count for multi-city departure days (line 2740)**
+Expected result
+- Navigating between legs/pages will no longer turn planned days into unplanned ones.
+- If a day temporarily appears empty, the app restores the original version instead of replacing it with generic placeholders.
+- Existing affected trips with version history can be recovered automatically by the new restore-first path.
 
-```typescript
-// Before:
-const minimumRealActivities = isLastDay ? 1 : (isFirstDay ? 3 : 5);
-
-// After:
-const isMultiCityDepartureDay = paramIsLastDayInCity && !isLastDay;
-const minimumRealActivities = isLastDay ? 1 : (isMultiCityDepartureDay ? 1 : (isFirstDay ? 3 : 5));
-```
-
-This allows the AI to generate a light departure morning (breakfast + checkout + transfer to station) without padding.
-
-**Change 2: Post-processing — dedup checkout activities (after line 2697)**
-
-Add a dedup pass that keeps only one checkout activity per day on multi-city departure days. When multiple checkout-like activities exist, keep the one with category `accommodation` and strip the others:
-
-```typescript
-if (isLastDayInCity) {
-  const checkoutActivities = generatedDay.activities.filter((a: any) => {
-    const t = (a.title || '').toLowerCase();
-    return t.includes('checkout') || t.includes('check-out') || t.includes('check out') ||
-           t.includes('departure preparation');
-  });
-  if (checkoutActivities.length > 1) {
-    // Keep the accommodation-category one; remove duplicates
-    const keepId = checkoutActivities.find((a: any) => a.category === 'accommodation')?.id 
-                   || checkoutActivities[0].id;
-    const removeIds = new Set(checkoutActivities.filter((a: any) => a.id !== keepId).map((a: any) => a.id));
-    generatedDay.activities = generatedDay.activities.filter((a: any) => !removeIds.has(a.id));
-    console.log(`[Stage 2] Day ${dayNumber}: Deduped ${removeIds.size} duplicate checkout activities`);
-  }
-}
-```
-
-**Change 3: Extend airport stripping to include location-based airport references (line 2682)**
-
-Broaden the non-flight departure filter to also catch activities whose location references an airport:
-
-```typescript
-generatedDay.activities = generatedDay.activities.filter((a: any) => {
-  const t = (a.title || '').toLowerCase();
-  const locName = (a.location?.name || '').toLowerCase();
-  const desc = (a.description || '').toLowerCase();
-  const isAirportRef =
-    t.includes('airport') || t.includes('flight departure') || t.includes('head to airport') ||
-    (a.category === 'transport' && (locName.includes('airport') || locName.includes('aeroporto') || locName.includes('aéroport')));
-  // Also strip transport activities whose description mentions airport when next leg isn't flight
-  const descAirportRef = a.category === 'transport' && desc.includes('airport');
-  return !isAirportRef && !descAirportRef;
-});
-```
-
-### Scope
-1 edge function file, ~25 lines changed. No client-side or database changes.
-
+Files likely involved
+- `src/pages/TripDetail.tsx`
+- `src/services/itineraryVersionHistory.ts`
+- `src/hooks/useGenerationPoller.ts`
