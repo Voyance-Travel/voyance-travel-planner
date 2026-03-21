@@ -9885,9 +9885,14 @@ function ActivityRow({
       return null;
     })();
 
+    const isPlaceholderLocation = (text?: string) => {
+      if (!text) return true;
+      const t = text.toLowerCase().trim();
+      return t.length < 4 || t === 'the destination' || t.startsWith('@ the destination') || t.startsWith('at the destination') || t === '@ the' || /^@?\s*the\s+(destination|city|area|location|neighborhood)$/i.test(t);
+    };
     const rawLocationName = activity.location?.name?.trim();
-    const dedupedLocationName = (rawLocationName && rawLocationName !== activityTitle) ? rawLocationName : '';
-    const locationText = dedupedLocationName || activity.location?.address;
+    const dedupedLocationName = (rawLocationName && rawLocationName !== activityTitle && !isPlaceholderLocation(rawLocationName)) ? rawLocationName : '';
+    const locationText = dedupedLocationName || (activity.location?.address && !isPlaceholderLocation(activity.location.address) ? activity.location.address : '');
 
     return (
       <div className="py-2">
