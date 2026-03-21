@@ -342,13 +342,22 @@ export function useTravelDNAHotelRanking(
       userBudgetTier: budgetTier as 'budget' | 'moderate' | 'premium' | 'luxury',
     };
     
-    // Map and score each hotel
-    const rankedHotels: RankedHotel[] = hotels.map(hotel => {
+    // Map each hotel and compute raw scores
+    const hotelData = hotels.map(hotel => {
       const metadata = mapHotelToMetadata(hotel, context);
-      const dnaMatchScore = calculateDNAMatchScore(metadata, traitScores);
+      const rawScore = calculateDNAMatchScoreRaw(metadata, traitScores);
+      return { hotel, metadata, rawScore };
+    });
+    
+    // Percentile rescaling across the full result set (30-95 range)
+    const rawScores = hotelData.map(h => h.rawScore);
+    const displayScores = rescaleScores(rawScores, 30, 95);
+    
+    const rankedHotels: RankedHotel[] = hotelData.map(({ hotel, metadata, rawScore }, idx) => {
+      const dnaMatchScore = displayScores[idx];
       const matchReasons = generateMatchReasons(metadata, traitScores, dnaMatchScore);
       
-      logger.debug(`[DNA Ranking] ${hotel.name}: score=${dnaMatchScore}`, {
+      logger.debug(`[DNA Ranking] ${hotel.name}: raw=${rawScore.toFixed(1)} display=${dnaMatchScore}`, {
         comfort: metadata.comfortScore,
         adventure: metadata.adventureScore,
         culture: metadata.cultureScore,
