@@ -238,6 +238,38 @@ export async function canUndo(tripId: string, dayNumber: number): Promise<boolea
 }
 
 /**
+ * Get the latest non-empty version snapshot for a day.
+ * Used by TripDetail self-heal to restore data instead of destructive regeneration.
+ */
+export async function getLatestNonEmptyVersion(
+  tripId: string,
+  dayNumber: number
+): Promise<ItineraryVersion | null> {
+  try {
+    const { data, error } = await supabase
+      .from('itinerary_versions')
+      .select('*')
+      .eq('trip_id', tripId)
+      .eq('day_number', dayNumber)
+      .order('version_number', { ascending: false })
+      .limit(10);
+
+    if (error || !data) return null;
+
+    for (const row of data) {
+      const version = row as unknown as ItineraryVersion;
+      if (Array.isArray(version.activities) && version.activities.length > 0) {
+        return version;
+      }
+    }
+    return null;
+  } catch (err) {
+    console.error('[VersionHistory] getLatestNonEmptyVersion error:', err);
+    return null;
+  }
+}
+
+/**
  * Format version for display
  */
 export function formatVersionLabel(version: ItineraryVersion): string {
