@@ -3,7 +3,7 @@
  * Supports authenticated users (direct DB) and anonymous users (via edge function + share token).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { registerSubscription, unregisterSubscription } from '@/lib/realtimeSubscriptionManager';
 import { ThumbsUp, Plus, Lightbulb, User, Loader2, ArrowRightLeft, CalendarClock, Pencil, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -60,6 +60,7 @@ const SUGGESTION_TYPES = [
 
 export default function TripSuggestions({ tripId, tripType, shareToken, className }: TripSuggestionsProps) {
   const { user } = useAuth();
+  const skipRealtimeRef = useRef(0);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -140,12 +141,12 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
           schema: 'public',
           table: 'trip_suggestions',
           filter: `trip_id=eq.${tripId}`,
-        }, () => loadSuggestions())
+        }, () => { if (Date.now() < skipRealtimeRef.current) return; loadSuggestions(); })
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
           table: 'trip_suggestion_votes',
-        }, () => loadSuggestions())
+        }, () => { if (Date.now() < skipRealtimeRef.current) return; loadSuggestions(); })
         .subscribe()
     );
 
@@ -235,6 +236,7 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
       setSuggestionType('general');
       setVoteDeadline('');
       setShowForm(false);
+      skipRealtimeRef.current = Date.now() + 2000;
       toast.success('Suggestion added!');
     } catch (err) {
       console.error('Failed to submit suggestion:', err);
@@ -321,6 +323,7 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
       setSuggestions(prev => prev.map(s =>
         s.id === suggestionId ? { ...s, vote_deadline: newDeadline } : s
       ));
+      skipRealtimeRef.current = Date.now() + 2000;
       toast.success(newDeadline ? 'Deadline updated' : 'Deadline removed');
       setEditingDeadlineId(null);
       setEditDeadlineValue('');
