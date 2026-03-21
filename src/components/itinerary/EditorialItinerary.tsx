@@ -4236,8 +4236,18 @@ export function EditorialItinerary({
         // CRITICAL: Preserve locked activities by passing both:
         // - keepActivities: IDs of locked activities
         // - currentActivities: full activity objects in BACKEND format so backend can merge them back
+        // Helper to identify accommodation/hotel activities
+        const isAccommodationLike = (a: EditorialActivity) => {
+          const cat = (a.category || '').toLowerCase();
+          const title = (a.title || '').toLowerCase();
+          return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
+            || title.includes('hotel check') || title.includes('check-in at')
+            || title.includes('check into');
+        };
+
+        // Filter out accommodation from keepActivities to prevent duplication
         const keepActivities = (day.activities || [])
-          .filter(a => a.isLocked)
+          .filter(a => a.isLocked && !isAccommodationLike(a))
           .map(a => a.id)
           .filter(Boolean);
         
@@ -4281,6 +4291,24 @@ export function EditorialItinerary({
 
         if (error) throw error;
         if (data?.day) {
+          // Post-regeneration: deduplicate accommodation entries
+          const originalHotel = (day.activities || []).find(isAccommodationLike);
+          if (originalHotel && data.day.activities) {
+            const dupeIdx = data.day.activities.findIndex((a: EditorialActivity) =>
+              isAccommodationLike(a) && a.id !== originalHotel.id
+            );
+            if (dupeIdx !== -1) {
+              data.day.activities.splice(dupeIdx, 1);
+              if (!data.day.activities.some((a: EditorialActivity) => a.id === originalHotel.id)) {
+                data.day.activities.push(originalHotel);
+              }
+            }
+          }
+
+          // Preserve original day title and theme — backend shouldn't rename without user request
+          data.day.title = day.title;
+          data.day.theme = day.theme;
+
           setDays(prev => prev.map((d, idx) => idx === dayIndex ? data.day : d));
           setHasChanges(true);
           if (guidedPreferences) {
