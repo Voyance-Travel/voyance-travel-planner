@@ -1,39 +1,60 @@
 
-Fix the deadline issue at the data layer, not the UI.
 
-What’s actually happening
-- I checked the live data for “Visit Sacré-Cœur Basilica at sunset” and its `vote_deadline` is still `null`.
-- The current `TripSuggestions.tsx` already contains the earlier optimistic/realtime suppression fix (`skipRealtimeRef`), so this is no longer just a stale UI overwrite problem.
-- The real backend gap is that `trip_suggestions` has SELECT and INSERT policies, but no UPDATE policy. That means owners/collaborators can create suggestions, but the deadline update is not actually allowed to persist.
+## Fix: Rewrite Day creates duplicate hotel entries and inflates costs
 
-Plan
-1. Add an UPDATE policy for `public.trip_suggestions`
-- Create a migration that allows authenticated users to update their own suggestion rows.
-- Restrict it to the row owner (`user_id = auth.uid()`) and only for trips they already have access to, matching the existing INSERT/SELECT access rules.
+### Problem
+When the AI rewrites a day, hotel/accommodation activities (category: `accommodation`, `hotel`, or keywords like "check-in", "hotel") are treated as "protected" by `isProtectedActivity()`. Their IDs are sent to the backend via `keepActivities`. However, the AI also generates a new hotel check-in activity because the accommodation context is in the prompt. The backend's semantic dedup uses a 50% keyword match which often fails because the titles differ (e.g., "Four Seasons Otemachi" vs "Hotel Check-in & Refresh"). Result: two hotel entries, both at $1,204, inflating the trip total by ~$9,759.
 
-2. Keep deadline editing ownership-safe
-- Ensure only the creator can update the suggestion deadline, which matches the current UI behavior (`isOwner(suggestion)`).
+### Root cause
+In `src/services/itineraryActionExecutor.ts` line 232-234, `isProtectedActivity` includes `accommodation` in `PROTECTED_CATEGORIES`. This means hotel STAY activities get sent as locked, but the AI doesn't know to skip generating a hotel entry — it just avoids the locked time slot and places a new hotel activity at a different time.
 
-3. Tighten the save flow in `TripSuggestions.tsx`
-- After a successful deadline update, trigger a fresh reload for that suggestion list so the saved DB value becomes the source of truth.
-- Keep the optimistic update, but make the post-save refresh explicit so we don’t rely only on realtime timing.
+### Fix
 
-4. Improve failure feedback
-- If the update is blocked or returns no updated row, show a clearer toast like:
-  - “Couldn’t save deadline. You may not have edit permission.”
-- This helps distinguish a permissions problem from a display bug.
+**File: `src/services/itineraryActionExecutor.ts` (lines ~230-255)**
 
-Files to update
-- `supabase/migrations/...sql` — add `FOR UPDATE` policy on `public.trip_suggestions`
-- `src/components/suggestions/TripSuggestions.tsx` — small save-flow hardening / clearer feedback
+Two changes:
 
-Expected result
-- Setting a deadline will actually persist in the database.
-- Reloading the page or returning in a later session will show the saved date/time instead of “Set deadline.”
-- If a user truly lacks permission, they’ll get a clear message instead of a misleading silent failure.
+1. **Exclude accommodation/hotel from `keepActivities`** — Hotel entries should NOT be sent as locked activities to the regeneration backend. They're not user-curated activities; they're logistics that should be handled by the schema compiler. Add a filter:
 
-Technical note
-- Evidence from the current project:
-  - `TripSuggestions.tsx` already has the realtime suppression fix.
-  - The specific suggestion row still has `vote_deadline = null` in the database.
-  - Existing migrations define SELECT/INSERT policies for `trip_suggestions`, but no UPDATE policy was found.
+```typescript
+const keepActivities = preserve_locked
+  ? day.activities
+      .filter(a => (a.isLocked || isProtectedActivity(a)) && !isAccommodationActivity(a))
+      .map(a => a.id).filter(Boolean)
+  : [];
+```
+
+2. **Post-rewrite dedup** — After receiving `newActivities` from the backend, deduplicate accommodation entries. If the original day had a hotel STAY and the AI generated another one, keep only the original:
+
+```typescript
+// Deduplicate hotel/accommodation entries: keep original, remove AI-generated duplicates
+const originalHotel = day.activities.find(a => isAccommodationActivity(a));
+if (originalHotel) {
+  const dupeIdx = newActivities.findIndex(a =>
+    isAccommodationActivity(a) && a.id !== originalHotel.id
+  );
+  if (dupeIdx !== -1) {
+    newActivities.splice(dupeIdx, 1);
+    // Re-insert original if not already present
+    if (!newActivities.some(a => a.id === originalHotel.id)) {
+      newActivities.push(originalHotel);
+      newActivities.sort((a, b) => /* time sort */);
+    }
+  }
+}
+```
+
+3. **Add helper function** `isAccommodationActivity`:
+```typescript
+function isAccommodationActivity(activity: Activity): boolean {
+  const cat = norm(activity.category);
+  const title = norm(activityTitle(activity));
+  return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
+    || title.includes('hotel check') || title.includes('check-in')
+    || title.includes('check into');
+}
+```
+
+### Scope
+Single file: `src/services/itineraryActionExecutor.ts`. No backend changes needed — the issue is entirely in how the client pre-filters and post-processes the rewrite result.
+
