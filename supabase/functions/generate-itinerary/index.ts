@@ -6431,6 +6431,20 @@ If the purpose is a specific event, plan at least ONE full day around that event
           allAfter.sort((a: any, b: any) =>
             (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0)
           );
+          
+          // Mini overlap resolution: ensure shifted activities don't overlap existing ones
+          for (let k = 0; k < allAfter.length - 1; k++) {
+            const curEnd = parseTimeToMinutes(allAfter[k].endTime) || 0;
+            const nextStart = parseTimeToMinutes(allAfter[k + 1].startTime) || 0;
+            if (curEnd > nextStart) {
+              const nextDuration = (parseTimeToMinutes(allAfter[k + 1].endTime) || (nextStart + 60)) - nextStart;
+              const newStart = curEnd + 15;
+              allAfter[k + 1].startTime = minutesToHHMM(newStart);
+              allAfter[k + 1].endTime = minutesToHHMM(newStart + nextDuration);
+              console.log(`[Stage 2.57] Resolved overlap: pushed "${allAfter[k + 1].title || allAfter[k + 1].name}" to ${minutesToHHMM(newStart)}`);
+            }
+          }
+          
           day.activities = [checkIn, ...allAfter];
           aiResult.days[dIdx] = day;
 
