@@ -638,7 +638,7 @@ function CustomizeVisual() {
             <div className="flex-1 min-w-0">
               <span className="text-[10px] font-mono text-muted-foreground">12:30 PM</span>
               <p className="font-serif text-sm font-medium">
-                {swapped ? 'Izuju Sushi — Kyoto Style' : 'Nishiki Market Lunch'}
+                {swapped ? 'Izuju Sushi, Kyoto Style' : 'Nishiki Market Lunch'}
               </p>
               <Badge variant="secondary" className="text-[10px] mt-0.5 px-1.5 py-0">Food</Badge>
             </div>

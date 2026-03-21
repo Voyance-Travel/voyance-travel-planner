@@ -50,7 +50,7 @@ export function VersionHistoryDrawer({
         <DrawerHeader>
           <DrawerTitle className="flex items-center gap-2">
             <History className="h-5 w-5 text-primary" />
-            Day {dayNumber} — Version History
+            Day {dayNumber}: Version History
           </DrawerTitle>
           <DrawerDescription>
             Browse and restore previous versions of this day's itinerary.

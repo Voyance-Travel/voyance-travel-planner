@@ -11,7 +11,7 @@ import * as path from 'path';
 const EM_DASH = '\u2014'; // —
 
 /** Directories / file patterns to skip (admin, tests, node_modules) */
-const SKIP_DIRS = ['node_modules', 'dist', '.git', 'src/pages/admin'];
+const SKIP_DIRS = ['node_modules', 'dist', '.git', 'src/pages/admin', 'src/components/admin'];
 const SKIP_FILES = [/\.test\./, /\.spec\./, /setup\.ts$/];
 
 function collectTsxFiles(dir: string, files: string[] = []): string[] {

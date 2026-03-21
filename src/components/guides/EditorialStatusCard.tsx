@@ -115,7 +115,7 @@ export default function EditorialStatusCard({
       {/* Existing version info */}
       {hasExisting && relativeTime && (
         <p className="text-xs text-muted-foreground">
-          Editorial v{editorialVersion} — generated {relativeTime}
+          Editorial v{editorialVersion}, generated {relativeTime}
         </p>
       )}
 

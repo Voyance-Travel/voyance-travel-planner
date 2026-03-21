@@ -698,7 +698,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mb-2">
-                    {city.nights} night{city.nights !== 1 ? 's' : ''} — {formatCurrency(city.allocatedBudgetCents)} allocated
+                    {city.nights} night{city.nights !== 1 ? 's' : ''}, {formatCurrency(city.allocatedBudgetCents)} allocated
                   </div>
                   <Progress
                     value={usedPercent}

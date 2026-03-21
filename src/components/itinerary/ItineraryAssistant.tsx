@@ -603,7 +603,7 @@ export function ItineraryAssistant({
                   Customize your {destination} itinerary
                 </SheetDescription>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  💬 Chat is free — actions cost credits
+                  💬 Chat is free. Actions cost credits
                 </p>
               </div>
               <div className="flex items-center gap-2">
