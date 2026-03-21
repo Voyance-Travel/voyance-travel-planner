@@ -9742,14 +9742,33 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                     }
 
                     if (!didFix && newStartMinsSD >= 0 && newStartMinsSD !== oldMinsSD) {
-                      const newST = `${Math.floor(newStartMinsSD / 60).toString().padStart(2, '0')}:${(newStartMinsSD % 60).toString().padStart(2, '0')}`;
-                      const newEndMinsSD = newStartMinsSD + durationSD;
-                      act.startTime = newST;
-                      if (act.endTime) {
-                        act.endTime = `${Math.floor(newEndMinsSD / 60).toString().padStart(2, '0')}:${(newEndMinsSD % 60).toString().padStart(2, '0')}`;
+                      // Hard-constraint check: don't shift if it squeezes against checkout/departure
+                      const hardStopActSD = normalizedActivities.find((ha: any) => {
+                        const hCat = (ha.category || '').toLowerCase();
+                        const hTitle = (ha.title || ha.name || '').toLowerCase();
+                        return (hCat === 'accommodation' && (hTitle.includes('check') || hTitle.includes('checkout')))
+                          || (hCat === 'transport' && (hTitle.includes('depart') || hTitle.includes('airport') || hTitle.includes('flight') || hTitle.includes('train')));
+                      });
+                      if (hardStopActSD && hardStopActSD.startTime) {
+                        const hardStopMinsSD = parseInt(hardStopActSD.startTime.split(':')[0]) * 60 + parseInt(hardStopActSD.startTime.split(':')[1]);
+                        const estimatedEndSD = newStartMinsSD + durationSD + 20;
+                        if (estimatedEndSD > hardStopMinsSD) {
+                          console.log(`[generate-day] ✗ "${act.title}" — REMOVED (shifted time would exceed hard stop at ${hardStopMinsSD}min)`);
+                          activitiesToRemove.push(act.id);
+                          didFix = true;
+                        }
                       }
-                      console.log(`[generate-day] ✓ "${act.title}" shifted to ${newST} (venue hours: ${Math.floor(venueOpenMins / 60).toString().padStart(2, '0')}:${(venueOpenMins % 60).toString().padStart(2, '0')}–${Math.floor(venueCloseMins / 60).toString().padStart(2, '0')}:${(venueCloseMins % 60).toString().padStart(2, '0')})`);
-                      didFix = true;
+                      
+                      if (!didFix && newStartMinsSD >= 0 && newStartMinsSD !== oldMinsSD) {
+                        const newST = `${Math.floor(newStartMinsSD / 60).toString().padStart(2, '0')}:${(newStartMinsSD % 60).toString().padStart(2, '0')}`;
+                        const newEndMinsSD = newStartMinsSD + durationSD;
+                        act.startTime = newST;
+                        if (act.endTime) {
+                          act.endTime = `${Math.floor(newEndMinsSD / 60).toString().padStart(2, '0')}:${(newEndMinsSD % 60).toString().padStart(2, '0')}`;
+                        }
+                        console.log(`[generate-day] ✓ "${act.title}" shifted to ${newST} (venue hours: ${Math.floor(venueOpenMins / 60).toString().padStart(2, '0')}:${(venueOpenMins % 60).toString().padStart(2, '0')}–${Math.floor(venueCloseMins / 60).toString().padStart(2, '0')}:${(venueCloseMins % 60).toString().padStart(2, '0')})`);
+                        didFix = true;
+                      }
                     }
                   }
                 }
