@@ -1,35 +1,35 @@
 
 
-## Fix: Single-Day Generation Doesn't Auto-Fix Hours Conflicts (Only Tags Warnings)
+## Fix: Venue Hours Shift Must Respect Hard Downstream Constraints (Checkout/Departure)
 
 ### Problem
-When a venue hours conflict is detected (e.g., "Nightcap at Caffè Florian" at 9 PM but venue closes at 8:30 PM), the full-generation path (Stage 4.5) has auto-fix logic that shifts the activity into the venue's open window or removes it. But the **single-day generation path** (line 9630-9665) only removes confirmed-closed-all-day activities and tags time conflicts as `closedRisk` warnings — it never attempts to shift the activity into the venue's open window.
+Stage 4.5 correctly detects "church opens at 10:30, scheduled at 10:00" and shifts the activity to 10:40 AM. But it doesn't check whether the shifted time creates an impossible squeeze against hard downstream events like hotel checkout (11:00 AM). The result: a 30-minute visit ending at 11:10 AM + 30-minute transit = checkout pushed to 11:40 AM, which violates the checkout constraint.
 
-The yellow warning banner is the result: the system knows the conflict but doesn't fix it.
+The fixes already deployed (Stage 4.5 auto-fix + single-day path auto-fix) handle the time-shift correctly. The gap is that **neither path validates the shifted time against hard constraints on the same day** — specifically checkout/departure on last days or transition days.
 
 ### Root Cause
-Two code paths, one fix:
-- **Full generation** (Stage 4.5, line 6770-6900): Parses opening hours, calculates venue open/close in minutes, shifts activity start/end to fit, or removes if duration doesn't fit.
-- **Single-day generation** (line 9630-9665): Only checks `isVenueOpenOnDay()` → if not open all day, removes; if time conflict only, sets `closedRisk = true` and moves on. **No time-shift logic.**
+Stage 4.5 shifts `startTime` forward and continues. Stage 4.6 then cascade-shifts everything downstream, including checkout — which shouldn't be movable on departure/transition days. There's no "is this a hard-stop activity?" check before cascade-shifting.
 
-### Fix (1 file, ~30 lines)
+### Fix (1 file, ~25 lines)
 
-**File: `supabase/functions/generate-itinerary/index.ts` (~line 9652)**
+**File: `supabase/functions/generate-itinerary/index.ts`**
 
-In the single-day generation's "time conflict only" branch, replicate the same time-shift logic from Stage 4.5:
+**In Stage 4.5's time-shift block (~line 6855):** After calculating `newStartMins`, before applying the shift, check if the day has a hard downstream constraint (checkout or departure transport). If the shifted activity + its duration + minimum transit buffer would exceed the hard constraint's start time, **remove the activity** instead of shifting it — the day can't fit it.
 
-1. Parse the day's opening hours entry to get `venueOpenMins` and `venueCloseMins`
-2. Calculate the activity's current start in minutes and its duration
-3. If scheduled after close (or overlapping close): shift to `venueCloseMins - duration - 15`
-4. If scheduled before open: shift to `venueOpenMins + 10`
-5. If the activity duration doesn't fit in the open window at all: remove the activity instead of leaving a warning
-6. Only fall through to `closedRisk` tagging if parsing fails (no parseable hours data)
+```
+Logic (pseudocode):
+1. Find hard-stop activity on this day (checkout, departure transport)
+2. If found, get its startTime in minutes → hardStopMins
+3. After computing newStartMins:
+   - estimatedEnd = newStartMins + duration + 20 (minimum transit buffer)
+   - If estimatedEnd > hardStopMins → REMOVE the activity
+4. Same check in the single-day path (~line 9705)
+```
 
-This ensures both generation paths apply identical enforcement. The warning banner becomes a last resort for truly ambiguous cases (e.g., hours data couldn't be parsed), not for clear conflicts with known hours.
+This prevents Stage 4.5 from shifting an activity into a position that Stage 4.6 will then cascade into checkout, and prevents checkout from being pushed.
 
-### Technical Detail
-The parsing logic already exists in Stage 4.5 (lines 6798-6882). Extract the relevant time-parsing and shifting into a shared helper to avoid duplicating ~40 lines. Both Stage 4.5 and the single-day path call the same helper.
+**Additionally in Stage 4.6 (~line 6966):** Add a guard that prevents cascade-shifting activities whose category is `accommodation` (checkout) or `transport`/`flight` on the last day or transition days. If a cascade shift would hit one of these, truncate the cascade at that point and remove the preceding activity that caused the overflow instead.
 
 ### Files
-- `supabase/functions/generate-itinerary/index.ts` — add time-shift fix to single-day hours validation; extract shared helper from Stage 4.5
+- `supabase/functions/generate-itinerary/index.ts` — add hard-constraint check in Stage 4.5 shift logic + Stage 4.6 cascade guard
 
