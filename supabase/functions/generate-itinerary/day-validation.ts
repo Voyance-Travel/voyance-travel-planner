@@ -132,7 +132,7 @@ const MEAL_KEYWORDS: Record<RequiredMeal, string[]> = {
 const DINING_CATEGORIES = ['dining', 'restaurant', 'food', 'cafe', 'meal'];
 
 export function detectMealSlots(
-  activities: Array<Pick<StrictActivityMinimal, 'title' | 'category'>>
+  activities: Array<Pick<StrictActivityMinimal, 'title' | 'category'> & { startTime?: string }>
 ): RequiredMeal[] {
   const detected = new Set<RequiredMeal>();
 
@@ -147,6 +147,17 @@ export function detectMealSlots(
         detected.add(mealType);
       } else if (isDining && MEAL_KEYWORDS[mealType].some(keyword => category.includes(keyword))) {
         detected.add(mealType);
+      }
+    }
+
+    // Time-based meal detection for dining-category activities (e.g. "De Kas" at 19:00)
+    if (isDining) {
+      const startTime = (activity as any).startTime || '';
+      const minutes = parseTimeToMinutesLocal(startTime);
+      if (minutes !== null) {
+        if (minutes >= 6 * 60 && minutes < 11 * 60) detected.add('breakfast');
+        else if (minutes >= 11 * 60 && minutes < 15 * 60) detected.add('lunch');
+        else if (minutes >= 17 * 60 && minutes <= 22 * 60) detected.add('dinner');
       }
     }
   }
