@@ -9886,7 +9886,7 @@ function ActivityRow({
     activity.id  // activityId - for DB write-back of fetched photo URLs
   );
 
-  const thumbnailUrl = fetchedImageUrl;
+  const thumbnailUrl = isManualMode ? null : fetchedImageUrl;
   const [thumbnailError, setThumbnailError] = useState(false);
 
   // Report resolved photo for batch write-back to itinerary_data
