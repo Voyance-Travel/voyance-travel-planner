@@ -3,7 +3,7 @@
  * Supports authenticated users (direct DB) and anonymous users (via edge function + share token).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { registerSubscription, unregisterSubscription } from '@/lib/realtimeSubscriptionManager';
 import { ThumbsUp, Plus, Lightbulb, User, Loader2, ArrowRightLeft, CalendarClock, Pencil, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
