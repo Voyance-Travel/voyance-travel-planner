@@ -127,7 +127,8 @@ Rules:
 - Suggestions must be specific to THIS itinerary and destination
 - Include real venue/restaurant names when possible
 - Rank by savings amount (biggest first)
-- All costs in ${currency} as integers (no decimals)`;
+- All costs in ${currency} as integers (no decimals)
+- NEVER suggest the same replacement venue/restaurant in more than one suggestion. Each swap must recommend a DIFFERENT specific place, even if multiple items are in the same category (e.g., if two breakfasts need swaps, suggest two different affordable cafés).`;
 
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
