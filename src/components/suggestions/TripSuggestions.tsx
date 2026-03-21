@@ -140,12 +140,12 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
           schema: 'public',
           table: 'trip_suggestions',
           filter: `trip_id=eq.${tripId}`,
-        }, () => loadSuggestions())
+        }, () => { if (Date.now() < skipRealtimeRef.current) return; loadSuggestions(); })
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
           table: 'trip_suggestion_votes',
-        }, () => loadSuggestions())
+        }, () => { if (Date.now() < skipRealtimeRef.current) return; loadSuggestions(); })
         .subscribe()
     );
 
