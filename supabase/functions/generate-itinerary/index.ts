@@ -1566,7 +1566,7 @@ async function generateSingleDayWithRetry(
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
-    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with "Hotel Check-in & Refresh" (category: accommodation) as the FIRST activity. Do NOT include an "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" activity — arrival logistics are handled by a separate UI component. Start the day with hotel check-in, then proceed to real activities.' : '',
+    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with hotel check-in/luggage drop as the FIRST activity (category: accommodation). Travelers arrive with bags — getting to the hotel is the #1 priority. If no flight time is given, assume a morning arrival (10:00 AM luggage drop). Title it "Hotel Check-in & Refresh" or "Luggage Drop & Early Check-in". Do NOT include "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" — arrival logistics are handled by a separate UI component.' : '',
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
     '13. **HOTEL FIDELITY — CRITICAL**: If a specific hotel name and address are provided in the accommodation section, you MUST use that EXACT hotel name for ALL accommodation activities (check-in, return to hotel, freshen up, checkout, etc.). Do NOT invent, substitute, or suggest a different hotel. The user has already booked their accommodation.',
     '14. **NO KEYWORD STUFFING**: Activity titles must be concise (max 8 words). NEVER pad titles with synonym lists of location types (e.g., "borough town place locale district quarter sector area"). Use the specific venue or activity name only.',
@@ -6241,8 +6241,8 @@ If the purpose is a specific event, plan at least ONE full day around that event
             const hotelAddress_56 = day1City_56?.hotelAddress || flightHotelResult?.hotelAddress || '';
 
             const firstActivity_56 = day1_56.activities[0];
-            const firstStartMin_56 = parseTimeToMinutes(firstActivity_56?.startTime || '15:00') || (15 * 60);
-            const checkInStartMin_56 = Math.max(12 * 60, firstStartMin_56 - 45);
+            const firstStartMin_56 = parseTimeToMinutes(firstActivity_56?.startTime || '10:00') || (10 * 60);
+            const checkInStartMin_56 = Math.max(9 * 60, firstStartMin_56 - 45);
             const checkInEndMin_56 = checkInStartMin_56 + 30;
             const checkInStart_56 = minutesToHHMM(checkInStartMin_56);
             const checkInEnd_56 = minutesToHHMM(checkInEndMin_56);
@@ -7899,71 +7899,57 @@ DO NOT plan activities before ${arrival24}.`;
         } else if (hasHotelData) {
           // ===== NO FLIGHT, BUT HOTEL PROVIDED =====
           // We know WHERE they're staying but not WHEN they arrive
-          // Apply conservative assumptions based on standard check-in
-          const defaultCheckIn = '15:00'; // Standard hotel check-in
-          const settleInEnd = addMinutesToHHMM(defaultCheckIn, 30);
-          const earliestActivity = addMinutesToHHMM(settleInEnd, 30);
+          // Assume morning arrival — travelers want to drop bags first
+          const luggageDropTime = '10:00';
+          const luggageDropEnd = addMinutesToHHMM(luggageDropTime, 30);
+          const earliestActivity = addMinutesToHHMM(luggageDropEnd, 15);
           
-          console.log(`[Day1-Decision] Hotel provided but no flight - using standard check-in (${defaultCheckIn})`);
+          console.log(`[Day1-Decision] Hotel provided but no flight - luggage drop first at ${luggageDropTime}`);
           
           dayConstraints = `
-HOTEL PROVIDED BUT ARRIVAL TIME UNKNOWN:
+HOTEL PROVIDED — LUGGAGE DROP FIRST:
 - Hotel: ${flightContext.hotelName}
 - Address: ${flightContext.hotelAddress || 'Address on file'}
 
 The traveler has a hotel but has NOT provided flight/arrival details.
-We cannot assume morning availability.
-
-SAFE ASSUMPTIONS:
-- Standard hotel check-in: 3:00 PM (15:00)
-- The traveler may be traveling to the destination during morning/early afternoon
-- DO NOT schedule activities before 15:00
+Assume they arrive in the morning and head to the hotel first to drop bags.
 
 REQUIRED FIRST ACTIVITY:
-1. "Hotel Check-in & Settle In"
-   - startTime: "${defaultCheckIn}", endTime: "${settleInEnd}"
+1. "Hotel Check-in & Refresh"
+   - startTime: "${luggageDropTime}", endTime: "${luggageDropEnd}"
    - category: "accommodation"
+   - description: "Head to hotel to drop bags. Most hotels store luggage before official check-in; early check-in is often available on request."
    - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
 
 DAY 1 GUIDELINES:
-- After check-in (${settleInEnd}), plan light afternoon activities
-- Earliest sightseeing: ${earliestActivity}
-- Focus on the hotel neighborhood
-- End with dinner nearby
-- This is an orientation day, not a full exploration day
+- After luggage drop (${luggageDropEnd}), plan a full day of activities starting from ${earliestActivity}
+- Include a "Return to Hotel" activity around 15:00-15:30 for official check-in/freshen up if the day is long enough
+- The traveler is free to explore all day after dropping bags
+- End with dinner
 
-DO NOT plan activities before ${defaultCheckIn}.`;
+Start the day at ${luggageDropTime} with the hotel luggage drop.`;
         } else {
           // ===== NO FLIGHT AND NO HOTEL =====
-          // Apply most conservative "safe day one" assumptions
-          console.log(`[Day1-Decision] No flight AND no hotel data - applying conservative defaults`);
+          // No luggage drop possible, but still allow a morning start
+          console.log(`[Day1-Decision] No flight AND no hotel data - assuming morning availability`);
           
           dayConstraints = `
-⚠️ NO ARRIVAL OR HOTEL INFORMATION PROVIDED
+NO ARRIVAL OR HOTEL INFORMATION PROVIDED
 
-The traveler has not specified:
-- Flight arrival time
-- Hotel/accommodation details
+The traveler has not specified flight or hotel details.
 
-CONSERVATIVE DAY 1 APPROACH:
-- We cannot assume the traveler is available in the morning
-- We cannot assume a specific location to start from
-- Apply maximum flexibility
-
-SAFE ASSUMPTIONS:
-- Assume arrival/check-in around 3:00 PM (15:00)
-- DO NOT schedule any morning activities
-- Start planning from 15:30 onwards
-- Focus on flexible, central activities
-- Plan activities that can be reached from any hotel location
+DAY 1 APPROACH:
+- Assume the traveler is available from 10:00 AM
+- Start with a central, accessible activity
+- Plan activities that can be reached from any accommodation
+- Focus on exploration and orientation
 
 STRUCTURE:
-1. Activity 1 should start at 15:30 (allows for hotel check-in + settling)
-2. Plan 2-3 light afternoon activities in central/accessible areas
+1. Start at 10:00 AM with a central activity
+2. Plan a full day of activities
 3. End with dinner
 
-DO NOT plan activities before 15:30 on Day 1.
-The traveler may still be in transit during the morning.`;
+Start the day at 10:00 AM.`;
         }
       } else if (isLastDay) {
         // ===== LAST DAY: DEPARTURE LOGIC WITH LUGGAGE REALITY =====
