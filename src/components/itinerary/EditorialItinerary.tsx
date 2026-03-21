@@ -1175,7 +1175,7 @@ function getDayTotalCost(
   // Only sum confirmed costs (not estimates) so day badges match the canonical Trip Total
   return activities.reduce((sum, act) => {
     const info = getActivityCostInfo(act, travelers, budgetTier, destinationCity, destinationCountry, isManualMode);
-    return sum + (info.isEstimated ? 0 : info.amount);
+    return sum + (isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount));
   }, 0);
 }
 
@@ -2975,7 +2975,7 @@ export function EditorialItinerary({
   const financialSnapshot = useTripFinancialSnapshot(tripId);
   
   // Calculate totals with smart estimation using destination-aware pricing
-  const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry), 0);
+  const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode), 0);
   const flightCost = allFlightLegs.reduce((sum, leg) => sum + (leg.price || 0), 0);
   const hotelCost = (() => {
     // Multi-hotel: sum totalPrice (or pricePerNight * nights) across all hotels
@@ -8929,7 +8929,7 @@ function DayCard({
   // Premium content visibility: use entitlement prop, fallback to !dayIsPreview for backward compat
   const canViewPremium = canViewPremiumProp !== undefined ? canViewPremiumProp : !dayIsPreview;
   const allLocked = day.activities.every(a => a.isLocked);
-  const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
+  const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode);
   
   // Transport details toggle - collapsed by default to reduce visual noise
   const [showTransportDetails, setShowTransportDetails] = useState(false);
