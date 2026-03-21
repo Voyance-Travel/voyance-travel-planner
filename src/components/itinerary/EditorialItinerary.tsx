@@ -1025,7 +1025,8 @@ function getActivityCostInfo(
   travelers: number = 1,
   budgetTier: string = 'moderate',
   destinationCity?: string,
-  destinationCountry?: string
+  destinationCountry?: string,
+  isManualMode: boolean = false
 ): CostInfo {
   const category = activity.category || activity.type || 'activity';
   const title = activity.title || '';
@@ -1058,6 +1059,10 @@ function getActivityCostInfo(
   // If cost is explicitly 0 and source is imported/user-override, respect it as-is
   if (costAmount === 0 && ((activity as any).costSource === 'imported' || (activity as any).costSource === 'user_override')) {
     return { amount: 0, isEstimated: false, confidence: 'high', basis };
+  }
+  // In manual (Build It Myself) mode, trust user's data — never auto-estimate
+  if (isManualMode && costAmount === 0) {
+    return { amount: 0, isEstimated: false, confidence: 'high' as const, basis };
   }
   // If cost is explicitly 0 but category should never be free, skip to estimation
   if (costAmount === 0 && shouldNeverBeFree) {
@@ -1125,9 +1130,10 @@ function getActivityCost(
   travelers: number = 1,
   budgetTier: string = 'moderate',
   destinationCity?: string,
-  destinationCountry?: string
+  destinationCountry?: string,
+  isManualMode: boolean = false
 ): number {
-  return getActivityCostInfo(activity, travelers, budgetTier, destinationCity, destinationCountry).amount;
+  return getActivityCostInfo(activity, travelers, budgetTier, destinationCity, destinationCountry, isManualMode).amount;
 }
 
 function getActivityType(activity: EditorialActivity): string {
@@ -1163,11 +1169,12 @@ function getDayTotalCost(
   travelers: number = 1, 
   budgetTier: string = 'moderate',
   destinationCity?: string,
-  destinationCountry?: string
+  destinationCountry?: string,
+  isManualMode: boolean = false
 ): number {
   // Only sum confirmed costs (not estimates) so day badges match the canonical Trip Total
   return activities.reduce((sum, act) => {
-    const info = getActivityCostInfo(act, travelers, budgetTier, destinationCity, destinationCountry);
+    const info = getActivityCostInfo(act, travelers, budgetTier, destinationCity, destinationCountry, isManualMode);
     return sum + (info.isEstimated ? 0 : info.amount);
   }, 0);
 }
@@ -9755,7 +9762,7 @@ function ActivityRow({
   const style = activityStyles[activityType] || activityStyles.activity;
   const rawRating = getActivityRating(activity);
   const reviewCount = getActivityReviewCount(activity);
-  const costInfo = getActivityCostInfo(activity, travelers, budgetTier, destination, destinationCountry);
+  const costInfo = getActivityCostInfo(activity, travelers, budgetTier, destination, destinationCountry, isManualMode);
   const cost = costInfo.amount;
   // Use tripCurrency (user's preferred display currency) instead of activity's native currency
   const existingPhoto = getActivityPhoto(activity);
