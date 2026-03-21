@@ -100,26 +100,8 @@ function guessCategory(text: string): string {
   return 'activity';
 }
 
-function normalizeTime(raw: string): string | undefined {
-  if (!raw) return undefined;
-  const cleaned = raw.trim().toLowerCase();
-  const match24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
-  if (match24) {
-    const h = parseInt(match24[1]);
-    return h <= 23 ? `${h.toString().padStart(2, '0')}:${match24[2]}` : undefined;
-  }
-  const match12 = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
-  if (match12) {
-    let h = parseInt(match12[1]);
-    const m = match12[2] || '00';
-    if (match12[3] === 'pm' && h !== 12) h += 12;
-    if (match12[3] === 'am' && h === 12) h = 0;
-    return `${h.toString().padStart(2, '0')}:${m}`;
-  }
-  // No longer match bare numbers — require :MM or am/pm
-  return undefined;
-  return undefined;
-}
+/** Use shared normalizeTimeTo24h — single source of truth */
+const normalizeTime = normalizeTimeTo24h;
 
 const SKIP_LINE_PATTERNS: RegExp[] = [
   /^[-=*_]{3,}$/,
