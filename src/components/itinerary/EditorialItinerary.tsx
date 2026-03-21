@@ -4310,18 +4310,14 @@ export function EditorialItinerary({
 
         if (error) throw error;
         if (data?.day) {
-          // Post-regeneration: deduplicate accommodation entries
+          // Post-regeneration: deduplicate ALL accommodation entries, keep only original
           const originalHotel = (day.activities || []).find(isAccommodationLike);
           if (originalHotel && data.day.activities) {
-            const dupeIdx = data.day.activities.findIndex((a: EditorialActivity) =>
-              isAccommodationLike(a) && a.id !== originalHotel.id
+            data.day.activities = data.day.activities.filter((a: EditorialActivity) => !isAccommodationLike(a));
+            data.day.activities.push(originalHotel);
+            data.day.activities.sort((a: EditorialActivity, b: EditorialActivity) =>
+              (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
             );
-            if (dupeIdx !== -1) {
-              data.day.activities.splice(dupeIdx, 1);
-              if (!data.day.activities.some((a: EditorialActivity) => a.id === originalHotel.id)) {
-                data.day.activities.push(originalHotel);
-              }
-            }
           }
 
           // Preserve original day title and theme — backend shouldn't rename without user request
