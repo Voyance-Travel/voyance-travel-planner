@@ -1,35 +1,47 @@
 
 
-## Fix: Venue Hours Shift Must Respect Hard Downstream Constraints (Checkout/Departure)
+## Fix: Departure Day Ends Abruptly — No Farewell Activity or Departure Transport
 
 ### Problem
-Stage 4.5 correctly detects "church opens at 10:30, scheduled at 10:00" and shifts the activity to 10:40 AM. But it doesn't check whether the shifted time creates an impossible squeeze against hard downstream events like hotel checkout (11:00 AM). The result: a 30-minute visit ending at 11:10 AM + 30-minute transit = checkout pushed to 11:40 AM, which violates the checkout constraint.
+On the final trip day without flight details, the prompt (line 8416-8449) caps activities at 10:30 AM and produces only "Checkout & Departure Preparation." No farewell meal, no departure transport card, no closure. The traveler's last day just stops mid-morning.
 
-The fixes already deployed (Stage 4.5 auto-fix + single-day path auto-fix) handle the time-shift correctly. The gap is that **neither path validates the shifted time against hard constraints on the same day** — specifically checkout/departure on last days or transition days.
+The "no flight but hotel" path (line 8366) is similarly bare — it adds a "Transfer to Airport" but no post-checkout activity and assumes airport departure even for cities like Venice where train/ferry is more likely.
 
 ### Root Cause
-Stage 4.5 shifts `startTime` forward and continues. Stage 4.6 then cascade-shifts everything downstream, including checkout — which shouldn't be movable on departure/transition days. There's no "is this a hard-stop activity?" check before cascade-shifting.
+The two no-flight prompt branches were designed ultra-conservatively ("better to under-schedule"). But the result is a departure day with zero emotional closure and no practical transport guidance. The prompt literally says "DO NOT schedule activities after 10:00 AM" and "1 maximum."
 
-### Fix (1 file, ~25 lines)
+### Fix (1 file, ~30 lines)
 
 **File: `supabase/functions/generate-itinerary/index.ts`**
 
-**In Stage 4.5's time-shift block (~line 6855):** After calculating `newStartMins`, before applying the shift, check if the day has a hard downstream constraint (checkout or departure transport). If the shifted activity + its duration + minimum transit buffer would exceed the hard constraint's start time, **remove the activity** instead of shifting it — the day can't fit it.
+**1. "No flight but hotel" path (line 8378-8414):** 
+- Replace "Transfer to Airport" with a generic "Departure Transfer" that uses destination context (Venice → "Vaporetto to Santa Lucia Station", etc.)
+- Add a post-checkout farewell slot: a light farewell meal or stroll (11:15-12:00) between checkout and departure transfer
+- Change `latestActivity` calculation to allow one post-checkout activity (currently it's `checkout - 60`, which kills the whole morning)
+- Bump "DEPARTURE DAY ACTIVITIES: 1 maximum" → "2-3 activities"
 
+**2. "No flight and no hotel" path (line 8419-8449):**
+- Push checkout to 11:00 (from 10:30) to match standard checkout times
+- Add a farewell activity slot after checkout: "Farewell [meal/stroll] near hotel" (11:15-12:00)
+- Add a generic "Departure Transfer" slot at 12:30
+- Change "DO NOT schedule activities after 10:00 AM" → allow activities through 12:30 PM
+- Bump from "1 maximum (breakfast)" to "2-3 activities"
+
+**3. Multi-city context (line 8497-8501):** The `paramIsLastDayInCity` block for the FINAL city already has transport-specific departure instructions but they only append to `dayConstraints` — they don't override the ultra-conservative "no flight" base constraint. Add a check: if `isLastDay && paramIsLastDayInCity`, the base departure prompt should use the multi-city transport mode (train/ferry/bus) instead of defaulting to "airport."
+
+### Key Changes
 ```
-Logic (pseudocode):
-1. Find hard-stop activity on this day (checkout, departure transport)
-2. If found, get its startTime in minutes → hardStopMins
-3. After computing newStartMins:
-   - estimatedEnd = newStartMins + duration + 20 (minimum transit buffer)
-   - If estimatedEnd > hardStopMins → REMOVE the activity
-4. Same check in the single-day path (~line 9705)
+// Current (no flight, no hotel):
+"DO NOT schedule activities after 10:30 AM"
+"1 maximum (breakfast)"
+
+// Fixed:
+"Plan a light farewell morning with 2-3 activities"
+"Include a farewell meal after checkout"  
+"Include a Departure Transfer to [station/airport/terminal]"
+"Last activity ends by 12:30 PM"
 ```
-
-This prevents Stage 4.5 from shifting an activity into a position that Stage 4.6 will then cascade into checkout, and prevents checkout from being pushed.
-
-**Additionally in Stage 4.6 (~line 6966):** Add a guard that prevents cascade-shifting activities whose category is `accommodation` (checkout) or `transport`/`flight` on the last day or transition days. If a cascade shift would hit one of these, truncate the cascade at that point and remove the preceding activity that caused the overflow instead.
 
 ### Files
-- `supabase/functions/generate-itinerary/index.ts` — add hard-constraint check in Stage 4.5 shift logic + Stage 4.6 cascade guard
+- `supabase/functions/generate-itinerary/index.ts` — enrich both no-flight departure day prompts with farewell content and departure transport
 
