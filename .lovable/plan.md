@@ -1,22 +1,34 @@
 
 
-## Remove "Cached" Badge from Travel Intel Card
+## Remove Photos from "Build It Myself" (Manual Builder) Mode
 
-### Change
+### Problem
+When a user clicks "I'll build it myself", manual mode is enabled but activity photos still display if the activity has an `existingPhoto` stored in the database. The user wants no photos in manual builder mode.
 
-**File: `src/components/itinerary/TravelIntelCard.tsx`**
-
-Remove lines 303-307 that render the "Cached" badge:
-```tsx
-{isCached && (
-  <Badge variant="outline" className="text-[10px] ml-1 px-1.5 py-0 text-muted-foreground">
-    Cached
-  </Badge>
-)}
+### Root Cause
+In `EditorialItinerary.tsx` line 9889:
+```typescript
+const thumbnailUrl = fetchedImageUrl;
 ```
 
-The `isCached` state variable and `setIsCached(!!data.cached)` call can also be removed as cleanup since nothing else references them. Caching behavior itself is untouched.
+While `shouldFetchRealPhoto` is correctly `false` in manual mode (preventing API calls), `useActivityImage` still returns `existingPhoto` when it exists. So stored photos still render.
+
+### Fix
+
+**File: `src/components/itinerary/EditorialItinerary.tsx` (line 9889)**
+
+Change:
+```typescript
+const thumbnailUrl = fetchedImageUrl;
+```
+
+To:
+```typescript
+const thumbnailUrl = isManualMode ? null : fetchedImageUrl;
+```
+
+This suppresses all photo rendering in manual mode — both fetched and existing photos. The three render locations (clean preview image, mobile expanded photo, desktop thumbnail column) all gate on `thumbnailUrl` already, so this single change handles all of them.
 
 ### Scope
-1 file, ~10 lines removed. No logic changes.
+1 line changed in 1 file.
 
