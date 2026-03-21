@@ -1,88 +1,48 @@
 
 
-## Fix: TransitBadge Mode Buttons Don't Apply Changes
+## Fix: "Check-in at Hotel" Appears on Days After Day 1
+
+### Problem
+The AI generates "Check-in at ONE@Tokyo" as a mid-day accommodation activity on Day 2+. These should be titled "Return to ONE@Tokyo" or "Freshen up at ONE@Tokyo" — "check-in" only makes sense on Day 1 (or the first day at a new hotel in split stays).
 
 ### Root cause
 
-In `handleTransportModeChange` (EditorialItinerary.tsx, line 2356), the **success path** (line 2403-2427) tries to match the optimize API's returned activity IDs with the original activity IDs:
+Two issues:
 
-```typescript
-const optAct = optimizedDay.activities?.find((oa: any) => oa.id === act.id);
-if (optAct?.transportation && act.id === activityId) {
-  // update transportation
-}
-return act; // ← unchanged if no match
-```
+1. **No prompt guardrail for non-first days**: The prompt instructs "HOTEL RETURN — Freshen up" (line 8512) and "RETURN TO HOTEL" (line 8515) generically, but doesn't explicitly tell the AI **not** to use "Check-in" on days after Day 1. The Day 1 rule (line 1569) says to begin with "Hotel Check-in & Refresh" — the AI sometimes reuses this phrasing on subsequent days.
 
-When the optimize API returns activities with **different IDs** (common with AI-generated responses) or returns no `transportation` field for the matching activity, the condition fails silently. The activity is returned unchanged, and the user sees no effect despite the toast saying "Updated to Walk."
-
-The **fallback paths** (no data at line 2430, error at line 2467) both work correctly because they update by matching `act.id === activityId` directly without relying on the API's activity IDs.
-
-The between-activity TransitModePicker works because it calls `onEdit(dayIndex, activityIndex, updatedActivity)` directly with a pre-built activity object, bypassing the optimize API entirely.
+2. **No post-processing title correction**: The hotel address correction pass (lines 2402-2434) fixes addresses but doesn't rename "Check-in at X" to "Return to X" on non-first days.
 
 ### Fix
 
-**File: `src/components/itinerary/EditorialItinerary.tsx` (lines ~2403-2427)**
+**File: `supabase/functions/generate-itinerary/index.ts`**
 
-In the success path, if the optimize API returns data but no matching activity transport is found, fall through to the same local update logic used in the fallback paths. Also add `e.stopPropagation()` to TransitBadge mode buttons to prevent any parent click interference.
+1. **Add prompt rule** (~line 1571, after the hotel fidelity rule): Add a new rule explicitly forbidding "check-in" titles on non-first days:
+   ```
+   !isFirstDay ? '15. **NO CHECK-IN ON NON-ARRIVAL DAYS**: On days after Day 1 (or after the first day at a new hotel), 
+   do NOT title accommodation activities as "Check-in at [Hotel]". Use "Return to [Hotel]" or 
+   "Freshen up at [Hotel]" instead. "Check-in" implies arrival — use it only on the day the 
+   traveler first arrives at that hotel.' : ''
+   ```
 
-**File: `src/components/itinerary/TransitBadge.tsx` (line ~181)**
-
-Add `e.stopPropagation()` to mode button clicks as defensive measure.
-
-### Specific changes
-
-**EditorialItinerary.tsx — success path (~line 2403-2427):**
-
-After the `setDays` call in the success path, check if any activity was actually updated. If the optimize API returned data but didn't match, apply the local fallback:
-
-```typescript
-if (data?.days?.[0]) {
-  const optimizedDay = data.days[0];
-  let wasUpdated = false;
-  
-  setDays(prev => prev.map((d, idx) => {
-    if (idx !== dayIndex) return d;
-    return {
-      ...d,
-      activities: d.activities.map(act => {
-        const optAct = optimizedDay.activities?.find((oa: any) => oa.id === act.id);
-        if (optAct?.transportation && act.id === activityId) {
-          wasUpdated = true;
-          // existing update logic...
-        }
-        // NEW: If this is the target activity and optimize didn't match, apply local fallback
-        if (!wasUpdated && act.id === activityId && act.transportation) {
-          wasUpdated = true;
-          const mLabels = { walking: 'Walk', walk: 'Walk', metro: 'Metro', ... };
-          const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
-          const newTitle = destMatch ? `${mLabels[newMode.toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
-          return {
-            ...act,
-            title: newTitle,
-            location: act.location ? { ...act.location, name: newTitle } : act.location,
-            transportation: { ...act.transportation, method: newMode },
-          };
-        }
-        return act;
-      }),
-    };
-  }));
-}
-```
-
-**TransitBadge.tsx — line ~181:**
-
-Add `e.stopPropagation()` to prevent any parent element from intercepting the click:
-
-```typescript
-<button
-  key={mode.value}
-  onClick={(e) => { e.stopPropagation(); handleModeSelect(mode.value); }}
-  disabled={isActive}
-  ...
-```
+2. **Add post-processing title rename** (~after line 2434, after the hotel address correction block): For non-first days, rename any "Check-in at X" accommodation activities to "Return to X":
+   ```typescript
+   if (!isFirstDay) {
+     for (const act of generatedDay.activities) {
+       const title = (act.title || '').toLowerCase();
+       const cat = (act.category || '').toLowerCase();
+       if ((cat === 'accommodation' || title.includes('check-in') || title.includes('check in')) 
+           && !title.includes('checkout') && !title.includes('check-out') && !title.includes('check out')) {
+         const checkInMatch = act.title?.match(/check[- ]?in\s+(at|to|—|–|-|@)\s+/i);
+         if (checkInMatch) {
+           const hotelPart = act.title!.slice(checkInMatch.index! + checkInMatch[0].length);
+           act.title = `Return to ${hotelPart}`;
+         }
+       }
+     }
+   }
+   ```
 
 ### Scope
-Two files: `EditorialItinerary.tsx` (~15 lines changed in success path) and `TransitBadge.tsx` (1 line changed for stopPropagation).
+Single file: `supabase/functions/generate-itinerary/index.ts` — ~15 lines added (prompt rule + post-processing). For multi-city split stays, `isFirstDayInCity` is already tracked and should be used instead of `isFirstDay` in that code path.
 
