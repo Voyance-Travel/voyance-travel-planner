@@ -148,8 +148,13 @@ function isDescriptionLine(line: string): boolean {
   return false;
 }
 
+/** Strip invisible Unicode chars that break time parsing (ZWSP, soft hyphens, BOM, etc.) */
+function sanitizeInvisibleChars(text: string): string {
+  return text.replace(/[\u200B\u200C\u200D\u00AD\u2060\uFEFF\u200E\u200F\u2028\u2029\u202A-\u202E]/g, '');
+}
+
 function cleanMarkdown(line: string): string {
-  return line
+  return sanitizeInvisibleChars(line)
     .replace(/^#+\s*/, '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
