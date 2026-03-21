@@ -21,6 +21,12 @@ export function useTripViewMode({ isOwner, canEdit = false }: UseTripViewModeOpt
     hasEditAccess ? 'edit' : 'preview'
   );
 
+  useEffect(() => {
+    if (hasEditAccess) {
+      setInternalMode('edit');
+    }
+  }, [hasEditAccess]);
+
   const mode: TripViewMode = hasEditAccess ? internalMode : 'preview';
 
   const setMode = useCallback(
