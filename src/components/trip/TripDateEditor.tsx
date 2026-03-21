@@ -330,7 +330,7 @@ export function TripDateEditor({
             {pendingStart && pendingEnd && (
               <div className="flex items-center gap-1.5 mt-1">
                 <p className="text-[11px] sm:text-xs text-muted-foreground">
-                  {newDayCount} day{newDayCount !== 1 ? 's' : ''}
+                  {newDayCount + 1} day{newDayCount + 1 !== 1 ? 's' : ''}
                   {dayDelta !== 0 && hasItinerary && (
                     <span className={dayDelta > 0 ? 'text-primary' : 'text-destructive'}>
                       {' '}({dayDelta > 0 ? '+' : ''}{dayDelta})
@@ -392,7 +392,7 @@ export function TripDateEditor({
                 <div className="grid gap-2">
                   {[
                     { value: 'before' as InsertPosition, label: 'Before Day 1', desc: 'Add days at the start' },
-                    { value: 'after' as InsertPosition, label: `After Day ${currentDays}`, desc: 'Add days at the end' },
+                    { value: 'after' as InsertPosition, label: `After Day ${currentDays + 1}`, desc: 'Add days at the end' },
                   ].map(opt => (
                     <button
                       key={opt.value}
@@ -568,7 +568,7 @@ export function TripDateEditor({
                 {shortenMode === 'end' && (
                   <p className="text-sm text-muted-foreground">
                     Day{shortenDialog.maxRemovable > 1 ? 's' : ''}{' '}
-                    {currentDays - shortenDialog.maxRemovable + 1}{shortenDialog.maxRemovable > 1 ? `–${currentDays}` : ''}{' '}
+                    {currentDays - shortenDialog.maxRemovable + 2}{shortenDialog.maxRemovable > 1 ? `–${currentDays + 1}` : ''}{' '}
                     will be removed from the end. They'll be archived in case you need them later.
                   </p>
                 )}
