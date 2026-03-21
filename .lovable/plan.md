@@ -1,27 +1,34 @@
 
 
-## Fix: Disable Cost Auto-Estimation in Manual (Build It Myself) Mode
+## Fix: Day Total Excludes Estimated ("~") Costs in Manual Mode
 
 ### Problem
-In "Build It Myself" mode, the `getActivityCost` function sees activities with `cost.amount === 0` and titles matching "never free" keywords (e.g., "Train to Zaanse Schans" matches `train to`). It then runs the estimation engine, producing ~€32/pp — contradicting the user's own description ("€6 return train, free entry").
-
-Manual mode is for users who want full control. Auto-estimating costs overrides their intent.
-
-### Root Cause
-`getActivityCost()` (line 1025 of `EditorialItinerary.tsx`) has no awareness of whether the trip is in manual mode. It applies the same "never free" estimation logic to all activities regardless of origin.
-
-The `costSource: 'imported'` guard (line 1059) only works for activities added via the Import modal. Activities added via other manual-mode paths (inline add, paste, AI-assisted add) don't have `costSource` set, so they fall through to estimation.
+`getDayTotalCost` on line 1178 skips any activity where `isEstimated === true`:
+```typescript
+return sum + (info.isEstimated ? 0 : info.amount);
+```
+This was designed so estimated costs don't inflate the "canonical" trip total. But in manual mode, all visible card costs (including estimated ones like "market browsing") should count toward the day total since they're the best data available and the user sees them on individual cards.
 
 ### Fix
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
+**File: `src/components/itinerary/EditorialItinerary.tsx` (line 1178)**
 
-**Change 1:** Pass `isManualMode` into `getActivityCost` (it's already available in the component scope where the function is called).
+In manual mode, include all costs (estimated or not). Change:
+```typescript
+return sum + (info.isEstimated ? 0 : info.amount);
+```
+To:
+```typescript
+return sum + (isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount));
+```
 
-**Change 2:** In `getActivityCost`, when `isManualMode === true` and `costAmount === 0`, return `{ amount: 0, isEstimated: false }` immediately — skip the "never free" estimation entirely. Manual mode trusts the user's data as-is.
+Also update the call site at line 8932 to pass `isManualMode`:
+```typescript
+const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode);
+```
 
-This is a ~5-line change: add the parameter, add one early-return condition before the `shouldNeverBeFree` check at line 1063.
+And the call at line 2978 similarly (needs `isManualMode` in scope there).
 
 ### Scope
-1 file, ~5 lines changed. No backend changes.
+1 file, ~3 lines changed.
 
