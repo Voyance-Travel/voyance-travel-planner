@@ -568,7 +568,7 @@ export function TripDateEditor({
                 {shortenMode === 'end' && (
                   <p className="text-sm text-muted-foreground">
                     Day{shortenDialog.maxRemovable > 1 ? 's' : ''}{' '}
-                    {currentDays - shortenDialog.maxRemovable + 1}{shortenDialog.maxRemovable > 1 ? `–${currentDays}` : ''}{' '}
+                    {currentDays - shortenDialog.maxRemovable + 2}{shortenDialog.maxRemovable > 1 ? `–${currentDays + 1}` : ''}{' '}
                     will be removed from the end. They'll be archived in case you need them later.
                   </p>
                 )}
