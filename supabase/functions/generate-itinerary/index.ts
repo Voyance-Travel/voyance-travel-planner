@@ -7378,6 +7378,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                   resolvedCountry = (city as any).country || destinationCountry;
                   // Check if this is the last day in this city — capture next leg transport
                   if (n === cityNights - 1) {
+                    resolvedIsLastDayInCity = true;
                     const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
                     if (nextCity) {
                       const isSameCountry = nextCity.country === city.country;
