@@ -1125,6 +1125,8 @@ export function PaymentsTab({
                                   if (realId) resolvedIds.push(realId);
                                 }
                                 if (resolvedIds.length < 2) { toast.error('Need at least 2 members'); return; }
+                                // Refresh trip-members cache after resolving IDs
+                                await queryClient.refetchQueries({ queryKey: ['trip-members', tripId] });
 
                                 // Filter out paid items — never touch them in bulk split
                                 const splittableItems = unassigned.items.filter(({ item }) =>
