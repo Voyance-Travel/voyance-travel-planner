@@ -438,6 +438,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           currency={settings?.budget_currency || 'USD'}
           destination={destination}
           itineraryDays={itineraryDays}
+          travelers={travelers}
           onApplySuggestion={onApplyBudgetSwap}
         />
       )}

@@ -65,6 +65,8 @@ interface BudgetCoachProps {
   currency: string;
   destination?: string;
   itineraryDays: ItineraryDay[];
+  /** Number of travelers — used to scale per-person savings to group totals for display */
+  travelers?: number;
   /** Called when the user applies a suggestion — parent must update the itinerary. Returns true if swap succeeded. */
   onApplySuggestion?: (suggestion: BudgetSuggestion) => Promise<boolean> | void;
   className?: string;
