@@ -1,30 +1,39 @@
 
 
-## Fix: Budget Coach "Save $X" Shows Per-Person Instead of Group Total
+## Fix: Budget Coach Swap Retains Original Booking Metadata
 
 ### Problem
-The Budget Coach displays "Save $70" but the actual budget impact is $140 (for 2 travelers). The savings label consistently shows half the real impact because the edge function receives and returns per-person costs, while the budget tracks group totals.
+When the budget coach suggests a free/cheap replacement (e.g., "self-guided exploration at $0"), the swap only updates title, description, and cost — but leaves `bookingUrl`, `viatorProductCode`, and `website` from the original paid activity. The card then shows "Booking Required" + "View on Viator ~$85" for what's supposed to be a free walk.
 
 ### Root Cause
-In `BudgetCoach.tsx` line 142-143, `cost.amount` (per-person) is sent to the edge function. The edge function computes `savings = currentCostCents - newCostCents` — all per-person. But the budget display (`currentTotalCents`, `budgetTargetCents`) uses group totals. So the "Save" badge is in a different unit than the budget it claims to reduce.
+In `EditorialItinerary.tsx` line 6206, the budget swap spreads `...act` and only overrides `title`, `name`, `description`, `cost`, and `location`. All booking-related fields (`bookingUrl`, `viatorProductCode`, `website`) survive from the original activity.
 
-### Fix (2 files, ~10 lines)
+### Fix (1 file, ~5 lines)
 
-**1. Pass `travelers` into `BudgetCoach`**
+**File: `src/components/itinerary/EditorialItinerary.tsx` (~line 6206)**
 
-- **`src/components/planner/budget/BudgetTab.tsx`** (~line 434): Add `travelers={travelers}` prop to `<BudgetCoach>`.
+In the budget swap application block, clear booking metadata when the new cost is zero or significantly lower (free replacement):
 
-**2. Multiply displayed savings by travelers**
+```typescript
+return {
+  ...act,
+  title: coherentTitle,
+  name: coherentTitle,
+  description: suggestion.suggested_description || suggestion.suggested_swap,
+  cost: ...,
+  location: ...,
+  // Clear booking metadata — the replacement is a different activity
+  bookingUrl: undefined,
+  viatorProductCode: undefined,
+  website: undefined,
+  tips: undefined,
+  voyanceInsight: undefined,
+  isVoyancePick: false,
+};
+```
 
-- **`src/components/planner/budget/BudgetCoach.tsx`**:
-  - Add `travelers` to the props interface (default 1).
-  - On the "Save" badge (line 428), display `formatCurrency(s.savings * travelers)` instead of `formatCurrency(s.savings)`.
-  - On the current_cost and new_cost displays (lines 411, 418), also multiply by travelers so the price tags match the budget scope.
-  - Add a `/pp` annotation when travelers > 1 for transparency, e.g. "Save $140 total" or show both.
-
-This keeps the edge function unchanged (it still thinks in per-person, which is correct for the AI prompt). The UI layer simply scales to group totals for display, matching how the budget itself is tracked.
+This ensures that when a paid Viator tour is swapped for a free self-guided walk, the card no longer shows the original's booking link or vendor price. The booking metadata should always be cleared on budget swaps because the replacement is fundamentally a different activity — keeping the old booking URL is always wrong, not just for free swaps.
 
 ### Files
-- `src/components/planner/budget/BudgetTab.tsx` — pass `travelers` prop
-- `src/components/planner/budget/BudgetCoach.tsx` — accept `travelers`, multiply displayed costs/savings
+- `src/components/itinerary/EditorialItinerary.tsx` — clear booking fields in budget swap block
 
