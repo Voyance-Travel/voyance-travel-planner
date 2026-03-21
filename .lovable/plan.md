@@ -1,45 +1,64 @@
 
 
-## Fix: Unplanned Days Not Self-Healing Due to Shared Guard Ref
+## Fix: Meal-Type/Time-Slot Coherence on Activity Swaps
 
 ### Problem
-Days 3 and 4 of Florence show "Unplanned" with no activities. The self-heal logic we added should restore them (from version history or via regeneration), but it's being skipped because `autoResumeAttemptedRef.current` is shared between two independent self-heal paths.
+When the budget coach suggests "Dinner at Osteria Beccafico → Lunch at Osteria Beccafico" (cheaper lunch menu), the client applies the new title "Lunch at Osteria Beccafico" but keeps the original 7:00 PM time slot. Result: "Lunch" at 7 PM — confusing and logically wrong.
 
 ### Root Cause
-In `TripDetail.tsx`, there are two self-heal paths that share the same `autoResumeAttemptedRef`:
+The budget coach prompt (line 119) explicitly suggests `"Expensive dinner restaurants → the same restaurant for lunch"`. The AI returns a title containing "Lunch" but no time data. The client blindly applies `title: suggestion.suggested_swap` while preserving the original time.
 
-1. **Line 1188** — `actualDays < expectedTotal` → calls `handleResumeGeneration()` and sets `autoResumeAttemptedRef.current = true`
-2. **Line 1204** — `actualDays >= expectedTotal` with empty days → version-restore/regeneration, guarded by `!autoResumeAttemptedRef.current`
+This affects **three swap paths**:
+1. **Budget Coach** (`EditorialItinerary.tsx` line 6206) — sets `title: suggestion.suggested_swap`
+2. **Hotel Swaps** (`TripDetail.tsx` line 2025) — sets `name: swap.suggestedActivity`
+3. **Regular Swap Drawer** (`EditorialItinerary.tsx` line 3194) — sets `title: newActivity.title`
 
-If path 1 fires first (e.g., during initial load when not all day rows exist yet), it locks out path 2. On subsequent renders when all day rows exist but some have empty activities, the empty-day restore never runs.
+### Fix (2 changes)
 
-Additionally, there's **no on-click generation** for Unplanned day tabs — clicking them just shows empty content with no way to trigger generation.
+**Change 1: Add a meal-type coherence guard (shared utility)**
 
-### Fix (1 file, ~15 lines)
+Create a small utility function that detects when a swap would create a meal-type/time-slot mismatch, and corrects the title to match the existing time slot:
 
-**File: `src/pages/TripDetail.tsx`**
-
-**Change 1: Separate the guard refs**
-
-Add a dedicated ref for the empty-day self-heal so it's independent:
-```typescript
-const autoResumeAttemptedRef = useRef(false);     // for incomplete day count
-const emptyDayHealAttemptedRef = useRef(false);   // for days with empty activities
+```
+File: src/utils/mealTimeCoherence.ts (new)
 ```
 
-Update line 1204 to use `emptyDayHealAttemptedRef` instead of `autoResumeAttemptedRef`, and set `emptyDayHealAttemptedRef.current = true` inside that block. Also update the reset in the cleanup/re-trigger logic to reset both refs.
+Logic:
+- Extract meal keyword from title ("breakfast", "lunch", "dinner/supper")
+- Check if time slot contradicts the meal keyword:
+  - Breakfast: 6:00–10:59
+  - Lunch: 11:00–14:59
+  - Dinner: 17:00–22:59
+- If mismatch detected: replace the meal keyword in the title with the correct one for the time slot
+- Example: "Lunch at Osteria Beccafico" at 19:00 → "Dinner at Osteria Beccafico"
 
-**Change 2: Add on-click generation for Unplanned days**
+**Change 2: Apply the guard in all three swap paths**
 
-In `EditorialItinerary.tsx`, when a user clicks an Unplanned day tab and the day has no activities, show a "Generate this day" CTA button in the day content area. This calls the existing `onDayRegenerate` handler, giving users a manual escape hatch if auto-heal didn't fire.
+- **Budget Coach swap** (`EditorialItinerary.tsx` ~line 6206): Before setting the title, run it through the coherence guard with the preserved time slot
+- **Hotel swap** (`TripDetail.tsx` ~line 2025): Same guard on `swap.suggestedActivity`
+- **Regular swap drawer** (`EditorialItinerary.tsx` ~line 3194): Same guard on `newActivity.title` (less likely to hit this since swap drawer uses category-filtered results, but defensive)
 
-### Technical Details
+**Change 3: Update budget coach prompt to prefer venue-only names**
 
-- The ref separation ensures both self-heal paths can fire independently during the same load cycle
-- The on-click CTA provides a manual fallback so users aren't stuck with permanently empty days
-- No backend changes needed
+In `supabase/functions/budget-coach/index.ts`, update line 119 to instruct the AI to suggest "same restaurant at lunch price" without changing the title to include "Lunch":
+
+```
+- Expensive dinner restaurants → the same restaurant for lunch (keep the venue name, note "lunch service" in the reason, do NOT prefix with "Lunch at")
+```
+
+Add to the naming rules:
+```
+- When suggesting a dinner→lunch swap, keep the original venue name (e.g., "Osteria Beccafico") — do NOT rename to "Lunch at Osteria Beccafico". Explain the lunch-price angle in the "reason" field instead.
+```
+
+### Why this approach
+- The utility guard is defensive — it catches any AI-generated meal-type mismatch regardless of source
+- The prompt fix reduces the frequency of the issue at the source
+- Both together ensure the title always matches the time slot
 
 ### Files
-- `src/pages/TripDetail.tsx` — separate guard refs
-- `src/components/itinerary/EditorialItinerary.tsx` — add "Generate this day" CTA for empty days
+- `src/utils/mealTimeCoherence.ts` (new) — shared coherence utility
+- `src/components/itinerary/EditorialItinerary.tsx` — apply guard in budget swap + regular swap paths
+- `src/pages/TripDetail.tsx` — apply guard in hotel swap path
+- `supabase/functions/budget-coach/index.ts` — prompt update to avoid meal-type renaming
 
