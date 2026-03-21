@@ -155,7 +155,7 @@ export function ItineraryAssistant({
     // Check for packed days (6+ activities)
     for (const day of currentDays) {
       if (day.activities.length >= 6) {
-        observations.push(`I see Day ${day.dayNumber} is packed with ${day.activities.length} activities — want me to space things out a bit?`);
+        observations.push(`I see Day ${day.dayNumber} is packed with ${day.activities.length} activities. Want me to space things out a bit?`);
         break;
       }
     }
