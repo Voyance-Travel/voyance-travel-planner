@@ -1175,7 +1175,7 @@ function getDayTotalCost(
   // Only sum confirmed costs (not estimates) so day badges match the canonical Trip Total
   return activities.reduce((sum, act) => {
     const info = getActivityCostInfo(act, travelers, budgetTier, destinationCity, destinationCountry, isManualMode);
-    return sum + (info.isEstimated ? 0 : info.amount);
+    return sum + (isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount));
   }, 0);
 }
 
