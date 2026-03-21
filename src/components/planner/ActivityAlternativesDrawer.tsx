@@ -518,7 +518,21 @@ export default function ActivityAlternativesDrawer({
     </motion.div>
   );
 
-  const hasAlternatives = similarAlternatives.length > 0 || differentAlternatives.length > 0;
+  // Client-side filtering by search query
+  const filterByQuery = (alts: typeof similarAlternatives) => {
+    if (!searchQuery.trim()) return alts;
+    const q = searchQuery.toLowerCase();
+    return alts.filter(a =>
+      a.name?.toLowerCase().includes(q) ||
+      a.category?.toLowerCase().includes(q) ||
+      a.description?.toLowerCase().includes(q) ||
+      a.location?.toLowerCase().includes(q)
+    );
+  };
+  const filteredSimilar = filterByQuery(similarAlternatives);
+  const filteredDifferent = filterByQuery(differentAlternatives);
+
+  const hasAlternatives = filteredSimilar.length > 0 || filteredDifferent.length > 0;
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()} modal={true}>
@@ -621,27 +635,27 @@ export default function ActivityAlternativesDrawer({
             ) : (
               <AnimatePresence mode="popLayout">
                 {/* Similar alternatives section */}
-                {similarAlternatives.length > 0 && (
+                {filteredSimilar.length > 0 && (
                   <div>
-                    {!activeFilter && differentAlternatives.length > 0 && (
+                    {!activeFilter && filteredDifferent.length > 0 && (
                       <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                         Similar Options
                       </h3>
                     )}
-                    {similarAlternatives.map((alt, i) => renderAlternativeCard(alt, i))}
+                    {filteredSimilar.map((alt, i) => renderAlternativeCard(alt, i))}
                   </div>
                 )}
 
                 {/* Different alternatives section */}
-                {differentAlternatives.length > 0 && (
+                {filteredDifferent.length > 0 && (
                   <div>
-                    {!activeFilter && similarAlternatives.length > 0 && (
+                    {!activeFilter && filteredSimilar.length > 0 && (
                       <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 mt-4">
                         Something Different
                       </h3>
                     )}
-                    {differentAlternatives.map((alt, i) => 
-                      renderAlternativeCard(alt, i + similarAlternatives.length)
+                    {filteredDifferent.map((alt, i) => 
+                      renderAlternativeCard(alt, i + filteredSimilar.length)
                     )}
                   </div>
                 )}
