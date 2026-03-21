@@ -86,6 +86,7 @@ export function PaymentsTab({
   journeyId,
   journeyName,
 }: PaymentsTabProps) {
+  const queryClient = useQueryClient();
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
   const [loading, setLoading] = useState(true);
