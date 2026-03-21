@@ -8283,7 +8283,7 @@ DEPARTURE DAY ACTIVITIES: 1 maximum (near hotel only)
 
 ⚠️ DO NOT schedule activities across the city.
 ⚠️ DO NOT plan activities after ${latestSightseeing}.
-⚠️ CHECKOUT (step 2) MUST have an earlier startTime than TRANSFER (step 4). VIOLATION = REGENERATION.
+⚠️ CHECKOUT (step 2) MUST have an earlier startTime than TRANSFER (step 4). This is auto-enforced by post-processing.
 THE TRAVELER IS LEAVING. Make it a gentle goodbye, not a marathon.`;
 
           } else if (isAfternoonFlight) {
