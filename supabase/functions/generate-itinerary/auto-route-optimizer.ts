@@ -62,6 +62,11 @@ const FIXED_TITLE_PATTERNS = [
   /concert/i,
   /theater|theatre/i,
   /tour\b.*\d/i,  // "Tour at 2pm" etc
+  /dinner\b/i,
+  /lunch\b/i,
+  /breakfast\b/i,
+  /brunch\b/i,
+  /supper\b/i,
 ];
 
 function getCoords(location: ActivityLike['location']): Coordinates | null {
