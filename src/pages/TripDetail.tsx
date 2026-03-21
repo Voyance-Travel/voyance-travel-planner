@@ -1200,86 +1200,130 @@ export default function TripDetail() {
           }
 
           // ── SELF-HEAL: Detect days that exist but have no real activities ("Unplanned") ──
-          // The day count matches expectedTotal but some days have empty activities arrays.
-          // Auto-regenerate those specific empty days once.
+          // Instead of destructive auto-regeneration, try restoring from version history first.
           if (expectedTotal > 0 && actualDays >= expectedTotal && !autoResumeAttemptedRef.current) {
             const daysList = (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>;
             const emptyDayNumbers: number[] = [];
             for (const day of daysList) {
               const acts = Array.isArray(day.activities) ? day.activities : [];
-              // Only flag days with truly ZERO activities — not days with logistical-only content.
-              // Arrival/departure days with just check-in/check-out are intentionally planned that way.
               if (acts.length === 0 && day.dayNumber) {
                 emptyDayNumbers.push(day.dayNumber);
               }
             }
 
             if (emptyDayNumbers.length > 0 && emptyDayNumbers.length < expectedTotal) {
-              console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} days have no activities (days: ${emptyDayNumbers.join(', ')}). Auto-regenerating.`);
               autoResumeAttemptedRef.current = true;
-              // Regenerate each empty day sequentially, capturing responses
+              console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} days have no activities (days: ${emptyDayNumbers.join(', ')}). Attempting version-history restore first.`);
+
               setTimeout(async () => {
                 try {
-                  // Get the latest itinerary data for merging
+                  // Dynamically import to avoid circular deps
+                  const { getLatestNonEmptyVersion } = await import('@/services/itineraryVersionHistory');
+
                   const { data: latestTrip } = await supabase
                     .from('trips')
                     .select('itinerary_data')
                     .eq('id', tripId!)
                     .single();
-                  
+
                   const currentItinData = (latestTrip?.itinerary_data as any) || itinData || {};
                   const currentDays = [...(currentItinData.days || [])] as any[];
+                  let restoredCount = 0;
+                  const unresolvedDays: number[] = [];
 
                   for (const dayNum of emptyDayNumbers) {
-                    console.log(`[TripDetail] Auto-regenerating empty day ${dayNum}`);
-                    const { data: regenResult } = await supabase.functions.invoke('generate-itinerary', {
-                      body: {
-                        action: 'regenerate-day',
-                        tripId: tripId,
-                        dayNumber: dayNum,
-                        destination: tripData.destination,
-                        startDate: tripData.start_date,
-                        endDate: tripData.end_date,
-                        travelers: tripData.travelers || 1,
-                        tripType: tripData.trip_type,
-                        budgetTier: (tripData as any).budget_tier,
-                        isMultiCity: !!(tripData as any).is_multi_city,
-                      },
-                    });
-
-                    // Merge returned day data into the local days array
-                    if (regenResult?.day?.activities?.length > 0) {
+                    // Step 1: Try restoring from version history
+                    const snapshot = await getLatestNonEmptyVersion(tripId!, dayNum);
+                    if (snapshot && Array.isArray(snapshot.activities) && snapshot.activities.length > 0) {
+                      console.log(`[TripDetail] Self-heal: Restored day ${dayNum} from version history (${snapshot.activities.length} activities, v${snapshot.version_number})`);
                       const idx = currentDays.findIndex((d: any) => d.dayNumber === dayNum);
                       if (idx >= 0) {
-                        currentDays[idx] = { ...currentDays[idx], ...regenResult.day };
+                        currentDays[idx] = {
+                          ...currentDays[idx],
+                          activities: snapshot.activities,
+                          ...(snapshot.day_metadata?.title ? { theme: snapshot.day_metadata.title } : {}),
+                        };
                       }
+                      restoredCount++;
+                    } else {
+                      unresolvedDays.push(dayNum);
                     }
                   }
 
-                  // Persist merged itinerary through backend save (normalization + meal guard + table sync)
-                  const mergedItinerary = { ...currentItinData, days: currentDays };
-                  try {
-                    await supabase.functions.invoke('generate-itinerary', {
-                      body: {
-                        action: 'save-itinerary',
-                        tripId: tripId!,
-                        itinerary: mergedItinerary,
-                      },
-                    });
-                  } catch (saveErr) {
-                    console.error('[TripDetail] Backend save after auto-regen failed, falling back to direct write:', saveErr);
-                    await supabase.from('trips').update({
-                      itinerary_data: mergedItinerary as any,
-                      updated_at: new Date().toISOString(),
-                    }).eq('id', tripId!);
+                  // Save restored days back if any were recovered
+                  if (restoredCount > 0) {
+                    const mergedItinerary = { ...currentItinData, days: currentDays };
+                    try {
+                      await supabase.functions.invoke('generate-itinerary', {
+                        body: {
+                          action: 'save-itinerary',
+                          tripId: tripId!,
+                          itinerary: mergedItinerary,
+                        },
+                      });
+                    } catch (saveErr) {
+                      console.error('[TripDetail] Backend save after version restore failed, falling back to direct write:', saveErr);
+                      await supabase.from('trips').update({
+                        itinerary_data: mergedItinerary as any,
+                        updated_at: new Date().toISOString(),
+                      }).eq('id', tripId!);
+                    }
+                    queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+                    toast.success(`Restored ${restoredCount} day${restoredCount > 1 ? 's' : ''} from history`);
                   }
 
-                  // Refresh trip data after regeneration
-                  queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
-                  toast.success(`Regenerated ${emptyDayNumbers.length} unplanned day${emptyDayNumbers.length > 1 ? 's' : ''}`);
+                  // Step 2: Only regenerate days that have NO version history at all
+                  if (unresolvedDays.length > 0) {
+                    console.warn(`[TripDetail] Self-heal: ${unresolvedDays.length} days have no version history (days: ${unresolvedDays.join(', ')}). Falling back to regeneration.`);
+                    const { data: freshTrip } = await supabase
+                      .from('trips')
+                      .select('itinerary_data')
+                      .eq('id', tripId!)
+                      .single();
+                    const freshItinData = (freshTrip?.itinerary_data as any) || currentItinData;
+                    const freshDays = [...(freshItinData.days || [])] as any[];
+
+                    for (const dayNum of unresolvedDays) {
+                      console.log(`[TripDetail] Auto-regenerating empty day ${dayNum} (no version history found)`);
+                      const { data: regenResult } = await supabase.functions.invoke('generate-itinerary', {
+                        body: {
+                          action: 'regenerate-day',
+                          tripId: tripId,
+                          dayNumber: dayNum,
+                          destination: tripData.destination,
+                          startDate: tripData.start_date,
+                          endDate: tripData.end_date,
+                          travelers: tripData.travelers || 1,
+                          tripType: tripData.trip_type,
+                          budgetTier: (tripData as any).budget_tier,
+                          isMultiCity: !!(tripData as any).is_multi_city,
+                        },
+                      });
+                      if (regenResult?.day?.activities?.length > 0) {
+                        const idx = freshDays.findIndex((d: any) => d.dayNumber === dayNum);
+                        if (idx >= 0) {
+                          freshDays[idx] = { ...freshDays[idx], ...regenResult.day };
+                        }
+                      }
+                    }
+
+                    const mergedFresh = { ...freshItinData, days: freshDays };
+                    try {
+                      await supabase.functions.invoke('generate-itinerary', {
+                        body: { action: 'save-itinerary', tripId: tripId!, itinerary: mergedFresh },
+                      });
+                    } catch (saveErr) {
+                      console.error('[TripDetail] Backend save after auto-regen failed:', saveErr);
+                      await supabase.from('trips').update({
+                        itinerary_data: mergedFresh as any,
+                        updated_at: new Date().toISOString(),
+                      }).eq('id', tripId!);
+                    }
+                    queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+                    toast.success(`Regenerated ${unresolvedDays.length} unplanned day${unresolvedDays.length > 1 ? 's' : ''}`);
+                  }
                 } catch (err) {
-                  console.error('[TripDetail] Auto-regenerate empty days failed:', err);
-                  // Reset so it retries on next page load
+                  console.error('[TripDetail] Self-heal (version restore + regen) failed:', err);
                   autoResumeAttemptedRef.current = false;
                 }
               }, 2000);
