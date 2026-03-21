@@ -1213,7 +1213,7 @@ export default function TripDetail() {
             }
 
             if (emptyDayNumbers.length > 0 && emptyDayNumbers.length < expectedTotal) {
-              autoResumeAttemptedRef.current = true;
+              emptyDayHealAttemptedRef.current = true;
               console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} days have no activities (days: ${emptyDayNumbers.join(', ')}). Attempting version-history restore first.`);
 
               setTimeout(async () => {
