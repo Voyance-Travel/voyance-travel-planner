@@ -418,7 +418,7 @@ export function BudgetCoach({
                             <span className="font-medium text-foreground">
                               {s.suggested_swap}
                               <span className="text-primary ml-1">
-                                ({formatCurrency(s.new_cost)})
+                                ({formatCurrency(s.new_cost * travelers)})
                               </span>
                             </span>
                           </div>
