@@ -1,42 +1,48 @@
 
 
-## Fix: Leading "1" Stripped from Two-Digit Hours (10, 11, 12)
+## Fix: Tone Down Transport Cards + Fix Checkout-Before-Flight Ordering
 
-### Root cause
+### Problem 1: Inter-city transport cards look childish
+The `InterCityTransportCard` uses loud colored left borders, colored backgrounds, colored icon backgrounds, colored accent text, and colored route dots per transport mode (blue for flights, emerald for trains, amber for buses, etc.). This makes them visually jarring compared to the clean, neutral activity cards used everywhere else.
 
-**Line 165** in `cleanMarkdown()`:
+### Problem 2: Flight appears before hotel checkout on transition days
+On transition days (city A → city B), the transport card is blindly prepended to the top of all activities at line 1547:
 ```
-.replace(/^[\p{Emoji}\s]{1,4}(?=\w)/u, '')
+updatedActivities = [...travelCards, ...updatedActivities];
 ```
+This means if checkout is at 8:00 AM and the flight is at 8:00 AM, the flight card shows FIRST. There's checkout-ordering logic for departure days (lines 1740-1752) but none for transition days.
 
-In JavaScript's Unicode spec, **ASCII digits (0-9) match `\p{Emoji}`** because they're emoji components (keycap sequences). This regex is meant to strip leading emoji like "🍣 Sushi dinner" but it also matches digits.
+### Changes
 
-For input `"10:00 AM - Tsukiji Fish Market"`:
-1. `\p{Emoji}` matches `"1"` at position 0
-2. It tries to greedily match more — `"0"` also matches, but then `":"` doesn't, so it backtracks to just `"1"`
-3. Lookahead `(?=\w)` checks next char `"0"` — passes (`\w` includes digits)
-4. Strips `"1"` → `"0:00 AM - Tsukiji Fish Market"`
-5. `normalizeTimeTo24h("0:00 AM")` → `"00:00"` → displayed as **12:00 AM**
+**File 1: `src/components/itinerary/InterCityTransportCard.tsx`**
 
-This explains every broken case:
-- `10:00 AM` → strips "1" → `0:00 AM` → **12:00 AM** ❌
-- `11:00 AM` → strips "1" → `1:00 AM` → **1:00 AM** ❌
-- `12:00 PM` → strips "1" → `2:00 PM` → **2:00 PM** ❌
-- `9:00 AM` → "9" matches emoji but lookahead on ":" fails → no strip → **9:00 AM** ✅
-- `1:00 PM` → "1" matches but lookahead on ":" fails → no strip → **1:00 PM** ✅
+Strip the per-mode color theming. Use a single neutral style matching normal activity cards:
+- Remove the `TRANSPORT_THEMES` color map entirely
+- Keep the transport-type icons (Plane, Train, Bus, Ship, Car) but render them in muted foreground color
+- Card styling: `bg-card border border-border rounded-xl shadow-sm` (same as activity cards)
+- Remove the colored left border, colored backgrounds, colored dots, colored accent text
+- Route dots become neutral `bg-muted-foreground`
+- Icon background becomes `bg-muted`
+- Transport label becomes `text-muted-foreground` instead of colored
+- The "final" variant keeps a subtle primary accent (it's the homebound card) but toned down
 
-### Fix
+**File 2: `src/components/itinerary/EditorialItinerary.tsx` (~line 1547)**
 
-**File: `src/components/itinerary/ImportActivitiesModal.tsx` (line 165)**
+Add checkout-aware insertion for transition days, matching the logic already used for departure days (lines 1740-1752):
 
-Replace `\p{Emoji}` with a pattern that excludes ASCII digits:
-
+Instead of:
 ```typescript
-.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]{1,4}(?=\w)/u, '')
+updatedActivities = [...travelCards, ...updatedActivities];
 ```
 
-`\p{Emoji_Presentation}` and `\p{Extended_Pictographic}` match actual visual emoji (🍣, 🏯, ✈️) but **not** ASCII digits. This preserves the intended emoji-stripping behavior while leaving time strings intact.
+Do:
+1. Find the checkout activity in `updatedActivities` using the same keyword check (`check out`, `checkout`, `check-out`, `__hotelCheckout`)
+2. Insert the travel card AFTER the checkout activity
+3. If checkout has no time or its time is >= the transport departure time, set checkout time to transport departure minus 60 minutes (minimum 07:00)
+4. If no checkout exists, insert chronologically based on `depTime` (or prepend if no depTime)
+
+This ensures the order is always: Checkout → Transport → Arrival activities.
 
 ### Scope
-One regex change on one line. No other files affected.
+2 files. `InterCityTransportCard.tsx` (visual restyle, ~30 lines changed). `EditorialItinerary.tsx` (~15 lines around line 1547 to add checkout-aware ordering for transition days).
 
