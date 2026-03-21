@@ -1,48 +1,42 @@
 
 
-## Fix: "11:00 AM" Parsed as "1:00 AM" in Import Modal
+## Fix: Leading "1" Stripped from Two-Digit Hours (10, 11, 12)
 
-### Analysis
+### Root cause
 
-Extensive code review shows the regex (`TIME_PATTERN`) and `normalizeTimeTo24h` logic are correct in isolation for clean input. The persistent bug is almost certainly caused by **invisible characters in pasted text** (zero-width spaces, non-breaking spaces, soft hyphens, etc. from Google Docs, Notes apps, or other rich-text sources). These invisible chars split `"11"` into `"1[invisible]1"`, so the regex only matches the second `"1:00 AM"`.
+**Line 165** in `cleanMarkdown()`:
+```
+.replace(/^[\p{Emoji}\s]{1,4}(?=\w)/u, '')
+```
 
-The backend `parse-trip-input` already has a raw-text cross-check for exactly this problem. The client-side import modal lacks it.
+In JavaScript's Unicode spec, **ASCII digits (0-9) match `\p{Emoji}`** because they're emoji components (keycap sequences). This regex is meant to strip leading emoji like "🍣 Sushi dinner" but it also matches digits.
+
+For input `"10:00 AM - Tsukiji Fish Market"`:
+1. `\p{Emoji}` matches `"1"` at position 0
+2. It tries to greedily match more — `"0"` also matches, but then `":"` doesn't, so it backtracks to just `"1"`
+3. Lookahead `(?=\w)` checks next char `"0"` — passes (`\w` includes digits)
+4. Strips `"1"` → `"0:00 AM - Tsukiji Fish Market"`
+5. `normalizeTimeTo24h("0:00 AM")` → `"00:00"` → displayed as **12:00 AM**
+
+This explains every broken case:
+- `10:00 AM` → strips "1" → `0:00 AM` → **12:00 AM** ❌
+- `11:00 AM` → strips "1" → `1:00 AM` → **1:00 AM** ❌
+- `12:00 PM` → strips "1" → `2:00 PM` → **2:00 PM** ❌
+- `9:00 AM` → "9" matches emoji but lookahead on ":" fails → no strip → **9:00 AM** ✅
+- `1:00 PM` → "1" matches but lookahead on ":" fails → no strip → **1:00 PM** ✅
 
 ### Fix
 
-**File: `src/components/itinerary/ImportActivitiesModal.tsx`**
+**File: `src/components/itinerary/ImportActivitiesModal.tsx` (line 165)**
 
-#### 1. Sanitize invisible characters from pasted text before parsing
-
-Add a sanitization step in `cleanMarkdown` (or before the time extraction) that strips common invisible Unicode characters:
+Replace `\p{Emoji}` with a pattern that excludes ASCII digits:
 
 ```typescript
-function sanitizeInvisibleChars(text: string): string {
-  // Strip zero-width spaces, soft hyphens, zero-width joiners/non-joiners,
-  // word joiners, BOM, and other invisible formatting chars
-  return text.replace(/[\u200B\u200C\u200D\u00AD\u2060\uFEFF\u200E\u200F\u2028\u2029\u202A-\u202E]/g, '');
-}
+.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]{1,4}(?=\w)/u, '')
 ```
 
-Apply this in `cleanMarkdown` as the first step, before any other replacements.
-
-#### 2. Add raw-text cross-check after time extraction (defensive)
-
-After extracting `startTime` via the regex + `normalizeTime`, cross-check against the original raw line. If the raw line contains a two-digit hour like `"11:00"` but the extracted time only has `"01:00"`, correct it:
-
-```typescript
-// After line 261: startTime = normalizeTime(times[0]);
-if (startTime) {
-  const twoDigitMatch = raw.match(/\b(1[0-2]):(\d{2})\s*(am|pm)/i);
-  if (twoDigitMatch) {
-    const crossCheck = normalizeTime(twoDigitMatch[0]);
-    if (crossCheck && crossCheck !== startTime) {
-      startTime = crossCheck;
-    }
-  }
-}
-```
+`\p{Emoji_Presentation}` and `\p{Extended_Pictographic}` match actual visual emoji (🍣, 🏯, ✈️) but **not** ASCII digits. This preserves the intended emoji-stripping behavior while leaving time strings intact.
 
 ### Scope
-Single file: `src/components/itinerary/ImportActivitiesModal.tsx` — ~15 lines added (sanitizer function + cross-check). No backend changes.
+One regex change on one line. No other files affected.
 
