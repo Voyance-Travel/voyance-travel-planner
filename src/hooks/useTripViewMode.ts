@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export type TripViewMode = 'edit' | 'preview';
 
@@ -20,6 +20,12 @@ export function useTripViewMode({ isOwner, canEdit = false }: UseTripViewModeOpt
   const [internalMode, setInternalMode] = useState<TripViewMode>(
     hasEditAccess ? 'edit' : 'preview'
   );
+
+  useEffect(() => {
+    if (hasEditAccess) {
+      setInternalMode('edit');
+    }
+  }, [hasEditAccess]);
 
   const mode: TripViewMode = hasEditAccess ? internalMode : 'preview';
 
