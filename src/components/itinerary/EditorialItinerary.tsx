@@ -86,6 +86,7 @@ import { useTripBudget } from '@/hooks/useTripBudget';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+import { resolveCountry } from '@/utils/cityCountryMap';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
 import { LockedField } from './LockedField';
