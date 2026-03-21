@@ -2681,18 +2681,40 @@ Generate activities for this day following ALL constraints above.`;
         const beforeCount = generatedDay.activities.length;
         generatedDay.activities = generatedDay.activities.filter((a: any) => {
           const t = (a.title || '').toLowerCase();
+          const locName = (a.location?.name || '').toLowerCase();
+          const desc = (a.description || '').toLowerCase();
           const isAirportRef =
             t.includes('airport') ||
             t.includes('taxi to airport') ||
             t.includes('transfer to airport') ||
             t.includes('departure transfer to airport') ||
             t.includes('flight departure') ||
-            t.includes('head to airport');
-          return !isAirportRef;
+            t.includes('head to airport') ||
+            (a.category === 'transport' && (locName.includes('airport') || locName.includes('aeroporto') || locName.includes('aéroport')));
+          const descAirportRef = a.category === 'transport' && desc.includes('airport');
+          return !isAirportRef && !descAirportRef;
         });
         const removed = beforeCount - generatedDay.activities.length;
         if (removed > 0) {
           console.log(`[Stage 2] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${nextLegTransport}, not flight)`);
+        }
+      }
+
+      // ==========================================================================
+      // MULTI-CITY DEPARTURE DAY: Dedup checkout activities
+      // ==========================================================================
+      if (isLastDayInCity) {
+        const checkoutActivities = (generatedDay.activities || []).filter((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return t.includes('checkout') || t.includes('check-out') || t.includes('check out') ||
+                 t.includes('departure preparation');
+        });
+        if (checkoutActivities.length > 1) {
+          const keepId = checkoutActivities.find((a: any) => a.category === 'accommodation')?.id 
+                         || checkoutActivities[0].id;
+          const removeIds = new Set(checkoutActivities.filter((a: any) => a.id !== keepId).map((a: any) => a.id));
+          generatedDay.activities = generatedDay.activities.filter((a: any) => !removeIds.has(a.id));
+          console.log(`[Stage 2] Day ${dayNumber}: Deduped ${removeIds.size} duplicate checkout activities`);
         }
       }
 
@@ -2737,7 +2759,8 @@ Generate activities for this day following ALL constraints above.`;
             title.includes('checkout') || title.includes('transfer') || title.includes('arrival at');
           return !isLogistics;
         });
-        const minimumRealActivities = isLastDay ? 1 : (isFirstDay ? 3 : 5);
+        const isMultiCityDepartureDay = isLastDayInCity && !isLastDay;
+        const minimumRealActivities = isLastDay ? 1 : (isMultiCityDepartureDay ? 1 : (isFirstDay ? 3 : 5));
         if (realActivities.length < minimumRealActivities) {
           console.warn(`[Stage 2] Day ${dayNumber} has only ${realActivities.length} real activities (minimum: ${minimumRealActivities}) — triggering retry`);
           validation.errors.push(
