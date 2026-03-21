@@ -8477,7 +8477,7 @@ REALISTIC STRUCTURE:
 
 ⚠️ All post-checkout activities must be NEAR the hotel or en route to departure.
 ⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
-⚠️ CHECKOUT must happen BEFORE departure transfer. VIOLATION = REGENERATION.
+⚠️ CHECKOUT must happen BEFORE departure transfer. This is auto-enforced by post-processing.
 
 NOTE: Add your flight details to unlock more of the day if departing later.`;
           
