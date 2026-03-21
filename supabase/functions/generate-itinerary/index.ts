@@ -8350,6 +8350,10 @@ THE TRAVELER IS LEAVING. Make it relaxed.`;
             const checkoutEnd = '12:30';
             const collectLuggageStart = addMinutesToHHMM(leaveHotelBy, -30);
             
+            // Recalculate latestSightseeing for evening flights — more generous
+            // Just need 30 min to return to hotel before luggage collection
+            latestSightseeing = addMinutesToHHMM(collectLuggageStart, -30);
+            
             dayConstraints = `
 === DEPARTURE DAY: EVENING FLIGHT (${departure24}) ===
 
