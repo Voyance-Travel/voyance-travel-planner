@@ -1,60 +1,69 @@
 
 
-## Fix: Rewrite Day creates duplicate hotel entries and inflates costs
+## Fix: Regenerate Day creates duplicate hotel entries and renames day title
 
 ### Problem
-When the AI rewrites a day, hotel/accommodation activities (category: `accommodation`, `hotel`, or keywords like "check-in", "hotel") are treated as "protected" by `isProtectedActivity()`. Their IDs are sent to the backend via `keepActivities`. However, the AI also generates a new hotel check-in activity because the accommodation context is in the prompt. The backend's semantic dedup uses a 50% keyword match which often fails because the titles differ (e.g., "Four Seasons Otemachi" vs "Hotel Check-in & Refresh"). Result: two hotel entries, both at $1,204, inflating the trip total by ~$9,759.
+The Regenerate Day flow in `EditorialItinerary.tsx` (line 4239-4284) has the same hotel duplication bug that was fixed in `itineraryActionExecutor.ts` — but through a completely separate code path. When clicking the ↻ Regenerate button:
+
+1. Locked activities are preserved via `keepActivities`, but accommodation isn't excluded — so the backend receives the hotel ID as "kept" AND generates a new hotel entry
+2. The backend returns a fully new day object (including a new title like "Tokyo Heights & Market Bites"), which replaces the original day wholesale at line 4284
+3. No post-merge dedup runs, so duplicate hotels appear (tripling the cost)
 
 ### Root cause
-In `src/services/itineraryActionExecutor.ts` line 232-234, `isProtectedActivity` includes `accommodation` in `PROTECTED_CATEGORIES`. This means hotel STAY activities get sent as locked, but the AI doesn't know to skip generating a hotel entry — it just avoids the locked time slot and places a new hotel activity at a different time.
+Two issues in `handleDayRegenerateInternal` (lines 4230-4292):
+- `keepActivities` includes accommodation/hotel activities, causing the same duplication as the Trip Assistant rewrite
+- The raw `data.day` from the backend replaces the entire day, including the title, without preserving the original title
 
 ### Fix
 
-**File: `src/services/itineraryActionExecutor.ts` (lines ~230-255)**
+**File: `src/components/itinerary/EditorialItinerary.tsx` (lines ~4239-4284)**
 
-Two changes:
-
-1. **Exclude accommodation/hotel from `keepActivities`** — Hotel entries should NOT be sent as locked activities to the regeneration backend. They're not user-curated activities; they're logistics that should be handled by the schema compiler. Add a filter:
+1. **Filter accommodation from keepActivities** — reuse the same `isAccommodationActivity` pattern from `itineraryActionExecutor.ts`:
 
 ```typescript
-const keepActivities = preserve_locked
-  ? day.activities
-      .filter(a => (a.isLocked || isProtectedActivity(a)) && !isAccommodationActivity(a))
-      .map(a => a.id).filter(Boolean)
-  : [];
+const keepActivities = (day.activities || [])
+  .filter(a => a.isLocked && !isAccommodationLike(a))
+  .map(a => a.id)
+  .filter(Boolean);
 ```
 
-2. **Post-rewrite dedup** — After receiving `newActivities` from the backend, deduplicate accommodation entries. If the original day had a hotel STAY and the AI generated another one, keep only the original:
+Add a local helper:
+```typescript
+const isAccommodationLike = (a: EditorialActivity) => {
+  const cat = (a.category || '').toLowerCase();
+  const title = (a.title || '').toLowerCase();
+  return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
+    || title.includes('hotel check') || title.includes('check-in at')
+    || title.includes('check into');
+};
+```
+
+2. **Post-regeneration accommodation dedup** — after receiving `data.day`, deduplicate hotel entries (keep original, remove AI duplicate):
 
 ```typescript
-// Deduplicate hotel/accommodation entries: keep original, remove AI-generated duplicates
-const originalHotel = day.activities.find(a => isAccommodationActivity(a));
-if (originalHotel) {
-  const dupeIdx = newActivities.findIndex(a =>
-    isAccommodationActivity(a) && a.id !== originalHotel.id
-  );
-  if (dupeIdx !== -1) {
-    newActivities.splice(dupeIdx, 1);
-    // Re-insert original if not already present
-    if (!newActivities.some(a => a.id === originalHotel.id)) {
-      newActivities.push(originalHotel);
-      newActivities.sort((a, b) => /* time sort */);
+if (data?.day) {
+  const originalHotel = day.activities.find(isAccommodationLike);
+  if (originalHotel && data.day.activities) {
+    // Remove AI-generated duplicate hotel
+    const dupeIdx = data.day.activities.findIndex(a =>
+      isAccommodationLike(a) && a.id !== originalHotel.id
+    );
+    if (dupeIdx !== -1) {
+      data.day.activities.splice(dupeIdx, 1);
+      if (!data.day.activities.some(a => a.id === originalHotel.id)) {
+        data.day.activities.push(originalHotel);
+      }
     }
   }
+  // Preserve original day title (don't let backend rename it)
+  data.day.title = day.title;
+  data.day.theme = day.theme;
+  ...
 }
 ```
 
-3. **Add helper function** `isAccommodationActivity`:
-```typescript
-function isAccommodationActivity(activity: Activity): boolean {
-  const cat = norm(activity.category);
-  const title = norm(activityTitle(activity));
-  return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
-    || title.includes('hotel check') || title.includes('check-in')
-    || title.includes('check into');
-}
-```
+3. **Preserve day title/theme** — the backend shouldn't rename a day the user hasn't asked to rename. Set `data.day.title = day.title` and `data.day.theme = day.theme` before applying.
 
 ### Scope
-Single file: `src/services/itineraryActionExecutor.ts`. No backend changes needed — the issue is entirely in how the client pre-filters and post-processes the rewrite result.
+Single file: `src/components/itinerary/EditorialItinerary.tsx`, ~20 lines added around the `handleDayRegenerateInternal` function.
 
