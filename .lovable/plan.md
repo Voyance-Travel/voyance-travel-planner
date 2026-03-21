@@ -1,45 +1,23 @@
 
 
-## Fix: Regenerate Day still duplicates hotels via `onRegenerateDay` callback path
+## Fix: Lock icon and three-dot menu visible in Preview mode (desktop regression)
 
 ### Root cause
 
-The dedup and title-preservation fixes (lines 4313-4325) only run in the `else` branch — when `onRegenerateDay` is **not** provided. But when it **is** provided (line 4242-4248), the returned day is applied wholesale with zero dedup, zero title preservation. The same gap exists in `ItineraryEditor.tsx` (lines 351-357 and 382-383).
+In `EditorialItinerary.tsx`, the `DaySection` render function passes `isCleanPreview` to `ActivityRow` for the **mobile** card (line 9377) but **not** for the **desktop** card (lines 9385-9427). The desktop `ActivityRow` defaults to `isCleanPreview = false`, so it renders the full edit-mode UI (lock icon, three-dot menu, etc.) instead of the clean magazine-style preview.
 
 ### Fix
 
-**File 1: `src/components/itinerary/EditorialItinerary.tsx` (lines 4242-4248)**
+**File: `src/components/itinerary/EditorialItinerary.tsx` (~line 9425)**
 
-Apply the same dedup + title preservation to the `onRegenerateDay` path:
+Add the missing `isCleanPreview={isCleanPreview}` prop to the desktop `ActivityRow` instance, right after `isPastTrip={isPastTrip}` (around line 9424):
 
 ```typescript
-if (onRegenerateDay) {
-  const newDay = await onRegenerateDay(day.dayNumber);
-  if (newDay) {
-    // Deduplicate accommodation
-    const originalHotel = (day.activities || []).find(isAccommodationLike);
-    if (originalHotel && newDay.activities) {
-      newDay.activities = newDay.activities.filter(a => !isAccommodationLike(a));
-      newDay.activities.push(originalHotel);
-      newDay.activities.sort((a, b) => 
-        (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
-      );
-    }
-    // Preserve original title/theme
-    newDay.title = day.title;
-    newDay.theme = day.theme;
-    setDays(prev => prev.map((d, idx) => idx === dayIndex ? newDay : d));
-    ...
-  }
-}
+  isPastTrip={isPastTrip}
+  isCleanPreview={isCleanPreview}   // ← add this
+  onPhotoResolved={onPhotoResolved}
+  isManualMode={isManualMode}
 ```
 
-Move `isAccommodationLike` helper above both branches so it's accessible to both.
-
-**File 2: `src/components/itinerary/ItineraryEditor.tsx` (lines 351-357 and 382-383)**
-
-Apply the same dedup pattern to both the `onRegenerateDay` path and the direct `data.day` path, plus preserve title/theme.
-
-### Scope
-Two files, ~30 lines total. Applies the existing fix pattern to the two code paths that were missed.
+One line addition. The `ActivityRow` component already handles `isCleanPreview` correctly (line 9862 — returns clean magazine card when true). It's just not receiving the prop on desktop.
 
