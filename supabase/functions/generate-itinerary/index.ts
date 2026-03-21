@@ -7208,7 +7208,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
         isMultiCity: paramIsMultiCity, isTransitionDay: paramIsTransitionDay, transitionFrom: paramTransitionFrom, transitionTo: paramTransitionTo, transitionMode: paramTransitionMode,
         mustDoActivities: paramMustDoActivities, interestCategories: paramInterestCategories, generationRules: paramGenerationRules,
         pacing: paramPacing, isFirstTimeVisitor: paramIsFirstTimeVisitor,
-        hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: resolvedIsLastDayInCity,
+        hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity,
         restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants } = params;
       
       // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
