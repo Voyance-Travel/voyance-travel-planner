@@ -1,39 +1,42 @@
 
 
-## Fix: "Venue Name" not updated on Transport Mode Switch
+## Fix: Rewrite dedup only removes first hotel duplicate
 
-### Problem
-When switching a transport segment's mode (e.g., Taxi → Train/Metro), only `act.transportation.method` and `act.transportation.estimatedCost` are updated. The activity's `title` and `location.name` remain unchanged (e.g., still "Taxi to Tokyo Skytree"). When the Edit Activity modal opens, it reads these stale values.
+### Root cause (line 268-279)
 
-### Root cause
-Three transport-mode-update code paths in `EditorialItinerary.tsx` (lines ~2426, ~2460, and ~2410) all update `act.transportation` but never touch `act.title` or `act.location.name`.
+```typescript
+const dupeIdx = newActivities.findIndex(a => isAccommodationActivity(a) && a.id !== originalHotel.id);
+if (dupeIdx !== -1) {
+  newActivities = newActivities.filter((_, i) => i !== dupeIdx); // removes ONE
+  if (!newActivities.some(a => a.id === originalHotel.id)) {
+    newActivities.push(originalHotel); // adds original back
+  }
+}
+```
+
+`findIndex` returns the **first** match only. If the AI generates 2 hotel activities (which happens when it copies the original + adds a new "Hotel Check-in & Refresh"), only one gets removed. Then `originalHotel` is pushed back because its ID isn't in the AI set → result: 2 hotel entries.
 
 ### Fix
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
+**File: `src/services/itineraryActionExecutor.ts` (lines 265-280)**
 
-In all three `setDays` blocks that handle transport mode changes, also update the activity title to reflect the new mode. Extract the destination from the existing title (the part after "to ") and rebuild it:
+Replace `findIndex`-based single removal with `filter`-based removal of **all** AI-generated accommodation, then ensure the single original hotel is present:
 
 ```typescript
-// Inside each act mapping for transport mode change:
-const destination = (act.title || '').replace(/^.+?\sto\s/i, '');
-const newTitle = destination 
-  ? `${modeLabels[newMode] || newMode} to ${destination}`
-  : act.title;
-
-return {
-  ...act,
-  title: newTitle,
-  location: act.location ? { ...act.location, name: newTitle } : act.location,
-  transportation: { ...act.transportation, method: newMode, ... },
-};
+const originalHotel = day.activities.find(a => isAccommodationActivity(a));
+if (originalHotel) {
+  // Remove ALL AI-generated accommodation entries
+  newActivities = newActivities.filter((a: Activity) => !isAccommodationActivity(a));
+  // Re-insert the single original hotel
+  newActivities.push(originalHotel);
+  newActivities.sort((a: Activity, b: Activity) =>
+    (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
+  );
+}
 ```
 
-This applies to:
-1. Success path from optimize API (~line 2430)
-2. Fallback when optimize returns no data (~line 2460)  
-3. Error fallback (~line 2464)
+This guarantees exactly one hotel entry regardless of how many the AI generates.
 
 ### Scope
-Single file: `src/components/itinerary/EditorialItinerary.tsx` — update 3 parallel code blocks (each ~2 lines added).
+Single file, ~10 lines changed. Same pattern should be verified in `EditorialItinerary.tsx`'s regenerate handler (the earlier fix) to ensure it also uses `filter` not `findIndex`.
 
