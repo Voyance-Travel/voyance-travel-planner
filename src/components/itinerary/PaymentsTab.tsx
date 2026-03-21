@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getAppUrl } from '@/utils/getAppUrl';
 
 import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
@@ -85,6 +86,7 @@ export function PaymentsTab({
   journeyId,
   journeyName,
 }: PaymentsTabProps) {
+  const queryClient = useQueryClient();
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [totals, setTotals] = useState<PaymentTotals>({ paid: 0, pending: 0, total: 0 });
   const [loading, setLoading] = useState(true);
@@ -526,6 +528,9 @@ export function PaymentsTab({
       }
       const validResolvedIds = resolvedIds.filter(Boolean) as string[];
 
+      // Refresh trip-members cache so realIdToSyntheticId picks up any newly created rows
+      await queryClient.refetchQueries({ queryKey: ['trip-members', tripId] });
+
       if (validResolvedIds.length === 0) {
         toast.error('Could not resolve member IDs. Please try again.');
         return;
@@ -558,7 +563,7 @@ export function PaymentsTab({
         assigned_member_id: realMemberId,
       }));
 
-      const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id' });
+      const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id,assigned_member_id' });
       if (error) throw error;
 
       toast.success(validResolvedIds.length > 1 
@@ -582,7 +587,7 @@ export function PaymentsTab({
       setAssignMemberId('');
       setAssignMemberIds([]);
       // Background sync (no await, no artificial delay)
-      fetchPayments(0);
+      await fetchPayments(0);
       
     } catch (err) {
       console.error('Error assigning member:', err);
@@ -1120,6 +1125,8 @@ export function PaymentsTab({
                                   if (realId) resolvedIds.push(realId);
                                 }
                                 if (resolvedIds.length < 2) { toast.error('Need at least 2 members'); return; }
+                                // Refresh trip-members cache after resolving IDs
+                                await queryClient.refetchQueries({ queryKey: ['trip-members', tripId] });
 
                                 // Filter out paid items — never touch them in bulk split
                                 const splittableItems = unassigned.items.filter(({ item }) =>
@@ -1148,7 +1155,7 @@ export function PaymentsTab({
                                     status: 'pending' as const,
                                     assigned_member_id: realMemberId,
                                   }));
-                                  const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id' });
+                                  const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id,assigned_member_id' });
                                   if (error) console.error('Failed to assign item:', item.name, error);
                                 }
                                 if (skippedCount > 0) {
