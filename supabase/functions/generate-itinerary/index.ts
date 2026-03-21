@@ -8172,7 +8172,7 @@ Start the day at 10:00 AM.`;
           
           // LUGGAGE REALITY: After checkout, traveler has bags
           // Activities must be near hotel OR use luggage storage
-          const latestSightseeing = addMinutesToHHMM(hotelCheckout, -60); // 1 hour to return to hotel
+          let latestSightseeing = addMinutesToHHMM(hotelCheckout, -60); // default: 1 hour to return to hotel
           
           const hotelNameDisplay = flightContext.hotelName || 'Hotel';
           
