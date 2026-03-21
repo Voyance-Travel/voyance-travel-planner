@@ -563,7 +563,7 @@ export function PaymentsTab({
         assigned_member_id: realMemberId,
       }));
 
-      const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id' });
+      const { error } = await supabase.from('trip_payments').upsert(rows, { onConflict: 'trip_id,item_type,item_id,assigned_member_id' });
       if (error) throw error;
 
       toast.success(validResolvedIds.length > 1 
