@@ -6995,14 +6995,37 @@ If the purpose is a specific event, plan at least ONE full day around that event
             if (actualGap < requiredBuffer) {
               const deficit = requiredBuffer - actualGap;
               // Check if cascade would hit a hard-stop activity (checkout/departure)
+              // Checkout is only a hard stop if the day has a flight departure
+              const dayHasFlightDep46 = day.activities.some((a: any) => {
+                const tL = (a.title || a.name || '').toLowerCase();
+                const cL = (a.category || '').toLowerCase();
+                return cL === 'transport' && (tL.includes('airport') || tL.includes('flight'));
+              });
+              
               let hitHardStop = false;
               for (let j = i + 1; j < day.activities.length; j++) {
                 const act = day.activities[j];
                 const catLower = (act.category || '').toLowerCase();
                 const titleLower = (act.title || act.name || '').toLowerCase();
-                const isHardStop = (catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout')))
-                  || (catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train')));
+                const isCheckout = catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout'));
+                const isTransportHardStop = catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train'));
+                const isHardStop = (isCheckout && dayHasFlightDep46) || isTransportHardStop;
                 if (isHardStop) {
+                  // Before removing, check if current is a must-do — if so, truncate instead
+                  const isMustDo = (current as any).isMustDo || (current as any).mustDo || (current as any).is_must_do;
+                  if (isMustDo) {
+                    const actStartMins = parseTimeToMinutes(act.startTime || '') ?? 1440;
+                    const curStartMins = parseTimeToMinutes(current.startTime || '') ?? 0;
+                    const availableMins = actStartMins - curStartMins - requiredBuffer;
+                    if (availableMins >= 20) {
+                      const newEndMins = curStartMins + availableMins;
+                      current.endTime = `${Math.floor(newEndMins / 60).toString().padStart(2, '0')}:${(newEndMins % 60).toString().padStart(2, '0')}`;
+                      console.log(`[Stage 4.6] Day ${day.dayNumber}: truncated must-do "${current.title}" to ${availableMins}min to fit before hard-stop "${act.title}"`);
+                      hitHardStop = true;
+                      bufferFixCount++;
+                      break;
+                    }
+                  }
                   // Don't cascade into checkout/departure — remove the activity causing the overflow instead
                   console.log(`[Stage 4.6] Day ${day.dayNumber}: cascade would shift hard-stop "${act.title}" — removing "${current.title}" instead`);
                   day.activities.splice(i, 1);
