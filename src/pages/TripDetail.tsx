@@ -222,6 +222,7 @@ export default function TripDetail() {
   const [resumingGeneration, setResumingGeneration] = useState(false);
   const resumeInFlightRef = useRef(false);
   const autoResumeAttemptedRef = useRef(false);
+  const emptyDayHealAttemptedRef = useRef(false);
   const onReadyCalledRef = useRef(false);
   const [generateNewDaysPrompt, setGenerateNewDaysPrompt] = useState<{
     open: boolean;
