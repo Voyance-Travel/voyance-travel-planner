@@ -322,6 +322,7 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
       setSuggestions(prev => prev.map(s =>
         s.id === suggestionId ? { ...s, vote_deadline: newDeadline } : s
       ));
+      skipRealtimeRef.current = Date.now() + 2000;
       toast.success(newDeadline ? 'Deadline updated' : 'Deadline removed');
       setEditingDeadlineId(null);
       setEditDeadlineValue('');
