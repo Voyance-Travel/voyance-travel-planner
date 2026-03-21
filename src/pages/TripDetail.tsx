@@ -222,6 +222,7 @@ export default function TripDetail() {
   const [resumingGeneration, setResumingGeneration] = useState(false);
   const resumeInFlightRef = useRef(false);
   const autoResumeAttemptedRef = useRef(false);
+  const emptyDayHealAttemptedRef = useRef(false);
   const onReadyCalledRef = useRef(false);
   const [generateNewDaysPrompt, setGenerateNewDaysPrompt] = useState<{
     open: boolean;
@@ -1201,7 +1202,7 @@ export default function TripDetail() {
 
           // ── SELF-HEAL: Detect days that exist but have no real activities ("Unplanned") ──
           // Instead of destructive auto-regeneration, try restoring from version history first.
-          if (expectedTotal > 0 && actualDays >= expectedTotal && !autoResumeAttemptedRef.current) {
+          if (expectedTotal > 0 && actualDays >= expectedTotal && !emptyDayHealAttemptedRef.current) {
             const daysList = (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>;
             const emptyDayNumbers: number[] = [];
             for (const day of daysList) {
@@ -1212,7 +1213,7 @@ export default function TripDetail() {
             }
 
             if (emptyDayNumbers.length > 0 && emptyDayNumbers.length < expectedTotal) {
-              autoResumeAttemptedRef.current = true;
+              emptyDayHealAttemptedRef.current = true;
               console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} days have no activities (days: ${emptyDayNumbers.join(', ')}). Attempting version-history restore first.`);
 
               setTimeout(async () => {
@@ -1324,7 +1325,7 @@ export default function TripDetail() {
                   }
                 } catch (err) {
                   console.error('[TripDetail] Self-heal (version restore + regen) failed:', err);
-                  autoResumeAttemptedRef.current = false;
+                  emptyDayHealAttemptedRef.current = false;
                 }
               }, 2000);
             }
@@ -1422,6 +1423,7 @@ export default function TripDetail() {
     return () => {
       if (tripId) clearCachedVersion(tripId);
       autoResumeAttemptedRef.current = false;
+      emptyDayHealAttemptedRef.current = false;
     };
   }, [tripId, handleResumeGeneration]);
 
