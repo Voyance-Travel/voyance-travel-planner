@@ -587,7 +587,7 @@ export function PaymentsTab({
       setAssignMemberId('');
       setAssignMemberIds([]);
       // Background sync (no await, no artificial delay)
-      fetchPayments(0);
+      await fetchPayments(0);
       
     } catch (err) {
       console.error('Error assigning member:', err);
