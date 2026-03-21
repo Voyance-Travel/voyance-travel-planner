@@ -6984,16 +6984,36 @@ If the purpose is a specific event, plan at least ONE full day around that event
 
             if (actualGap < requiredBuffer) {
               const deficit = requiredBuffer - actualGap;
-              // Cascade-shift this activity and all subsequent ones forward
+              // Check if cascade would hit a hard-stop activity (checkout/departure)
+              let hitHardStop = false;
               for (let j = i + 1; j < day.activities.length; j++) {
                 const act = day.activities[j];
-                const s = parseTimeToMinutes(act.startTime || '');
-                const e = parseTimeToMinutes(act.endTime || '');
-                if (s !== null) act.startTime = minutesToHHMM(s + deficit);
-                if (e !== null) act.endTime = minutesToHHMM(e + deficit);
+                const catLower = (act.category || '').toLowerCase();
+                const titleLower = (act.title || act.name || '').toLowerCase();
+                const isHardStop = (catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout')))
+                  || (catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train')));
+                if (isHardStop) {
+                  // Don't cascade into checkout/departure — remove the activity causing the overflow instead
+                  console.log(`[Stage 4.6] Day ${day.dayNumber}: cascade would shift hard-stop "${act.title}" — removing "${current.title}" instead`);
+                  day.activities.splice(i, 1);
+                  i--; // re-check from same index
+                  hitHardStop = true;
+                  bufferFixCount++;
+                  break;
+                }
               }
-              bufferFixCount++;
-              console.log(`[Stage 4.6] Day ${day.dayNumber}: "${current.title}" → "${next.title}" = ${distKm.toFixed(1)}km, needed ${requiredBuffer}min buffer but had ${actualGap}min — shifted +${deficit}min`);
+              if (!hitHardStop) {
+                // Safe to cascade-shift all subsequent activities forward
+                for (let j = i + 1; j < day.activities.length; j++) {
+                  const act = day.activities[j];
+                  const s = parseTimeToMinutes(act.startTime || '');
+                  const e = parseTimeToMinutes(act.endTime || '');
+                  if (s !== null) act.startTime = minutesToHHMM(s + deficit);
+                  if (e !== null) act.endTime = minutesToHHMM(e + deficit);
+                }
+                bufferFixCount++;
+                console.log(`[Stage 4.6] Day ${day.dayNumber}: "${current.title}" → "${next.title}" = ${distKm.toFixed(1)}km, needed ${requiredBuffer}min buffer but had ${actualGap}min — shifted +${deficit}min`);
+              }
             }
           }
         }
