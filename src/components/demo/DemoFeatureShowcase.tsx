@@ -471,7 +471,7 @@ function GenerationVisual() {
                 {/* Voyance Tip */}
                 <div className="mt-2 pl-3 border-l-2 border-primary/20">
                   <p className="text-[11px] italic text-muted-foreground">
-                    <span className="text-primary font-medium not-italic">Voyance Tip</span> — {act.tip}
+                    <span className="text-primary font-medium not-italic">Voyance Tip</span> · {act.tip}
                   </p>
                 </div>
               </div>
