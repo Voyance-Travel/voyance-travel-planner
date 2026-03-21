@@ -1423,6 +1423,7 @@ export default function TripDetail() {
     return () => {
       if (tripId) clearCachedVersion(tripId);
       autoResumeAttemptedRef.current = false;
+      emptyDayHealAttemptedRef.current = false;
     };
   }, [tripId, handleResumeGeneration]);
 

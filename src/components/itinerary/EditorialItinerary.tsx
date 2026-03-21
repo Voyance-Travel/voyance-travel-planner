@@ -5971,6 +5971,31 @@ export function EditorialItinerary({
                      );
                    }
 
+                  // Unlocked days with no activities and not generating: show "Generate this day" CTA
+                  if (!isLockedDay && !hasActivities && !isActivelyGenerating) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+                        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                          <Sparkles className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Day {selectedDay.dayNumber} hasn't been planned yet</p>
+                          <p className="text-xs text-muted-foreground mt-1">Generate activities for this day to fill it with curated recommendations</p>
+                        </div>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handleDayRegenerate(selectedDayIndex)}
+                          disabled={regeneratingDay === selectedDay.dayNumber}
+                          className="mt-2"
+                        >
+                          <RefreshCw className={cn("h-4 w-4 mr-2", regeneratingDay === selectedDay.dayNumber && "animate-spin")} />
+                          {regeneratingDay === selectedDay.dayNumber ? 'Generating...' : `Generate Day ${selectedDay.dayNumber}`}
+                        </Button>
+                      </div>
+                    );
+                  }
+
                   // Days with activities but locked: show LockedDayCard (no real content in DOM)
                   // SECURITY: Previously used FrostedGateOverlay+DayCard which leaked activities to DevTools
                   return (
