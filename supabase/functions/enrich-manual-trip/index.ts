@@ -69,6 +69,13 @@ function buildResearchContext(itinerary: any): string {
       const name = activity.title || activity.name || "";
       if (!name) continue;
 
+      // Skip pure cost/price annotations (e.g. "€16pp", "~€45pp", "$25/person")
+      if (/^[~≈]?\s*[€$£¥₹]?\s*\d+[\d.,]*\s*(?:\/?\s*(?:pp|person|pax|each|per\s*person))?\s*[€$£¥₹]?\s*$/i.test(name.trim())) continue;
+
+      // Skip generic category placeholders (not specific venues)
+      const genericTitles = ['dinner at a restaurant', 'lunch at a restaurant', 'breakfast at a café', 'breakfast at a cafe'];
+      if (genericTitles.includes(name.trim().toLowerCase())) continue;
+
       const normalizedName = name.toLowerCase().trim();
       if (daySeen.has(normalizedName)) continue;
       daySeen.add(normalizedName);
