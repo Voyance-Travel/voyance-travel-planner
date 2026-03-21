@@ -1060,6 +1060,10 @@ function getActivityCostInfo(
   if (costAmount === 0 && ((activity as any).costSource === 'imported' || (activity as any).costSource === 'user_override')) {
     return { amount: 0, isEstimated: false, confidence: 'high', basis };
   }
+  // In manual (Build It Myself) mode, trust user's data — never auto-estimate
+  if (isManualMode && costAmount === 0) {
+    return { amount: 0, isEstimated: false, confidence: 'high' as const, basis };
+  }
   // If cost is explicitly 0 but category should never be free, skip to estimation
   if (costAmount === 0 && shouldNeverBeFree) {
     // Fall through to estimation engine below
