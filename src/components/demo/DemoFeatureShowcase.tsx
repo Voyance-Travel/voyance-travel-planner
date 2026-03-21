@@ -380,7 +380,7 @@ function GenerationVisual() {
 
   const activities = [
     { time: '9:00 AM', name: 'Fushimi Inari Shrine', type: 'Culture', tip: 'Arrive early to walk the torii gates with fewer crowds' },
-    { time: '12:30 PM', name: 'Nishiki Market', type: 'Food', tip: 'Try the dashimaki tamago at Marutama — a local staple' },
+    { time: '12:30 PM', name: 'Nishiki Market', type: 'Food', tip: 'Try the dashimaki tamago at Marutama, a local staple' },
     { time: '3:00 PM', name: 'Arashiyama Bamboo Grove', type: 'Nature', tip: 'The light is magical between 3–4 PM for photos' },
   ];
 
