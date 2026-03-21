@@ -43,6 +43,9 @@ const FIXED_CATEGORIES = new Set([
   'check-out',
   'arrival',
   'departure',
+  'dining',
+  'food',
+  'restaurant',
 ]);
 
 /** Keywords in titles that indicate time-fixed activities */
