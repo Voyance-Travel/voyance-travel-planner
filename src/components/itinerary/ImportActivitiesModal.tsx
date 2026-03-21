@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ClipboardPaste, Check, RefreshCw, Merge, ArrowRight, ChevronRight, AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { normalizeTimeTo24h, formatTime12h } from '@/utils/timeFormat';
 
 // =============================================================================
 // TYPES
@@ -99,26 +100,8 @@ function guessCategory(text: string): string {
   return 'activity';
 }
 
-function normalizeTime(raw: string): string | undefined {
-  if (!raw) return undefined;
-  const cleaned = raw.trim().toLowerCase();
-  const match24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
-  if (match24) {
-    const h = parseInt(match24[1]);
-    return h <= 23 ? `${h.toString().padStart(2, '0')}:${match24[2]}` : undefined;
-  }
-  const match12 = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
-  if (match12) {
-    let h = parseInt(match12[1]);
-    const m = match12[2] || '00';
-    if (match12[3] === 'pm' && h !== 12) h += 12;
-    if (match12[3] === 'am' && h === 12) h = 0;
-    return `${h.toString().padStart(2, '0')}:${m}`;
-  }
-  // No longer match bare numbers — require :MM or am/pm
-  return undefined;
-  return undefined;
-}
+/** Use shared normalizeTimeTo24h — single source of truth */
+const normalizeTime = normalizeTimeTo24h;
 
 const SKIP_LINE_PATTERNS: RegExp[] = [
   /^[-=*_]{3,}$/,
@@ -618,14 +601,20 @@ export function ImportActivitiesModal({
                         </div>
                         <span className="flex-1 truncate cursor-pointer" onClick={() => toggleActivity(gi, ai)}>{activity.title}</span>
                         {activity.startTime && (
-                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                             {activity.isEstimatedTime && <Clock className="h-3 w-3 text-muted-foreground" />}
+                            <span className={cn(
+                              'text-xs font-mono whitespace-nowrap',
+                              activity.isEstimatedTime ? 'italic text-muted-foreground' : 'text-foreground'
+                            )}>
+                              {formatTime12h(activity.startTime)}
+                            </span>
                             <input
                               type="time"
                               value={activity.startTime}
                               onChange={(e) => updateActivityTime(gi, ai, e.target.value)}
                               className={cn(
-                                'w-[70px] h-6 px-1 text-xs rounded border bg-background text-foreground',
+                                'w-[100px] h-6 px-1 text-xs rounded border bg-background text-foreground [font-variant-numeric:tabular-nums]',
                                 activity.isEstimatedTime
                                   ? 'border-dashed border-muted-foreground/50 italic text-muted-foreground'
                                   : 'border-border'
