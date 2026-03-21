@@ -5,6 +5,16 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { TripCity, TripCityInsert, TripCityUpdate, TripCityBudgetSummary } from '@/types/tripCity';
+import { resolveCountry } from '@/utils/cityCountryMap';
+
+/** Ensure country is populated before insertion */
+function enrichCityCountry<T extends { city_name: string; country?: string }>(city: T): T {
+  if (!city.country) {
+    const resolved = resolveCountry(city.city_name);
+    if (resolved) return { ...city, country: resolved };
+  }
+  return city;
+}
 
 /**
  * Get all cities for a trip, ordered by city_order

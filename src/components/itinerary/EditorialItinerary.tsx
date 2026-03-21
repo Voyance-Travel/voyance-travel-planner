@@ -8998,7 +8998,7 @@ function DayCard({
                 <div className="flex items-center gap-1.5 mb-0.5 sm:mb-1 flex-wrap">
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 bg-primary/10 text-foreground font-medium">
                     <MapPin className="h-2.5 w-2.5 mr-0.5" />
-                    {day.city}{day.country ? `, ${day.country}` : ''}
+                    {day.city}{(() => { const rc = resolveCountry(day.city!, day.country); return rc ? `, ${rc}` : ''; })()}
                   </Badge>
                   {day.isTransitionDay && day.transitionFrom && day.transitionTo && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-border bg-card text-foreground font-medium">
