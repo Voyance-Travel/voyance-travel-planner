@@ -1,71 +1,32 @@
 
+Fix the contradiction by making the day-level warning and the Refresh Day validator use the same definition of a bad buffer.
 
-## Fix: Swap Activity panel slow/broken — AbortController not connected
+1. Root cause
+- The page banner in `src/components/itinerary/EditorialItinerary.tsx` flags any `gap <= 0` between two different locations.
+- The backend validator in `supabase/functions/refresh-day/index.ts` does not. Its `getMinBufferMinutes()` returns `0` whenever either activity looks like transit/transport, so a `0 min` gap can be treated as acceptable.
+- `src/components/itinerary/RefreshDayDiffView.tsx` then shows “All Good” because it only treats buffers as a problem when `isInsufficient` is true.
 
-### Root cause
+2. Backend fix first
+- Update `supabase/functions/refresh-day/index.ts` so a `0-minute` gap between distinct places is always flagged, even if one item is a walking/transport segment.
+- Add a pair-level helper for “same place / safe handoff” instead of relying only on category names.
+- Keep true same-location handoffs ignored, but mark distinct-location `0 min` transitions as `insufficient_buffer` and generate a buffer fix suggestion.
+- Make the returned `buffers[]` mark these rows as `isInsufficient: true`, so the UI can trust the refresh result.
 
-The `invokeWithTimeout` function in `ActivityAlternativesDrawer.tsx` creates an `AbortController` but **never passes the signal to the actual request**. `supabase.functions.invoke()` doesn't accept an `AbortSignal` parameter, so:
+3. UI alignment
+- In `src/components/itinerary/RefreshDayDiffView.tsx`, keep the header driven by authoritative refresh data, but ensure “All Good” only appears when there are:
+  - no issues, and
+  - no insufficient buffers
+- Update the empty-state copy so it reflects the new rule clearly.
 
-- The 15-second client timeout is a no-op — it sets a flag but the HTTP request continues indefinitely
-- When a user clicks a filter chip, the previous request keeps running (wasting resources, potentially blocking)
-- The edge function itself has internal timeouts (12s AI + 3s DNA = up to 15s), but if the Supabase gateway is slow or cold-starting, there's no client-side cancellation
+4. Optional consistency cleanup
+- In `src/components/itinerary/EditorialItinerary.tsx`, keep hiding the heuristic banner once refresh results exist, but only because the refreshed result will now correctly surface the zero-buffer problem.
+- If needed, extract/mirror the same “same place vs real movement” logic client-side so the pre-refresh warning matches the backend more closely.
 
-This means the spinner can hang until the edge function's own gateway timeout (which can be 30s+).
+Files to update
+- `supabase/functions/refresh-day/index.ts`
+- `src/components/itinerary/RefreshDayDiffView.tsx`
+- Possibly `src/components/itinerary/EditorialItinerary.tsx` for small consistency cleanup
 
-### Fix
-
-**File: `src/components/planner/ActivityAlternativesDrawer.tsx` (lines 120-144)**
-
-Replace `supabase.functions.invoke` with a direct `fetch` call to the edge function URL, passing the `AbortController.signal` so the request is genuinely cancelled on timeout or when a new filter is clicked.
-
-```typescript
-const invokeWithTimeout = useCallback(async (
-  body: Record<string, unknown>,
-  timeoutMs: number,
-): Promise<Record<string, unknown> | null> => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    const { data: { session } } = await supabase.auth.getSession();
-
-    const response = await fetch(
-      `${supabaseUrl}/functions/v1/get-activity-alternatives`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${session?.access_token || supabaseKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,  // Actually connected now
-      }
-    );
-
-    clearTimeout(timer);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
-  } catch (err) {
-    clearTimeout(timer);
-    if ((err as Error)?.name === 'AbortError') return null;
-    throw err;
-  }
-}, []);
-```
-
-Additionally, store the current `AbortController` in a ref so that when a new filter/search request starts, the previous one is explicitly aborted (not just ignored by stale ID check, but actually cancelled at the network level):
-
-```typescript
-const activeAbortRef = useRef<AbortController | null>(null);
-
-// At start of each request:
-activeAbortRef.current?.abort();
-activeAbortRef.current = controller;
-```
-
-### Scope
-Single file: `src/components/planner/ActivityAlternativesDrawer.tsx`. No edge function changes needed — the issue is entirely client-side request handling.
-
+Expected result
+- Refresh Day will no longer say “All Good” for a `0 min` gap like “Summer Riverside Wander → Scenic Walk to the Latin Quarter” unless it is a true same-location handoff.
+- The button becomes useful again because the refresh result will explicitly flag the problem and propose a timing fix instead of silently passing it.
