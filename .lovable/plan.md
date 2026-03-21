@@ -1,43 +1,25 @@
 
 
-## Fix: Activities Scheduled Before Hotel Check-In on Arrival Days
+## Fix: Budget Coach Swap Leaves "Lunch" in Location Name and Transit Labels
 
 ### Problem
-On Day 1 (arrival), the AI places hotel check-in at 12:00 PM but schedules activities at 10:00 AM and 11:45 AM — before the traveler has even reached their hotel. The prompt (Rule 12) says check-in must be the FIRST activity, but the AI doesn't always comply. The fallback injection (Stage 2.56) only fires when check-in is **missing** — it doesn't fix ordering when check-in exists but isn't first.
+The meal coherence guard fixes the `title` and `name` fields, but two other places still use the raw `suggestion.suggested_swap` text ("Lunch at Osteria Beccafico"):
+1. **Line 6216**: `location.name` is set to raw `suggestion.suggested_swap` — this feeds transit labels ("Walk to Lunch at Osteria Beccafico · 23 min")
+2. **Line 6210**: `description` falls back to raw `suggestion.suggested_swap`
 
-### Root Cause
-Stage 2.56 (line 6249) checks `hasCheckIn` — if true, it skips entirely with "no injection needed." But it never verifies that check-in is actually the **first** activity chronologically. So when the AI places check-in at noon and sightseeing at 10 AM, the post-processor accepts it as valid.
+So even though the title is corrected to "Dinner at Osteria Beccafico", the location name and transit segment still say "Lunch."
 
-### Fix (1 file, ~20 lines)
+### Fix (1 file, ~3 lines)
 
-**File: `supabase/functions/generate-itinerary/index.ts`**
+**File: `src/components/itinerary/EditorialItinerary.tsx`**
 
-**After Stage 2.56's existing check-in injection block (~line 6294), add a new enforcement step:**
+Apply the same `coherentTitle` to `location.name` and the description fallback:
 
-When Day 1 (or first day in a new city) has a check-in activity but it's NOT the earliest activity by time:
+- **Line 6210**: Change `suggestion.suggested_description || suggestion.suggested_swap` → `suggestion.suggested_description || coherentTitle`
+- **Line 6216**: Change `name: suggestion.suggested_swap` → `name: coherentTitle`
 
-1. Find the check-in activity and determine its start time
-2. Find all activities scheduled before check-in
-3. Shift those pre-check-in activities to after check-in ends, maintaining their relative order and spacing
-4. Log the fix
-
-```
-// Stage 2.57: Enforce check-in-first ordering on arrival days
-// If check-in exists but isn't the earliest activity, shift pre-check-in 
-// activities to after check-in ends.
-```
-
-Logic:
-- Parse check-in start time → `checkInStartMin`
-- Parse check-in end time → `checkInEndMin`
-- For each activity with `startTime < checkInStartMin`: shift it to `checkInEndMin + offset` (preserving original duration and relative order)
-- Re-sort activities by start time
-
-This is deterministic post-processing — no AI call, no retry needed. It catches every case where the AI violates the "check-in first" rule regardless of the specific times chosen.
-
-### Why not just fix the prompt?
-The prompt (Rule 12) already says "MUST begin with hotel check-in as the FIRST activity." The AI sometimes ignores it. This post-processing enforcement is the reliable backstop — same pattern used for checkout/departure ordering on last days.
+This ensures every user-visible text field that displays the activity name uses the meal-corrected version, including transit segment labels that derive from `location.name`.
 
 ### Files
-- `supabase/functions/generate-itinerary/index.ts` — add Stage 2.57 check-in-first enforcement
+- `src/components/itinerary/EditorialItinerary.tsx` — use `coherentTitle` in location.name and description fallback
 
