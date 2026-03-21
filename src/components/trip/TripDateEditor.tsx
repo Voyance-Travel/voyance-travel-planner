@@ -392,7 +392,7 @@ export function TripDateEditor({
                 <div className="grid gap-2">
                   {[
                     { value: 'before' as InsertPosition, label: 'Before Day 1', desc: 'Add days at the start' },
-                    { value: 'after' as InsertPosition, label: `After Day ${currentDays}`, desc: 'Add days at the end' },
+                    { value: 'after' as InsertPosition, label: `After Day ${currentDays + 1}`, desc: 'Add days at the end' },
                   ].map(opt => (
                     <button
                       key={opt.value}
