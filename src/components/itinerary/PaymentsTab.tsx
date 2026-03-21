@@ -528,6 +528,9 @@ export function PaymentsTab({
       }
       const validResolvedIds = resolvedIds.filter(Boolean) as string[];
 
+      // Refresh trip-members cache so realIdToSyntheticId picks up any newly created rows
+      await queryClient.refetchQueries({ queryKey: ['trip-members', tripId] });
+
       if (validResolvedIds.length === 0) {
         toast.error('Could not resolve member IDs. Please try again.');
         return;
