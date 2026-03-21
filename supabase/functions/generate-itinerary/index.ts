@@ -6871,6 +6871,25 @@ If the purpose is a specific event, plan at least ONE full day around that event
                   }
                   
                   if (newStartMins >= 0 && newStartMins !== oldMins) {
+                    // Hard-constraint check: ensure shifted time doesn't squeeze against checkout/departure
+                    const hardStopAct = day.activities.find((a: StrictActivity) => {
+                      const catLower = (a.category || '').toLowerCase();
+                      const titleLower = (a.title || a.name || '').toLowerCase();
+                      return (catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout')))
+                        || (catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train')));
+                    });
+                    if (hardStopAct && hardStopAct.startTime) {
+                      const hardStopMins = parseInt(hardStopAct.startTime.split(':')[0]) * 60 + parseInt(hardStopAct.startTime.split(':')[1]);
+                      const estimatedEnd = newStartMins + duration + 20; // 20min transit buffer
+                      if (estimatedEnd > hardStopMins) {
+                        // Shifted activity would squeeze past checkout/departure — REMOVE instead
+                        day.activities = day.activities.filter((a: StrictActivity) => a.id !== violation.activityId);
+                        removedCount++;
+                        console.log(`  ✗ Day ${violation.dayNumber}: "${violation.activityTitle}" — REMOVED (shifted time ${newStartMins}min + ${duration}min + transit exceeds hard stop at ${hardStopMins}min)`);
+                        continue;
+                      }
+                    }
+                    
                     const newStartTime = `${Math.floor(newStartMins / 60).toString().padStart(2, '0')}:${(newStartMins % 60).toString().padStart(2, '0')}`;
                     const newEndMins = newStartMins + duration;
                     activity.startTime = newStartTime;
