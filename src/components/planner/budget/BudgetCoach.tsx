@@ -411,7 +411,7 @@ export function BudgetCoach({
                               <Scissors className="h-3 w-3" />
                               {s.current_item}
                               <span className="font-medium text-foreground">
-                                ({formatCurrency(s.current_cost)})
+                                ({formatCurrency(s.current_cost * travelers)})
                               </span>
                             </span>
                             <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
