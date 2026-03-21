@@ -1,53 +1,43 @@
 
 
-## Fix: Cost-Only Strings Treated as Must-Do Activities in Smart Finish
+## Fix: "De Kas" Replaced by Generic Placeholder in Smart Finish
 
 ### Problem
-When Smart Finish processes a manually-built itinerary, `buildResearchContext()` serializes every activity title — including cost-only entries like "~€15pp", "€16pp", "~€45pp", "Dinner At A Restaurant" — into the `mustDoActivities` string. The `parseItem()` function in `must-do-priorities.ts` has no filter for pure price/cost strings, so these become mandatory must-do activities with `priority: 'must'`. The validation gate then blocks generation because the AI (correctly) doesn't produce activities titled "€16pp".
-
-The error "CRITICAL: The user's NON-NEGOTIABLE must-do activities are MISSING from Day 1: '~€15pp', '€16pp', '~€45pp'" confirms this.
+Smart Finish correctly receives "De Kas" as a must-do activity but the Meal Final Guard then injects a generic "Dinner at a restaurant" placeholder because `detectMealSlots()` fails to recognize "De Kas" as dinner.
 
 ### Root Cause
-Two missing filters:
+`detectMealSlots()` in `day-validation.ts` (line 134) only detects meals via keyword matching — it checks if the activity **title** contains "dinner", "supper", or "evening meal". A restaurant like "De Kas" with `category: "dining"` scheduled at 19:00 doesn't contain any dinner keywords, so it's invisible to the detector.
 
-1. **`buildResearchContext()`** (enrich-manual-trip) includes all activities without filtering out cost-annotation entries
-2. **`parseItem()`** (must-do-priorities.ts) accepts any string ≥2 chars as a valid must-do — no check for pure price/currency patterns
+The Final Guard sees "dinner is missing", injects a generic placeholder, and the original "De Kas" activity either gets pushed aside or the duplicate confuses the output.
 
-### Fix (2 files)
+### Fix
 
-**File 1: `supabase/functions/generate-itinerary/must-do-priorities.ts` — `parseItem()` (~line 429)**
+**File: `supabase/functions/generate-itinerary/day-validation.ts` — `detectMealSlots()` (~line 134)**
 
-Add a filter after `activityName` is cleaned, before returning. If the remaining name is purely a cost/price string, return `null`:
+Add time-based meal detection for dining-category activities. If an activity has `category` in `DINING_CATEGORIES` and its `startTime` falls within a meal window, count it as that meal:
 
 ```typescript
-// After: if (!activityName) return null;
-// Add:
-// Skip pure cost/price annotations (e.g. "€16pp", "~€45pp", "$25/person", "£10")
-if (/^[~≈]?\s*[€$£¥₹]?\s*\d+[\d.,]*\s*(?:\/?\s*(?:pp|person|pax|each|per\s*person))?\s*[€$£¥₹]?\s*$/i.test(activityName)) {
-  return null;
+// After keyword matching loop, add time-based detection for dining activities:
+if (isDining) {
+  const startTime = (activity as any).startTime || '';
+  const minutes = parseTimeToMinutesLocal(startTime);
+  if (minutes !== null) {
+    if (minutes >= 6*60 && minutes < 11*60) detected.add('breakfast');
+    else if (minutes >= 11*60 && minutes < 15*60) detected.add('lunch');
+    else if (minutes >= 17*60 && minutes <= 22*60) detected.add('dinner');
+  }
 }
 ```
 
-This catches patterns like `€16pp`, `~€45pp`, `$25/person`, `~€15pp`, `£10`, etc.
+This means "De Kas" at 19:00 with `category: "dining"` will be detected as dinner, preventing the Final Guard from injecting a duplicate.
 
-**File 2: `supabase/functions/enrich-manual-trip/index.ts` — `buildResearchContext()` (~line 69)**
-
-Add a pre-filter when iterating activities to skip cost-only titles:
-
+**Update the type signature** of the `activities` parameter to include optional `startTime`:
 ```typescript
-// After: const name = activity.title || activity.name || "";
-// Add:
-if (/^[~≈]?\s*[€$£¥₹]?\s*\d+[\d.,]*\s*(?:\/?\s*(?:pp|person|pax|each))?\s*[€$£¥₹]?\s*$/i.test(name.trim())) continue;
+activities: Array<Pick<StrictActivityMinimal, 'title' | 'category'> & { startTime?: string }>
 ```
 
-Also filter out generic filler titles like "Dinner At A Restaurant" which are category placeholders, not specific venues. Add after the cost check:
-
-```typescript
-// Skip generic category placeholders (not specific venues)
-const genericTitles = ['dinner at a restaurant', 'lunch at a restaurant', 'breakfast at a café', 'breakfast at a cafe'];
-if (genericTitles.includes(name.trim().toLowerCase())) continue;
-```
+`parseTimeToMinutesLocal` already exists at line 166 in the same file.
 
 ### Scope
-2 edge function files, ~10 lines added total. No client-side changes. No database changes.
+1 file, ~10 lines added. No client-side or database changes.
 
