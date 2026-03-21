@@ -6241,8 +6241,8 @@ If the purpose is a specific event, plan at least ONE full day around that event
             const hotelAddress_56 = day1City_56?.hotelAddress || flightHotelResult?.hotelAddress || '';
 
             const firstActivity_56 = day1_56.activities[0];
-            const firstStartMin_56 = parseTimeToMinutes(firstActivity_56?.startTime || '15:00') || (15 * 60);
-            const checkInStartMin_56 = Math.max(12 * 60, firstStartMin_56 - 45);
+            const firstStartMin_56 = parseTimeToMinutes(firstActivity_56?.startTime || '10:00') || (10 * 60);
+            const checkInStartMin_56 = Math.max(9 * 60, firstStartMin_56 - 45);
             const checkInEndMin_56 = checkInStartMin_56 + 30;
             const checkInStart_56 = minutesToHHMM(checkInStartMin_56);
             const checkInEnd_56 = minutesToHHMM(checkInEndMin_56);
