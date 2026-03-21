@@ -6431,6 +6431,20 @@ If the purpose is a specific event, plan at least ONE full day around that event
           allAfter.sort((a: any, b: any) =>
             (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0)
           );
+          
+          // Mini overlap resolution: ensure shifted activities don't overlap existing ones
+          for (let k = 0; k < allAfter.length - 1; k++) {
+            const curEnd = parseTimeToMinutes(allAfter[k].endTime) || 0;
+            const nextStart = parseTimeToMinutes(allAfter[k + 1].startTime) || 0;
+            if (curEnd > nextStart) {
+              const nextDuration = (parseTimeToMinutes(allAfter[k + 1].endTime) || (nextStart + 60)) - nextStart;
+              const newStart = curEnd + 15;
+              allAfter[k + 1].startTime = minutesToHHMM(newStart);
+              allAfter[k + 1].endTime = minutesToHHMM(newStart + nextDuration);
+              console.log(`[Stage 2.57] Resolved overlap: pushed "${allAfter[k + 1].title || allAfter[k + 1].name}" to ${minutesToHHMM(newStart)}`);
+            }
+          }
+          
           day.activities = [checkIn, ...allAfter];
           aiResult.days[dIdx] = day;
 
@@ -6872,10 +6886,20 @@ If the purpose is a specific event, plan at least ONE full day around that event
                   
                   if (newStartMins >= 0 && newStartMins !== oldMins) {
                     // Hard-constraint check: ensure shifted time doesn't squeeze against checkout/departure
+                    // But ONLY treat checkout as hard stop if day has a flight departure
+                    // (no-flight days deliberately schedule farewell activities AFTER checkout)
+                    const dayHasFlightDeparture = day.activities.some((a: StrictActivity) => {
+                      const tLower = (a.title || a.name || '').toLowerCase();
+                      const cLower = (a.category || '').toLowerCase();
+                      return cLower === 'transport' && (tLower.includes('airport') || tLower.includes('flight'));
+                    });
+                    
                     const hardStopAct = day.activities.find((a: StrictActivity) => {
                       const catLower = (a.category || '').toLowerCase();
                       const titleLower = (a.title || a.name || '').toLowerCase();
-                      return (catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout')))
+                      const isCheckout = catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout'));
+                      if (isCheckout && !dayHasFlightDeparture) return false;
+                      return isCheckout
                         || (catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train')));
                     });
                     if (hardStopAct && hardStopAct.startTime) {
@@ -6985,14 +7009,37 @@ If the purpose is a specific event, plan at least ONE full day around that event
             if (actualGap < requiredBuffer) {
               const deficit = requiredBuffer - actualGap;
               // Check if cascade would hit a hard-stop activity (checkout/departure)
+              // Checkout is only a hard stop if the day has a flight departure
+              const dayHasFlightDep46 = day.activities.some((a: any) => {
+                const tL = (a.title || a.name || '').toLowerCase();
+                const cL = (a.category || '').toLowerCase();
+                return cL === 'transport' && (tL.includes('airport') || tL.includes('flight'));
+              });
+              
               let hitHardStop = false;
               for (let j = i + 1; j < day.activities.length; j++) {
                 const act = day.activities[j];
                 const catLower = (act.category || '').toLowerCase();
                 const titleLower = (act.title || act.name || '').toLowerCase();
-                const isHardStop = (catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout')))
-                  || (catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train')));
+                const isCheckout = catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout'));
+                const isTransportHardStop = catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train'));
+                const isHardStop = (isCheckout && dayHasFlightDep46) || isTransportHardStop;
                 if (isHardStop) {
+                  // Before removing, check if current is a must-do — if so, truncate instead
+                  const isMustDo = (current as any).isMustDo || (current as any).mustDo || (current as any).is_must_do;
+                  if (isMustDo) {
+                    const actStartMins = parseTimeToMinutes(act.startTime || '') ?? 1440;
+                    const curStartMins = parseTimeToMinutes(current.startTime || '') ?? 0;
+                    const availableMins = actStartMins - curStartMins - requiredBuffer;
+                    if (availableMins >= 20) {
+                      const newEndMins = curStartMins + availableMins;
+                      current.endTime = `${Math.floor(newEndMins / 60).toString().padStart(2, '0')}:${(newEndMins % 60).toString().padStart(2, '0')}`;
+                      console.log(`[Stage 4.6] Day ${day.dayNumber}: truncated must-do "${current.title}" to ${availableMins}min to fit before hard-stop "${act.title}"`);
+                      hitHardStop = true;
+                      bufferFixCount++;
+                      break;
+                    }
+                  }
                   // Don't cascade into checkout/departure — remove the activity causing the overflow instead
                   console.log(`[Stage 4.6] Day ${day.dayNumber}: cascade would shift hard-stop "${act.title}" — removing "${current.title}" instead`);
                   day.activities.splice(i, 1);
@@ -8125,7 +8172,7 @@ Start the day at 10:00 AM.`;
           
           // LUGGAGE REALITY: After checkout, traveler has bags
           // Activities must be near hotel OR use luggage storage
-          const latestSightseeing = addMinutesToHHMM(hotelCheckout, -60); // 1 hour to return to hotel
+          let latestSightseeing = addMinutesToHHMM(hotelCheckout, -60); // default: 1 hour to return to hotel
           
           const hotelNameDisplay = flightContext.hotelName || 'Hotel';
           
@@ -8236,7 +8283,7 @@ DEPARTURE DAY ACTIVITIES: 1 maximum (near hotel only)
 
 ⚠️ DO NOT schedule activities across the city.
 ⚠️ DO NOT plan activities after ${latestSightseeing}.
-⚠️ CHECKOUT (step 2) MUST have an earlier startTime than TRANSFER (step 4). VIOLATION = REGENERATION.
+⚠️ CHECKOUT (step 2) MUST have an earlier startTime than TRANSFER (step 4). This is auto-enforced by post-processing.
 THE TRAVELER IS LEAVING. Make it a gentle goodbye, not a marathon.`;
 
           } else if (isAfternoonFlight) {
@@ -8293,7 +8340,7 @@ DEPARTURE DAY ACTIVITIES: 1-2 maximum (morning only, near hotel)
 
 ⚠️ NO activities scheduled after ${latestSightseeing}.
 ⚠️ Stay near hotel. Do not go across the city.
-⚠️ CHECKOUT (step 4) MUST have an earlier startTime than TRANSFER (step 5). VIOLATION = REGENERATION.
+⚠️ CHECKOUT (step 4) MUST have an earlier startTime than TRANSFER (step 5). This is auto-enforced by post-processing.
 THE TRAVELER IS LEAVING. Make it relaxed.`;
 
           } else {
@@ -8302,6 +8349,10 @@ THE TRAVELER IS LEAVING. Make it relaxed.`;
             const checkoutTime = '12:00';
             const checkoutEnd = '12:30';
             const collectLuggageStart = addMinutesToHHMM(leaveHotelBy, -30);
+            
+            // Recalculate latestSightseeing for evening flights — more generous
+            // Just need 30 min to return to hotel before luggage collection
+            latestSightseeing = addMinutesToHHMM(collectLuggageStart, -30);
             
             dayConstraints = `
 === DEPARTURE DAY: EVENING FLIGHT (${departure24}) ===
@@ -8359,7 +8410,7 @@ DEPARTURE DAY ACTIVITIES: 2-3 maximum, but CONDENSED
 ⚠️ All activities after checkout must be in ONE area.
 ⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
 ⚠️ No reservations that can't be cancelled.
-⚠️ CHECKOUT must happen BEFORE luggage collection/transfer. VIOLATION = REGENERATION.
+⚠️ CHECKOUT must happen BEFORE luggage collection/transfer. This is auto-enforced by post-processing.
 THE TRAVELER IS LEAVING. A gentle goodbye, not a marathon.`;
           }
           
@@ -8426,7 +8477,7 @@ REALISTIC STRUCTURE:
 
 ⚠️ All post-checkout activities must be NEAR the hotel or en route to departure.
 ⚠️ Final activity should be LOW-STAKES (can be skipped if running late).
-⚠️ CHECKOUT must happen BEFORE departure transfer. VIOLATION = REGENERATION.
+⚠️ CHECKOUT must happen BEFORE departure transfer. This is auto-enforced by post-processing.
 
 NOTE: Add your flight details to unlock more of the day if departing later.`;
           
@@ -9777,10 +9828,19 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
                     if (!didFix && newStartMinsSD >= 0 && newStartMinsSD !== oldMinsSD) {
                       // Hard-constraint check: don't shift if it squeezes against checkout/departure
+                      // Only treat checkout as hard stop if day has a flight departure
+                      const dayHasFlightDepSD = normalizedActivities.some((fa: any) => {
+                        const ftL = (fa.title || fa.name || '').toLowerCase();
+                        const fcL = (fa.category || '').toLowerCase();
+                        return fcL === 'transport' && (ftL.includes('airport') || ftL.includes('flight'));
+                      });
+                      
                       const hardStopActSD = normalizedActivities.find((ha: any) => {
                         const hCat = (ha.category || '').toLowerCase();
                         const hTitle = (ha.title || ha.name || '').toLowerCase();
-                        return (hCat === 'accommodation' && (hTitle.includes('check') || hTitle.includes('checkout')))
+                        const isCheckoutSD = hCat === 'accommodation' && (hTitle.includes('check') || hTitle.includes('checkout'));
+                        if (isCheckoutSD && !dayHasFlightDepSD) return false;
+                        return isCheckoutSD
                           || (hCat === 'transport' && (hTitle.includes('depart') || hTitle.includes('airport') || hTitle.includes('flight') || hTitle.includes('train')));
                       });
                       if (hardStopActSD && hardStopActSD.startTime) {
