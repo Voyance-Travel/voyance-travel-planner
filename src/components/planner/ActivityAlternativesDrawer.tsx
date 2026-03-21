@@ -635,27 +635,27 @@ export default function ActivityAlternativesDrawer({
             ) : (
               <AnimatePresence mode="popLayout">
                 {/* Similar alternatives section */}
-                {similarAlternatives.length > 0 && (
+                {filteredSimilar.length > 0 && (
                   <div>
-                    {!activeFilter && differentAlternatives.length > 0 && (
+                    {!activeFilter && filteredDifferent.length > 0 && (
                       <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                         Similar Options
                       </h3>
                     )}
-                    {similarAlternatives.map((alt, i) => renderAlternativeCard(alt, i))}
+                    {filteredSimilar.map((alt, i) => renderAlternativeCard(alt, i))}
                   </div>
                 )}
 
                 {/* Different alternatives section */}
-                {differentAlternatives.length > 0 && (
+                {filteredDifferent.length > 0 && (
                   <div>
-                    {!activeFilter && similarAlternatives.length > 0 && (
+                    {!activeFilter && filteredSimilar.length > 0 && (
                       <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 mt-4">
                         Something Different
                       </h3>
                     )}
-                    {differentAlternatives.map((alt, i) => 
-                      renderAlternativeCard(alt, i + similarAlternatives.length)
+                    {filteredDifferent.map((alt, i) => 
+                      renderAlternativeCard(alt, i + filteredSimilar.length)
                     )}
                   </div>
                 )}
