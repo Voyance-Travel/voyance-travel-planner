@@ -6215,6 +6215,12 @@ export function EditorialItinerary({
                           ...(act.location || {}),
                           name: suggestion.suggested_swap,
                         },
+                        // Clear booking metadata — replacement is a different activity
+                        bookingUrl: undefined,
+                        viatorProductCode: undefined,
+                        website: undefined,
+                        externalBookingUrl: undefined,
+                        vendorPrice: undefined,
                         tips: undefined,
                         voyanceInsight: undefined,
                         isVoyancePick: false,
