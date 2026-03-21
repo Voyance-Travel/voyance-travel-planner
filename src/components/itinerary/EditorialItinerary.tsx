@@ -9762,7 +9762,7 @@ function ActivityRow({
   const style = activityStyles[activityType] || activityStyles.activity;
   const rawRating = getActivityRating(activity);
   const reviewCount = getActivityReviewCount(activity);
-  const costInfo = getActivityCostInfo(activity, travelers, budgetTier, destination, destinationCountry);
+  const costInfo = getActivityCostInfo(activity, travelers, budgetTier, destination, destinationCountry, isManualMode);
   const cost = costInfo.amount;
   // Use tripCurrency (user's preferred display currency) instead of activity's native currency
   const existingPhoto = getActivityPhoto(activity);
