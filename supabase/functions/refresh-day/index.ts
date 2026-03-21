@@ -554,7 +554,7 @@ Deno.serve(async (req: Request) => {
       const nextStart = parseTime(next.startTime);
       if (currEnd !== null && nextStart !== null) {
         const gap = nextStart - currEnd;
-        const required = getMinBufferMinutes(curr.category, next.category);
+        const required = getEffectiveMinBuffer(curr, next);
         buffers.push({
           fromId: curr.id,
           fromTitle: curr.title,
