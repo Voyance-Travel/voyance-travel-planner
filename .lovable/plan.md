@@ -1,25 +1,39 @@
 
+Fix the deadline issue at the data layer, not the UI.
 
-## Fix: Calendar shows "4 days" for a 5-day trip
+What’s actually happening
+- I checked the live data for “Visit Sacré-Cœur Basilica at sunset” and its `vote_deadline` is still `null`.
+- The current `TripSuggestions.tsx` already contains the earlier optimistic/realtime suppression fix (`skipRealtimeRef`), so this is no longer just a stale UI overwrite problem.
+- The real backend gap is that `trip_suggestions` has SELECT and INSERT policies, but no UPDATE policy. That means owners/collaborators can create suggestions, but the deadline update is not actually allowed to persist.
 
-### Problem
-`TripDateEditor.tsx` uses `differenceInDays(end, start)` which returns intervals (nights), not inclusive calendar days. Jul 1–5 = 4 intervals, but 5 calendar days.
+Plan
+1. Add an UPDATE policy for `public.trip_suggestions`
+- Create a migration that allows authenticated users to update their own suggestion rows.
+- Restrict it to the row owner (`user_id = auth.uid()`) and only for trips they already have access to, matching the existing INSERT/SELECT access rules.
 
-### Root cause
-- Line 113: `currentDays = differenceInDays(currentEnd, currentStart)` → 4 for Jul 1–5
-- Line 290: `newDayCount = differenceInDays(pendingEnd, pendingStart)` → same
-- Line 333: displays `{newDayCount} days` — shows "4 days"
+2. Keep deadline editing ownership-safe
+- Ensure only the creator can update the suggestion deadline, which matches the current UI behavior (`isOwner(suggestion)`).
 
-The interval-based count is also used for delta math (`daysAdded = newDays - currentDays`), which is correct as-is because both sides use the same base. So the delta doesn't need changing — only the display.
+3. Tighten the save flow in `TripSuggestions.tsx`
+- After a successful deadline update, trigger a fresh reload for that suggestion list so the saved DB value becomes the source of truth.
+- Keep the optimistic update, but make the post-save refresh explicit so we don’t rely only on realtime timing.
 
-### Fix
+4. Improve failure feedback
+- If the update is blocked or returns no updated row, show a clearer toast like:
+  - “Couldn’t save deadline. You may not have edit permission.”
+- This helps distinguish a permissions problem from a display bug.
 
-**File: `src/components/trip/TripDateEditor.tsx`**
+Files to update
+- `supabase/migrations/...sql` — add `FOR UPDATE` policy on `public.trip_suggestions`
+- `src/components/suggestions/TripSuggestions.tsx` — small save-flow hardening / clearer feedback
 
-1. **Line 333**: Change display from `{newDayCount}` to `{newDayCount + 1}` to show inclusive day count
-2. That's it. The delta (`dayDelta`) remains correct because it's a difference of two interval counts, and +1 would cancel out.
+Expected result
+- Setting a deadline will actually persist in the database.
+- Reloading the page or returning in a later session will show the saved date/time instead of “Set deadline.”
+- If a user truly lacks permission, they’ll get a clear message instead of a misleading silent failure.
 
-Also fix line 395 (`After Day ${currentDays}`) → `After Day ${currentDays + 1}` if it's meant to show the last day number, and line 571 similarly.
-
-Single display-only fix — no logic changes to the date change result calculations.
-
+Technical note
+- Evidence from the current project:
+  - `TripSuggestions.tsx` already has the realtime suppression fix.
+  - The specific suggestion row still has `vote_deadline = null` in the database.
+  - Existing migrations define SELECT/INSERT policies for `trip_suggestions`, but no UPDATE policy was found.
