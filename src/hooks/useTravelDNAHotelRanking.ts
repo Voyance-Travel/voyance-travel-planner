@@ -189,52 +189,73 @@ function generateMatchReasons(
 // Scoring Algorithm
 // ============================================================================
 
-function calculateDNAMatchScore(
+function calculateDNAMatchScoreRaw(
   metadata: HotelMetadata,
   traitScores: DNATraitScores
 ): number {
-  // Map DNA traits to hotel metadata dimensions with weights
-  // The weights determine how much each dimension contributes to the match
   const dimensionMappings: Array<{
     hotelScore: number;
     userTrait: number;
     weight: number;
   }> = [
-    { hotelScore: metadata.comfortScore, userTrait: traitScores.comfort, weight: 0.15 },
+    { hotelScore: metadata.comfortScore, userTrait: traitScores.comfort, weight: 0.20 },
     { hotelScore: metadata.adventureScore, userTrait: traitScores.adventure, weight: 0.12 },
     { hotelScore: metadata.cultureScore, userTrait: traitScores.culture, weight: 0.10 },
-    { hotelScore: metadata.socialScore, userTrait: traitScores.social, weight: 0.12 },
-    { hotelScore: metadata.priceScore, userTrait: 1.0, weight: 0.18 }, // Price always matters
-    { hotelScore: metadata.paceScore, userTrait: traitScores.pace, weight: 0.10 },
+    { hotelScore: metadata.socialScore, userTrait: traitScores.social, weight: 0.08 },
+    { hotelScore: metadata.priceScore, userTrait: traitScores.budget, weight: 0.20 },
+    { hotelScore: metadata.paceScore, userTrait: traitScores.pace, weight: 0.08 },
     { hotelScore: metadata.authenticityScore, userTrait: traitScores.authenticity, weight: 0.13 },
-    { hotelScore: metadata.simplicityScore, userTrait: 1 - traitScores.planning, weight: 0.10 }, // Low planning = needs simplicity
+    { hotelScore: metadata.simplicityScore, userTrait: 1 - traitScores.planning, weight: 0.09 },
   ];
   
   let totalScore = 0;
   let totalWeight = 0;
   
   for (const { hotelScore, userTrait, weight } of dimensionMappings) {
-    // Clamp to 0–1 for safety (quiz may store raw values)
     const clampedTrait = Math.max(0, Math.min(1, userTrait));
-    // Pure alignment: how close is the hotel to what the user wants
-    const alignment = Math.max(0, Math.min(1, 1 - Math.abs(hotelScore - clampedTrait)));
-    // No prioritization penalty — weights already handle importance
-    
+    const diff = Math.abs(hotelScore - clampedTrait);
+    // Quadratic alignment: amplifies mismatches for better differentiation
+    const alignment = Math.max(0, 1 - diff * diff);
     totalScore += alignment * weight;
     totalWeight += weight;
   }
   
-  // Normalize to 0-100
-  const rawScore = (totalScore / totalWeight) * 100;
+  let rawScore = (totalScore / totalWeight) * 100;
   
-  // Scale to use more of the 0-100 range
-  // Map the typical 40-80 raw range to 45-95 display range
-  const scaledScore = Math.min(100, rawScore * 1.25 + 12);
+  // Tiered quality bonus
+  if (metadata.qualityScore >= 0.85) rawScore += 4;
+  else if (metadata.qualityScore >= 0.8) rawScore += 2;
+  else if (metadata.qualityScore >= 0.7) rawScore += 1;
   
-  // Apply quality filter bonus (good hotels get a slight boost)
-  const qualityBonus = metadata.qualityScore >= 0.8 ? 3 : metadata.qualityScore >= 0.7 ? 1 : 0;
+  return isNaN(rawScore) ? 50 : rawScore;
+}
+
+/**
+ * Percentile-rescale an array of raw scores to a target display range.
+ * Returns a new array of integer display scores.
+ */
+function rescaleScores(rawScores: number[], minDisplay: number, maxDisplay: number): number[] {
+  if (rawScores.length === 0) return [];
+  const minRaw = Math.min(...rawScores);
+  const maxRaw = Math.max(...rawScores);
+  const range = maxRaw - minRaw || 1;
   
-  return Math.max(15, Math.min(99, Math.round(scaledScore + qualityBonus)));
+  const scaled = rawScores.map(raw =>
+    Math.round(minDisplay + ((raw - minRaw) / range) * (maxDisplay - minDisplay))
+  );
+  
+  // Tie-breaking: ensure no two adjacent scores are identical after rounding
+  // Sort indices by raw score descending, then spread ties by 2 points
+  const indices = rawScores.map((_, i) => i).sort((a, b) => rawScores[b] - rawScores[a]);
+  for (let i = 1; i < indices.length; i++) {
+    const cur = indices[i];
+    const prev = indices[i - 1];
+    if (scaled[cur] >= scaled[prev]) {
+      scaled[cur] = Math.max(minDisplay, scaled[prev] - 2);
+    }
+  }
+  
+  return scaled.map(s => Math.max(minDisplay, Math.min(maxDisplay, s)));
 }
 
 // ============================================================================
