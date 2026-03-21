@@ -486,6 +486,68 @@ serve(async (req) => {
     if (parsed.unparsed) parsed.unparsed = parsed.unparsed.map((u: string) => sanitizeStr(u)).filter(Boolean);
     if (parsed.tripPriorities) parsed.tripPriorities = parsed.tripPriorities.map((p: string) => sanitizeStr(p)).filter(Boolean);
 
+    // --- Time truncation fix ---
+    // The AI sometimes truncates multi-digit hours: "11:00 AM" → "1:00 AM".
+    // Cross-reference extracted times against the raw text to catch this.
+    if (parsed.days) {
+      const timePatternGlobal = /(\d{1,2}):(\d{2})\s*(am|pm)?/gi;
+      const rawTimes: Array<{ hour: string; min: string; ampm: string; pos: number; full: string }> = [];
+      let tm: RegExpExecArray | null;
+      while ((tm = timePatternGlobal.exec(text)) !== null) {
+        rawTimes.push({
+          hour: tm[1],
+          min: tm[2],
+          ampm: (tm[3] || '').toLowerCase(),
+          pos: tm.index,
+          full: tm[0],
+        });
+      }
+
+      if (rawTimes.length > 0) {
+        for (const day of parsed.days) {
+          if (!day.activities) continue;
+          for (const act of day.activities) {
+            if (!act.time) continue;
+            const aiTimeMatch = act.time.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+            if (!aiTimeMatch) continue;
+            const aiHour = aiTimeMatch[1];
+            const aiMin = aiTimeMatch[2];
+            const aiAmpm = (aiTimeMatch[3] || '').toLowerCase();
+
+            const actName = (act.name || act.title || '').toLowerCase();
+            const keywords = actName.split(/[\s,\-–—&]+/).filter((w: string) => w.length > 3).slice(0, 3);
+            if (keywords.length === 0) continue;
+
+            const textLower = text.toLowerCase();
+            let namePos = -1;
+            for (const kw of keywords) {
+              const idx = textLower.indexOf(kw);
+              if (idx !== -1) { namePos = idx; break; }
+            }
+            if (namePos === -1) continue;
+
+            let bestRaw: typeof rawTimes[0] | null = null;
+            let bestDist = 151;
+            for (const rt of rawTimes) {
+              const dist = Math.abs(rt.pos - namePos);
+              if (dist < bestDist && rt.min === aiMin) {
+                if (aiAmpm && rt.ampm && aiAmpm !== rt.ampm) continue;
+                bestDist = dist;
+                bestRaw = rt;
+              }
+            }
+
+            if (bestRaw && bestRaw.hour !== aiHour) {
+              if (bestRaw.hour.endsWith(aiHour) && bestRaw.hour.length > aiHour.length) {
+                console.log(`[parse-trip-input] Time truncation fix: "${act.time}" → "${bestRaw.full}" for activity "${act.name}" (raw text had "${bestRaw.full}")`);
+                act.time = bestRaw.full.trim();
+              }
+            }
+          }
+        }
+      }
+    }
+
     // --- Month-reference date fixing ---
     // When users type "in March", "next June", etc., the AI often defaults
     // start_date to today. Detect month names in the original text and
