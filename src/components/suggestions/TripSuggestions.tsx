@@ -323,9 +323,11 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
       setSuggestions(prev => prev.map(s =>
         s.id === suggestionId ? { ...s, vote_deadline: newDeadline } : s
       ));
-      skipRealtimeRef.current = Date.now() + 2000;
+      skipRealtimeRef.current = Date.now() + 3000;
       toast.success(newDeadline ? 'Deadline updated' : 'Deadline removed');
       setEditingDeadlineId(null);
+      // Refresh from DB after a short delay to confirm persistence
+      setTimeout(() => loadSuggestions(), 1500);
       setEditDeadlineValue('');
     } catch (err) {
       console.error('Failed to update deadline:', err);
