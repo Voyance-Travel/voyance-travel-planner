@@ -6354,6 +6354,91 @@ If the purpose is a specific event, plan at least ONE full day around that event
       }
 
       // =======================================================================
+      // STAGE 2.57: Enforce check-in-first ordering on arrival days
+      // If check-in exists but isn't the earliest activity, shift pre-check-in
+      // activities to after check-in ends.
+      // =======================================================================
+      if (aiResult.days.length > 0) {
+        const isCheckInActivity = (a: any) => {
+          const t = (a.title || '').toLowerCase();
+          const cat = (a.category || '').toLowerCase();
+          return cat === 'accommodation' && (
+            t.includes('check-in') || t.includes('check in') ||
+            t.includes('checkin') || t.includes('settle in') ||
+            t.includes('refresh') || t.includes('hotel')
+          );
+        };
+
+        // Determine which day indices are arrival days (Day 1 + first day in each new city)
+        const arrivalDayIndices = new Set<number>([0]);
+        if (context.multiCityDayMap && aiResult.days.length > 1) {
+          let prevDest = '';
+          for (let dIdx = 0; dIdx < aiResult.days.length; dIdx++) {
+            const dest = context.multiCityDayMap[dIdx]?.destination || '';
+            if (dest && dest !== prevDest && prevDest !== '') {
+              arrivalDayIndices.add(dIdx);
+            }
+            prevDest = dest;
+          }
+        }
+
+        for (const dIdx of arrivalDayIndices) {
+          const day = aiResult.days[dIdx];
+          if (!day?.activities || day.activities.length < 2) continue;
+
+          const checkInIdx = day.activities.findIndex((a: any) => isCheckInActivity(a));
+          if (checkInIdx < 0) continue; // no check-in to enforce
+
+          const checkIn = day.activities[checkInIdx];
+          const checkInStartMin = parseTimeToMinutes(checkIn.startTime);
+          const checkInEndMin = parseTimeToMinutes(checkIn.endTime) || (checkInStartMin + 30);
+
+          // Find activities scheduled before check-in
+          const preCheckInActivities: any[] = [];
+          const postCheckInActivities: any[] = [];
+
+          for (let i = 0; i < day.activities.length; i++) {
+            if (i === checkInIdx) continue;
+            const actStart = parseTimeToMinutes(day.activities[i].startTime);
+            if (actStart < checkInStartMin) {
+              preCheckInActivities.push(day.activities[i]);
+            } else {
+              postCheckInActivities.push(day.activities[i]);
+            }
+          }
+
+          if (preCheckInActivities.length === 0) continue; // check-in is already first
+
+          // Shift pre-check-in activities to after check-in ends
+          let cursor = checkInEndMin + 15; // 15-min buffer after check-in
+          // Sort pre-check-in by their original start time to preserve relative order
+          preCheckInActivities.sort((a: any, b: any) =>
+            (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0)
+          );
+
+          for (const act of preCheckInActivities) {
+            const origStart = parseTimeToMinutes(act.startTime) || 0;
+            const origEnd = parseTimeToMinutes(act.endTime) || (origStart + 60);
+            const duration = origEnd - origStart;
+            act.startTime = minutesToHHMM(cursor);
+            act.endTime = minutesToHHMM(cursor + duration);
+            cursor += duration + 15; // 15-min gap between shifted activities
+          }
+
+          // Rebuild: check-in first, then shifted activities, then original post-check-in activities
+          // Sort everything after check-in by start time
+          const allAfter = [...preCheckInActivities, ...postCheckInActivities];
+          allAfter.sort((a: any, b: any) =>
+            (parseTimeToMinutes(a.startTime) || 0) - (parseTimeToMinutes(b.startTime) || 0)
+          );
+          day.activities = [checkIn, ...allAfter];
+          aiResult.days[dIdx] = day;
+
+          console.log(`[Stage 2.57] ✓ Day ${dIdx + 1}: Shifted ${preCheckInActivities.length} pre-check-in activities to after check-in (${checkIn.startTime}-${checkIn.endTime})`);
+        }
+      }
+
+      // =======================================================================
       // Validate itinerary against user preferences before saving
       // =======================================================================
       console.log("[Stage 2.6] Validating personalization compliance...");
