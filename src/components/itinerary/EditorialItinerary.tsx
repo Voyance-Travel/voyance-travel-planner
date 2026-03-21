@@ -4239,9 +4239,30 @@ export function EditorialItinerary({
 
     setRegeneratingDay(day.dayNumber);
     try {
+      // Helper to identify accommodation/hotel activities (shared by both paths)
+      const isAccommodationLike = (a: EditorialActivity) => {
+        const cat = (a.category || '').toLowerCase();
+        const title = (a.title || '').toLowerCase();
+        return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
+          || title.includes('hotel check') || title.includes('check-in at')
+          || title.includes('check into');
+      };
+
       if (onRegenerateDay) {
         const newDay = await onRegenerateDay(day.dayNumber);
         if (newDay) {
+          // Deduplicate accommodation: keep only the original hotel
+          const originalHotel = (day.activities || []).find(isAccommodationLike);
+          if (originalHotel && newDay.activities) {
+            newDay.activities = newDay.activities.filter((a: EditorialActivity) => !isAccommodationLike(a));
+            newDay.activities.push(originalHotel);
+            newDay.activities.sort((a: EditorialActivity, b: EditorialActivity) =>
+              (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
+            );
+          }
+          // Preserve original day title/theme
+          newDay.title = day.title;
+          newDay.theme = day.theme;
           setDays(prev => prev.map((d, idx) => idx === dayIndex ? newDay : d));
           setHasChanges(true);
           toast.success(`Day ${day.dayNumber} regenerated!`);
