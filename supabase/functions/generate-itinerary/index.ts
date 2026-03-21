@@ -1570,6 +1570,7 @@ async function generateSingleDayWithRetry(
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
     '13. **HOTEL FIDELITY — CRITICAL**: If a specific hotel name and address are provided in the accommodation section, you MUST use that EXACT hotel name for ALL accommodation activities (check-in, return to hotel, freshen up, checkout, etc.). Do NOT invent, substitute, or suggest a different hotel. The user has already booked their accommodation.',
     '14. **NO KEYWORD STUFFING**: Activity titles must be concise (max 8 words). NEVER pad titles with synonym lists of location types (e.g., "borough town place locale district quarter sector area"). Use the specific venue or activity name only.',
+    !isFirstDay ? '15. **NO CHECK-IN ON NON-ARRIVAL DAYS**: On days after Day 1 (or after the first day at a new hotel), do NOT title accommodation activities as "Check-in at [Hotel]". Use "Return to [Hotel]" or "Freshen up at [Hotel]" instead. "Check-in" implies arrival — use it only on the day the traveler first arrives at that hotel.' : '',
   ].filter(Boolean).join('\n');
 
   // Build list of previous experience types for stricter rejection
@@ -2428,6 +2429,26 @@ Generate activities for this day following ALL constraints above.`;
                   name: actualHotelName || 'Accommodation',
                   address: actualHotelAddress || '',
                 };
+              }
+            }
+          }
+        }
+      }
+
+      // Post-processing: Rename "Check-in at X" to "Return to X" on non-arrival days
+      const effectiveIsFirstDay = context.isFirstDayInCity !== undefined ? context.isFirstDayInCity : isFirstDay;
+      if (!effectiveIsFirstDay) {
+        for (const act of generatedDay.activities) {
+          const title = (act.title || '').toLowerCase();
+          const cat = (act.category || '').toLowerCase();
+          if ((cat === 'accommodation' || cat === 'stay' || title.includes('check-in') || title.includes('check in'))
+              && !title.includes('checkout') && !title.includes('check-out') && !title.includes('check out')) {
+            const checkInMatch = act.title?.match(/check[- ]?in\s+(at|to|—|–|-|@)\s+/i);
+            if (checkInMatch) {
+              const hotelPart = act.title!.slice(checkInMatch.index! + checkInMatch[0].length);
+              act.title = `Return to ${hotelPart}`;
+              if (act.location?.name) {
+                act.location.name = act.title;
               }
             }
           }
