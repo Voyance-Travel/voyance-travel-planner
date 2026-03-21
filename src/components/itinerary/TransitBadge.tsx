@@ -178,7 +178,7 @@ export function TransitBadge({
                       return (
                         <button
                           key={mode.value}
-                          onClick={() => handleModeSelect(mode.value)}
+                          onClick={(e) => { e.stopPropagation(); handleModeSelect(mode.value); }}
                           disabled={isActive}
                           className={cn(
                             "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border transition-colors",
