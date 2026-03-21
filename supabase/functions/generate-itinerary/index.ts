@@ -9828,10 +9828,19 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
                     if (!didFix && newStartMinsSD >= 0 && newStartMinsSD !== oldMinsSD) {
                       // Hard-constraint check: don't shift if it squeezes against checkout/departure
+                      // Only treat checkout as hard stop if day has a flight departure
+                      const dayHasFlightDepSD = normalizedActivities.some((fa: any) => {
+                        const ftL = (fa.title || fa.name || '').toLowerCase();
+                        const fcL = (fa.category || '').toLowerCase();
+                        return fcL === 'transport' && (ftL.includes('airport') || ftL.includes('flight'));
+                      });
+                      
                       const hardStopActSD = normalizedActivities.find((ha: any) => {
                         const hCat = (ha.category || '').toLowerCase();
                         const hTitle = (ha.title || ha.name || '').toLowerCase();
-                        return (hCat === 'accommodation' && (hTitle.includes('check') || hTitle.includes('checkout')))
+                        const isCheckoutSD = hCat === 'accommodation' && (hTitle.includes('check') || hTitle.includes('checkout'));
+                        if (isCheckoutSD && !dayHasFlightDepSD) return false;
+                        return isCheckoutSD
                           || (hCat === 'transport' && (hTitle.includes('depart') || hTitle.includes('airport') || hTitle.includes('flight') || hTitle.includes('train')));
                       });
                       if (hardStopActSD && hardStopActSD.startTime) {
