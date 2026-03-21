@@ -267,6 +267,19 @@ function parsePastedTextGrouped(text: string, currency: string, knownCities: str
         workingLine = workingLine.replace(times[0], '').trim();
       }
     }
+
+    // Cross-check: if parsed time is single-digit hour but raw text has two-digit hour, fix it
+    if (startTime) {
+      const sanitizedRaw = sanitizeInvisibleChars(raw);
+      const twoDigitMatch = sanitizedRaw.match(/\b(1[0-2]):(\d{2})\s*(am|pm)/i);
+      if (twoDigitMatch) {
+        const crossCheck = normalizeTime(twoDigitMatch[0]);
+        if (crossCheck && crossCheck !== startTime) {
+          startTime = crossCheck;
+        }
+      }
+    }
+
     if (!startTime && currentSectionTime) startTime = currentSectionTime;
 
     // Extract cost
