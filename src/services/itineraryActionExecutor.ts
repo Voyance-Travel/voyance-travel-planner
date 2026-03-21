@@ -47,6 +47,14 @@ function isMealActivity(activity: Activity): boolean {
   return MEAL_KEYWORDS.some(k => title.includes(k));
 }
 
+function isAccommodationActivity(activity: Activity): boolean {
+  const cat = norm(activity.category);
+  const title = norm(activityTitle(activity));
+  return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
+    || title.includes('hotel check') || title.includes('check-in at')
+    || title.includes('check into') || title.includes('check in at');
+}
+
 function hasKeywordInDay(day: ItineraryDay, keyword: string): boolean {
   const k = norm(keyword);
   return day.activities.some(a => norm(activityTitle(a)).includes(k));
@@ -230,7 +238,7 @@ async function executeRewriteDayAction(
 
   const day = currentDays[dayIndex];
   const keepActivities = preserve_locked
-    ? day.activities.filter(a => a.isLocked || isProtectedActivity(a)).map(a => a.id).filter(Boolean)
+    ? day.activities.filter(a => (a.isLocked || isProtectedActivity(a)) && !isAccommodationActivity(a)).map(a => a.id).filter(Boolean)
     : [];
 
   const { data, error } = await supabase.functions.invoke('generate-itinerary', {
@@ -252,7 +260,24 @@ async function executeRewriteDayAction(
     return { success: false, message: 'Failed to rewrite day', error: error?.message || data?.error || 'Unknown error' };
   }
 
-  const newActivities = data.day.activities || day.activities;
+  let newActivities = data.day.activities || day.activities;
+
+  // Deduplicate hotel/accommodation: if original day had one, remove AI-generated dupes
+  const originalHotel = day.activities.find(a => isAccommodationActivity(a));
+  if (originalHotel) {
+    const dupeIdx = newActivities.findIndex((a: Activity) =>
+      isAccommodationActivity(a) && a.id !== originalHotel.id
+    );
+    if (dupeIdx !== -1) {
+      newActivities = newActivities.filter((_: Activity, i: number) => i !== dupeIdx);
+      if (!newActivities.some((a: Activity) => a.id === originalHotel.id)) {
+        newActivities.push(originalHotel);
+        newActivities.sort((a: Activity, b: Activity) =>
+          (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
+        );
+      }
+    }
+  }
 
   // Budget-down guard: if instructions asked for cheaper, cap costs at original levels
   const budgetDownKeywords = /cheap|budget|afford|save money|less expensive|lower cost|reduce.*cost|cut.*spending|frugal/i;
@@ -468,7 +493,7 @@ async function executeRegenerateAction(
 
   const day = currentDays[dayIndex];
   const keepActivities = day.activities
-    .filter(a => a.isLocked || isProtectedActivity(a) || isMealActivity(a))
+    .filter(a => (a.isLocked || isProtectedActivity(a) || isMealActivity(a)) && !isAccommodationActivity(a))
     .map(a => a.id)
     .filter(Boolean);
 
