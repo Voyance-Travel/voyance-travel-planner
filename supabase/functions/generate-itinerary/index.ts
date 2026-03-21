@@ -2759,7 +2759,8 @@ Generate activities for this day following ALL constraints above.`;
             title.includes('checkout') || title.includes('transfer') || title.includes('arrival at');
           return !isLogistics;
         });
-        const minimumRealActivities = isLastDay ? 1 : (isFirstDay ? 3 : 5);
+        const isMultiCityDepartureDay = isLastDayInCity && !isLastDay;
+        const minimumRealActivities = isLastDay ? 1 : (isMultiCityDepartureDay ? 1 : (isFirstDay ? 3 : 5));
         if (realActivities.length < minimumRealActivities) {
           console.warn(`[Stage 2] Day ${dayNumber} has only ${realActivities.length} real activities (minimum: ${minimumRealActivities}) — triggering retry`);
           validation.errors.push(
