@@ -260,7 +260,24 @@ async function executeRewriteDayAction(
     return { success: false, message: 'Failed to rewrite day', error: error?.message || data?.error || 'Unknown error' };
   }
 
-  const newActivities = data.day.activities || day.activities;
+  let newActivities = data.day.activities || day.activities;
+
+  // Deduplicate hotel/accommodation: if original day had one, remove AI-generated dupes
+  const originalHotel = day.activities.find(a => isAccommodationActivity(a));
+  if (originalHotel) {
+    const dupeIdx = newActivities.findIndex((a: Activity) =>
+      isAccommodationActivity(a) && a.id !== originalHotel.id
+    );
+    if (dupeIdx !== -1) {
+      newActivities = newActivities.filter((_: Activity, i: number) => i !== dupeIdx);
+      if (!newActivities.some((a: Activity) => a.id === originalHotel.id)) {
+        newActivities.push(originalHotel);
+        newActivities.sort((a: Activity, b: Activity) =>
+          (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
+        );
+      }
+    }
+  }
 
   // Budget-down guard: if instructions asked for cheaper, cap costs at original levels
   const budgetDownKeywords = /cheap|budget|afford|save money|less expensive|lower cost|reduce.*cost|cut.*spending|frugal/i;
