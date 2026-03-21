@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { syncHotelToLedger } from '@/services/budgetLedgerSync';
+import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBudgetAlerts } from '@/hooks/useBudgetAlerts';
 import { getTripCities, updateCityHotel } from '@/services/tripCitiesService';
@@ -549,6 +550,11 @@ export default function PlannerHotelEnhanced() {
             checkOut: endDate,
             totalPrice: pricePerNight * nights,
           } as any).catch(err => console.warn('[PlannerHotel] Budget sync failed:', err));
+          patchItineraryWithHotel(tripId, {
+            name: hotelSelection.name,
+            address: hotelSelection.address,
+          }).catch(err => console.warn('[PlannerHotel] Itinerary patch failed:', err));
+          window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
         }
       } else {
         // Single-city: save via TripPlannerContext (writes to trips.hotel_selection)
@@ -565,6 +571,11 @@ export default function PlannerHotelEnhanced() {
             checkOut: endDate,
             totalPrice: pricePerNight * nights,
           } as any).catch(err => console.warn('[PlannerHotel] Budget sync failed:', err));
+          patchItineraryWithHotel(tripId, {
+            name: hotelSelection.name,
+            address: hotelSelection.address,
+          }).catch(err => console.warn('[PlannerHotel] Itinerary patch failed:', err));
+          window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
         }
       }
     } catch (err) {
@@ -668,6 +679,18 @@ export default function PlannerHotelEnhanced() {
         } catch (err) {
           console.warn('[PlannerHotel] Failed to save manual hotel to trip_cities:', err);
         }
+      }
+
+      // Sync budget + itinerary for manual hotels
+      const manualTripId = searchParams.get('tripId') || plannerState.tripId;
+      if (manualTripId && manualHotel.name) {
+        syncHotelToLedger(manualTripId, manualHotel as any)
+          .catch(err => console.warn('[PlannerHotel] Manual hotel budget sync failed:', err));
+        patchItineraryWithHotel(manualTripId, {
+          name: manualHotel.name,
+          address: manualHotel.address,
+        }).catch(err => console.warn('[PlannerHotel] Manual hotel itinerary patch failed:', err));
+        window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId: manualTripId } }));
       }
 
       toast.success('Hotel details saved');
