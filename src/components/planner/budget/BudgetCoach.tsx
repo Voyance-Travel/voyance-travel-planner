@@ -65,6 +65,8 @@ interface BudgetCoachProps {
   currency: string;
   destination?: string;
   itineraryDays: ItineraryDay[];
+  /** Number of travelers — used to scale per-person savings to group totals for display */
+  travelers?: number;
   /** Called when the user applies a suggestion — parent must update the itinerary. Returns true if swap succeeded. */
   onApplySuggestion?: (suggestion: BudgetSuggestion) => Promise<boolean> | void;
   className?: string;
@@ -97,6 +99,7 @@ export function BudgetCoach({
   currency,
   destination,
   itineraryDays,
+  travelers = 1,
   onApplySuggestion,
   className,
 }: BudgetCoachProps) {
@@ -408,14 +411,14 @@ export function BudgetCoach({
                               <Scissors className="h-3 w-3" />
                               {s.current_item}
                               <span className="font-medium text-foreground">
-                                ({formatCurrency(s.current_cost)})
+                                ({formatCurrency(s.current_cost * travelers)})
                               </span>
                             </span>
                             <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                             <span className="font-medium text-foreground">
                               {s.suggested_swap}
                               <span className="text-primary ml-1">
-                                ({formatCurrency(s.new_cost)})
+                                ({formatCurrency(s.new_cost * travelers)})
                               </span>
                             </span>
                           </div>
@@ -425,7 +428,7 @@ export function BudgetCoach({
                               variant="secondary"
                               className="text-xs text-emerald-600 dark:text-emerald-400"
                             >
-                              Save {formatCurrency(s.savings)}
+                              Save {formatCurrency(s.savings * travelers)}{travelers > 1 ? ' total' : ''}
                             </Badge>
                             <span className="text-[10px] text-muted-foreground">
                               Day {s.day_number}
