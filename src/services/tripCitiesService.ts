@@ -5,6 +5,16 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { TripCity, TripCityInsert, TripCityUpdate, TripCityBudgetSummary } from '@/types/tripCity';
+import { resolveCountry } from '@/utils/cityCountryMap';
+
+/** Ensure country is populated before insertion */
+function enrichCityCountry<T extends { city_name: string; country?: string }>(city: T): T {
+  if (!city.country) {
+    const resolved = resolveCountry(city.city_name);
+    if (resolved) return { ...city, country: resolved };
+  }
+  return city;
+}
 
 /**
  * Get all cities for a trip, ordered by city_order
@@ -24,9 +34,10 @@ export async function getTripCities(tripId: string): Promise<TripCity[]> {
  * Add a city to a trip
  */
 export async function addTripCity(city: TripCityInsert): Promise<TripCity> {
+  const enriched = enrichCityCountry(city);
   const { data, error } = await supabase
     .from('trip_cities')
-    .insert(city as any)
+    .insert(enriched as any)
     .select()
     .single();
 
@@ -38,9 +49,10 @@ export async function addTripCity(city: TripCityInsert): Promise<TripCity> {
  * Add multiple cities at once (e.g., when creating a multi-city trip)
  */
 export async function addTripCities(cities: TripCityInsert[]): Promise<TripCity[]> {
+  const enriched = cities.map(c => enrichCityCountry(c));
   const { data, error } = await supabase
     .from('trip_cities')
-    .insert(cities as any[])
+    .insert(enriched as any[])
     .select();
 
   if (error) throw new Error(`Failed to add cities: ${error.message}`);
