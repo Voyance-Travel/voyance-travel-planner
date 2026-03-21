@@ -1,64 +1,30 @@
 
 
-## Fix: Meal-Type/Time-Slot Coherence on Activity Swaps
+## Fix: Budget Coach "Save $X" Shows Per-Person Instead of Group Total
 
 ### Problem
-When the budget coach suggests "Dinner at Osteria Beccafico → Lunch at Osteria Beccafico" (cheaper lunch menu), the client applies the new title "Lunch at Osteria Beccafico" but keeps the original 7:00 PM time slot. Result: "Lunch" at 7 PM — confusing and logically wrong.
+The Budget Coach displays "Save $70" but the actual budget impact is $140 (for 2 travelers). The savings label consistently shows half the real impact because the edge function receives and returns per-person costs, while the budget tracks group totals.
 
 ### Root Cause
-The budget coach prompt (line 119) explicitly suggests `"Expensive dinner restaurants → the same restaurant for lunch"`. The AI returns a title containing "Lunch" but no time data. The client blindly applies `title: suggestion.suggested_swap` while preserving the original time.
+In `BudgetCoach.tsx` line 142-143, `cost.amount` (per-person) is sent to the edge function. The edge function computes `savings = currentCostCents - newCostCents` — all per-person. But the budget display (`currentTotalCents`, `budgetTargetCents`) uses group totals. So the "Save" badge is in a different unit than the budget it claims to reduce.
 
-This affects **three swap paths**:
-1. **Budget Coach** (`EditorialItinerary.tsx` line 6206) — sets `title: suggestion.suggested_swap`
-2. **Hotel Swaps** (`TripDetail.tsx` line 2025) — sets `name: swap.suggestedActivity`
-3. **Regular Swap Drawer** (`EditorialItinerary.tsx` line 3194) — sets `title: newActivity.title`
+### Fix (2 files, ~10 lines)
 
-### Fix (2 changes)
+**1. Pass `travelers` into `BudgetCoach`**
 
-**Change 1: Add a meal-type coherence guard (shared utility)**
+- **`src/components/planner/budget/BudgetTab.tsx`** (~line 434): Add `travelers={travelers}` prop to `<BudgetCoach>`.
 
-Create a small utility function that detects when a swap would create a meal-type/time-slot mismatch, and corrects the title to match the existing time slot:
+**2. Multiply displayed savings by travelers**
 
-```
-File: src/utils/mealTimeCoherence.ts (new)
-```
+- **`src/components/planner/budget/BudgetCoach.tsx`**:
+  - Add `travelers` to the props interface (default 1).
+  - On the "Save" badge (line 428), display `formatCurrency(s.savings * travelers)` instead of `formatCurrency(s.savings)`.
+  - On the current_cost and new_cost displays (lines 411, 418), also multiply by travelers so the price tags match the budget scope.
+  - Add a `/pp` annotation when travelers > 1 for transparency, e.g. "Save $140 total" or show both.
 
-Logic:
-- Extract meal keyword from title ("breakfast", "lunch", "dinner/supper")
-- Check if time slot contradicts the meal keyword:
-  - Breakfast: 6:00–10:59
-  - Lunch: 11:00–14:59
-  - Dinner: 17:00–22:59
-- If mismatch detected: replace the meal keyword in the title with the correct one for the time slot
-- Example: "Lunch at Osteria Beccafico" at 19:00 → "Dinner at Osteria Beccafico"
-
-**Change 2: Apply the guard in all three swap paths**
-
-- **Budget Coach swap** (`EditorialItinerary.tsx` ~line 6206): Before setting the title, run it through the coherence guard with the preserved time slot
-- **Hotel swap** (`TripDetail.tsx` ~line 2025): Same guard on `swap.suggestedActivity`
-- **Regular swap drawer** (`EditorialItinerary.tsx` ~line 3194): Same guard on `newActivity.title` (less likely to hit this since swap drawer uses category-filtered results, but defensive)
-
-**Change 3: Update budget coach prompt to prefer venue-only names**
-
-In `supabase/functions/budget-coach/index.ts`, update line 119 to instruct the AI to suggest "same restaurant at lunch price" without changing the title to include "Lunch":
-
-```
-- Expensive dinner restaurants → the same restaurant for lunch (keep the venue name, note "lunch service" in the reason, do NOT prefix with "Lunch at")
-```
-
-Add to the naming rules:
-```
-- When suggesting a dinner→lunch swap, keep the original venue name (e.g., "Osteria Beccafico") — do NOT rename to "Lunch at Osteria Beccafico". Explain the lunch-price angle in the "reason" field instead.
-```
-
-### Why this approach
-- The utility guard is defensive — it catches any AI-generated meal-type mismatch regardless of source
-- The prompt fix reduces the frequency of the issue at the source
-- Both together ensure the title always matches the time slot
+This keeps the edge function unchanged (it still thinks in per-person, which is correct for the AI prompt). The UI layer simply scales to group totals for display, matching how the budget itself is tracked.
 
 ### Files
-- `src/utils/mealTimeCoherence.ts` (new) — shared coherence utility
-- `src/components/itinerary/EditorialItinerary.tsx` — apply guard in budget swap + regular swap paths
-- `src/pages/TripDetail.tsx` — apply guard in hotel swap path
-- `supabase/functions/budget-coach/index.ts` — prompt update to avoid meal-type renaming
+- `src/components/planner/budget/BudgetTab.tsx` — pass `travelers` prop
+- `src/components/planner/budget/BudgetCoach.tsx` — accept `travelers`, multiply displayed costs/savings
 
