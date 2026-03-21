@@ -2975,7 +2975,7 @@ export function EditorialItinerary({
   const financialSnapshot = useTripFinancialSnapshot(tripId);
   
   // Calculate totals with smart estimation using destination-aware pricing
-  const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry), 0);
+  const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode), 0);
   const flightCost = allFlightLegs.reduce((sum, leg) => sum + (leg.price || 0), 0);
   const hotelCost = (() => {
     // Multi-hotel: sum totalPrice (or pricePerNight * nights) across all hotels
