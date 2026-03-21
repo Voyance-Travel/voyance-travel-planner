@@ -330,7 +330,7 @@ export function TripDateEditor({
             {pendingStart && pendingEnd && (
               <div className="flex items-center gap-1.5 mt-1">
                 <p className="text-[11px] sm:text-xs text-muted-foreground">
-                  {newDayCount} day{newDayCount !== 1 ? 's' : ''}
+                  {newDayCount + 1} day{newDayCount + 1 !== 1 ? 's' : ''}
                   {dayDelta !== 0 && hasItinerary && (
                     <span className={dayDelta > 0 ? 'text-primary' : 'text-destructive'}>
                       {' '}({dayDelta > 0 ? '+' : ''}{dayDelta})
