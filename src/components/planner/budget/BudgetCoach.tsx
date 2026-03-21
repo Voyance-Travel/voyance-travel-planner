@@ -99,6 +99,7 @@ export function BudgetCoach({
   currency,
   destination,
   itineraryDays,
+  travelers = 1,
   onApplySuggestion,
   className,
 }: BudgetCoachProps) {
