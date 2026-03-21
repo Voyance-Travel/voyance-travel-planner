@@ -236,6 +236,7 @@ export default function TripSuggestions({ tripId, tripType, shareToken, classNam
       setSuggestionType('general');
       setVoteDeadline('');
       setShowForm(false);
+      skipRealtimeRef.current = Date.now() + 2000;
       toast.success('Suggestion added!');
     } catch (err) {
       console.error('Failed to submit suggestion:', err);
