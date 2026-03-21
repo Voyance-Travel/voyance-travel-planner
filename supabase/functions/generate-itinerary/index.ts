@@ -7930,35 +7930,26 @@ DAY 1 GUIDELINES:
 Start the day at ${luggageDropTime} with the hotel luggage drop.`;
         } else {
           // ===== NO FLIGHT AND NO HOTEL =====
-          // Apply most conservative "safe day one" assumptions
-          console.log(`[Day1-Decision] No flight AND no hotel data - applying conservative defaults`);
+          // No luggage drop possible, but still allow a morning start
+          console.log(`[Day1-Decision] No flight AND no hotel data - assuming morning availability`);
           
           dayConstraints = `
-⚠️ NO ARRIVAL OR HOTEL INFORMATION PROVIDED
+NO ARRIVAL OR HOTEL INFORMATION PROVIDED
 
-The traveler has not specified:
-- Flight arrival time
-- Hotel/accommodation details
+The traveler has not specified flight or hotel details.
 
-CONSERVATIVE DAY 1 APPROACH:
-- We cannot assume the traveler is available in the morning
-- We cannot assume a specific location to start from
-- Apply maximum flexibility
-
-SAFE ASSUMPTIONS:
-- Assume arrival/check-in around 3:00 PM (15:00)
-- DO NOT schedule any morning activities
-- Start planning from 15:30 onwards
-- Focus on flexible, central activities
-- Plan activities that can be reached from any hotel location
+DAY 1 APPROACH:
+- Assume the traveler is available from 10:00 AM
+- Start with a central, accessible activity
+- Plan activities that can be reached from any accommodation
+- Focus on exploration and orientation
 
 STRUCTURE:
-1. Activity 1 should start at 15:30 (allows for hotel check-in + settling)
-2. Plan 2-3 light afternoon activities in central/accessible areas
+1. Start at 10:00 AM with a central activity
+2. Plan a full day of activities
 3. End with dinner
 
-DO NOT plan activities before 15:30 on Day 1.
-The traveler may still be in transit during the morning.`;
+Start the day at 10:00 AM.`;
         }
       } else if (isLastDay) {
         // ===== LAST DAY: DEPARTURE LOGIC WITH LUGGAGE REALITY =====
