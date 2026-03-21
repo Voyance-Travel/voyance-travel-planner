@@ -428,6 +428,11 @@ function parseItem(item: string, destination: string): MustDoPriority | null {
 
   if (!activityName) return null;
 
+  // Skip pure cost/price annotations (e.g. "€16pp", "~€45pp", "$25/person", "£10")
+  if (/^[~≈]?\s*[€$£¥₹]?\s*\d+[\d.,]*\s*(?:\/?\s*(?:pp|person|pax|each|per\s*person))?\s*[€$£¥₹]?\s*$/i.test(activityName)) {
+    return null;
+  }
+
   for (const [key, data] of Object.entries(KNOWN_LANDMARKS)) {
     if (normalized.includes(key)) {
       matchedLandmark = data;
