@@ -1,48 +1,57 @@
 
 
-## Fix: "Check-in at Hotel" Appears on Days After Day 1
+## Fix: Make Hotel Check-in the First Activity on Arrival Day
 
 ### Problem
-The AI generates "Check-in at ONE@Tokyo" as a mid-day accommodation activity on Day 2+. These should be titled "Return to ONE@Tokyo" or "Freshen up at ONE@Tokyo" — "check-in" only makes sense on Day 1 (or the first day at a new hotel in split stays).
+Currently, when no flight data is provided, the system assumes a conservative 3:00 PM check-in and blocks all morning activities. This ignores reality: travelers arrive with bags and want to drop them off first. Even hotels that officially check in at 3 PM will store luggage — the traveler should head to the hotel immediately, not wait around.
 
-### Root cause
+When flight data IS provided, check-in is correctly sequenced after arrival, but the "no flight" paths are overly conservative.
 
-Two issues:
-
-1. **No prompt guardrail for non-first days**: The prompt instructs "HOTEL RETURN — Freshen up" (line 8512) and "RETURN TO HOTEL" (line 8515) generically, but doesn't explicitly tell the AI **not** to use "Check-in" on days after Day 1. The Day 1 rule (line 1569) says to begin with "Hotel Check-in & Refresh" — the AI sometimes reuses this phrasing on subsequent days.
-
-2. **No post-processing title correction**: The hotel address correction pass (lines 2402-2434) fixes addresses but doesn't rename "Check-in at X" to "Return to X" on non-first days.
-
-### Fix
+### Changes
 
 **File: `supabase/functions/generate-itinerary/index.ts`**
 
-1. **Add prompt rule** (~line 1571, after the hotel fidelity rule): Add a new rule explicitly forbidding "check-in" titles on non-first days:
-   ```
-   !isFirstDay ? '15. **NO CHECK-IN ON NON-ARRIVAL DAYS**: On days after Day 1 (or after the first day at a new hotel), 
-   do NOT title accommodation activities as "Check-in at [Hotel]". Use "Return to [Hotel]" or 
-   "Freshen up at [Hotel]" instead. "Check-in" implies arrival — use it only on the day the 
-   traveler first arrives at that hotel.' : ''
-   ```
+#### 1. No-flight-but-hotel path (lines ~7899-7935)
+Replace the "don't schedule before 15:00" approach with a luggage-drop-first approach:
 
-2. **Add post-processing title rename** (~after line 2434, after the hotel address correction block): For non-first days, rename any "Check-in at X" accommodation activities to "Return to X":
-   ```typescript
-   if (!isFirstDay) {
-     for (const act of generatedDay.activities) {
-       const title = (act.title || '').toLowerCase();
-       const cat = (act.category || '').toLowerCase();
-       if ((cat === 'accommodation' || title.includes('check-in') || title.includes('check in')) 
-           && !title.includes('checkout') && !title.includes('check-out') && !title.includes('check out')) {
-         const checkInMatch = act.title?.match(/check[- ]?in\s+(at|to|—|–|-|@)\s+/i);
-         if (checkInMatch) {
-           const hotelPart = act.title!.slice(checkInMatch.index! + checkInMatch[0].length);
-           act.title = `Return to ${hotelPart}`;
-         }
-       }
-     }
-   }
-   ```
+- Change the first activity from "Hotel Check-in & Settle In" at 15:00 to **"Luggage Drop & Early Check-in"** starting at **10:00 AM**
+- Description: "Head to hotel to drop bags. Most hotels store luggage before official check-in; early check-in is often available on request."
+- Allow morning activities AFTER the luggage drop (from ~10:30 onwards)
+- Add a "Return to Hotel" activity around 15:00-15:30 for official check-in/freshen up if the day is long enough
+- Remove the "DO NOT schedule activities before 15:00" instruction
+
+#### 2. No-flight-no-hotel path (lines ~7937-7960+)
+Similarly shift from "assume arrival at 3 PM" to a more practical default:
+
+- Assume traveler can start at **10:00 AM** with a flexible meeting point
+- Note that without a hotel, we can't plan a luggage drop, but still allow morning activities
+- Remove the "DO NOT schedule any morning activities" instruction
+
+#### 3. Prompt rule update (line 1569)
+Update the Day 1 arrival structure rule to mention luggage drop as the priority:
+
+```
+'12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with hotel 
+check-in/luggage drop as the FIRST activity. Travelers arrive with bags — 
+getting to the hotel is the #1 priority. If no flight time is given, assume 
+a morning arrival (10:00 AM luggage drop). Do NOT include airport arrival 
+or transfer activities — those are handled by a separate UI component.'
+```
+
+#### 4. Check-in injection fallback (lines ~6244-6246)
+Update the Stage 2.56 injection to default to 10:00 AM instead of 15:00 when no other activities exist, and to 45 minutes before the first activity (minimum 09:00) when activities exist:
+
+```typescript
+const firstStartMin_56 = parseTimeToMinutes(firstActivity_56?.startTime || '10:00') || (10 * 60);
+const checkInStartMin_56 = Math.max(9 * 60, firstStartMin_56 - 45);
+```
+
+### What stays the same
+- When flight data IS provided, the existing arrival → customs → transfer → check-in sequence is correct and untouched
+- The "Hotel Check-in & Refresh" title and category stay the same
+- Multi-city transition check-ins are unchanged
+- The check-in description can note "Drop bags / early check-in if available"
 
 ### Scope
-Single file: `supabase/functions/generate-itinerary/index.ts` — ~15 lines added (prompt rule + post-processing). For multi-city split stays, `isFirstDayInCity` is already tracked and should be used instead of `isFirstDay` in that code path.
+Single file: `supabase/functions/generate-itinerary/index.ts` — ~40 lines changed across 4 locations. Prompt updates + timing defaults. No frontend changes needed.
 
