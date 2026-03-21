@@ -8425,7 +8425,7 @@ THE TRAVELER IS LEAVING. A gentle goodbye, not a marathon.`;
           // Determine departure mode from multi-city context or default
           let departureMode = 'airport';
           let departureLabel = 'Transfer to Airport';
-          if (paramIsMultiCity && resolvedNextLegTransport) {
+          if (resolvedIsMultiCity && resolvedNextLegTransport) {
             const mode = resolvedNextLegTransport;
             if (mode === 'train') { departureMode = 'train station'; departureLabel = 'Transfer to Train Station'; }
             else if (mode === 'bus') { departureMode = 'bus station'; departureLabel = 'Transfer to Bus Station'; }
@@ -8536,7 +8536,7 @@ Add your flight and hotel details for a more complete last day.`;
       }
 
       // ===== MULTI-CITY: Per-City Boundary Constraints =====
-      if (paramIsMultiCity) {
+      if (resolvedIsMultiCity) {
         const mcHotelName = paramHotelOverride?.name || flightContext.hotelName || 'Hotel';
 
         if (paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay) {
