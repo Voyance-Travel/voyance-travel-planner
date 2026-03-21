@@ -1325,7 +1325,7 @@ export default function TripDetail() {
                   }
                 } catch (err) {
                   console.error('[TripDetail] Self-heal (version restore + regen) failed:', err);
-                  autoResumeAttemptedRef.current = false;
+                  emptyDayHealAttemptedRef.current = false;
                 }
               }, 2000);
             }
