@@ -415,7 +415,7 @@ Deno.serve(async (req: Request) => {
           const effectiveNextStart = patchedTimes.get(next.id)?.start ?? parseTime(next.startTime);
           if (effectiveEndForBuffer !== null && effectiveNextStart !== null) {
             const gap = effectiveNextStart - effectiveEndForBuffer;
-            const minBuffer = getMinBufferMinutes(act.category, next.category);
+            const minBuffer = getEffectiveMinBuffer(act, next);
             const totalNeeded = transit.durationMinutes + minBuffer;
 
             if (gap < totalNeeded && gap >= 0) {
