@@ -126,18 +126,48 @@ function checkOperatingHours(
 
 // ─── Buffer Requirements ───────────────────────────────────────────────────────
 
-function getMinBufferMinutes(fromCategory?: string, toCategory?: string): number {
-  const transitCats = ['transportation', 'transit', 'transfer', 'taxi', 'transport', 'commute', 'travel'];
-  const accommodationCats = ['accommodation', 'hotel', 'lodging'];
+const TRANSIT_CATS = ['transportation', 'transit', 'transfer', 'taxi', 'transport', 'commute', 'travel'];
+const ACCOMMODATION_CATS = ['accommodation', 'hotel', 'lodging'];
 
-  const fromLower = fromCategory?.toLowerCase() || '';
-  const toLower = toCategory?.toLowerCase() || '';
+function isTransitCategory(cat?: string): boolean {
+  const lower = cat?.toLowerCase() || '';
+  return TRANSIT_CATS.some(t => lower.includes(t));
+}
 
-  // No buffer needed to/from transit or accommodation (check-in flows directly into next activity)
-  if (transitCats.some(t => fromLower.includes(t)) || transitCats.some(t => toLower.includes(t))) return 0;
-  if (accommodationCats.some(t => fromLower.includes(t)) || accommodationCats.some(t => toLower.includes(t))) return 5;
-  // All other activity pairs: 15 min minimum buffer
+/** Check if two activities are at the same place (safe handoff, no buffer needed) */
+function isSamePlace(a: Activity, b: Activity): boolean {
+  // If both have coordinates, check if within ~100m
+  if (a.location?.lat && b.location?.lat && a.location?.lng && b.location?.lng) {
+    const dist = haversineMeters(
+      { lat: a.location.lat, lng: a.location.lng },
+      { lat: b.location.lat, lng: b.location.lng }
+    );
+    return dist < 100;
+  }
+  // If both have names, fuzzy match
+  const aName = (a.location?.name || a.location?.address || '').toLowerCase().trim();
+  const bName = (b.location?.name || b.location?.address || '').toLowerCase().trim();
+  if (aName && bName && aName === bName) return true;
+  // No location data — assume same place to avoid false positives
+  if (!a.location && !b.location) return true;
+  return false;
+}
+
+function getMinBufferMinutes(fromCat?: string, toCat?: string): number {
+  const fromLower = fromCat?.toLowerCase() || '';
+  const toLower = toCat?.toLowerCase() || '';
+
+  if (TRANSIT_CATS.some(t => fromLower.includes(t)) || TRANSIT_CATS.some(t => toLower.includes(t))) return 0;
+  if (ACCOMMODATION_CATS.some(t => fromLower.includes(t)) || ACCOMMODATION_CATS.some(t => toLower.includes(t))) return 5;
   return 15;
+}
+
+/** Effective minimum buffer that accounts for location: distinct places always need ≥5 min */
+function getEffectiveMinBuffer(from: Activity, to: Activity): number {
+  const catBuffer = getMinBufferMinutes(from.category, to.category);
+  // Even if category says 0 (transit), distinct locations need a minimum buffer
+  if (catBuffer === 0 && !isSamePlace(from, to)) return 5;
+  return catBuffer;
 }
 
 // ─── Haversine ─────────────────────────────────────────────────────────────────
