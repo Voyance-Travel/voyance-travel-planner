@@ -8929,7 +8929,7 @@ function DayCard({
   // Premium content visibility: use entitlement prop, fallback to !dayIsPreview for backward compat
   const canViewPremium = canViewPremiumProp !== undefined ? canViewPremiumProp : !dayIsPreview;
   const allLocked = day.activities.every(a => a.isLocked);
-  const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry);
+  const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode);
   
   // Transport details toggle - collapsed by default to reduce visual noise
   const [showTransportDetails, setShowTransportDetails] = useState(false);
