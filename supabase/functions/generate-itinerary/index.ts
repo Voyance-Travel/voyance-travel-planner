@@ -2435,6 +2435,26 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
+      // Post-processing: Rename "Check-in at X" to "Return to X" on non-arrival days
+      const effectiveIsFirstDay = context.isFirstDayInCity !== undefined ? context.isFirstDayInCity : isFirstDay;
+      if (!effectiveIsFirstDay) {
+        for (const act of generatedDay.activities) {
+          const title = (act.title || '').toLowerCase();
+          const cat = (act.category || '').toLowerCase();
+          if ((cat === 'accommodation' || cat === 'stay' || title.includes('check-in') || title.includes('check in'))
+              && !title.includes('checkout') && !title.includes('check-out') && !title.includes('check out')) {
+            const checkInMatch = act.title?.match(/check[- ]?in\s+(at|to|—|–|-|@)\s+/i);
+            if (checkInMatch) {
+              const hotelPart = act.title!.slice(checkInMatch.index! + checkInMatch[0].length);
+              act.title = `Return to ${hotelPart}`;
+              if (act.location?.name) {
+                act.location.name = act.title;
+              }
+            }
+          }
+        }
+      }
+
       // Force 24-hour HH:MM time format for UI consistency (some model outputs include AM/PM)
       for (const act of generatedDay.activities) {
         const parsedStart = parseTimeToMinutes(act.startTime || '');
