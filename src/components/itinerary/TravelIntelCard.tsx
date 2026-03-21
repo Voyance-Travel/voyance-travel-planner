@@ -224,7 +224,7 @@ export default function TravelIntelCard({
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isCached, setIsCached] = useState(false);
+  
   const fetchedRef = useRef(false);
 
   const fetchIntel = useCallback(async (forceRefresh = false) => {
@@ -246,7 +246,7 @@ export default function TravelIntelCard({
 
       if (data?.success && data?.data) {
         setIntel(data.data);
-        setIsCached(!!data.cached);
+        
         fetchedRef.current = true;
       } else {
         setError(data?.error || 'Failed to load intel');
@@ -300,11 +300,6 @@ export default function TravelIntelCard({
             <span className="text-sm font-medium text-foreground">Travel Intel</span>
             <span className="text-xs text-muted-foreground ml-2">{city}</span>
           </div>
-          {isCached && (
-            <Badge variant="outline" className="text-[10px] ml-1 px-1.5 py-0 text-muted-foreground">
-              Cached
-            </Badge>
-          )}
         </button>
         <div className="flex items-center gap-1.5">
           <button
