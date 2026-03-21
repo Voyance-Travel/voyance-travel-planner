@@ -8145,7 +8145,7 @@ STRUCTURE:
 
 Start the day at 10:00 AM.`;
         }
-      } else if (isLastDay) {
+      } else if (isLastDay || paramIsLastDayInCity) {
         // ===== LAST DAY: DEPARTURE LOGIC WITH LUGGAGE REALITY =====
         const hasReturnFlight = !!(flightContext.returnDepartureTime || flightContext.returnDepartureTime24);
         const hasHotelData = !!(flightContext.hotelName || flightContext.hotelAddress);
