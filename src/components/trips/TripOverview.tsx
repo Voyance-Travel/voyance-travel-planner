@@ -266,7 +266,7 @@ export function TripOverview({
                     >
                       <div className="pl-14 pb-4 space-y-1.5">
                         {activities.length === 0 ? (
-                          <p className="text-xs font-serif italic text-muted-foreground">Free day — explore at your pace</p>
+                          <p className="text-xs font-serif italic text-muted-foreground">Free day. Explore at your pace</p>
                         ) : activities.map((activity) => (
                           <div key={activity.id} className="flex items-center gap-2 py-1">
                             <div className={cn(

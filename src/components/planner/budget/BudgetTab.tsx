@@ -658,7 +658,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             />
           </div>
           {(settings?.budget_include_flight ?? false) && !hasFlight && (
-            <p className="text-xs text-amber-600 -mt-1 ml-1">No flight cost added yet — add one in the Flights &amp; Hotels tab.</p>
+            <p className="text-xs text-amber-600 -mt-1 ml-1">No flight cost added yet. Add one in the Flights &amp; Hotels tab.</p>
           )}
 
           <div className="flex items-center justify-between">

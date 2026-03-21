@@ -196,7 +196,7 @@ export default function FoundersGuideDetail() {
             Every recommendation is personally tested
           </h3>
           <p className="text-sm text-muted-foreground mb-4">
-            That's the Voyance promise — we don't recommend what we haven't tried.
+            That's the Voyance promise. We don't recommend what we haven't tried.
           </p>
           <Button asChild variant="outline">
             <Link to="/guides?tab=founders">More Founder's Guides</Link>

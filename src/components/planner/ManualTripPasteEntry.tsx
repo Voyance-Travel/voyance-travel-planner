@@ -338,7 +338,7 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
               {!editedStartDate && !editedEndDate && (
                 <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
-                  No dates detected — add them now or edit later
+                  No dates detected. Add them now or edit later
                 </p>
               )}
 

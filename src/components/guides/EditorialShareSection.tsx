@@ -41,7 +41,7 @@ export default function EditorialShareSection({ guideId, editorialTitle }: Edito
       try {
         await navigator.share({
           title: editorialTitle,
-          text: `${editorialTitle} — a travel guide on Voyance`,
+          text: `${editorialTitle} - a travel guide on Voyance`,
           url: guideUrl,
         });
       } catch {

@@ -775,7 +775,7 @@ function AssistantVisual() {
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span className="text-foreground font-medium">Zen Garden Meditation — 1.5 hrs</span>
+                <span className="text-foreground font-medium">Zen Garden Meditation, 1.5 hrs</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

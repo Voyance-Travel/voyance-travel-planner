@@ -100,7 +100,7 @@ export default function EditorialStatusCard({
       <p className="text-sm text-muted-foreground leading-relaxed">
         {isUnlocked
           ? 'Your notes are ready to be transformed into a polished travel editorial.'
-          : `Share your experience on at least ${MIN_THRESHOLD} activities to unlock your editorial — a polished travel article generated from your notes.`}
+          : `Share your experience on at least ${MIN_THRESHOLD} activities to unlock your editorial, a polished travel article generated from your notes.`}
       </p>
 
       {/* Progress */}
