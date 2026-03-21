@@ -164,7 +164,7 @@ export function ItineraryAssistant({
     if (observations.length < 2) {
       for (const day of currentDays) {
         if (day.activities.length > 0 && day.activities.length < 3) {
-          observations.push(`Day ${day.dayNumber} has some free time — want me to suggest something fun to fill the gap?`);
+          observations.push(`Day ${day.dayNumber} has some free time. Want me to suggest something fun to fill the gap?`);
           break;
         }
       }
