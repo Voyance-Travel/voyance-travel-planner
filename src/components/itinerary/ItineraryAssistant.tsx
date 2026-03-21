@@ -179,7 +179,7 @@ export function ItineraryAssistant({
           return cat.includes('dinner') || cat.includes('dining') || title.includes('dinner');
         });
         if (!hasDinner && day.activities.length > 0) {
-          observations.push(`Day ${day.dayNumber} doesn't have dinner planned yet — want me to find a spot${accommodationInfo?.neighborhood ? ` near ${accommodationInfo.neighborhood}` : ''}?`);
+          observations.push(`Day ${day.dayNumber} doesn't have dinner planned yet. Want me to find a spot${accommodationInfo?.neighborhood ? ` near ${accommodationInfo.neighborhood}` : ''}?`);
           break;
         }
       }
