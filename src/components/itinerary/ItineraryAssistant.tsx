@@ -194,11 +194,11 @@ export function ItineraryAssistant({
     if (observations.length < 2 && blendedDna?.blendedTraits) {
       const traits = blendedDna.blendedTraits;
       if ((traits.adventure ?? 0) >= 7) {
-        observations.push(`Your Travel DNA says you love adventure — I'll keep an eye out for thrill-seeking options!`);
+        observations.push(`Your Travel DNA says you love adventure. I'll keep an eye out for thrill-seeking options!`);
       } else if ((traits.authenticity ?? 0) >= 7) {
-        observations.push(`Your DNA leans toward authentic local experiences — let me know if any activity feels too touristy.`);
+        observations.push(`Your DNA leans toward authentic local experiences. Let me know if any activity feels too touristy.`);
       } else if ((traits.comfort ?? 0) >= 7) {
-        observations.push(`I see you value comfort — I'll make sure your days have a nice rhythm without too much rushing.`);
+        observations.push(`I see you value comfort. I'll make sure your days have a nice rhythm without too much rushing.`);
       }
     }
 
