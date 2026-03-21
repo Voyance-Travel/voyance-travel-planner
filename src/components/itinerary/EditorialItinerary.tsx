@@ -6207,13 +6207,13 @@ export function EditorialItinerary({
                         ...act,
                         title: coherentTitle,
                         name: coherentTitle,
-                        description: suggestion.suggested_description || suggestion.suggested_swap,
+                        description: suggestion.suggested_description || coherentTitle,
                         cost: typeof act.cost === 'object' && act.cost !== null
                           ? { ...(act.cost as any), amount: newCostWhole, basis: originalBasis }
                           : newCostWhole,
                         location: {
                           ...(act.location || {}),
-                          name: suggestion.suggested_swap,
+                          name: coherentTitle,
                         },
                         // Clear booking metadata — replacement is a different activity
                         bookingUrl: undefined,
