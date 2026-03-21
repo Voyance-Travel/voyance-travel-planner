@@ -9422,6 +9422,7 @@ function DayCard({
                         aiLocked={aiLocked}
                         compact={compactCards}
                         isPastTrip={isPastTrip}
+                          isCleanPreview={isCleanPreview}
                           onPhotoResolved={onPhotoResolved}
                           isManualMode={isManualMode}
                         />
