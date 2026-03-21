@@ -116,28 +116,47 @@ export default function ActivityAlternativesDrawer({
   const bgRequestIdRef = useRef(0);
   // Track whether user has interacted with filters/search (suppresses bg preload)
   const userInteractedRef = useRef(false);
+  // Active AbortController — abort previous request when a new one starts
+  const activeAbortRef = useRef<AbortController | null>(null);
 
-  /** Invoke edge function with a hard timeout. Returns null if timed out. */
+  /** Invoke edge function with a hard timeout and real AbortController. Returns null if timed out/aborted. */
   const invokeWithTimeout = useCallback(async (
     body: Record<string, unknown>,
     timeoutMs: number,
   ): Promise<Record<string, unknown> | null> => {
+    // Abort any previous in-flight request
+    activeAbortRef.current?.abort();
+
     const controller = new AbortController();
+    activeAbortRef.current = controller;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const { data, error } = await supabase.functions.invoke('get-activity-alternatives', {
-        body,
-      });
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/get-activity-alternatives`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${session?.access_token || supabaseKey}`,
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        }
+      );
 
       clearTimeout(timer);
-      if (controller.signal.aborted) return null;
-      if (error) throw error;
-      return data as Record<string, unknown>;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
     } catch (err) {
       clearTimeout(timer);
-      if ((err as Error)?.name === 'AbortError' || controller.signal.aborted) {
-        return null; // timed out
+      if ((err as Error)?.name === 'AbortError') {
+        return null; // timed out or superseded by newer request
       }
       throw err;
     }
