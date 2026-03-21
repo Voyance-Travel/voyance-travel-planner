@@ -1202,7 +1202,7 @@ export default function TripDetail() {
 
           // ── SELF-HEAL: Detect days that exist but have no real activities ("Unplanned") ──
           // Instead of destructive auto-regeneration, try restoring from version history first.
-          if (expectedTotal > 0 && actualDays >= expectedTotal && !autoResumeAttemptedRef.current) {
+          if (expectedTotal > 0 && actualDays >= expectedTotal && !emptyDayHealAttemptedRef.current) {
             const daysList = (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>;
             const emptyDayNumbers: number[] = [];
             for (const day of daysList) {
