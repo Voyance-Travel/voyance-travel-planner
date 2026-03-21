@@ -6871,6 +6871,25 @@ If the purpose is a specific event, plan at least ONE full day around that event
                   }
                   
                   if (newStartMins >= 0 && newStartMins !== oldMins) {
+                    // Hard-constraint check: ensure shifted time doesn't squeeze against checkout/departure
+                    const hardStopAct = day.activities.find((a: StrictActivity) => {
+                      const catLower = (a.category || '').toLowerCase();
+                      const titleLower = (a.title || a.name || '').toLowerCase();
+                      return (catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout')))
+                        || (catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train')));
+                    });
+                    if (hardStopAct && hardStopAct.startTime) {
+                      const hardStopMins = parseInt(hardStopAct.startTime.split(':')[0]) * 60 + parseInt(hardStopAct.startTime.split(':')[1]);
+                      const estimatedEnd = newStartMins + duration + 20; // 20min transit buffer
+                      if (estimatedEnd > hardStopMins) {
+                        // Shifted activity would squeeze past checkout/departure — REMOVE instead
+                        day.activities = day.activities.filter((a: StrictActivity) => a.id !== violation.activityId);
+                        removedCount++;
+                        console.log(`  ✗ Day ${violation.dayNumber}: "${violation.activityTitle}" — REMOVED (shifted time ${newStartMins}min + ${duration}min + transit exceeds hard stop at ${hardStopMins}min)`);
+                        continue;
+                      }
+                    }
+                    
                     const newStartTime = `${Math.floor(newStartMins / 60).toString().padStart(2, '0')}:${(newStartMins % 60).toString().padStart(2, '0')}`;
                     const newEndMins = newStartMins + duration;
                     activity.startTime = newStartTime;
@@ -6965,16 +6984,36 @@ If the purpose is a specific event, plan at least ONE full day around that event
 
             if (actualGap < requiredBuffer) {
               const deficit = requiredBuffer - actualGap;
-              // Cascade-shift this activity and all subsequent ones forward
+              // Check if cascade would hit a hard-stop activity (checkout/departure)
+              let hitHardStop = false;
               for (let j = i + 1; j < day.activities.length; j++) {
                 const act = day.activities[j];
-                const s = parseTimeToMinutes(act.startTime || '');
-                const e = parseTimeToMinutes(act.endTime || '');
-                if (s !== null) act.startTime = minutesToHHMM(s + deficit);
-                if (e !== null) act.endTime = minutesToHHMM(e + deficit);
+                const catLower = (act.category || '').toLowerCase();
+                const titleLower = (act.title || act.name || '').toLowerCase();
+                const isHardStop = (catLower === 'accommodation' && (titleLower.includes('check') || titleLower.includes('checkout')))
+                  || (catLower === 'transport' && (titleLower.includes('depart') || titleLower.includes('airport') || titleLower.includes('flight') || titleLower.includes('train')));
+                if (isHardStop) {
+                  // Don't cascade into checkout/departure — remove the activity causing the overflow instead
+                  console.log(`[Stage 4.6] Day ${day.dayNumber}: cascade would shift hard-stop "${act.title}" — removing "${current.title}" instead`);
+                  day.activities.splice(i, 1);
+                  i--; // re-check from same index
+                  hitHardStop = true;
+                  bufferFixCount++;
+                  break;
+                }
               }
-              bufferFixCount++;
-              console.log(`[Stage 4.6] Day ${day.dayNumber}: "${current.title}" → "${next.title}" = ${distKm.toFixed(1)}km, needed ${requiredBuffer}min buffer but had ${actualGap}min — shifted +${deficit}min`);
+              if (!hitHardStop) {
+                // Safe to cascade-shift all subsequent activities forward
+                for (let j = i + 1; j < day.activities.length; j++) {
+                  const act = day.activities[j];
+                  const s = parseTimeToMinutes(act.startTime || '');
+                  const e = parseTimeToMinutes(act.endTime || '');
+                  if (s !== null) act.startTime = minutesToHHMM(s + deficit);
+                  if (e !== null) act.endTime = minutesToHHMM(e + deficit);
+                }
+                bufferFixCount++;
+                console.log(`[Stage 4.6] Day ${day.dayNumber}: "${current.title}" → "${next.title}" = ${distKm.toFixed(1)}km, needed ${requiredBuffer}min buffer but had ${actualGap}min — shifted +${deficit}min`);
+              }
             }
           }
         }
@@ -9703,14 +9742,33 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                     }
 
                     if (!didFix && newStartMinsSD >= 0 && newStartMinsSD !== oldMinsSD) {
-                      const newST = `${Math.floor(newStartMinsSD / 60).toString().padStart(2, '0')}:${(newStartMinsSD % 60).toString().padStart(2, '0')}`;
-                      const newEndMinsSD = newStartMinsSD + durationSD;
-                      act.startTime = newST;
-                      if (act.endTime) {
-                        act.endTime = `${Math.floor(newEndMinsSD / 60).toString().padStart(2, '0')}:${(newEndMinsSD % 60).toString().padStart(2, '0')}`;
+                      // Hard-constraint check: don't shift if it squeezes against checkout/departure
+                      const hardStopActSD = normalizedActivities.find((ha: any) => {
+                        const hCat = (ha.category || '').toLowerCase();
+                        const hTitle = (ha.title || ha.name || '').toLowerCase();
+                        return (hCat === 'accommodation' && (hTitle.includes('check') || hTitle.includes('checkout')))
+                          || (hCat === 'transport' && (hTitle.includes('depart') || hTitle.includes('airport') || hTitle.includes('flight') || hTitle.includes('train')));
+                      });
+                      if (hardStopActSD && hardStopActSD.startTime) {
+                        const hardStopMinsSD = parseInt(hardStopActSD.startTime.split(':')[0]) * 60 + parseInt(hardStopActSD.startTime.split(':')[1]);
+                        const estimatedEndSD = newStartMinsSD + durationSD + 20;
+                        if (estimatedEndSD > hardStopMinsSD) {
+                          console.log(`[generate-day] ✗ "${act.title}" — REMOVED (shifted time would exceed hard stop at ${hardStopMinsSD}min)`);
+                          activitiesToRemove.push(act.id);
+                          didFix = true;
+                        }
                       }
-                      console.log(`[generate-day] ✓ "${act.title}" shifted to ${newST} (venue hours: ${Math.floor(venueOpenMins / 60).toString().padStart(2, '0')}:${(venueOpenMins % 60).toString().padStart(2, '0')}–${Math.floor(venueCloseMins / 60).toString().padStart(2, '0')}:${(venueCloseMins % 60).toString().padStart(2, '0')})`);
-                      didFix = true;
+                      
+                      if (!didFix && newStartMinsSD >= 0 && newStartMinsSD !== oldMinsSD) {
+                        const newST = `${Math.floor(newStartMinsSD / 60).toString().padStart(2, '0')}:${(newStartMinsSD % 60).toString().padStart(2, '0')}`;
+                        const newEndMinsSD = newStartMinsSD + durationSD;
+                        act.startTime = newST;
+                        if (act.endTime) {
+                          act.endTime = `${Math.floor(newEndMinsSD / 60).toString().padStart(2, '0')}:${(newEndMinsSD % 60).toString().padStart(2, '0')}`;
+                        }
+                        console.log(`[generate-day] ✓ "${act.title}" shifted to ${newST} (venue hours: ${Math.floor(venueOpenMins / 60).toString().padStart(2, '0')}:${(venueOpenMins % 60).toString().padStart(2, '0')}–${Math.floor(venueCloseMins / 60).toString().padStart(2, '0')}:${(venueCloseMins % 60).toString().padStart(2, '0')})`);
+                        didFix = true;
+                      }
                     }
                   }
                 }
