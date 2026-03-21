@@ -224,7 +224,7 @@ export default function TravelIntelCard({
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isCached, setIsCached] = useState(false);
+  
   const fetchedRef = useRef(false);
 
   const fetchIntel = useCallback(async (forceRefresh = false) => {
