@@ -2477,8 +2477,13 @@ export function EditorialItinerary({
           ...d,
           activities: d.activities.map(act => {
             if (act.id !== activityId || !act.transportation) return act;
+            const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
+            const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
+            const newTitle = destMatch ? `${mLabels[newMode.toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
             return {
               ...act,
+              title: newTitle,
+              location: act.location ? { ...act.location, name: newTitle } : act.location,
               transportation: {
                 ...act.transportation,
                 method: newMode,
