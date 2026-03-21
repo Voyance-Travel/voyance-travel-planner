@@ -8545,7 +8545,10 @@ Add your flight and hotel details for a more complete last day.`;
 - Use "${mcHotelName}" for ALL hotel references. Do NOT invent a different hotel.`;
         }
 
-        if (paramIsLastDayInCity && !isLastDay) {
+        if (paramIsLastDayInCity && !isLastDay && !(isLastDay || paramIsLastDayInCity)) {
+          // NOTE: This block is now unreachable because paramIsLastDayInCity days enter the
+          // departure-day prompt block above (line 8148). Kept for safety but should not fire.
+          // The departure-day block already includes checkout, farewell, and transport-specific instructions.
           const nextTransport = resolvedNextLegTransport || 'flight';
           const nextCity = resolvedNextLegCity || 'the next destination';
           const transportLabel = nextTransport.toUpperCase();
