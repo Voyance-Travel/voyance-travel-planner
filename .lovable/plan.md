@@ -1,59 +1,37 @@
 
 
-## Fix: Hotel Update from Planner Page Doesn't Propagate to Itinerary or Budget
+## Fix: Inline Transport Mode Buttons Only Work Once
 
 ### Root cause
 
-**`src/pages/planner/PlannerHotelEnhanced.tsx`** has two hotel save paths that are missing critical post-save steps compared to `AddBookingInline`:
+In `handleTransportModeChange` (EditorialItinerary.tsx, line 2413), the success path takes the optimize API's `transportation` object **wholesale**:
 
-1. **`handleSelectHotel`** (lines ~523-572) — saves hotel + calls `syncHotelToLedger` but:
-   - Never calls `patchItineraryWithHotel()` → accommodation activities keep old hotel name
-   - Never dispatches `booking-changed` event → financial snapshot doesn't refresh
+```typescript
+const updatedAct = { ...act, transportation: optAct.transportation };
+```
 
-2. **`handleManualHotelSubmit`** (lines ~638-683) — saves hotel but:
-   - Never calls `syncHotelToLedger()` → price doesn't update in budget
-   - Never calls `patchItineraryWithHotel()` → itinerary not updated
-   - Never dispatches `booking-changed` event
+This replaces the entire transportation object with whatever the API returned — including `method`. If the optimize API returns `method: 'metro'` (because it considers metro optimal for that route), the user's click on "Walk" is silently overridden. The title gets updated correctly to "Walk to X" (line 2417), but the `transportation.method` stays as the API's choice.
 
-By contrast, `AddBookingInline` (the itinerary page hotel editor) correctly does all three.
+On the **next** click, TransitBadge reads `transportation.method` → still 'metro' → the metro button appears active → the user clicks something else → the API returns metro again → stuck forever.
+
+The title update masks the bug: the label says "Walk to X" but the underlying method is still 'metro', so TransitBadge highlights metro.
 
 ### Fix
 
-**File: `src/pages/planner/PlannerHotelEnhanced.tsx`**
+**File: `src/components/itinerary/EditorialItinerary.tsx` (~line 2413)**
 
-#### 1. Add missing import
+Force the user's chosen mode onto the API response instead of trusting the API's method:
+
 ```typescript
-import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
+// Before (broken):
+const updatedAct = { ...act, transportation: optAct.transportation };
+
+// After (fixed):
+const updatedAct = { ...act, transportation: { ...optAct.transportation, method: newMode } };
 ```
 
-#### 2. In `handleSelectHotel` (~after line 567, after `syncHotelToLedger`)
-Add itinerary patch + booking-changed event:
-```typescript
-// Patch itinerary accommodation activities
-patchItineraryWithHotel(tripId, {
-  name: hotelSelection.name,
-  address: hotelSelection.address,
-}).catch(err => console.warn('[PlannerHotel] Itinerary patch failed:', err));
-
-// Refresh financial snapshot
-window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
-```
-
-#### 3. In `handleManualHotelSubmit` (~after line 671, after saving)
-Add budget sync + itinerary patch + booking-changed event for manual hotels:
-```typescript
-const tripId = plannerState.tripId;
-if (tripId && manualHotel.name) {
-  syncHotelToLedger(tripId, manualHotel as any)
-    .catch(err => console.warn('[PlannerHotel] Manual hotel budget sync failed:', err));
-  patchItineraryWithHotel(tripId, {
-    name: manualHotel.name,
-    address: manualHotel.address,
-  }).catch(err => console.warn('[PlannerHotel] Manual hotel itinerary patch failed:', err));
-  window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
-}
-```
+One line change. The API's route details (duration, cost, instructions) are still used, but the method is always what the user clicked.
 
 ### Scope
-Single file: `src/pages/planner/PlannerHotelEnhanced.tsx` — 1 import + ~15 lines added across two functions. No backend changes.
+Single line change in `EditorialItinerary.tsx`.
 
