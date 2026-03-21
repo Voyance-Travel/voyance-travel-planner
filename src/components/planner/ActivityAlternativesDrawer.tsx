@@ -518,7 +518,21 @@ export default function ActivityAlternativesDrawer({
     </motion.div>
   );
 
-  const hasAlternatives = similarAlternatives.length > 0 || differentAlternatives.length > 0;
+  // Client-side filtering by search query
+  const filterByQuery = (alts: typeof similarAlternatives) => {
+    if (!searchQuery.trim()) return alts;
+    const q = searchQuery.toLowerCase();
+    return alts.filter(a =>
+      a.name?.toLowerCase().includes(q) ||
+      a.category?.toLowerCase().includes(q) ||
+      a.description?.toLowerCase().includes(q) ||
+      a.location?.toLowerCase().includes(q)
+    );
+  };
+  const filteredSimilar = filterByQuery(similarAlternatives);
+  const filteredDifferent = filterByQuery(differentAlternatives);
+
+  const hasAlternatives = filteredSimilar.length > 0 || filteredDifferent.length > 0;
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()} modal={true}>
