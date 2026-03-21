@@ -34,9 +34,10 @@ export async function getTripCities(tripId: string): Promise<TripCity[]> {
  * Add a city to a trip
  */
 export async function addTripCity(city: TripCityInsert): Promise<TripCity> {
+  const enriched = enrichCityCountry(city);
   const { data, error } = await supabase
     .from('trip_cities')
-    .insert(city as any)
+    .insert(enriched as any)
     .select()
     .single();
 
