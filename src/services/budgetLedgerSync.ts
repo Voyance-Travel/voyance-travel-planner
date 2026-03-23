@@ -156,3 +156,22 @@ export async function syncHotelToLedger(
 
   await upsertLogisticsCost(tripId, 'hotel', totalUsd, description);
 }
+
+/**
+ * Sync multiple city hotels into one aggregated activity_costs row.
+ * Used for multi-city trips where hotels are stored per-city in trip_cities.
+ */
+export async function syncMultiCityHotelsToLedger(
+  tripId: string,
+  hotels: { name: string; totalPrice: number }[],
+) {
+  const totalUsd = hotels.reduce((sum, h) => sum + (h.totalPrice || 0), 0);
+  const names = hotels.map(h => h.name).filter(Boolean).join(', ');
+
+  if (totalUsd <= 0) {
+    await removeLogisticsCost(tripId, 'hotel');
+    return;
+  }
+
+  await upsertLogisticsCost(tripId, 'hotel', totalUsd, names ? `Hotels: ${names}` : 'Hotels');
+}
