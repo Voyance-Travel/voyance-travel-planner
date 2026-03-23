@@ -242,6 +242,8 @@ export function validateGeneratedDay(
       .trim();
   };
 
+  const STRIP_VERBS_RE = /\b(guided|visit|explore|discover|tour|walk|stroll|head|go|return|morning|afternoon|evening|a|an|the|to|of|at|in|on|and|with|for)\b/g;
+
   const conceptSimilarity = (a: string, b: string): boolean => {
     if (!a || !b || a.length < 5 || b.length < 5) return false;
     if (a === b) return true;
@@ -250,6 +252,14 @@ export function validateGeneratedDay(
     const bHasMeal = mealKeywords.some(kw => b.includes(kw));
     if (aHasMeal !== bHasMeal) return false;
     if (a.includes(b) || b.includes(a)) return true;
+
+    // Venue-name substring matching: strip common verbs/prepositions and check containment
+    const aVenue = a.replace(STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
+    const bVenue = b.replace(STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
+    if (aVenue.length > 5 && bVenue.length > 5 && (aVenue.includes(bVenue) || bVenue.includes(aVenue))) {
+      return true;
+    }
+
     const aWords = new Set(a.split(/\s+/));
     const bWords = new Set(b.split(/\s+/));
     const intersection = [...aWords].filter(w => bWords.has(w) && w.length > 3);
@@ -397,12 +407,16 @@ export function validateGeneratedDay(
   if (previousDays.length > 0 && day.activities?.length) {
     const previousConcepts = new Set<string>();
     const previousExperienceTypes: Record<string, number> = {};
+    const previousLocations = new Set<string>();
     for (const prevDay of previousDays) {
       for (const prevAct of prevDay.activities || []) {
         const concept = extractConcept(normalizeText(prevAct.title || ''));
         if (concept.length > 5) previousConcepts.add(concept);
         const expType = getExperienceType(prevAct);
         previousExperienceTypes[expType] = (previousExperienceTypes[expType] || 0) + 1;
+        // Build location set for cross-day location dedup
+        const locName = normalizeText(prevAct.location?.name || '');
+        if (locName.length > 5) previousLocations.add(locName);
       }
     }
 
@@ -415,6 +429,15 @@ export function validateGeneratedDay(
 
       if (actType === 'transport' || actType === 'accommodation') continue;
       if (LOGISTICAL_PATTERNS.test(actTitle)) continue;
+
+      // Cross-day location dedup: same physical venue on different days
+      const actLocName = normalizeText(act.location?.name || '');
+      if (actLocName.length > 5 && previousLocations.has(actLocName)) {
+        if (!isRecurringEvent(act, mustDoActivities)) {
+          errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" visits the same location ("${act.location?.name}") as a previous day.`);
+          continue;
+        }
+      }
 
       // Meal-specific dedup: flag if same restaurant name appears on previous days
       if (actType === 'dining') {
@@ -435,10 +458,10 @@ export function validateGeneratedDay(
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
           if (isRecurringEvent(act, mustDoActivities)) continue;
-          if (!isSmartFinish && (actType === 'culinary_class' || actType === 'wine_tasting')) {
-            errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day.`);
-          } else {
+          if (isSmartFinish) {
             warnings.push(`Trip-wide similarity: "${act.title}" resembles a previous day's activity. Consider more variety.`);
+          } else {
+            errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day.`);
           }
           break;
         }
