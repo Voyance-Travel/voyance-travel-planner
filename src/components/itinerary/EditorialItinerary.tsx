@@ -10166,7 +10166,7 @@ function ActivityRow({
             <p className={cn(
               "text-xs text-muted-foreground leading-relaxed",
               !canViewPremium && "blur-sm pointer-events-none select-none"
-            )}>{activity.description}</p>
+            )}>{sanitizeActivityText(activity.description)}</p>
           )}
           {(() => {
             const locN = activity.location?.name?.trim();
