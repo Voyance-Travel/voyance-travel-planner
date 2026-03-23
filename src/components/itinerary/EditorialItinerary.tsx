@@ -3014,7 +3014,7 @@ export function EditorialItinerary({
     }
     // Legacy single hotel
     if (hotelSelection?.totalPrice) return hotelSelection.totalPrice;
-    return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
+    return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || Math.max(1, days.length - 1));
   })();
   
   // Use financial snapshot as the canonical total (matches Budget & Payments exactly)
@@ -6421,7 +6421,7 @@ export function EditorialItinerary({
                     <p className="text-xs text-muted-foreground">
                       {allHotels && allHotels.length > 0
                         ? `${allHotels.length} ${allHotels.length === 1 ? 'city' : 'cities'}`
-                        : hotelSelection?.name ? `${hotelSelection.nights || days.length} nights` : 'Where you\'ll stay'}
+                        : hotelSelection?.name ? `${hotelSelection.nights || Math.max(1, days.length - 1)} nights` : 'Where you\'ll stay'}
                     </p>
                   </div>
                 </div>
