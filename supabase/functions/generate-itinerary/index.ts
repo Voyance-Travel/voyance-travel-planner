@@ -5563,6 +5563,7 @@ RULES FOR VOYANCE PICKS:
         primaryArchetype: primaryArchetypeId,
         secondaryArchetype: secondaryArchetypeId,
         celebrationDay: context.celebrationDay,
+        travelerCount: context.travelers || 1,
       };
       const forcedSlots = deriveForcedSlots(traitScores, userInterests, 1, context.totalDays, slotContext);
       const forcedSlotsPrompt = buildForcedSlotsPrompt(forcedSlots);
