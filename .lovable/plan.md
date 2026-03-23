@@ -1,48 +1,96 @@
 
 
-## Root Cause: "Departure Transfer to Airport" on a Multi-City Train Day
+## Fix: Hotel Not Showing Accurately in Budget for Multi-City Trips
 
-### What the screenshot shows
-Rome → Florence trip. Last day in Rome shows "Departure Transfer to Airport · 45 minutes" even though the user selected **Train** to Florence in Step 2. The "UP NEXT" card below correctly says "🚅 Train to Florence."
+### Problem
+Hotels show correctly in the Hotel tab (reads from `trip_cities.hotel_selection`) but the Budget tab shows $0 for hotel. Confirmed in DB: zero hotel rows exist in `activity_costs` for any multi-city trip, despite hotels being saved in `trip_cities`.
 
----
+### Root Cause — Two bugs working together
 
-### The logic gap — two code paths, one blind spot
+**Bug 1: EditorialItinerary auto-sync deletes hotel costs on every load**
 
-The engine has **two generation paths**. The bug behavior differs depending on which path ran:
+Line 1464 in `EditorialItinerary.tsx` runs on initial load:
+```
+if (hotelSelection) {
+  syncHotelToLedger(tripId, hotelSelection as any)
+}
+```
 
-#### Path A: Full generation (`generate-trip`, lines 1503-7200)
-- **Lines 1953-1963**: When `dayCity.isLastDayInCity`, it builds a `multiCityPrompt` saying "tomorrow the traveler takes a TRAIN to Florence" and "DO NOT mention airports." This is correct.
-- **Lines 2678-2700**: Post-processing strips airport activities when `isLastDayInCity && nextLegTransport !== 'flight'`. Also correct.
-- **BUT** the departure day constraint block at **line 8148** (`else if (isLastDay)`) only fires when `dayNumber === totalDays` — i.e., the absolute last day of the entire trip. For a mid-trip city departure (last day in Rome, but not last day of the trip), this block is **skipped entirely**. The farewell prompts at lines 8417-8532 never fire for mid-trip departures.
-- Instead, it falls through to a **standard day** with the `multiCityPrompt` appended. The multi-city boundary constraint at **line 8548** (`paramIsLastDayInCity && !isLastDay`) does add checkout/farewell/transport instructions, but **only as an append** — the base `dayConstraints` was set for a standard day, not a departure day. The AI gets conflicting signals.
+For multi-city trips, `hotelSelection` comes from `trip.hotel_selection` which is **null** (hotels live on `trip_cities`, not on the trips table). So `syncHotelToLedger(tripId, null)` is called, which **removes** the hotel row from `activity_costs`. This undoes any hotel cost that was synced when the user saved the hotel in the planner.
 
-#### Path B: Single-day generation (`generate-day`, lines 7202-11000)
-- **Line 7837**: `isLastDay = dayNumber === totalDays`. For mid-trip city departures, `isLastDay = false`.
-- **Line 8148**: The departure day block is gated on `isLastDay`. So **mid-trip city departures get zero departure-day constraints** — no checkout timeline, no farewell meal, no departure transfer.
-- The only departure guidance comes from the multi-city boundary append at **line 8548**, which adds checkout + transport instructions. But the core prompt template treats this as a normal sightseeing day with a checkout note tacked on.
-- **Lines 10911-10928**: Post-processing strips airport references, but the AI's generated "Departure Transfer to Airport" uses the exact title. The strip filter at line 10915-10921 checks for `airport` in the title — so **this should catch it**. If it didn't, the strip filter isn't running (meaning `paramIsLastDayInCity` or `resolvedNextLegTransport` isn't set correctly from the frontend call).
+**Bug 2: `trip_cities.hotel_cost_cents` is always 0 or per-night-only**
 
-### The actual root cause (most likely)
+When saving a hotel in `PlannerHotelEnhanced.tsx` (line 537):
+```
+hotel_cost_cents: Math.round(pricePerNight * 100)
+```
+This stores the **per-night** rate, not the total stay cost. The city budget breakdown reads this field directly and shows wrong numbers.
 
-**The frontend calling `generate-day` doesn't pass `isLastDayInCity: true` or passes it but doesn't pass the transport type.** Let me check:
+### Fix — 3 files
 
-The `itineraryAPI.ts` `buildDayCityMap` at line 201-251 correctly computes `isDepartureDay` and `departureTransportType`. But the question is: **does the frontend pass these as `isLastDayInCity` and the transport type to the edge function?**
+**1. `src/components/itinerary/EditorialItinerary.tsx` (~line 1458)**
 
-Looking at `resolvedNextLegTransport` initialization at line 7353: it starts as `''`. It's only populated if `tripId && !resolvedIsTransitionDay` (line 7360) — meaning the DB query runs and finds the next city. **This should work** if the trip_cities table has the correct `transport_type`.
+In the auto-sync block, before calling `syncHotelToLedger`, check `allHotels` (the per-city hotel array). For multi-city trips, sync each city hotel individually instead of relying on `hotelSelection`:
 
-So the real gap is: **even when all the data flows correctly, mid-trip departure days don't get the departure-day prompt template** (lines 8148-8532). They get a standard day template with a multi-city checkout append. The AI sees "plan a full day" as the primary instruction and "also do checkout and train transfer" as a footnote — and the AI prioritizes the primary instruction, sometimes hallucinating airport transfers because "departure day = airport" is deeply baked into LLM training data.
+```
+// If multi-city with allHotels, sync each city hotel
+if (allHotels && allHotels.length > 0) {
+  for (const cityHotel of allHotels) {
+    if (cityHotel.hotel?.pricePerNight && cityHotel.checkInDate && cityHotel.checkOutDate) {
+      const nights = Math.max(1, Math.ceil(...));
+      syncHotelToLedger(tripId, {
+        name: cityHotel.hotel.name,
+        pricePerNight: cityHotel.hotel.pricePerNight,
+        totalPrice: cityHotel.hotel.pricePerNight * nights,
+        checkIn: cityHotel.checkInDate,
+        checkOut: cityHotel.checkOutDate,
+      });
+    }
+  }
+} else if (hotelSelection) {
+  // Single-city path (existing logic)
+  syncHotelToLedger(tripId, hotelSelection as any);
+}
+```
 
-### Summary of root causes
+Key: when `allHotels` exists, **do not call syncHotelToLedger with null** — that's what deletes the row.
 
-| # | Issue | Severity |
-|---|-------|----------|
-| 1 | The departure-day prompt block (line 8148) is gated on `isLastDay` (absolute last day of trip) — mid-trip city departures never enter it | HIGH |
-| 2 | Mid-trip departures rely on a multi-city append (line 8548) that adds checkout/transport as a footnote to a standard-day template — weak signal to the AI | HIGH |
-| 3 | The no-flight farewell enrichment (lines 8417-8532) with train/bus/ferry-aware departure labels only fires for `isLastDay` — never for mid-trip transitions | MEDIUM |
-| 4 | Post-processing airport strip (lines 10911-10928) is a safety net but depends on `paramIsLastDayInCity` being set — if the frontend doesn't pass it, the strip doesn't run | MEDIUM |
-| 5 | The `day-validation.ts` at line 491-520 looks for "airport" or "departure transfer" — it doesn't validate that the departure mode matches the user's selected transport | LOW |
+**2. `src/services/budgetLedgerSync.ts` — Support summing multiple city hotels**
 
-### What needs fixing (for the follow-up plan)
-The departure-day prompt block needs to fire for **any** last-day-in-city, not just the absolute last day of the trip. When `isLastDayInCity && !isLastDay`, it should use the train/bus/ferry/car-specific departure template instead of defaulting to airport. The multi-city append should become the **primary** constraint, not a footnote.
+Currently `syncHotelToLedger` expects one hotel and stores one row. For multi-city trips with multiple hotels, the upsert needs to sum all hotel costs into the single `activity_costs` hotel row (day_number=0). Add a new export:
+
+```typescript
+export async function syncMultiCityHotelsToLedger(
+  tripId: string,
+  hotels: { name: string; totalPrice: number }[]
+) {
+  const totalUsd = hotels.reduce((sum, h) => sum + (h.totalPrice || 0), 0);
+  const names = hotels.map(h => h.name).filter(Boolean).join(', ');
+  if (totalUsd <= 0) {
+    await removeLogisticsCost(tripId, 'hotel');
+    return;
+  }
+  await upsertLogisticsCost(tripId, 'hotel', totalUsd, `Hotels: ${names}`);
+}
+```
+
+**3. `src/pages/planner/PlannerHotelEnhanced.tsx` (~line 537)**
+
+Fix `hotel_cost_cents` to store the total stay cost, not per-night:
+
+```typescript
+// Before:
+hotel_cost_cents: Math.round(pricePerNight * 100),
+
+// After:
+hotel_cost_cents: Math.round(pricePerNight * nights * 100),
+```
+
+### Why hotel shows correctly elsewhere
+The Hotel tab, itinerary cards, and Arrival Game Plan all read from `trip_cities.hotel_selection` directly (which has the hotel data). Only the Budget tab relies on `activity_costs` (which has zero hotel rows for multi-city trips due to Bug 1).
+
+### Files
+- `src/components/itinerary/EditorialItinerary.tsx` — fix auto-sync to handle multi-city hotels
+- `src/services/budgetLedgerSync.ts` — add multi-city hotel sync function
+- `src/pages/planner/PlannerHotelEnhanced.tsx` — fix hotel_cost_cents to store total, not per-night
 
