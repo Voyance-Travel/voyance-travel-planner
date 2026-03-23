@@ -407,12 +407,16 @@ export function validateGeneratedDay(
   if (previousDays.length > 0 && day.activities?.length) {
     const previousConcepts = new Set<string>();
     const previousExperienceTypes: Record<string, number> = {};
+    const previousLocations = new Set<string>();
     for (const prevDay of previousDays) {
       for (const prevAct of prevDay.activities || []) {
         const concept = extractConcept(normalizeText(prevAct.title || ''));
         if (concept.length > 5) previousConcepts.add(concept);
         const expType = getExperienceType(prevAct);
         previousExperienceTypes[expType] = (previousExperienceTypes[expType] || 0) + 1;
+        // Build location set for cross-day location dedup
+        const locName = normalizeText(prevAct.location?.name || '');
+        if (locName.length > 5) previousLocations.add(locName);
       }
     }
 
