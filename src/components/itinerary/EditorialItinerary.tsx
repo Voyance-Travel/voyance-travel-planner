@@ -64,7 +64,7 @@ import type { ActivityType, ItineraryActivity, WeatherCondition, DayItinerary } 
 import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@/types/itinerary';
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import { useActivityImageWriteback } from '@/hooks/useActivityImageWriteback';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
 import { getAppUrl } from '@/utils/getAppUrl';
@@ -10020,7 +10020,7 @@ function ActivityRow({
         {/* Description */}
         {activity.description && (
           <p className="text-base text-muted-foreground leading-relaxed mt-2">
-            {activity.description}
+            {sanitizeActivityText(activity.description)}
           </p>
         )}
 
@@ -10166,7 +10166,7 @@ function ActivityRow({
             <p className={cn(
               "text-xs text-muted-foreground leading-relaxed",
               !canViewPremium && "blur-sm pointer-events-none select-none"
-            )}>{activity.description}</p>
+            )}>{sanitizeActivityText(activity.description)}</p>
           )}
           {(() => {
             const locN = activity.location?.name?.trim();
@@ -10505,7 +10505,7 @@ function ActivityRow({
                     <p className={cn(
                       "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
                       !canViewPremium && "blur-sm pointer-events-none select-none"
-                    )}>{activity.description}</p>
+                    )}>{sanitizeActivityText(activity.description)}</p>
                   )}
 
                   {/* Location — in compact mode show only location name, no full address */}

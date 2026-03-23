@@ -116,3 +116,15 @@ export function sanitizeActivityName(name: string | undefined | null): string {
 
   return sanitized || 'Activity';
 }
+
+/**
+ * Sanitize any activity text field (description, tips, insights, etc.)
+ * by stripping internal system labels. Lighter than sanitizeActivityName —
+ * no dedup logic, just prefix removal.
+ */
+const SYSTEM_LABEL_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*:?\s*/gi;
+
+export function sanitizeActivityText(text: string | undefined | null): string {
+  if (!text) return '';
+  return text.replace(SYSTEM_LABEL_RE, '').replace(/\s{2,}/g, ' ').trim();
+}
