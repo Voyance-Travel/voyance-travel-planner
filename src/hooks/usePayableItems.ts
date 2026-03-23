@@ -21,6 +21,14 @@ export interface PayableItem {
   assignedMemberIds: string[];
 }
 
+interface ActivityCostRow {
+  cost_per_person_usd: number;
+  num_travelers: number;
+  category: string;
+  day_number: number;
+  activity_id: string;
+}
+
 interface PayableItemsInput {
   days: Array<{
     dayNumber: number;
@@ -52,6 +60,7 @@ interface PayableItemsInput {
   budgetTier?: string;
   destination?: string;
   destinationCountry?: string;
+  activityCosts?: ActivityCostRow[] | null;
 }
 
 const NON_PAYABLE_KEYWORDS = [
