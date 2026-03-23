@@ -1,46 +1,45 @@
 
 
-## Fix: Hotel Nights Off-By-One in Flights & Hotels Tab
+## Fix: Trip Total on Itinerary Tab Diverges from Budget Tab
 
 ### Problem
-Mar 24 → Mar 27 = 3 hotel nights, but the Flights & Hotels tab shows "4 nights" and charges $3,920 (4 × $980) instead of $2,940 (3 × $980). The Budget tab correctly shows $2,940.
+Itinerary tab shows $6,749, Budget tab shows $5,918. Three different hotel figures floating around simultaneously.
 
 ### Root Cause
-Two places in `EditorialItinerary.tsx` use `days.length` as a fallback for hotel nights. `days.length` counts **calendar days** (Mar 24, 25, 26, 27 = 4), not **hotel nights** (3). Hotel nights = calendar days − 1.
-
-**Line 3017** (hotel cost calculation):
+Line 3025 in `EditorialItinerary.tsx`:
 ```typescript
-return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
+const totalCost = snapshotTotalUsd > 0
+  ? snapshotTotalUsd
+  : jsTotalCost * (travelers || 1); // Fallback
 ```
 
-**Line 6424** (display label):
-```typescript
-`${hotelSelection.nights || days.length} nights`
-```
+The fallback path (`jsTotalCost * travelers`) is flawed:
+- `jsTotalCost = totalActivityCost + flightCost + hotelCost`
+- `totalActivityCost` is **per-person**, `hotelCost` is **per-room (total)**
+- Multiplying everything by `travelers` **double-counts the hotel** (and potentially flight)
+- The hotel cost calculation at lines 2999-3017 reads from local JSON (which may have stale/different values than `activity_costs` DB)
 
-Both should use `days.length - 1` (or better, compute nights from dates).
+When the snapshot hasn't loaded yet or returns 0 momentarily, the Itinerary tab falls through to this broken JS formula, producing a number that matches neither the Budget nor Payments tabs.
+
+Even when the snapshot IS used, there's a **race condition**: the component renders once with `snapshotTotalUsd = 0` (loading), displays the JS fallback, then re-renders with the snapshot. The user may see the wrong number flash or get cached.
 
 ### Fix — 1 file
 
-**`src/components/itinerary/EditorialItinerary.tsx`**
+**`src/components/itinerary/EditorialItinerary.tsx`** (~line 3020-3027)
 
-1. **Line 3017** — Change fallback from `days.length` to `Math.max(1, days.length - 1)`:
+1. **Show a loading state instead of the broken fallback** — when the snapshot is loading, don't display `jsTotalCost * travelers`. Show the snapshot value or a placeholder.
+
+2. **Fix the fallback formula** for the brief moment before snapshot loads — hotel and flight costs should NOT be multiplied by travelers:
+
 ```typescript
-return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || Math.max(1, days.length - 1));
+const perPersonCosts = totalActivityCost;
+const fixedCosts = flightCost + hotelCost; // per-room/per-booking, not per-person
+const jsTotalCost = perPersonCosts * (travelers || 1) + fixedCosts;
+const totalCost = snapshotTotalUsd > 0 ? snapshotTotalUsd : jsTotalCost;
 ```
 
-2. **Line 6424** — Same fix for display label:
-```typescript
-`${hotelSelection.nights || Math.max(1, days.length - 1)} nights`
-```
-
-This also affects `ItineraryEditor.tsx` **line 675** which has the same pattern:
-```typescript
-{hotelSelection.nights || days.length} nights
-```
-→ Change to `hotelSelection.nights || Math.max(1, days.length - 1)`.
+This ensures the fallback at least produces a reasonable number while the snapshot loads, and the snapshot (same DB source as Budget tab) is used for the final display.
 
 ### Files
-- `src/components/itinerary/EditorialItinerary.tsx` — fix cost calc and display label
-- `src/components/itinerary/ItineraryEditor.tsx` — fix display label
+- `src/components/itinerary/EditorialItinerary.tsx` — fix fallback formula so hotel/flight aren't multiplied by travelers
 
