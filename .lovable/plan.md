@@ -1,96 +1,32 @@
 
 
-## Fix: Hotel Not Showing Accurately in Budget for Multi-City Trips
+## Fix: System Prefixes Leaking Into Activity Descriptions
 
 ### Problem
-Hotels show correctly in the Hotel tab (reads from `trip_cities.hotel_selection`) but the Budget tab shows $0 for hotel. Confirmed in DB: zero hotel rows exist in `activity_costs` for any multi-city trip, despite hotels being saved in `trip_cities`.
+Internal prompt labels like `SOLO_RETREAT:`, `AUTHENTIC_ENCOUNTER:`, etc. intermittently appear in activity **descriptions**, **voyanceInsight**, and **whyThisFits** fields — not just titles. The Venice trip showed "A SOLO_RETREAT moment in one of Lisbon's most peaceful squares…" in a description.
 
-### Root Cause — Two bugs working together
+### Root Cause
+Two sanitization layers exist, but neither strips system prefixes from non-title fields:
 
-**Bug 1: EditorialItinerary auto-sync deletes hotel costs on every load**
+1. **`sanitizeAITextField`** (in `sanitization.ts`) — strips CJK characters and schema-leak patterns, but has **no awareness of system prefixes** like `SOLO_RETREAT:` or `AUTHENTIC_ENCOUNTER:`.
+2. **`earlySaveItinerary`** (in `index.ts`, line 3196) — strips system prefixes, but **only from `act.title`**, not from `description`, `voyanceInsight`, `tips`, or `whyThisFits`.
 
-Line 1464 in `EditorialItinerary.tsx` runs on initial load:
-```
-if (hotelSelection) {
-  syncHotelToLedger(tripId, hotelSelection as any)
-}
-```
+So when the AI leaks a prefix into a description ("AUTHENTIC_ENCOUNTER: Indulge in a signature…"), neither layer catches it.
 
-For multi-city trips, `hotelSelection` comes from `trip.hotel_selection` which is **null** (hotels live on `trip_cities`, not on the trips table). So `syncHotelToLedger(tripId, null)` is called, which **removes** the hotel row from `activity_costs`. This undoes any hotel cost that was synced when the user saved the hotel in the planner.
+### Fix — 1 file
 
-**Bug 2: `trip_cities.hotel_cost_cents` is always 0 or per-night-only**
+**`supabase/functions/generate-itinerary/sanitization.ts`**
 
-When saving a hotel in `PlannerHotelEnhanced.tsx` (line 537):
-```
-hotel_cost_cents: Math.round(pricePerNight * 100)
-```
-This stores the **per-night** rate, not the total stay cost. The city budget breakdown reads this field directly and shows wrong numbers.
-
-### Fix — 3 files
-
-**1. `src/components/itinerary/EditorialItinerary.tsx` (~line 1458)**
-
-In the auto-sync block, before calling `syncHotelToLedger`, check `allHotels` (the per-city hotel array). For multi-city trips, sync each city hotel individually instead of relying on `hotelSelection`:
-
-```
-// If multi-city with allHotels, sync each city hotel
-if (allHotels && allHotels.length > 0) {
-  for (const cityHotel of allHotels) {
-    if (cityHotel.hotel?.pricePerNight && cityHotel.checkInDate && cityHotel.checkOutDate) {
-      const nights = Math.max(1, Math.ceil(...));
-      syncHotelToLedger(tripId, {
-        name: cityHotel.hotel.name,
-        pricePerNight: cityHotel.hotel.pricePerNight,
-        totalPrice: cityHotel.hotel.pricePerNight * nights,
-        checkIn: cityHotel.checkInDate,
-        checkOut: cityHotel.checkOutDate,
-      });
-    }
-  }
-} else if (hotelSelection) {
-  // Single-city path (existing logic)
-  syncHotelToLedger(tripId, hotelSelection as any);
-}
-```
-
-Key: when `allHotels` exists, **do not call syncHotelToLedger with null** — that's what deletes the row.
-
-**2. `src/services/budgetLedgerSync.ts` — Support summing multiple city hotels**
-
-Currently `syncHotelToLedger` expects one hotel and stores one row. For multi-city trips with multiple hotels, the upsert needs to sum all hotel costs into the single `activity_costs` hotel row (day_number=0). Add a new export:
+Add system prefix stripping to `sanitizeAITextField` so it applies to **all** text fields (descriptions, insights, tips, etc.) — not just titles:
 
 ```typescript
-export async function syncMultiCityHotelsToLedger(
-  tripId: string,
-  hotels: { name: string; totalPrice: number }[]
-) {
-  const totalUsd = hotels.reduce((sum, h) => sum + (h.totalPrice || 0), 0);
-  const names = hotels.map(h => h.name).filter(Boolean).join(', ');
-  if (totalUsd <= 0) {
-    await removeLogisticsCost(tripId, 'hotel');
-    return;
-  }
-  await upsertLogisticsCost(tripId, 'hotel', totalUsd, `Hotels: ${names}`);
-}
+const SYSTEM_PREFIXES_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*[:]\s*/gi;
 ```
 
-**3. `src/pages/planner/PlannerHotelEnhanced.tsx` (~line 537)**
+Add `.replace(SYSTEM_PREFIXES_RE, '')` to the `sanitizeAITextField` chain. This catches prefixes anywhere in the string (not just at the start), handles both "A SOLO_RETREAT moment…" and "SOLO_RETREAT: Visit…" patterns, and is case-insensitive.
 
-Fix `hotel_cost_cents` to store the total stay cost, not per-night:
-
-```typescript
-// Before:
-hotel_cost_cents: Math.round(pricePerNight * 100),
-
-// After:
-hotel_cost_cents: Math.round(pricePerNight * nights * 100),
-```
-
-### Why hotel shows correctly elsewhere
-The Hotel tab, itinerary cards, and Arrival Game Plan all read from `trip_cities.hotel_selection` directly (which has the hotel data). Only the Budget tab relies on `activity_costs` (which has zero hotel rows for multi-city trips due to Bug 1).
+This single regex addition protects all fields that flow through `sanitizeAITextField`: title, name, description, tips, voyanceInsight, bestTime, whyThisFits, location name/address, and transportation instructions.
 
 ### Files
-- `src/components/itinerary/EditorialItinerary.tsx` — fix auto-sync to handle multi-city hotels
-- `src/services/budgetLedgerSync.ts` — add multi-city hotel sync function
-- `src/pages/planner/PlannerHotelEnhanced.tsx` — fix hotel_cost_cents to store total, not per-night
+- `supabase/functions/generate-itinerary/sanitization.ts` — add system prefix regex to `sanitizeAITextField`
 
