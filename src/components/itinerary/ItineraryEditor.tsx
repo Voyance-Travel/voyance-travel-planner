@@ -672,7 +672,7 @@ export function ItineraryEditor({
                   )}
                   <div className="pt-4 border-t flex justify-between">
                     <span className="font-medium">
-                      {hotelSelection.nights || days.length} nights @ {formatCurrency(hotelSelection.pricePerNight || 0)}/night
+                      {hotelSelection.nights || Math.max(1, days.length - 1)} nights @ {formatCurrency(hotelSelection.pricePerNight || 0)}/night
                     </span>
                     <span className="text-lg font-bold">{formatCurrency(hotelCost)}</span>
                   </div>
