@@ -1,58 +1,74 @@
 
 
-## Fix: System Labels Leaking Into Activity Descriptions (Confirmed Systemic)
+## Fix: "Solo" Activities Generated on Multi-Person Trips
 
 ### Problem
-`SOLO_RETREAT` and `AUTHENTIC_ENCOUNTER` labels appear in activity **descriptions** across multiple trips. Two patterns:
-- `"A SOLO_RETREAT moment in one of..."` — no colon, mid-sentence
-- `"AUTHENTIC_ENCOUNTER: Indulge in a..."` — with colon, at start
+The personalization system generates `solo_retreat` slots based purely on introvert trait scores (`social <= -4`), without checking traveler count. On a 2-person trip, this produces activities like "Solo Reflections at Igreja de Sao Roque" — contradicting the group size.
 
-### Root Cause — 2 gaps
+### Root Cause
+`deriveForcedSlots()` in `personalization-enforcer.ts` (line 268) pushes a `solo_retreat` slot when the social trait is <= -4, regardless of how many travelers are on the trip. The `SlotDerivationContext` interface doesn't include traveler count, so there's no way to gate this.
 
-**Gap 1: Backend regex requires a colon**
-`sanitization.ts` line 61: `SYSTEM_PREFIXES_RE = /\b(?:SOLO_RETREAT|...)\s*[:]\s*/gi`
-This catches `AUTHENTIC_ENCOUNTER:` but misses `SOLO_RETREAT` without a colon. The `[:]` is mandatory in the regex.
+The slot description sent to the AI is `"One peaceful solo moment"` with tags like `['quiet', 'solo', 'peaceful']`, which causes the AI to generate activities with "Solo" in the title and description.
 
-**Gap 2: Client-side sanitizer only handles titles**
-`sanitizeActivityName()` strips prefixes from activity names/titles only. Descriptions are rendered raw — `{activity.description}` — in 17+ components with no sanitization pass.
+### Fix — 1 file
 
-### Fix — 3 files
+**`supabase/functions/generate-itinerary/personalization-enforcer.ts`**
 
-**1. `supabase/functions/generate-itinerary/sanitization.ts`** — Make colon optional in regex
-
-```
-// Before:
-/\b(?:EDGE_ACTIVITY|...)\s*[:]\s*/gi
-
-// After:  
-/\b(?:EDGE_ACTIVITY|...)\s*[:]?\s*/gi
-```
-
-Adding `?` after `[:]` makes the colon optional, catching both `"SOLO_RETREAT moment"` and `"AUTHENTIC_ENCOUNTER: Indulge"`. The `\b` word boundary prevents false positives on normal words.
-
-**2. `src/utils/activityNameSanitizer.ts`** — Add a `sanitizeActivityText()` export for descriptions
-
-Add a new exported function that applies the same system-prefix regex (colon-optional) to any text field. Simpler than `sanitizeActivityName` — no dedup logic, just prefix stripping:
+**Change 1: Add `travelerCount` to `SlotDerivationContext`** (~line 103)
 
 ```typescript
-const SYSTEM_LABEL_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*:?\s*/gi;
-
-export function sanitizeActivityText(text: string | undefined | null): string {
-  if (!text) return '';
-  return text.replace(SYSTEM_LABEL_RE, '').replace(/\s{2,}/g, ' ').trim();
+export interface SlotDerivationContext {
+  tripType?: string;
+  travelCompanions?: string[];
+  hasChildren?: boolean;
+  primaryArchetype?: string;
+  secondaryArchetype?: string;
+  celebrationDay?: number;
+  travelerCount?: number;  // NEW
 }
 ```
 
-**3. `src/components/itinerary/EditorialItinerary.tsx`** — Sanitize descriptions at render
+**Change 2: Gate `solo_retreat` on single traveler** (~line 267-276)
 
-The primary itinerary view renders descriptions in 3 places (~lines 10023, 10169, 10507). Wrap each `activity.description` with `sanitizeActivityText()`. This is the main component; other components (LiveActivityCard, BookableItemCard, etc.) can be updated in a follow-up but EditorialItinerary is where users spend 90%+ of their time.
+Replace the introvert slot logic:
+```typescript
+// Introverts (negative social score) — only for solo travelers
+if ((traits.social ?? 0) <= -4) {
+  const isSoloTrip = !context?.travelerCount || context.travelerCount <= 1 ||
+    context?.tripType === 'solo' ||
+    context?.travelCompanions?.includes('solo');
+  
+  if (isSoloTrip) {
+    slots.push({
+      type: 'solo_retreat',
+      traitSource: 'social',
+      traitValue: traits.social || 0,
+      description: 'One peaceful solo moment',
+      validationTags: ['quiet', 'solo', 'peaceful', 'intimate', 'private', 'secluded', 'serene']
+    });
+  } else {
+    // Multi-person introvert trip: request quiet/peaceful activities without "solo" framing
+    slots.push({
+      type: 'solo_retreat',
+      traitSource: 'social',
+      traitValue: traits.social || 0,
+      description: 'One quiet, peaceful moment away from crowds (NOT solo — travelers are together)',
+      validationTags: ['quiet', 'peaceful', 'intimate', 'secluded', 'serene']
+    });
+  }
+}
+```
 
-### Why both backend and client-side
-- Backend fix prevents future generations from having labels
-- Client-side fix cleans already-generated trip data stored in the DB without requiring regeneration
+For multi-person trips, the slot still exists (introvert travelers still want quiet moments) but the description explicitly says "NOT solo" and drops the `'solo'` tag, so the AI won't generate "Solo Reflections" titles.
+
+**Change 3: Pass `travelerCount` at call sites** — 3 locations in `index.ts` and `action-generate-trip.ts` where `deriveForcedSlots` is called. Add `travelerCount` to the context object:
+
+- `index.ts` ~line 5563: add `travelerCount: context.travelers || 1`
+- `index.ts` ~line 11485: add `travelerCount: totalTravelers || 1`
+- `action-generate-trip.ts` ~line 409: add `travelerCount: travelers || 1`
 
 ### Files
-- `supabase/functions/generate-itinerary/sanitization.ts` — make colon optional in regex
-- `src/utils/activityNameSanitizer.ts` — add `sanitizeActivityText()` for description fields
-- `src/components/itinerary/EditorialItinerary.tsx` — sanitize descriptions at render time
+- `supabase/functions/generate-itinerary/personalization-enforcer.ts` — add travelerCount to context, gate solo_retreat
+- `supabase/functions/generate-itinerary/index.ts` — pass travelerCount at 2 call sites
+- `supabase/functions/generate-itinerary/action-generate-trip.ts` — pass travelerCount at 1 call site
 
