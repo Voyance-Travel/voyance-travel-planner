@@ -1485,7 +1485,7 @@ export function EditorialItinerary({
         }
       });
     }
-  }, [rawDays.length, tripId, syncBudgetFromDays, flightSelection, hotelSelection]);
+  }, [rawDays.length, tripId, syncBudgetFromDays, flightSelection, hotelSelection, allHotels]);
 
   // Inject synthetic travel activity cards on transition days:
   // Check-out → Head to transport → Transport (seat/ticket) → Arrival → Check-in
