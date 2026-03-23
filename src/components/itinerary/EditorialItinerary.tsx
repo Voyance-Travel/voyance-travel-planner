@@ -3018,13 +3018,13 @@ export function EditorialItinerary({
   })();
   
   // Use financial snapshot as the canonical total (matches Budget & Payments exactly)
-  // jsTotalCost is per-person; snapshot is all-travelers — always prefer snapshot for consistency
-  const jsTotalCost = totalActivityCost + flightCost + hotelCost;
   const snapshotTotalUsd = financialSnapshot.tripTotalCents / 100;
+  // Fallback: activity costs are per-person, hotel/flight are fixed (per-room/per-booking)
+  const perPersonCosts = totalActivityCost;
+  const fixedCosts = flightCost + hotelCost;
+  const jsTotalCost = perPersonCosts * (travelers || 1) + fixedCosts;
   // Always prefer snapshot when available — removes divergence with Payments tab
-  const totalCost = snapshotTotalUsd > 0
-    ? snapshotTotalUsd
-    : jsTotalCost * (travelers || 1); // Fallback only before snapshot loads
+  const totalCost = snapshotTotalUsd > 0 ? snapshotTotalUsd : jsTotalCost;
   
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
