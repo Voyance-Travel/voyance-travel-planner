@@ -305,7 +305,7 @@
 
     "@capacitor/push-notifications": ["@capacitor/push-notifications@8.0.2", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-mej8Eh4EU4JXbaeyMX2l+4NNK6IdY5iRsEXpBOTHLD29fuCACBP7kOJTiJv6piw134zdlbFH0rR+sDKHIiFOFg=="],
 
-    "@capgo/native-purchases": ["@capgo/native-purchases@8.2.4", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-KFJH8SLdxrbF2Sg+BviMufHn/hTFXaWM1R7UUFxu+gIDja/vPaMhZhSmr8eesolmYAjGCLVGwpxhi1gYg8xW8g=="],
+    "@capgo/native-purchases": ["@capgo/native-purchases@8.2.5", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-gzUpSf6/4+J38Ry+JbnaOcnr4JE62UnXWjMtwM9BYwkti3K1u65900T0aOmKpspExPS038ZYqgM42UV4d2uP/w=="],
 
     "@dnd-kit/accessibility": ["@dnd-kit/accessibility@3.1.1", "", { "dependencies": { "tslib": "^2.0.0" }, "peerDependencies": { "react": ">=16.8.0" } }, "sha512-2P+YgaXF+gRsIihwwY1gCsQSYnu9Zyj2py8kY5fFvUM1qm2WA2u639R6YNVfU4GWr+ZM5mqEsfHZZLoRONbemw=="],
 
