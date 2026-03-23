@@ -192,6 +192,19 @@ export function PaymentsTab({
     fetchPayments();
   }, [fetchPayments]);
 
+  // Fetch activity_costs from DB for category reconciliation
+  const { data: activityCosts } = useQuery({
+    queryKey: ['activity-costs-payable', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('activity_costs')
+        .select('cost_per_person_usd, num_travelers, category, day_number, activity_id')
+        .eq('trip_id', tripId);
+      return data || [];
+    },
+    enabled: !!tripId,
+  });
+
   // Use the shared payable items hook — single source of truth for cost totals
   const { items: payableItems, totalCents: payableTotalCents, essentialItems, activityItems } = usePayableItems({
     days,
@@ -202,6 +215,7 @@ export function PaymentsTab({
     budgetTier,
     destination,
     destinationCountry,
+    activityCosts,
   });
 
   // ─── Canonical total from DB ledger (single source of truth, matches header + budget) ───
