@@ -58,12 +58,14 @@ export function sanitizeOptionFields(obj: any): any {
 // =============================================================================
 const CJK_ARTIFACTS = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F]+/g;
 const TEXT_SCHEMA_LEAK = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
+const SYSTEM_PREFIXES_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*[:]\s*/gi;
 
 export function sanitizeAITextField(text: string | undefined | null): string {
   if (!text || typeof text !== 'string') return '';
   return text
     .replace(CJK_ARTIFACTS, '')
     .replace(TEXT_SCHEMA_LEAK, '')
+    .replace(SYSTEM_PREFIXES_RE, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
