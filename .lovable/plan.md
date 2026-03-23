@@ -1,81 +1,58 @@
 
 
-## Fix: Cross-Day Venue Duplication (Jerónimos Monastery on Day 1 & Day 2)
+## Fix: System Labels Leaking Into Activity Descriptions (Confirmed Systemic)
 
 ### Problem
-The same physical venue (Jerónimos Monastery) appears on consecutive days with different titles:
-- Day 1: "Guided Visit to Jerónimos Monastery"
-- Day 2: "Jerónimos Monastery & Santa Maria Church"
+`SOLO_RETREAT` and `AUTHENTIC_ENCOUNTER` labels appear in activity **descriptions** across multiple trips. Two patterns:
+- `"A SOLO_RETREAT moment in one of..."` — no colon, mid-sentence
+- `"AUTHENTIC_ENCOUNTER: Indulge in a..."` — with colon, at start
 
-This is a recurring issue (also seen with Royal Gardens on Venice).
+### Root Cause — 2 gaps
 
-### Root Cause — Two gaps in the dedup pipeline
+**Gap 1: Backend regex requires a colon**
+`sanitization.ts` line 61: `SYSTEM_PREFIXES_RE = /\b(?:SOLO_RETREAT|...)\s*[:]\s*/gi`
+This catches `AUTHENTIC_ENCOUNTER:` but misses `SOLO_RETREAT` without a colon. The `[:]` is mandatory in the regex.
 
-**Gap 1: `conceptSimilarity` misses venue-name matches across differently-worded titles**
+**Gap 2: Client-side sanitizer only handles titles**
+`sanitizeActivityName()` strips prefixes from activity names/titles only. Descriptions are rendered raw — `{activity.description}` — in 17+ components with no sanitization pass.
 
-`extractConcept("guided visit to jeronimos monastery")` → strips "visit" → `"guided to jeronimos monastery"` (4 words)
-`extractConcept("jeronimos monastery santa maria church")` → `"jeronimos monastery santa maria church"` (4 words)
+### Fix — 3 files
 
-Word overlap = {"jeronimos", "monastery"} = 2 common words. Threshold is `intersection/min > 0.6`, so 2/4 = 0.5 → **no match**. The similarity check fails.
+**1. `supabase/functions/generate-itinerary/sanitization.ts`** — Make colon optional in regex
 
-**Gap 2: Cross-day validator only warns, doesn't error**
+```
+// Before:
+/\b(?:EDGE_ACTIVITY|...)\s*[:]\s*/gi
 
-Even if similarity DID match, the cross-day check (line 441 in `day-validation.ts`) pushes a `warning` for general activities, not an `error`. The stripping logic in `index.ts` (line 10292) only acts on strings containing "TRIP-WIDE DUPLICATE" which is only pushed for `culinary_class`/`wine_tasting` types. General venue duplicates produce warnings that are logged but never enforced.
+// After:  
+/\b(?:EDGE_ACTIVITY|...)\s*[:]?\s*/gi
+```
 
-**Gap 3: No location-based cross-day dedup**
+Adding `?` after `[:]` makes the colon optional, catching both `"SOLO_RETREAT moment"` and `"AUTHENTIC_ENCOUNTER: Indulge"`. The `\b` word boundary prevents false positives on normal words.
 
-The cross-day validator (line 395-468) only compares title concepts, not location names/addresses. Two activities at the same physical address with different titles will never be flagged. The `deduplicateActivities` function (line 575) does check locations but only within a single day, not across days.
+**2. `src/utils/activityNameSanitizer.ts`** — Add a `sanitizeActivityText()` export for descriptions
 
-### Fix — 1 file, 2 changes
-
-**`supabase/functions/generate-itinerary/day-validation.ts`**
-
-**Change 1: Add location-based cross-day matching to `validateGeneratedDay`** (around line 395-468)
-
-Before the concept-similarity loop, build a set of normalized location names from `previousDays`. Then for each activity in the current day, check if its location name matches a previous day's location. If so, push an **error** (not warning) with the "TRIP-WIDE DUPLICATE" prefix so the stripping logic in `index.ts` will act on it:
+Add a new exported function that applies the same system-prefix regex (colon-optional) to any text field. Simpler than `sanitizeActivityName` — no dedup logic, just prefix stripping:
 
 ```typescript
-// Build set of previous location names for cross-day location dedup
-const previousLocations = new Set<string>();
-for (const prevDay of previousDays) {
-  for (const prevAct of prevDay.activities || []) {
-    const locName = normalizeText(prevAct.location?.name || '');
-    if (locName.length > 5) previousLocations.add(locName);
-  }
-}
+const SYSTEM_LABEL_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*:?\s*/gi;
 
-// Inside the activity loop, before concept checks:
-const actLocName = normalizeText(act.location?.name || '');
-if (actLocName.length > 5 && previousLocations.has(actLocName)) {
-  if (!isRecurringEvent(act, mustDoActivities)) {
-    errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" visits the same location as a previous day.`);
-    continue;
-  }
+export function sanitizeActivityText(text: string | undefined | null): string {
+  if (!text) return '';
+  return text.replace(SYSTEM_LABEL_RE, '').replace(/\s{2,}/g, ' ').trim();
 }
 ```
 
-**Change 2: Improve `conceptSimilarity` to also check venue-name substring matching**
+**3. `src/components/itinerary/EditorialItinerary.tsx`** — Sanitize descriptions at render
 
-Add a venue-extraction step: extract the last significant noun phrase (likely the venue name) and check if it appears in both concepts. For titles like "Guided Visit to X" and "X & Y", extract "X" and check containment:
+The primary itinerary view renders descriptions in 3 places (~lines 10023, 10169, 10507). Wrap each `activity.description` with `sanitizeActivityText()`. This is the main component; other components (LiveActivityCard, BookableItemCard, etc.) can be updated in a follow-up but EditorialItinerary is where users spend 90%+ of their time.
 
-```typescript
-// Inside conceptSimilarity, after the word-overlap check:
-// Extract potential venue names (words after stripping common verbs/prepositions)
-const STRIP_VERBS = /\b(guided|visit|explore|discover|tour|walk|stroll|head|go|return|morning|afternoon|evening)\b/g;
-const aVenue = a.replace(STRIP_VERBS, '').replace(/\s+/g, ' ').trim();
-const bVenue = b.replace(STRIP_VERBS, '').replace(/\s+/g, ' ').trim();
-if (aVenue.length > 5 && bVenue.length > 5 && (aVenue.includes(bVenue) || bVenue.includes(aVenue))) {
-  return true;
-}
-```
-
-This catches "jeronimos monastery" (from title A after stripping) being contained in "jeronimos monastery santa maria church" (title B).
-
-### Why this fixes it
-- Location-based matching catches same-address visits regardless of title wording
-- Improved concept similarity catches venue-name substrings across differently-worded titles
-- Using `errors.push` with `TRIP-WIDE DUPLICATE:` prefix ensures the stripping logic in `index.ts` will auto-remove the duplicate activity
+### Why both backend and client-side
+- Backend fix prevents future generations from having labels
+- Client-side fix cleans already-generated trip data stored in the DB without requiring regeneration
 
 ### Files
-- `supabase/functions/generate-itinerary/day-validation.ts` — add cross-day location dedup + improve concept similarity
+- `supabase/functions/generate-itinerary/sanitization.ts` — make colon optional in regex
+- `src/utils/activityNameSanitizer.ts` — add `sanitizeActivityText()` for description fields
+- `src/components/itinerary/EditorialItinerary.tsx` — sanitize descriptions at render time
 
