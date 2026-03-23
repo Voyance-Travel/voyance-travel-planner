@@ -458,10 +458,10 @@ export function validateGeneratedDay(
       for (const prevConcept of previousConcepts) {
         if (conceptSimilarity(actConcept, prevConcept)) {
           if (isRecurringEvent(act, mustDoActivities)) continue;
-          if (!isSmartFinish && (actType === 'culinary_class' || actType === 'wine_tasting')) {
-            errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day.`);
-          } else {
+          if (isSmartFinish) {
             warnings.push(`Trip-wide similarity: "${act.title}" resembles a previous day's activity. Consider more variety.`);
+          } else {
+            errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" is too similar to an activity from a previous day.`);
           }
           break;
         }
