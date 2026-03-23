@@ -3014,7 +3014,7 @@ export function EditorialItinerary({
     }
     // Legacy single hotel
     if (hotelSelection?.totalPrice) return hotelSelection.totalPrice;
-    return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
+    return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || Math.max(1, days.length - 1));
   })();
   
   // Use financial snapshot as the canonical total (matches Budget & Payments exactly)
