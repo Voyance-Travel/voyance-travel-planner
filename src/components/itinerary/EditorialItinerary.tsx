@@ -10505,7 +10505,7 @@ function ActivityRow({
                     <p className={cn(
                       "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
                       !canViewPremium && "blur-sm pointer-events-none select-none"
-                    )}>{activity.description}</p>
+                    )}>{sanitizeActivityText(activity.description)}</p>
                   )}
 
                   {/* Location — in compact mode show only location name, no full address */}
