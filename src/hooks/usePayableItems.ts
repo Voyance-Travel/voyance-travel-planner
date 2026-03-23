@@ -99,6 +99,7 @@ export function usePayableItems({
   budgetTier = 'moderate',
   destination,
   destinationCountry,
+  activityCosts,
 }: PayableItemsInput): PayableItemsResult {
   const items = useMemo(() => {
     const result: PayableItem[] = [];
