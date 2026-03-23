@@ -21,6 +21,14 @@ export interface PayableItem {
   assignedMemberIds: string[];
 }
 
+interface ActivityCostRow {
+  cost_per_person_usd: number;
+  num_travelers: number;
+  category: string;
+  day_number: number;
+  activity_id: string;
+}
+
 interface PayableItemsInput {
   days: Array<{
     dayNumber: number;
@@ -52,6 +60,7 @@ interface PayableItemsInput {
   budgetTier?: string;
   destination?: string;
   destinationCountry?: string;
+  activityCosts?: ActivityCostRow[] | null;
 }
 
 const NON_PAYABLE_KEYWORDS = [
@@ -90,6 +99,7 @@ export function usePayableItems({
   budgetTier = 'moderate',
   destination,
   destinationCountry,
+  activityCosts,
 }: PayableItemsInput): PayableItemsResult {
   const items = useMemo(() => {
     const result: PayableItem[] = [];
@@ -218,8 +228,66 @@ export function usePayableItems({
     // Manual activities
     addManualGroups('activity');
 
+    // ─── Reconcile with activity_costs DB rows ───
+    // Surface categories (dining, transit, etc.) that exist in DB but not in JSON-parsed items
+    if (activityCosts?.length) {
+      const CATEGORY_LABELS: Record<string, string> = {
+        dining: 'Food & Dining',
+        food: 'Food & Dining',
+        restaurant: 'Food & Dining',
+        breakfast: 'Food & Dining',
+        lunch: 'Food & Dining',
+        dinner: 'Food & Dining',
+        cafe: 'Food & Dining',
+        transit: 'Local Transit',
+        transport: 'Local Transit',
+        transportation: 'Local Transit',
+        transfer: 'Local Transit',
+      };
+
+      // Collect IDs already represented in result
+      const coveredActivityIds = new Set(result.map(i => i.id));
+
+      // Group DB costs by display label, skipping logistics (day_number=0) and already-covered items
+      const labelTotals = new Map<string, number>();
+      for (const row of activityCosts) {
+        if (row.day_number === 0) continue; // hotel/flight handled above
+        const cat = (row.category || '').toLowerCase();
+        const label = CATEGORY_LABELS[cat];
+        if (!label) continue; // only add summary items for known gap categories
+
+        // Check if this specific activity_cost row's activity is already in the result
+        const compositePatterns = result.some(
+          r => r.id.startsWith(row.activity_id) || r.id === row.activity_id
+        );
+        if (compositePatterns) continue;
+
+        const totalCentsRow = Math.round((row.cost_per_person_usd || 0) * (row.num_travelers || 1) * 100);
+        labelTotals.set(label, (labelTotals.get(label) || 0) + totalCentsRow);
+      }
+
+      for (const [label, cents] of labelTotals) {
+        if (cents <= 0) continue;
+        const summaryId = `cat-${label.toLowerCase().replace(/[^a-z]/g, '-')}`;
+        if (coveredActivityIds.has(summaryId)) continue;
+
+        const catPayments = payments.filter(p => p.item_id === summaryId);
+        const assignedIds = catPayments.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
+        result.push({
+          id: summaryId,
+          type: 'activity',
+          name: label,
+          amountCents: cents,
+          payment: catPayments[0],
+          allPayments: catPayments,
+          assignedMemberId: assignedIds[0],
+          assignedMemberIds: [...new Set(assignedIds)],
+        });
+      }
+    }
+
     return result;
-  }, [flightSelection, hotelSelection, days, payments, travelers, budgetTier, destination, destinationCountry]);
+  }, [flightSelection, hotelSelection, days, payments, travelers, budgetTier, destination, destinationCountry, activityCosts]);
 
   const totalCents = useMemo(() => items.reduce((sum, i) => sum + i.amountCents, 0), [items]);
   const essentialItems = useMemo(() => items.filter(i => i.type === 'flight' || i.type === 'hotel'), [items]);
