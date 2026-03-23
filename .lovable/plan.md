@@ -1,72 +1,81 @@
 
 
-## Fix: Payments Tab Missing Food & Dining / Transit Items
+## Fix: Cross-Day Venue Duplication (Jerónimos Monastery on Day 1 & Day 2)
 
 ### Problem
-The Payments tab header shows the correct total ($5,918) from the financial snapshot, but the itemized list only totals $5,434. Food & Dining ($1,674) and Local Transit ($363) are entirely missing from the line items, creating a ~$484 gap (the exact gap depends on which activities happen to be categorized as dining/transit in `activity_costs` vs. parsed as "activity" in the JSON).
+The same physical venue (Jerónimos Monastery) appears on consecutive days with different titles:
+- Day 1: "Guided Visit to Jerónimos Monastery"
+- Day 2: "Jerónimos Monastery & Santa Maria Church"
 
-### Root Cause
-Two different data sources:
-- **Header total** → `useTripFinancialSnapshot` → reads from `activity_costs` DB table (includes all categories: dining, transit, activity, hotel, flight)
-- **Itemized list** → `usePayableItems` → parses itinerary JSON activities and classifies them only as `flight`, `hotel`, or `activity`
+This is a recurring issue (also seen with Royal Gardens on Venice).
 
-The `usePayableItems` hook has `NEVER_FREE_CATEGORIES` that includes dining/transit keywords for cost estimation, but its output type system only supports `flight | hotel | activity`. All dining and transit items end up typed as `activity` — **if** they're matched at all. Many dining/transit items in `activity_costs` were synced during generation with specific categories but don't exist as individual activities in the itinerary JSON (they're budget allocations, not line items).
+### Root Cause — Two gaps in the dedup pipeline
 
-### Fix — 2 files
+**Gap 1: `conceptSimilarity` misses venue-name matches across differently-worded titles**
 
-**1. `src/hooks/usePayableItems.ts`**
+`extractConcept("guided visit to jeronimos monastery")` → strips "visit" → `"guided to jeronimos monastery"` (4 words)
+`extractConcept("jeronimos monastery santa maria church")` → `"jeronimos monastery santa maria church"` (4 words)
 
-Add a new input: `activityCosts` (rows from the `activity_costs` DB table). After building items from itinerary JSON, compare against `activity_costs` to find categories with costs in the DB that have no matching payable items. For each unmatched category (e.g., "dining", "transit"), create a summary payable item:
+Word overlap = {"jeronimos", "monastery"} = 2 common words. Threshold is `intersection/min > 0.6`, so 2/4 = 0.5 → **no match**. The similarity check fails.
+
+**Gap 2: Cross-day validator only warns, doesn't error**
+
+Even if similarity DID match, the cross-day check (line 441 in `day-validation.ts`) pushes a `warning` for general activities, not an `error`. The stripping logic in `index.ts` (line 10292) only acts on strings containing "TRIP-WIDE DUPLICATE" which is only pushed for `culinary_class`/`wine_tasting` types. General venue duplicates produce warnings that are logged but never enforced.
+
+**Gap 3: No location-based cross-day dedup**
+
+The cross-day validator (line 395-468) only compares title concepts, not location names/addresses. Two activities at the same physical address with different titles will never be flagged. The `deduplicateActivities` function (line 575) does check locations but only within a single day, not across days.
+
+### Fix — 1 file, 2 changes
+
+**`supabase/functions/generate-itinerary/day-validation.ts`**
+
+**Change 1: Add location-based cross-day matching to `validateGeneratedDay`** (around line 395-468)
+
+Before the concept-similarity loop, build a set of normalized location names from `previousDays`. Then for each activity in the current day, check if its location name matches a previous day's location. If so, push an **error** (not warning) with the "TRIP-WIDE DUPLICATE" prefix so the stripping logic in `index.ts` will act on it:
 
 ```typescript
-// After building items from itinerary JSON, add DB-only category items
-if (activityCosts?.length) {
-  const coveredCategories = new Set(['hotel', 'flight']); // already handled
-  const jsonItemTotal = result.reduce((s, i) => s + i.amountCents, 0);
-  
-  // Group activity_costs by category, excluding hotel/flight (day_number=0)
-  const categoryTotals = new Map<string, number>();
-  activityCosts.forEach(cost => {
-    if (cost.day_number === 0) return; // logistics handled separately
-    const cat = cost.category || 'activity';
-    const total = (cost.cost_per_person_usd || 0) * (cost.num_travelers || 1) * 100;
-    categoryTotals.set(cat, (categoryTotals.get(cat) || 0) + total);
-  });
-  
-  // Add summary items for categories not covered by JSON-parsed items
-  for (const [category, totalCents] of categoryTotals) {
-    if (['dining', 'food'].includes(category) && totalCents > 0) {
-      result.push({ id: `cat-dining`, type: 'activity', name: 'Food & Dining', amountCents: Math.round(totalCents), ... });
-    }
-    if (['transit', 'transport'].includes(category) && totalCents > 0) {
-      result.push({ id: `cat-transit`, type: 'activity', name: 'Local Transit', amountCents: Math.round(totalCents), ... });
-    }
+// Build set of previous location names for cross-day location dedup
+const previousLocations = new Set<string>();
+for (const prevDay of previousDays) {
+  for (const prevAct of prevDay.activities || []) {
+    const locName = normalizeText(prevAct.location?.name || '');
+    if (locName.length > 5) previousLocations.add(locName);
+  }
+}
+
+// Inside the activity loop, before concept checks:
+const actLocName = normalizeText(act.location?.name || '');
+if (actLocName.length > 5 && previousLocations.has(actLocName)) {
+  if (!isRecurringEvent(act, mustDoActivities)) {
+    errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" visits the same location as a previous day.`);
+    continue;
   }
 }
 ```
 
-Expand the `PayableItemsInput` interface to accept an optional `activityCosts` array.
+**Change 2: Improve `conceptSimilarity` to also check venue-name substring matching**
 
-**2. `src/components/itinerary/PaymentsTab.tsx`**
-
-Fetch `activity_costs` rows for the trip and pass them to `usePayableItems`:
+Add a venue-extraction step: extract the last significant noun phrase (likely the venue name) and check if it appears in both concepts. For titles like "Guided Visit to X" and "X & Y", extract "X" and check containment:
 
 ```typescript
-const { data: activityCosts } = useQuery({
-  queryKey: ['activity-costs', tripId],
-  queryFn: () => supabase.from('activity_costs').select('*').eq('trip_id', tripId).then(r => r.data),
-});
-
-const { items, totalCents, essentialItems, activityItems } = usePayableItems({
-  days, flightSelection, hotelSelection, travelers, payments,
-  budgetTier, destination, destinationCountry,
-  activityCosts, // NEW
-});
+// Inside conceptSimilarity, after the word-overlap check:
+// Extract potential venue names (words after stripping common verbs/prepositions)
+const STRIP_VERBS = /\b(guided|visit|explore|discover|tour|walk|stroll|head|go|return|morning|afternoon|evening)\b/g;
+const aVenue = a.replace(STRIP_VERBS, '').replace(/\s+/g, ' ').trim();
+const bVenue = b.replace(STRIP_VERBS, '').replace(/\s+/g, ' ').trim();
+if (aVenue.length > 5 && bVenue.length > 5 && (aVenue.includes(bVenue) || bVenue.includes(aVenue))) {
+  return true;
+}
 ```
 
-This ensures the Payments tab's itemized total matches the header total by surfacing all cost categories as trackable line items, while keeping the existing per-activity granularity for items that exist in both sources.
+This catches "jeronimos monastery" (from title A after stripping) being contained in "jeronimos monastery santa maria church" (title B).
+
+### Why this fixes it
+- Location-based matching catches same-address visits regardless of title wording
+- Improved concept similarity catches venue-name substrings across differently-worded titles
+- Using `errors.push` with `TRIP-WIDE DUPLICATE:` prefix ensures the stripping logic in `index.ts` will auto-remove the duplicate activity
 
 ### Files
-- `src/hooks/usePayableItems.ts` — accept `activityCosts` input, add summary items for DB-only categories
-- `src/components/itinerary/PaymentsTab.tsx` — fetch and pass `activity_costs` to the hook
+- `supabase/functions/generate-itinerary/day-validation.ts` — add cross-day location dedup + improve concept similarity
 
