@@ -250,7 +250,7 @@ export function ItineraryEditor({
   const flightCost = (flightSelection as any)?.legs
     ? ((flightSelection as any).legs as any[]).reduce((sum: number, leg: any) => sum + (leg.price || 0), 0)
     : ((flightSelection as any)?.outbound?.price || (flightSelection as any)?.departure?.price || 0) + ((flightSelection as any)?.return?.price || 0);
-  const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || days.length);
+  const hotelCost = (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || Math.max(1, days.length - 1));
   const totalCost = totalActivityCost + flightCost + hotelCost;
   const perPersonCost = travelers > 1 ? Math.round(totalCost / travelers) : totalCost;
 
