@@ -10020,7 +10020,7 @@ function ActivityRow({
         {/* Description */}
         {activity.description && (
           <p className="text-base text-muted-foreground leading-relaxed mt-2">
-            {activity.description}
+            {sanitizeActivityText(activity.description)}
           </p>
         )}
 
