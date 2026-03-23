@@ -430,6 +430,15 @@ export function validateGeneratedDay(
       if (actType === 'transport' || actType === 'accommodation') continue;
       if (LOGISTICAL_PATTERNS.test(actTitle)) continue;
 
+      // Cross-day location dedup: same physical venue on different days
+      const actLocName = normalizeText(act.location?.name || '');
+      if (actLocName.length > 5 && previousLocations.has(actLocName)) {
+        if (!isRecurringEvent(act, mustDoActivities)) {
+          errors.push(`TRIP-WIDE DUPLICATE: "${act.title}" visits the same location ("${act.location?.name}") as a previous day.`);
+          continue;
+        }
+      }
+
       // Meal-specific dedup: flag if same restaurant name appears on previous days
       if (actType === 'dining') {
         for (const prevConcept of previousConcepts) {
