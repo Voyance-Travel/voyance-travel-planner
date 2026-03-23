@@ -534,7 +534,7 @@ export default function PlannerHotelEnhanced() {
           .from('trip_cities')
           .update({
             hotel_selection: JSON.parse(JSON.stringify(hotelArray)),
-            hotel_cost_cents: Math.round(pricePerNight * 100),
+            hotel_cost_cents: Math.round(pricePerNight * Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24))) * 100),
           } as any)
           .eq('id', multiCityCityId);
 

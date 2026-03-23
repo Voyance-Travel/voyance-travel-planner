@@ -1456,12 +1456,30 @@ export function EditorialItinerary({
       syncBudgetFromDays(rawDays);
 
       // Sync flight/hotel costs to activity_costs table
-      import('@/services/budgetLedgerSync').then(({ syncFlightToLedger, syncHotelToLedger }) => {
+      import('@/services/budgetLedgerSync').then(({ syncFlightToLedger, syncHotelToLedger, syncMultiCityHotelsToLedger }) => {
         if (flightSelection) {
           syncFlightToLedger(tripId, flightSelection as any)
             .catch(err => console.error('[EditorialItinerary] Flight cost sync failed:', err));
         }
-        if (hotelSelection) {
+        // Multi-city: aggregate all city hotels into one ledger row
+        if (allHotels && allHotels.length > 0) {
+          const hotelEntries = allHotels
+            .filter(ch => ch.hotel)
+            .map(ch => {
+              const h = ch.hotel!;
+              const nights = ch.nights || (ch.checkInDate && ch.checkOutDate
+                ? Math.max(1, Math.ceil((new Date(ch.checkOutDate).getTime() - new Date(ch.checkInDate).getTime()) / (1000 * 60 * 60 * 24)))
+                : 1);
+              const total = h.totalPrice || (h.pricePerNight ? h.pricePerNight * nights : 0);
+              return { name: h.name || ch.cityName, totalPrice: total };
+            })
+            .filter(e => e.totalPrice > 0);
+          if (hotelEntries.length > 0) {
+            syncMultiCityHotelsToLedger(tripId, hotelEntries)
+              .catch(err => console.error('[EditorialItinerary] Multi-city hotel sync failed:', err));
+          }
+        } else if (hotelSelection) {
+          // Single-city path
           syncHotelToLedger(tripId, hotelSelection as any)
             .catch(err => console.error('[EditorialItinerary] Hotel cost sync failed:', err));
         }
