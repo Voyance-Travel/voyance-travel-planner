@@ -107,6 +107,7 @@ export interface SlotDerivationContext {
   primaryArchetype?: string;
   secondaryArchetype?: string;
   celebrationDay?: number; // User-specified day for birthday/anniversary celebration (1-indexed)
+  travelerCount?: number; // Number of travelers on the trip
 }
 
 export interface ScheduleConstraints {
