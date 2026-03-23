@@ -242,6 +242,8 @@ export function validateGeneratedDay(
       .trim();
   };
 
+  const STRIP_VERBS_RE = /\b(guided|visit|explore|discover|tour|walk|stroll|head|go|return|morning|afternoon|evening|a|an|the|to|of|at|in|on|and|with|for)\b/g;
+
   const conceptSimilarity = (a: string, b: string): boolean => {
     if (!a || !b || a.length < 5 || b.length < 5) return false;
     if (a === b) return true;
@@ -250,6 +252,14 @@ export function validateGeneratedDay(
     const bHasMeal = mealKeywords.some(kw => b.includes(kw));
     if (aHasMeal !== bHasMeal) return false;
     if (a.includes(b) || b.includes(a)) return true;
+
+    // Venue-name substring matching: strip common verbs/prepositions and check containment
+    const aVenue = a.replace(STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
+    const bVenue = b.replace(STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
+    if (aVenue.length > 5 && bVenue.length > 5 && (aVenue.includes(bVenue) || bVenue.includes(aVenue))) {
+      return true;
+    }
+
     const aWords = new Set(a.split(/\s+/));
     const bWords = new Set(b.split(/\s+/));
     const intersection = [...aWords].filter(w => bWords.has(w) && w.length > 3);
