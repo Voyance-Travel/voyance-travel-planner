@@ -107,6 +107,7 @@ export interface SlotDerivationContext {
   primaryArchetype?: string;
   secondaryArchetype?: string;
   celebrationDay?: number; // User-specified day for birthday/anniversary celebration (1-indexed)
+  travelerCount?: number; // Number of travelers on the trip
 }
 
 export interface ScheduleConstraints {
@@ -264,15 +265,30 @@ export function deriveForcedSlots(
     });
   }
   
-  // Introverts (negative social score)
+  // Introverts (negative social score) — gate "solo" framing on traveler count
   if ((traits.social ?? 0) <= -4) {
-    slots.push({
-      type: 'solo_retreat',
-      traitSource: 'social',
-      traitValue: traits.social || 0,
-      description: 'One peaceful solo moment',
-      validationTags: ['quiet', 'solo', 'peaceful', 'intimate', 'private', 'secluded', 'serene']
-    });
+    const isSoloTrip = !context?.travelerCount || context.travelerCount <= 1 ||
+      context?.tripType === 'solo' ||
+      context?.travelCompanions?.includes('solo');
+
+    if (isSoloTrip) {
+      slots.push({
+        type: 'solo_retreat',
+        traitSource: 'social',
+        traitValue: traits.social || 0,
+        description: 'One peaceful solo moment',
+        validationTags: ['quiet', 'solo', 'peaceful', 'intimate', 'private', 'secluded', 'serene']
+      });
+    } else {
+      // Multi-person introvert trip: request quiet/peaceful activities without "solo" framing
+      slots.push({
+        type: 'solo_retreat',
+        traitSource: 'social',
+        traitValue: traits.social || 0,
+        description: 'One quiet, peaceful moment away from crowds (NOT solo — travelers are together)',
+        validationTags: ['quiet', 'peaceful', 'intimate', 'secluded', 'serene']
+      });
+    }
   }
   
   // ==========================================================================

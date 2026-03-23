@@ -407,6 +407,7 @@ export async function handleGenerateTrip(
           primaryArchetype: tripProfile.archetype,
           secondaryArchetype: undefined,
           celebrationDay: undefined,
+          travelerCount: travelers || 1,
         };
         const forcedSlots = deriveForcedSlots(slotTraits, tripProfile.interests, 1, totalDays, slotContext);
         if (forcedSlots.length > 0) {

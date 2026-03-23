@@ -5563,6 +5563,7 @@ RULES FOR VOYANCE PICKS:
         primaryArchetype: primaryArchetypeId,
         secondaryArchetype: secondaryArchetypeId,
         celebrationDay: context.celebrationDay,
+        travelerCount: context.travelers || 1,
       };
       const forcedSlots = deriveForcedSlots(traitScores, userInterests, 1, context.totalDays, slotContext);
       const forcedSlotsPrompt = buildForcedSlotsPrompt(forcedSlots);
@@ -11484,6 +11485,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               primaryArchetype: tripProfile.archetype,
               secondaryArchetype: undefined,
               celebrationDay: undefined,
+              travelerCount: travelers || 1,
             };
             const forcedSlots = deriveForcedSlots(slotTraits, tripProfile.interests, 1, totalDays, slotContext);
             if (forcedSlots.length > 0) {
