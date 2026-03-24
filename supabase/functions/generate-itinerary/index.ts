@@ -8287,6 +8287,11 @@ Start the day at 10:00 AM.`;
         const isNonFlightDeparture = isMidTripCityDeparture && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight';
         
         if (isNonFlightDeparture) {
+          // Hole 1 fix: Strip return flight data from context to prevent prompt conflict
+          flightContext = { ...flightContext, returnDepartureTime: undefined, returnDepartureTime24: undefined, latestLastActivityTime: undefined };
+          if (flightContext.context) {
+            flightContext.context = flightContext.context.replace(/🚨 LAST DAY TIMING CONSTRAINT:[\s\S]*?(?=\n={5,}|\n🚨|$)/, '');
+          }
           // ===== NON-FLIGHT DEPARTURE (train/bus/ferry/car) — NO AIRPORT =====
           const td = resolvedNextLegTransportDetails || {};
           const modeLabel = resolvedNextLegTransport.charAt(0).toUpperCase() + resolvedNextLegTransport.slice(1);
