@@ -7463,6 +7463,33 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                 if (dayCounter === dayNumber) {
                   resolvedDestination = city.city_name || destination;
                   resolvedCountry = (city as any).country || destinationCountry;
+                  // Resolve per-city hotel for this day (if not already overridden by caller)
+                  if (!resolvedHotelOverride?.name && (city as any).hotel_selection) {
+                    const rawHotel = (city as any).hotel_selection;
+                    const hotelList: any[] = Array.isArray(rawHotel) ? rawHotel : (rawHotel ? [rawHotel] : []);
+                    let cityHotel: any = null;
+                    if (hotelList.length > 1 && date) {
+                      // Date-aware resolution for split-stay within a city
+                      const dateStr = typeof date === 'string' ? date.split('T')[0] : date;
+                      cityHotel = hotelList.find((h: any) => {
+                        const cin = h.checkInDate || h.check_in_date;
+                        const cout = h.checkOutDate || h.check_out_date;
+                        return cin && cout && dateStr >= cin && dateStr < cout;
+                      }) || hotelList[0];
+                    } else {
+                      cityHotel = hotelList[0] || null;
+                    }
+                    if (cityHotel?.name) {
+                      resolvedHotelOverride = {
+                        name: cityHotel.name,
+                        address: cityHotel.address,
+                        neighborhood: cityHotel.neighborhood,
+                        checkIn: cityHotel.checkIn || cityHotel.checkInTime || cityHotel.check_in,
+                        checkOut: cityHotel.checkOut || cityHotel.checkOutTime || cityHotel.check_out,
+                      };
+                      console.log(`[generate-day] Per-city hotel resolved from trip_cities: "${cityHotel.name}" for ${resolvedDestination}`);
+                    }
+                  }
                   // Check if this is the last day in this city — capture next leg transport
                   if (n === cityNights - 1) {
                     resolvedIsLastDayInCity = true;
