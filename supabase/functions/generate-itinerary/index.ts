@@ -8240,6 +8240,79 @@ Start the day at 10:00 AM.`;
         }
       } else if (isLastDay || resolvedIsLastDayInCity) {
         // ===== LAST DAY: DEPARTURE LOGIC WITH LUGGAGE REALITY =====
+        
+        // NEW: For mid-trip city departures, check actual transport mode FIRST
+        const isMidTripCityDeparture = resolvedIsLastDayInCity && !isLastDay;
+        const isNonFlightDeparture = isMidTripCityDeparture && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight';
+        
+        if (isNonFlightDeparture) {
+          // ===== NON-FLIGHT DEPARTURE (train/bus/ferry/car) — NO AIRPORT =====
+          const td = resolvedNextLegTransportDetails || {};
+          const modeLabel = resolvedNextLegTransport.charAt(0).toUpperCase() + resolvedNextLegTransport.slice(1);
+          const depTime = td.departureTime || '10:30';
+          const depStation = td.departureStation || `${modeLabel} Station`;
+          const carrier = td.carrier ? ` (${td.carrier})` : '';
+          const hotelNameDisplay = flightContext.hotelName || 'Hotel';
+          const checkoutTime = flightContext.hotelCheckOut || '10:00';
+          
+          // Calculate checkout time based on departure: checkout 90 min before departure
+          const depMins = parseTimeToMinutes(depTime) ?? (10 * 60 + 30);
+          const checkoutMins = Math.max(depMins - 90, 7 * 60); // At least 7:00 AM
+          const calculatedCheckout = `${String(Math.floor(checkoutMins / 60)).padStart(2, '0')}:${String(checkoutMins % 60).padStart(2, '0')}`;
+          const leaveForStationMins = Math.max(depMins - 45, checkoutMins + 15);
+          const leaveForStation = `${String(Math.floor(leaveForStationMins / 60)).padStart(2, '0')}:${String(leaveForStationMins % 60).padStart(2, '0')}`;
+          const breakfastEnd = `${String(Math.floor(Math.max(checkoutMins - 30, 7 * 60) / 60)).padStart(2, '0')}:${String(Math.max(checkoutMins - 30, 7 * 60) % 60).padStart(2, '0')}`;
+          const breakfastStart = `${String(Math.floor(Math.max(checkoutMins - 90, 7 * 60) / 60)).padStart(2, '0')}:${String(Math.max(checkoutMins - 90, 7 * 60) % 60).padStart(2, '0')}`;
+          
+          console.log(`[LastDay-Decision] NON-FLIGHT departure: mode=${resolvedNextLegTransport}, depTime=${depTime}, station=${depStation}, to=${resolvedNextLegCity}`);
+          
+          dayConstraints = `
+=== DEPARTURE DAY: ${modeLabel.toUpperCase()} TO ${(resolvedNextLegCity || 'NEXT CITY').toUpperCase()} ===
+
+⚠️ THIS IS NOT A FLIGHT DEPARTURE. DO NOT mention airports, flights, boarding gates, or security checkpoints.
+The traveler departs by ${modeLabel}${carrier}.
+
+🚆 CONFIRMED ${modeLabel.toUpperCase()} SCHEDULE:
+- Departs: ${depTime} from ${depStation}${carrier}
+- Destination: ${resolvedNextLegCity}
+${td.duration ? `- Duration: ${td.duration}` : ''}
+
+TIMELINE:
+- Breakfast: ${breakfastStart} - ${breakfastEnd}
+- Hotel Checkout: ${calculatedCheckout}
+- Leave for ${depStation}: ${leaveForStation}
+- Board ${modeLabel}: ${depTime}
+
+DEPARTURE DAY ACTIVITIES: 1-2 maximum (breakfast + farewell only)
+
+REQUIRED SEQUENCE:
+1. "Breakfast at hotel or nearby café"
+   - startTime: "${breakfastStart}", endTime: "${breakfastEnd}"
+   - category: "dining"
+   - Near hotel
+
+2. "Hotel Checkout"
+   - startTime: "${calculatedCheckout}", endTime: "${addMinutesToHHMM(calculatedCheckout, 15)}"
+   - category: "accommodation"
+   - location: { name: "${hotelNameDisplay}" }
+
+3. "Transfer to ${depStation}"
+   - startTime: "${leaveForStation}", endTime: "${addMinutesToHHMM(depTime, -10)}"
+   - category: "transport"
+   - description: "Travel to ${depStation} for ${modeLabel} departure"
+
+4. "${modeLabel} to ${resolvedNextLegCity}"
+   - startTime: "${depTime}"
+   - category: "transport"
+   - description: "Board ${modeLabel}${carrier} to ${resolvedNextLegCity}"
+
+⚠️ DO NOT schedule sightseeing or major activities. This is a departure day.
+⚠️ DO NOT mention airports or flights — the traveler is taking a ${modeLabel}.
+⚠️ CHECKOUT MUST happen BEFORE transfer to station. This is auto-enforced.
+THE TRAVELER IS LEAVING BY ${modeLabel.toUpperCase()}. Keep it simple.`;
+          
+        } else {
+        // ===== FLIGHT-BASED DEPARTURE (original logic) =====
         const hasReturnFlight = !!(flightContext.returnDepartureTime || flightContext.returnDepartureTime24);
         const hasHotelData = !!(flightContext.hotelName || flightContext.hotelAddress);
         
