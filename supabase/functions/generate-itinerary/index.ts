@@ -310,6 +310,10 @@ interface MultiCityDayInfo {
   // Split-stay: hotel changed from previous day within same city
   isHotelChange?: boolean;
   previousHotelName?: string;
+  // Next-leg transport details for departure day (populated on last day in city)
+  nextLegTransport?: string;
+  nextLegCity?: string;
+  nextLegTransportDetails?: Record<string, any>;
 }
 
 interface GenerationContext {
