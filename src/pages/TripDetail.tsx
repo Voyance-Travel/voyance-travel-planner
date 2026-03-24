@@ -2633,35 +2633,13 @@ export default function TripDetail() {
 
                 // Prefer trip_cities from DB (authoritative source)
                 if (tripCities.length >= 1) {
-                  return tripCities.map((city, idx) => {
+                  const entries: import('@/components/itinerary/EditorialItinerary').CityHotelInfo[] = [];
+                  for (const city of tripCities) {
                     const hotelRaw = city.hotel_selection as any;
-                    // hotel_selection in trip_cities can be an array [{name:...}] or object {name:...}
-                    const hotelData = Array.isArray(hotelRaw) && hotelRaw.length > 0 ? hotelRaw[0] : hotelRaw;
-                    const normalizedHotel = allNormalizedHotels[idx];
-                    const hotel = hotelData?.name ? hotelData : normalizedHotel;
-                    return {
-                      cityName: city.city_name,
-                      cityOrder: city.city_order,
-                      cityId: city.id,
-                      checkInDate: city.arrival_date,
-                      checkOutDate: city.departure_date,
-                      nights: city.nights || (city.arrival_date && city.departure_date
-                        ? Math.max(1, Math.ceil((new Date(city.departure_date).getTime() - new Date(city.arrival_date).getTime()) / (1000 * 60 * 60 * 24)))
-                        : undefined),
-                      hotel: hotel?.name ? {
-                        name: hotel.name,
-                        address: hotel.address,
-                        rating: hotel.rating,
-                        imageUrl: hotel.imageUrl || hotel.image_url,
-                        images: hotel.images,
-                        website: hotel.website,
-                        googleMapsUrl: hotel.googleMapsUrl || hotel.google_maps_url,
-                        checkIn: hotel.checkIn || hotel.check_in || '3:00 PM',
-                        checkOut: hotel.checkOut || hotel.check_out || '11:00 AM',
-                        pricePerNight: hotel.pricePerNight || hotel.price_per_night,
-                        amenities: hotel.amenities,
-                      } as any : null,
-                      // Transport to this city
+                    const hotelArr = Array.isArray(hotelRaw) ? hotelRaw : (hotelRaw?.name ? [hotelRaw] : []);
+
+                    // Transport info attaches only to the last hotel entry for this city
+                    const transportInfo = {
                       transportType: city.transport_type || undefined,
                       transportDetails: city.transport_details || undefined,
                       transportCostCents: city.transport_cost_cents || 0,
@@ -2669,7 +2647,69 @@ export default function TripDetail() {
                       arrivalTransfer: (city as any).arrival_transfer || null,
                       departureTransfer: (city as any).departure_transfer || null,
                     };
-                  });
+
+                    if (hotelArr.length > 1) {
+                      // Split-stay: expand each hotel into its own CityHotelInfo entry
+                      hotelArr.forEach((hotel: any, hIdx: number) => {
+                        const checkIn = hotel.checkInDate || hotel.checkIn;
+                        const checkOut = hotel.checkOutDate || hotel.checkOut;
+                        const nights = checkIn && checkOut
+                          ? Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60 * 24)))
+                          : undefined;
+                        entries.push({
+                          cityName: city.city_name,
+                          cityOrder: city.city_order,
+                          cityId: city.id,
+                          checkInDate: checkIn || city.arrival_date,
+                          checkOutDate: checkOut || city.departure_date,
+                          nights,
+                          hotel: hotel?.name ? {
+                            name: hotel.name,
+                            address: hotel.address,
+                            rating: hotel.rating,
+                            imageUrl: hotel.imageUrl || hotel.image_url,
+                            images: hotel.images,
+                            website: hotel.website,
+                            googleMapsUrl: hotel.googleMapsUrl || hotel.google_maps_url,
+                            checkIn: hotel.checkIn || hotel.check_in || '3:00 PM',
+                            checkOut: hotel.checkOut || hotel.check_out || '11:00 AM',
+                            pricePerNight: hotel.pricePerNight || hotel.price_per_night,
+                            amenities: hotel.amenities,
+                          } as any : null,
+                          // Only attach transport to the last hotel in this city
+                          ...(hIdx === hotelArr.length - 1 ? transportInfo : {}),
+                        });
+                      });
+                    } else {
+                      // Single hotel (or none) — original behavior
+                      const hotel = hotelArr[0] || null;
+                      entries.push({
+                        cityName: city.city_name,
+                        cityOrder: city.city_order,
+                        cityId: city.id,
+                        checkInDate: city.arrival_date,
+                        checkOutDate: city.departure_date,
+                        nights: city.nights || (city.arrival_date && city.departure_date
+                          ? Math.max(1, Math.ceil((new Date(city.departure_date).getTime() - new Date(city.arrival_date).getTime()) / (1000 * 60 * 60 * 24)))
+                          : undefined),
+                        hotel: hotel?.name ? {
+                          name: hotel.name,
+                          address: hotel.address,
+                          rating: hotel.rating,
+                          imageUrl: hotel.imageUrl || hotel.image_url,
+                          images: hotel.images,
+                          website: hotel.website,
+                          googleMapsUrl: hotel.googleMapsUrl || hotel.google_maps_url,
+                          checkIn: hotel.checkIn || hotel.check_in || '3:00 PM',
+                          checkOut: hotel.checkOut || hotel.check_out || '11:00 AM',
+                          pricePerNight: hotel.pricePerNight || hotel.price_per_night,
+                          amenities: hotel.amenities,
+                        } as any : null,
+                        ...transportInfo,
+                      });
+                    }
+                  }
+                  return entries;
                 }
 
                 // Fallback: derive from destination string
