@@ -1450,14 +1450,13 @@ export function buildDayPrompt(
   hotel: HotelData,
   dna: TravelerDNA,
   tripContext: TripContext,
-  dayNumber: number
+  dayNumber: number,
+  options?: { isLastDayInCity?: boolean; nextLegTransport?: string; nextLegCity?: string; nextLegTransportDetails?: Record<string, any> }
 ): { personaPrompt: string; dayConstraints: DayConstraints } {
   const isFirstDay = dayNumber === 1;
   const isLastDay = dayNumber === tripContext.totalDays;
   
   // ─── Cross-day flight detection ───
-  // If outbound flight departs on startDate but arrives on a later date,
-  // Day 1 is a departure/travel day (not a destination day).
   const isDepartureTravelDay = isFirstDay
     && flight.hasOutboundFlight
     && flight.arrivalDate
@@ -1470,10 +1469,19 @@ export function buildDayPrompt(
   // Build day-specific constraints
   let dayConstraints: DayConstraints;
   
+  // ─── Mid-trip city departure (non-flight): generate station-based departure ───
+  const isMidTripCityDeparture = options?.isLastDayInCity && !isLastDay;
+  const isNonFlightCityDeparture = isMidTripCityDeparture && options?.nextLegTransport && options.nextLegTransport !== 'flight';
+  
   if (isDepartureTravelDay) {
     dayConstraints = buildOutboundTravelDayPrompt(flight, hotel, dna, tripContext);
   } else if (isFirstDay) {
     dayConstraints = buildArrivalDayPrompt(flight, hotel, dna, tripContext);
+  } else if (isNonFlightCityDeparture) {
+    // Non-flight departure from a mid-trip city — do NOT use flight departure prompt
+    // Return a regular day prompt; the actual departure constraints come from the
+    // multi-city overlay or the generate-day handler's non-flight departure block
+    dayConstraints = buildRegularDayPrompt(dna, tripContext, dayNumber, hotel);
   } else if (isLastDay) {
     dayConstraints = buildDepartureDayPrompt(flight, hotel, dna, tripContext, dayNumber);
   } else {

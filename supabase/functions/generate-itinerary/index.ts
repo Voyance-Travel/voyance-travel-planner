@@ -1607,7 +1607,13 @@ async function generateSingleDayWithRetry(
       effectiveHotelData,
       context.travelerDNA,
       tripCtx,
-      dayNumber
+      dayNumber,
+      dayCity0?.isLastDayInCity ? {
+        isLastDayInCity: true,
+        nextLegTransport: dayCity0.nextLegTransport,
+        nextLegCity: dayCity0.nextLegCity,
+        nextLegTransportDetails: dayCity0.nextLegTransportDetails,
+      } : undefined
     );
     
     dnaPromptSection = personaPrompt;
