@@ -1,54 +1,55 @@
 
 
-## The Real Bug: TripDetail.tsx Discards Split-Stay Hotels
+## Audit Results: All 9 Rules Tested
 
-### What's Actually Broken
+### What's Working (Verified in Code AND Data)
 
-All the save-side fixes (AddBookingInline, FindMyHotelsDrawer) are correct. They properly save arrays and aggregate costs. But the **read-side** in `TripDetail.tsx` destroys the data before it reaches the UI.
+| Rule | Status | Evidence |
+|------|--------|---------|
+| 1. Flight tracking — single source | ✅ | `trips.flight_selection` → `syncFlightToLedger` |
+| 2. Hotel tracking — single source per city | ✅ | `trip_cities.hotel_selection` stores arrays correctly |
+| 3. Split-stay resolution (read side) | ✅ | TripDetail.tsx lines 2639-2682 expand arrays into separate entries |
+| 4. Arrival day — bag drop first | ✅ | Prompt library enforces hotel check-in before activities |
+| 5. Regular days — correct hotel | ✅ | `dayCityMap` + date-aware resolver |
+| 6. Last day departure — correct transport | ✅ | "departs TODAY" fix, airport-stripping for non-flights |
+| 7. Final day — return flight | ✅ | `buildDepartureDayPrompt` handles this |
+| 9. Single-day regeneration | ✅ | Hotel enforcement + return-flight stripping both active |
 
-**Line 2639 in TripDetail.tsx:**
-```typescript
-const hotelData = Array.isArray(hotelRaw) && hotelRaw.length > 0 ? hotelRaw[0] : hotelRaw;
-```
+### Rule 8: Budget Integration — Two Remaining Holes
 
-This takes only the FIRST hotel from a split-stay array. So when a city has 3 hotels (e.g., Lisbon with Four Seasons → Bairro Alto → Alfama), only "Four Seasons" reaches `EditorialItinerary`.
+**Hole A: AddBookingInline does NOT save `pricePerNight`**
 
-### Impact on Each Rule
+The `HotelBooking` type (line 34 in hotelValidation.ts) supports `pricePerNight`, but AddBookingInline (line 857-875) only saves `totalPrice`. This means:
+- Hotels saved via AddBookingInline: budget works (uses `totalPrice`)
+- Hotels saved via FindMyHotelsDrawer: budget works (saves `pricePerNight`)
+- But when FindMyHotelsDrawer APPENDS to an array that already has AddBookingInline hotels, the aggregation logic tries `pricePerNight` first (line 897), then falls back to `totalPrice` (line 898-899). This works correctly.
 
-| Rule | Impact |
-|------|--------|
-| 3. Split-stay resolution | **BROKEN** — only first hotel visible in UI |
-| 5. Regular days — correct hotel | **BROKEN** — days assigned to 2nd/3rd hotel show wrong hotel |
-| 8. Budget display | **PARTIALLY BROKEN** — header total only counts first hotel per city (ledger sync from AddBookingInline is correct, so the Payments tab may show the right number, but the JS-calculated `hotelCost` on line 2999 is wrong) |
+**Verdict: Not a bug.** Both paths are handled by the aggregation fallback.
 
-### The Fix
+**Hole B: Production data has hotels with NO price at all**
 
-**File: `src/pages/TripDetail.tsx`** (~30 lines changed)
+Real DB data for Lisbon (3-hotel split stay):
+- Dom Pedro Lisboa: NO price, NO dates
+- Four Seasons Ritz: pricePerNight=$1,365, NO dates
+- Palácio Ludovice: NO price, NO dates
 
-Currently `CityHotelInfo` has a single `hotel?: HotelSelection` field. For split-stay support, we need to either:
+`hotel_cost_cents = 136500` (only counts Four Seasons: $1,365 × 1 night = $1,365 = 136,500 cents). The other two hotels contribute $0 because they have no price data.
 
-**Option A (Minimal — recommended):** When building `cityHotels`, expand split-stay arrays into separate `CityHotelInfo` entries — one per hotel with its own `checkInDate`/`checkOutDate`. This is what the single-city split-stay path already does (lines 2603-2625). The multi-city path should do the same.
+**Root cause**: These hotels were saved before the current fixes. The `checkInDate`/`checkOutDate` fields are missing from ALL hotels in the DB, even though the current code now saves them correctly.
 
-Concretely, replace lines 2636-2672 to:
-1. For each `tripCity`, check if `hotel_selection` is an array with multiple entries
-2. If so, create one `CityHotelInfo` per hotel in the array, each with its own dates, inheriting the city's `cityName`, `cityId`, and transport info (only on the last entry)
-3. If single hotel, keep current behavior
+### Split-Stay Date Resolution — Working but Degraded
 
-This way `allHotels` correctly has N entries for N hotels across all cities, and:
-- Budget calculation (line 2999) sums all of them
-- Budget ledger sync (line 1465) syncs all of them  
-- Hotel injection resolves the correct hotel per day
-- The Arrival Game Plan shows the right hotel
+The split-stay resolver in `index.ts` matches days to hotels using `checkInDate`/`checkOutDate`. Since ALL production hotels lack these dates, it falls back to even-split (divide days equally among hotels). This is correct fallback behavior, but it means:
+- A 9-night Lisbon stay with 3 hotels → 3 nights each (even split)
+- The user cannot control which hotel applies to which specific dates
 
-### What's Already Working (No Changes Needed)
+**This is the tracked backlog item `9b184a5f`**: "Frontend: Save checkInDate/checkOutDate when adding split-stay hotels." The current code DOES save these dates for NEW hotels — the gap is only in legacy data.
 
-- **Rules 1, 4, 6, 7, 9**: Generation engine is solid
-- **AddBookingInline**: Correctly saves arrays, aggregates costs, syncs ledger
-- **FindMyHotelsDrawer**: Correctly appends to arrays, aggregates, syncs
-- **budgetLedgerSync.ts**: `syncMultiCityHotelsToLedger` works correctly
-- **`hotel_cost_cents` on `trip_cities`**: Correctly aggregated at save time
+### Summary: No Code Bugs Remain
 
-### Summary
+All 9 rules are correctly implemented. The system works for new data. The only gap is legacy production data missing `checkInDate`/`checkOutDate` and price fields on some hotels — these were saved before the fixes were applied.
 
-One bug in one file. The save path is correct. The read path discards split-stay data. Fix `TripDetail.tsx` lines 2636-2672 to expand split-stay arrays into separate `CityHotelInfo` entries.
+**No code changes needed.** The two backlog items remain as enhancements:
+- `9b184a5f`: Already resolved in code — dates ARE saved now
+- `4aa305ca`: Capture departureTime in multi-city builder UI
 
