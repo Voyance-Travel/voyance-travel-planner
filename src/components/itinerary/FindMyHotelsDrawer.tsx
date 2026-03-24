@@ -159,21 +159,68 @@ export function FindMyHotelsDrawer({
       };
 
       if (cityId) {
-        // Multi-city: save to trip_cities table
+        // Multi-city: save to trip_cities table, preserving existing split-stay hotels
         const { supabase } = await import('@/integrations/supabase/client');
-        const totalCostCents = Math.round((hotelData.totalPrice || 0) * 100);
+
+        // 1. Fetch existing hotel_selection array from this city
+        const { data: cityRow } = await supabase
+          .from('trip_cities')
+          .select('hotel_selection')
+          .eq('id', cityId)
+          .maybeSingle();
+
+        const existing = (() => {
+          const sel = (cityRow as any)?.hotel_selection;
+          if (Array.isArray(sel)) return sel;
+          if (sel && typeof sel === 'object') return [sel];
+          return [];
+        })();
+
+        // 2. Append new hotel (or replace if same id)
+        const newHotel = { ...hotelData, checkInDate: startDate, checkOutDate: endDate };
+        const idx = existing.findIndex((h: any) => h.id === newHotel.id);
+        const updatedHotels = idx >= 0
+          ? existing.map((h: any, i: number) => i === idx ? newHotel : h)
+          : [...existing, newHotel];
+
+        // 3. Aggregate cost across ALL hotels in the city
+        const aggregatedCostCents = updatedHotels.reduce((sum: number, h: any) => {
+          const ppn = h.pricePerNight || 0;
+          const ci = h.checkInDate || h.checkIn;
+          const co = h.checkOutDate || h.checkOut;
+          let n = 1;
+          if (ci && co) {
+            const diff = new Date(co).getTime() - new Date(ci).getTime();
+            if (diff > 0) n = Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+          }
+          return sum + Math.round(ppn * n * 100);
+        }, 0);
+
         const { error } = await supabase
           .from('trip_cities')
           .update({
-            hotel_selection: JSON.parse(JSON.stringify(hotelData)),
-            hotel_cost_cents: totalCostCents,
+            hotel_selection: JSON.parse(JSON.stringify(updatedHotels)),
+            hotel_cost_cents: aggregatedCostCents,
           } as any)
           .eq('id', cityId);
         if (error) throw error;
 
-        // Sync to budget ledger (multi-city aggregated)
-        if (hotelData.totalPrice && hotelData.totalPrice > 0) {
-          await syncMultiCityHotelsToLedger(tripId, [{ name: hotelData.name, totalPrice: hotelData.totalPrice }]);
+        // 4. Sync ALL hotels to budget ledger (not just the new one)
+        const ledgerHotels = updatedHotels
+          .filter((h: any) => (h.totalPrice || ((h.pricePerNight || 0) > 0)))
+          .map((h: any) => {
+            const ppn = h.pricePerNight || 0;
+            const ci = h.checkInDate || h.checkIn;
+            const co = h.checkOutDate || h.checkOut;
+            let n = 1;
+            if (ci && co) {
+              const diff = new Date(co).getTime() - new Date(ci).getTime();
+              if (diff > 0) n = Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+            }
+            return { name: h.name || 'Hotel', totalPrice: h.totalPrice || ppn * n };
+          });
+        if (ledgerHotels.length > 0) {
+          await syncMultiCityHotelsToLedger(tripId, ledgerHotels);
         }
       } else {
         // Single-city: save to trips table
