@@ -7463,6 +7463,17 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                       const isSameCountry = nextCity.country === city.country;
                       resolvedNextLegTransport = (nextCity as any).transport_type || (isSameCountry ? 'train' : 'flight');
                       resolvedNextLegCity = nextCity.city_name || '';
+                      // Capture next-leg transport details for departure-day prompt
+                      if ((nextCity as any).transport_details) {
+                        const rawNext = (nextCity as any).transport_details;
+                        resolvedNextLegTransportDetails = { ...rawNext };
+                        if (rawNext.operator && !rawNext.carrier) resolvedNextLegTransportDetails.carrier = rawNext.operator;
+                        if (!rawNext.duration && rawNext.inTransitDuration) resolvedNextLegTransportDetails.duration = rawNext.inTransitDuration;
+                        if (resolvedNextLegTransport === 'car') {
+                          if (rawNext.pickupLocation && !rawNext.departureStation) resolvedNextLegTransportDetails.departureStation = rawNext.pickupLocation;
+                          if (rawNext.rentalCompany && !rawNext.carrier) resolvedNextLegTransportDetails.carrier = rawNext.rentalCompany;
+                        }
+                      }
                     }
                   }
                   if (n === 0 && city.city_order > 0 && (city as any).transition_day_mode !== 'skip') {
