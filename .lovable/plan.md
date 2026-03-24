@@ -1,78 +1,121 @@
 
 
-## Fix: Multi-City Itinerary Uses Wrong Hotel + Missing Second Hotel Check-In
+## Fix: Last Day in City Generates Airport Itinerary for Non-Flight Departures
 
-### Problem (2 bugs)
+### Problem
 
-**Bug 1 — Wrong hotel in itinerary for multi-city trips**
-The system correctly stores per-city hotel data in `trip_cities.hotel_selection` and builds it into `multiCityDayMap`. The multi-city prompt injection (line ~1936) correctly tells the AI which hotel to use. However, `context.hotelData` is populated once from `trips.hotel_selection` via `extractHotelData()` — which always grabs the first hotel. The prompt library functions (`buildDayPrompt`, `buildArrivalDayPrompt`, etc.) all receive this single `hotelData` object, so they inject the wrong hotel name into their structured prompts. The AI sees two conflicting hotel names and sometimes follows the wrong one.
+On a multi-city trip where the next leg is a **train** (not a flight), the last day in a city generates airport-based logistics: "Transfer to Airport," "Departure – Boarding & Security," etc. The user provided train details in step 2, but the departure-day prompt ignores them.
 
-**Bug 2 — No check-in generated for second hotel**
-When building the `dayCityMap`, each day for a given city gets the same hotel (hotel_selection[0] from that city). But the user has TWO hotels within one city segment (split stay within a multi-city trip). The `dayCityMap` doesn't account for date-based hotel switching within a single city, so the second hotel is never injected and no check-in/checkout transition is generated.
+Two root causes across two generation paths:
 
-### Root Cause
+### Root Cause 1: `buildDayPrompt` in prompt-library.ts (full-trip generation)
 
-1. **`context.hotelData`** is set at Stage 1.4.5 (line ~5025) from `trips.hotel_selection` and never updated per-day. When `generateSingleDayWithRetry` calls `buildDayPrompt`, it passes this stale single-hotel data, which conflicts with the per-city multi-city prompt.
+`buildDayPrompt` (line 1448) checks `isLastDay = dayNumber === totalDays`. For a mid-trip last-day-in-city, `isLastDay` is **false**, so it returns a **regular day prompt** — not a departure prompt. The multi-city overlay (`multiCityPrompt`) correctly says "CHECKOUT DAY, next leg is TRAIN," but the prompt library has no notion of "last day in city." The AI gets conflicting signals — regular day structure + checkout instructions — and hallucinates airport activities because `flightContext` still contains the trip's overall return flight data.
 
-2. **`dayCityMap` builder** (line ~1356-1393) extracts `rawHotel[0]` per city but ignores `checkInDate`/`checkOutDate` on split-stay hotels. All nights in a city get the same hotel even when the user has date-scoped hotels within that city.
+### Root Cause 2: `generate-day` handler departure logic (single-day generation, line 8193)
 
-### Fix — 1 file
+When `resolvedIsLastDayInCity` is true, it enters the departure logic block. The **first** check is `hasReturnFlight` (line 8195), which looks at `flightContext.returnDepartureTime` — this is the **overall trip's** return flight, not this city's departure. So on a mid-trip city departure by train, if the trip has a return flight stored, it generates full airport departure logistics. The non-flight transport check (`resolvedNextLegTransport`) only runs in the `else if (hasHotelData)` fallback (line 8462), which is never reached because `hasReturnFlight` is true.
 
-**`supabase/functions/generate-itinerary/index.ts`**
+Additionally, the transport details from `trip_cities.transport_details` (departure time, station name, carrier) are captured for **arrival/transition days** (line 7438-7460) but **never captured for the departure side** — the last day in city only gets `resolvedNextLegTransport` (mode) and `resolvedNextLegCity` (name), not the schedule details.
 
-**Change 1: Override `context.hotelData` per-day before calling prompt library** (~line 1537-1543)
+### Fix — 2 files
 
-Before calling `buildDayPrompt`, check if `dayCity?.hotelName` exists and override the hotel data passed to the prompt library:
+**File 1: `supabase/functions/generate-itinerary/index.ts`**
 
-```typescript
-const effectiveHotelData = (dayCity?.hotelName)
-  ? { hasHotel: true, hotelName: dayCity.hotelName, hotelAddress: dayCity.hotelAddress, hotelNeighborhood: dayCity.hotelNeighborhood, checkInTime: dayCity.hotelCheckIn, checkOutTime: dayCity.hotelCheckOut }
-  : (context.hotelData || { hasHotel: false });
-```
+**Change 1a: Capture next leg transport_details on last-day-in-city** (~line 7423-7430)
 
-Then pass `effectiveHotelData` instead of `hotelData` to `buildDayPrompt`, `buildArrivalDayPrompt`, and `buildDepartureDayPrompt`. This ensures the prompt library tells the AI the correct hotel for each day.
-
-**Change 2: Date-aware hotel resolution in `dayCityMap` builder** (~line 1356-1393)
-
-When building the day map for each city, resolve the hotel based on the day's date against `checkInDate`/`checkOutDate` on each hotel in the array:
+When detecting the last day in a city, also capture the next city's `transport_details` (departure time, station, carrier) into a new variable `resolvedNextLegTransportDetails`:
 
 ```typescript
-// For each night n in a city, compute the actual date
-const dayDate = new Date(startDate);
-dayDate.setDate(dayDate.getDate() + dayMap.length);
-const dateStr = dayDate.toISOString().split('T')[0];
-
-// If hotel_selection is an array with date ranges, find the matching hotel
-let cityHotel = null;
-if (Array.isArray(rawHotel) && rawHotel.length > 1) {
-  cityHotel = rawHotel.find(h => h.checkInDate && h.checkOutDate && dateStr >= h.checkInDate && dateStr < h.checkOutDate) || rawHotel[0];
-} else {
-  cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : rawHotel;
+if (n === cityNights - 1) {
+  resolvedIsLastDayInCity = true;
+  const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
+  if (nextCity) {
+    const isSameCountry = nextCity.country === city.country;
+    resolvedNextLegTransport = (nextCity as any).transport_type || (isSameCountry ? 'train' : 'flight');
+    resolvedNextLegCity = nextCity.city_name || '';
+    // NEW: Capture transport details for departure-day prompt
+    if ((nextCity as any).transport_details) {
+      const raw = (nextCity as any).transport_details;
+      resolvedNextLegTransportDetails = { ...raw };
+      if (raw.operator && !raw.carrier) resolvedNextLegTransportDetails.carrier = raw.operator;
+      if (!raw.duration && raw.inTransitDuration) resolvedNextLegTransportDetails.duration = raw.inTransitDuration;
+    }
+  }
 }
 ```
 
-Also set `isFirstDayInCity` and `isLastDayInCity` flags when the hotel changes within a city (to trigger check-in/checkout generation):
+**Change 1b: Gate departure prompt on actual transport mode** (~line 8193-8460)
+
+For `resolvedIsLastDayInCity && !isLastDay`, check `resolvedNextLegTransport` **before** checking `hasReturnFlight`. If the next leg is non-flight, generate a train/bus/ferry departure prompt using the captured transport details (departure time, station, carrier) instead of airport logistics:
 
 ```typescript
-const prevDayHotel = dayMap.length > 0 ? dayMap[dayMap.length - 1].hotelName : null;
-const isHotelChange = prevDayHotel && prevDayHotel !== hotelName && dayMap[dayMap.length - 1]?.cityName === city.city_name;
+} else if (isLastDay || resolvedIsLastDayInCity) {
+  // NEW: For mid-trip city departures, use ACTUAL next-leg transport mode
+  const isMidTripCityDeparture = resolvedIsLastDayInCity && !isLastDay;
+  const isNonFlightDeparture = isMidTripCityDeparture && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight';
+  
+  if (isNonFlightDeparture) {
+    // Build departure prompt using train/bus/ferry details, NOT airport
+    const td = resolvedNextLegTransportDetails || {};
+    const modeLabel = resolvedNextLegTransport.charAt(0).toUpperCase() + resolvedNextLegTransport.slice(1);
+    const depTime = td.departureTime || '10:30';
+    const depStation = td.departureStation || `${modeLabel} Station`;
+    const carrier = td.carrier || '';
+    // ... build station-based departure prompt with checkout → transfer to station → board train
+  } else {
+    // Existing flight-based departure logic (hasReturnFlight check, etc.)
+    ...
+  }
+}
 ```
 
-When `isHotelChange` is true, mark that day entry with a flag so the prompt injection generates checkout from the old hotel and check-in at the new one.
+The non-flight departure prompt should include:
+- Hotel checkout (morning)
+- Optional breakfast/farewell activity near hotel
+- Transfer to train station (using real station name from transport_details)
+- Board train (using real departure time, carrier from transport_details)
+- No airport references whatsoever
 
-**Change 3: Inject hotel-change prompt on transition days within a city** (~line 1936 area)
+**Change 1c: Same fix in full-trip path** (~line 1987-1997)
 
-Add a condition: if the hotel changed from the previous day (same city), inject a hotel transition prompt similar to:
+The `multiCityPrompt` for `isLastDayInCity` already says "next leg is TRAIN" but it's weak — the AI still sees flight data from `flightContext`. Add explicit instruction to **override** the prompt library's flight-based constraints:
+
+```typescript
+if (dayCity.isLastDayInCity) {
+  // ... existing prompt ...
+  if (isNonFlightFullGen) {
+    multiCityPrompt += `\n   ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabelFullGen}.`;
+    // NEW: Override flight context for prompt library
+    multiCityPrompt += `\n   ⚠️ IGNORE any flight departure data in the system prompt. This is NOT a flight departure day. Plan checkout → transfer to ${transportLabelFullGen.toLowerCase()} station → departure by ${transportLabelFullGen}.`;
+    // Inject real transport schedule if available
+    const nextTd = nextDayInfo?.transportDetails;
+    if (nextTd?.departureTime) {
+      multiCityPrompt += `\n   🚆 CONFIRMED ${transportLabelFullGen} SCHEDULE: Departs ${nextTd.departureTime}${nextTd.departureStation ? ` from ${nextTd.departureStation}` : ''}${nextTd.carrier ? ` (${nextTd.carrier})` : ''}. Plan checkout and transfer backwards from this time.`;
+    }
+  }
+}
 ```
-📍 HOTEL CHANGE: Traveler checks out of "{previousHotel}" and checks into "{newHotel}". 
-Plan checkout in the morning, then check-in at the new hotel, then activities.
-```
+
+**Change 1d: Pass transport details through multiCityDayMap** (~line 1356-1420)
+
+When building the `dayCityMap`, store the next city's transport details on the last day entry so the full-trip path can access them:
+
+Add `transportDetails` to the `MultiCityDayInfo` interface and populate it on last-day-in-city entries.
+
+**File 2: `supabase/functions/generate-itinerary/prompt-library.ts`**
+
+**Change 2: Make `buildDayPrompt` aware of last-day-in-city**
+
+Add an optional `isLastDayInCity` + `nextLegTransport` parameter to `buildDayPrompt`. When `isLastDayInCity && !isLastDay && nextLegTransport !== 'flight'`, call a new `buildCityDeparturePrompt` instead of `buildRegularDayPrompt` or `buildDepartureDayPrompt`. This ensures the prompt library never injects airport/flight references on non-flight departure days.
 
 ### Impact
-- Existing multi-city trips with per-city hotels will now get the correct hotel in ALL prompt layers (not just the multi-city overlay)
-- Split-stay hotels within a single city segment will be resolved by date
-- Check-in/checkout activities will be generated when switching hotels mid-city
+- Last day in a city with train/bus/ferry next leg will generate station-based departure logistics
+- Transport details (departure time, station, carrier) from step 2 will be injected into the departure prompt
+- Airport stripping post-processing (line 10959) becomes a safety net rather than the primary fix
+- No changes to the final day of the trip (actual return flight departure) — that path is untouched
 
 ### Files
-- `supabase/functions/generate-itinerary/index.ts` — 3 changes: per-day hotel override for prompt library, date-aware hotel resolution in dayCityMap, hotel-change prompt injection
+- `supabase/functions/generate-itinerary/index.ts` — 4 changes: capture next-leg transport details, gate departure prompt on transport mode, strengthen multi-city prompt override, pass transport details through dayCityMap
+- `supabase/functions/generate-itinerary/prompt-library.ts` — 1 change: add city-departure prompt variant
 
