@@ -8697,6 +8697,7 @@ STRUCTURE:
 
 Add your flight and hotel details for a more complete last day.`;
         }
+        } // end else (flight-based departure)
       }
 
       // ===== MULTI-CITY: Per-City Boundary Constraints =====
