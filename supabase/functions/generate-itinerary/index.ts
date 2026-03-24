@@ -7438,6 +7438,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       let resolvedNextLegTransport = '';
       let resolvedNextLegCity = '';
       let resolvedNextLegTransportDetails: any = null;
+      let resolvedHotelOverride: any = paramHotelOverride || null;
       let resolvedIsMultiCity = !!paramIsMultiCity;
       let resolvedIsLastDayInCity = !!paramIsLastDayInCity;
       let resolvedDestination = destination;
@@ -7448,7 +7449,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
         try {
           const { data: tripCities } = await supabase
             .from('trip_cities')
-            .select('city_name, country, city_order, nights, days_total, transition_day_mode, transport_type, transport_details')
+            .select('city_name, country, city_order, nights, days_total, transition_day_mode, transport_type, transport_details, hotel_selection')
             .eq('trip_id', tripId)
             .order('city_order', { ascending: true });
 
@@ -7462,6 +7463,33 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                 if (dayCounter === dayNumber) {
                   resolvedDestination = city.city_name || destination;
                   resolvedCountry = (city as any).country || destinationCountry;
+                  // Resolve per-city hotel for this day (if not already overridden by caller)
+                  if (!resolvedHotelOverride?.name && (city as any).hotel_selection) {
+                    const rawHotel = (city as any).hotel_selection;
+                    const hotelList: any[] = Array.isArray(rawHotel) ? rawHotel : (rawHotel ? [rawHotel] : []);
+                    let cityHotel: any = null;
+                    if (hotelList.length > 1 && date) {
+                      // Date-aware resolution for split-stay within a city
+                      const dateStr = typeof date === 'string' ? date.split('T')[0] : date;
+                      cityHotel = hotelList.find((h: any) => {
+                        const cin = h.checkInDate || h.check_in_date;
+                        const cout = h.checkOutDate || h.check_out_date;
+                        return cin && cout && dateStr >= cin && dateStr < cout;
+                      }) || hotelList[0];
+                    } else {
+                      cityHotel = hotelList[0] || null;
+                    }
+                    if (cityHotel?.name) {
+                      resolvedHotelOverride = {
+                        name: cityHotel.name,
+                        address: cityHotel.address,
+                        neighborhood: cityHotel.neighborhood,
+                        checkIn: cityHotel.checkIn || cityHotel.checkInTime || cityHotel.check_in,
+                        checkOut: cityHotel.checkOut || cityHotel.checkOutTime || cityHotel.check_out,
+                      };
+                      console.log(`[generate-day] Per-city hotel resolved from trip_cities: "${cityHotel.name}" for ${resolvedDestination}`);
+                    }
+                  }
                   // Check if this is the last day in this city — capture next leg transport
                   if (n === cityNights - 1) {
                     resolvedIsLastDayInCity = true;
@@ -7923,14 +7951,14 @@ If the purpose is a specific event, plan at least ONE full day around that event
       // CRITICAL: Fetch flight/hotel context for Day 1 and last day timing
       let flightContext = tripId ? await getFlightHotelContext(supabase, tripId) : { context: '' };
 
-      // For multi-city trips, override the hotel data with per-city hotel from generate-trip-day chain
-      if (paramHotelOverride && paramHotelOverride.name) {
+      // For multi-city trips, override the hotel data with per-city hotel (from caller OR resolved from trip_cities)
+      if (resolvedHotelOverride && resolvedHotelOverride.name) {
         flightContext = {
           ...flightContext,
-          hotelName: paramHotelOverride.name,
-          hotelAddress: paramHotelOverride.address || flightContext.hotelAddress,
+          hotelName: resolvedHotelOverride.name,
+          hotelAddress: resolvedHotelOverride.address || flightContext.hotelAddress,
         };
-        console.log(`[generate-day] Hotel override applied: "${paramHotelOverride.name}" (from per-city data)`);
+        console.log(`[generate-day] Hotel override applied: "${resolvedHotelOverride.name}" (from per-city data)`);
       }
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
@@ -8708,7 +8736,7 @@ Add your flight and hotel details for a more complete last day.`;
 
       // ===== MULTI-CITY: Per-City Boundary Constraints =====
       if (resolvedIsMultiCity) {
-        const mcHotelName = paramHotelOverride?.name || flightContext.hotelName || 'Hotel';
+        const mcHotelName = resolvedHotelOverride?.name || flightContext.hotelName || 'Hotel';
 
         if (paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay) {
           dayConstraints += `\n\n🏨 CITY ARRIVAL — CHECK-IN DAY:
@@ -10959,8 +10987,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
           if (!hasCheckout) {
             // Resolve hotel name
-            let checkoutHotelName = paramHotelOverride?.name || flightContext.hotelName || 'Hotel';
-            let checkoutHotelAddress = paramHotelOverride?.address || flightContext.hotelAddress || '';
+            let checkoutHotelName = resolvedHotelOverride?.name || flightContext.hotelName || 'Hotel';
+            let checkoutHotelAddress = resolvedHotelOverride?.address || flightContext.hotelAddress || '';
 
             // For multi-city, try to load hotel from trip_cities (reuse same logic as check-in)
             if (tripId && resolvedIsMultiCity && checkoutHotelName === 'Hotel') {
