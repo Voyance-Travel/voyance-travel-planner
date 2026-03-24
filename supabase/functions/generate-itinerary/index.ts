@@ -7431,6 +7431,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       let resolvedTransportDetails: any = null;
       let resolvedNextLegTransport = '';
       let resolvedNextLegCity = '';
+      let resolvedNextLegTransportDetails: any = null;
       let resolvedIsMultiCity = !!paramIsMultiCity;
       let resolvedIsLastDayInCity = !!paramIsLastDayInCity;
       let resolvedDestination = destination;
