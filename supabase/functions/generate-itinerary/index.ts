@@ -307,6 +307,9 @@ interface MultiCityDayInfo {
   hotelCheckOut?: string;
   isFirstDayInCity?: boolean;
   isLastDayInCity?: boolean;
+  // Split-stay: hotel changed from previous day within same city
+  isHotelChange?: boolean;
+  previousHotelName?: string;
 }
 
 interface GenerationContext {
