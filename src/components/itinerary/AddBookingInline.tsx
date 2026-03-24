@@ -27,7 +27,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
-import { syncHotelToLedger, syncFlightToLedger } from '@/services/budgetLedgerSync';
+import { syncHotelToLedger, syncFlightToLedger, syncMultiCityHotelsToLedger } from '@/services/budgetLedgerSync';
 import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
 import { patchItineraryWithFlight } from '@/services/flightItineraryPatch';
 import { cn } from '@/lib/utils';
