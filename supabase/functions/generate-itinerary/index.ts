@@ -1406,6 +1406,29 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
             const isHotelChange = !!(prevEntry && prevEntry.hotelName && hotelName && prevEntry.hotelName !== hotelName && prevEntry.cityName === city.city_name);
             const previousHotelName = isHotelChange ? prevEntry!.hotelName : undefined;
 
+            // Capture next-leg transport details on last day in city for departure prompt
+            let nextLegTransport: string | undefined;
+            let nextLegCity: string | undefined;
+            let nextLegTransportDetails: Record<string, any> | undefined;
+            if (n === nights - 1) {
+              const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
+              if (nextCity) {
+                const isSameCountryNext = nextCity.country === city.country;
+                nextLegTransport = (nextCity as any).transport_type || (isSameCountryNext ? 'train' : 'flight');
+                nextLegCity = nextCity.city_name || '';
+                if ((nextCity as any).transport_details) {
+                  const rawTd = (nextCity as any).transport_details;
+                  nextLegTransportDetails = { ...rawTd };
+                  if (rawTd.operator && !rawTd.carrier) nextLegTransportDetails!.carrier = rawTd.operator;
+                  if (!rawTd.duration && rawTd.inTransitDuration) nextLegTransportDetails!.duration = rawTd.inTransitDuration;
+                  if (nextLegTransport === 'car') {
+                    if (rawTd.pickupLocation && !rawTd.departureStation) nextLegTransportDetails!.departureStation = rawTd.pickupLocation;
+                    if (rawTd.rentalCompany && !rawTd.carrier) nextLegTransportDetails!.carrier = rawTd.rentalCompany;
+                  }
+                }
+              }
+            }
+
             dayMap.push({
               cityName: city.city_name,
               country: city.country,
@@ -1422,6 +1445,9 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
               isLastDayInCity: n === nights - 1,
               isHotelChange,
               previousHotelName,
+              nextLegTransport,
+              nextLegCity,
+              nextLegTransportDetails,
             });
           }
         }
