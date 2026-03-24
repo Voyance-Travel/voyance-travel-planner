@@ -1,15 +1,25 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { SignInForm } from '@/components/auth/SignInForm';
 import Head from '@/components/common/Head';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import AuthLayout from '@/components/layout/AuthLayout';
+import { useAuth } from '@/contexts/AuthContext';
 import { Compass } from 'lucide-react';
 
 export default function SignIn() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { isAuthenticated, isLoading } = useAuth();
   const nextPath = searchParams.get('next') || '/profile';
   const isRedirectedFromProtected = nextPath && nextPath.startsWith('/');
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      navigate(nextPath || '/profile', { replace: true });
+    }
+  }, [isAuthenticated, isLoading, navigate, nextPath]);
 
   const heroImage = {
     src: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80',
