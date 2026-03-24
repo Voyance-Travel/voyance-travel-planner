@@ -8736,7 +8736,7 @@ Add your flight and hotel details for a more complete last day.`;
 
       // ===== MULTI-CITY: Per-City Boundary Constraints =====
       if (resolvedIsMultiCity) {
-        const mcHotelName = paramHotelOverride?.name || flightContext.hotelName || 'Hotel';
+        const mcHotelName = resolvedHotelOverride?.name || flightContext.hotelName || 'Hotel';
 
         if (paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay) {
           dayConstraints += `\n\n🏨 CITY ARRIVAL — CHECK-IN DAY:
