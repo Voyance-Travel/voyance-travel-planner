@@ -2034,7 +2034,7 @@ These help the traveler prepare for their trip.
             const nextLegCity = dayCity.nextLegCity || nextDayInfo?.cityName || 'the next destination';
             const isNonFlightFullGen = nextLegTransport !== 'flight';
             const transportLabelFullGen = nextLegTransport.toUpperCase();
-            multiCityPrompt += `\n   📍 CHECKOUT DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). Tomorrow the traveler takes a ${transportLabelFullGen} to ${nextLegCity}. Plan morning around checkout — breakfast at/near hotel, pack and check out, then activities before departing.`;
+            multiCityPrompt += `\n   📍 CHECKOUT & DEPARTURE DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). The traveler departs TODAY by ${transportLabelFullGen} to ${nextLegCity}. Plan morning around checkout — breakfast at/near hotel, pack and check out, then transfer to ${isNonFlightFullGen ? transportLabelFullGen.toLowerCase() + ' station' : 'airport'} and depart.`;
             if (isNonFlightFullGen) {
               multiCityPrompt += `\n   ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabelFullGen}.`;
               multiCityPrompt += `\n   ⚠️ IGNORE any flight departure data in the system prompt. This is NOT a flight departure day. Plan checkout → transfer to ${transportLabelFullGen.toLowerCase()} station → departure by ${transportLabelFullGen}.`;
