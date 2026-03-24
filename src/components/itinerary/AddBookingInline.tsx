@@ -27,7 +27,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
-import { syncHotelToLedger, syncFlightToLedger } from '@/services/budgetLedgerSync';
+import { syncHotelToLedger, syncFlightToLedger, syncMultiCityHotelsToLedger } from '@/services/budgetLedgerSync';
 import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
 import { patchItineraryWithFlight } from '@/services/flightItineraryPatch';
 import { cn } from '@/lib/utils';
@@ -891,16 +891,56 @@ export function AddHotelInline({
         parseLocalDate(a.checkInDate).getTime() - parseLocalDate(b.checkInDate).getTime()
       );
 
+      // Aggregate total hotel cost across ALL hotels in this city
+      const aggregatedCostCents = updatedHotels.reduce((sum, h) => {
+        const hAny = h as any;
+        const ppn = hAny.pricePerNight || 0;
+        const tp = hAny.totalPrice || 0;
+        if (tp > 0) return sum + Math.round(tp * 100);
+        if (ppn > 0) {
+          const ci = hAny.checkInDate || hAny.checkIn;
+          const co = hAny.checkOutDate || hAny.checkOut;
+          let n = 1;
+          if (ci && co) {
+            const diff = new Date(co).getTime() - new Date(ci).getTime();
+            if (diff > 0) n = Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+          }
+          return sum + Math.round(ppn * n * 100);
+        }
+        return sum;
+      }, 0);
+
       if (cityId) {
         // Multi-city: save to trip_cities table
         const { error } = await supabase
           .from('trip_cities')
           .update({
             hotel_selection: JSON.parse(JSON.stringify(updatedHotels)),
-            hotel_cost_cents: Math.round((newHotel as any).pricePerNight ? (newHotel as any).pricePerNight * 100 : 0),
+            hotel_cost_cents: aggregatedCostCents,
           } as any)
           .eq('id', cityId);
         if (error) throw error;
+
+        // Sync all city hotels to budget ledger
+        const hotelsForSync = updatedHotels
+          .filter((h: any) => (h.totalPrice || h.pricePerNight) && h.name)
+          .map((h: any) => {
+            let total = h.totalPrice || 0;
+            if (!total && h.pricePerNight) {
+              const ci = h.checkInDate || h.checkIn;
+              const co = h.checkOutDate || h.checkOut;
+              let n = 1;
+              if (ci && co) {
+                const diff = new Date(co).getTime() - new Date(ci).getTime();
+                if (diff > 0) n = Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+              }
+              total = h.pricePerNight * n;
+            }
+            return { name: h.name, totalPrice: total };
+          });
+        if (hotelsForSync.length > 0) {
+          await syncMultiCityHotelsToLedger(tripId, hotelsForSync);
+        }
       } else {
         // Single-city: save to trips table (existing behavior)
         const { error } = await supabase
@@ -908,17 +948,16 @@ export function AddHotelInline({
           .update({ hotel_selection: JSON.parse(JSON.stringify(updatedHotels)) })
           .eq('id', tripId);
         if (error) throw error;
-      }
 
-
-      // Sync hotel price to budget ledger if price was entered
-      if (newHotel.totalPrice && newHotel.totalPrice > 0) {
-        await syncHotelToLedger(tripId, {
-          name: newHotel.name,
-          totalPrice: newHotel.totalPrice,
-          checkIn: newHotel.checkInDate,
-          checkOut: newHotel.checkOutDate,
-        });
+        // Sync hotel price to budget ledger if price was entered
+        if (newHotel.totalPrice && newHotel.totalPrice > 0) {
+          await syncHotelToLedger(tripId, {
+            name: newHotel.name,
+            totalPrice: newHotel.totalPrice,
+            checkIn: newHotel.checkInDate,
+            checkOut: newHotel.checkOutDate,
+          });
+        }
       }
 
       // Cascade hotel info into itinerary accommodation activities

@@ -25,7 +25,7 @@ import { useSpendCredits } from '@/hooks/useSpendCredits';
 import { useDNAHotelRecommendations, type DNARecommendedHotel, type IdealHotelProfile } from '@/hooks/useDNAHotelRecommendations';
 import { CREDIT_COSTS } from '@/config/pricing';
 import { saveHotelSelection } from '@/services/supabase/trips';
-import { syncHotelToLedger } from '@/services/budgetLedgerSync';
+import { syncHotelToLedger, syncMultiCityHotelsToLedger } from '@/services/budgetLedgerSync';
 import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
 
 interface FindMyHotelsDrawerProps {
@@ -161,21 +161,27 @@ export function FindMyHotelsDrawer({
       if (cityId) {
         // Multi-city: save to trip_cities table
         const { supabase } = await import('@/integrations/supabase/client');
+        const totalCostCents = Math.round((hotelData.totalPrice || 0) * 100);
         const { error } = await supabase
           .from('trip_cities')
           .update({
             hotel_selection: JSON.parse(JSON.stringify(hotelData)),
-            hotel_cost_cents: Math.round((hotelData.totalPrice || hotel.pricePerNight || 0) * 100),
+            hotel_cost_cents: totalCostCents,
           } as any)
           .eq('id', cityId);
         if (error) throw error;
+
+        // Sync to budget ledger (multi-city aggregated)
+        if (hotelData.totalPrice && hotelData.totalPrice > 0) {
+          await syncMultiCityHotelsToLedger(tripId, [{ name: hotelData.name, totalPrice: hotelData.totalPrice }]);
+        }
       } else {
         // Single-city: save to trips table
         await saveHotelSelection(tripId, hotelData);
-      }
 
-      // Sync hotel cost to budget ledger
-      await syncHotelToLedger(tripId, hotelData);
+        // Sync hotel cost to budget ledger
+        await syncHotelToLedger(tripId, hotelData);
+      }
 
       // Patch itinerary accommodation activities with hotel name/address
       try {
