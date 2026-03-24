@@ -1387,7 +1387,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
             if (hotelList.length > 1) {
               // Try to match by date range (checkInDate/checkOutDate on each hotel)
               cityHotel = hotelList.find((h: any) => {
-                const cin = h.checkInDate || h.check_in_date;
+                const cin = h.checkInDate || h.check_in_date || context.startDate; // default missing checkInDate to trip start
                 const cout = h.checkOutDate || h.check_out_date;
                 return cin && cout && dateStr >= cin && dateStr < cout;
               }) || hotelList[0];
