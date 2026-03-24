@@ -310,6 +310,10 @@ interface MultiCityDayInfo {
   // Split-stay: hotel changed from previous day within same city
   isHotelChange?: boolean;
   previousHotelName?: string;
+  // Next-leg transport details for departure day (populated on last day in city)
+  nextLegTransport?: string;
+  nextLegCity?: string;
+  nextLegTransportDetails?: Record<string, any>;
 }
 
 interface GenerationContext {
@@ -1402,6 +1406,29 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
             const isHotelChange = !!(prevEntry && prevEntry.hotelName && hotelName && prevEntry.hotelName !== hotelName && prevEntry.cityName === city.city_name);
             const previousHotelName = isHotelChange ? prevEntry!.hotelName : undefined;
 
+            // Capture next-leg transport details on last day in city for departure prompt
+            let nextLegTransport: string | undefined;
+            let nextLegCity: string | undefined;
+            let nextLegTransportDetails: Record<string, any> | undefined;
+            if (n === nights - 1) {
+              const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
+              if (nextCity) {
+                const isSameCountryNext = nextCity.country === city.country;
+                nextLegTransport = (nextCity as any).transport_type || (isSameCountryNext ? 'train' : 'flight');
+                nextLegCity = nextCity.city_name || '';
+                if ((nextCity as any).transport_details) {
+                  const rawTd = (nextCity as any).transport_details;
+                  nextLegTransportDetails = { ...rawTd };
+                  if (rawTd.operator && !rawTd.carrier) nextLegTransportDetails!.carrier = rawTd.operator;
+                  if (!rawTd.duration && rawTd.inTransitDuration) nextLegTransportDetails!.duration = rawTd.inTransitDuration;
+                  if (nextLegTransport === 'car') {
+                    if (rawTd.pickupLocation && !rawTd.departureStation) nextLegTransportDetails!.departureStation = rawTd.pickupLocation;
+                    if (rawTd.rentalCompany && !rawTd.carrier) nextLegTransportDetails!.carrier = rawTd.rentalCompany;
+                  }
+                }
+              }
+            }
+
             dayMap.push({
               cityName: city.city_name,
               country: city.country,
@@ -1418,6 +1445,9 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
               isLastDayInCity: n === nights - 1,
               isHotelChange,
               previousHotelName,
+              nextLegTransport,
+              nextLegCity,
+              nextLegTransportDetails,
             });
           }
         }
@@ -1577,7 +1607,13 @@ async function generateSingleDayWithRetry(
       effectiveHotelData,
       context.travelerDNA,
       tripCtx,
-      dayNumber
+      dayNumber,
+      dayCity0?.isLastDayInCity ? {
+        isLastDayInCity: true,
+        nextLegTransport: dayCity0.nextLegTransport,
+        nextLegCity: dayCity0.nextLegCity,
+        nextLegTransportDetails: dayCity0.nextLegTransportDetails,
+      } : undefined
     );
     
     dnaPromptSection = personaPrompt;
@@ -1987,13 +2023,19 @@ These help the traveler prepare for their trip.
           if (dayCity.isLastDayInCity) {
             // Look ahead to find the next city's transport mode
             const nextDayInfo = context.multiCityDayMap?.[dayNumber];
-            const nextLegTransport = nextDayInfo?.transportType || 'flight';
-            const nextLegCity = nextDayInfo?.cityName || 'the next destination';
+            const nextLegTransport = dayCity.nextLegTransport || nextDayInfo?.transportType || 'flight';
+            const nextLegCity = dayCity.nextLegCity || nextDayInfo?.cityName || 'the next destination';
             const isNonFlightFullGen = nextLegTransport !== 'flight';
             const transportLabelFullGen = nextLegTransport.toUpperCase();
             multiCityPrompt += `\n   📍 CHECKOUT DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). Tomorrow the traveler takes a ${transportLabelFullGen} to ${nextLegCity}. Plan morning around checkout — breakfast at/near hotel, pack and check out, then activities before departing.`;
             if (isNonFlightFullGen) {
               multiCityPrompt += `\n   ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabelFullGen}.`;
+              multiCityPrompt += `\n   ⚠️ IGNORE any flight departure data in the system prompt. This is NOT a flight departure day. Plan checkout → transfer to ${transportLabelFullGen.toLowerCase()} station → departure by ${transportLabelFullGen}.`;
+              // Inject real transport schedule if available
+              const nextTd = dayCity.nextLegTransportDetails || nextDayInfo?.nextLegTransportDetails;
+              if (nextTd?.departureTime) {
+                multiCityPrompt += `\n   🚆 CONFIRMED ${transportLabelFullGen} SCHEDULE: Departs ${nextTd.departureTime}${nextTd.departureStation ? ` from ${nextTd.departureStation}` : ''}${nextTd.carrier ? ` (${nextTd.carrier})` : ''}. Plan checkout and transfer backwards from this time.`;
+              }
             }
           }
           
@@ -7395,6 +7437,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
       let resolvedTransportDetails: any = null;
       let resolvedNextLegTransport = '';
       let resolvedNextLegCity = '';
+      let resolvedNextLegTransportDetails: any = null;
       let resolvedIsMultiCity = !!paramIsMultiCity;
       let resolvedIsLastDayInCity = !!paramIsLastDayInCity;
       let resolvedDestination = destination;
@@ -7427,6 +7470,17 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                       const isSameCountry = nextCity.country === city.country;
                       resolvedNextLegTransport = (nextCity as any).transport_type || (isSameCountry ? 'train' : 'flight');
                       resolvedNextLegCity = nextCity.city_name || '';
+                      // Capture next-leg transport details for departure-day prompt
+                      if ((nextCity as any).transport_details) {
+                        const rawNext = (nextCity as any).transport_details;
+                        resolvedNextLegTransportDetails = { ...rawNext };
+                        if (rawNext.operator && !rawNext.carrier) resolvedNextLegTransportDetails.carrier = rawNext.operator;
+                        if (!rawNext.duration && rawNext.inTransitDuration) resolvedNextLegTransportDetails.duration = rawNext.inTransitDuration;
+                        if (resolvedNextLegTransport === 'car') {
+                          if (rawNext.pickupLocation && !rawNext.departureStation) resolvedNextLegTransportDetails.departureStation = rawNext.pickupLocation;
+                          if (rawNext.rentalCompany && !rawNext.carrier) resolvedNextLegTransportDetails.carrier = rawNext.rentalCompany;
+                        }
+                      }
                     }
                   }
                   if (n === 0 && city.city_order > 0 && (city as any).transition_day_mode !== 'skip') {
@@ -8192,6 +8246,79 @@ Start the day at 10:00 AM.`;
         }
       } else if (isLastDay || resolvedIsLastDayInCity) {
         // ===== LAST DAY: DEPARTURE LOGIC WITH LUGGAGE REALITY =====
+        
+        // NEW: For mid-trip city departures, check actual transport mode FIRST
+        const isMidTripCityDeparture = resolvedIsLastDayInCity && !isLastDay;
+        const isNonFlightDeparture = isMidTripCityDeparture && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight';
+        
+        if (isNonFlightDeparture) {
+          // ===== NON-FLIGHT DEPARTURE (train/bus/ferry/car) — NO AIRPORT =====
+          const td = resolvedNextLegTransportDetails || {};
+          const modeLabel = resolvedNextLegTransport.charAt(0).toUpperCase() + resolvedNextLegTransport.slice(1);
+          const depTime = td.departureTime || '10:30';
+          const depStation = td.departureStation || `${modeLabel} Station`;
+          const carrier = td.carrier ? ` (${td.carrier})` : '';
+          const hotelNameDisplay = flightContext.hotelName || 'Hotel';
+          const checkoutTime = flightContext.hotelCheckOut || '10:00';
+          
+          // Calculate checkout time based on departure: checkout 90 min before departure
+          const depMins = parseTimeToMinutes(depTime) ?? (10 * 60 + 30);
+          const checkoutMins = Math.max(depMins - 90, 7 * 60); // At least 7:00 AM
+          const calculatedCheckout = `${String(Math.floor(checkoutMins / 60)).padStart(2, '0')}:${String(checkoutMins % 60).padStart(2, '0')}`;
+          const leaveForStationMins = Math.max(depMins - 45, checkoutMins + 15);
+          const leaveForStation = `${String(Math.floor(leaveForStationMins / 60)).padStart(2, '0')}:${String(leaveForStationMins % 60).padStart(2, '0')}`;
+          const breakfastEnd = `${String(Math.floor(Math.max(checkoutMins - 30, 7 * 60) / 60)).padStart(2, '0')}:${String(Math.max(checkoutMins - 30, 7 * 60) % 60).padStart(2, '0')}`;
+          const breakfastStart = `${String(Math.floor(Math.max(checkoutMins - 90, 7 * 60) / 60)).padStart(2, '0')}:${String(Math.max(checkoutMins - 90, 7 * 60) % 60).padStart(2, '0')}`;
+          
+          console.log(`[LastDay-Decision] NON-FLIGHT departure: mode=${resolvedNextLegTransport}, depTime=${depTime}, station=${depStation}, to=${resolvedNextLegCity}`);
+          
+          dayConstraints = `
+=== DEPARTURE DAY: ${modeLabel.toUpperCase()} TO ${(resolvedNextLegCity || 'NEXT CITY').toUpperCase()} ===
+
+⚠️ THIS IS NOT A FLIGHT DEPARTURE. DO NOT mention airports, flights, boarding gates, or security checkpoints.
+The traveler departs by ${modeLabel}${carrier}.
+
+🚆 CONFIRMED ${modeLabel.toUpperCase()} SCHEDULE:
+- Departs: ${depTime} from ${depStation}${carrier}
+- Destination: ${resolvedNextLegCity}
+${td.duration ? `- Duration: ${td.duration}` : ''}
+
+TIMELINE:
+- Breakfast: ${breakfastStart} - ${breakfastEnd}
+- Hotel Checkout: ${calculatedCheckout}
+- Leave for ${depStation}: ${leaveForStation}
+- Board ${modeLabel}: ${depTime}
+
+DEPARTURE DAY ACTIVITIES: 1-2 maximum (breakfast + farewell only)
+
+REQUIRED SEQUENCE:
+1. "Breakfast at hotel or nearby café"
+   - startTime: "${breakfastStart}", endTime: "${breakfastEnd}"
+   - category: "dining"
+   - Near hotel
+
+2. "Hotel Checkout"
+   - startTime: "${calculatedCheckout}", endTime: "${addMinutesToHHMM(calculatedCheckout, 15)}"
+   - category: "accommodation"
+   - location: { name: "${hotelNameDisplay}" }
+
+3. "Transfer to ${depStation}"
+   - startTime: "${leaveForStation}", endTime: "${addMinutesToHHMM(depTime, -10)}"
+   - category: "transport"
+   - description: "Travel to ${depStation} for ${modeLabel} departure"
+
+4. "${modeLabel} to ${resolvedNextLegCity}"
+   - startTime: "${depTime}"
+   - category: "transport"
+   - description: "Board ${modeLabel}${carrier} to ${resolvedNextLegCity}"
+
+⚠️ DO NOT schedule sightseeing or major activities. This is a departure day.
+⚠️ DO NOT mention airports or flights — the traveler is taking a ${modeLabel}.
+⚠️ CHECKOUT MUST happen BEFORE transfer to station. This is auto-enforced.
+THE TRAVELER IS LEAVING BY ${modeLabel.toUpperCase()}. Keep it simple.`;
+          
+        } else {
+        // ===== FLIGHT-BASED DEPARTURE (original logic) =====
         const hasReturnFlight = !!(flightContext.returnDepartureTime || flightContext.returnDepartureTime24);
         const hasHotelData = !!(flightContext.hotelName || flightContext.hotelAddress);
         
@@ -8576,6 +8703,7 @@ STRUCTURE:
 
 Add your flight and hotel details for a more complete last day.`;
         }
+        } // end else (flight-based departure)
       }
 
       // ===== MULTI-CITY: Per-City Boundary Constraints =====
