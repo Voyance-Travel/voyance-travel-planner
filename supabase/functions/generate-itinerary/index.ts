@@ -7961,6 +7961,11 @@ If the purpose is a specific event, plan at least ONE full day around that event
           hotelAddress: resolvedHotelOverride.address || flightContext.hotelAddress,
         };
         console.log(`[generate-day] Hotel override applied: "${resolvedHotelOverride.name}" (from per-city data)`);
+        // Hole 4 fix: Add hotel enforcement prompt for multi-city regenerations
+        if (resolvedIsMultiCity) {
+          const hotelEnforcement = `\n\n🏨 ACCOMMODATION FOR THIS DAY: "${resolvedHotelOverride.name}"${resolvedHotelOverride.address ? ` — ${resolvedHotelOverride.address}` : ''}.${resolvedHotelOverride.neighborhood ? ` Neighborhood: ${resolvedHotelOverride.neighborhood}.` : ''}\n🚫 CRITICAL: Use "${resolvedHotelOverride.name}" for ALL accommodation references. Do NOT invent or substitute a different hotel name.`;
+          flightContext = { ...flightContext, context: (flightContext.context || '') + hotelEnforcement };
+        }
       }
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
