@@ -1360,21 +1360,45 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
           // Extract per-city hotel info
           // hotel_selection can be an array [{name:...}] or a plain object {name:...}
           const rawHotel = city.hotel_selection as any;
-          const cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : rawHotel;
-          const hotelName = cityHotel?.name as string | undefined;
-          const hotelAddress = cityHotel?.address as string | undefined;
-          const hotelNeighborhood = (cityHotel?.neighborhood as string) || hotelAddress;
-          const hotelCheckIn = (cityHotel?.checkIn || cityHotel?.checkInTime || cityHotel?.check_in) as string | undefined;
-          const hotelCheckOut = (cityHotel?.checkOut || cityHotel?.checkOutTime || cityHotel?.check_out) as string | undefined;
+          // Normalize hotel list: always work with an array
+          const hotelList: any[] = Array.isArray(rawHotel) ? rawHotel : (rawHotel ? [rawHotel] : []);
           
           for (let n = 0; n < nights; n++) {
             const isTransition = n === 0 && i > 0;
             const isSameCountry = isTransition && tripCities[i - 1].country === city.country;
             const defaultTransport = isSameCountry ? 'train' : 'flight';
-            // transport_type may be stored on this city (correct) OR the previous city (legacy bug)
             const resolvedTransport = isTransition
               ? (city.transport_type || tripCities[i - 1].transport_type || defaultTransport)
               : undefined;
+
+            // Date-aware hotel resolution for split-stay within a single city
+            const dayDate = new Date(context.startDate);
+            dayDate.setDate(dayDate.getDate() + dayMap.length);
+            const dateStr = dayDate.toISOString().split('T')[0];
+
+            let cityHotel: any = null;
+            if (hotelList.length > 1) {
+              // Try to match by date range (checkInDate/checkOutDate on each hotel)
+              cityHotel = hotelList.find((h: any) => {
+                const cin = h.checkInDate || h.check_in_date;
+                const cout = h.checkOutDate || h.check_out_date;
+                return cin && cout && dateStr >= cin && dateStr < cout;
+              }) || hotelList[0];
+            } else {
+              cityHotel = hotelList[0] || null;
+            }
+
+            const hotelName = cityHotel?.name as string | undefined;
+            const hotelAddress = cityHotel?.address as string | undefined;
+            const hotelNeighborhood = (cityHotel?.neighborhood as string) || hotelAddress;
+            const hotelCheckIn = (cityHotel?.checkIn || cityHotel?.checkInTime || cityHotel?.check_in) as string | undefined;
+            const hotelCheckOut = (cityHotel?.checkOut || cityHotel?.checkOutTime || cityHotel?.check_out) as string | undefined;
+
+            // Detect hotel change within same city (split-stay)
+            const prevEntry = dayMap.length > 0 ? dayMap[dayMap.length - 1] : null;
+            const isHotelChange = !!(prevEntry && prevEntry.hotelName && hotelName && prevEntry.hotelName !== hotelName && prevEntry.cityName === city.city_name);
+            const previousHotelName = isHotelChange ? prevEntry!.hotelName : undefined;
+
             dayMap.push({
               cityName: city.city_name,
               country: city.country,
@@ -1387,8 +1411,10 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
               hotelNeighborhood,
               hotelCheckIn,
               hotelCheckOut,
-              isFirstDayInCity: n === 0,
+              isFirstDayInCity: n === 0 || isHotelChange,
               isLastDayInCity: n === nights - 1,
+              isHotelChange,
+              previousHotelName,
             });
           }
         }
