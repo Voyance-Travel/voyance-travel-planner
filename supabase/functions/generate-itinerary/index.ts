@@ -1387,7 +1387,7 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
             if (hotelList.length > 1) {
               // Try to match by date range (checkInDate/checkOutDate on each hotel)
               cityHotel = hotelList.find((h: any) => {
-                const cin = h.checkInDate || h.check_in_date;
+                const cin = h.checkInDate || h.check_in_date || context.startDate; // default missing checkInDate to trip start
                 const cout = h.checkOutDate || h.check_out_date;
                 return cin && cout && dateStr >= cin && dateStr < cout;
               }) || hotelList[0];
@@ -7474,6 +7474,8 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                       cityHotel = hotelList.find((h: any) => {
                         const cin = h.checkInDate || h.check_in_date;
                         const cout = h.checkOutDate || h.check_out_date;
+                        // If checkInDate is missing (common for first hotel), treat as matching if dateStr < checkOutDate
+                        if (!cin && cout && dateStr < cout) return true;
                         return cin && cout && dateStr >= cin && dateStr < cout;
                       }) || hotelList[0];
                     } else {
@@ -7959,6 +7961,11 @@ If the purpose is a specific event, plan at least ONE full day around that event
           hotelAddress: resolvedHotelOverride.address || flightContext.hotelAddress,
         };
         console.log(`[generate-day] Hotel override applied: "${resolvedHotelOverride.name}" (from per-city data)`);
+        // Hole 4 fix: Add hotel enforcement prompt for multi-city regenerations
+        if (resolvedIsMultiCity) {
+          const hotelEnforcement = `\n\n🏨 ACCOMMODATION FOR THIS DAY: "${resolvedHotelOverride.name}"${resolvedHotelOverride.address ? ` — ${resolvedHotelOverride.address}` : ''}.${resolvedHotelOverride.neighborhood ? ` Neighborhood: ${resolvedHotelOverride.neighborhood}.` : ''}\n🚫 CRITICAL: Use "${resolvedHotelOverride.name}" for ALL accommodation references. Do NOT invent or substitute a different hotel name.`;
+          flightContext = { ...flightContext, context: (flightContext.context || '') + hotelEnforcement };
+        }
       }
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
@@ -8280,6 +8287,11 @@ Start the day at 10:00 AM.`;
         const isNonFlightDeparture = isMidTripCityDeparture && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight';
         
         if (isNonFlightDeparture) {
+          // Hole 1 fix: Strip return flight data from context to prevent prompt conflict
+          flightContext = { ...flightContext, returnDepartureTime: undefined, returnDepartureTime24: undefined, latestLastActivityTime: undefined };
+          if (flightContext.context) {
+            flightContext.context = flightContext.context.replace(/🚨 LAST DAY TIMING CONSTRAINT:[\s\S]*?(?=\n={5,}|\n🚨|$)/, '');
+          }
           // ===== NON-FLIGHT DEPARTURE (train/bus/ferry/car) — NO AIRPORT =====
           const td = resolvedNextLegTransportDetails || {};
           const modeLabel = resolvedNextLegTransport.charAt(0).toUpperCase() + resolvedNextLegTransport.slice(1);
