@@ -10987,8 +10987,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
           if (!hasCheckout) {
             // Resolve hotel name
-            let checkoutHotelName = paramHotelOverride?.name || flightContext.hotelName || 'Hotel';
-            let checkoutHotelAddress = paramHotelOverride?.address || flightContext.hotelAddress || '';
+            let checkoutHotelName = resolvedHotelOverride?.name || flightContext.hotelName || 'Hotel';
+            let checkoutHotelAddress = resolvedHotelOverride?.address || flightContext.hotelAddress || '';
 
             // For multi-city, try to load hotel from trip_cities (reuse same logic as check-in)
             if (tripId && resolvedIsMultiCity && checkoutHotelName === 'Hotel') {
