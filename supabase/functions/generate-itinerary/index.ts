@@ -7448,7 +7448,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
         try {
           const { data: tripCities } = await supabase
             .from('trip_cities')
-            .select('city_name, country, city_order, nights, days_total, transition_day_mode, transport_type, transport_details')
+            .select('city_name, country, city_order, nights, days_total, transition_day_mode, transport_type, transport_details, hotel_selection')
             .eq('trip_id', tripId)
             .order('city_order', { ascending: true });
 
