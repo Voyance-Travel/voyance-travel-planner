@@ -1993,6 +1993,14 @@ These help the traveler prepare for their trip.
               multiCityPrompt += `\n   ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabelFullGen}.`;
             }
           }
+          
+          // Hotel change within same city (split-stay)
+          if ((dayCity as any).isHotelChange && (dayCity as any).previousHotelName) {
+            const prevHotel = (dayCity as any).previousHotelName;
+            multiCityPrompt += `\n   📍 HOTEL CHANGE: Traveler checks out of "${prevHotel}" and checks into "${dayCity.hotelName}".`;
+            multiCityPrompt += `\n   Plan checkout from "${prevHotel}" in the morning (by ${checkOutTime}), then check-in at "${dayCity.hotelName}" (from ${checkInTime}), then afternoon/evening activities.`;
+            multiCityPrompt += `\n   Include BOTH a checkout activity for "${prevHotel}" AND a check-in activity for "${dayCity.hotelName}".`;
+          }
         }
         
         if (isTransitionDay && dayCity.transitionFrom) {
