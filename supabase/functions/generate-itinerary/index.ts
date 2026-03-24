@@ -1387,10 +1387,17 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
             if (hotelList.length > 1) {
               // Try to match by date range (checkInDate/checkOutDate on each hotel)
               cityHotel = hotelList.find((h: any) => {
-                const cin = h.checkInDate || h.check_in_date || context.startDate; // default missing checkInDate to trip start
+                const cin = h.checkInDate || h.check_in_date || context.startDate;
                 const cout = h.checkOutDate || h.check_out_date;
                 return cin && cout && dateStr >= cin && dateStr < cout;
-              }) || hotelList[0];
+              });
+              // Fix A: If no hotel matched by date (dates missing), infer by evenly splitting nights
+              if (!cityHotel) {
+                const daysPerHotel = Math.max(1, Math.floor(nights / hotelList.length));
+                const hotelIndex = Math.min(Math.floor(n / daysPerHotel), hotelList.length - 1);
+                cityHotel = hotelList[hotelIndex];
+                console.log(`[Stage 1] Split-stay date inference: day ${n} of ${nights} in ${city.city_name} → hotel[${hotelIndex}] "${cityHotel?.name}"`);
+              }
             } else {
               cityHotel = hotelList[0] || null;
             }
