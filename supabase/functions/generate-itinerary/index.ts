@@ -1562,11 +1562,16 @@ async function generateSingleDayWithRetry(
     };
     
     const flightData = context.flightData || { hasOutboundFlight: false, hasReturnFlight: false } as any;
-    const hotelData = context.hotelData || { hasHotel: false } as any;
+    
+    // Per-day hotel override: use multi-city dayMap hotel when available (fixes wrong-hotel bug)
+    const dayCity0 = context.multiCityDayMap?.[dayNumber - 1];
+    const effectiveHotelData = (dayCity0?.hotelName)
+      ? { hasHotel: true, hotelName: dayCity0.hotelName, hotelAddress: dayCity0.hotelAddress, hotelNeighborhood: dayCity0.hotelNeighborhood, checkInTime: dayCity0.hotelCheckIn || '15:00', checkOutTime: dayCity0.hotelCheckOut || '11:00' }
+      : (context.hotelData || { hasHotel: false } as any);
     
     const { personaPrompt, dayConstraints } = buildDayPrompt(
       flightData,
-      hotelData,
+      effectiveHotelData,
       context.travelerDNA,
       tripCtx,
       dayNumber
