@@ -1387,10 +1387,17 @@ async function prepareContext(supabase: any, tripId: string, userId?: string, di
             if (hotelList.length > 1) {
               // Try to match by date range (checkInDate/checkOutDate on each hotel)
               cityHotel = hotelList.find((h: any) => {
-                const cin = h.checkInDate || h.check_in_date || context.startDate; // default missing checkInDate to trip start
+                const cin = h.checkInDate || h.check_in_date || context.startDate;
                 const cout = h.checkOutDate || h.check_out_date;
                 return cin && cout && dateStr >= cin && dateStr < cout;
-              }) || hotelList[0];
+              });
+              // Fix A: If no hotel matched by date (dates missing), infer by evenly splitting nights
+              if (!cityHotel) {
+                const daysPerHotel = Math.max(1, Math.floor(nights / hotelList.length));
+                const hotelIndex = Math.min(Math.floor(n / daysPerHotel), hotelList.length - 1);
+                cityHotel = hotelList[hotelIndex];
+                console.log(`[Stage 1] Split-stay date inference: day ${n} of ${nights} in ${city.city_name} → hotel[${hotelIndex}] "${cityHotel?.name}"`);
+              }
             } else {
               cityHotel = hotelList[0] || null;
             }
@@ -2027,7 +2034,7 @@ These help the traveler prepare for their trip.
             const nextLegCity = dayCity.nextLegCity || nextDayInfo?.cityName || 'the next destination';
             const isNonFlightFullGen = nextLegTransport !== 'flight';
             const transportLabelFullGen = nextLegTransport.toUpperCase();
-            multiCityPrompt += `\n   📍 CHECKOUT DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). Tomorrow the traveler takes a ${transportLabelFullGen} to ${nextLegCity}. Plan morning around checkout — breakfast at/near hotel, pack and check out, then activities before departing.`;
+            multiCityPrompt += `\n   📍 CHECKOUT & DEPARTURE DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). The traveler departs TODAY by ${transportLabelFullGen} to ${nextLegCity}. Plan morning around checkout — breakfast at/near hotel, pack and check out, then transfer to ${isNonFlightFullGen ? transportLabelFullGen.toLowerCase() + ' station' : 'airport'} and depart.`;
             if (isNonFlightFullGen) {
               multiCityPrompt += `\n   ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabelFullGen}.`;
               multiCityPrompt += `\n   ⚠️ IGNORE any flight departure data in the system prompt. This is NOT a flight departure day. Plan checkout → transfer to ${transportLabelFullGen.toLowerCase()} station → departure by ${transportLabelFullGen}.`;
@@ -7474,10 +7481,16 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                       cityHotel = hotelList.find((h: any) => {
                         const cin = h.checkInDate || h.check_in_date;
                         const cout = h.checkOutDate || h.check_out_date;
-                        // If checkInDate is missing (common for first hotel), treat as matching if dateStr < checkOutDate
                         if (!cin && cout && dateStr < cout) return true;
                         return cin && cout && dateStr >= cin && dateStr < cout;
-                      }) || hotelList[0];
+                      });
+                      // Fix A: If no hotel matched by date (dates missing), infer by evenly splitting nights
+                      if (!cityHotel) {
+                        const daysPerHotel = Math.max(1, Math.floor(cityNights / hotelList.length));
+                        const hotelIndex = Math.min(Math.floor(n / daysPerHotel), hotelList.length - 1);
+                        cityHotel = hotelList[hotelIndex];
+                        console.log(`[generate-day] Split-stay date inference: day ${n} of ${cityNights} → hotel[${hotelIndex}] "${cityHotel?.name}"`);
+                      }
                     } else {
                       cityHotel = hotelList[0] || null;
                     }
