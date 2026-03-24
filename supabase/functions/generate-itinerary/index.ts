@@ -7481,10 +7481,16 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                       cityHotel = hotelList.find((h: any) => {
                         const cin = h.checkInDate || h.check_in_date;
                         const cout = h.checkOutDate || h.check_out_date;
-                        // If checkInDate is missing (common for first hotel), treat as matching if dateStr < checkOutDate
                         if (!cin && cout && dateStr < cout) return true;
                         return cin && cout && dateStr >= cin && dateStr < cout;
-                      }) || hotelList[0];
+                      });
+                      // Fix A: If no hotel matched by date (dates missing), infer by evenly splitting nights
+                      if (!cityHotel) {
+                        const daysPerHotel = Math.max(1, Math.floor(cityNights / hotelList.length));
+                        const hotelIndex = Math.min(Math.floor(n / daysPerHotel), hotelList.length - 1);
+                        cityHotel = hotelList[hotelIndex];
+                        console.log(`[generate-day] Split-stay date inference: day ${n} of ${cityNights} → hotel[${hotelIndex}] "${cityHotel?.name}"`);
+                      }
                     } else {
                       cityHotel = hotelList[0] || null;
                     }
