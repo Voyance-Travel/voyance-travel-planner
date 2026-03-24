@@ -2017,13 +2017,19 @@ These help the traveler prepare for their trip.
           if (dayCity.isLastDayInCity) {
             // Look ahead to find the next city's transport mode
             const nextDayInfo = context.multiCityDayMap?.[dayNumber];
-            const nextLegTransport = nextDayInfo?.transportType || 'flight';
-            const nextLegCity = nextDayInfo?.cityName || 'the next destination';
+            const nextLegTransport = dayCity.nextLegTransport || nextDayInfo?.transportType || 'flight';
+            const nextLegCity = dayCity.nextLegCity || nextDayInfo?.cityName || 'the next destination';
             const isNonFlightFullGen = nextLegTransport !== 'flight';
             const transportLabelFullGen = nextLegTransport.toUpperCase();
             multiCityPrompt += `\n   📍 CHECKOUT DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). Tomorrow the traveler takes a ${transportLabelFullGen} to ${nextLegCity}. Plan morning around checkout — breakfast at/near hotel, pack and check out, then activities before departing.`;
             if (isNonFlightFullGen) {
               multiCityPrompt += `\n   ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabelFullGen}.`;
+              multiCityPrompt += `\n   ⚠️ IGNORE any flight departure data in the system prompt. This is NOT a flight departure day. Plan checkout → transfer to ${transportLabelFullGen.toLowerCase()} station → departure by ${transportLabelFullGen}.`;
+              // Inject real transport schedule if available
+              const nextTd = dayCity.nextLegTransportDetails || nextDayInfo?.nextLegTransportDetails;
+              if (nextTd?.departureTime) {
+                multiCityPrompt += `\n   🚆 CONFIRMED ${transportLabelFullGen} SCHEDULE: Departs ${nextTd.departureTime}${nextTd.departureStation ? ` from ${nextTd.departureStation}` : ''}${nextTd.carrier ? ` (${nextTd.carrier})` : ''}. Plan checkout and transfer backwards from this time.`;
+              }
             }
           }
           
