@@ -7472,7 +7472,7 @@ async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<voi
                       // Date-aware resolution for split-stay within a city
                       const dateStr = typeof date === 'string' ? date.split('T')[0] : date;
                       cityHotel = hotelList.find((h: any) => {
-                        const cin = h.checkInDate || h.check_in_date || (date ? undefined : undefined); // fallback below
+                        const cin = h.checkInDate || h.check_in_date;
                         const cout = h.checkOutDate || h.check_out_date;
                         // If checkInDate is missing (common for first hotel), treat as matching if dateStr < checkOutDate
                         if (!cin && cout && dateStr < cout) return true;
