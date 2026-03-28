@@ -3316,6 +3316,43 @@ async function generateItineraryAI(
     }
   }
 
+  // Post-generation: fix breakfast at wrong hotel
+  const HOTEL_BRAND_KEYWORDS = /\b(hotel|palace|hyatt|marriott|hilton|ritz|aman|mandarin|peninsula|shangri|intercontinental|westin|sheraton|conrad|waldorf|st\.?\s*regis|four\s*seasons|park\s*hyatt|andaz|w\s+hotel|rosewood|fairmont|langham|sofitel|oberoi|raffles|banyan\s*tree|capella|edition)\b/i;
+  const primaryHotelName = context.hotelData?.hotelName || context.multiCityDayMap?.[0]?.hotelName;
+  if (primaryHotelName) {
+    const hotelNameLower = primaryHotelName.toLowerCase();
+    // Extract last 2 significant words for matching (e.g. "Four Seasons Hotel Tokyo at Otemachi" → "at otemachi")
+    const hotelNameParts = hotelNameLower.split(/\s+/).filter(w => w.length > 1);
+    const hotelMatchFragment = hotelNameParts.slice(-2).join(' ');
+    
+    for (const day of days) {
+      // For multi-city trips, use per-day hotel if available
+      const dayCity = context.multiCityDayMap?.[day.dayNumber - 1];
+      const dayHotelName = dayCity?.hotelName || primaryHotelName;
+      const dayHotelLower = dayHotelName.toLowerCase();
+      const dayHotelParts = dayHotelLower.split(/\s+/).filter((w: string) => w.length > 1);
+      const dayHotelMatch = dayHotelParts.slice(-2).join(' ');
+      
+      for (const act of day.activities || []) {
+        const title = (act.title || '').toLowerCase();
+        const isBreakfast = title.includes('breakfast') && 
+          (act.category || '').toLowerCase() === 'dining';
+        if (!isBreakfast) continue;
+        
+        const mentionsOtherHotel = HOTEL_BRAND_KEYWORDS.test(title) && 
+          !title.includes(dayHotelMatch);
+        
+        if (mentionsOtherHotel) {
+          const oldTitle = act.title;
+          act.title = `Breakfast at ${dayHotelName}`;
+          act.description = `Start the morning at your hotel's restaurant.`;
+          if (act.location) act.location.name = dayHotelName;
+          console.log(`[Breakfast fix] Changed "${oldTitle}" → "${act.title}"`);
+        }
+      }
+    }
+  }
+
   // Apply fallback costs for any missing values
   const fallbackCosts: Record<string, number> = {
     sightseeing: 15,
@@ -8727,7 +8764,7 @@ TIMELINE:
 DEPARTURE DAY ACTIVITIES: 1-2 maximum (breakfast + farewell only)
 
 REQUIRED SEQUENCE:
-1. "Breakfast at hotel or nearby café"
+1. "Breakfast at ${effectiveHotelData?.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - startTime: "${breakfastStart}", endTime: "${breakfastEnd}"
    - category: "dining"
    - Near hotel
@@ -8863,7 +8900,7 @@ LUGGAGE REALITY:
 DEPARTURE DAY ACTIVITIES: 1 maximum (near hotel only)
 
 ⚠️ CRITICAL SEQUENCE - CHECKOUT MUST HAPPEN BEFORE AIRPORT TRANSFER:
-1. "Breakfast at hotel or nearby café"
+1. "Breakfast at ${effectiveHotelData?.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - startTime: "${breakfastStart}", endTime: "${breakfastEnd}"
    - category: "dining"
    - NEAR HOTEL
@@ -9058,9 +9095,9 @@ TIMELINE:
 DEPARTURE DAY ACTIVITIES: 2-3 activities (breakfast + 1-2 farewell experiences)
 
 REALISTIC STRUCTURE:
-1. "Breakfast at hotel or nearby café"
+1. "Breakfast at ${effectiveHotelData?.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - 08:30 - 09:30
-   - Near hotel
+   - At hotel restaurant
 
 2. "Farewell [stroll/café/experience] in [neighborhood]"
    - 09:30 - 10:30
@@ -9352,7 +9389,7 @@ ${dayMealPolicy.isFullExplorationDay ? 'FULL EXPLORATION DAY' : dayMealPolicy.da
 This day must be a COMPLETE itinerary from morning to night. Every hour accounted for.
 
 REQUIRED DAY STRUCTURE:
-${dayMealPolicy.requiredMeals.includes('breakfast') ? '1. BREAKFAST (category: "dining") — Near hotel, real restaurant name, ~price, walking distance' : ''}
+${dayMealPolicy.requiredMeals.includes('breakfast') ? `1. BREAKFAST (category: "dining") — At the hotel's own restaurant (preferred) or a real café nearby. NEVER at a DIFFERENT hotel's restaurant. Use the hotel name: ${effectiveHotelData?.hotelName || '[your hotel]'}. ~price, walking distance` : ''}
 2. TRANSIT between every pair of consecutive activities (category: "transport")
    - Include mode (${resolvedTransportModes.length > 0 ? resolvedTransportModes.join('/') : 'walk/taxi/metro/bus'}), duration, cost, route details
    - 10+ minute walks or any paid transit = separate activity entry

@@ -1132,13 +1132,13 @@ VIOLATIONS:
 - Generic tourist restaurants = VIOLATION
 - Skipping local specialties = VIOLATION
 - Fast food = VIOLATION
-- Hotel breakfast = VIOLATION (unless exceptional)
+- Hotel breakfast at budget/chain hotels = VIOLATION (unless exceptional). Luxury hotel restaurants (Four Seasons, Aman, Park Hyatt, Ritz-Carlton, Mandarin Oriental, Peninsula, etc.) are ACCEPTABLE and often PREFERRED for breakfast.
 `,
     avoid: [
       'Tourist trap restaurants',
       'Chain restaurants',
       'Skipping meals',
-      'Hotel breakfast (usually)',
+      'Hotel breakfast at budget/chain hotels (luxury hotel restaurants are OK)',
       'International cuisine in a local destination',
       'Fast food'
     ],
