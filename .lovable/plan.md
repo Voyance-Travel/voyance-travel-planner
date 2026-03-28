@@ -1,51 +1,62 @@
 
 
-## Fix Generic "Meal at a X" Titles in Itinerary
+## Fix: Departure Transport Card Logic
 
-### Root Cause
+### Current state (3 paths, each with issues)
 
-There are **two** meal guard systems that inject fallback meals when the AI misses one:
+```text
+Path 1: Transition Day     → reads trip_cities.transport_details    ✅ works
+Path 2: Departure Day      → reads next city's transport_details    ✅ works  
+Path 3: Final Departure     → reads flightSelection return leg      ⚠️ broken
+```
 
-1. **Server-side** (`day-validation.ts` line 838): Has access to a restaurant pool and verified_venues. Falls back to generic `"Breakfast at a café near your hotel"` only when both pools are empty.
+Path 3 problems:
+- Transport type detected via fragile heuristic (has flight number → flight, else → train). Ignores `transportMode` field that `buildTransportSelection()` actually saves
+- AI-generated "Transfer to Airport" and "Departure from Airport" activities duplicate the synthetic card
+- No card at all if `flightSelection` is missing (single-city, no transport entered)
 
-2. **Client-side** (`mealGuard.ts` line 144): Runs on every save (via `itineraryActionExecutor.ts` and `itineraryAPI.ts`). Has **zero** access to restaurant pools — always produces generic names like `"Lunch at a neighborhood restaurant"`.
+### Fixes
 
-**221 out of 3,112 dining activities** (7%) in production have these generic fallback names. The client-side guard is the primary offender because it fires on every drag-drop, edit, or regeneration save.
+**1. Read `transportMode` from `flightSelection` instead of guessing** (EditorialItinerary.tsx ~line 1737)
 
-### The Fix (3 parts)
+Currently:
+```js
+const hasFlightNum = !!(flightNum || (carrier && !carrier.toLowerCase().includes('train')));
+const tType = hasFlightNum ? 'flight' : 'train';
+```
 
-**Part 1: Client-side guard — query real venues before falling back**
+Fix: Check `flightSelection.transportMode` first (set by `buildTransportSelection`), then fall back to the heuristic:
+```js
+const tType = flightSelection.transportMode 
+  || (flightNum ? 'flight' : 'train');
+```
 
-File: `src/utils/mealGuard.ts`
+**2. Deduplicate AI-generated departure activities against synthetic card**
 
-- Add an async variant `enforceItineraryMealComplianceAsync` that accepts `supabase` client
-- Before injecting a generic fallback, query `verified_venues` table for the destination city (same approach as server-side line 11210-11234)
-- Use real venue names when available; only fall back to generic when the query returns nothing
-- Mark any remaining generic fallbacks with `needsRefinement: true` (already done)
+After injecting the synthetic final departure card, filter out AI-generated activities that are clearly transport/departure duplicates (titles matching "Transfer to Airport", "Departure from", etc.). The current trimming logic only removes by time cutoff — it doesn't detect semantic duplicates.
 
-**Part 2: Wire up the async guard in callers**
+Add a dedup pass (~line 1810):
+```js
+const DEPARTURE_DUPES = ['transfer to airport', 'departure from', 'head to airport', 'airport transfer'];
+updatedActivities = updatedActivities.filter(act => {
+  if ((act as any).__syntheticFinalDeparture) return true; // keep the card
+  const t = (act.title || '').toLowerCase();
+  return !DEPARTURE_DUPES.some(kw => t.includes(kw));
+});
+```
 
-Files: `src/services/itineraryActionExecutor.ts`, `src/services/itineraryAPI.ts`
+**3. Handle train/bus/ferry departure — strip airport references**
 
-- Switch from `enforceItineraryMealCompliance` (sync) to `enforceItineraryMealComplianceAsync` (async)
-- Pass the supabase client and destination city to the guard
-
-**Part 3: Ensure needsRefinement meals show a swap CTA**
-
-Verify the UI already renders a "Find a real restaurant" button for `needsRefinement` activities. If not, add it to the activity card component.
-
-### What this does NOT change
-
-- The server-side guard already has pool access and works correctly
-- AI prompt instructions stay the same (they already demand real names)
-- The 221 existing generic entries in production won't auto-fix, but users can tap "swap" to replace them
+When `transportMode` is train/bus/ferry, the dedup list should also catch "Transfer to Narita Airport" etc. The synthetic card will show the correct station/terminal instead.
 
 ### Files changed
 
 | File | Change |
 |------|--------|
-| `src/utils/mealGuard.ts` | Add async variant with `verified_venues` query |
-| `src/services/itineraryActionExecutor.ts` | Use async guard, pass supabase + destination |
-| `src/services/itineraryAPI.ts` | Use async guard, pass supabase + destination |
-| Activity card component (if needed) | Ensure swap CTA for `needsRefinement` |
+| `src/components/itinerary/EditorialItinerary.tsx` | Read `transportMode`, add dedup filter, strip airport activities for non-flight departures |
+
+### What this does NOT change
+- Paths 1 and 2 (transition/departure days) — these work correctly
+- The AI prompt (server-side generation already handles transport correctly)
+- `buildTransportSelection()` — already saves `transportMode`
 
