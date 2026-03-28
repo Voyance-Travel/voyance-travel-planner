@@ -8764,7 +8764,7 @@ TIMELINE:
 DEPARTURE DAY ACTIVITIES: 1-2 maximum (breakfast + farewell only)
 
 REQUIRED SEQUENCE:
-1. "Breakfast at hotel or nearby café"
+1. "Breakfast at ${effectiveHotelData?.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - startTime: "${breakfastStart}", endTime: "${breakfastEnd}"
    - category: "dining"
    - Near hotel
@@ -8900,7 +8900,7 @@ LUGGAGE REALITY:
 DEPARTURE DAY ACTIVITIES: 1 maximum (near hotel only)
 
 ⚠️ CRITICAL SEQUENCE - CHECKOUT MUST HAPPEN BEFORE AIRPORT TRANSFER:
-1. "Breakfast at hotel or nearby café"
+1. "Breakfast at ${effectiveHotelData?.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - startTime: "${breakfastStart}", endTime: "${breakfastEnd}"
    - category: "dining"
    - NEAR HOTEL
@@ -9095,9 +9095,9 @@ TIMELINE:
 DEPARTURE DAY ACTIVITIES: 2-3 activities (breakfast + 1-2 farewell experiences)
 
 REALISTIC STRUCTURE:
-1. "Breakfast at hotel or nearby café"
+1. "Breakfast at ${effectiveHotelData?.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - 08:30 - 09:30
-   - Near hotel
+   - At hotel restaurant
 
 2. "Farewell [stroll/café/experience] in [neighborhood]"
    - 09:30 - 10:30
