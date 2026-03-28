@@ -12203,6 +12203,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           }
         }
 
+        // End post-processing phase
+        if (innerTimer) {
+          innerTimer.endPhase(`post_processing_day_${dayNumber}`);
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
