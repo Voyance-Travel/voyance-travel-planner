@@ -874,3 +874,98 @@ export function enforceRequiredMealsFinalGuard(
 
   return { activities: result, injectedMeals: missing, alreadyCompliant: false };
 }
+
+// =============================================================================
+// TIMING CONSTRAINT ENFORCEMENT
+// Shifts overlapping activities forward and fixes meal-label mismatches.
+// =============================================================================
+
+function minutesToTimeString24(totalMinutes: number): string {
+  const clamped = Math.min(totalMinutes, 23 * 60 + 45); // cap at 23:45
+  const h = Math.floor(clamped / 60) % 24;
+  const m = clamped % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+const ANCHORED_CATEGORIES = new Set([
+  'transport', 'transit', 'accommodation', 'flight', 'hotel',
+]);
+
+/**
+ * Enforce minimum 15-minute gaps between activities and fix meal-label
+ * mismatches (e.g. "Dinner" before 17:00 → "Lunch").
+ *
+ * Operates on `StrictActivityMinimal[]` using 24h `HH:MM` times.
+ */
+export function enforceTimingConstraints(
+  activities: StrictActivityMinimal[],
+): StrictActivityMinimal[] {
+  if (!activities || activities.length < 2) return activities;
+
+  const MIN_GAP = 15; // minutes
+
+  // Sort by startTime
+  const sorted = [...activities].sort((a, b) => {
+    const aMin = parseTimeToMinutesLocal(a.startTime) ?? 0;
+    const bMin = parseTimeToMinutesLocal(b.startTime) ?? 0;
+    return aMin - bMin;
+  });
+
+  // --- Pass 1: shift overlapping activities forward ---
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+
+    // Skip anchored categories (transport, accommodation)
+    const currCat = (curr.category || '').toLowerCase();
+    if (ANCHORED_CATEGORIES.has(currCat)) continue;
+
+    const prevEnd = parseTimeToMinutesLocal(prev.endTime);
+    const currStart = parseTimeToMinutesLocal(curr.startTime);
+    const currEnd = parseTimeToMinutesLocal(curr.endTime);
+
+    if (prevEnd === null || currStart === null || currEnd === null) continue;
+
+    const requiredStart = prevEnd + MIN_GAP;
+    if (currStart < requiredStart) {
+      const duration = Math.max(currEnd - currStart, 15); // preserve duration, min 15m
+      const newStart = Math.min(requiredStart, 23 * 60 + 30); // don't push past 23:30
+      const newEnd = Math.min(newStart + duration, 23 * 60 + 45);
+
+      console.log(
+        `[TimingEnforce] Shifted "${curr.title}" ${minutesToTimeString24(currStart)}→${minutesToTimeString24(newStart)} (overlap with "${prev.title}" ending ${minutesToTimeString24(prevEnd)})`,
+      );
+
+      sorted[i] = {
+        ...curr,
+        startTime: minutesToTimeString24(newStart),
+        endTime: minutesToTimeString24(newEnd),
+      };
+    }
+  }
+
+  // --- Pass 2: fix meal-label mismatches ---
+  for (let i = 0; i < sorted.length; i++) {
+    const act = sorted[i];
+    const startMin = parseTimeToMinutesLocal(act.startTime);
+    if (startMin === null) continue;
+
+    const titleLower = (act.title || '').toLowerCase();
+
+    // "Dinner" before 17:00 → "Lunch"
+    if (/\bdinner\b/.test(titleLower) && startMin < 17 * 60) {
+      const newTitle = act.title.replace(/\b[Dd]inner\b/, (m) => m[0] === 'D' ? 'Lunch' : 'lunch');
+      console.log(`[TimingEnforce] Relabeled "${act.title}" → "${newTitle}" (dinner before 17:00)`);
+      sorted[i] = { ...act, title: newTitle };
+    }
+
+    // "Nightcap" before 20:00 → "Cocktails"
+    if (/\bnightcap\b/.test(titleLower) && startMin < 20 * 60) {
+      const newTitle = act.title.replace(/\b[Nn]ightcap\b/, (m) => m[0] === 'N' ? 'Cocktails' : 'cocktails');
+      console.log(`[TimingEnforce] Relabeled "${act.title}" → "${newTitle}" (nightcap before 20:00)`);
+      sorted[i] = { ...act, title: newTitle };
+    }
+  }
+
+  return sorted;
+}

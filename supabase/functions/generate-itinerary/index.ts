@@ -1550,6 +1550,7 @@ import {
   sanitizeActivityTitles,
   detectMealSlots,
   enforceRequiredMealsFinalGuard,
+  enforceTimingConstraints,
   isChainRestaurant,
   filterChainRestaurants,
   type DayValidationResult,
@@ -3145,6 +3146,9 @@ Generate activities for this day following ALL constraints above.`;
 
         // POST-VALIDATION: Strip keyword-stuffed activity titles
         generatedDay = sanitizeActivityTitles(generatedDay);
+
+        // POST-VALIDATION: Enforce minimum gaps and fix meal-time labels
+        generatedDay.activities = enforceTimingConstraints(generatedDay.activities || []);
 
         // POST-VALIDATION: Strip chain restaurants from dining activities
         {
