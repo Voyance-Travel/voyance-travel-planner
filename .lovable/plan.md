@@ -1,39 +1,48 @@
 
 
-## Table-Driven Cost Architecture — Implemented
+## Fix: Budget and Payments Tab Alignment
 
-### What Changed
+### Current State
 
-**Phase 1: Seeded cost_reference** — 300+ rows across 14 destinations (Hong Kong, Tokyo, Shanghai, Beijing, Austin, Barcelona, Paris, London, Bangkok, New York, Rome, Dubai, Singapore) plus `_global` fallback rows. Each city has dining, transport, activity, nightlife, and shopping categories with low/mid/high USD ranges.
+Both **BudgetTab** and **PaymentsTab** already use `useTripFinancialSnapshot` which reads from the `activity_costs` table — they share the same data source. Many of the fixes in the prompt are **already implemented**:
 
-**Phase 2: Generation pipeline** — Rewrote Phase 4 in `generate-itinerary/index.ts` to:
-- Look up `cost_reference` by `(destination_city, category, subcategory)` instead of using AI-hallucinated costs
-- Select `cost_low/mid/high_usd` based on the user's budget tier
-- Fall back to global defaults, then hardcoded minimums, only when no reference exists
-- Round all costs to nearest $5 for clean display (no more $15.25 dinners)
-- Link each `activity_costs` row to its `cost_reference_id` for traceability
+- **Fix 2** (dual-sync): `syncBudgetFromDays` already syncs to `activity_costs` (lines 1394-1448)
+- **Fix 3** (flight/hotel on load): Already syncs flight/hotel to `activity_costs` on page load (lines 1458-1486)
+- **Fix 4** (chat sync): `ItineraryAssistant.tsx` already syncs to `activity_costs` after chat edits (lines 449-484)
 
-**Phase 2b: Prompt update** — Removed "PRICES ON EVERYTHING" instructions from `prompt-library.ts`. AI no longer estimates costs; costs are assigned post-generation from the reference table.
+### Remaining Issue
 
-**Phase 2c: Budget scaling** — Budget scaling now rounds to nearest $5 instead of nearest cent.
+**PaymentsTab line 225** — when `activity_costs` table is empty or stale (e.g., fresh trip load before sync completes), `financialSnapshot.tripTotalCents` returns 0. The current code:
 
-**Phase 3: Trip Summary header** — `EditorialItinerary.tsx` now uses the DB financial snapshot as the sole source of truth. JS fallback only runs while snapshot is loading.
+```typescript
+const estimatedTotal = financialSnapshot.loading ? payableTotalCents : financialSnapshot.tripTotalCents;
+```
 
-**Phase 4: Budget Coach guardrails** — Added explicit rules to budget-coach system prompt: never modify costs directly, only suggest swaps, all costs must come from reference pricing data.
+Shows `$0` total once loading finishes, even though `payableItems` correctly lists flights, hotels, and activities with real costs. The user sees line items totaling thousands of dollars but a "$0 Trip Total" header.
 
-### Remaining Work
+### Fix
 
-| Item | Status |
-|------|--------|
-| Backfill existing trips with corrected costs | Todo — invoke `backfill-activity-costs` edge function |
-| Remove legacy `estimateCostSync()` paths | Todo — clean up `usePayableItems.ts`, `EditorialItinerary.tsx`, `cost-estimation.ts` |
+**File: `src/components/itinerary/PaymentsTab.tsx` — line 225**
 
-### Files Changed
+Change:
+```typescript
+const estimatedTotal = financialSnapshot.loading ? payableTotalCents : financialSnapshot.tripTotalCents;
+```
+
+To:
+```typescript
+const estimatedTotal = financialSnapshot.loading
+  ? payableTotalCents
+  : (financialSnapshot.tripTotalCents > 0 ? financialSnapshot.tripTotalCents : payableTotalCents);
+```
+
+When the snapshot loads successfully with data, use it (canonical source). When it returns 0 (empty `activity_costs`), fall back to `payableTotalCents` — the sum of visible line items — so the total always matches what the user sees.
+
+This is a one-line change that ensures Budget and Payments tabs agree when data is present, and prevents a $0 display when `activity_costs` hasn't been populated yet.
+
+### Files changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/index.ts` | Rewrote Phase 4 cost-writing to use cost_reference lookups |
-| `supabase/functions/generate-itinerary/prompt-library.ts` | Removed cost estimation instructions from AI prompt |
-| `supabase/functions/budget-coach/index.ts` | Hardened system prompt with cost guardrails |
-| `src/components/itinerary/EditorialItinerary.tsx` | Trip Summary uses DB snapshot only |
-| `cost_reference` table | Seeded with 300+ rows for 14 destinations |
+| `src/components/itinerary/PaymentsTab.tsx` | Add fallback to `payableTotalCents` when snapshot returns 0 |
+
