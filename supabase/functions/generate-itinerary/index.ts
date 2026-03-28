@@ -1647,7 +1647,8 @@ async function generateSingleDayWithRetry(
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
     '13. **HOTEL FIDELITY — CRITICAL**: If a specific hotel name and address are provided in the accommodation section, you MUST use that EXACT hotel name for ALL accommodation activities (check-in, return to hotel, freshen up, checkout, etc.). Do NOT invent, substitute, or suggest a different hotel. The user has already booked their accommodation.',
     '14. **NO KEYWORD STUFFING**: Activity titles must be concise (max 8 words). NEVER pad titles with synonym lists of location types (e.g., "borough town place locale district quarter sector area"). Use the specific venue or activity name only.',
-    !isFirstDay ? '15. **NO CHECK-IN ON NON-ARRIVAL DAYS**: On days after Day 1 (or after the first day at a new hotel), do NOT title accommodation activities as "Check-in at [Hotel]". Use "Return to [Hotel]" or "Freshen up at [Hotel]" instead. "Check-in" implies arrival — use it only on the day the traveler first arrives at that hotel.' : '',
+    '15. **ALL REAL VENUE NAMES — CRITICAL**: ALL activities must use REAL, SPECIFIC venue names — not generic descriptions. This applies to ALL categories (wellness, cafés, nightlife, shopping, etc.), not just dining. WRONG: "Boutique Wellness in Omotesando". WRONG: "a kissaten". WRONG: "Local Spa". RIGHT: "Omotesando Koffee". RIGHT: "Kayabacho Sabō". RIGHT: "HIGASHIYA GINZA".',
+    !isFirstDay ? '16. **NO CHECK-IN ON NON-ARRIVAL DAYS**: On days after Day 1 (or after the first day at a new hotel), do NOT title accommodation activities as "Check-in at [Hotel]". Use "Return to [Hotel]" or "Freshen up at [Hotel]" instead. "Check-in" implies arrival — use it only on the day the traveler first arrives at that hotel.' : '',
   ].filter(Boolean).join('\n');
 
   // Build list of previous experience types for stricter rejection
@@ -2543,6 +2544,39 @@ Generate activities for this day following ALL constraints above.`;
                 };
               }
             }
+          }
+        }
+      }
+
+      // ==========================================================================
+      // FORWARD-REFERENCE SANITIZATION: Strip hallucinated "tomorrow's X adventure"
+      // from Return to Hotel descriptions that reference non-existent next-day plans
+      // ==========================================================================
+      {
+        const hotelName = dayCity?.hotelName || context.hotelData?.hotelName || 'your hotel';
+        for (const act of generatedDay.activities) {
+          const cat = (act.category || '').toLowerCase();
+          const title = (act.title || '').toLowerCase();
+          const isReturnAccom = cat === 'accommodation' &&
+            (title.includes('return to') || title.includes('freshen up') || title.includes('back to') || title.includes('settle in'));
+          if (isReturnAccom && act.description && /tomorrow/i.test(act.description)) {
+            console.log(`[Forward-ref fix] Stripping hallucinated tomorrow reference from "${act.title}": "${act.description}"`);
+            act.description = `Time at ${hotelName} to rest and refresh.`;
+          }
+        }
+      }
+
+      // ==========================================================================
+      // GENERIC TITLE VALIDATOR: Flag and clean placeholder business names
+      // ==========================================================================
+      {
+        const INDEFINITE_ARTICLE_START = /^(a|an)\s+[a-z]/i;
+        const VAGUE_TITLE_KEYWORDS = /\b(or high.end|or similar|boutique wellness|local spa|nearby caf[eé])\b/i;
+        for (const act of generatedDay.activities) {
+          const title = (act.title || '').trim();
+          if (INDEFINITE_ARTICLE_START.test(title) || VAGUE_TITLE_KEYWORDS.test(title)) {
+            act.title = sanitizeAITextField(title);
+            console.log(`[Generic title warning] "${title}" may be a placeholder — cleaned to "${act.title}"`);
           }
         }
       }

@@ -65,6 +65,7 @@ const SLOT_PREFIX_RE = /^slot:\s*/i;
 const FULFILLS_RE = /\.?\s*Fulfills the\s+[^.]*?(?:slot|requirement|block)\.\s*/gi;
 const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/gi;
 const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
+const FORWARD_REF_RE = /\.?\s*(?:rest|recharge|prepare|get ready)\s+for\s+tomorrow'?s?\s+[^.]+(?:adventure|day|exploration|experience|excursion)[^.]*\.?/gi;
 
 export function sanitizeAITextField(text: string | undefined | null): string {
   if (!text || typeof text !== 'string') return '';
@@ -78,6 +79,8 @@ export function sanitizeAITextField(text: string | undefined | null): string {
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')
     .replace(INLINE_META_RE, '')
+    .replace(FORWARD_REF_RE, '')
+    .replace(/\(\s*\)/g, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
