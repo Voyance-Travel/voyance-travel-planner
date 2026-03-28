@@ -1,41 +1,30 @@
 
 
-## Fix: Consistent Hotel Placeholder When None Provided
+## Add Missing Sanitization Patterns for Leaked AI Text
 
 ### Problem
-When no hotel is selected, `hotelName` and `hotelAddress` stay empty. The AI has no constraint, so it hallucates a different luxury hotel each day (Conrad, Peninsula, Four Seasons, etc.).
-
-### Fix
-Replace lines 428–431 in `supabase/functions/generate-itinerary/flight-hotel-context.ts` with a placeholder that sets `hotelName = 'Your Hotel'` and adds explicit AI prompt instructions to never invent hotel names.
+`sanitizeAITextField` in `sanitization.ts` catches CJK artifacts, schema leaks, and system prefixes but misses several leaked AI planning patterns: reservation urgency codes, next-day planning text, required interest slot references, transport emoji notation, and booking meta.
 
 ### Changes
 
-**File: `supabase/functions/generate-itinerary/flight-hotel-context.ts` (lines 428–431)**
+**File: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-Replace the current warning-only block:
-```typescript
-} else if (!hotel) {
-  console.log(`[FlightHotel] ⚠️ NO HOTEL DATA FOUND - hotel_selection is empty or missing`);
-  console.log(`[FlightHotel] Raw hotel_selection value:`, JSON.stringify(hotelRaw));
-}
-```
+1. **Add 7 new regex constants** after line 68 (after `FORWARD_REF_RE`):
+   - `RESERVATION_URGENCY_RE` — strips `reservationUrgency: book_now (60 days)` etc.
+   - `BOOK_CODE_RE` — strips `book_now via official site` fragments
+   - `NEXT_DAY_PLANNING_RE` — strips `Tomorrow: Wake at 08:30...` and `Next morning:...` through end of text
+   - `REQUIRED_SLOT_RE` — strips `the required 'Authentic Encounter' interest slot`
+   - `TRANSPORT_EMOJI_RE` — strips `🚶 0 min` transport notation
+   - `PARENTHETICAL_META_RE` — strips `(Paid activity)` / `(Free to explore...)`
+   - `WALKIN_META_RE` — strips `Walk-in OK but busy.`
 
-With:
-```typescript
-} else if (!hotel) {
-  console.log(`[FlightHotel] ⚠ NO HOTEL DATA FOUND - using placeholder`);
-  hotelName = 'Your Hotel';
-  hotelAddress = '';
-  sections.push(`\n${'='.repeat(40)}\n ACCOMMODATION (Placeholder)\n${'='.repeat(40)}`);
-  sections.push(`  🏨 Hotel: Your Hotel (not yet selected)`);
-  sections.push(`  ⚠️ IMPORTANT: The traveler has NOT selected a hotel yet.`);
-  sections.push(`  - Use "Your Hotel" as the hotel name in ALL days consistently.`);
-  sections.push(`  - Do NOT invent or suggest specific hotel names.`);
-  sections.push(`  - Do NOT generate "Breakfast at [Hotel Name]" cards — instead use "Breakfast at Your Hotel".`);
-  sections.push(`  - Do NOT generate hotel-specific tips (lobby views, spa access, etc).`);
-  sections.push(`  - Freshen-up and return cards should reference "Your Hotel" only.`);
-}
-```
+2. **Add `.replace()` calls** in `sanitizeAITextField` after `FORWARD_REF_RE` and before the existing cleanup chain (empty parens, dash normalization, whitespace collapse).
 
-Then **redeploy** the `generate-itinerary` edge function.
+3. **Also mirror these patterns** in the client-side `src/utils/activityNameSanitizer.ts` `sanitizeActivityText` function for defense-in-depth.
+
+4. **Redeploy** the `generate-itinerary` edge function.
+
+### Technical Detail
+
+All new patterns are purely additive regex replacements — no existing logic changes. The sanitizer is already wired to all user-facing fields (title, name, description, tips, voyanceInsight, bestTime, location) so no additional call-site changes are needed.
 
