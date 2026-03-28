@@ -1643,7 +1643,7 @@ async function generateSingleDayWithRetry(
     '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
     '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
     '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
-    isFirstDay ? '12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with hotel check-in/luggage drop as the FIRST activity (category: accommodation). Travelers arrive with bags — getting to the hotel is the #1 priority. If no flight time is given, assume a morning arrival (10:00 AM luggage drop). Title it "Hotel Check-in & Refresh" or "Luggage Drop & Early Check-in". Do NOT include "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" — arrival logistics are handled by a separate UI component.' : '',
+    isFirstDay ? `12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with hotel arrival as the FIRST activity (category: accommodation). Travelers arrive with bags — getting to the hotel is the #1 priority. If no flight time is given, assume a morning arrival (10:00 AM luggage drop). The hotel standard check-in time is ${effectiveHotelData?.checkInTime || '15:00'}. If the traveler arrives BEFORE ${effectiveHotelData?.checkInTime || '15:00'}, title it "Luggage Drop & Early Exploration" and note "Early check-in subject to availability (standard check-in: ${effectiveHotelData?.checkInTime || '15:00'})" in the description. If arriving AT or AFTER ${effectiveHotelData?.checkInTime || '15:00'}, title it "Hotel Check-in & Refresh". Do NOT include "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" — arrival logistics are handled by a separate UI component.` : '',
     isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
     '13. **HOTEL FIDELITY — CRITICAL**: If a specific hotel name and address are provided in the accommodation section, you MUST use that EXACT hotel name for ALL accommodation activities (check-in, return to hotel, freshen up, checkout, etc.). Do NOT invent, substitute, or suggest a different hotel. The user has already booked their accommodation.',
     '14. **NO KEYWORD STUFFING**: Activity titles must be concise (max 8 words). NEVER pad titles with synonym lists of location types (e.g., "borough town place locale district quarter sector area"). Use the specific venue or activity name only.',
@@ -6708,7 +6708,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
       // Distance-aware buffer enforcement happens in Stage 4.6 after
       // coordinates are available from enrichment.
       // =======================================================================
-      const MIN_OVERLAP_GAP = 5;
+      const MIN_OVERLAP_GAP = scheduleConstraints?.bufferMinutesBetweenActivities || 15;
       let overlapFixCount = 0;
       
       for (const day of aiResult.days) {
@@ -6775,6 +6775,37 @@ If the purpose is a specific event, plan at least ONE full day around that event
       
       if (overlapFixCount > 0) {
         console.log(`[Stage 2.7] Fixed ${overlapFixCount} overlaps/zero-gaps across all days`);
+      }
+
+      // =====================================================================
+      // STAGE 2.75: Check-in Time Consistency
+      // Relabel early arrivals as "Luggage Drop" when before hotel check-in
+      // =====================================================================
+      try {
+        const hotelCheckInTime275 = context.hotelData?.checkInTime || '15:00';
+        const checkInMins275 = parseTimeToMinutes(hotelCheckInTime275);
+        if (checkInMins275 > 0 && aiResult.days.length > 0) {
+          const day1 = aiResult.days[0];
+          const checkinAct = day1.activities?.find((a: any) =>
+            (a.category || '').toLowerCase() === 'accommodation' &&
+            /(check.?in|luggage drop)/i.test(a.title || '')
+          );
+          if (checkinAct) {
+            const actStart275 = parseTimeToMinutes(checkinAct.startTime || '');
+            if (actStart275 > 0 && actStart275 < checkInMins275) {
+              if (!/(luggage|bag|drop)/i.test(checkinAct.title || '')) {
+                checkinAct.title = (checkinAct.title || '').replace(/check.?in/i, 'Luggage Drop') || 'Luggage Drop & Early Check-in';
+                console.log(`[Stage 2.75] Relabeled Day 1 check-in to "${checkinAct.title}" (arrives ${checkinAct.startTime} before check-in ${hotelCheckInTime275})`);
+              }
+              if (!checkinAct.description?.includes('early check-in')) {
+                checkinAct.description = (checkinAct.description || '') +
+                  ` Early check-in subject to availability (standard check-in: ${hotelCheckInTime275}).`;
+              }
+            }
+          }
+        }
+      } catch (e275) {
+        console.warn(`[Stage 2.75] Check-in relabel error:`, e275);
       }
 
       // =====================================================================
@@ -7163,7 +7194,35 @@ If the purpose is a specific event, plan at least ONE full day around that event
             const curCoords = current.location?.coordinates || current.coordinates;
             const nextCoords = next.location?.coordinates || next.coordinates;
 
-            if (!curCoords?.lat || !curCoords?.lng || !nextCoords?.lat || !nextCoords?.lng) continue;
+            if (!curCoords?.lat || !curCoords?.lng || !nextCoords?.lat || !nextCoords?.lng) {
+              // No coordinates — enforce a minimum buffer as fallback
+              const FALLBACK_BUFFER = 15;
+              const curEndMinsNoCoord = parseTimeToMinutes(current.endTime || current.startTime || '');
+              const nextStartMinsNoCoord = parseTimeToMinutes(next.startTime || '');
+              if (curEndMinsNoCoord > 0 && nextStartMinsNoCoord > 0) {
+                const gapNoCoord = nextStartMinsNoCoord - curEndMinsNoCoord;
+                if (gapNoCoord < FALLBACK_BUFFER && gapNoCoord >= 0) {
+                  const deficit = FALLBACK_BUFFER - gapNoCoord;
+                  for (let j = i + 1; j < day.activities.length; j++) {
+                    const sM = parseTimeToMinutes(day.activities[j].startTime || '');
+                    const eM = parseTimeToMinutes(day.activities[j].endTime || '');
+                    if (sM > 0) {
+                      const sH = Math.floor((sM + deficit) / 60);
+                      const sMn = (sM + deficit) % 60;
+                      day.activities[j].startTime = `${String(sH).padStart(2,'0')}:${String(sMn).padStart(2,'0')}`;
+                    }
+                    if (eM > 0) {
+                      const eH = Math.floor((eM + deficit) / 60);
+                      const eMn = (eM + deficit) % 60;
+                      day.activities[j].endTime = `${String(eH).padStart(2,'0')}:${String(eMn).padStart(2,'0')}`;
+                    }
+                  }
+                  bufferFixCount++;
+                  console.log(`[Stage 4.6] Day ${day.dayNumber}: No-coord fallback buffer for "${next.title || next.name}" — shifted +${deficit}min`);
+                }
+              }
+              continue;
+            }
 
             const distKm = haversineDistanceKm(
               curCoords.lat, curCoords.lng,
