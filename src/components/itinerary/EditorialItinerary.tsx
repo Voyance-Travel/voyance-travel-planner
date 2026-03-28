@@ -1349,7 +1349,18 @@ export function EditorialItinerary({
   const isCleanPreview = viewMode === 'preview';
   const isActivelyGenerating = itineraryStatus === 'generating' || itineraryStatus === 'queued';
 
-  const [rawDays, setRawDays] = useState<EditorialDay[]>(initialDays);
+  const [rawDays, setRawDays] = useState<EditorialDay[]>(() =>
+    initialDays.map(day => ({
+      ...day,
+      activities: (day.activities || [])
+        .filter(a => a != null)
+        .map(a => {
+          const raw = a as any;
+          const safeTitle = a.title || raw.name || raw.venue || 'Untitled Activity';
+          return { ...a, title: safeTitle };
+        }),
+    }))
+  );
 
   // Sanitize wrapper: ensures every activity has a valid title and filters out
   // completely empty/null activity objects that slip through from edge functions.
