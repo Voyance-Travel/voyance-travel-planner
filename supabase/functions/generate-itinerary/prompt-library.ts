@@ -1354,6 +1354,14 @@ export function buildRegularDayPrompt(
   lines.push(`   - If an activity is FREE, you may mention "free entry" in the description`);
   lines.push('');
 
+  lines.push(`   TEXT QUALITY RULES:`);
+  lines.push(`   - Never include "or [alternative venue]" in descriptions. Name only the primary venue.`);
+  lines.push(`   - Never include reservation urgency codes (book_now, book_soon) in any text field.`);
+  lines.push(`   - Never include "Tomorrow:" or next-day planning text in tips or descriptions.`);
+  lines.push(`   - The "tips" field is for practical visitor advice ONLY (dress code, best time, queue tips).`);
+  lines.push(`   - Do not reference internal slot names, option groups, or fulfillment logic.`);
+  lines.push('');
+
   lines.push(`⚡ ACTIVITY DENSITY`);
   lines.push(`${'─'.repeat(40)}`);
   lines.push(`   Max EXPERIENCE activities: ${maxActivities} (museums, tours, attractions, cultural sites)`);

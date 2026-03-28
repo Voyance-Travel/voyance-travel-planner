@@ -84,6 +84,7 @@ export function sanitizeAITextField(text: string | undefined | null): string {
     .replace(SYSTEM_PREFIXES_RE, '')
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
+    .replace(INLINE_ALT_VENUE_RE, '')
     .replace(SLOT_PREFIX_RE, '')
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')
