@@ -1744,8 +1744,8 @@ export function EditorialItinerary({
             : tType === 'train' ? 'station'
             : 'terminal';
           // Build a descriptive title: prefer route, fallback to generic
-          const homeCity = arrAirport || (returnLeg.arrival?.city) || '';
-          const departCity = depAirport || (returnLeg.departure?.city) || '';
+          const homeCity = arrAirport || '';
+          const departCity = depAirport || '';
           const title = homeCity
             ? `${transportLabel} to ${homeCity}`
             : departCity
