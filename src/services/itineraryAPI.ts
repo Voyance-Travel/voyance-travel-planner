@@ -606,7 +606,7 @@ export async function regenerateDay(
   // Run client-side meal compliance guard before saving (async — uses real venue names)
   try {
     const { enforceItineraryMealComplianceAsync } = await import('@/utils/mealGuard');
-    const mealResult = await enforceItineraryMealComplianceAsync(updatedDays as any, supabase, destination);
+    const mealResult = await enforceItineraryMealComplianceAsync(updatedDays as any, supabase, trip.destination);
     if (mealResult.totalInjected > 0) {
       console.warn(`[itineraryAPI] Meal guard injected ${mealResult.totalInjected} meals before save`);
     }
