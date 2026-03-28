@@ -455,7 +455,7 @@ function TripDetailsStep({
 
   // Guard: skip forward sync when reverse sync just updated destinations
   const reverseSyncRef = React.useRef(false);
-  const customBudgetActive = useRef(false);
+  const [customBudgetActive, setCustomBudgetActive] = useState(false);
 
   // Auto-calculate end date for multi-city mode (forward sync: destinations → endDate)
   useEffect(() => {
