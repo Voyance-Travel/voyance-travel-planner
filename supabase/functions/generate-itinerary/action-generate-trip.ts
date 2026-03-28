@@ -11,6 +11,7 @@
  */
 
 import { corsHeaders, type ActionContext, verifyTripAccess } from './action-types.ts';
+import { GenerationTimer } from './generation-timer.ts';
 
 // Imported enrichment modules (compute once-per-trip context)
 import { loadTravelerProfile } from './profile-loader.ts';
@@ -54,6 +55,9 @@ export async function handleGenerateTrip(
       { status: 403, headers: jsonHeaders }
     );
   }
+
+  // ── PERFORMANCE TIMER ──
+  const timer = new GenerationTimer(tripId, supabase);
 
   // Guard: prevent double generation if already in progress (not a resume)
   if (!resumeFromDay) {
@@ -107,6 +111,11 @@ export async function handleGenerateTrip(
     }
   }
 
+  // Initialize performance timer
+  const totalDaysForTimer = totalDays; // Will be set after calculation
+  await timer.init(destination, totalDays, travelers || 1);
+  timer.startPhase('pre_chain_setup');
+
   // Set status to generating + store metadata
   const { data: currentTrip } = await supabase.from('trips').select('metadata, itinerary_data').eq('id', tripId).single();
   const existingMeta = (currentTrip?.metadata as Record<string, unknown>) || {};
@@ -157,7 +166,8 @@ export async function handleGenerateTrip(
   // PRE-CHAIN ENRICHMENT: Compute once-per-trip context and store in metadata
   // =====================================================================
   if (!isResume) {
-    console.log('[generate-trip] Computing generation_context enrichment...');
+   console.log('[generate-trip] Computing generation_context enrichment...');
+    timer.startPhase('pre_chain_enrichment');
     const enrichmentContext: Record<string, unknown> = {};
     
     try {
@@ -429,8 +439,10 @@ export async function handleGenerateTrip(
       }
       
       console.log(`[generate-trip] Enrichment context computed with ${Object.keys(enrichmentContext).length} fields`);
+      timer.endPhase('pre_chain_enrichment');
     } catch (enrichErr) {
       console.warn('[generate-trip] Enrichment context computation failed (non-blocking):', enrichErr);
+      timer.addError('pre_chain_enrichment', String(enrichErr));
     }
     
     // Store generation_context in the update payload
@@ -445,6 +457,9 @@ export async function handleGenerateTrip(
   // Fire the first day generation via self-chain (non-blocking)
   const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  timer.endPhase('pre_chain_setup');
+  await timer.updateProgress('Launching day generation', 5);
+
   const initialChainBody = JSON.stringify({
     action: 'generate-trip-day',
     tripId,
@@ -463,6 +478,7 @@ export async function handleGenerateTrip(
     totalDays,
     generationRunId,
     isFirstTrip: isFirstTrip || false,
+    generationLogId: timer.getLogId(),
   });
 
   // Retry loop with exponential backoff for intermittent 403 errors

@@ -8,6 +8,7 @@
  */
 
 import { corsHeaders } from './action-types.ts';
+import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
 
@@ -110,7 +111,7 @@ export async function handleGenerateTripDay(
   userId: string,
   params: Record<string, any>,
 ): Promise<Response> {
-  const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip } = params;
+  const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip, generationLogId } = params;
 
   if (!tripId || !dayNumber || !totalDays) {
     return new Response(
@@ -120,6 +121,13 @@ export async function handleGenerateTripDay(
   }
 
   console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'})`);
+
+  // ── PERFORMANCE TIMER ──
+  const timer = new GenerationTimer(tripId, supabase);
+  if (generationLogId) {
+    await timer.resume(generationLogId, destination || '', totalDays, travelers || 1);
+  }
+  timer.startPhase(`day_${dayNumber}_total`);
 
   // Guard: check trip is still in "generating" state AND run ID matches
   const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data, flight_selection').eq('id', tripId).single();
@@ -273,6 +281,7 @@ export async function handleGenerateTripDay(
   const MAX_RETRIES = 4;
   let dayResult: any = null;
   let lastError: string | null = null;
+  const dayGenStart = Date.now();
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -337,6 +346,7 @@ export async function handleGenerateTripDay(
       if (!data.day) throw new Error(`No day data returned for day ${dayNumber}`);
 
       dayResult = data.day;
+      timer.endPhase(`day_${dayNumber}_total`);
       break;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -839,6 +849,11 @@ export async function handleGenerateTripDay(
       },
     }).eq('id', tripId);
 
+    // Record final day timing and finalize performance log
+    const dayGenTotal = Date.now() - dayGenStart;
+    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0);
+    await timer.finalize(allDaysHaveActivities ? 'completed' : 'failed');
+
     console.log(`[generate-trip-day] ${allDaysHaveActivities ? '✅' : '⚠️'} Trip ${tripId} generation ${allDaysHaveActivities ? 'complete' : 'partial (shell days)'}: ${totalDays} days, status=${finalStatus}`);
 
     // ── SYNC NORMALIZED TABLES on chain completion ──────────────────
@@ -892,6 +907,12 @@ export async function handleGenerateTripDay(
       },
     }).eq('id', tripId);
 
+    // Record day timing
+    const dayGenTotal = Date.now() - dayGenStart;
+    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0);
+    const progressPct = 5 + Math.round((dayNumber / totalDays) * 90);
+    await timer.updateProgress(`Day ${dayNumber}/${totalDays} complete`, progressPct);
+
     console.log(`[generate-trip-day] Day ${dayNumber}/${totalDays} complete, chaining to day ${dayNumber + 1}`);
 
     const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
@@ -914,6 +935,7 @@ export async function handleGenerateTripDay(
       totalDays,
       generationRunId,
       isFirstTrip: isFirstTrip || false,
+      generationLogId: generationLogId || timer.getLogId(),
     });
 
     const maxRetries = 3;
