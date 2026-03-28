@@ -278,7 +278,7 @@ export function buildMealRequirementsPrompt(policy: MealPolicy): string {
   lines.push(`Each meal MUST use a REAL, SPECIFIC restaurant or café name that exists in the destination.`);
 
   if (policy.requiredMeals.includes('breakfast')) {
-    lines.push(`- 🍳 BREAKFAST (MANDATORY): A real named café/restaurant near the hotel. Include the actual restaurant name, approximate price, and walk time. MUST be DIFFERENT from any previous day's breakfast. Example: "Breakfast at Café de Flore" NOT "Breakfast — Local Café".`);
+    lines.push(`- 🍳 BREAKFAST (MANDATORY): PREFER the hotel's own restaurant/café (e.g., "Breakfast at [Hotel Restaurant Name]"). At least 3 of every 5 days should be at the guest's hotel. For variety, alternate with a real named café within walking distance on some days. NEVER send the guest to a DIFFERENT hotel for breakfast. Include the actual restaurant name, approximate price. MUST be DIFFERENT from any previous day's breakfast. Example: "Breakfast at The Lounge at Four Seasons" NOT "Breakfast — Local Café".`);
   }
   if (policy.requiredMeals.includes('lunch')) {
     lines.push(`- 🥗 LUNCH (MANDATORY): A real named restaurant near the previous activity. Include actual restaurant name, ~price, 1 alternative in tips. MUST be DIFFERENT from any previous day's lunch. Example: "Lunch at Ichiran Ramen" NOT "Lunch spot".`);
