@@ -1,24 +1,37 @@
 
 
-## Broad Category-Based Sanitization Regex
+## Time Ordering Validation (Post-Processing)
 
-### Change — Single file: `supabase/functions/generate-itinerary/sanitization.ts`
+### Problem
+Activities go backwards in time — e.g. dinner ends at 8:45 PM, then "Nightcap" shows 12:30 PM, then "Return to hotel" at 2:05 PM. The AI confuses AM/PM for late-night activities.
 
-**1. Add new broad category patterns after line 77** (after existing leaked AI patterns, before `INLINE_ALT_VENUE_RE`):
+### Changes
 
-- `EMOJI_BOOKING_FLAG_RE` — matches 🔴🟡🟢🔵 + Book/Reserve text
-- `URGENCY_PREFIX_RE` — matches any "Urgency:" or "Reservation urgency:" prefixed sentence
-- `RAW_CODE_FIELD_RE` — matches camelCase field assignments like `isVoyancePick: true`
-- `ALL_CAPS_META_RE` — matches parenthetical all-caps instructions like `(TRANSIT INCLUDED IN TIPS)`
-- `AI_SELF_COMMENTARY_RE` — matches "Profile updated for...", "Based on your profile..." sentences
-- `ALTERNATIVE_SUGGESTION_RE` — matches "Alternative: X..." sentences
-- `STANDALONE_BOOL_RE` — matches standalone `isFieldName: true/false/null` patterns
+**1. `supabase/functions/generate-itinerary/day-validation.ts` — Add `enforceChronologicalOrder`**
 
-**2. Update `sanitizeAITextField` (lines 96-102)** — add the new `.replace()` calls after the existing ones, keeping old patterns as additional layers.
+Add three functions at the end of the file:
 
-**3. Broaden `NEXT_DAY_PLANNING_RE`** (line 73) — current pattern requires a colon after "Tomorrow". Replace with the broader version that catches "Tomorrow" or "Next morning/day" without requiring colon.
+- `parseTimeToMinutesLocal(timeStr)` — parses "10:00 AM", "22:00", etc. to minutes since midnight. This is local to day-validation.ts (the shared util in `src/` can't be imported from edge functions).
+- `minutesToTimeString(totalMinutes)` — converts minutes back to "h:MM AM/PM" format.
+- `enforceChronologicalOrder(day)` — walks activities sequentially:
+  - If `currStart < prevEnd` and gap > 240 min, try AM/PM flip (+12 hours)
+  - Otherwise push activity to start 15 min after previous ends, preserving duration
+  - Export it for use in index.ts
 
-**4. Redeploy** the `generate-itinerary` edge function.
+**2. `supabase/functions/generate-itinerary/index.ts` — Call at both parse sites**
 
-Old patterns are kept for backward compatibility — more layers = more coverage.
+At both locations (after hotel enforcement, ~line 2454 and ~line 10375), add:
+
+```typescript
+generatedDay = enforceChronologicalOrder(generatedDay);
+```
+
+Import it alongside existing day-validation imports (~line 1548).
+
+**3. Redeploy** the `generate-itinerary` edge function.
+
+### Technical notes
+- The existing `src/utils/timeFormat.ts` has `parseTimeToMinutes` and `normalizeTimeTo24h`, but edge functions can't import from `src/`. The day-validation.ts file will have its own lightweight time parser.
+- Both 12h ("2:30 PM") and 24h ("14:30") formats are handled.
+- The fix preserves activity duration when shifting times forward.
 
