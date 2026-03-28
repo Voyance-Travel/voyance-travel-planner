@@ -1,55 +1,70 @@
 
 
-## Fix: Duplicate Attractions Across Days
+## Fix: Wrong Activity Categories (Bars Categorized as Wellness)
 
 ### Problem
 
-"Imperial Palace East Gardens" appears on both Day 1 and Day 4 with different titles and prices. The system has dedup logic but two gaps allow this through.
+Cocktail bars and nightcap venues are being categorized as "WELLNESS" or "ACTIVITY" instead of "dining" or a nightlife-equivalent. This happens because:
 
-### Root Causes
+1. **The JSON schema enum doesn't include "nightlife"** — Line 2228 and 10007 define allowed categories as `["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"]`. No nightlife option exists, so the AI picks the closest match — sometimes "wellness" (from prompt context about wellness slots) or "activity".
 
-**Gap 1 — Parallel batch blindness (Days 1-3 generated together)**
+2. **The prompt says "EVENING/NIGHTLIFE"** (line 9329) but doesn't specify which category to use for bars/cocktails, leaving the AI to guess.
 
-Days within the same batch (e.g., 1-3) are generated in parallel with no visibility into each other. The post-batch dedup at line 3212 only checks **exact title matches** — "Stroll the Imperial Palace East Gardens" vs "Imperial Palace East Gardens Exploration" have different keys, so both survive.
-
-**Gap 2 — Cross-batch last-attempt acceptance (Day 4 sees Day 1)**
-
-Day 4 (batch 2) does have Day 1 in its `previousDays`, and `validateGeneratedDay` correctly flags it as `TRIP-WIDE DUPLICATE`. But after max retries, line 3060 accepts the day anyway with the duplicate still present. The generate-day (single day regen) path at line 10842 strips flagged duplicates — the full generation path does not.
+3. **No post-generation category correction** — even when the AI outputs an invalid category like "wellness" or "nightlife", nothing normalizes it back to a valid value.
 
 ### Fix — Two changes in `index.ts`
 
-**Change 1: Post-batch dedup uses concept similarity (line ~3212)**
+**Change 1: Update the prompt (line 9329)**
 
-Replace the exact-title Map lookup with the existing `conceptSimilarity` function (already defined in `day-validation.ts`). When a concept-similar duplicate is found across batches, **remove** the later occurrence instead of renaming it with "(Day X version)".
+Add explicit category guidance for evening/nightlife activities:
 
-```typescript
-// Import conceptSimilarity from day-validation (or inline the logic)
-// For each non-logistics activity, check against all previously seen concepts
-// If concept-similar match found on a different day → splice/remove the duplicate
-// Log: "[Stage 2] Cross-batch dedup: removed "Imperial Palace East Gardens Exploration" 
-//       from Day 4 (similar to "Stroll the Imperial Palace East Gardens" on Day 1)"
+```
+8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot
+   (at least 1 suggestion). Use category: "dining" for bars, lounges, and cocktail
+   venues. Use category: "activity" for shows, clubs, and entertainment.
+   NEVER use "wellness", "nightlife", or "relaxation" as a category for bars/lounges.
 ```
 
-**Change 2: Strip trip-wide duplicates on last-attempt acceptance (line ~3060)**
+**Change 2: Add a post-generation category normalizer**
 
-When `isLastAttempt && !smartFinishBlocksReturn` and validation has `TRIP-WIDE DUPLICATE` errors, strip those activities before returning — matching the existing logic from the generate-day path (line 10842).
+After AI output is parsed (near the existing normalization passes around Stage 2), add a category correction pass that:
+
+- Maps any invalid/non-enum category to the correct one based on title/description keywords
+- Specifically catches bars, lounges, cocktails, nightcaps → "dining"
+- Catches wellness used for non-wellness activities → "activity" or "dining"
+- Logs corrections for debugging
 
 ```typescript
-// After line 3060, before deduplicateActivities call:
-if (isLastAttempt && validation.errors.length > 0) {
-  // Strip activities flagged as TRIP-WIDE DUPLICATE
-  const duplicateTitles: string[] = [];
-  for (const err of validation.errors) {
-    const titleMatch = err.match(/TRIP-WIDE DUPLICATE:\s*"([^"]+)"/i);
-    if (titleMatch) duplicateTitles.push(titleMatch[1].toLowerCase());
-  }
-  if (duplicateTitles.length > 0) {
-    const before = generatedDay.activities.length;
-    generatedDay.activities = generatedDay.activities.filter(a => {
-      const title = (a.title || '').toLowerCase();
-      return !duplicateTitles.some(dt => title.includes(dt) || dt.includes(title));
-    });
-    console.log(`[Stage 2] Stripped ${before - generatedDay.activities.length} trip-wide duplicates on last attempt`);
+// Post-generation category normalizer
+const VALID_CATEGORIES = new Set([
+  'sightseeing', 'dining', 'cultural', 'shopping',
+  'relaxation', 'transport', 'accommodation', 'activity'
+]);
+
+const BAR_KEYWORDS = /\b(bar|lounge|cocktail|nightcap|pub|drinks?|wine bar|rooftop bar|izakaya|sake|whisky|bourbon|speakeasy|taproom)\b/i;
+const DINING_KEYWORDS = /\b(restaurant|cafe|coffee|bistro|brasserie|eatery|brunch|breakfast|lunch|dinner|ramen|sushi|food)\b/i;
+
+for (const day of allDays) {
+  for (const act of day.activities || []) {
+    const cat = (act.category || '').toLowerCase();
+    const titleDesc = `${act.title || ''} ${act.description || ''}`;
+
+    if (!VALID_CATEGORIES.has(cat)) {
+      // Invalid category — remap based on content
+      if (BAR_KEYWORDS.test(titleDesc) || DINING_KEYWORDS.test(titleDesc)) {
+        act.category = 'dining';
+      } else if (/\b(spa|massage|onsen|bath|meditation|yoga|wellness)\b/i.test(titleDesc)) {
+        act.category = 'relaxation';
+      } else {
+        act.category = 'activity';
+      }
+      console.log(`[Category fix] "${act.title}": "${cat}" → "${act.category}"`);
+    }
+    // Also catch valid-but-wrong: "relaxation" used for bars
+    else if (cat === 'relaxation' && BAR_KEYWORDS.test(titleDesc)) {
+      act.category = 'dining';
+      console.log(`[Category fix] "${act.title}": relaxation → dining (bar/lounge)`);
+    }
   }
 }
 ```
@@ -58,14 +73,15 @@ if (isLastAttempt && validation.errors.length > 0) {
 
 | Before | After |
 |--------|-------|
-| Day 1: "Stroll the Imperial Palace East Gardens" + Day 4: "Imperial Palace East Gardens Exploration" | Day 4 duplicate stripped; only Day 1 visit remains |
-| Post-batch dedup only catches exact title matches | Catches concept-similar venues across parallel batches |
-| Last-attempt acceptance keeps flagged duplicates | Strips `TRIP-WIDE DUPLICATE` activities before returning |
+| "Nightcap at Virtu Lounge" → WELLNESS | → dining |
+| "Skyline Nightcap at The Moon Lounge" → WELLNESS | → dining |
+| "Nightcap at Bar High Five" → ACTIVITY | → dining |
+| Budget allocations distorted by wrong categories | Correct category totals |
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/index.ts` | Post-batch dedup: use concept similarity + remove duplicates |
-| `supabase/functions/generate-itinerary/index.ts` | Last-attempt: strip TRIP-WIDE DUPLICATE flagged activities |
+| `supabase/functions/generate-itinerary/index.ts` | Add category normalizer after AI output parsing |
+| `supabase/functions/generate-itinerary/index.ts` | Update line 9329 prompt to specify categories for evening venues |
 
