@@ -189,6 +189,20 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number): any {
       if (act.personalization && typeof act.personalization === 'object') {
         if (act.personalization.whyThisFits) act.personalization.whyThisFits = sanitizeAITextField(act.personalization.whyThisFits) || undefined;
       }
+
+      // Clear tips if it duplicates description (common AI leak pattern)
+      if (act.description && act.tips) {
+        const descNorm = act.description.trim().toLowerCase();
+        const tipsNorm = act.tips.trim().toLowerCase();
+        if (descNorm === tipsNorm) {
+          act.tips = undefined;
+        } else if (descNorm.length > 10 && tipsNorm.includes(descNorm)) {
+          act.tips = undefined;
+        } else if (tipsNorm.length > 10 && descNorm.includes(tipsNorm)) {
+          act.tips = undefined;
+        }
+      }
+
       return act;
     });
   }
