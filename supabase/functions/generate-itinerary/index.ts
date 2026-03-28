@@ -4277,9 +4277,9 @@ async function enrichItinerary(
     const day = days[dayIndex];
     const enrichedActivities: StrictActivity[] = [];
 
-    // Process activities in batches of 3 with delays for rate limits
-    // (3 activities × 2 API calls each = ~6 concurrent requests per batch)
-    const BATCH_SIZE = 3;
+    // Process activities in batches of 5 with delays for rate limits
+    // (5 activities × 2 API calls each = ~10 concurrent requests per batch)
+    const BATCH_SIZE = 5;
     let budgetExceeded = false;
 
     for (let i = 0; i < day.activities.length; i += BATCH_SIZE) {
@@ -4317,7 +4317,7 @@ async function enrichItinerary(
 
       // Delay between batches to respect API rate limits
       if (i + BATCH_SIZE < day.activities.length) {
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, 100));
       }
     }
 
@@ -8499,6 +8499,14 @@ If the purpose is a specific event, plan at least ONE full day around that event
           flightContext = { ...flightContext, context: (flightContext.context || '') + hotelEnforcement };
         }
       }
+
+      // Define effectiveHotelData in generate-day handler scope so departure/breakfast templates can reference it
+      const effectiveHotelData = (resolvedHotelOverride?.name)
+        ? { hasHotel: true, hotelName: resolvedHotelOverride.name, hotelAddress: resolvedHotelOverride.address || '', checkInTime: '15:00', checkOutTime: '11:00' }
+        : (flightContext?.hotelName
+          ? { hasHotel: true, hotelName: flightContext.hotelName, hotelAddress: flightContext.hotelAddress || '', checkInTime: flightContext.hotelCheckIn || '15:00', checkOutTime: flightContext.hotelCheckOut || '11:00' }
+          : { hasHotel: false, hotelName: 'hotel' } as any);
+
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
       
@@ -10490,8 +10498,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           const ENRICHMENT_TIME_BUDGET_MS = 25_000;
           const enrichStartedAt = Date.now();
           
-          // Enrich in parallel batches of 3 to avoid rate limits
-          const batchSize = 3;
+          // Enrich in parallel batches of 5 for speed (timeout protection handles slow calls)
+          const batchSize = 5;
           const enrichedActivities: StrictActivity[] = [];
           let enrichmentBudgetExceeded = false;
           
