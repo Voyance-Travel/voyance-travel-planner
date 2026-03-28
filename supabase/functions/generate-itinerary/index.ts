@@ -11140,10 +11140,13 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 if (mealRepeatTitles.length > 0) {
                   const poolAvailable = (paramRestaurantPool || []) as any[];
                   const usedSetLocal = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
-                  // Also mark all restaurants in current day as used
+                  // Also mark all restaurants in current day as used (both title and location.name)
                   for (const act of generatedDay.activities) {
                     if ((act.category || '').toLowerCase() === 'dining') {
                       usedSetLocal.add((act.title || '').toLowerCase());
+                      if (act.location?.name) {
+                        usedSetLocal.add(act.location.name.toLowerCase());
+                      }
                     }
                   }
 

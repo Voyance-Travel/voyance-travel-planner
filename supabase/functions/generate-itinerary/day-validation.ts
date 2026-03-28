@@ -441,6 +441,15 @@ export function validateGeneratedDay(
 
       // Meal-specific dedup: flag if same restaurant name appears on previous days
       if (actType === 'dining') {
+        // Direct location.name match (catches cases where title differs but venue is same)
+        const actLocNameForDining = normalizeText(act.location?.name || '');
+        if (actLocNameForDining.length > 3 && previousLocations.has(actLocNameForDining)) {
+          if (!isRecurringEvent(act, mustDoActivities)) {
+            errors.push(`MEAL REPEAT: "${act.title}" uses the same restaurant "${act.location?.name}" as a previous day.`);
+            continue;
+          }
+        }
+
         for (const prevConcept of previousConcepts) {
           if (conceptSimilarity(actConcept, prevConcept)) {
             if (isRecurringEvent(act, mustDoActivities)) continue;

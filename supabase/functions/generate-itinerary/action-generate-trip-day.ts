@@ -909,6 +909,13 @@ export async function handleGenerateTripDay(
         if (name && !newUsedRestaurants.includes(name)) {
           newUsedRestaurants.push(name);
         }
+        // Also track location.name (the actual restaurant name) for cross-day dedup
+        if (act.location?.name) {
+          const locName = act.location.name.trim();
+          if (locName && !newUsedRestaurants.includes(locName)) {
+            newUsedRestaurants.push(locName);
+          }
+        }
       }
     }
 
