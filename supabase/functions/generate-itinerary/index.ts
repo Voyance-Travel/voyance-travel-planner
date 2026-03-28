@@ -3058,6 +3058,26 @@ Generate activities for this day following ALL constraints above.`;
       const isLastAttempt = attempt === maxRetries;
       const smartFinishBlocksReturn = context.isSmartFinish && hasHardErrors;
       if (validation.isValid || (isLastAttempt && !smartFinishBlocksReturn)) {
+        // POST-VALIDATION: Strip trip-wide duplicates on last-attempt acceptance
+        if (isLastAttempt && validation.errors.length > 0) {
+          const duplicateTitles: string[] = [];
+          for (const err of validation.errors) {
+            const titleMatch = err.match(/(?:TRIP-WIDE DUPLICATE|CONCEPT SIMILARITY):\s*"([^"]+)"/i);
+            if (titleMatch) duplicateTitles.push(titleMatch[1].toLowerCase());
+          }
+          if (duplicateTitles.length > 0) {
+            const beforeCount = generatedDay.activities.length;
+            generatedDay.activities = generatedDay.activities.filter(a => {
+              const title = (a.title || '').toLowerCase();
+              return !duplicateTitles.some(dt => title.includes(dt) || dt.includes(title));
+            });
+            const removedCount = beforeCount - generatedDay.activities.length;
+            if (removedCount > 0) {
+              console.log(`[Stage 2] Stripped ${removedCount} trip-wide duplicate(s) on last attempt for Day ${dayNumber}`);
+            }
+          }
+        }
+
         // POST-VALIDATION: Strip any duplicate activities that slipped through
         // Pass requiredMeals so dedup won't remove the sole provider of a required meal
         const { day: dedupedDay, removed: removedDupes } = deduplicateActivities(generatedDay, dayMealPolicy.requiredMeals);
@@ -3206,12 +3226,34 @@ async function generateItineraryAI(
     }
   }
 
-  // ── Post-batch dedup pass ──────────────────────────────────────
+  // ── Post-batch dedup pass (concept-similarity) ──────────────────
   // Within a parallel batch, days can't see each other's activities,
-  // so duplicates may appear. Detect and rename them here.
-  const seenTitles = new Map<string, { dayNum: number; actIdx: number }>();
+  // so duplicates may appear. Use concept similarity to catch renamed
+  // versions of the same attraction (e.g. "Stroll Imperial Palace East Gardens"
+  // vs "Imperial Palace East Gardens Exploration").
+  const DEDUP_STRIP_VERBS = /\b(guided|visit|explore|discover|tour|walk|stroll|head|go|return|morning|afternoon|evening|a|an|the|to|of|at|in|on|and|with|for|exploration|adventure)\b/g;
+  const dedupConceptSimilarity = (a: string, b: string): boolean => {
+    if (!a || !b || a.length < 5 || b.length < 5) return false;
+    if (a === b) return true;
+    const mealKeywords = ['lunch', 'dinner', 'breakfast', 'brunch', 'coffee', 'cafe', 'dessert', 'snack', 'food', 'eat', 'meal', 'drinks', 'cocktail', 'bar'];
+    const aHasMeal = mealKeywords.some(kw => a.includes(kw));
+    const bHasMeal = mealKeywords.some(kw => b.includes(kw));
+    if (aHasMeal !== bHasMeal) return false;
+    if (a.includes(b) || b.includes(a)) return true;
+    const aVenue = a.replace(DEDUP_STRIP_VERBS, '').replace(/\s+/g, ' ').trim();
+    const bVenue = b.replace(DEDUP_STRIP_VERBS, '').replace(/\s+/g, ' ').trim();
+    if (aVenue.length > 5 && bVenue.length > 5 && (aVenue.includes(bVenue) || bVenue.includes(aVenue))) return true;
+    const aWords = new Set(a.split(/\s+/));
+    const bWords = new Set(b.split(/\s+/));
+    const intersection = [...aWords].filter(w => bWords.has(w) && w.length > 3);
+    const minLen = Math.min(aWords.size, bWords.size);
+    return minLen > 0 && intersection.length / minLen > 0.6;
+  };
+
+  const seenConcepts: Array<{ concept: string; dayNum: number }> = [];
   let dedupCount = 0;
   for (const day of days) {
+    const indicesToRemove: number[] = [];
     for (let i = 0; i < day.activities.length; i++) {
       const act = day.activities[i];
       const key = (act.title || act.name || '').toLowerCase().trim();
@@ -3220,21 +3262,23 @@ async function generateItineraryAI(
       const cat = (act.category || '').toLowerCase();
       if (['transport', 'transportation', 'accommodation', 'transfer', 'logistics'].includes(cat)) continue;
 
-      const existing = seenTitles.get(key);
-      if (existing && existing.dayNum !== day.dayNumber) {
-        // Mark as duplicate — append day number to make title unique
-        // The next generation stage or enrichment can refine this
-        console.log(`[Stage 2] Dedup: "${act.title}" appears on Day ${existing.dayNum} and Day ${day.dayNumber}`);
-        act.title = `${act.title} (Day ${day.dayNumber} version)`;
-        act._isDuplicate = true;
+      const match = seenConcepts.find(s => s.dayNum !== day.dayNumber && dedupConceptSimilarity(key, s.concept));
+      if (match) {
+        // Remove the later occurrence instead of renaming
+        console.log(`[Stage 2] Cross-batch dedup: removed "${act.title}" from Day ${day.dayNumber} (similar to "${match.concept}" on Day ${match.dayNum})`);
+        indicesToRemove.push(i);
         dedupCount++;
       } else {
-        seenTitles.set(key, { dayNum: day.dayNumber, actIdx: i });
+        seenConcepts.push({ concept: key, dayNum: day.dayNumber });
       }
+    }
+    // Remove in reverse order to preserve indices
+    for (let r = indicesToRemove.length - 1; r >= 0; r--) {
+      day.activities.splice(indicesToRemove[r], 1);
     }
   }
   if (dedupCount > 0) {
-    console.log(`[Stage 2] Post-batch dedup: marked ${dedupCount} duplicate activities`);
+    console.log(`[Stage 2] Post-batch dedup: removed ${dedupCount} concept-similar duplicate activities`);
   }
 
   // Apply fallback costs for any missing values
