@@ -3,6 +3,24 @@
  * that should never be shown to users.
  */
 
+// Strip AI search qualifiers from names/locations
+// e.g. "(Satellite or High-End alternative in Chiyoda/Minato)"
+// e.g. "(or high-end Kaiseki alternative)"
+const AI_QUALIFIER_RE = /\s*\((?:[^)]*?\b(?:alternative|satellite|or\s+high.end|similar|equivalent|comparable)\b[^)]*?)\)/gi;
+
+// Strip "or High-End Boutique Wellness" style trailing qualifiers (no parens)
+const TRAILING_OR_QUALIFIER_RE = /\s+or\s+(?:high.end|similar|equivalent|comparable)\b[^,.]*/gi;
+
+// Strip "slot: " prefix from descriptions
+const SLOT_PREFIX_RE = /^slot:\s*/i;
+
+// Strip "Fulfills the ... slot/requirement." sentences
+const FULFILLS_RE = /\.?\s*Fulfills the\s+[^.]*?(?:slot|requirement|block)\.\s*/gi;
+
+// Strip distance/cost metadata in tips: "(Level 39 of Hotel, ~0.1km, ~$40)"
+const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/gi;
+const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
+
 // Internal prefixes used by the generation system that shouldn't appear in UI
 const SYSTEM_PREFIXES = [
   'EDGE_ACTIVITY:',
@@ -53,6 +71,11 @@ export function sanitizeActivityName(name: string | undefined | null): string {
     }
   }
   
+  // Strip AI search qualifiers like "(or high-end alternative)"
+  sanitized = sanitized.replace(AI_QUALIFIER_RE, '').trim();
+  // Strip trailing "or High-End Boutique Wellness" without parens
+  sanitized = sanitized.replace(TRAILING_OR_QUALIFIER_RE, '').trim();
+
   // Also handle case-insensitive matching for robustness
   const lowerName = sanitized.toLowerCase();
   for (const prefix of SYSTEM_PREFIXES) {
@@ -126,5 +149,14 @@ const SYSTEM_LABEL_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS
 
 export function sanitizeActivityText(text: string | undefined | null): string {
   if (!text) return '';
-  return text.replace(SYSTEM_LABEL_RE, '').replace(/\s{2,}/g, ' ').trim();
+  return text
+    .replace(SYSTEM_LABEL_RE, '')
+    .replace(AI_QUALIFIER_RE, '')
+    .replace(TRAILING_OR_QUALIFIER_RE, '')
+    .replace(SLOT_PREFIX_RE, '')
+    .replace(FULFILLS_RE, ' ')
+    .replace(META_DISTANCE_COST_RE, '')
+    .replace(INLINE_META_RE, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
