@@ -8499,6 +8499,14 @@ If the purpose is a specific event, plan at least ONE full day around that event
           flightContext = { ...flightContext, context: (flightContext.context || '') + hotelEnforcement };
         }
       }
+
+      // Define effectiveHotelData in generate-day handler scope so departure/breakfast templates can reference it
+      const effectiveHotelData = (resolvedHotelOverride?.name)
+        ? { hasHotel: true, hotelName: resolvedHotelOverride.name, hotelAddress: resolvedHotelOverride.address || '', checkInTime: '15:00', checkOutTime: '11:00' }
+        : (flightContext?.hotelName
+          ? { hasHotel: true, hotelName: flightContext.hotelName, hotelAddress: flightContext.hotelAddress || '', checkInTime: flightContext.hotelCheckIn || '15:00', checkOutTime: flightContext.hotelCheckOut || '11:00' }
+          : { hasHotel: false, hotelName: 'hotel' } as any);
+
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
       
