@@ -1733,10 +1733,16 @@ export function EditorialItinerary({
           const bookingRef = returnLeg.confirmationCode || '';
           const price = returnLeg.price;
 
-          // Detect transport type from carrier/flight number
-          const hasFlightNum = !!(flightNum || (carrier && !carrier.toLowerCase().includes('train')));
-          const tType = hasFlightNum ? 'flight' : 'train';
-          const transportLabel = tType.charAt(0).toUpperCase() + tType.slice(1);
+          // Detect transport type: prefer explicit transportMode, then heuristic
+          const explicitMode = (flightSelection as any).transportMode as string | undefined;
+          const tType: string = explicitMode
+            || (flightNum ? 'flight' : (carrier && !carrier.toLowerCase().includes('train') ? 'flight' : 'train'));
+          const transportLabel = tType === 'rideshare' ? 'Rideshare'
+            : tType.charAt(0).toUpperCase() + tType.slice(1);
+          const terminalWord = tType === 'flight' ? 'airport'
+            : tType === 'ferry' ? 'port'
+            : tType === 'train' ? 'station'
+            : 'terminal';
           const title = arrAirport ? `${transportLabel} to ${arrAirport}` : `${transportLabel} home`;
           const cardTime = depTime || '18:00';
 
