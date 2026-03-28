@@ -7689,7 +7689,15 @@ If the purpose is a specific event, plan at least ONE full day around that event
               if (oldTitle !== act.title) transportFixCount++;
             } else if ((act.title || '').toLowerCase().startsWith('travel to')) {
               const oldTitle = act.title;
-              act.title = `Travel to ${nextLocationName}`;
+              // Check transportation.method for a real mode
+              const methodRaw = (act.transportation?.method || '').toLowerCase();
+              const knownModes = ['taxi','metro','walk','walking','train','bus','ferry','uber','subway','tram','rideshare','drive','driving'];
+              const modeLabel = knownModes.includes(methodRaw)
+                ? methodRaw.charAt(0).toUpperCase() + methodRaw.slice(1)
+                : null;
+              act.title = modeLabel
+                ? `${modeLabel} to ${nextLocationName}`
+                : `Travel to ${nextLocationName}`;
               if (oldTitle !== act.title) transportFixCount++;
             }
 
@@ -11465,7 +11473,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
               startTime: st, endTime: bOffset(st, 15), durationMinutes: 15,
               location: { name: to, address: '' },
               cost: { amount: 0, currency: 'USD' }, isLocked: false,
-              tags: ['transport'], transportation: { method: 'unknown', duration: '~15 min' },
+              tags: ['transport'], transportation: { method: 'walking', duration: '15 min' },
               source: 'bookend-validator',
             });
 

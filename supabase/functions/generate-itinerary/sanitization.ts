@@ -151,6 +151,48 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number): any {
   return day;
 }
 
+// =============================================================================
+// DURATION NORMALIZATION — Render all duration strings consistently
+// =============================================================================
+
+/**
+ * Normalize a duration string to a consistent format: "X min" or "Xh Y min".
+ * Handles: "0:25", "15m", "15 min", "~15 min", "1h 30m", "1h30m", etc.
+ */
+export function normalizeDurationString(raw: string | undefined | null): string {
+  if (!raw || typeof raw !== 'string') return '';
+  const cleaned = raw.replace(/^~\s*/, '').trim();
+  if (!cleaned) return '';
+
+  // Parse "H:MM" format (e.g., "0:25", "1:30")
+  const hmMatch = cleaned.match(/^(\d+):(\d{2})$/);
+  if (hmMatch) {
+    const h = parseInt(hmMatch[1], 10);
+    const m = parseInt(hmMatch[2], 10);
+    const total = h * 60 + m;
+    if (total <= 0) return '';
+    if (total < 60) return `${total} min`;
+    if (total % 60 === 0) return `${total / 60}h`;
+    return `${h}h ${m} min`;
+  }
+
+  // Parse existing "Xh Ym" / "X min" / "Xm" formats → re-render consistently
+  let totalMins = 0;
+  const hMatch = cleaned.match(/(\d+)\s*h/i);
+  const mMatch = cleaned.match(/(\d+)\s*m(?:in(?:ute)?s?)?/i);
+  if (hMatch) totalMins += parseInt(hMatch[1], 10) * 60;
+  if (mMatch) totalMins += parseInt(mMatch[1], 10);
+
+  if (totalMins > 0) {
+    if (totalMins < 60) return `${totalMins} min`;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return m === 0 ? `${h}h` : `${h}h ${m} min`;
+  }
+
+  return raw; // Unparseable — pass through
+}
+
 export function sanitizeDateFields(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(sanitizeDateFields);
