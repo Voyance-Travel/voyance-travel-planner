@@ -190,6 +190,13 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(TRANSPORT_EMOJI_RE, '')
     .replace(PARENTHETICAL_META_RE, '')
     .replace(WALKIN_META_RE, '')
+    .replace(EMOJI_BOOKING_FLAG_RE, '')
+    .replace(URGENCY_PREFIX_RE, '')
+    .replace(RAW_CODE_FIELD_RE, '')
+    .replace(ALL_CAPS_META_RE, '')
+    .replace(AI_SELF_COMMENTARY_RE, '')
+    .replace(ALTERNATIVE_SUGGESTION_RE, '')
+    .replace(STANDALONE_BOOL_RE, '')
     .replace(/\(\s*\)/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
