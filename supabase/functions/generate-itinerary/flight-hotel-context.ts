@@ -440,7 +440,17 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
       latestLastActivityTime: latestLastActivity,
       hotelName,
       hotelAddress,
-      arrivalAirport: (flightRaw?.arrivalAirport as string) || undefined,
+      arrivalAirport: (() => {
+        // Prefer legs[].arrival.airport (same logic as prompt-library.ts)
+        const legs = Array.isArray(flightRaw?.legs) ? flightRaw.legs as any[] : [];
+        if (legs.length > 0) {
+          const destLeg = legs.find((l: any) => l.isDestinationArrival) || legs[0];
+          const legAirport = destLeg?.arrival?.airport;
+          if (legAirport) return legAirport as string;
+        }
+        // Fallback to flat field
+        return (flightRaw?.arrivalAirport as string) || undefined;
+      })(),
       rawFlightSelection: trip.flight_selection,
       rawHotelSelection: trip.hotel_selection,
       rawFlightIntelligence: trip.flight_intelligence,
