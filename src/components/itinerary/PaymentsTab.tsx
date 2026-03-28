@@ -220,9 +220,11 @@ export function PaymentsTab({
 
   // ─── Canonical total from DB ledger (single source of truth, matches header + budget) ───
   const financialSnapshot = useTripFinancialSnapshot(tripId);
-  // Use the DB-backed ledger total exclusively — no fallback to payableTotalCents
-  // to prevent divergence between Budget, Payments, and Itinerary totals.
-  const estimatedTotal = financialSnapshot.loading ? payableTotalCents : financialSnapshot.tripTotalCents;
+  // Use DB-backed snapshot as canonical total; fall back to payableItems sum
+  // when activity_costs table is empty (e.g. fresh trip before sync completes).
+  const estimatedTotal = financialSnapshot.loading
+    ? payableTotalCents
+    : (financialSnapshot.tripTotalCents > 0 ? financialSnapshot.tripTotalCents : payableTotalCents);
   // "Paid so far" reflects actual recorded payments from trip_payments
   const paidAmount = totals.paid;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
