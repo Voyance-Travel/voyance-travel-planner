@@ -441,6 +441,7 @@ export async function handleGenerateTrip(
       
       console.log(`[generate-trip] Enrichment context computed with ${Object.keys(enrichmentContext).length} fields`);
       timer.endPhase('pre_chain_enrichment');
+      await timer.updateProgress('enrichment_complete', 8);
     } catch (enrichErr) {
       console.warn('[generate-trip] Enrichment context computation failed (non-blocking):', enrichErr);
       timer.addError('pre_chain_enrichment', String(enrichErr));
