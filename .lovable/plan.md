@@ -1,67 +1,56 @@
 
 
-## Enhance Generation Logging: LLM Model, Token Counts, Categories, Inner Phase Timing
+## Fix: Generation Speed — Targeted Optimizations
 
-The timer infrastructure exists but is only half-wired. The expensive inner work (AI call, parsing, enrichment) inside `index.ts` is not instrumented, and the model/token/category data is never recorded.
+### Key Finding: Most parallelization is already done
 
----
+After reading the actual code, the system **already has**:
+- **Parallel day generation** — Stage 2 generates days in batches of 3 via `Promise.all` (line 3249)
+- **Parallel venue enrichment** — Both Stage 4 (line 4282) and generate-day (line 10494) process activities in `Promise.all` batches of 3
+- **Per-activity timeouts** — 10s timeout per enrichment via `Promise.race` (line 4106)
+- **Stage-level time budgets** — 45s for Stage 4, 25s for generate-day enrichment
 
-### What's Missing Today
+**The real blocker is a crash, not slowness.** The `effectiveHotelData` variable is used at lines 8869, 9005, 9200, and 9494 in the generate-day handler but is only defined inside `buildDayPrompt()` at line 1610. This causes a `ReferenceError` that crashes Day 2+ generation entirely.
 
-| Data Point | DB Column Exists? | Currently Logged? |
-|---|---|---|
-| Which LLM model is called | Yes (`model_used`) | No |
-| Token counts (prompt/completion) | Yes (`prompt_token_count`, `completion_token_count`) | No |
-| Per-phase timing inside generate-day | Yes (`phase_timings`) | Only outer `day_N_total`, not inner AI/enrich/parse |
-| Activity categories per day | No | No |
+### What this fix does (3 targeted changes)
 
----
-
-### Changes
-
-**1. Wire timer into `index.ts` generate-day action (~line 2200)**
-
-Pass `generationLogId` through the `generate-day` request payload from `action-generate-trip-day.ts`. Inside `index.ts`, reconstruct the timer and wrap the key phases:
-
-- `ai_call_day_N` — the main Gemini 3 Flash call (~line 2201)
-- `parse_response_day_N` — JSON parsing of AI output
-- `venue_enrichment_day_N` — Google Places + GPT-5-nano semantic verification (~line 3720)
-- `cost_estimation_day_N` — pricing logic
-- `bookend_validation` — the post-processing validator
-
-This gives the waterfall chart real per-phase bars instead of just one `day_N_total` block.
-
-**2. Record LLM model name**
-
-After the AI call completes, write `model_used: 'google/gemini-3-flash-preview'` to the generation_logs row. Since venue verification also uses `openai/gpt-5-nano`, track both in a new `models_used` JSONB field (or append to `phase_timings` metadata).
-
-Simpler approach: add the model name to each phase key, e.g. `ai_call_day_1 [gemini-3-flash]`, so it shows in the waterfall naturally.
-
-**3. Record token counts**
-
-The Lovable AI gateway returns `usage.prompt_tokens` and `usage.completion_tokens` in the response. After the AI call, parse these from the response and accumulate them. On `finalize()`, write totals to `prompt_token_count` and `completion_token_count`.
-
-**4. Track categories per day**
-
-Add a `category_breakdown` field to each `day_timings` entry:
-```json
-{ "day": 1, "total_ms": 62000, "ai_ms": 45000, "enrich_ms": 8000, "activities": 8,
-  "categories": { "dining": 3, "activity": 2, "transport": 2, "nightlife": 1 } }
+**1. Fix the crash (critical — unblocks everything)**
+Define `effectiveHotelData` in the generate-day handler scope using the same logic as `buildDayPrompt()`:
+```typescript
+const effectiveHotelData = (hotelOverride?.name)
+  ? { hasHotel: true, hotelName: hotelOverride.name, ... }
+  : (flightContext?.hotelName
+    ? { hasHotel: true, hotelName: flightContext.hotelName, ... }
+    : { hasHotel: false, hotelName: 'hotel' });
 ```
+This single addition fixes all 4 crash sites.
 
-After parsing the AI response, count activities by category and include in `addDayTiming()`.
+**2. Increase batch concurrency (moderate speedup)**
+The current BATCH_SIZE of 3 is conservative. With per-activity 10s timeouts already in place:
+- Increase `BATCH_SIZE` from 3 → 5 in both Stage 4 enrichment and generate-day enrichment
+- Reduce inter-batch delay from 400ms → 100ms (the timeout protection handles slow calls)
+- This reduces enrichment time by ~40% without risking rate limits (5 concurrent Google Places calls is well within quotas)
 
----
+**3. AI call timeout protection**
+The generate-day handler already has AbortController timeouts (120s/180s), but add a `Promise.race` wrapper as a safety net for the inner AI call in the generate-day action to prevent infinite hangs.
 
-### Files Changed
+### Files changed
 
 | File | Change |
-|---|---|
-| `supabase/functions/generate-itinerary/generation-timer.ts` | Add `addTokenUsage()` method, extend `addDayTiming()` to accept categories, write token totals in `finalize()` |
-| `supabase/functions/generate-itinerary/action-generate-trip-day.ts` | Pass `generationLogId` in the `generate-day` request body; count categories from `dayResult.activities` before calling `addDayTiming()` |
-| `supabase/functions/generate-itinerary/index.ts` | Import timer, reconstruct from logId in generate-day action, wrap AI call / parse / enrichment / cost phases with `startPhase`/`endPhase`, extract token counts from AI response |
+|------|--------|
+| `supabase/functions/generate-itinerary/index.ts` | Define `effectiveHotelData` in generate-day handler (~line 8545); increase BATCH_SIZE to 5 and reduce delays in Stage 4 enrichment |
 
-### Migration
+### Expected impact
 
-None needed — `model_used`, `prompt_token_count`, and `completion_token_count` columns already exist. Category data goes inside the existing `day_timings` JSONB.
+| Change | Effect |
+|--------|--------|
+| Fix effectiveHotelData crash | **Unblocks Day 2-5 generation entirely** — currently 0% of multi-day trips complete |
+| Larger batches + shorter delays | ~40% faster enrichment per day |
+| AI timeout safety net | Prevents infinite hangs |
+
+### What we're NOT doing (already implemented)
+
+- Parallelizing venue enrichment (already done with `Promise.all`)
+- Parallelizing day generation (already done in batches of 3)
+- Prompt trimming (already done — `previousActivities` capped to last 3 days at line 234)
 
