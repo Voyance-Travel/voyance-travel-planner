@@ -8920,6 +8920,148 @@ Add your flight and hotel details for a more complete last day.`;
         }
       }
 
+        // =======================================================================
+        // TRANSPORT & HOTEL BOOKEND VALIDATOR
+        // Ensures consistent Activity → Transport → Activity pattern
+        // and that hotel returns/arrivals always have visible cards
+        // =======================================================================
+        try {
+          const hotelName = (() => {
+            // Try to find hotel name from accommodation activities or trip data
+            const accomAct = generatedDay.activities?.find((a: any) => 
+              (a.category || '').toLowerCase() === 'accommodation' && 
+              !(a.title || '').toLowerCase().includes('checkout') &&
+              !(a.title || '').toLowerCase().includes('check-out')
+            );
+            if (accomAct) return accomAct.location?.name || accomAct.title?.replace(/^(Return to |Freshen up at |Check.?in at )/i, '') || null;
+            // Fallback: check paramHotelName if available
+            return paramHotelName || null;
+          })();
+
+          if (hotelName && generatedDay.activities?.length > 0) {
+            const activities = generatedDay.activities;
+            const isTransport = (a: any) => (a.category || '').toLowerCase() === 'transport';
+            const isAccommodation = (a: any) => (a.category || '').toLowerCase() === 'accommodation';
+            const isHotelRelated = (a: any) => {
+              const title = (a.title || '').toLowerCase();
+              const locName = (a.location?.name || '').toLowerCase();
+              const hn = hotelName.toLowerCase();
+              return title.includes(hn) || locName.includes(hn) || 
+                     title.includes('hotel') || title.includes('return to') || title.includes('freshen up');
+            };
+
+            // Helper to generate a time string offset by minutes
+            const offsetTime = (timeStr: string, minutes: number): string => {
+              if (!timeStr) return '';
+              const parts = timeStr.split(':');
+              if (parts.length < 2) return timeStr;
+              const h = parseInt(parts[0], 10);
+              const m = parseInt(parts[1], 10);
+              const total = h * 60 + m + minutes;
+              const nh = Math.floor(total / 60) % 24;
+              const nm = total % 60;
+              return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
+            };
+
+            const makeAccomCard = (label: string, startTime: string, duration: number) => ({
+              id: `bookend-${label.replace(/\s/g, '-').toLowerCase()}-${dayNumber}-${Date.now()}`,
+              title: `${label} ${hotelName}`,
+              category: 'accommodation',
+              description: `Time at ${hotelName} to rest and refresh.`,
+              startTime,
+              endTime: offsetTime(startTime, duration),
+              durationMinutes: duration,
+              location: { name: hotelName, address: '' },
+              cost: { amount: 0, currency: 'USD' },
+              isLocked: false,
+              tags: ['hotel', 'rest'],
+              source: 'bookend-validator',
+            });
+
+            const makeTransportCard = (fromName: string, toName: string, startTime: string) => ({
+              id: `transport-gap-${dayNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              title: `Travel to ${toName}`,
+              category: 'transport',
+              description: `Transit from ${fromName} to ${toName}.`,
+              startTime,
+              endTime: offsetTime(startTime, 15),
+              durationMinutes: 15,
+              location: { name: toName, address: '' },
+              cost: { amount: 0, currency: 'USD' },
+              isLocked: false,
+              tags: ['transport'],
+              transportation: { method: 'unknown', duration: '~15 min' },
+              source: 'bookend-validator',
+            });
+
+            // 1. Mid-day hotel transports without accommodation card
+            for (let i = 0; i < activities.length - 1; i++) {
+              const act = activities[i];
+              if (isTransport(act) && isHotelRelated(act) && !isAccommodation(activities[i + 1])) {
+                // Transport to hotel but no accommodation card follows — inject one
+                const accomCard = makeAccomCard('Freshen up at', act.endTime || offsetTime(act.startTime || '14:00', 15), 30);
+                activities.splice(i + 1, 0, accomCard);
+                console.log(`[bookend-validator] 🏨 Injected "Freshen up at ${hotelName}" after transport on Day ${dayNumber}`);
+              }
+            }
+
+            // 2. End-of-day hotel return
+            const visibleActivities = activities.filter((a: any) => !isTransport(a));
+            const lastVisible = visibleActivities[visibleActivities.length - 1];
+            if (lastVisible && !isAccommodation(lastVisible)) {
+              // Last visible activity is not hotel — inject return
+              const lastEndTime = lastVisible.endTime || '22:00';
+              const transportCard = makeTransportCard(
+                lastVisible.location?.name || lastVisible.title || 'venue',
+                hotelName,
+                lastEndTime
+              );
+              const returnCard = makeAccomCard('Return to', offsetTime(lastEndTime, 20), 15);
+              activities.push(transportCard);
+              activities.push(returnCard);
+              console.log(`[bookend-validator] 🏨 Injected "Return to ${hotelName}" at end of Day ${dayNumber}`);
+            }
+
+            // 3. Ensure transport exists between every pair of visible activities at different locations
+            const rebuilt: any[] = [];
+            for (let i = 0; i < activities.length; i++) {
+              rebuilt.push(activities[i]);
+              
+              if (i < activities.length - 1) {
+                const curr = activities[i];
+                const next = activities[i + 1];
+                
+                // Skip if either is already transport
+                if (isTransport(curr) || isTransport(next)) continue;
+                
+                // Check if locations differ
+                const currLoc = (curr.location?.name || curr.title || '').toLowerCase();
+                const nextLoc = (next.location?.name || next.title || '').toLowerCase();
+                
+                if (currLoc && nextLoc && currLoc !== nextLoc) {
+                  // Check no transport between them in original array
+                  const hasTransitBetween = (i + 2 <= activities.length - 1) && isTransport(activities[i + 1]);
+                  if (!hasTransitBetween) {
+                    const gapTransport = makeTransportCard(
+                      curr.location?.name || curr.title,
+                      next.location?.name || next.title,
+                      curr.endTime || ''
+                    );
+                    rebuilt.push(gapTransport);
+                    console.log(`[bookend-validator] 🚕 Injected transit gap: "${curr.title}" → "${next.title}" on Day ${dayNumber}`);
+                  }
+                }
+              }
+            }
+
+            generatedDay.activities = rebuilt;
+            normalizedActivities = rebuilt;
+            console.log(`[bookend-validator] ✓ Day ${dayNumber} bookend validation complete (${rebuilt.length} activities)`);
+          }
+        } catch (bookendErr) {
+          console.warn('[bookend-validator] Non-blocking error:', bookendErr);
+        }
+
 
       let transportPreferencePrompt = '';
       const transportModesFromRequest = preferences?.transportationModes as string[] | undefined;
@@ -9077,10 +9219,10 @@ ${dayMealPolicy.requiredMeals.includes('breakfast') ? '1. BREAKFAST (category: "
 3. MORNING ACTIVITIES — At least 1 paid + 1 free activity
 ${dayMealPolicy.requiredMeals.includes('lunch') ? '4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips' : ''}
 5. AFTERNOON ACTIVITIES — At least 1-2 paid + 1 free activity  
-6. HOTEL RETURN (if dinner venue is far) — "Freshen up" with category "accommodation"
+6. HOTEL RETURN (REQUIRED if dinner is far from hotel) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30-60 min. This MUST be a separate activity card, not just a transport entry.
 ${dayMealPolicy.requiredMeals.includes('dinner') ? '7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips' : ''}
 8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot (at least 1 suggestion)
-9. RETURN TO HOTEL — With transport mode and time
+9. RETURN TO HOTEL (REQUIRED as LAST activity) — "Return to [EXACT Hotel Name]" with category "accommodation". This is the FINAL card of every day. MUST appear after ALL other activities including nightlife. Include transport mode in a preceding transport activity.
 10. NEXT MORNING PREVIEW — In the tips of the LAST activity: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
 
 ${mealRequirementsBlock}
