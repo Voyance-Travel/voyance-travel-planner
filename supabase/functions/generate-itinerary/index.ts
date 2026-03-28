@@ -10139,6 +10139,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       try {
         let data: any = null;
         const maxAttempts = 5;
+        if (innerTimer) innerTimer.startPhase(`ai_call_day_${dayNumber}`);
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           // Fall back to a faster model after 3 failed attempts to reduce provider timeouts
           const model = attempt <= 3 ? "google/gemini-3-flash-preview" : "google/gemini-2.5-flash";
