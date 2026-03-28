@@ -48,6 +48,7 @@ interface PayableItemsInput {
   flightSelection?: {
     outbound?: { price?: number; airline?: string };
     return?: { price?: number; airline?: string };
+    legs?: { price?: number; airline?: string }[];
     totalPrice?: number;
   } | null;
   hotelSelection?: {
