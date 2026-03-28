@@ -2485,6 +2485,27 @@ Generate activities for this day following ALL constraints above.`;
           normalizedAct.bookingRequired = true;
         }
 
+        // Clamp end-of-day accommodation cards to realistic duration
+        const accomTitle = (normalizedAct.title || '').toLowerCase();
+        const isReturnToHotel = normalizedAct.category?.toLowerCase() === 'accommodation' &&
+          (accomTitle.includes('return to') || accomTitle.includes('freshen up') || 
+           accomTitle.includes('rest at') || accomTitle.includes('back to') ||
+           accomTitle.includes('wind down') || accomTitle.includes('settle in'));
+
+        if (isReturnToHotel && normalizedAct.durationMinutes > 60) {
+          const clampedDuration = 15;
+          const origDuration = normalizedAct.durationMinutes;
+          normalizedAct.durationMinutes = clampedDuration;
+          if (normalizedAct.startTime) {
+            const startMins = parseTimeToMinutes(normalizedAct.startTime);
+            if (startMins !== null) {
+              normalizedAct.endTime = minutesToHHMM(startMins + clampedDuration);
+            }
+          }
+          normalizedAct.duration = '15 min';
+          console.log(`[Duration fix] Clamped "${normalizedAct.title}" from ${origDuration}min to ${clampedDuration}min`);
+        }
+
         // Derive intelligence fields if AI didn't set them
         deriveIntelligenceFields(normalizedAct);
 
