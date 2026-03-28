@@ -341,6 +341,30 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
     };
   }
   
+  // Priority 0.5: Known free attractions — short-circuit before any estimation
+  const FREE_ATTRACTION_KEYWORDS = [
+    'crossing', 'gardens', 'park', 'shrine', 'temple', 'plaza',
+    'square', 'bridge', 'waterfront', 'promenade', 'boulevard',
+    'viewpoint', 'lookout', 'market stroll', 'neighborhood walk',
+    'imperial palace', 'east gardens', 'meiji jingu', 'senso-ji',
+    'sensoji', 'fushimi inari', 'central park', 'hyde park',
+    'torii', 'gate', 'passage', 'cemetery', 'memorial',
+    'boardwalk', 'riverbank', 'canal', 'pier', 'harbor walk',
+    'old town', 'district walk', 'fish market', 'tsukiji',
+    'nishiki', 'la boqueria', 'grand bazaar',
+  ];
+  const titleLower = (params.title || '').toLowerCase();
+  if (FREE_ATTRACTION_KEYWORDS.some(kw => titleLower.includes(kw))) {
+    return {
+      amount: 0,
+      currency: 'USD',
+      isEstimated: false,
+      confidence: 'medium' as const,
+      source: 'category_estimate' as const,
+      reason: 'Commonly free attraction',
+    };
+  }
+
   // Priority 1: Explicit cost
   if (explicitCost !== undefined && explicitCost >= 0) {
     return {
