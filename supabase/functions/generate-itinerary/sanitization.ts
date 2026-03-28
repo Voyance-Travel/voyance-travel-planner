@@ -67,14 +67,32 @@ const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/g
 const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
 const FORWARD_REF_RE = /\.?\s*(?:rest|recharge|prepare|get ready)\s+for\s+tomorrow'?s?\s+[^.]+(?:adventure|day|exploration|experience|excursion)[^.]*\.?/gi;
 
-// Leaked AI planning text patterns
+// Leaked AI planning text patterns (narrow — kept for backward compat)
 const RESERVATION_URGENCY_RE = /\b[Rr]eservation\s*[Uu]rgency[:\s]+\S+(?:\s*\([^)]*\))?\.?\s*/g;
 const BOOK_CODE_RE = /\bbook_(?:now|soon|week_before)\b(?:\s+via\s+[^.]+)?\.?\s*/gi;
-const NEXT_DAY_PLANNING_RE = /(?:Tomorrow|Next\s+[Mm]orning(?:\s+Preview)?)\s*:\s*[^]*$/gi;
+const NEXT_DAY_PLANNING_RE = /(?:Tomorrow|Next\s+(?:morning|day))[:\s]*[^.]+\.?\s*/gi;
 const REQUIRED_SLOT_RE = /[Tt]he\s+required\s+[''\u2018\u2019][^''\u2018\u2019]+[''\u2018\u2019]\s+(?:interest\s+)?slot\s*[-–—]?\s*/g;
 const TRANSPORT_EMOJI_RE = /🚶\s*\d+\s*min\.?\s*/g;
 const PARENTHETICAL_META_RE = /\((?:Paid\s+activity|Free\s+to\s+explore[^)]*)\)\s*/gi;
 const WALKIN_META_RE = /\bWalk-in\s+OK\b[^.]*\.?\s*/gi;
+
+// ============================================================
+// Broad category-based leaked AI text patterns
+// ============================================================
+// 1. Emoji booking flags: 🔴 Book Now, 🟡 Book 2-4 weeks out, etc.
+const EMOJI_BOOKING_FLAG_RE = /[🔴🟡🟢🔵]\s*(?:Book|Reserve|BOOK|RESERVE)[^.]*\.?\s*/g;
+// 2. Urgency/Reservation prefix sentences
+const URGENCY_PREFIX_RE = /(?:^|\.\s*)\s*(?:Urgency|Reservation\s*urgency|Booking\s*urgency)[:\s]+[^.]+\.?\s*/gi;
+// 3. Raw code field assignments (isVoyancePick: true, book_now, walk_in)
+const RAW_CODE_FIELD_RE = /\b(?:is[A-Z]\w+|book_(?:now|soon|week_before)|walk_in)\s*[:=]\s*\w+\.?\s*/g;
+// 4. All-caps parenthetical meta notes: (TRANSIT INCLUDED IN TIPS), (NOTE: ...)
+const ALL_CAPS_META_RE = /\([A-Z][A-Z\s_]{3,}\)/g;
+// 5. AI self-commentary about profiles/preferences
+const AI_SELF_COMMENTARY_RE = /(?:^|\.\s*)(?:Profile updated|Updated preferences|Based on (?:your|the) profile|Adjusted (?:for|based on)|Per your preferences)[^.]*\.?\s*/gi;
+// 6. Alternative suggestions: "Alternative: Narisawa (...)"
+const ALTERNATIVE_SUGGESTION_RE = /\s*Alternative:\s*[^.]+\.?\s*/g;
+// 7. Standalone boolean field leaks: isVoyancePick: true
+const STANDALONE_BOOL_RE = /\s+(?:is[A-Z]\w+):\s*(?:true|false|null)\.?\s*/g;
 
 // Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
 const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''\u2018\u2019-]+/gi;
