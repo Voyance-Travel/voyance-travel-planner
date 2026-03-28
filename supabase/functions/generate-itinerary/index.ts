@@ -2441,6 +2441,18 @@ Generate activities for this day following ALL constraints above.`;
         throw new Error("Invalid AI response format");
       }
 
+      // ==========================================================================
+      // HOTEL NAME ENFORCEMENT: Replace hallucinated hotel brands with "Your Hotel"
+      // when no hotel was selected by the user.
+      // ==========================================================================
+      if (!dayCity?.hotelName || dayCity.hotelName === 'Your Hotel') {
+        const ctxHotel = context.hotelData?.hotelName;
+        if (!ctxHotel || ctxHotel === 'Your Hotel') {
+          generatedDay = enforceHotelPlaceholderOnDay(generatedDay) as StrictDay;
+          console.log(`[Hotel enforcement] Replaced hallucinated hotel brands on day ${dayNumber}`);
+        }
+      }
+
       // Normalize the day data
       generatedDay.dayNumber = dayNumber;
       generatedDay.date = date;
@@ -10348,6 +10360,18 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         if (innerTimer) {
           innerTimer.endPhase(`parse_response_day_${dayNumber}`);
           innerTimer.startPhase(`post_processing_day_${dayNumber}`);
+        }
+
+        // ==========================================================================
+        // HOTEL NAME ENFORCEMENT: Replace hallucinated hotel brands with "Your Hotel"
+        // when no hotel was selected by the user (generate-day handler).
+        // ==========================================================================
+        {
+          const effectiveHotel = resolvedHotelOverride?.name || flightContext.hotelName;
+          if (!effectiveHotel || effectiveHotel === 'Your Hotel') {
+            generatedDay = enforceHotelPlaceholderOnDay(generatedDay);
+            console.log(`[Hotel enforcement] Replaced hallucinated hotel brands on day ${dayNumber} (generate-day)`);
+          }
         }
 
         // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
