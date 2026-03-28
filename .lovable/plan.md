@@ -1,62 +1,47 @@
 
 
-## Fix: Departure Transport Card Logic
+## Fix Final Departure Card — Dedup + Design
 
-### Current state (3 paths, each with issues)
+### Problem 1: Dedup patterns miss city names
 
-```text
-Path 1: Transition Day     → reads trip_cities.transport_details    ✅ works
-Path 2: Departure Day      → reads next city's transport_details    ✅ works  
-Path 3: Final Departure     → reads flightSelection return leg      ⚠️ broken
-```
+"Transfer to Narita Airport (NRT)" is not caught by `"transfer to airport"` because "Narita" sits between the words. Same for "Transfer to Tokyo Station" vs `"transfer to station"`.
 
-Path 3 problems:
-- Transport type detected via fragile heuristic (has flight number → flight, else → train). Ignores `transportMode` field that `buildTransportSelection()` actually saves
-- AI-generated "Transfer to Airport" and "Departure from Airport" activities duplicate the synthetic card
-- No card at all if `flightSelection` is missing (single-city, no transport entered)
+**Fix**: Replace substring matching with smarter keyword detection that checks for the presence of key tokens regardless of what's between them:
 
-### Fixes
-
-**1. Read `transportMode` from `flightSelection` instead of guessing** (EditorialItinerary.tsx ~line 1737)
-
-Currently:
 ```js
-const hasFlightNum = !!(flightNum || (carrier && !carrier.toLowerCase().includes('train')));
-const tType = hasFlightNum ? 'flight' : 'train';
+// Instead of: t.includes('transfer to airport')
+// Use: t.includes('transfer to') && (t.includes('airport') || t.includes('station') || ...)
+const isTransferActivity = t.includes('transfer to') && 
+  (t.includes('airport') || t.includes('station') || t.includes('port') || t.includes('terminal'));
+const isDepartureActivity = t.includes('departure from') || t.includes('depart from');
+const isHeadingTo = (t.includes('head to') || t.includes('travel to')) && 
+  (t.includes('airport') || t.includes('station') || t.includes('port'));
 ```
 
-Fix: Check `flightSelection.transportMode` first (set by `buildTransportSelection`), then fall back to the heuristic:
-```js
-const tType = flightSelection.transportMode 
-  || (flightNum ? 'flight' : 'train');
-```
+This catches "Transfer to Narita Airport (NRT)", "Departure from Narita Airport", "Head to Tokyo Station", etc.
 
-**2. Deduplicate AI-generated departure activities against synthetic card**
+**File**: `EditorialItinerary.tsx` lines 1816-1832
 
-After injecting the synthetic final departure card, filter out AI-generated activities that are clearly transport/departure duplicates (titles matching "Transfer to Airport", "Departure from", etc.). The current trimming logic only removes by time cutoff — it doesn't detect semantic duplicates.
+### Problem 2: Card looks bad
 
-Add a dedup pass (~line 1810):
-```js
-const DEPARTURE_DUPES = ['transfer to airport', 'departure from', 'head to airport', 'airport transfer'];
-updatedActivities = updatedActivities.filter(act => {
-  if ((act as any).__syntheticFinalDeparture) return true; // keep the card
-  const t = (act.title || '').toLowerCase();
-  return !DEPARTURE_DUPES.some(kw => t.includes(kw));
-});
-```
+Current card shows:
+- "HEADING HOME" small label
+- "TRAIN" bold uppercase label (from `transportName`)
+- "Train home" as title — redundant with the label above
 
-**3. Handle train/bus/ferry departure — strip airport references**
+**Fixes in `InterCityTransportCard.tsx`**:
 
-When `transportMode` is train/bus/ferry, the dedup list should also catch "Transfer to Narita Airport" etc. The synthetic card will show the correct station/terminal instead.
+1. **Remove redundant transport type label** when variant is `final` — the "HEADING HOME" header already signals what this is. Instead show the carrier/route info where the label currently sits.
+
+2. **Better title generation** in `EditorialItinerary.tsx`: Instead of `"Train home"`, generate something like `"Train to [home city]"` or just use the carrier name + route. When no home city is known, use the route (`Tokyo → Home`) rather than the generic "Train home".
+
+3. **Clean up the card layout for final variant**: Merge the transport type into the heading line so it reads `"Heading Home · Train"` instead of stacking three separate text elements.
 
 ### Files changed
 
 | File | Change |
 |------|--------|
-| `src/components/itinerary/EditorialItinerary.tsx` | Read `transportMode`, add dedup filter, strip airport activities for non-flight departures |
-
-### What this does NOT change
-- Paths 1 and 2 (transition/departure days) — these work correctly
-- The AI prompt (server-side generation already handles transport correctly)
-- `buildTransportSelection()` — already saves `transportMode`
+| `EditorialItinerary.tsx` (~line 1816) | Replace substring dedup with token-based matching |
+| `EditorialItinerary.tsx` (~line 1746) | Generate better title using route info |
+| `InterCityTransportCard.tsx` (~line 80) | For final variant, merge transport type into heading, remove redundant label |
 
