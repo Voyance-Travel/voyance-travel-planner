@@ -1733,10 +1733,16 @@ export function EditorialItinerary({
           const bookingRef = returnLeg.confirmationCode || '';
           const price = returnLeg.price;
 
-          // Detect transport type from carrier/flight number
-          const hasFlightNum = !!(flightNum || (carrier && !carrier.toLowerCase().includes('train')));
-          const tType = hasFlightNum ? 'flight' : 'train';
-          const transportLabel = tType.charAt(0).toUpperCase() + tType.slice(1);
+          // Detect transport type: prefer explicit transportMode, then heuristic
+          const explicitMode = (flightSelection as any).transportMode as string | undefined;
+          const tType: string = explicitMode
+            || (flightNum ? 'flight' : (carrier && !carrier.toLowerCase().includes('train') ? 'flight' : 'train'));
+          const transportLabel = tType === 'rideshare' ? 'Rideshare'
+            : tType.charAt(0).toUpperCase() + tType.slice(1);
+          const terminalWord = tType === 'flight' ? 'airport'
+            : tType === 'ferry' ? 'port'
+            : tType === 'train' ? 'station'
+            : 'terminal';
           const title = arrAirport ? `${transportLabel} to ${arrAirport}` : `${transportLabel} home`;
           const cardTime = depTime || '18:00';
 
@@ -1763,7 +1769,7 @@ export function EditorialItinerary({
               from: depAirport,
               to: arrAirport,
               transportName: transportLabel,
-              hubLabel: tType === 'flight' ? 'airport' : 'station',
+              hubLabel: terminalWord,
               carrier,
               flightNum,
               depTime,
@@ -1806,22 +1812,30 @@ export function EditorialItinerary({
 
           updatedActivities.splice(insertIndex, 0, departureCard);
 
-          // Trim non-synthetic activities after checkout on the final day
-          const finalDepMinutes = parseTimeToMinutes(cardTime);
-          const finalBufferMinutes = tType === 'flight' ? 90 : tType === 'train' ? 45 : 30;
-          const finalCutoffMinutes = finalDepMinutes - finalBufferMinutes;
-
+          // Deduplicate AI-generated departure/transfer activities against the synthetic card
+          const DEPARTURE_DUPES = [
+            'transfer to airport', 'departure from', 'head to airport', 'airport transfer',
+            'transfer to station', 'head to station', 'station transfer',
+            'transfer to port', 'head to port', 'port transfer',
+            'transfer to terminal', 'head to terminal',
+            'depart from', 'heading home', 'travel to airport',
+          ];
           updatedActivities = updatedActivities.filter(act => {
-            if ((act as any).__syntheticTravel || (act as any).__syntheticDeparture ||
-                (act as any).__syntheticFinalDeparture || (act as any).__interCityTransport ||
+            if ((act as any).__syntheticFinalDeparture || (act as any).__syntheticTravel ||
+                (act as any).__syntheticDeparture || (act as any).__interCityTransport ||
                 (act as any).__hotelCheckout || (act as any).__hotelCheckin ||
                 act.id.startsWith('hotel-') || act.id.startsWith('departure-') ||
                 act.id.startsWith('travel-') || act.id.startsWith('final-departure-')) {
               return true;
             }
+            const t = (act.title || '').toLowerCase();
+            if (DEPARTURE_DUPES.some(kw => t.includes(kw))) return false;
+            // Time-based trim: remove activities past cutoff
             if (!act.startTime) return true;
             const actMin = parseTimeToMinutes(act.startTime);
-            return actMin < finalCutoffMinutes;
+            const finalDepMinutes = parseTimeToMinutes(cardTime);
+            const finalBufferMinutes = tType === 'flight' ? 90 : tType === 'train' ? 45 : 30;
+            return actMin < (finalDepMinutes - finalBufferMinutes);
           });
         }
       }
