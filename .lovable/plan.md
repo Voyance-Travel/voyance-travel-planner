@@ -1,85 +1,93 @@
 
 
-## Fix: Description Text Quality Issues
+## Fix: Transport Card Inconsistencies
 
-Three distinct problems in AI-generated activity text.
-
----
-
-### Issue 1: Empty Parentheses "()" in Descriptions
-
-**Root cause**: After `sanitizeAITextField` strips content inside parentheses (via `AI_QUALIFIER_RE`, `META_DISTANCE_COST_RE`), the empty `()` shell is left behind. No cleanup pass removes empty parens.
-
-**Fix** — Add to `sanitizeAITextField` in `sanitization.ts` (line ~80, before the final whitespace cleanup):
-```typescript
-.replace(/\(\s*\)/g, '')  // Strip empty parentheses left after content removal
-```
-
-Also add the same rule to the client-side `sanitizeAIOutput` in `src/utils/textSanitizer.ts`.
-
-**File**: `supabase/functions/generate-itinerary/sanitization.ts`, `src/utils/textSanitizer.ts`
+Two problems: (1) inconsistent transport titles ("Travel to X" when mode is known), and (2) duration format varies wildly ("15 min", "15m", "0:25", "~15 min").
 
 ---
 
-### Issue 2: Hallucinated Forward References ("tomorrow's DisneySea adventure")
+### Problem 1: Generic "Travel to" Titles + Wrong Destinations
 
-**Root cause**: The prompt instructs the AI to add a "NEXT MORNING PREVIEW" in the last activity's tips field (line 9424). The AI sometimes leaks this forward-reference into Return to Hotel *descriptions* instead of tips, and fabricates content that doesn't match the actual next day.
+**Root causes:**
+- The bookend validator creates stub transport cards with `method: 'unknown'` and title `Travel to X` (line 11468)
+- The transport title fixer (line 7682) only rewrites titles if a mode prefix is already present; it doesn't check `transportation.method`
+- Destination mismatch: transport titles sometimes reference a location that doesn't match the next activity
 
-**Fix** — Add a post-generation sanitizer in `sanitization.ts` that strips forward-reference phrases from descriptions:
+**Fix — Enhance transport title normalizer in `index.ts` (~line 7690)**
+
+When the title is generic "Travel to X", check `act.transportation?.method` and use it:
 ```typescript
-// In sanitizeAITextField, add:
-const FORWARD_REF_RE = /\.?\s*(?:rest|recharge|prepare|get ready)\s+for\s+tomorrow'?s?\s+[^.]+(?:adventure|day|exploration|experience|excursion)[^.]*\.?/gi;
-```
-
-Also add a dedicated pass in `index.ts` (near the existing category/breakfast normalizers) that specifically targets Return to Hotel descriptions:
-- If description mentions "tomorrow" and doesn't match the actual next day's theme, replace with the bookend validator's clean template: `"Time at ${hotelName} to rest and refresh."`
-
-**File**: `supabase/functions/generate-itinerary/sanitization.ts`, `supabase/functions/generate-itinerary/index.ts`
-
----
-
-### Issue 3: Generic/Placeholder Business Names
-
-**Root cause**: The prompt prohibits generic meal names but doesn't extend this to non-dining activities (wellness, cafés). "Boutique Wellness in Omotesando" and "a kissaten" slip through because validation only checks dining activities for real names.
-
-**Fix** — Add a post-generation validator in `index.ts` (near existing normalizers) that flags generic activity titles:
-
-```typescript
-const GENERIC_TITLE_RE = /^(a |an |the |some |boutique |local )/i;
-const VAGUE_TITLE_KEYWORDS = /\b(or high.end|or similar|boutique wellness|local spa|nearby café)\b/i;
-const INDEFINITE_ARTICLE_START = /^(a|an)\s+[a-z]/i;
-
-for (const day of allDays) {
-  for (const act of day.activities || []) {
-    const title = (act.title || '').trim();
-    // Flag titles starting with indefinite articles ("a kissaten") 
-    // or containing search-result language ("or High-End")
-    if (INDEFINITE_ARTICLE_START.test(title) || VAGUE_TITLE_KEYWORDS.test(title)) {
-      // Capitalize and clean up but can't invent a real name
-      // At minimum, strip the vague qualifiers
-      act.title = sanitizeAITextField(title);
-      console.log(`[Generic title warning] "${title}" may be a placeholder`);
-    }
-  }
+} else if ((act.title || '').toLowerCase().startsWith('travel to')) {
+  const method = (act.transportation?.method || '').toLowerCase();
+  const knownModes = ['taxi','metro','walk','walking','train','bus','ferry','uber','subway','tram','rideshare','drive','driving'];
+  const modeLabel = knownModes.includes(method) 
+    ? method.charAt(0).toUpperCase() + method.slice(1)
+    : null;
+  act.title = modeLabel 
+    ? `${modeLabel} to ${nextLocationName}` 
+    : `Travel to ${nextLocationName}`;
+  // Also fix method='unknown' when we can infer from title
 }
 ```
 
-Also update the prompt (near line 9422) to extend the real-name requirement beyond meals:
-```
-ALL activities must use REAL, SPECIFIC venue names — not generic descriptions.
-"Boutique Wellness in Omotesando" = VIOLATION. Use the actual spa/studio name.
-"a kissaten" = VIOLATION. Name the specific kissaten.
-```
-
-**File**: `supabase/functions/generate-itinerary/index.ts`
+Also update the bookend validator's `bTransCard` (line 11468) to avoid `method: 'unknown'` — default to `'walking'` for short gaps.
 
 ---
 
-### Summary of Changes
+### Problem 2: Duration Format Inconsistency
+
+**Root cause:** Duration strings come from three sources with no normalization:
+- AI output: `"25 min"`, `"0:25"`, `"1h 30m"`
+- Bookend validator: `"~15 min"`
+- Transit estimates: `"15m"`
+
+**Fix — Add `normalizeDurationString()` utility and apply in post-gen pipeline**
+
+Add a function in `sanitization.ts`:
+```typescript
+export function normalizeDurationString(raw: string | undefined): string {
+  if (!raw) return '';
+  const cleaned = raw.replace(/^~/, '').trim();
+  
+  // Parse "H:MM" format (e.g., "0:25", "1:30")
+  const hmMatch = cleaned.match(/^(\d+):(\d{2})$/);
+  if (hmMatch) {
+    const h = parseInt(hmMatch[1], 10);
+    const m = parseInt(hmMatch[2], 10);
+    const total = h * 60 + m;
+    if (total < 60) return `${total} min`;
+    if (total % 60 === 0) return `${total / 60}h`;
+    return `${h}h ${m} min`;
+  }
+  
+  // Parse existing "Xh Ym" / "X min" / "Xm" formats → re-render consistently
+  let totalMins = 0;
+  const hMatch = cleaned.match(/(\d+)\s*h/i);
+  const mMatch = cleaned.match(/(\d+)\s*m(?:in)?/i);
+  if (hMatch) totalMins += parseInt(hMatch[1], 10) * 60;
+  if (mMatch) totalMins += parseInt(mMatch[1], 10);
+  
+  if (totalMins > 0) {
+    if (totalMins < 60) return `${totalMins} min`;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return m === 0 ? `${h}h` : `${h}h ${m} min`;
+  }
+  
+  return raw; // Unparseable — pass through
+}
+```
+
+Apply this in the Stage 2 normalization loop (where transport cards are already being processed) to every `transportation.duration` and the activity's own `duration` field for transport cards.
+
+Also update the bookend validator to use `'15 min'` instead of `'~15 min'`.
+
+---
+
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/sanitization.ts` | Add empty `()` removal + forward-reference stripping to `sanitizeAITextField` |
-| `src/utils/textSanitizer.ts` | Add empty `()` removal to client-side `sanitizeAIOutput` |
-| `supabase/functions/generate-itinerary/index.ts` | Add Return to Hotel description cleaner, generic title warning, and prompt updates requiring real venue names for all activities |
+| `supabase/functions/generate-itinerary/sanitization.ts` | Add `normalizeDurationString()` |
+| `supabase/functions/generate-itinerary/index.ts` | (1) Enhance transport title normalizer to use `transportation.method` for generic "Travel to" titles. (2) Apply `normalizeDurationString()` to all transport durations in Stage 2. (3) Fix bookend validator defaults (`walking` instead of `unknown`, `15 min` instead of `~15 min`). |
 
