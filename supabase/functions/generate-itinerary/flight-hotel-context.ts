@@ -426,8 +426,17 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
         sections.push(`\n${'='.repeat(40)}\n${accomEmoji} ACCOMMODATION — ${accomLabel.toUpperCase()} (Use as daily starting/ending point)\n${'='.repeat(40)}\n${hotelInfo.join('\n')}\n⚠️ Start each day from the ${accomLabel.toLowerCase()} area and end nearby for easy return.\n⚠️ CRITICAL: Day 1 activities must NOT begin before check-in is complete. Standard check-in is 3:00 PM - do not schedule sightseeing before this unless arrival is very early.`);
       }
     } else if (!hotel) {
-      console.log(`[FlightHotel] ⚠️ NO HOTEL DATA FOUND - hotel_selection is empty or missing`);
-      console.log(`[FlightHotel] Raw hotel_selection value:`, JSON.stringify(hotelRaw));
+      console.log(`[FlightHotel] ⚠ NO HOTEL DATA FOUND - using placeholder`);
+      hotelName = 'Your Hotel';
+      hotelAddress = '';
+      sections.push(`\n${'='.repeat(40)}\n ACCOMMODATION (Placeholder)\n${'='.repeat(40)}`);
+      sections.push(`  🏨 Hotel: Your Hotel (not yet selected)`);
+      sections.push(`  ⚠️ IMPORTANT: The traveler has NOT selected a hotel yet.`);
+      sections.push(`  - Use "Your Hotel" as the hotel name in ALL days consistently.`);
+      sections.push(`  - Do NOT invent or suggest specific hotel names.`);
+      sections.push(`  - Do NOT generate "Breakfast at [Hotel Name]" cards — instead use "Breakfast at Your Hotel".`);
+      sections.push(`  - Do NOT generate hotel-specific tips (lobby views, spa access, etc).`);
+      sections.push(`  - Freshen-up and return cards should reference "Your Hotel" only.`);
     }
 
     return {
