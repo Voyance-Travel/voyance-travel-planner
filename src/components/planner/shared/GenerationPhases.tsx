@@ -217,7 +217,7 @@ export function GenerationPhases({
   const nextDay = displayCompletedDays + 1;
   const allVisibleDaysDone = totalDays > 0 && displayCompletedDays >= totalDays;
 
-  const rotatingMessage = useRotatingMessage();
+  const rotatingMessage = useRotatingMessage(tripId, isActive);
 
   // Celebration state
   const [showCelebration, setShowCelebration] = useState(false);
