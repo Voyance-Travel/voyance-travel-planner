@@ -10496,6 +10496,11 @@ function ActivityRow({
                   Booking Required
                 </Badge>
               )}
+              {(isAccommodation || isCheckIn) && (
+                <Badge variant="secondary" className="text-[10px] bg-secondary/60 text-muted-foreground border-0">
+                  Included in your stay
+                </Badge>
+              )}
               {/* Contextual Tips Popover — non-intrusive, behind a tap */}
               {activity.contextualTips && activity.contextualTips.length > 0 && !isDowntime && !isTransport && !isCheckIn && canViewPremium && !compact && (
                 <ContextualTipsPopover tips={activity.contextualTips} />
