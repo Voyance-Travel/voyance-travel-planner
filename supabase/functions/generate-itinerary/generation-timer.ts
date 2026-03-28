@@ -12,7 +12,7 @@ export class GenerationTimer {
   private logId: string | null = null;
   private startTime: number;
   private phases: Record<string, number> = {};
-  private dayTimings: Array<{ day: number; total_ms: number; ai_ms: number; enrich_ms: number; activities: number }> = [];
+  private dayTimings: Array<{ day: number; total_ms: number; ai_ms: number; enrich_ms: number; activities: number; categories?: Record<string, number> }> = [];
   private errors: Array<{ phase: string; error: string; timestamp: string }> = [];
   private currentPhase: string = 'init';
   private phaseStart: number;
@@ -20,6 +20,9 @@ export class GenerationTimer {
   private destination: string = '';
   private numDays: number = 0;
   private numGuests: number = 0;
+  private totalPromptTokens: number = 0;
+  private totalCompletionTokens: number = 0;
+  private modelsUsed: Set<string> = new Set();
 
   constructor(tripId: string, supabaseClient: any) {
     this.tripId = tripId;
@@ -111,10 +114,25 @@ export class GenerationTimer {
     }
   }
 
-  /** Record per-day timing breakdown. */
-  addDayTiming(day: number, totalMs: number, aiMs: number, enrichMs: number, activityCount: number) {
+  /** Record per-day timing breakdown with optional category counts. */
+  addDayTiming(day: number, totalMs: number, aiMs: number, enrichMs: number, activityCount: number, categories?: Record<string, number>) {
     try {
-      this.dayTimings.push({ day, total_ms: totalMs, ai_ms: aiMs, enrich_ms: enrichMs, activities: activityCount });
+      const entry: any = { day, total_ms: totalMs, ai_ms: aiMs, enrich_ms: enrichMs, activities: activityCount };
+      if (categories && Object.keys(categories).length > 0) {
+        entry.categories = categories;
+      }
+      this.dayTimings.push(entry);
+    } catch (e) {
+      // Never break generation
+    }
+  }
+
+  /** Accumulate token usage from an AI response. */
+  addTokenUsage(promptTokens: number, completionTokens: number, model?: string) {
+    try {
+      this.totalPromptTokens += promptTokens || 0;
+      this.totalCompletionTokens += completionTokens || 0;
+      if (model) this.modelsUsed.add(model);
     } catch (e) {
       // Never break generation
     }
@@ -170,8 +188,13 @@ export class GenerationTimer {
       if (this.dayTimings.length > 0) {
         console.log(`[perf] Per-day breakdown:`);
         for (const d of this.dayTimings) {
-          console.log(`[perf]   Day ${d.day}: ${(d.total_ms / 1000).toFixed(1)}s total, AI ${(d.ai_ms / 1000).toFixed(1)}s, enrich ${(d.enrich_ms / 1000).toFixed(1)}s, ${d.activities} activities`);
+          const catStr = (d as any).categories ? ` | ${JSON.stringify((d as any).categories)}` : '';
+          console.log(`[perf]   Day ${d.day}: ${(d.total_ms / 1000).toFixed(1)}s total, AI ${(d.ai_ms / 1000).toFixed(1)}s, enrich ${(d.enrich_ms / 1000).toFixed(1)}s, ${d.activities} activities${catStr}`);
         }
+      }
+      if (this.totalPromptTokens > 0 || this.totalCompletionTokens > 0) {
+        console.log(`[perf] Tokens: ${this.totalPromptTokens} prompt + ${this.totalCompletionTokens} completion = ${this.totalPromptTokens + this.totalCompletionTokens} total`);
+        console.log(`[perf] Models used: ${Array.from(this.modelsUsed).join(', ') || 'unknown'}`);
       }
       if (this.errors.length > 0) {
         console.log(`[perf] Errors: ${this.errors.length}`);
@@ -192,6 +215,9 @@ export class GenerationTimer {
           errors: this.errors,
           current_phase: status === 'completed' ? 'done' : 'failed',
           progress_pct: status === 'completed' ? 100 : Math.round((this.dayTimings.length / Math.max(1, this.numDays)) * 100),
+          model_used: Array.from(this.modelsUsed).join(', ') || null,
+          prompt_token_count: this.totalPromptTokens || null,
+          completion_token_count: this.totalCompletionTokens || null,
         })
         .eq('id', this.logId);
     } catch (e) {

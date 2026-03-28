@@ -328,6 +328,7 @@ export async function handleGenerateTripDay(
             isLastDayInCity: cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false,
             restaurantPool: restaurantPool.length > 0 ? restaurantPool : undefined,
             usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
+            generationLogId: generationLogId || timer.getLogId(),
           }),
         });
       } finally {
@@ -849,9 +850,14 @@ export async function handleGenerateTripDay(
       },
     }).eq('id', tripId);
 
-    // Record final day timing and finalize performance log
+    // Record final day timing with category breakdown and finalize performance log
     const dayGenTotal = Date.now() - dayGenStart;
-    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0);
+    const dayCategories: Record<string, number> = {};
+    for (const act of (dayResult?.activities || [])) {
+      const cat = (act.category || 'other').toLowerCase();
+      dayCategories[cat] = (dayCategories[cat] || 0) + 1;
+    }
+    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0, dayCategories);
     await timer.finalize(allDaysHaveActivities ? 'completed' : 'failed');
 
     console.log(`[generate-trip-day] ${allDaysHaveActivities ? '✅' : '⚠️'} Trip ${tripId} generation ${allDaysHaveActivities ? 'complete' : 'partial (shell days)'}: ${totalDays} days, status=${finalStatus}`);
@@ -907,9 +913,14 @@ export async function handleGenerateTripDay(
       },
     }).eq('id', tripId);
 
-    // Record day timing
+    // Record day timing with category breakdown
     const dayGenTotal = Date.now() - dayGenStart;
-    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0);
+    const dayCats: Record<string, number> = {};
+    for (const act of (dayResult?.activities || [])) {
+      const cat = (act.category || 'other').toLowerCase();
+      dayCats[cat] = (dayCats[cat] || 0) + 1;
+    }
+    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0, dayCats);
     const progressPct = 5 + Math.round((dayNumber / totalDays) * 90);
     await timer.updateProgress(`Day ${dayNumber}/${totalDays} complete`, progressPct);
 

@@ -14,6 +14,7 @@ import { handleRepairTripCosts } from './action-repair-costs.ts';
 import { handleGenerateTrip } from './action-generate-trip.ts';
 import { handleGenerateTripDay } from './action-generate-trip-day.ts';
 import type { ActionContext } from './action-types.ts';
+import { GenerationTimer } from './generation-timer.ts';
 
 // =============================================================================
 // EXTRACTED MODULES — Reduce bundle size for deploy
@@ -7808,7 +7809,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
         mustDoActivities: paramMustDoActivities, interestCategories: paramInterestCategories, generationRules: paramGenerationRules,
         pacing: paramPacing, isFirstTimeVisitor: paramIsFirstTimeVisitor,
         hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity,
-        restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants } = params;
+        restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants, generationLogId: paramGenerationLogId } = params;
       
       // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
       // This is the critical fix - frontend calls often omit userId, but auth token is always present
@@ -7838,6 +7839,17 @@ If the purpose is a specific event, plan at least ONE full day around that event
         console.log(`[generate-day] ✓ Using authenticated userId: ${userId} (no tripId to verify)`);
       }
 
+      // ── PERFORMANCE TIMER (inner phase tracking) ──
+      let innerTimer: GenerationTimer | null = null;
+      if (paramGenerationLogId) {
+        try {
+          innerTimer = new GenerationTimer(tripId || '', supabase);
+          await innerTimer.resume(paramGenerationLogId, destination || '', totalDays || 1, travelers || 1);
+        } catch (e) {
+          console.warn('[generate-day] Timer resume failed (non-blocking):', e);
+          innerTimer = null;
+        }
+      }
 
 // =============================================================================
 // JOURNEY NEXT-LEG AUTO-TRIGGER
@@ -10127,6 +10139,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       try {
         let data: any = null;
         const maxAttempts = 5;
+        if (innerTimer) innerTimer.startPhase(`ai_call_day_${dayNumber}`);
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           // Fall back to a faster model after 3 failed attempts to reduce provider timeouts
           const model = attempt <= 3 ? "google/gemini-3-flash-preview" : "google/gemini-2.5-flash";
@@ -10274,6 +10287,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           throw new Error('AI generation failed');
         }
 
+        // Record AI phase timing, token usage, and model
+        if (innerTimer) {
+          innerTimer.endPhase(`ai_call_day_${dayNumber}`);
+          try {
+            const usage = data.usage;
+            const modelUsed = data.model || 'unknown';
+            if (usage) {
+              innerTimer.addTokenUsage(usage.prompt_tokens || 0, usage.completion_tokens || 0, modelUsed);
+            } else {
+              innerTimer.addTokenUsage(0, 0, modelUsed);
+            }
+          } catch (_e) { /* non-blocking */ }
+          innerTimer.startPhase(`parse_response_day_${dayNumber}`);
+        }
+
         const message = data.choices?.[0]?.message;
         const toolCall = message?.tool_calls?.[0];
 
@@ -10301,6 +10329,12 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         } else {
           console.error("[generate-day] Invalid AI response - no tool_calls or content:", JSON.stringify(data).substring(0, 1000));
           throw new Error("Invalid AI response format");
+        }
+
+        // End parse phase, start post-processing
+        if (innerTimer) {
+          innerTimer.endPhase(`parse_response_day_${dayNumber}`);
+          innerTimer.startPhase(`post_processing_day_${dayNumber}`);
         }
 
         // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
@@ -12167,6 +12201,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           } else {
             console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
           }
+        }
+
+        // End post-processing phase
+        if (innerTimer) {
+          innerTimer.endPhase(`post_processing_day_${dayNumber}`);
         }
 
         return new Response(
