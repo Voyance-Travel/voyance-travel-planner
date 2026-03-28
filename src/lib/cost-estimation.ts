@@ -328,6 +328,19 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
     explicitCost,
   } = params;
   
+  // Block accommodation categories — hotel costs are tracked separately in Budget/Payments
+  const normalizedCategoryEarly = category.toLowerCase().trim();
+  if (['accommodation', 'hotel', 'stay', 'check-in', 'checkout', 'check-out'].includes(normalizedCategoryEarly)) {
+    return {
+      amount: 0,
+      currency: 'USD',
+      isEstimated: false,
+      confidence: 'high' as const,
+      source: 'explicit' as const,
+      reason: 'Accommodation excluded from activity costs',
+    };
+  }
+  
   // Priority 1: Explicit cost
   if (explicitCost !== undefined && explicitCost >= 0) {
     return {

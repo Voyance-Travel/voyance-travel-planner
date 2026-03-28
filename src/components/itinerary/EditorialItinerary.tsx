@@ -1046,6 +1046,26 @@ function getActivityCostInfo(
     return { amount: 0, isEstimated: false, confidence: 'high' as const, basis: 'flat' as CostBasis };
   }
   
+  // Accommodation cards (check-in, checkout, freshen-up, return to hotel) are always Free
+  // Hotel costs live in the Budget/Payments tabs — not on activity cards
+  const isAccommodation = ['accommodation', 'hotel', 'stay'].includes(catLower) ||
+    /check.?in|check.?out|checkout|freshen\s*up|return to .*(hotel|four|aman|ritz|hyatt|hilton|marriott|peninsula|mandarin|park|palace|st\.\s*regis|waldorf|conrad|w\s+hotel|shangri|intercontinental|westin|sheraton|fairmont|rosewood|banyan|six\s*senses|oberoi|taj\s|belmond)/i.test(titleLower);
+  if (isAccommodation) {
+    return { amount: 0, isEstimated: false, confidence: 'high' as const, basis: 'flat' as CostBasis };
+  }
+  
+  // Free attractions — temples, shrines, gardens, crossings, parks, plazas, etc.
+  // These should show "Free" instead of ~$50 estimation fallback
+  const FREE_ATTRACTION_KEYWORDS = [
+    'crossing', 'gardens', 'park', 'shrine', 'temple', 'plaza',
+    'square', 'bridge', 'waterfront', 'promenade', 'boulevard',
+    'viewpoint', 'lookout', 'market stroll', 'neighborhood walk',
+    'imperial palace', 'east gardens', 'meiji jingu', 'senso-ji',
+    'sensoji', 'fushimi inari', 'central park', 'hyde park',
+  ];
+  const looksLikelyFree = FREE_ATTRACTION_KEYWORDS.some(kw => titleLower.includes(kw)) &&
+    ['sightseeing', 'explore', 'cultural', 'activity', 'attraction'].includes(catLower);
+  
   const shouldNeverBeFree = isNeverFreeCategory(category, title);
   // Use explicit basis from backend if available, otherwise infer
   const basis: CostBasis = (activity as any).costBasis || (activity as any).cost?.basis || inferCostBasis(category, title);
@@ -1124,10 +1144,10 @@ function getActivityCostInfo(
   };
 }
 
-/** Short label for cost basis — "/pp" for per-person, nothing for flat (group/total) */
+/** Short label for cost basis — always "/pp" for multi-guest trips for consistency */
 function basisLabel(basis: CostBasis, travelers: number): string {
   if (travelers <= 1) return '';
-  return basis === 'per_person' ? '/pp' : '';
+  return '/pp';
 }
 
 function getActivityCost(
