@@ -411,14 +411,14 @@ export function BudgetCoach({
                               <Scissors className="h-3 w-3" />
                               {s.current_item}
                               <span className="font-medium text-foreground">
-                                ({formatCurrency(s.current_cost * travelers)})
+                                ({formatCurrency(s.current_cost)}{travelers > 1 ? '/pp' : ''})
                               </span>
                             </span>
                             <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                             <span className="font-medium text-foreground">
                               {s.suggested_swap}
                               <span className="text-primary ml-1">
-                                ({formatCurrency(s.new_cost * travelers)})
+                                ({formatCurrency(s.new_cost)}{travelers > 1 ? '/pp' : ''})
                               </span>
                             </span>
                           </div>
@@ -428,7 +428,7 @@ export function BudgetCoach({
                               variant="secondary"
                               className="text-xs text-emerald-600 dark:text-emerald-400"
                             >
-                              Save {formatCurrency(s.savings * travelers)}{travelers > 1 ? ' total' : ''}
+                              Save {formatCurrency(s.savings * travelers)}{travelers > 1 ? ` total (${formatCurrency(s.savings)}/pp)` : ''}
                             </Badge>
                             <span className="text-[10px] text-muted-foreground">
                               Day {s.day_number}
@@ -498,7 +498,8 @@ export function BudgetCoach({
                       </span>
                     ) : (
                       <span className="text-amber-600 dark:text-amber-400">
-                        Still {formatCurrency(gapCents - totalPotentialSavings)} over
+                        Still {formatCurrency(gapCents - totalPotentialSavings)} over.
+                        {' '}Consider removing activities or adjusting budget to {formatCurrency(currentTotalCents - totalPotentialSavings)}.
                       </span>
                     )}
                   </div>

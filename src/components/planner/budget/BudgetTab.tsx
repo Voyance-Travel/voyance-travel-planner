@@ -367,6 +367,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           open={showSetupDialog}
           onOpenChange={setShowSetupDialog}
           memberNames={memberNames}
+          tripTotalCents={snapshot.tripTotalCents}
           onSave={async (newSettings) => {
             await updateSettings(newSettings);
             refetch();
@@ -750,6 +751,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         open={showSetupDialog}
         onOpenChange={setShowSetupDialog}
         memberNames={memberNames}
+        tripTotalCents={snapshot.tripTotalCents}
         onSave={async (newSettings) => {
           await updateSettings(newSettings);
           refetch();

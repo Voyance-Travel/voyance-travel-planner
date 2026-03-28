@@ -1445,9 +1445,12 @@ export function EditorialItinerary({
 
       for (const day of currentDays) {
         for (const act of day.activities) {
-          const costPerPerson = resolvePerPersonForDb(act.cost as any, travelers || 1);
+          // Try act.cost first, then fall back to act.estimatedCost
+          const costInput = act.cost || (act as any).estimatedCost || null;
+          const costPerPerson = resolvePerPersonForDb(costInput as any, travelers || 1);
 
-          if (costPerPerson >= 0) {
+          // Only write rows with actual costs (skip $0 to avoid noise)
+          if (costPerPerson > 0) {
             activitiesForCostTable.push({
               id: act.id,
               dayNumber: day.dayNumber,

@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Wallet, Users, Sliders, DollarSign } from 'lucide-react';
+import { Wallet, Users, Sliders, DollarSign, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +32,8 @@ interface BudgetSetupDialogProps {
   onSave: (settings: Partial<TripBudgetSettings> & { budget_individual_cents?: Record<string, number> }) => Promise<void>;
   /** Optional member names for per-person budget differentiation */
   memberNames?: { id: string; name: string }[];
+  /** Current estimated trip total in cents — used for feasibility warnings */
+  tripTotalCents?: number;
 }
 
 export function BudgetSetupDialog({
@@ -42,6 +44,7 @@ export function BudgetSetupDialog({
   spendStyle = 'balanced',
   onSave,
   memberNames = [],
+  tripTotalCents,
 }: BudgetSetupDialogProps) {
   const [inputMode, setInputMode] = useState<'total' | 'per_person'>(settings?.budget_input_mode || 'total');
   const [amount, setAmount] = useState('');
@@ -280,6 +283,16 @@ export function BudgetSetupDialog({
                     : `${formatCurrency(totalCents)} total for ${travelers} traveler${travelers > 1 ? 's' : ''}`
                   }
                 </p>
+                {/* Impossible budget warning */}
+                {tripTotalCents && tripTotalCents > 0 && totalCents > 0 && totalCents < tripTotalCents * 0.5 && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    <span>
+                      Your trip's estimated cost is {formatCurrency(tripTotalCents)}.
+                      This budget may be difficult to achieve without significant changes.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
