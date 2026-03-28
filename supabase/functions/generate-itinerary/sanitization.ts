@@ -76,6 +76,9 @@ const TRANSPORT_EMOJI_RE = /🚶\s*\d+\s*min\.?\s*/g;
 const PARENTHETICAL_META_RE = /\((?:Paid\s+activity|Free\s+to\s+explore[^)]*)\)\s*/gi;
 const WALKIN_META_RE = /\bWalk-in\s+OK\b[^.]*\.?\s*/gi;
 
+// Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
+const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''\u2018\u2019-]+/gi;
+
 export function sanitizeAITextField(text: string | undefined | null): string {
   if (!text || typeof text !== 'string') return '';
   return text
@@ -84,6 +87,7 @@ export function sanitizeAITextField(text: string | undefined | null): string {
     .replace(SYSTEM_PREFIXES_RE, '')
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
+    .replace(INLINE_ALT_VENUE_RE, '')
     .replace(SLOT_PREFIX_RE, '')
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')

@@ -11,6 +11,9 @@ const AI_QUALIFIER_RE = /\s*\((?:[^)]*?\b(?:alternative|satellite|or\s+high.end|
 // Strip "or High-End Boutique Wellness" style trailing qualifiers (no parens)
 const TRAILING_OR_QUALIFIER_RE = /\s+or\s+(?:high.end|similar|equivalent|comparable)\b[^,.]*/gi;
 
+// Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
+const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''\u2018\u2019-]+/gi;
+
 // Strip "slot: " prefix from descriptions
 const SLOT_PREFIX_RE = /^slot:\s*/i;
 
@@ -75,6 +78,8 @@ export function sanitizeActivityName(name: string | undefined | null): string {
   sanitized = sanitized.replace(AI_QUALIFIER_RE, '').trim();
   // Strip trailing "or High-End Boutique Wellness" without parens
   sanitized = sanitized.replace(TRAILING_OR_QUALIFIER_RE, '').trim();
+  // Strip inline alternative venue references
+  sanitized = sanitized.replace(INLINE_ALT_VENUE_RE, '').trim();
 
   // Also handle case-insensitive matching for robustness
   const lowerName = sanitized.toLowerCase();
@@ -163,6 +168,7 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(SYSTEM_LABEL_RE, '')
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
+    .replace(INLINE_ALT_VENUE_RE, '')
     .replace(SLOT_PREFIX_RE, '')
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')
