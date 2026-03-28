@@ -4415,98 +4415,193 @@ async function finalSaveItinerary(
     await triggerNextJourneyLeg(supabase, tripId);
 
     // =========================================================================
-    // PHASE 4: Write activity_costs rows — single source of truth for all totals
+    // PHASE 4: Write activity_costs rows — TABLE-DRIVEN from cost_reference
+    // The AI does NOT set costs. All costs come from the cost_reference table.
     // =========================================================================
     try {
       const allDays = enrichedData.days || [];
       const costRows: Array<Record<string, unknown>> = [];
+      const destinationCity = (context.destination || '').split(',')[0].trim();
+
+      // Load cost_reference for this destination + global fallbacks
+      const { data: allRefs } = await supabase
+        .from('cost_reference')
+        .select('*')
+        .or(`destination_city.ilike.${destinationCity},destination_city.eq._global`);
+
+      // Build lookup map: city|category|subcategory → ref row (city-specific wins over _global)
+      const refMap = new Map<string, any>();
+      if (allRefs) {
+        // Insert globals first, then city-specific (so city overrides global)
+        const sorted = [...allRefs].sort((a, b) =>
+          (a.destination_city === '_global' ? 0 : 1) - (b.destination_city === '_global' ? 0 : 1)
+        );
+        for (const r of sorted) {
+          const prefix = r.destination_city === '_global' ? '_global' : destinationCity.toLowerCase();
+          if (r.subcategory) {
+            refMap.set(`${prefix}|${r.category}|${r.subcategory}`, r);
+            // Also set without prefix for global fallback
+            if (r.destination_city === '_global') {
+              refMap.set(`_fb|${r.category}|${r.subcategory}`, r);
+            }
+          }
+          // Category-only fallback (first match wins per city)
+          const catKey = `${prefix}|${r.category}|`;
+          if (!refMap.has(catKey)) refMap.set(catKey, r);
+          if (r.destination_city === '_global') {
+            const fbCatKey = `_fb|${r.category}|`;
+            if (!refMap.has(fbCatKey)) refMap.set(fbCatKey, r);
+          }
+        }
+      }
+
+      // Subcategory inference from title keywords
+      const transportKw: Record<string, string[]> = {
+        taxi: ['taxi', 'cab', 'uber', 'grab', 'lyft', 'ride', 'private car', 'rideshare'],
+        airport_transfer: ['airport transfer', 'airport shuttle', 'airport bus', 'airport express'],
+        metro: ['metro', 'subway', 'mrt', 'mtr', 'underground'],
+        bus: ['bus', 'shuttle bus', 'city bus'],
+        train: ['train', 'rail', 'shinkansen'],
+        ferry: ['ferry', 'boat', 'water taxi', 'star ferry', 'junk boat'],
+      };
+      const diningKw: Record<string, string[]> = {
+        street_food: ['street food', 'hawker', 'night market food', 'dai pai dong', 'food stall'],
+        cafe: ['cafe', 'café', 'coffee', 'bakery'],
+        breakfast: ['breakfast', 'morning meal'],
+        lunch: ['lunch', 'brunch'],
+        dinner: ['dinner', 'supper'],
+        ramen: ['ramen', 'noodle shop'],
+        fine_dining: ['fine dining', 'michelin', 'omakase', 'tasting menu'],
+      };
+
+      function inferSubcategory(title: string, category: string): string | null {
+        const t = title.toLowerCase();
+        if (category === 'transport') {
+          for (const [sub, kws] of Object.entries(transportKw)) {
+            if (kws.some(kw => t.includes(kw))) return sub;
+          }
+        }
+        if (category === 'dining') {
+          for (const [sub, kws] of Object.entries(diningKw)) {
+            if (kws.some(kw => t.includes(kw))) return sub;
+          }
+        }
+        if (category === 'activity') {
+          if (t.includes('museum')) return 'museum';
+          if (t.includes('temple') || t.includes('shrine')) return 'temple';
+          if (t.includes('tour')) return 'tour';
+        }
+        return null;
+      }
+
+      // Budget tier determines which column to pick from cost_reference
+      const budgetTier = (context.budgetTier || 'moderate').toLowerCase();
+
+      // Map itinerary categories to cost_reference categories
+      const categoryMap: Record<string, string> = {
+        dining: 'dining', breakfast: 'dining', brunch: 'dining', lunch: 'dining',
+        dinner: 'dining', cafe: 'dining', coffee: 'dining', food: 'dining', restaurant: 'dining',
+        transport: 'transport', transportation: 'transport', taxi: 'transport', metro: 'transport',
+        activity: 'activity', attraction: 'activity', museum: 'activity', tour: 'activity',
+        sightseeing: 'activity', experience: 'activity', entertainment: 'activity',
+        nightlife: 'nightlife', bar: 'nightlife', club: 'nightlife',
+        shopping: 'shopping', market: 'shopping',
+      };
 
       for (const day of allDays) {
         for (const act of (day.activities || [])) {
-          // Skip downtime / free-time blocks
           const cat = (act.category || 'activity').toLowerCase();
           if (['downtime', 'free_time', 'accommodation'].includes(cat)) continue;
 
-          const rawCost = (act as any).cost || (act as any).estimatedCost || { amount: 0, currency: 'USD' };
-          let costPerPerson = typeof rawCost === 'number' ? rawCost : (rawCost.amount || 0);
-
-          // Map itinerary categories to cost_reference categories
-          const categoryMap: Record<string, string> = {
-            dining: 'dining', breakfast: 'dining', brunch: 'dining', lunch: 'dining',
-            dinner: 'dining', cafe: 'dining', coffee: 'dining', food: 'dining', restaurant: 'dining',
-            transport: 'transport', transportation: 'transport', taxi: 'transport', metro: 'transport',
-            activity: 'activity', attraction: 'activity', museum: 'activity', tour: 'activity',
-            sightseeing: 'activity', experience: 'activity', entertainment: 'activity',
-            nightlife: 'nightlife', bar: 'nightlife', club: 'nightlife',
-            shopping: 'shopping', market: 'shopping',
-          };
           const mappedCategory = categoryMap[cat] || 'activity';
+          const titleLower = ((act as any).title || '').toLowerCase();
 
-          // "Never free" estimation: if AI returned $0 for categories that always cost money,
-          // apply a reasonable default so DB values match frontend display
-          if (costPerPerson <= 0) {
-            const NEVER_FREE_CATEGORIES = [
-              'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee',
-              'cruise', 'boat', 'tour', 'activity', 'experience', 'spa', 'massage', 'show',
-              'performance', 'concert', 'theater', 'theatre', 'nightlife', 'bar', 'club',
-              'transfer', 'transport', 'transportation', 'airport', 'taxi', 'uber', 'rideshare',
-            ];
-            const NEVER_FREE_TITLE_KW = [
-              'breakfast', 'brunch', 'lunch', 'dinner', 'cruise', 'tour',
-              'restaurant', 'café', 'cafe', 'transfer', 'airport', 'taxi',
-              'uber', 'private car', 'shuttle', 'train to', 'bus to',
-            ];
-            const titleLower = ((act as any).title || '').toLowerCase();
-            const isNeverFree = NEVER_FREE_CATEGORIES.some(nfc => cat.includes(nfc)) ||
-              NEVER_FREE_TITLE_KW.some(kw => titleLower.includes(kw));
+          // Skip walks — they're always free
+          const isWalk = ['walk', 'walking', 'stroll'].includes(cat) ||
+            ['walk to', 'walk through', 'stroll', 'evening walk', 'neighborhood walk'].some(kw => titleLower.includes(kw));
+          if (isWalk) {
+            costRows.push({
+              trip_id: tripId,
+              activity_id: act.id,
+              day_number: day.dayNumber || 1,
+              cost_per_person_usd: 0,
+              num_travelers: context.travelers || 1,
+              category: mappedCategory,
+              source: 'reference',
+              confidence: 'high',
+            });
+            continue;
+          }
 
-            // Skip walks — they're always free
-            const isWalk = ['walk', 'walking', 'stroll'].includes(cat) ||
-              ['walk to', 'walk through', 'stroll', 'evening walk', 'neighborhood walk'].some(kw => titleLower.includes(kw));
+          // Look up cost_reference: try city+category+subcategory, then city+category, then global
+          const subcategory = inferSubcategory(titleLower, mappedCategory);
+          const cityKey = destinationCity.toLowerCase();
+          let ref: any = null;
 
-            if (isNeverFree && !isWalk) {
-              // Category-based default estimates (per person, USD)
-              const defaults: Record<string, number> = {
-                dining: 30, transport: 15, activity: 25, nightlife: 25, shopping: 20,
-              };
-              // Refine for meal type from title
-              if (titleLower.includes('breakfast') || titleLower.includes('coffee') || titleLower.includes('café') || titleLower.includes('cafe')) {
-                costPerPerson = 15;
-              } else if (titleLower.includes('lunch') || titleLower.includes('brunch')) {
-                costPerPerson = 25;
-              } else if (titleLower.includes('dinner')) {
-                costPerPerson = 40;
-              } else if (titleLower.includes('transfer') || titleLower.includes('taxi') || titleLower.includes('uber') || titleLower.includes('shuttle')) {
-                costPerPerson = 20;
-              } else if (titleLower.includes('private car')) {
-                costPerPerson = 50;
-              } else {
-                costPerPerson = defaults[mappedCategory] || 25;
-              }
-              console.log(`[Phase 4] Estimated $${costPerPerson}/pp for "${(act as any).title}" (was $0, category: ${cat})`);
+          if (subcategory) {
+            ref = refMap.get(`${cityKey}|${mappedCategory}|${subcategory}`);
+          }
+          if (!ref) {
+            ref = refMap.get(`${cityKey}|${mappedCategory}|`);
+          }
+          if (!ref && subcategory) {
+            ref = refMap.get(`_fb|${mappedCategory}|${subcategory}`);
+          }
+          if (!ref) {
+            ref = refMap.get(`_fb|${mappedCategory}|`);
+          }
+
+          let costPerPerson: number;
+          let costRefId: string | null = null;
+          let source = 'reference';
+          let confidence = 'medium';
+
+          if (ref) {
+            costRefId = ref.id;
+            switch (budgetTier) {
+              case 'budget': case 'saver': costPerPerson = Number(ref.cost_low_usd); break;
+              case 'moderate': case 'comfort': costPerPerson = Number(ref.cost_mid_usd); break;
+              case 'premium': case 'luxury': costPerPerson = Number(ref.cost_high_usd); break;
+              default: costPerPerson = Number(ref.cost_mid_usd);
             }
+            confidence = ref.confidence || 'medium';
+          } else {
+            // No reference at all — use conservative hardcoded defaults
+            const defaults: Record<string, number> = {
+              dining: 20, transport: 10, activity: 15, nightlife: 15, shopping: 15,
+            };
+            costPerPerson = defaults[mappedCategory] || 15;
+            source = 'fallback';
+            confidence = 'low';
+            console.log(`[Phase 4] No cost_reference for "${(act as any).title}" (${mappedCategory}/${subcategory || 'none'}), using fallback $${costPerPerson}`);
+          }
+
+          // Round to nearest $5 for cleaner display (except small amounts < $5)
+          if (costPerPerson >= 5) {
+            costPerPerson = Math.round(costPerPerson / 5) * 5;
           }
 
           costRows.push({
             trip_id: tripId,
             activity_id: act.id,
             day_number: day.dayNumber || 1,
-            cost_per_person_usd: Math.min(costPerPerson, 2000), // safety cap
+            cost_per_person_usd: Math.min(costPerPerson, 2000),
             num_travelers: context.travelers || 1,
             category: mappedCategory,
-            source: costPerPerson > 0 && (typeof rawCost === 'number' ? rawCost : (rawCost.amount || 0)) <= 0 ? 'estimated' : 'reference',
-            confidence: costPerPerson > 0 && (typeof rawCost === 'number' ? rawCost : (rawCost.amount || 0)) <= 0 ? 'low' : 'medium',
+            source,
+            confidence,
+            cost_reference_id: costRefId,
           });
         }
       }
 
       // ─── POST-GENERATION BUDGET VALIDATION ───
-      // If the user set a real budget, scale down AI costs that overshoot it
+      // If the user set a real budget, scale down reference costs that overshoot it
+      // Round scaled values to nearest $5 to avoid "random-looking" numbers
       if (costRows.length > 0 && context.actualDailyBudgetPerPerson != null && context.actualDailyBudgetPerPerson > 0) {
-        const budgetCap = context.actualDailyBudgetPerPerson; // per person, dollars
-        const tolerance = 1.2; // allow 20% over before scaling
+        const budgetCap = context.actualDailyBudgetPerPerson;
+        const tolerance = 1.2;
 
-        // Group cost rows by day
         const dayGroups = new Map<number, typeof costRows>();
         for (const row of costRows) {
           const dayNum = row.day_number as number;
@@ -4516,28 +4611,33 @@ async function finalSaveItinerary(
 
         for (const [dayNum, rows] of dayGroups) {
           const dayTotal = rows.reduce((sum, r) => sum + (r.cost_per_person_usd as number), 0);
-          const cappedTotal = budgetCap * tolerance; // 110% → target after scaling
 
           if (dayTotal > budgetCap * tolerance) {
-            // Scale all costs proportionally to fit within 110% of daily cap
             const scaleFactor = (budgetCap * 1.1) / dayTotal;
-            console.log(`[Budget Validation] Day ${dayNum}: $${dayTotal.toFixed(0)}/pp exceeds cap $${budgetCap.toFixed(0)}/pp by ${Math.round((dayTotal / budgetCap - 1) * 100)}%. Scaling by ${scaleFactor.toFixed(2)}`);
+            console.log(`[Budget Validation] Day ${dayNum}: $${dayTotal.toFixed(0)}/pp exceeds cap $${budgetCap.toFixed(0)}/pp. Scaling by ${scaleFactor.toFixed(2)}`);
             for (const row of rows) {
-              (row as any).cost_per_person_usd = Math.round((row.cost_per_person_usd as number) * scaleFactor * 100) / 100;
-              (row as any).notes = ((row as any).notes || '') + ` [Budget-scaled from $${((row.cost_per_person_usd as number) / scaleFactor).toFixed(0)}]`;
+              const original = row.cost_per_person_usd as number;
+              let scaled = original * scaleFactor;
+              // Round to nearest $5 (minimum $1 for non-zero items)
+              if (scaled >= 5) {
+                scaled = Math.round(scaled / 5) * 5;
+              } else if (scaled > 0) {
+                scaled = Math.max(1, Math.round(scaled));
+              }
+              (row as any).cost_per_person_usd = scaled;
+              (row as any).notes = `[Budget-scaled from $${original.toFixed(0)}]`;
             }
           }
         }
       }
 
       if (costRows.length > 0) {
-        // Delete existing rows for this trip, then insert fresh
         await supabase.from('activity_costs').delete().eq('trip_id', tripId);
         const { error: costErr } = await supabase.from('activity_costs').insert(costRows);
         if (costErr) {
           console.warn('[Stage 6] activity_costs insert error (non-blocking):', costErr.message);
         } else {
-          console.log(`[Stage 6] Wrote ${costRows.length} activity_costs rows`);
+          console.log(`[Stage 6] Wrote ${costRows.length} activity_costs rows (table-driven)`);
         }
       }
     } catch (costWriteErr) {

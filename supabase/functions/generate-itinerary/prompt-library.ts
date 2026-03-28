@@ -1347,12 +1347,11 @@ export function buildRegularDayPrompt(
   lines.push(`     "Tomorrow: Wake up [time]. Breakfast at [restaurant] ([walk time] from hotel, ~[price])."`);
   lines.push('');
 
-  lines.push(`   PRICES ON EVERYTHING (no exceptions):`);
-  lines.push(`   - Every meal: approximate price per person`);
-  lines.push(`   - Every ticket: entry fee`);
-  lines.push(`   - Every taxi/transit: fare`);
-  lines.push(`   - Free activities: estimatedCost.amount = 0`);
-  lines.push(`   - Approximate is fine. Missing is NOT.`);
+  lines.push(`   COSTS — DO NOT ESTIMATE PRICES:`);
+  lines.push(`   - Do NOT include cost estimates, price guesses, or estimatedCost fields`);
+  lines.push(`   - Costs are assigned separately from our verified pricing database`);
+  lines.push(`   - Focus on activity selection, timing, and descriptions only`);
+  lines.push(`   - If an activity is FREE, you may mention "free entry" in the description`);
   lines.push('');
 
   lines.push(`⚡ ACTIVITY DENSITY`);
