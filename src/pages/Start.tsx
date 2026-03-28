@@ -824,7 +824,7 @@ function TripDetailsStep({
                 <button
                   key={preset.label}
                   type="button"
-                  onClick={() => { customBudgetActive.current = false; setBudgetAmount(preset.value); }}
+                  onClick={() => { setCustomBudgetActive(false); setBudgetAmount(preset.value); }}
                   className={cn(
                     'p-2 rounded-lg border text-center transition-all',
                     budgetAmount === preset.value
@@ -844,13 +844,13 @@ function TripDetailsStep({
                 min={0}
                 max={100000}
                 placeholder="Or enter your own budget"
-                value={customBudgetActive.current ? (budgetAmount ?? '') : (budgetAmount && !budgetPresets.some(p => p.value === budgetAmount) ? budgetAmount : '')}
+                value={customBudgetActive ? (budgetAmount ?? '') : (budgetAmount && !budgetPresets.some(p => p.value === budgetAmount) ? budgetAmount : '')}
                 onChange={(e) => {
                   const val = parseInt(e.target.value);
                   setBudgetAmount(val > 0 ? val : undefined);
                 }}
-                onFocus={() => { customBudgetActive.current = true; }}
-                onBlur={() => { customBudgetActive.current = false; }}
+                onFocus={() => { setCustomBudgetActive(true); }}
+                onBlur={() => { setCustomBudgetActive(false); }}
                 className="w-full pl-8 pr-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
               />
             </div>
