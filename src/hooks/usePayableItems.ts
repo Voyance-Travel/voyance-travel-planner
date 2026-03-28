@@ -48,6 +48,7 @@ interface PayableItemsInput {
   flightSelection?: {
     outbound?: { price?: number; airline?: string };
     return?: { price?: number; airline?: string };
+    legs?: { price?: number; airline?: string }[];
     totalPrice?: number;
   } | null;
   hotelSelection?: {
@@ -104,23 +105,50 @@ export function usePayableItems({
   const items = useMemo(() => {
     const result: PayableItem[] = [];
 
-    // Flight from selection
-    if (flightSelection?.totalPrice) {
+    // Flight from selection — compute total from legs, outbound/return, or totalPrice
+    const flightTotal = flightSelection?.totalPrice
+      || (flightSelection?.legs?.reduce((s, l) => s + (l?.price || 0), 0) || 0)
+      || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0));
+
+    if (flightTotal > 0) {
       const flightId = 'flight-selection';
       const flightPayments = payments.filter(p => p.item_type === 'flight' && p.item_id === flightId);
       const assignedIds = flightPayments
         .map(p => (p as any)?.assigned_member_id)
         .filter(Boolean) as string[];
+      const flightAirline = flightSelection?.outbound?.airline
+        || flightSelection?.legs?.[0]?.airline;
       result.push({
         id: flightId,
         type: 'flight',
-        name: `Round-trip Flight${flightSelection.outbound?.airline ? ` (${flightSelection.outbound.airline})` : ''}`,
-        amountCents: Math.round((flightSelection.totalPrice || 0) * 100),
+        name: `Round-trip Flight${flightAirline ? ` (${flightAirline})` : ''}`,
+        amountCents: Math.round(flightTotal * 100),
         payment: flightPayments[0],
         allPayments: flightPayments,
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
       });
+    } else if (activityCosts?.length) {
+      // DB fallback: check activity_costs for a flight category row
+      const flightRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0);
+      if (flightRow && flightRow.cost_per_person_usd > 0) {
+        const flightId = 'flight-selection';
+        const flightPayments = payments.filter(p => p.item_type === 'flight' && p.item_id === flightId);
+        const assignedIds = flightPayments
+          .map(p => (p as any)?.assigned_member_id)
+          .filter(Boolean) as string[];
+        const totalFlightCents = Math.round(flightRow.cost_per_person_usd * (flightRow.num_travelers || 1) * 100);
+        result.push({
+          id: flightId,
+          type: 'flight',
+          name: 'Round-trip Flight',
+          amountCents: totalFlightCents,
+          payment: flightPayments[0],
+          allPayments: flightPayments,
+          assignedMemberId: assignedIds[0],
+          assignedMemberIds: [...new Set(assignedIds)],
+        });
+      }
     }
 
     // Hotel from selection
@@ -215,7 +243,7 @@ export function usePayableItems({
             id: compositeId,
             type: 'activity',
             name: activity.title || activity.name || (activity as any).venue || 'Activity',
-            amountCents: Math.round(cost * 100),
+            amountCents: Math.round(cost * travelers * 100),
             dayNumber: day.dayNumber,
             payment: activityPayments[0],
             allPayments: activityPayments,
