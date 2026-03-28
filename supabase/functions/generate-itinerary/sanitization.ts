@@ -67,6 +67,15 @@ const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/g
 const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
 const FORWARD_REF_RE = /\.?\s*(?:rest|recharge|prepare|get ready)\s+for\s+tomorrow'?s?\s+[^.]+(?:adventure|day|exploration|experience|excursion)[^.]*\.?/gi;
 
+// Leaked AI planning text patterns
+const RESERVATION_URGENCY_RE = /\b[Rr]eservation\s*[Uu]rgency[:\s]+\S+(?:\s*\([^)]*\))?\.?\s*/g;
+const BOOK_CODE_RE = /\bbook_(?:now|soon|week_before)\b(?:\s+via\s+[^.]+)?\.?\s*/gi;
+const NEXT_DAY_PLANNING_RE = /(?:Tomorrow|Next\s+[Mm]orning(?:\s+Preview)?)\s*:\s*[^]*$/gi;
+const REQUIRED_SLOT_RE = /[Tt]he\s+required\s+[''\u2018\u2019][^''\u2018\u2019]+[''\u2018\u2019]\s+(?:interest\s+)?slot\s*[-–—]?\s*/g;
+const TRANSPORT_EMOJI_RE = /🚶\s*\d+\s*min\.?\s*/g;
+const PARENTHETICAL_META_RE = /\((?:Paid\s+activity|Free\s+to\s+explore[^)]*)\)\s*/gi;
+const WALKIN_META_RE = /\bWalk-in\s+OK\b[^.]*\.?\s*/gi;
+
 export function sanitizeAITextField(text: string | undefined | null): string {
   if (!text || typeof text !== 'string') return '';
   return text
@@ -80,6 +89,13 @@ export function sanitizeAITextField(text: string | undefined | null): string {
     .replace(META_DISTANCE_COST_RE, '')
     .replace(INLINE_META_RE, '')
     .replace(FORWARD_REF_RE, '')
+    .replace(RESERVATION_URGENCY_RE, '')
+    .replace(BOOK_CODE_RE, '')
+    .replace(NEXT_DAY_PLANNING_RE, '')
+    .replace(REQUIRED_SLOT_RE, '')
+    .replace(TRANSPORT_EMOJI_RE, '')
+    .replace(PARENTHETICAL_META_RE, '')
+    .replace(WALKIN_META_RE, '')
     .replace(/\(\s*\)/g, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
