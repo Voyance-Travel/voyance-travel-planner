@@ -10799,6 +10799,102 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         }
 
         // =======================================================================
+        // TRANSPORT & HOTEL BOOKEND VALIDATOR
+        // Ensures consistent Activity → Transport → Activity pattern
+        // and that hotel returns/arrivals always have visible cards
+        // =======================================================================
+        try {
+          const bookendHotelName = (() => {
+            const accomAct = generatedDay.activities?.find((a: any) => 
+              (a.category || '').toLowerCase() === 'accommodation' && 
+              !(a.title || '').toLowerCase().includes('checkout') &&
+              !(a.title || '').toLowerCase().includes('check-out')
+            );
+            if (accomAct) return accomAct.location?.name || accomAct.title?.replace(/^(Return to |Freshen up at |Check.?in at )/i, '') || null;
+            return paramHotelName || null;
+          })();
+
+          if (bookendHotelName && generatedDay.activities?.length > 0) {
+            const bActs = generatedDay.activities;
+            const bIsTransport = (a: any) => (a.category || '').toLowerCase() === 'transport';
+            const bIsAccom = (a: any) => (a.category || '').toLowerCase() === 'accommodation';
+            const bIsHotelRelated = (a: any) => {
+              const t = (a.title || '').toLowerCase();
+              const l = (a.location?.name || '').toLowerCase();
+              const hn = bookendHotelName.toLowerCase();
+              return t.includes(hn) || l.includes(hn) || t.includes('hotel') || t.includes('return to') || t.includes('freshen up');
+            };
+            const bOffset = (ts: string, min: number): string => {
+              if (!ts) return '';
+              const p = ts.split(':');
+              if (p.length < 2) return ts;
+              const tot = parseInt(p[0], 10) * 60 + parseInt(p[1], 10) + min;
+              return `${String(Math.floor(tot / 60) % 24).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+            };
+            const bAccomCard = (label: string, st: string, dur: number) => ({
+              id: `bookend-${label.replace(/\s/g, '-').toLowerCase()}-${dayNumber}-${Date.now()}`,
+              title: `${label} ${bookendHotelName}`,
+              category: 'accommodation',
+              description: `Time at ${bookendHotelName} to rest and refresh.`,
+              startTime: st, endTime: bOffset(st, dur), durationMinutes: dur,
+              location: { name: bookendHotelName, address: '' },
+              cost: { amount: 0, currency: 'USD' }, isLocked: false,
+              tags: ['hotel', 'rest'], source: 'bookend-validator',
+            });
+            const bTransCard = (from: string, to: string, st: string) => ({
+              id: `transport-gap-${dayNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              title: `Travel to ${to}`, category: 'transport',
+              description: `Transit from ${from} to ${to}.`,
+              startTime: st, endTime: bOffset(st, 15), durationMinutes: 15,
+              location: { name: to, address: '' },
+              cost: { amount: 0, currency: 'USD' }, isLocked: false,
+              tags: ['transport'], transportation: { method: 'unknown', duration: '~15 min' },
+              source: 'bookend-validator',
+            });
+
+            // 1. Mid-day hotel transports without accommodation card
+            for (let i = 0; i < bActs.length - 1; i++) {
+              if (bIsTransport(bActs[i]) && bIsHotelRelated(bActs[i]) && !bIsAccom(bActs[i + 1])) {
+                const card = bAccomCard('Freshen up at', bActs[i].endTime || bOffset(bActs[i].startTime || '14:00', 15), 30);
+                bActs.splice(i + 1, 0, card);
+                console.log(`[bookend-validator] 🏨 Injected "Freshen up at ${bookendHotelName}" after transport on Day ${dayNumber}`);
+              }
+            }
+
+            // 2. End-of-day hotel return
+            const bVisible = bActs.filter((a: any) => !bIsTransport(a));
+            const bLast = bVisible[bVisible.length - 1];
+            if (bLast && !bIsAccom(bLast)) {
+              const et = bLast.endTime || '22:00';
+              bActs.push(bTransCard(bLast.location?.name || bLast.title || 'venue', bookendHotelName, et));
+              bActs.push(bAccomCard('Return to', bOffset(et, 20), 15));
+              console.log(`[bookend-validator] 🏨 Injected "Return to ${bookendHotelName}" at end of Day ${dayNumber}`);
+            }
+
+            // 3. Ensure transport between every pair of visible activities at different locations
+            const bRebuilt: any[] = [];
+            for (let i = 0; i < bActs.length; i++) {
+              bRebuilt.push(bActs[i]);
+              if (i < bActs.length - 1) {
+                const curr = bActs[i], next = bActs[i + 1];
+                if (bIsTransport(curr) || bIsTransport(next)) continue;
+                const cLoc = (curr.location?.name || curr.title || '').toLowerCase();
+                const nLoc = (next.location?.name || next.title || '').toLowerCase();
+                if (cLoc && nLoc && cLoc !== nLoc) {
+                  bRebuilt.push(bTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || ''));
+                  console.log(`[bookend-validator] 🚕 Injected transit gap: "${curr.title}" → "${next.title}" on Day ${dayNumber}`);
+                }
+              }
+            }
+            generatedDay.activities = bRebuilt;
+            normalizedActivities = bRebuilt;
+            console.log(`[bookend-validator] ✓ Day ${dayNumber} bookend validation complete (${bRebuilt.length} activities)`);
+          }
+        } catch (bookendErr) {
+          console.warn('[bookend-validator] Non-blocking error:', bookendErr);
+        }
+
+        // =======================================================================
         if (tripId) {
           try {
             // Upsert day row
