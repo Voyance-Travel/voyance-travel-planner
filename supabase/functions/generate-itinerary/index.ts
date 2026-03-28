@@ -9663,10 +9663,26 @@ Each restaurant below is REAL and highly rated (4.5+ stars).
   if (anySpots.length > 0) {
     poolPrompt += `FLEXIBLE (any meal):\n${anySpots.map((r: any) => `  • ${r.name} — ${r.cuisine || 'Local cuisine'}, ${r.neighborhood || ''} (${r.priceRange || '$$'})`).join('\n')}\n\n`;
   }
-  poolPrompt += `RULE: Pick ONE restaurant per meal from the lists above. Use the EXACT name as shown. Do NOT modify restaurant names.`;
+  poolPrompt += `RULE: Pick ONE restaurant per meal from the lists above. Use the EXACT name as shown. Do NOT modify restaurant names.\n\n`;
   
-  console.log(`[generate-day] Injected restaurant pool: ${available.length} available (${breakfastSpots.length}B/${lunchSpots.length}L/${dinnerSpots.length}D/${anySpots.length}any)`);
+  // Add explicit blocklist of already-used restaurants
+  const usedList = paramUsedRestaurants || [];
+  if (usedList.length > 0) {
+    poolPrompt += `⛔ ALREADY USED ON PREVIOUS DAYS (DO NOT PICK THESE):\n`;
+    poolPrompt += usedList.map((name: string) => `  • ${name}`).join('\n');
+    poolPrompt += `\nPick DIFFERENT restaurants — variety is essential. Do NOT repeat any restaurant from this blocklist.\n`;
+  }
+  
+  console.log(`[generate-day] Injected restaurant pool: ${available.length} available (${breakfastSpots.length}B/${lunchSpots.length}L/${dinnerSpots.length}D/${anySpots.length}any), blocklist: ${usedList.length} used`);
   return poolPrompt;
+})()}
+
+${(() => {
+  // Even without a pool, inject used-restaurants blocklist so the AI avoids repeats
+  if (paramRestaurantPool && Array.isArray(paramRestaurantPool) && paramRestaurantPool.length > 0) return ''; // Already handled above
+  const usedList = paramUsedRestaurants || [];
+  if (usedList.length === 0) return '';
+  return `⛔ RESTAURANT VARIETY RULE — DO NOT USE THESE (already used on previous days):\n${usedList.map((name: string) => `  • ${name}`).join('\n')}\nPick DIFFERENT restaurants for every meal. Variety is essential.\n`;
 })()}
 
 CRITICAL REMINDERS:
@@ -10621,17 +10637,14 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
                 // Strip duplicates found by validation instead of full retry
                 // Remove activities flagged as TRIP-WIDE DUPLICATE or CONCEPT SIMILARITY
-                // CRITICAL: NEVER strip dining activities — a repeated real restaurant is
-                // infinitely better than a generic "Breakfast spot" placeholder from the meal guard.
-                // MEAL REPEAT errors for dining are logged as warnings but the activity is kept.
+                // For MEAL REPEAT: try to swap from pool first, only keep duplicate as last resort
                 const duplicateTitles: string[] = [];
                 const mealRepeatTitles: string[] = [];
                 for (const err of dayValidation.errors) {
-                  // Separate MEAL REPEAT (dining) from other duplicates (sightseeing, tours)
                   const mealMatch = err.match(/MEAL REPEAT:\s*"([^"]+)"/i);
                   if (mealMatch) {
                     mealRepeatTitles.push(mealMatch[1]);
-                    continue; // Do NOT add to duplicateTitles — we keep dining activities
+                    continue;
                   }
                   const titleMatch = err.match(/(?:TRIP-WIDE DUPLICATE|CONCEPT SIMILARITY):\s*"([^"]+)"/i);
                   if (titleMatch) {
@@ -10639,11 +10652,56 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                   }
                 }
 
-                // Log meal repeats but keep them — real restaurant > placeholder
+                // MEAL REPEAT: swap duplicates from pool instead of keeping them
                 if (mealRepeatTitles.length > 0) {
-                  console.log(`[generate-day] ⚠️ Day ${dayNumber} has ${mealRepeatTitles.length} MEAL REPEAT(s): [${mealRepeatTitles.join(', ')}] — KEEPING (real restaurant > placeholder)`);
+                  const poolAvailable = (paramRestaurantPool || []) as any[];
+                  const usedSetLocal = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
+                  // Also mark all restaurants in current day as used
+                  for (const act of generatedDay.activities) {
+                    if ((act.category || '').toLowerCase() === 'dining') {
+                      usedSetLocal.add((act.title || '').toLowerCase());
+                    }
+                  }
+
+                  for (const repeatTitle of mealRepeatTitles) {
+                    const repeatLower = repeatTitle.toLowerCase();
+                    // Find the duplicate activity in this day
+                    const dupeIdx = generatedDay.activities.findIndex((act: any) =>
+                      (act.title || '').toLowerCase().includes(repeatLower) || repeatLower.includes((act.title || '').toLowerCase())
+                    );
+                    if (dupeIdx === -1) continue;
+                    const dupeAct = generatedDay.activities[dupeIdx];
+                    if (dupeAct.isLocked) continue;
+
+                    // Determine meal type from the activity
+                    const startHour = parseInt((dupeAct.startTime || '12:00').split(':')[0], 10);
+                    const mealType = startHour < 11 ? 'breakfast' : startHour < 15 ? 'lunch' : 'dinner';
+
+                    // Find unused pool restaurant for this meal type
+                    const replacement = poolAvailable.find((r: any) => {
+                      const rName = (r.name || '').toLowerCase();
+                      if (usedSetLocal.has(rName)) return false;
+                      return r.mealType === mealType || r.mealType === 'any';
+                    });
+
+                    if (replacement) {
+                      console.log(`[generate-day] 🔄 Swapping duplicate dining "${dupeAct.title}" → "${replacement.name}" (pool-dedup-swap)`);
+                      generatedDay.activities[dupeIdx] = {
+                        ...dupeAct,
+                        title: `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} at ${replacement.name}`,
+                        description: `${replacement.cuisine || 'Local cuisine'} in ${replacement.neighborhood || 'the city'}. ${replacement.priceRange || '$$'}.`,
+                        location: { name: replacement.name, address: replacement.address || '', neighborhood: replacement.neighborhood || '' },
+                        source: 'pool-dedup-swap',
+                      };
+                      usedSetLocal.add(replacement.name.toLowerCase());
+                    } else {
+                      console.log(`[generate-day] ⚠️ No pool replacement for duplicate "${dupeAct.title}" — keeping (real restaurant > placeholder)`);
+                    }
+                  }
+                  normalizedActivities = generatedDay.activities;
                 }
 
+                // Strip non-dining duplicates
                 if (duplicateTitles.length > 0) {
                   const beforeCount = generatedDay.activities.length;
                   generatedDay.activities = generatedDay.activities.filter((act: any) => {
@@ -10651,13 +10709,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                     const actCategory = (act.category || '').toLowerCase();
                     const isDupe = duplicateTitles.some(dt => actTitle.includes(dt) || dt.includes(actTitle));
                     if (isDupe) {
-                      // Don't remove locked activities
                       if (act.isLocked) return true;
-                      // NEVER remove dining activities — keep the repeat rather than losing the meal
-                      if (actCategory === 'dining') {
-                        console.log(`[generate-day] 🍽️ Keeping duplicate dining activity "${act.title}" (real restaurant > placeholder)`);
-                        return true;
-                      }
                       console.log(`[generate-day] 🗑️ Removing duplicate activity "${act.title}" (matched trip-wide validation)`);
                       return false;
                     }
