@@ -328,6 +328,7 @@ export async function handleGenerateTripDay(
             isLastDayInCity: cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false,
             restaurantPool: restaurantPool.length > 0 ? restaurantPool : undefined,
             usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
+            generationLogId: generationLogId || timer.getLogId(),
           }),
         });
       } finally {
