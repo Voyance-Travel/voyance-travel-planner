@@ -7707,6 +7707,14 @@ If the purpose is a specific event, plan at least ONE full day around that event
             if (nextAct.location?.coordinates) {
               act.location.coordinates = nextAct.location.coordinates;
             }
+
+            // Normalize duration format on transport cards
+            if (act.transportation?.duration) {
+              act.transportation.duration = normalizeDurationString(act.transportation.duration) || act.transportation.duration;
+            }
+            if (act.duration && typeof act.duration === 'string') {
+              act.duration = normalizeDurationString(act.duration) || act.duration;
+            }
           }
         }
         console.log(`[Stage 4.95] ✓ Transport title consistency: ${transportFixCount} transport cards synced`);
