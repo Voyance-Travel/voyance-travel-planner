@@ -188,8 +188,13 @@ export class GenerationTimer {
       if (this.dayTimings.length > 0) {
         console.log(`[perf] Per-day breakdown:`);
         for (const d of this.dayTimings) {
-          console.log(`[perf]   Day ${d.day}: ${(d.total_ms / 1000).toFixed(1)}s total, AI ${(d.ai_ms / 1000).toFixed(1)}s, enrich ${(d.enrich_ms / 1000).toFixed(1)}s, ${d.activities} activities`);
+          const catStr = (d as any).categories ? ` | ${JSON.stringify((d as any).categories)}` : '';
+          console.log(`[perf]   Day ${d.day}: ${(d.total_ms / 1000).toFixed(1)}s total, AI ${(d.ai_ms / 1000).toFixed(1)}s, enrich ${(d.enrich_ms / 1000).toFixed(1)}s, ${d.activities} activities${catStr}`);
         }
+      }
+      if (this.totalPromptTokens > 0 || this.totalCompletionTokens > 0) {
+        console.log(`[perf] Tokens: ${this.totalPromptTokens} prompt + ${this.totalCompletionTokens} completion = ${this.totalPromptTokens + this.totalCompletionTokens} total`);
+        console.log(`[perf] Models used: ${Array.from(this.modelsUsed).join(', ') || 'unknown'}`);
       }
       if (this.errors.length > 0) {
         console.log(`[perf] Errors: ${this.errors.length}`);
@@ -210,6 +215,9 @@ export class GenerationTimer {
           errors: this.errors,
           current_phase: status === 'completed' ? 'done' : 'failed',
           progress_pct: status === 'completed' ? 100 : Math.round((this.dayTimings.length / Math.max(1, this.numDays)) * 100),
+          model_used: Array.from(this.modelsUsed).join(', ') || null,
+          prompt_token_count: this.totalPromptTokens || null,
+          completion_token_count: this.totalCompletionTokens || null,
         })
         .eq('id', this.logId);
     } catch (e) {
