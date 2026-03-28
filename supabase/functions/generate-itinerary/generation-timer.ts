@@ -150,9 +150,13 @@ export class GenerationTimer {
 
   /** Update progress in DB for real-time UI polling. Fire-and-forget. */
   async updateProgress(phase: string, pct: number) {
-    if (!this.logId) return;
+    if (!this.logId) {
+      console.warn('[perf] updateProgress called but logId is null — skipping');
+      return;
+    }
+    this.currentPhase = phase;
     try {
-      await this.supabaseClient
+      const { error } = await this.supabaseClient
         .from('generation_logs')
         .update({
           current_phase: phase,
@@ -163,8 +167,12 @@ export class GenerationTimer {
           errors: this.errors,
         })
         .eq('id', this.logId);
+
+      if (error) {
+        console.error(`[perf] updateProgress FAILED for logId=${this.logId}, phase=${phase}:`, error.message, error.details, error.hint);
+      }
     } catch (e) {
-      // Don't let logging failures break generation
+      console.error(`[perf] updateProgress EXCEPTION for logId=${this.logId}, phase=${phase}:`, e);
     }
   }
 
@@ -205,7 +213,7 @@ export class GenerationTimer {
 
       if (!this.logId) return;
 
-      await this.supabaseClient
+      const { error } = await this.supabaseClient
         .from('generation_logs')
         .update({
           status,
@@ -220,8 +228,14 @@ export class GenerationTimer {
           completion_token_count: this.totalCompletionTokens || null,
         })
         .eq('id', this.logId);
+
+      if (error) {
+        console.error(`[perf] finalize FAILED for logId=${this.logId}, status=${status}:`, error.message, error.details, error.hint);
+      } else {
+        console.log(`[perf] finalize SUCCESS for logId=${this.logId}, status=${status}, duration=${totalMs}ms`);
+      }
     } catch (e) {
-      console.error('[perf-logger] Failed to save final log:', e);
+      console.error(`[perf] finalize EXCEPTION for logId=${this.logId}:`, e);
     }
   }
 
