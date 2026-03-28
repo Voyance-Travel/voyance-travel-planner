@@ -26,6 +26,7 @@ import {
   sanitizeGeneratedDay,
   sanitizeDateFields,
   normalizeDurationString,
+  enforceHotelPlaceholderOnDay,
 } from './sanitization.ts';
 
 import {
