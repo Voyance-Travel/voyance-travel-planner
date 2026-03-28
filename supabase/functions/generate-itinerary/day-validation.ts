@@ -963,9 +963,85 @@ export function enforceTimingConstraints(
     if (/\bnightcap\b/.test(titleLower) && startMin < 20 * 60) {
       const newTitle = act.title.replace(/\b[Nn]ightcap\b/, (m) => m[0] === 'N' ? 'Cocktails' : 'cocktails');
       console.log(`[TimingEnforce] Relabeled "${act.title}" → "${newTitle}" (nightcap before 20:00)`);
-      sorted[i] = { ...act, title: newTitle };
+    sorted[i] = { ...act, title: newTitle };
     }
   }
 
   return sorted;
+}
+
+// =============================================================================
+// CHRONOLOGICAL ORDER ENFORCEMENT — fixes AM/PM confusion in late-night slots
+// =============================================================================
+
+function minutesToTimeString(totalMinutes: number): string {
+  const hours24 = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  const period = hours24 >= 12 ? 'PM' : 'AM';
+  const hours12 = hours24 === 0 ? 12 : hours24 > 12 ? hours24 - 12 : hours24;
+  return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+}
+
+/**
+ * Convert a 12h time string back to 24h "HH:MM" format for storage.
+ */
+function to24h(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60) % 24;
+  const m = totalMinutes % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Ensures all activities in a day are in chronological order.
+ * If an activity starts before the previous one ends, push it forward.
+ * Also detects the common AI mistake of using PM instead of AM for late-night times.
+ */
+export function enforceChronologicalOrder(day: StrictDayMinimal): StrictDayMinimal {
+  if (!day?.activities || !Array.isArray(day.activities) || day.activities.length < 2) {
+    return day;
+  }
+
+  const activities = [...day.activities];
+
+  for (let i = 1; i < activities.length; i++) {
+    const prev = activities[i - 1];
+    const curr = activities[i];
+
+    const prevEnd = parseTimeToMinutesLocal(prev.endTime);
+    const currStart = parseTimeToMinutesLocal(curr.startTime);
+
+    if (prevEnd === null || currStart === null) continue;
+
+    // If current starts before previous ends, it's out of order
+    if (currStart < prevEnd) {
+      const gap = prevEnd - currStart;
+      const currEnd = parseTimeToMinutesLocal(curr.endTime);
+      const duration = currEnd !== null && currEnd > currStart ? currEnd - currStart : 60;
+
+      if (gap > 240) {
+        // Likely AM/PM flip — try adding 12 hours
+        const corrected = currStart + 720;
+        if (corrected >= prevEnd && corrected <= 1440) {
+          console.log(`[ChronoFix] Day ${day.dayNumber}: Flipped AM/PM for "${curr.title}" ${curr.startTime} → ${to24h(corrected)}`);
+          activities[i] = {
+            ...curr,
+            startTime: to24h(corrected),
+            endTime: to24h(Math.min(corrected + duration, 1439)),
+          };
+          continue;
+        }
+      }
+
+      // Otherwise, push this activity to start 15 min after previous ends
+      const newStart = prevEnd + 15;
+      console.log(`[ChronoFix] Day ${day.dayNumber}: Pushed "${curr.title}" from ${curr.startTime} → ${to24h(newStart)}`);
+      activities[i] = {
+        ...curr,
+        startTime: to24h(newStart),
+        endTime: to24h(Math.min(newStart + duration, 1439)),
+      };
+    }
+  }
+
+  return { ...day, activities };
 }
