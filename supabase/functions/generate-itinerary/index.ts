@@ -3281,6 +3281,41 @@ async function generateItineraryAI(
     console.log(`[Stage 2] Post-batch dedup: removed ${dedupCount} concept-similar duplicate activities`);
   }
 
+  // Post-generation category normalizer — fix invalid or mismatched categories
+  const VALID_CATEGORIES = new Set([
+    'sightseeing', 'dining', 'cultural', 'shopping',
+    'relaxation', 'transport', 'accommodation', 'activity'
+  ]);
+  const BAR_KEYWORDS = /\b(bar|lounge|cocktail|nightcap|pub|drinks?|wine\s*bar|rooftop\s*bar|izakaya|sake|whisky|bourbon|speakeasy|taproom)\b/i;
+  const DINING_KEYWORDS = /\b(restaurant|cafe|coffee|bistro|brasserie|eatery|brunch|breakfast|lunch|dinner|ramen|sushi|food)\b/i;
+  const WELLNESS_KEYWORDS = /\b(spa|massage|onsen|bath|meditation|yoga|wellness)\b/i;
+
+  for (const day of days) {
+    for (const act of day.activities || []) {
+      const cat = (act.category || '').toLowerCase();
+      const titleDesc = `${act.title || ''} ${act.description || ''}`;
+
+      if (!VALID_CATEGORIES.has(cat)) {
+        // Invalid category — remap based on content
+        if (BAR_KEYWORDS.test(titleDesc) || DINING_KEYWORDS.test(titleDesc)) {
+          console.log(`[Category fix] "${act.title}": "${cat}" → "dining"`);
+          act.category = 'dining';
+        } else if (WELLNESS_KEYWORDS.test(titleDesc)) {
+          console.log(`[Category fix] "${act.title}": "${cat}" → "relaxation"`);
+          act.category = 'relaxation';
+        } else {
+          console.log(`[Category fix] "${act.title}": "${cat}" → "activity"`);
+          act.category = 'activity';
+        }
+      }
+      // Also catch valid-but-wrong: "relaxation" used for bars
+      else if (cat === 'relaxation' && BAR_KEYWORDS.test(titleDesc)) {
+        console.log(`[Category fix] "${act.title}": relaxation → dining (bar/lounge)`);
+        act.category = 'dining';
+      }
+    }
+  }
+
   // Apply fallback costs for any missing values
   const fallbackCosts: Record<string, number> = {
     sightseeing: 15,
@@ -9326,7 +9361,7 @@ ${dayMealPolicy.requiredMeals.includes('lunch') ? '4. LUNCH (category: "dining")
 5. AFTERNOON ACTIVITIES — At least 1-2 paid + 1 free activity  
 6. HOTEL RETURN (REQUIRED if dinner is far from hotel) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30-60 min. This MUST be a separate activity card, not just a transport entry.
 ${dayMealPolicy.requiredMeals.includes('dinner') ? '7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips' : ''}
-8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot (at least 1 suggestion)
+8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot (at least 1 suggestion). Use category: "dining" for bars, lounges, and cocktail venues. Use category: "activity" for shows, clubs, and entertainment. NEVER use "wellness", "nightlife", or "relaxation" as a category for bars/lounges.
 9. RETURN TO HOTEL (REQUIRED as LAST activity) — "Return to [EXACT Hotel Name]" with category "accommodation". This is the FINAL card of every day. MUST appear after ALL other activities including nightlife. Include transport mode in a preceding transport activity.
 10. NEXT MORNING PREVIEW — In the tips of the LAST activity: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
 
