@@ -5,11 +5,12 @@
  * glowing active day card, skeleton pending cards.
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Check, Loader2, Clock, PartyPopper } from 'lucide-react';
 import { GenerationAnimation } from './GenerationAnimation';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
 import type { GenerationStep } from '@/hooks/useLovableItinerary';
 import type { GeneratedDaySummary } from '@/hooks/useGenerationPoller';
 
@@ -109,16 +110,54 @@ function useDripFeedDays(generatedDaysList: GeneratedDaySummary[]) {
   return visibleDays;
 }
 
-/** Rotating status message hook */
-function useRotatingMessage() {
+/** Rotating status message hook — uses real phase data from generation_logs when available */
+function useRotatingMessage(tripId?: string, isActive?: boolean) {
   const [index, setIndex] = useState(0);
+  const [livePhase, setLivePhase] = useState<string | null>(null);
+
+  // Poll generation_logs for real phase info
+  useEffect(() => {
+    if (!isActive || !tripId) { setLivePhase(null); return; }
+
+    const poll = async () => {
+      try {
+        const { data } = await supabase
+          .from('generation_logs')
+          .select('current_phase, progress_pct, status')
+          .eq('trip_id', tripId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (data?.current_phase && data.status !== 'completed' && data.status !== 'failed') {
+          // Format phase name for display
+          const phase = data.current_phase
+            .replace(/_/g, ' ')
+            .replace(/day (\d+)/i, 'Day $1')
+            .replace(/^(\w)/, (c: string) => c.toUpperCase());
+          setLivePhase(phase);
+        } else {
+          setLivePhase(null);
+        }
+      } catch {
+        // Non-critical — fall back to rotating messages
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 4000);
+    return () => clearInterval(interval);
+  }, [tripId, isActive]);
+
+  // Fallback rotating messages
   useEffect(() => {
     const interval = setInterval(() => {
       setIndex(prev => (prev + 1) % STATUS_MESSAGES.length);
     }, 3000);
     return () => clearInterval(interval);
   }, []);
-  return STATUS_MESSAGES[index];
+
+  return livePhase || STATUS_MESSAGES[index];
 }
 
 /** Shimmer progress bar component */
