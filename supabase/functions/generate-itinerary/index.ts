@@ -7324,9 +7324,27 @@ If the purpose is a specific event, plan at least ONE full day around that event
             }
             
             // Couldn't auto-fix and not confirmed closed — tag as uncertain warning only
-            (activity as any).closedRisk = true;
-            (activity as any).closedRiskReason = violation.reason;
-            console.warn(`  - Day ${violation.dayNumber}: "${violation.activityTitle}" — ${violation.reason} (uncertain, tagged as warning)`);
+            // But first: suppress for nightlife/entertainment categories with implausible morning-only hours
+            const actCatLower = (activity.category || '').toLowerCase();
+            const nightlifeCategories = ['nightlife', 'entertainment', 'bar', 'jazz', 'club', 'music', 'live music', 'concert'];
+            const isNightlifeCategory = nightlifeCategories.some(c => actCatLower.includes(c));
+            const reasonLooksImplausible = violation.reason && /Open\s+\d{2}:\d{2}[–\-]\d{2}:\d{2}/.test(violation.reason) && 
+              (() => {
+                const closeMatch = violation.reason.match(/Open\s+\d{2}:\d{2}[–\-](\d{2}):(\d{2})/);
+                if (closeMatch) {
+                  const closeMins = parseInt(closeMatch[1]) * 60 + parseInt(closeMatch[2]);
+                  return closeMins <= 720; // closes before noon
+                }
+                return false;
+              })();
+            
+            if (isNightlifeCategory && reasonLooksImplausible) {
+              console.log(`  ⊘ Day ${violation.dayNumber}: "${violation.activityTitle}" — suppressed implausible hours warning for ${actCatLower} venue`);
+            } else {
+              (activity as any).closedRisk = true;
+              (activity as any).closedRiskReason = violation.reason;
+              console.warn(`  - Day ${violation.dayNumber}: "${violation.activityTitle}" — ${violation.reason} (uncertain, tagged as warning)`);
+            }
           }
           
           const summary: string[] = [];
