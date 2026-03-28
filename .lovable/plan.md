@@ -1,35 +1,24 @@
 
 
-## Hotel Name Enforcement (Post-Processing)
+## Broad Category-Based Sanitization Regex
 
-### Problem
-When no hotel is selected, `hotelName` is set to `'Your Hotel'` and the prompt tells the AI not to invent hotels. The AI ignores this and generates specific luxury hotel names (Peninsula, Four Seasons, Conrad, etc.).
+### Change — Single file: `supabase/functions/generate-itinerary/sanitization.ts`
 
-### Changes
+**1. Add new broad category patterns after line 77** (after existing leaked AI patterns, before `INLINE_ALT_VENUE_RE`):
 
-**1. `supabase/functions/generate-itinerary/sanitization.ts` — Add two new exports**
+- `EMOJI_BOOKING_FLAG_RE` — matches 🔴🟡🟢🔵 + Book/Reserve text
+- `URGENCY_PREFIX_RE` — matches any "Urgency:" or "Reservation urgency:" prefixed sentence
+- `RAW_CODE_FIELD_RE` — matches camelCase field assignments like `isVoyancePick: true`
+- `ALL_CAPS_META_RE` — matches parenthetical all-caps instructions like `(TRANSIT INCLUDED IN TIPS)`
+- `AI_SELF_COMMENTARY_RE` — matches "Profile updated for...", "Based on your profile..." sentences
+- `ALTERNATIVE_SUGGESTION_RE` — matches "Alternative: X..." sentences
+- `STANDALONE_BOOL_RE` — matches standalone `isFieldName: true/false/null` patterns
 
-Add `enforceHotelPlaceholder(text)` and `enforceHotelPlaceholderOnDay(day)` at the end of the file:
+**2. Update `sanitizeAITextField` (lines 96-102)** — add the new `.replace()` calls after the existing ones, keeping old patterns as additional layers.
 
-- `KNOWN_HOTEL_BRANDS` array covering ~30 luxury chains (Peninsula, Four Seasons, Ritz-Carlton, Park Hyatt, Aman, Mandarin Oriental, Conrad, St. Regis, Waldorf Astoria, Shangri-La, Rosewood, Hoshinoya, etc.)
-- `HOTEL_BRAND_RE` regex that matches brand + optional city/suffix (e.g. "The Peninsula Tokyo", "Four Seasons Hotel at Otemachi")
-- `enforceHotelPlaceholder(text)` — replaces matched hotel names with "Your Hotel"
-- `enforceHotelPlaceholderOnDay(day)` — walks all text fields on a day object (title, theme, narrative, accommodationNotes, practicalTips, and every activity's title/name/description/tips/voyanceInsight/bestTime/location.name/location.address/personalization.whyThisFits/transit.description/transit.to/transit.from/transportation.instructions)
+**3. Broaden `NEXT_DAY_PLANNING_RE`** (line 73) — current pattern requires a colon after "Tomorrow". Replace with the broader version that catches "Tomorrow" or "Next morning/day" without requiring colon.
 
-**2. `supabase/functions/generate-itinerary/index.ts` — Call after each day parse (2 locations)**
+**4. Redeploy** the `generate-itinerary` edge function.
 
-At both parse sites (~line 2421 and ~line 10323), after `sanitizeGeneratedDay(...)` returns and before the existing post-processing block (line ~2554), add:
-
-```typescript
-if (!dayCity?.hotelName || dayCity.hotelName === 'Your Hotel') {
-  generatedDay = enforceHotelPlaceholderOnDay(generatedDay);
-}
-```
-
-This uses the already-available `dayCity?.hotelName` and `context.hotelData?.hotelName` to decide whether enforcement is needed — same variables already used at line 2559.
-
-**3. Redeploy** the `generate-itinerary` edge function.
-
-### Why it works
-Instead of relying on prompt instructions (which the AI ignores), we mechanically replace every known hotel brand mention after generation. The regex covers 30+ brands with optional city suffixes. Even partial coverage eliminates the most common hallucinations.
+Old patterns are kept for backward compatibility — more layers = more coverage.
 
