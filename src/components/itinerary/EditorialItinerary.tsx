@@ -10052,9 +10052,9 @@ function ActivityRow({
       const t = text.toLowerCase().trim();
       return t.length < 4 || t === 'the destination' || t.startsWith('@ the destination') || t.startsWith('at the destination') || t === '@ the' || /^@?\s*the\s+(destination|city|area|location|neighborhood)$/i.test(t);
     };
-    const rawLocationName = activity.location?.name?.trim();
+    const rawLocationName = sanitizeActivityText(activity.location?.name?.trim());
     const dedupedLocationName = (rawLocationName && rawLocationName !== activityTitle && !isPlaceholderLocation(rawLocationName)) ? rawLocationName : '';
-    const locationText = dedupedLocationName || (activity.location?.address && !isPlaceholderLocation(activity.location.address) ? activity.location.address : '');
+    const locationText = dedupedLocationName || (activity.location?.address && !isPlaceholderLocation(activity.location.address) ? sanitizeActivityText(activity.location.address) : '');
 
     return (
       <div className="py-2">
@@ -10116,7 +10116,7 @@ function ActivityRow({
               Voyance Tip
             </p>
             <p className="text-sm text-muted-foreground italic leading-relaxed">
-              {activity.tips}
+              {sanitizeActivityText(activity.tips)}
             </p>
           </div>
         )}

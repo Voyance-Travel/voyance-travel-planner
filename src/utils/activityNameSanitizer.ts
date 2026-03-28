@@ -71,6 +71,11 @@ export function sanitizeActivityName(name: string | undefined | null): string {
     }
   }
   
+  // Strip AI search qualifiers like "(or high-end alternative)"
+  sanitized = sanitized.replace(AI_QUALIFIER_RE, '').trim();
+  // Strip trailing "or High-End Boutique Wellness" without parens
+  sanitized = sanitized.replace(TRAILING_OR_QUALIFIER_RE, '').trim();
+
   // Also handle case-insensitive matching for robustness
   const lowerName = sanitized.toLowerCase();
   for (const prefix of SYSTEM_PREFIXES) {
@@ -144,5 +149,14 @@ const SYSTEM_LABEL_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS
 
 export function sanitizeActivityText(text: string | undefined | null): string {
   if (!text) return '';
-  return text.replace(SYSTEM_LABEL_RE, '').replace(/\s{2,}/g, ' ').trim();
+  return text
+    .replace(SYSTEM_LABEL_RE, '')
+    .replace(AI_QUALIFIER_RE, '')
+    .replace(TRAILING_OR_QUALIFIER_RE, '')
+    .replace(SLOT_PREFIX_RE, '')
+    .replace(FULFILLS_RE, ' ')
+    .replace(META_DISTANCE_COST_RE, '')
+    .replace(INLINE_META_RE, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
