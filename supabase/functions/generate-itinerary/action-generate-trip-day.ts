@@ -913,9 +913,14 @@ export async function handleGenerateTripDay(
       },
     }).eq('id', tripId);
 
-    // Record day timing
+    // Record day timing with category breakdown
     const dayGenTotal = Date.now() - dayGenStart;
-    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0);
+    const dayCats: Record<string, number> = {};
+    for (const act of (dayResult?.activities || [])) {
+      const cat = (act.category || 'other').toLowerCase();
+      dayCats[cat] = (dayCats[cat] || 0) + 1;
+    }
+    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0, dayCats);
     const progressPct = 5 + Math.round((dayNumber / totalDays) * 90);
     await timer.updateProgress(`Day ${dayNumber}/${totalDays} complete`, progressPct);
 
