@@ -12,7 +12,7 @@ export class GenerationTimer {
   private logId: string | null = null;
   private startTime: number;
   private phases: Record<string, number> = {};
-  private dayTimings: Array<{ day: number; total_ms: number; ai_ms: number; enrich_ms: number; activities: number }> = [];
+  private dayTimings: Array<{ day: number; total_ms: number; ai_ms: number; enrich_ms: number; activities: number; categories?: Record<string, number> }> = [];
   private errors: Array<{ phase: string; error: string; timestamp: string }> = [];
   private currentPhase: string = 'init';
   private phaseStart: number;
@@ -20,6 +20,9 @@ export class GenerationTimer {
   private destination: string = '';
   private numDays: number = 0;
   private numGuests: number = 0;
+  private totalPromptTokens: number = 0;
+  private totalCompletionTokens: number = 0;
+  private modelsUsed: Set<string> = new Set();
 
   constructor(tripId: string, supabaseClient: any) {
     this.tripId = tripId;
