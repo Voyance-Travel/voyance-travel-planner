@@ -127,7 +127,8 @@ export function usePayableItems({
     if (hotelSelection?.totalPrice || hotelSelection?.pricePerNight) {
       const hotelId = 'hotel-selection';
       const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
-      const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * days.length;
+      const nights = Math.max(1, days.length - 1);
+      const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * nights;
       const assignedIds = hotelPayments
         .map(p => (p as any)?.assigned_member_id)
         .filter(Boolean) as string[];
