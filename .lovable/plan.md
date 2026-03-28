@@ -1,22 +1,51 @@
 
 
-## Fix: Green Focus Box Around Inputs
+## Fix Generic "Meal at a X" Titles in Itinerary
 
-### Problem
-Line 152-154 in `src/index.css` applies a **global** focus ring to every focusable element:
-```css
-*:focus-visible {
-  @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
-}
-```
-The `--ring` CSS variable is set to a teal/green hue (`185 45% 28%`), creating a visible green box around inputs when typing.
+### Root Cause
 
-This is **redundant** — individual components like `Input`, `Button`, `Select`, etc. already define their own `focus-visible:ring-2 focus-visible:ring-ring` styles via Tailwind classes. The global rule doubles up and creates an aggressive green outline on everything.
+There are **two** meal guard systems that inject fallback meals when the AI misses one:
 
-### Fix
-**File: `src/index.css` (lines 151-154)**
+1. **Server-side** (`day-validation.ts` line 838): Has access to a restaurant pool and verified_venues. Falls back to generic `"Breakfast at a café near your hotel"` only when both pools are empty.
 
-Remove the global `*:focus-visible` rule entirely. All shadcn/ui components already handle their own focus styles. The high-contrast accessibility override on line 343 (`html.a11y-high-contrast *:focus-visible`) can stay — it only activates when users explicitly enable high contrast mode.
+2. **Client-side** (`mealGuard.ts` line 144): Runs on every save (via `itineraryActionExecutor.ts` and `itineraryAPI.ts`). Has **zero** access to restaurant pools — always produces generic names like `"Lunch at a neighborhood restaurant"`.
 
-This is a 3-line deletion. No other files need changes.
+**221 out of 3,112 dining activities** (7%) in production have these generic fallback names. The client-side guard is the primary offender because it fires on every drag-drop, edit, or regeneration save.
+
+### The Fix (3 parts)
+
+**Part 1: Client-side guard — query real venues before falling back**
+
+File: `src/utils/mealGuard.ts`
+
+- Add an async variant `enforceItineraryMealComplianceAsync` that accepts `supabase` client
+- Before injecting a generic fallback, query `verified_venues` table for the destination city (same approach as server-side line 11210-11234)
+- Use real venue names when available; only fall back to generic when the query returns nothing
+- Mark any remaining generic fallbacks with `needsRefinement: true` (already done)
+
+**Part 2: Wire up the async guard in callers**
+
+Files: `src/services/itineraryActionExecutor.ts`, `src/services/itineraryAPI.ts`
+
+- Switch from `enforceItineraryMealCompliance` (sync) to `enforceItineraryMealComplianceAsync` (async)
+- Pass the supabase client and destination city to the guard
+
+**Part 3: Ensure needsRefinement meals show a swap CTA**
+
+Verify the UI already renders a "Find a real restaurant" button for `needsRefinement` activities. If not, add it to the activity card component.
+
+### What this does NOT change
+
+- The server-side guard already has pool access and works correctly
+- AI prompt instructions stay the same (they already demand real names)
+- The 221 existing generic entries in production won't auto-fix, but users can tap "swap" to replace them
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `src/utils/mealGuard.ts` | Add async variant with `verified_venues` query |
+| `src/services/itineraryActionExecutor.ts` | Use async guard, pass supabase + destination |
+| `src/services/itineraryAPI.ts` | Use async guard, pass supabase + destination |
+| Activity card component (if needed) | Ensure swap CTA for `needsRefinement` |
 
