@@ -464,6 +464,18 @@ export function isVenueOpenOnDay(
           return scheduledMins >= range.open && scheduledMins <= range.close;
         });
         if (!withinRange) {
+          // Plausibility guard: if ALL parsed hours close before noon but activity
+          // is scheduled for evening (≥17:00), the hours data is almost certainly
+          // wrong (e.g., Google returning "06:00–10:30" for a jazz club).
+          const allCloseBeforeNoon = timeRanges.every(r => {
+            const effectiveClose = r.close <= r.open ? r.close + 1440 : r.close;
+            return effectiveClose <= 720; // noon = 720 mins
+          });
+          if (allCloseBeforeNoon && scheduledMins >= 1020) { // 17:00 = 1020 mins
+            // Hours data is implausible for an evening activity — suppress warning
+            return { isOpen: true };
+          }
+
           return { 
             isOpen: false, 
             reason: `${dayName}: Open ${timeRanges.map(r => `${minutesToHHMM(r.open)}–${minutesToHHMM(r.close)}`).join(', ')}, but scheduled at ${scheduledTimeHHMM}` 
