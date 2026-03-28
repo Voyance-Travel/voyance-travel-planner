@@ -10287,6 +10287,21 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           throw new Error('AI generation failed');
         }
 
+        // Record AI phase timing, token usage, and model
+        if (innerTimer) {
+          innerTimer.endPhase(`ai_call_day_${dayNumber}`);
+          try {
+            const usage = data.usage;
+            const modelUsed = data.model || 'unknown';
+            if (usage) {
+              innerTimer.addTokenUsage(usage.prompt_tokens || 0, usage.completion_tokens || 0, modelUsed);
+            } else {
+              innerTimer.addTokenUsage(0, 0, modelUsed);
+            }
+          } catch (_e) { /* non-blocking */ }
+          innerTimer.startPhase(`parse_response_day_${dayNumber}`);
+        }
+
         const message = data.choices?.[0]?.message;
         const toolCall = message?.tool_calls?.[0];
 
