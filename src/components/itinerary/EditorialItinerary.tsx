@@ -6814,12 +6814,28 @@ export function EditorialItinerary({
                         <span className="text-muted-foreground">Check-out:</span>
                         <span className="font-medium">{hotelSelection.checkOut || '11:00 AM'}</span>
                       </div>
+                      {startDate && endDate && (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 text-sm">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="font-medium">{safeFormatDate(startDate, 'MMM d', startDate)} – {safeFormatDate(endDate, 'MMM d', endDate)}</span>
+                        </div>
+                      )}
                       {hotelSelection.pricePerNight && (
                         <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-sm border border-primary/10">
                           <span className="font-medium text-primary">${hotelSelection.pricePerNight}/night</span>
                         </div>
                       )}
+                      {(hotelSelection as any).roomType && (
+                        <Badge variant="secondary" className="text-xs">
+                          {(hotelSelection as any).roomType}
+                        </Badge>
+                      )}
                     </div>
+                    {hotelSelection.pricePerNight && totalDays > 1 && (
+                      <div className="text-sm text-muted-foreground">
+                        ${hotelSelection.pricePerNight}/night × {Math.max(1, totalDays - 1)} nights = <strong className="text-foreground">${(hotelSelection.pricePerNight * Math.max(1, totalDays - 1)).toLocaleString()}</strong>
+                      </div>
+                    )}
                     
                     {hotelSelection.address && (
                       <div className="flex items-start gap-2 text-sm">
@@ -6852,7 +6868,7 @@ export function EditorialItinerary({
                           className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-border hover:bg-secondary/50 transition-colors"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
-                          {hotelSelection.website ? 'Website' : 'Maps'}
+                          {hotelSelection.website ? (() => { try { return new URL(hotelSelection.website!).hostname.replace('www.', ''); } catch { return 'Website'; } })() : 'Maps'}
                         </a>
                       </div>
                     )}
