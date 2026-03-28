@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Wallet, Users, Sliders, DollarSign } from 'lucide-react';
+import { Wallet, Users, Sliders, DollarSign, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +32,8 @@ interface BudgetSetupDialogProps {
   onSave: (settings: Partial<TripBudgetSettings> & { budget_individual_cents?: Record<string, number> }) => Promise<void>;
   /** Optional member names for per-person budget differentiation */
   memberNames?: { id: string; name: string }[];
+  /** Current estimated trip total in cents — used for feasibility warnings */
+  tripTotalCents?: number;
 }
 
 export function BudgetSetupDialog({
@@ -42,6 +44,7 @@ export function BudgetSetupDialog({
   spendStyle = 'balanced',
   onSave,
   memberNames = [],
+  tripTotalCents,
 }: BudgetSetupDialogProps) {
   const [inputMode, setInputMode] = useState<'total' | 'per_person'>(settings?.budget_input_mode || 'total');
   const [amount, setAmount] = useState('');
