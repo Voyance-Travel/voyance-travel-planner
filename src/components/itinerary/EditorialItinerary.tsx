@@ -1743,7 +1743,14 @@ export function EditorialItinerary({
             : tType === 'ferry' ? 'port'
             : tType === 'train' ? 'station'
             : 'terminal';
-          const title = arrAirport ? `${transportLabel} to ${arrAirport}` : `${transportLabel} home`;
+          // Build a descriptive title: prefer route, fallback to generic
+          const homeCity = arrAirport || (returnLeg.arrival?.city) || '';
+          const departCity = depAirport || (returnLeg.departure?.city) || '';
+          const title = homeCity
+            ? `${transportLabel} to ${homeCity}`
+            : departCity
+              ? `${departCity} → Home`
+              : `${transportLabel} home`;
           const cardTime = depTime || '18:00';
 
           const depInterCityCategory = tType === 'flight' ? 'inter_city_flight' : 'inter_city_train';
@@ -1813,13 +1820,8 @@ export function EditorialItinerary({
           updatedActivities.splice(insertIndex, 0, departureCard);
 
           // Deduplicate AI-generated departure/transfer activities against the synthetic card
-          const DEPARTURE_DUPES = [
-            'transfer to airport', 'departure from', 'head to airport', 'airport transfer',
-            'transfer to station', 'head to station', 'station transfer',
-            'transfer to port', 'head to port', 'port transfer',
-            'transfer to terminal', 'head to terminal',
-            'depart from', 'heading home', 'travel to airport',
-          ];
+          // Use token-based matching to catch "Transfer to Narita Airport (NRT)" etc.
+          const HUB_TOKENS = ['airport', 'station', 'port', 'terminal', 'aeropuerto', 'gare', 'bahnhof'];
           updatedActivities = updatedActivities.filter(act => {
             if ((act as any).__syntheticFinalDeparture || (act as any).__syntheticTravel ||
                 (act as any).__syntheticDeparture || (act as any).__interCityTransport ||
@@ -1829,7 +1831,13 @@ export function EditorialItinerary({
               return true;
             }
             const t = (act.title || '').toLowerCase();
-            if (DEPARTURE_DUPES.some(kw => t.includes(kw))) return false;
+            // Token-based dedup: "transfer to" + any hub keyword
+            const hasHubToken = HUB_TOKENS.some(h => t.includes(h));
+            const isTransferActivity = (t.includes('transfer to') || t.includes('transit to')) && hasHubToken;
+            const isDepartureActivity = t.includes('departure from') || t.includes('depart from') || t.includes('departing from');
+            const isHeadingTo = (t.includes('head to') || t.includes('travel to') || t.includes('go to')) && hasHubToken;
+            const isGenericDeparture = t.includes('heading home') || t.includes('airport transfer') || t.includes('station transfer');
+            if (isTransferActivity || isDepartureActivity || isHeadingTo || isGenericDeparture) return false;
             // Time-based trim: remove activities past cutoff
             if (!act.startTime) return true;
             const actMin = parseTimeToMinutes(act.startTime);

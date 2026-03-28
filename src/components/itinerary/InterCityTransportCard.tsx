@@ -77,23 +77,27 @@ export function InterCityTransportCard({ title, travelMeta, className, variant =
       onClick={hasExpandableDetails ? () => setExpanded(prev => !prev) : undefined}
     >
       <div className={cn('px-4', isFinal ? 'py-4' : 'py-3.5')}>
-        {/* "Heading Home" label for final variant */}
-        {isFinal && (
-          <p className="text-[10px] font-bold uppercase tracking-widest text-primary/50 mb-2">
-            Heading Home
-          </p>
-        )}
-
         {/* Header row: icon + title + price */}
         <div className="flex items-center gap-3 mb-2.5">
           <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-muted">
             <Icon className="h-4.5 w-4.5 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              {(travelMeta.transportName || 'Transfer').toUpperCase()}
-            </p>
-            <p className="text-sm font-semibold text-foreground truncate">{title}</p>
+            {isFinal ? (
+              <>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-primary/50">
+                  Heading Home{travelMeta.transportName ? ` · ${travelMeta.transportName}` : ''}
+                </p>
+                <p className="text-sm font-semibold text-foreground truncate">{title}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  {(travelMeta.transportName || 'Transfer').toUpperCase()}
+                </p>
+                <p className="text-sm font-semibold text-foreground truncate">{title}</p>
+              </>
+            )}
           </div>
           {formattedPrice && (
             <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">
