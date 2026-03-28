@@ -539,34 +539,36 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
   const committedFixed = (settings.budget_include_hotel ? summary.committedHotelCents : 0)
     + (settings.budget_include_flight ? summary.committedFlightCents : 0);
   const discretionaryTotal = Math.max(budgetTotal - committedFixed, 0);
+  // Scale discretionary slider percentages relative to total budget so all percents sum to ~100%
+  const discRatio = budgetTotal > 0 ? discretionaryTotal / budgetTotal : 0;
   result.push(
     {
       category: 'food',
       allocatedCents: Math.round(discretionaryTotal * (allocations.food_percent / 100)),
       usedCents: summary.plannedFoodCents,
       remainingCents: Math.round(discretionaryTotal * (allocations.food_percent / 100)) - summary.plannedFoodCents,
-      percent: allocations.food_percent,
+      percent: Math.round(allocations.food_percent * discRatio),
     },
     {
       category: 'activities',
       allocatedCents: Math.round(discretionaryTotal * (allocations.activities_percent / 100)),
       usedCents: summary.plannedActivitiesCents,
       remainingCents: Math.round(discretionaryTotal * (allocations.activities_percent / 100)) - summary.plannedActivitiesCents,
-      percent: allocations.activities_percent,
+      percent: Math.round(allocations.activities_percent * discRatio),
     },
     {
       category: 'transit',
       allocatedCents: Math.round(discretionaryTotal * (allocations.transit_percent / 100)),
       usedCents: summary.plannedTransitCents,
       remainingCents: Math.round(discretionaryTotal * (allocations.transit_percent / 100)) - summary.plannedTransitCents,
-      percent: allocations.transit_percent,
+      percent: Math.round(allocations.transit_percent * discRatio),
     },
     {
       category: 'misc',
       allocatedCents: Math.round(discretionaryTotal * (allocations.misc_percent / 100)),
       usedCents: 0,
       remainingCents: Math.round(discretionaryTotal * (allocations.misc_percent / 100)),
-      percent: allocations.misc_percent,
+      percent: Math.round(allocations.misc_percent * discRatio),
     },
   );
 
