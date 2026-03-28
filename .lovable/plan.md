@@ -1,39 +1,50 @@
 
 
-## Fix Ghost ~$50 Price on Free Activities
+## Fix Generation Logging Stuck at `pre_chain_setup` 10%
 
-### Problem
-Free attractions (Meiji Shrine, Tsukiji Market, Nihonbashi Bridge) show ~$50/pp because `NEVER_FREE_CATEGORIES` includes broad categories like `'activity'`, `'sightseeing'`, `'market'`, `'cultural'`, `'attraction'`. The existing `FREE_ATTRACTION_KEYWORDS` check at line 1066 tries to catch these but loses to `isNeverFreeCategory()` later in the flow. Additionally, `usePayableItems.ts` has its own `NEVER_FREE_CATEGORIES` list with the same problem, and descriptions containing "free entry" or "free to explore" are never checked.
+### Root Cause
+The self-chaining architecture has **one timer per invocation**: `action-generate-trip.ts` creates the log row and updates to 5%, then `action-generate-trip-day.ts` resumes that timer via `generationLogId`. The happy-path last-day completion **does** call `timer.finalize('completed')` (line 861). But there are **4 exit paths that skip finalize entirely**:
+
+1. **All days failed** (line 426) — returns without finalize
+2. **Partial failure on last day** (line 487) — returns without finalize  
+3. **Chain failure** (line 981) — chain to next day fails, returns without finalize
+4. **Skip-to-chain for failed day** (line 495) — chains without finalize (not terminal, but if the chain itself then fails, the timer is lost)
+
+Additionally, intermediate `updateProgress` calls only happen at two points: once at 5% in the orchestrator and once per completed day (line 925). No progress updates exist for prompt building, enrichment, or post-processing phases.
 
 ### Changes
 
-**1. `src/components/itinerary/EditorialItinerary.tsx` — Expand and prioritize free detection**
+**1. `action-generate-trip-day.ts` — Add `timer.finalize()` to all terminal exit paths**
 
-- Expand `FREE_ATTRACTION_KEYWORDS` with: `'shrine'`, `'temple'`, `'torii'`, `'gate'`, `'passage'`, `'cemetery'`, `'memorial'`, `'boardwalk'`, `'riverbank'`, `'canal'`, `'pier'`, `'harbor walk'`, `'old town'`, `'district walk'`, `'fish market'`, `'tsukiji'`, `'nishiki'`, `'la boqueria'`, `'grand bazaar'`.
+- **Line ~427** (all days failed path): Add `await timer.finalize('failed');` before the return
+- **Line ~488** (partial/last day with failures): Add `await timer.finalize('failed');` before the return
+- **Line ~981-1004** (chain failure): Add `await timer.finalize('failed');` after recording chain_broken metadata — this is a non-terminal path (current day succeeded but next day can't start), so finalize with `'completed'` if `dayNumber === totalDays - 1` equivalent logic, otherwise `'failed'`
 
-- Add `FREE_DESCRIPTION_INDICATORS` array: `'free to explore'`, `'free entry'`, `'free to visit'`, `'free admission'`, `'no entrance fee'`, `'no entry fee'`, `'free to enter'`, `'free to walk'`, `'free of charge'`, `'no cost'`.
+**2. `action-generate-trip-day.ts` — Add intermediate `updateProgress` calls**
 
-- In `getActivityCostInfo()`, add a description check **before** the `shouldNeverBeFree` path (~line 1069–1071): if the activity description contains any free indicator, return `amount: 0` immediately regardless of category.
+- After loading multi-city mapping (~line 200): `await timer.updateProgress('context_loaded', 10 + ...)`
+- Before the AI call attempt loop (~line 286): progress update with day info
+- These complement the existing per-day-complete update at line 925
 
-- Broaden the `looksLikelyFree` category check to also accept `'cultural'`, `'market'`, `'explore'` in addition to existing values.
+**3. `action-generate-trip.ts` — Add `updateProgress` after enrichment completes**
 
-- Make `looksLikelyFree` **take priority over** `shouldNeverBeFree` by moving the free-check block before the `shouldNeverBeFree` assignment and ensuring it returns early. Already partially done but the `isNeverFreeCategory` guard prevents it from working for categories like `'market'` — remove that guard for keyword-matched items.
+- After `timer.endPhase('pre_chain_enrichment')` (line 443): `await timer.updateProgress('enrichment_complete', 8);`
 
-**2. `src/hooks/usePayableItems.ts` — Add free-attraction bypass**
+**4. Database cleanup — Mark stuck rows as completed**
 
-- Add the same `FREE_ATTRACTION_KEYWORDS` and `FREE_DESCRIPTION_INDICATORS` arrays.
-- Before the `shouldNeverBeFree` check at line 218, add: if the title matches a free keyword or description contains a free indicator, skip the estimation fallback and leave cost at 0.
+Run a migration to clean up existing stuck `in_progress` rows older than 30 minutes:
 
-**3. `src/lib/cost-estimation.ts` — Add free-activity short-circuit in `estimateCostSync`**
-
-- After the accommodation block (~line 342) and before the explicit cost check, add a title-based free-attraction check using the same keyword list. If matched, return `amount: 0` with `source: 'category_estimate'`, `reason: 'Commonly free attraction'`.
-
-**4. Backend: `supabase/functions/generate-itinerary/action-repair-costs.ts`**
-
-- In the repair loop, before assigning `costPerPerson` from the reference table, check if the activity title matches free-attraction keywords. If so, set `costPerPerson = 0` and `source = 'free_attraction'`.
+```sql
+UPDATE generation_logs
+SET status = 'completed',
+    current_phase = 'done (retroactive fix)',
+    progress_pct = 100
+WHERE status = 'in_progress'
+  AND created_at < now() - interval '30 minutes';
+```
 
 **5. Redeploy** the `generate-itinerary` edge function.
 
-### Technical Detail
-The root cause is that `NEVER_FREE_CATEGORIES` is too broad — it includes `'activity'`, `'sightseeing'`, `'market'`, and `'cultural'` which catches shrines, parks, and markets. Rather than narrowing that list (which would break paid activities), the fix adds an early-exit path for known-free attractions that takes priority. Description-based detection (`"free entry"`, `"free to explore"`) provides a second layer that works regardless of category.
+### Why This Fixes It
+The stuck log was likely caused by hitting one of the non-finalized exit paths (e.g., chain failure or partial completion). Adding `finalize()` to every terminal return ensures the log row always reaches a final state. The intermediate progress calls provide visibility into what phase the generation is actually in.
 
