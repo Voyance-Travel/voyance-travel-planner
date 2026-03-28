@@ -6814,12 +6814,28 @@ export function EditorialItinerary({
                         <span className="text-muted-foreground">Check-out:</span>
                         <span className="font-medium">{hotelSelection.checkOut || '11:00 AM'}</span>
                       </div>
+                      {startDate && endDate && (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 text-sm">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="font-medium">{safeFormatDate(startDate, 'MMM d', startDate)} – {safeFormatDate(endDate, 'MMM d', endDate)}</span>
+                        </div>
+                      )}
                       {hotelSelection.pricePerNight && (
                         <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-sm border border-primary/10">
                           <span className="font-medium text-primary">${hotelSelection.pricePerNight}/night</span>
                         </div>
                       )}
+                      {(hotelSelection as any).roomType && (
+                        <Badge variant="secondary" className="text-xs">
+                          {(hotelSelection as any).roomType}
+                        </Badge>
+                      )}
                     </div>
+                    {hotelSelection.pricePerNight && days.length > 1 && (
+                      <div className="text-sm text-muted-foreground">
+                        ${hotelSelection.pricePerNight}/night × {Math.max(1, days.length - 1)} nights = <strong className="text-foreground">${(hotelSelection.pricePerNight * Math.max(1, days.length - 1)).toLocaleString()}</strong>
+                      </div>
+                    )}
                     
                     {hotelSelection.address && (
                       <div className="flex items-start gap-2 text-sm">
@@ -6852,7 +6868,7 @@ export function EditorialItinerary({
                           className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-border hover:bg-secondary/50 transition-colors"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
-                          {hotelSelection.website ? 'Website' : 'Maps'}
+                          {hotelSelection.website ? (() => { try { return new URL(hotelSelection.website!).hostname.replace('www.', ''); } catch { return 'Website'; } })() : 'Maps'}
                         </a>
                       </div>
                     )}
@@ -8652,7 +8668,7 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
     } else if (hours >= 12) {
       return { action: 'Check in, then lunch & explore', reason: 'Afternoon arrival - grab lunch and explore the neighborhood' };
     } else {
-      return { action: 'Store luggage, explore immediately', reason: 'Early arrival - make the most of your first day!' };
+      return { action: 'Head to hotel, drop bags & start exploring', reason: 'Early arrival - make the most of your first day!' };
     }
   };
 
@@ -8742,7 +8758,7 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                   <Clock className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="font-medium text-sm">Arrive at airport by {recommendedArrival}</p>
+                  <p className="font-medium text-sm">Leave for the airport by {recommendedArrival}</p>
                   <p className="text-xs text-muted-foreground">
                     We recommend 2.5 hours before your {departureTime} departure for international flights
                   </p>
@@ -8834,8 +8850,8 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                 )}
                 {(effectiveHotelSelection?.checkInDate || allHotels?.[0]?.checkInDate) && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Check-in: {safeFormatDate(effectiveHotelSelection?.checkInDate || allHotels?.[0]?.checkInDate, 'MMM d', 'Date TBD')}
-                    {(effectiveHotelSelection?.checkInTime || effectiveHotelSelection?.checkIn || allHotels?.[0]?.hotel?.checkIn) && ` at ${effectiveHotelSelection?.checkInTime || effectiveHotelSelection?.checkIn || allHotels?.[0]?.hotel?.checkIn}`}
+                    Check-in from {safeFormatDate(effectiveHotelSelection?.checkInDate || allHotels?.[0]?.checkInDate, 'MMM d', 'Date TBD')}
+                    {` at ${effectiveHotelSelection?.checkInTime || effectiveHotelSelection?.checkIn || allHotels?.[0]?.hotel?.checkIn || '3:00 PM'}`} (early luggage storage usually available)
                   </p>
                 )}
               </div>
@@ -10320,7 +10336,12 @@ function ActivityRow({
           <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(activity.endTime)}</p>
         )}
         {activity.duration && (
-          <p className="text-xs text-primary/70 mt-0.5 font-medium">{activity.duration}</p>
+          <p className="text-xs text-primary/70 mt-0.5 font-medium">
+            {(activityType === 'accommodation' || titleLower.includes('return to') || titleLower.includes('freshen up'))
+              && activity.durationMinutes && activity.durationMinutes > 180
+              ? 'Overnight'
+              : activity.duration}
+          </p>
         )}
       </div>
 
@@ -10478,6 +10499,11 @@ function ActivityRow({
               {activity.bookingRequired && !compact && !isDowntime && !isTransport && !isCheckIn && !isAccommodation && (
                 <Badge variant="outline" className="text-xs border-accent/50 text-accent">
                   Booking Required
+                </Badge>
+              )}
+              {(isAccommodation || isCheckIn) && (
+                <Badge variant="secondary" className="text-[10px] bg-secondary/60 text-muted-foreground border-0">
+                  Included in your stay
                 </Badge>
               )}
               {/* Contextual Tips Popover — non-intrusive, behind a tap */}
