@@ -11140,19 +11140,25 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 if (mealRepeatTitles.length > 0) {
                   const poolAvailable = (paramRestaurantPool || []) as any[];
                   const usedSetLocal = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
-                  // Also mark all restaurants in current day as used
+                  // Also mark all restaurants in current day as used (both title and location.name)
                   for (const act of generatedDay.activities) {
                     if ((act.category || '').toLowerCase() === 'dining') {
                       usedSetLocal.add((act.title || '').toLowerCase());
+                      if (act.location?.name) {
+                        usedSetLocal.add(act.location.name.toLowerCase());
+                      }
                     }
                   }
 
                   for (const repeatTitle of mealRepeatTitles) {
                     const repeatLower = repeatTitle.toLowerCase();
-                    // Find the duplicate activity in this day
-                    const dupeIdx = generatedDay.activities.findIndex((act: any) =>
-                      (act.title || '').toLowerCase().includes(repeatLower) || repeatLower.includes((act.title || '').toLowerCase())
-                    );
+                    // Find the duplicate activity in this day (check both title and location.name)
+                    const dupeIdx = generatedDay.activities.findIndex((act: any) => {
+                      const actTitleLower = (act.title || '').toLowerCase();
+                      const actLocLower = (act.location?.name || '').toLowerCase();
+                      return actTitleLower.includes(repeatLower) || repeatLower.includes(actTitleLower)
+                        || (actLocLower.length > 3 && (actLocLower.includes(repeatLower) || repeatLower.includes(actLocLower)));
+                    });
                     if (dupeIdx === -1) continue;
                     const dupeAct = generatedDay.activities[dupeIdx];
                     if (dupeAct.isLocked) continue;
