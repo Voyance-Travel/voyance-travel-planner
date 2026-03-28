@@ -11152,10 +11152,13 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
                   for (const repeatTitle of mealRepeatTitles) {
                     const repeatLower = repeatTitle.toLowerCase();
-                    // Find the duplicate activity in this day
-                    const dupeIdx = generatedDay.activities.findIndex((act: any) =>
-                      (act.title || '').toLowerCase().includes(repeatLower) || repeatLower.includes((act.title || '').toLowerCase())
-                    );
+                    // Find the duplicate activity in this day (check both title and location.name)
+                    const dupeIdx = generatedDay.activities.findIndex((act: any) => {
+                      const actTitleLower = (act.title || '').toLowerCase();
+                      const actLocLower = (act.location?.name || '').toLowerCase();
+                      return actTitleLower.includes(repeatLower) || repeatLower.includes(actTitleLower)
+                        || (actLocLower.length > 3 && (actLocLower.includes(repeatLower) || repeatLower.includes(actLocLower)));
+                    });
                     if (dupeIdx === -1) continue;
                     const dupeAct = generatedDay.activities[dupeIdx];
                     if (dupeAct.isLocked) continue;
