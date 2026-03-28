@@ -7838,6 +7838,17 @@ If the purpose is a specific event, plan at least ONE full day around that event
         console.log(`[generate-day] ✓ Using authenticated userId: ${userId} (no tripId to verify)`);
       }
 
+      // ── PERFORMANCE TIMER (inner phase tracking) ──
+      let innerTimer: GenerationTimer | null = null;
+      if (paramGenerationLogId) {
+        try {
+          innerTimer = new GenerationTimer(tripId || '', supabase);
+          await innerTimer.resume(paramGenerationLogId, destination || '', totalDays || 1, travelers || 1);
+        } catch (e) {
+          console.warn('[generate-day] Timer resume failed (non-blocking):', e);
+          innerTimer = null;
+        }
+      }
 
 // =============================================================================
 // JOURNEY NEXT-LEG AUTO-TRIGGER
