@@ -243,7 +243,7 @@ export function usePayableItems({
             id: compositeId,
             type: 'activity',
             name: activity.title || activity.name || (activity as any).venue || 'Activity',
-            amountCents: Math.round(cost * 100),
+            amountCents: Math.round(cost * travelers * 100),
             dayNumber: day.dayNumber,
             payment: activityPayments[0],
             allPayments: activityPayments,
