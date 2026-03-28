@@ -1,30 +1,47 @@
 
 
-## Add Missing Sanitization Patterns for Leaked AI Text
+## Strip Hallucinated Venue Alternatives & Add Prompt Guardrails
 
 ### Problem
-`sanitizeAITextField` in `sanitization.ts` catches CJK artifacts, schema leaks, and system prefixes but misses several leaked AI planning patterns: reservation urgency codes, next-day planning text, required interest slot references, transport emoji notation, and booking meta.
+The AI generates inline alternative venues like "at The Blue Note Jaffa or a private jazz lounge like the Cotton Club" — where "Blue Note Jaffa" is hallucinated. The existing `AI_QUALIFIER_RE` only catches parenthetical qualifiers like `(or high-end alternative)`, not inline prose alternatives.
+
+Additionally, the prompt at **line 1345-1347** actively instructs the AI to include "Tomorrow: Wake up..." text in tips — which the sanitizer then strips. This is contradictory.
 
 ### Changes
 
-**File: `supabase/functions/generate-itinerary/sanitization.ts`**
+**1. `sanitization.ts` — Add inline alternative venue regex (after line 77)**
 
-1. **Add 7 new regex constants** after line 68 (after `FORWARD_REF_RE`):
-   - `RESERVATION_URGENCY_RE` — strips `reservationUrgency: book_now (60 days)` etc.
-   - `BOOK_CODE_RE` — strips `book_now via official site` fragments
-   - `NEXT_DAY_PLANNING_RE` — strips `Tomorrow: Wake at 08:30...` and `Next morning:...` through end of text
-   - `REQUIRED_SLOT_RE` — strips `the required 'Authentic Encounter' interest slot`
-   - `TRANSPORT_EMOJI_RE` — strips `🚶 0 min` transport notation
-   - `PARENTHETICAL_META_RE` — strips `(Paid activity)` / `(Free to explore...)`
-   - `WALKIN_META_RE` — strips `Walk-in OK but busy.`
+```typescript
+// Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
+const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''-]+/gi;
+```
 
-2. **Add `.replace()` calls** in `sanitizeAITextField` after `FORWARD_REF_RE` and before the existing cleanup chain (empty parens, dash normalization, whitespace collapse).
+Add `.replace(INLINE_ALT_VENUE_RE, '')` to `sanitizeAITextField` chain after `TRAILING_OR_QUALIFIER_RE`.
 
-3. **Also mirror these patterns** in the client-side `src/utils/activityNameSanitizer.ts` `sanitizeActivityText` function for defense-in-depth.
+**2. `src/utils/activityNameSanitizer.ts` — Mirror the same regex**
 
-4. **Redeploy** the `generate-itinerary` edge function.
+Add the same `INLINE_ALT_VENUE_RE` pattern and `.replace()` call to both `sanitizeActivityName` and `sanitizeActivityText` for defense-in-depth.
 
-### Technical Detail
+**3. `prompt-library.ts` — Fix contradictory prompt & add output rules**
 
-All new patterns are purely additive regex replacements — no existing logic changes. The sanitizer is already wired to all user-facing fields (title, name, description, tips, voyanceInsight, bestTime, location) so no additional call-site changes are needed.
+- **Remove lines 1345-1347** (the "NEXT MORNING PREVIEW" instruction that tells the AI to put "Tomorrow: Wake up..." in tips). This contradicts the sanitizer and leaks planning text.
+
+- **Add a TEXT QUALITY RULES section** after the COSTS block (~line 1355), before ACTIVITY DENSITY:
+
+```typescript
+lines.push(`   TEXT QUALITY RULES:`);
+lines.push(`   - Never include "or [alternative venue]" in descriptions. Name only the primary venue.`);
+lines.push(`   - Never include reservation urgency codes (book_now, book_soon) in any text field.`);
+lines.push(`   - Never include "Tomorrow:" or next-day planning text in tips or descriptions.`);
+lines.push(`   - The "tips" field is for practical visitor advice ONLY (dress code, best time, queue tips).`);
+lines.push(`   - Do not reference internal slot names, option groups, or fulfillment logic.`);
+lines.push('');
+```
+
+**4. Redeploy** the `generate-itinerary` edge function.
+
+### Why This Works
+- The regex catches prose-style alternatives that slip past the existing parenthetical filter
+- Removing the contradictory "Tomorrow:" prompt instruction eliminates the source of the leak rather than just sanitizing it after the fact
+- The TEXT QUALITY RULES block gives the AI explicit guardrails at generation time, reducing the need for post-hoc sanitization
 
