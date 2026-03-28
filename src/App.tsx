@@ -109,6 +109,7 @@ import UnitEconomics from "./pages/admin/UnitEconomics";
 import TestSuites from "./pages/admin/TestSuites";
 import UserTracking from "./pages/admin/UserTracking";
 import SessionExplorer from "./pages/admin/SessionExplorer";
+import GenerationLogs from "./pages/admin/GenerationLogs";
 
 // Agent CRM
 import AgentDashboard from "./pages/agent/AgentDashboard";
@@ -276,7 +277,8 @@ function AnimatedRoutes() {
         <Route path="/admin/margins" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="/admin/test-suites" element={<ProtectedRoute><TestSuites /></ProtectedRoute>} />
         <Route path="/admin/user-tracking" element={<ProtectedRoute><UserTracking /></ProtectedRoute>} />
-                <Route path="/admin/session-explorer" element={<ProtectedRoute><SessionExplorer /></ProtectedRoute>} />
+        <Route path="/admin/session-explorer" element={<ProtectedRoute><SessionExplorer /></ProtectedRoute>} />
+                <Route path="/admin/logs" element={<ProtectedRoute><GenerationLogs /></ProtectedRoute>} />
         
         {/* Agent CRM Routes */}
         <Route path="/agent" element={<ProtectedRoute><AgentDashboard /></ProtectedRoute>} />
