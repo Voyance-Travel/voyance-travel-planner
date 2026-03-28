@@ -1,93 +1,80 @@
 
 
-## Fix: Strip Leaked AI Reasoning from User-Facing Text
+## Fix: Wrong Airport on Arrival Card
 
 ### Problem
-Internal AI reasoning text is leaking into itinerary cards in three patterns:
-1. **Location names** contain search qualifiers: `"Kagurazaka Ishikawa (Satellite or High-End alternative in Chiyoda/Minato)"`
-2. **Descriptions** contain slot/requirement references: `"slot: A traditional..."`, `"Fulfills the solo retreat slot."`, `"Fulfills the accommodation requirement."`
-3. **Tips** contain raw metadata: `"Tomorrow: Wake 08:00. Breakfast at The Lounge (Level 39 of Hotel, ~0.1km, ~$40)..."`
+The arrival card says "Arrival at Narita International Airport" but the flight lands at HND (Haneda). Two separate bugs cause this:
 
-### Root Cause
-The existing sanitizers (`sanitizeActivityText`, `sanitizeActivityName`, `sanitizeAITextField`) strip system label prefixes (EDGE_ACTIVITY, etc.) and CJK artifacts, but have no rules for:
-- Parenthetical search qualifiers with "or", "alternative", "Satellite"
-- "slot:" prefixes or "Fulfills the...slot/requirement" sentences
-- Distance/cost metadata like `~0.1km, ~$40`
+1. **`flight-hotel-context.ts` line 443** only reads `flightRaw.arrivalAirport` (flat top-level field). When flights are stored in the `legs[]` format, the airport code lives at `legs[0].arrival.airport` — which is never checked here. So `arrivalAirport` comes back `undefined`.
 
-### Fix — Two Files
+2. **`index.ts` lines 8162-8179** tries to recover from the missing value by regex-matching against `metadata.flightDetails`, but the hardcoded map only contains US airports (JFK, LAX, etc.) — no HND, NRT, or any non-US airport. When that also fails, it falls back to generic `"Airport"`, and the AI model fills in "Narita" because it's the more famous Tokyo airport.
 
-**File 1: `src/utils/activityNameSanitizer.ts`**
+### Fix — Two files
 
-Add new regex patterns to `sanitizeActivityText()` and `sanitizeActivityName()`:
+**File 1: `supabase/functions/generate-itinerary/flight-hotel-context.ts`** (line 443)
+
+Extract arrival airport from legs data the same way `prompt-library.ts` already does:
 
 ```typescript
-// Strip AI search qualifiers from names/locations
-// e.g. "(Satellite or High-End alternative in Chiyoda/Minato)"
-// e.g. "(or high-end Kaiseki alternative)"
-const AI_QUALIFIER_RE = /\s*\((?:[^)]*?\b(?:alternative|satellite|or\s+high.end|similar|equivalent|comparable)\b[^)]*?)\)/gi;
+// Before (line 443):
+arrivalAirport: (flightRaw?.arrivalAirport as string) || undefined,
 
-// Strip "slot: " prefix from descriptions
-const SLOT_PREFIX_RE = /^slot:\s*/i;
-
-// Strip "Fulfills the ... slot/requirement." sentences
-const FULFILLS_RE = /\.?\s*Fulfills the\s+[^.]*?(?:slot|requirement|block)\.\s*/gi;
-
-// Strip distance/cost metadata in tips: "(Level 39 of Hotel, ~0.1km, ~$40)"
-// and "~0.1km" / "~$40" standalone fragments
-const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/gi;
-const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
+// After:
+arrivalAirport: (() => {
+  // Prefer legs[].arrival.airport (same logic as prompt-library.ts)
+  const legs = Array.isArray(flightRaw?.legs) ? flightRaw.legs as any[] : [];
+  if (legs.length > 0) {
+    const destLeg = legs.find((l: any) => l.isDestinationArrival)
+      || (legs.length === 2 ? legs[0] : legs[0]);
+    const legAirport = destLeg?.arrival?.airport;
+    if (legAirport) return legAirport as string;
+  }
+  // Fallback to flat field
+  return (flightRaw?.arrivalAirport as string) || undefined;
+})(),
 ```
 
-Add these to `sanitizeActivityText()`:
+**File 2: `supabase/functions/generate-itinerary/index.ts`** (lines 8162-8179)
+
+Replace the hardcoded US-only regex+map with a database lookup from the `airports` table. If `flightContext.arrivalAirport` is a 3-letter IATA code, query the airports table for its full name:
+
 ```typescript
-export function sanitizeActivityText(text: string | undefined | null): string {
-  if (!text) return '';
-  return text
-    .replace(SYSTEM_LABEL_RE, '')
-    .replace(AI_QUALIFIER_RE, '')
-    .replace(SLOT_PREFIX_RE, '')
-    .replace(FULFILLS_RE, ' ')
-    .replace(META_DISTANCE_COST_RE, '')
-    .replace(INLINE_META_RE, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+// Replace lines 8162-8179 with:
+let arrivalAirportDisplay = flightContext.arrivalAirport || '';
+
+// If we have a code but no full name, look it up
+if (arrivalAirportDisplay && /^[A-Z]{3}$/i.test(arrivalAirportDisplay)) {
+  const code = arrivalAirportDisplay.toUpperCase();
+  try {
+    const { data: apt } = await supabaseClient
+      .from('airports')
+      .select('name, code')
+      .ilike('code', code)
+      .maybeSingle();
+    if (apt?.name) {
+      arrivalAirportDisplay = `${apt.name} (${code})`;
+    } else {
+      arrivalAirportDisplay = `${code} Airport`;
+    }
+  } catch {
+    arrivalAirportDisplay = `${code} Airport`;
+  }
+} else if (!arrivalAirportDisplay) {
+  // Last resort fallback from metadata (keep existing logic but simplified)
+  arrivalAirportDisplay = 'Airport';
 }
 ```
 
-Add `AI_QUALIFIER_RE` to `sanitizeActivityName()` after the system prefix strip:
-```typescript
-sanitized = sanitized.replace(AI_QUALIFIER_RE, '').trim();
-```
-
-**File 2: `src/components/itinerary/EditorialItinerary.tsx`**
-
-Apply sanitization to three currently-unsanitized render points:
-
-1. **`locationText`** (~line 10055-10057) — wrap in `sanitizeActivityText`:
-```typescript
-const rawLocationName = sanitizeActivityText(activity.location?.name?.trim());
-```
-
-2. **`activity.tips`** (~line 10118-10120) — wrap in `sanitizeActivityText`:
-```typescript
-{sanitizeActivityText(activity.tips)}
-```
-
-3. **Transport card titles** — the transport title inherits the destination's location name (e.g., "Travel to Yoyogi Park West Spa or High-End Boutique Wellness"). Since titles go through `sanitizeActivityName`, adding `AI_QUALIFIER_RE` there covers this case automatically.
+This removes the hardcoded map entirely and uses the airports table that already exists in the database — working for any airport worldwide.
 
 ### Result
-| Before | After |
-|--------|-------|
-| `Kagurazaka Ishikawa (Satellite or High-End alternative in Chiyoda/Minato)` | `Kagurazaka Ishikawa` |
-| `Sushi Kanesaka (or high-end Kaiseki alternative)` | `Sushi Kanesaka` |
-| `Yoyogi Park West Spa or High-End Boutique Wellness` | `Yoyogi Park West Spa` |
-| `slot: A traditional Japanese head spa...` | `A traditional Japanese head spa...` |
-| `Rest and enjoy... Fulfills the accommodation requirement.` | `Rest and enjoy...` |
-| `Tomorrow: Wake 08:00. Breakfast at The Lounge (Level 39 of Hotel, ~0.1km, ~$40)` | `Tomorrow: Wake 08:00. Breakfast at The Lounge` |
+- Flight arriving at HND → card says "Haneda Airport (HND)" instead of "Narita International Airport"
+- Works for all airports globally, not just 14 US airports
+- Consistent with the Arrival Game Plan which already correctly shows HND
 
 ### Files Changed
-| File | Changes |
-|------|---------|
-| `src/utils/activityNameSanitizer.ts` | Add AI qualifier, slot, fulfills, and metadata regexes to both sanitize functions |
-| `src/components/itinerary/EditorialItinerary.tsx` | Wrap locationText, tips, and location name renders in sanitization |
+| File | Change |
+|------|--------|
+| `supabase/functions/generate-itinerary/flight-hotel-context.ts` | Extract arrivalAirport from legs data |
+| `supabase/functions/generate-itinerary/index.ts` | Replace hardcoded airport map with airports table lookup |
 
