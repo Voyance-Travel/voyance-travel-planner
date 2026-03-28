@@ -114,10 +114,25 @@ export class GenerationTimer {
     }
   }
 
-  /** Record per-day timing breakdown. */
-  addDayTiming(day: number, totalMs: number, aiMs: number, enrichMs: number, activityCount: number) {
+  /** Record per-day timing breakdown with optional category counts. */
+  addDayTiming(day: number, totalMs: number, aiMs: number, enrichMs: number, activityCount: number, categories?: Record<string, number>) {
     try {
-      this.dayTimings.push({ day, total_ms: totalMs, ai_ms: aiMs, enrich_ms: enrichMs, activities: activityCount });
+      const entry: any = { day, total_ms: totalMs, ai_ms: aiMs, enrich_ms: enrichMs, activities: activityCount };
+      if (categories && Object.keys(categories).length > 0) {
+        entry.categories = categories;
+      }
+      this.dayTimings.push(entry);
+    } catch (e) {
+      // Never break generation
+    }
+  }
+
+  /** Accumulate token usage from an AI response. */
+  addTokenUsage(promptTokens: number, completionTokens: number, model?: string) {
+    try {
+      this.totalPromptTokens += promptTokens || 0;
+      this.totalCompletionTokens += completionTokens || 0;
+      if (model) this.modelsUsed.add(model);
     } catch (e) {
       // Never break generation
     }
