@@ -283,6 +283,16 @@ export function BudgetSetupDialog({
                     : `${formatCurrency(totalCents)} total for ${travelers} traveler${travelers > 1 ? 's' : ''}`
                   }
                 </p>
+                {/* Impossible budget warning */}
+                {tripTotalCents && tripTotalCents > 0 && totalCents > 0 && totalCents < tripTotalCents * 0.5 && (
+                  <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    <span>
+                      Your trip's estimated cost is {formatCurrency(tripTotalCents)}.
+                      This budget may be difficult to achieve without significant changes.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
