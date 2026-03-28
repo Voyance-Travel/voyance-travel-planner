@@ -3805,6 +3805,78 @@ export type Database = {
           },
         ]
       }
+      generation_logs: {
+        Row: {
+          completion_token_count: number | null
+          created_at: string | null
+          current_phase: string | null
+          day_timings: Json | null
+          destination: string | null
+          errors: Json | null
+          id: string
+          model_used: string | null
+          num_days: number | null
+          num_guests: number | null
+          phase_timings: Json | null
+          progress_pct: number | null
+          prompt_token_count: number | null
+          status: string | null
+          total_duration_ms: number | null
+          trip_id: string | null
+        }
+        Insert: {
+          completion_token_count?: number | null
+          created_at?: string | null
+          current_phase?: string | null
+          day_timings?: Json | null
+          destination?: string | null
+          errors?: Json | null
+          id?: string
+          model_used?: string | null
+          num_days?: number | null
+          num_guests?: number | null
+          phase_timings?: Json | null
+          progress_pct?: number | null
+          prompt_token_count?: number | null
+          status?: string | null
+          total_duration_ms?: number | null
+          trip_id?: string | null
+        }
+        Update: {
+          completion_token_count?: number | null
+          created_at?: string | null
+          current_phase?: string | null
+          day_timings?: Json | null
+          destination?: string | null
+          errors?: Json | null
+          id?: string
+          model_used?: string | null
+          num_days?: number | null
+          num_guests?: number | null
+          phase_timings?: Json | null
+          progress_pct?: number | null
+          prompt_token_count?: number | null
+          status?: string | null
+          total_duration_ms?: number | null
+          trip_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_logs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "generation_logs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       geocoding_cache: {
         Row: {
           address: string
