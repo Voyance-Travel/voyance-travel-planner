@@ -1552,6 +1552,7 @@ import {
   detectMealSlots,
   enforceRequiredMealsFinalGuard,
   enforceTimingConstraints,
+  enforceChronologicalOrder,
   isChainRestaurant,
   filterChainRestaurants,
   type DayValidationResult,
@@ -3162,6 +3163,9 @@ Generate activities for this day following ALL constraints above.`;
 
         // POST-VALIDATION: Enforce minimum gaps and fix meal-time labels
         generatedDay.activities = enforceTimingConstraints(generatedDay.activities || []);
+
+        // POST-VALIDATION: Enforce chronological order (fix AM/PM confusion)
+        generatedDay = enforceChronologicalOrder(generatedDay);
 
         // POST-VALIDATION: Strip chain restaurants from dining activities
         {
