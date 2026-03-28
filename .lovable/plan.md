@@ -1,47 +1,43 @@
 
 
-## Strip Hallucinated Venue Alternatives & Add Prompt Guardrails
+## Enforce Minimum Timing Gaps Between Activities
 
 ### Problem
-The AI generates inline alternative venues like "at The Blue Note Jaffa or a private jazz lounge like the Cotton Club" — where "Blue Note Jaffa" is hallucinated. The existing `AI_QUALIFIER_RE` only catches parenthetical qualifiers like `(or high-end alternative)`, not inline prose alternatives.
-
-Additionally, the prompt at **line 1345-1347** actively instructs the AI to include "Tomorrow: Wake up..." text in tips — which the sanitizer then strips. This is contradictory.
+Generated days sometimes have 11–15 activities with overlapping times (e.g., lunch at 12:30 + dinner at 1:00, nightcap at 12:30 PM). No post-generation enforcement exists to fix overlaps or mislabeled meals.
 
 ### Changes
 
-**1. `sanitization.ts` — Add inline alternative venue regex (after line 77)**
+**1. `supabase/functions/generate-itinerary/day-validation.ts` — Add `enforceTimingConstraints`**
+
+Add a new exported function at the end of the file:
+
+- Sort activities by `startTime` (using existing `parseTimeToMinutesLocal`)
+- Enforce a 15-minute minimum gap: if activity N starts before activity N-1 ends + 15 min, shift N forward (preserving its duration)
+- Relabel meal mismatches:
+  - "Dinner" before 17:00 → "Lunch"
+  - "Nightcap" before 20:00 → "Cocktails"
+- Add a `minutesToTimeString` helper (24h format `HH:MM` to match the existing time format convention used throughout the codebase — NOT 12h)
+- Operates on `StrictActivityMinimal[]`, returns the corrected array
+- Skips shifting for transport/accommodation categories (these are anchored)
+
+**2. `supabase/functions/generate-itinerary/index.ts` — Wire into post-validation pipeline**
+
+Insert the call at ~line 3147, right after `sanitizeActivityTitles` and before the chain restaurant filter:
 
 ```typescript
-// Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
-const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''-]+/gi;
+// POST-VALIDATION: Enforce minimum gaps and fix meal-time labels
+generatedDay.activities = enforceTimingConstraints(generatedDay.activities || []);
 ```
 
-Add `.replace(INLINE_ALT_VENUE_RE, '')` to `sanitizeAITextField` chain after `TRAILING_OR_QUALIFIER_RE`.
+Also add it to the `action-generate-trip-day.ts` single-day generation path for consistency.
 
-**2. `src/utils/activityNameSanitizer.ts` — Mirror the same regex**
+Import `enforceTimingConstraints` from `./day-validation.ts` in both files.
 
-Add the same `INLINE_ALT_VENUE_RE` pattern and `.replace()` call to both `sanitizeActivityName` and `sanitizeActivityText` for defense-in-depth.
+**3. Redeploy** the `generate-itinerary` edge function.
 
-**3. `prompt-library.ts` — Fix contradictory prompt & add output rules**
-
-- **Remove lines 1345-1347** (the "NEXT MORNING PREVIEW" instruction that tells the AI to put "Tomorrow: Wake up..." in tips). This contradicts the sanitizer and leaks planning text.
-
-- **Add a TEXT QUALITY RULES section** after the COSTS block (~line 1355), before ACTIVITY DENSITY:
-
-```typescript
-lines.push(`   TEXT QUALITY RULES:`);
-lines.push(`   - Never include "or [alternative venue]" in descriptions. Name only the primary venue.`);
-lines.push(`   - Never include reservation urgency codes (book_now, book_soon) in any text field.`);
-lines.push(`   - Never include "Tomorrow:" or next-day planning text in tips or descriptions.`);
-lines.push(`   - The "tips" field is for practical visitor advice ONLY (dress code, best time, queue tips).`);
-lines.push(`   - Do not reference internal slot names, option groups, or fulfillment logic.`);
-lines.push('');
-```
-
-**4. Redeploy** the `generate-itinerary` edge function.
-
-### Why This Works
-- The regex catches prose-style alternatives that slip past the existing parenthetical filter
-- Removing the contradictory "Tomorrow:" prompt instruction eliminates the source of the leak rather than just sanitizing it after the fact
-- The TEXT QUALITY RULES block gives the AI explicit guardrails at generation time, reducing the need for post-hoc sanitization
+### Design Notes
+- Uses 24h `HH:MM` format (e.g., `"14:30"`) matching the existing `timeRegex` validation at line 289–291
+- Leverages the existing `parseTimeToMinutesLocal` already in `day-validation.ts`
+- Meal relabeling complements the client-side `mealTimeCoherence.ts` utility but catches issues at generation time
+- Activities past midnight (after shifting) are clamped to 23:45 to avoid invalid times
 
