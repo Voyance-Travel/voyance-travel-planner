@@ -41,6 +41,9 @@ export function sanitizeAIOutput(text: string | undefined | null): string {
   // Remove leaked tool-call JSON (e.g. { "action": "extract_trip_details", "action_input": "..." })
   cleaned = cleaned.replace(/\{\s*"action"\s*:\s*"extract_trip_details"\s*,\s*"action_input"\s*:\s*"[\s\S]*?"\s*\}/g, '');
   
+  // Strip empty parentheses left after content removal
+  cleaned = cleaned.replace(/\(\s*\)/g, '');
+  
   // Clean up artifacts: double spaces, trailing fragments, leading/trailing punctuation
   cleaned = cleaned
     .replace(/\s{2,}/g, ' ')

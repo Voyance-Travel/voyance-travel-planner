@@ -2547,6 +2547,39 @@ Generate activities for this day following ALL constraints above.`;
         }
       }
 
+      // ==========================================================================
+      // FORWARD-REFERENCE SANITIZATION: Strip hallucinated "tomorrow's X adventure"
+      // from Return to Hotel descriptions that reference non-existent next-day plans
+      // ==========================================================================
+      {
+        const hotelName = dayCity?.hotelName || context.hotelData?.hotelName || 'your hotel';
+        for (const act of generatedDay.activities) {
+          const cat = (act.category || '').toLowerCase();
+          const title = (act.title || '').toLowerCase();
+          const isReturnAccom = cat === 'accommodation' &&
+            (title.includes('return to') || title.includes('freshen up') || title.includes('back to') || title.includes('settle in'));
+          if (isReturnAccom && act.description && /tomorrow/i.test(act.description)) {
+            console.log(`[Forward-ref fix] Stripping hallucinated tomorrow reference from "${act.title}": "${act.description}"`);
+            act.description = `Time at ${hotelName} to rest and refresh.`;
+          }
+        }
+      }
+
+      // ==========================================================================
+      // GENERIC TITLE VALIDATOR: Flag and clean placeholder business names
+      // ==========================================================================
+      {
+        const INDEFINITE_ARTICLE_START = /^(a|an)\s+[a-z]/i;
+        const VAGUE_TITLE_KEYWORDS = /\b(or high.end|or similar|boutique wellness|local spa|nearby caf[eé])\b/i;
+        for (const act of generatedDay.activities) {
+          const title = (act.title || '').trim();
+          if (INDEFINITE_ARTICLE_START.test(title) || VAGUE_TITLE_KEYWORDS.test(title)) {
+            act.title = sanitizeAITextField(title);
+            console.log(`[Generic title warning] "${title}" may be a placeholder — cleaned to "${act.title}"`);
+          }
+        }
+      }
+
       // Post-processing: Rename "Check-in at X" to "Return to X" on non-arrival days
       const effectiveIsFirstDay = context.isFirstDayInCity !== undefined ? context.isFirstDayInCity : isFirstDay;
       if (!effectiveIsFirstDay) {
