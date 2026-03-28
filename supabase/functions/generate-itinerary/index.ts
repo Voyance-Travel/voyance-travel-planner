@@ -7808,7 +7808,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
         mustDoActivities: paramMustDoActivities, interestCategories: paramInterestCategories, generationRules: paramGenerationRules,
         pacing: paramPacing, isFirstTimeVisitor: paramIsFirstTimeVisitor,
         hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity,
-        restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants } = params;
+        restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants, generationLogId: paramGenerationLogId } = params;
       
       // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
       // This is the critical fix - frontend calls often omit userId, but auth token is always present
