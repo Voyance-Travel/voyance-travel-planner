@@ -5,6 +5,8 @@
  * before any frontend code saves itinerary data directly.
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 type MealType = 'breakfast' | 'lunch' | 'dinner';
 
 interface ActivityMinimal {
@@ -41,7 +43,6 @@ function detectMeals(activities: ActivityMinimal[]): MealType[] {
     const isDining = DINING_CATEGORIES.some(c => category.includes(c));
 
     for (const mealType of Object.keys(MEAL_KEYWORDS) as MealType[]) {
-      // Title-based keyword match works regardless of category
       if (MEAL_KEYWORDS[mealType].some(kw => title.includes(kw))) {
         detected.add(mealType);
       } else if (isDining && MEAL_KEYWORDS[mealType].some(kw => category.includes(kw))) {
@@ -53,9 +54,7 @@ function detectMeals(activities: ActivityMinimal[]): MealType[] {
 }
 
 function isFullExplorationDay(day: DayMinimal, totalDays: number): boolean {
-  // First and last days are not full exploration days
   if (day.dayNumber === 1 || day.dayNumber === totalDays) return false;
-  // Days with fewer than 3 activities are likely constrained
   if (day.activities.length < 3) return false;
   return true;
 }
@@ -66,7 +65,6 @@ const FALLBACK_MEALS: Record<MealType, { start: string; end: string; cost: numbe
   dinner: { start: '19:00', end: '20:15', cost: 30 },
 };
 
-// Destination-aware fallback hints (mirrors backend)
 const DESTINATION_MEAL_HINTS: Record<string, Record<MealType, { venueSuffix: string; description: string }>> = {
   tokyo: {
     breakfast: { venueSuffix: 'kissaten (traditional coffee house)', description: 'Traditional Japanese morning set at a neighborhood kissaten' },
@@ -107,56 +105,121 @@ function getClientMealHint(destination: string, mealType: MealType): { venueSuff
   }[mealType];
 }
 
+// ─── Venue resolution ───────────────────────────────────────────────────
+
+interface VerifiedVenue {
+  name: string;
+  address?: string;
+  rating?: number;
+  category?: string;
+}
+
 /**
- * Ensure a day's activities include required meals.
- * Injects fallback dining entries for any missing meals on full exploration days.
- * Returns the activities array (possibly with injected meals) and a list of what was injected.
+ * Query verified_venues for real restaurant names matching a destination and dining category.
+ * Returns a map of meal types to venue names, using category heuristics.
  */
-function ensureDayMeals(
-  activities: ActivityMinimal[],
-  requiredMeals: MealType[],
-  dayNumber: number,
-  destination?: string,
-): { activities: ActivityMinimal[]; injected: MealType[] } {
-  if (requiredMeals.length === 0) {
-    return { activities, injected: [] };
+async function fetchRealVenues(
+  supabaseClient: SupabaseClient,
+  destination: string,
+  needed: MealType[],
+): Promise<Record<MealType, VerifiedVenue | null>> {
+  const result: Record<MealType, VerifiedVenue | null> = {
+    breakfast: null,
+    lunch: null,
+    dinner: null,
+  };
+
+  if (!destination || needed.length === 0) return result;
+
+  try {
+    // Query dining venues for this destination, ordered by rating
+    const { data: venues } = await supabaseClient
+      .from('verified_venues')
+      .select('name, address, rating, category')
+      .ilike('destination', `%${destination}%`)
+      .in('category', ['restaurant', 'dining', 'cafe', 'food', 'bakery', 'bar'])
+      .order('rating', { ascending: false, nullsFirst: false })
+      .limit(30);
+
+    if (!venues || venues.length === 0) return result;
+
+    // Assign venues to meal slots based on category/name heuristics
+    const used = new Set<string>();
+
+    for (const mealType of needed) {
+      const venue = pickVenueForMeal(venues as VerifiedVenue[], mealType, used);
+      if (venue) {
+        result[mealType] = venue;
+        used.add(venue.name);
+      }
+    }
+  } catch (e) {
+    console.warn('[MealGuard] Failed to fetch verified venues:', e);
   }
 
-  const detected = detectMeals(activities);
-  const missing = requiredMeals.filter(m => !detected.includes(m));
+  return result;
+}
 
-  if (missing.length === 0) {
-    return { activities, injected: [] };
+const BREAKFAST_HINTS = ['cafe', 'bakery', 'breakfast', 'coffee', 'brunch', 'pastry'];
+const LUNCH_HINTS = ['bistro', 'trattoria', 'deli', 'lunch', 'noodle', 'ramen', 'sandwich'];
+const DINNER_HINTS = ['restaurant', 'ristorante', 'brasserie', 'steakhouse', 'izakaya', 'dinner', 'grill'];
+
+function pickVenueForMeal(
+  venues: VerifiedVenue[],
+  mealType: MealType,
+  used: Set<string>,
+): VerifiedVenue | null {
+  const hints = mealType === 'breakfast' ? BREAKFAST_HINTS
+    : mealType === 'lunch' ? LUNCH_HINTS
+    : DINNER_HINTS;
+
+  // First pass: find a venue whose name/category matches the meal type hints
+  for (const v of venues) {
+    if (used.has(v.name)) continue;
+    const combined = `${v.name} ${v.category || ''}`.toLowerCase();
+    if (hints.some(h => combined.includes(h))) return v;
   }
 
-  console.warn(
-    `[MealGuard-Client] Day ${dayNumber}: required=[${requiredMeals.join(',')}], ` +
-    `detected=[${detected.join(',')}], MISSING=[${missing.join(',')}] — injecting`
-  );
-
-  const result = [...activities];
-  for (const mealType of missing) {
-    const slot = FALLBACK_MEALS[mealType];
-    const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
-    const hint = getClientMealHint(destination || '', mealType);
-    result.push({
-      id: crypto.randomUUID(),
-      title: `${label} at a ${hint.venueSuffix}`,
-      startTime: slot.start,
-      endTime: slot.end,
-      category: 'dining',
-      location: { name: `${label} spot nearby`, address: '' },
-      cost: { amount: slot.cost, currency: 'USD', source: 'meal_guard_client' },
-      description: hint.description,
-      tags: ['dining', mealType, 'meal-guard', 'needs-refinement'],
-      bookingRequired: false,
-      tips: `Tap "Find a real restaurant" below to get a personalized ${mealType} recommendation.`,
-      needsRefinement: true,
-    });
+  // Second pass: just pick the highest-rated unused venue
+  for (const v of venues) {
+    if (used.has(v.name)) continue;
+    return v;
   }
 
-  // Sort by startTime
-  result.sort((a, b) => {
+  return null;
+}
+
+// ─── Core injection logic ───────────────────────────────────────────────
+
+function buildFallbackActivity(
+  mealType: MealType,
+  venueName: string,
+  venueAddress: string,
+  description: string,
+  isGeneric: boolean,
+  cost: number,
+): ActivityMinimal {
+  const slot = FALLBACK_MEALS[mealType];
+  return {
+    id: crypto.randomUUID(),
+    title: venueName,
+    startTime: slot.start,
+    endTime: slot.end,
+    category: 'dining',
+    location: { name: venueName, address: venueAddress },
+    cost: { amount: cost, currency: 'USD', source: isGeneric ? 'meal_guard_client' : 'meal_guard_venue' },
+    description,
+    tags: ['dining', mealType, 'meal-guard', ...(isGeneric ? ['needs-refinement'] : [])],
+    bookingRequired: false,
+    tips: isGeneric
+      ? `Tap "Find a real restaurant" below to get a personalized ${mealType} recommendation.`
+      : `Added from verified venues — feel free to swap if you prefer somewhere else.`,
+    needsRefinement: isGeneric,
+  };
+}
+
+function sortByTime(activities: ActivityMinimal[]): ActivityMinimal[] {
+  return [...activities].sort((a, b) => {
     const parseMin = (t?: string) => {
       if (!t) return 0;
       const m = t.match(/(\d{1,2}):(\d{2})/);
@@ -164,13 +227,11 @@ function ensureDayMeals(
     };
     return parseMin(a.startTime || a.time) - parseMin(b.startTime || b.time);
   });
-
-  return { activities: result, injected: missing };
 }
 
 /**
- * Run meal compliance across all days of an itinerary before saving.
- * Mutates in-place and returns a summary of injections.
+ * Synchronous meal compliance — uses generic fallbacks only.
+ * Kept for backward compatibility but prefer the async variant.
  */
 export function enforceItineraryMealCompliance(
   days: DayMinimal[],
@@ -183,25 +244,124 @@ export function enforceItineraryMealCompliance(
   for (const day of days) {
     if (!day.activities || !Array.isArray(day.activities)) continue;
 
-    // Determine required meals based on day type
     const requiredMeals: MealType[] = isFullExplorationDay(day, totalDays)
       ? ['breakfast', 'lunch', 'dinner']
-      : []; // First/last days have dynamic requirements — only enforce on full days client-side
+      : [];
 
     if (requiredMeals.length === 0) continue;
 
-    // Use per-day city if available, fall back to trip destination
+    const detected = detectMeals(day.activities);
+    const missing = requiredMeals.filter(m => !detected.includes(m));
+    if (missing.length === 0) continue;
+
     const dayDestination = (day as any).city || destination || '';
-    const result = ensureDayMeals(day.activities, requiredMeals, day.dayNumber, dayDestination);
-    if (result.injected.length > 0) {
-      day.activities = result.activities;
-      details.push({ dayNumber: day.dayNumber, injected: result.injected });
-      totalInjected += result.injected.length;
+
+    console.warn(
+      `[MealGuard-Client] Day ${day.dayNumber}: required=[${requiredMeals.join(',')}], ` +
+      `detected=[${detected.join(',')}], MISSING=[${missing.join(',')}] — injecting generic`
+    );
+
+    for (const mealType of missing) {
+      const hint = getClientMealHint(dayDestination, mealType);
+      const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+      day.activities.push(
+        buildFallbackActivity(
+          mealType,
+          `${label} at a ${hint.venueSuffix}`,
+          '',
+          hint.description,
+          true,
+          FALLBACK_MEALS[mealType].cost,
+        )
+      );
     }
+
+    day.activities = sortByTime(day.activities);
+    details.push({ dayNumber: day.dayNumber, injected: missing });
+    totalInjected += missing.length;
   }
 
   if (totalInjected > 0) {
-    console.warn(`[MealGuard-Client] Injected ${totalInjected} meals across ${details.length} days`);
+    console.warn(`[MealGuard-Client] Injected ${totalInjected} generic meals across ${details.length} days`);
+  }
+
+  return { totalInjected, details };
+}
+
+/**
+ * Async meal compliance — queries verified_venues for real restaurant names
+ * before falling back to generic placeholders.
+ */
+export async function enforceItineraryMealComplianceAsync(
+  days: DayMinimal[],
+  supabaseClient: SupabaseClient,
+  destination?: string,
+): Promise<{ totalInjected: number; details: Array<{ dayNumber: number; injected: MealType[] }> }> {
+  const totalDays = days.length;
+  const details: Array<{ dayNumber: number; injected: MealType[] }> = [];
+  let totalInjected = 0;
+
+  for (const day of days) {
+    if (!day.activities || !Array.isArray(day.activities)) continue;
+
+    const requiredMeals: MealType[] = isFullExplorationDay(day, totalDays)
+      ? ['breakfast', 'lunch', 'dinner']
+      : [];
+
+    if (requiredMeals.length === 0) continue;
+
+    const detected = detectMeals(day.activities);
+    const missing = requiredMeals.filter(m => !detected.includes(m));
+    if (missing.length === 0) continue;
+
+    const dayDestination = (day as any).city || destination || '';
+
+    console.warn(
+      `[MealGuard-Client] Day ${day.dayNumber}: required=[${requiredMeals.join(',')}], ` +
+      `detected=[${detected.join(',')}], MISSING=[${missing.join(',')}] — resolving venues`
+    );
+
+    // Try to get real venue names from verified_venues
+    const realVenues = await fetchRealVenues(supabaseClient, dayDestination, missing);
+
+    for (const mealType of missing) {
+      const venue = realVenues[mealType];
+      if (venue) {
+        // Use real venue name
+        day.activities.push(
+          buildFallbackActivity(
+            mealType,
+            venue.name,
+            venue.address || '',
+            `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} at ${venue.name}${venue.rating ? ` (★ ${venue.rating})` : ''}`,
+            false,
+            FALLBACK_MEALS[mealType].cost,
+          )
+        );
+      } else {
+        // Fall back to generic
+        const hint = getClientMealHint(dayDestination, mealType);
+        const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+        day.activities.push(
+          buildFallbackActivity(
+            mealType,
+            `${label} at a ${hint.venueSuffix}`,
+            '',
+            hint.description,
+            true,
+            FALLBACK_MEALS[mealType].cost,
+          )
+        );
+      }
+    }
+
+    day.activities = sortByTime(day.activities);
+    details.push({ dayNumber: day.dayNumber, injected: missing });
+    totalInjected += missing.length;
+  }
+
+  if (totalInjected > 0) {
+    console.warn(`[MealGuard-Client] Injected ${totalInjected} meals across ${details.length} days (with venue resolution)`);
   }
 
   return { totalInjected, details };
