@@ -14,6 +14,7 @@ import { handleRepairTripCosts } from './action-repair-costs.ts';
 import { handleGenerateTrip } from './action-generate-trip.ts';
 import { handleGenerateTripDay } from './action-generate-trip-day.ts';
 import type { ActionContext } from './action-types.ts';
+import { GenerationTimer } from './generation-timer.ts';
 
 // =============================================================================
 // EXTRACTED MODULES — Reduce bundle size for deploy
