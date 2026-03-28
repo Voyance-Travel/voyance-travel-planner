@@ -1,136 +1,55 @@
 
 
-## Fix: Geographic Impossibilities in Generated Itineraries
+## Fix: Duplicate Attractions Across Days
 
 ### Problem
 
-Three distinct failures produce geographically impossible itineraries:
-
-1. **Transport destinations don't match next activity** — AI generates "Metro to Omotesando" but the next activity is in Roppongi. The bookend validator (line 11148-11157) creates transport cards using `next.location?.name` which is the AI-generated (potentially wrong) name, and AI-generated transport cards use hallucinated destinations.
-
-2. **Activities scattered across far-apart neighborhoods** — Asakusa → Ebisu → Sumida requires 10km+ hops, but Stage 3.5 geographic validation runs *before* enrichment (Stage 4) adds coordinates. Most activities lack GPS data at that point, so reordering is ineffective.
-
-3. **Activity name doesn't match its actual location** — "Fine Dining at Ginza Toyoda" is actually located at a Kagurazaka address. The AI conflates venue names from different neighborhoods.
+"Imperial Palace East Gardens" appears on both Day 1 and Day 4 with different titles and prices. The system has dedup logic but two gaps allow this through.
 
 ### Root Causes
 
-| Issue | Root Cause |
-|-------|-----------|
-| Transport mismatch | No post-enrichment pass syncs transport titles with next activity's verified location |
-| Neighborhood scattering | Stage 3.5 reorder runs pre-enrichment; Stage 4.9 auto-route optimizer exists but transport cards aren't updated to match |
-| Name/location mismatch | No cross-check between verified Place data and AI-generated venue names |
+**Gap 1 — Parallel batch blindness (Days 1-3 generated together)**
 
-### Fix — Three New Stages in `index.ts`
+Days within the same batch (e.g., 1-3) are generated in parallel with no visibility into each other. The post-batch dedup at line 3212 only checks **exact title matches** — "Stroll the Imperial Palace East Gardens" vs "Imperial Palace East Gardens Exploration" have different keys, so both survive.
 
-All three are added after Stage 4.9 (auto route optimization), where activities have verified coordinates and enriched location data.
+**Gap 2 — Cross-batch last-attempt acceptance (Day 4 sees Day 1)**
 
-**Stage 4.92: Post-enrichment geographic reorder**
+Day 4 (batch 2) does have Day 1 in its `previousDays`, and `validateGeneratedDay` correctly flags it as `TRIP-WIDE DUPLICATE`. But after max retries, line 3060 accepts the day anyway with the duplicate still present. The generate-day (single day regen) path at line 10842 strips flagged duplicates — the full generation path does not.
 
-Re-run `reorderActivitiesOptimally` after enrichment, now that activities have verified GPS coordinates. This catches the Asakusa→Ebisu→Sumida pattern by clustering geographically proximate activities.
+### Fix — Two changes in `index.ts`
+
+**Change 1: Post-batch dedup uses concept similarity (line ~3212)**
+
+Replace the exact-title Map lookup with the existing `conceptSimilarity` function (already defined in `day-validation.ts`). When a concept-similar duplicate is found across batches, **remove** the later occurrence instead of renaming it with "(Day X version)".
 
 ```typescript
-// After Stage 4.9, ~line 7393
-// STAGE 4.92: Post-enrichment geographic reorder
-for (let dayIdx = 0; dayIdx < enrichedDays.length; dayIdx++) {
-  const day = enrichedDays[dayIdx];
-  const activitiesWithLocation = day.activities.map(act => ({
-    id: act.id, title: act.title || act.name || '',
-    coordinates: act.location?.coordinates,
-    neighborhood: act.location?.address?.split(',')[0],
-    isLocked: isTimeFixed(act), // reuse from auto-route-optimizer
-    category: act.category,
-  }));
-  
-  const dayAnchor = determineDayAnchor(activitiesWithLocation, undefined, hotelNeighborhood, cityZones);
-  const validation = validateDayGeography(activitiesWithLocation, dayAnchor, travelConstraints, cityZones);
-  
-  if (!validation.isValid) {
-    const reordered = reorderActivitiesOptimally(activitiesWithLocation, dayAnchor);
-    const reorderedIds = reordered.map(a => a.id);
-    // Preserve original time slots, just reorder activities
-    const originalTimes = day.activities.map(a => ({ startTime: a.startTime, endTime: a.endTime }));
-    day.activities = day.activities.sort((a, b) => {
-      const aIdx = reorderedIds.indexOf(a.id);
-      const bIdx = reorderedIds.indexOf(b.id);
-      return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
-    });
-    // Reassign original time slots to reordered activities
-    day.activities.forEach((act, i) => {
-      if (originalTimes[i]) {
-        act.startTime = originalTimes[i].startTime;
-        act.endTime = originalTimes[i].endTime;
-      }
-    });
-  }
-}
+// Import conceptSimilarity from day-validation (or inline the logic)
+// For each non-logistics activity, check against all previously seen concepts
+// If concept-similar match found on a different day → splice/remove the duplicate
+// Log: "[Stage 2] Cross-batch dedup: removed "Imperial Palace East Gardens Exploration" 
+//       from Day 4 (similar to "Stroll the Imperial Palace East Gardens" on Day 1)"
 ```
 
-**Stage 4.93: Name-location cross-check**
+**Change 2: Strip trip-wide duplicates on last-attempt acceptance (line ~3060)**
 
-For activities where Google Places verification returned a `placeId` and coordinates, check if the verified neighborhood matches the activity title. If "Ginza" is in the title but verified address is in Kagurazaka, strip the incorrect neighborhood from the title.
+When `isLastAttempt && !smartFinishBlocksReturn` and validation has `TRIP-WIDE DUPLICATE` errors, strip those activities before returning — matching the existing logic from the generate-day path (line 10842).
 
 ```typescript
-// STAGE 4.93: Name-location mismatch detection
-for (const day of enrichedDays) {
-  for (const act of day.activities) {
-    if (!act.verified?.placeId || !act.location?.address) continue;
-    const title = (act.title || '').toLowerCase();
-    const address = (act.location.address || '').toLowerCase();
-    // Check if title contains a neighborhood name that contradicts the address
-    const TOKYO_NEIGHBORHOODS = ['ginza','shibuya','shinjuku','asakusa','roppongi',
-      'omotesando','ebisu','akihabara','ueno','ikebukuro','sumida','kagurazaka','otemachi'];
-    const titleNeighborhood = TOKYO_NEIGHBORHOODS.find(n => title.includes(n));
-    const addressNeighborhood = TOKYO_NEIGHBORHOODS.find(n => address.includes(n));
-    if (titleNeighborhood && addressNeighborhood && titleNeighborhood !== addressNeighborhood) {
-      // Mismatch: strip the wrong neighborhood from title
-      const re = new RegExp(`\\b${titleNeighborhood}\\b`, 'gi');
-      act.title = (act.title || '').replace(re, addressNeighborhood.charAt(0).toUpperCase() + addressNeighborhood.slice(1));
-      console.log(`[Stage 4.93] Fixed name-location mismatch: "${title}" → address is in ${addressNeighborhood}, not ${titleNeighborhood}`);
-    }
+// After line 3060, before deduplicateActivities call:
+if (isLastAttempt && validation.errors.length > 0) {
+  // Strip activities flagged as TRIP-WIDE DUPLICATE
+  const duplicateTitles: string[] = [];
+  for (const err of validation.errors) {
+    const titleMatch = err.match(/TRIP-WIDE DUPLICATE:\s*"([^"]+)"/i);
+    if (titleMatch) duplicateTitles.push(titleMatch[1].toLowerCase());
   }
-}
-```
-
-**Stage 4.95: Transport title consistency**
-
-After all reordering is done, iterate every transport card and sync its destination with the next non-transport activity's location.
-
-```typescript
-// STAGE 4.95: Sync transport card destinations with next activity
-for (const day of enrichedDays) {
-  for (let i = 0; i < day.activities.length; i++) {
-    const act = day.activities[i];
-    if ((act.category || '').toLowerCase() !== 'transport') continue;
-    
-    // Find next non-transport activity
-    let nextAct = null;
-    for (let j = i + 1; j < day.activities.length; j++) {
-      if ((day.activities[j].category || '').toLowerCase() !== 'transport') {
-        nextAct = day.activities[j];
-        break;
-      }
-    }
-    if (!nextAct) continue;
-    
-    const nextLocationName = nextAct.location?.name || nextAct.title || '';
-    if (!nextLocationName) continue;
-    
-    // Extract transport mode from current title
-    const modeMatch = (act.title || '').match(/^(taxi|metro|walk|train|bus|ferry|uber|rideshare|drive)\s+to\b/i)
-      || (act.title || '').match(/^travel\s+to\s+.+\s+via\s+(.+)$/i);
-    
-    if (modeMatch) {
-      const mode = modeMatch[1] || 'Travel';
-      act.title = `${mode.charAt(0).toUpperCase() + mode.slice(1)} to ${nextLocationName}`;
-    } else if ((act.title || '').toLowerCase().startsWith('travel to')) {
-      act.title = `Travel to ${nextLocationName}`;
-    }
-    
-    // Also sync transport card's location to destination
-    act.location = { ...act.location, name: nextLocationName, address: nextAct.location?.address || '' };
-    if (nextAct.location?.coordinates) {
-      act.location.coordinates = nextAct.location.coordinates;
-    }
+  if (duplicateTitles.length > 0) {
+    const before = generatedDay.activities.length;
+    generatedDay.activities = generatedDay.activities.filter(a => {
+      const title = (a.title || '').toLowerCase();
+      return !duplicateTitles.some(dt => title.includes(dt) || dt.includes(title));
+    });
+    console.log(`[Stage 2] Stripped ${before - generatedDay.activities.length} trip-wide duplicates on last attempt`);
   }
 }
 ```
@@ -139,14 +58,14 @@ for (const day of enrichedDays) {
 
 | Before | After |
 |--------|-------|
-| Asakusa → Ebisu (10km) → Sumida — scattered | Clustered: Asakusa → Sumida → Skytree (nearby) |
-| "Metro to Omotesando" → next activity in Roppongi | "Metro to Seryna Mon Cher Ton Ton" (Roppongi) |
-| "Fine Dining at Ginza Toyoda" at Kagurazaka address | "Fine Dining at Kagurazaka Toyoda" |
-| "Taxi to Nezu Museum" → next is Acupuncture in Omotesando | "Taxi to Acupuncture & Tea Wellness" |
+| Day 1: "Stroll the Imperial Palace East Gardens" + Day 4: "Imperial Palace East Gardens Exploration" | Day 4 duplicate stripped; only Day 1 visit remains |
+| Post-batch dedup only catches exact title matches | Catches concept-similar venues across parallel batches |
+| Last-attempt acceptance keeps flagged duplicates | Strips `TRIP-WIDE DUPLICATE` activities before returning |
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/index.ts` | Add Stages 4.92, 4.93, 4.95 after Stage 4.9 |
+| `supabase/functions/generate-itinerary/index.ts` | Post-batch dedup: use concept similarity + remove duplicates |
+| `supabase/functions/generate-itinerary/index.ts` | Last-attempt: strip TRIP-WIDE DUPLICATE flagged activities |
 
