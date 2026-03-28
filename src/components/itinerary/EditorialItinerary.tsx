@@ -10338,8 +10338,11 @@ function ActivityRow({
         {activity.duration && (
           <p className="text-xs text-primary/70 mt-0.5 font-medium">
             {(activityType === 'accommodation' || titleLower.includes('return to') || titleLower.includes('freshen up'))
-              && activity.durationMinutes && activity.durationMinutes > 180
-              ? 'Overnight'
+              ? (activity.durationMinutes && activity.durationMinutes > 180
+                ? (titleLower.includes('check-in') || titleLower.includes('checkout') || titleLower.includes('check-out')
+                   ? activity.duration 
+                   : null)
+                : activity.duration)
               : activity.duration}
           </p>
         )}
