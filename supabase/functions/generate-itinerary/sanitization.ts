@@ -213,6 +213,93 @@ export function normalizeDurationString(raw: string | undefined | null): string 
   return raw; // Unparseable — pass through
 }
 
+// =============================================================================
+// HOTEL NAME ENFORCEMENT — Replace hallucinated hotel brands with "Your Hotel"
+// =============================================================================
+
+const KNOWN_HOTEL_BRANDS = [
+  'Peninsula', 'Four Seasons', 'Ritz-Carlton', 'Ritz Carlton',
+  'Park Hyatt', 'Aman', 'Mandarin Oriental', 'Conrad',
+  'St\\. Regis', 'St Regis', 'Waldorf Astoria', 'Shangri-La',
+  'InterContinental', 'Andaz', 'W Hotel', 'Edition',
+  'Rosewood', 'Bulgari', 'Six Senses', 'Hoshinoya',
+  'Palace Hotel', 'Imperial Hotel', 'Hotel Okura',
+  'Prince Hotel', 'Cerulean Tower', 'Capitol Hotel',
+  'Hyatt Regency', 'Hilton', 'Marriott', 'Westin',
+  'Grand Hyatt', 'ANA InterContinental', 'JW Marriott',
+  'Fairmont', 'Sofitel', 'Belmond', 'Oberoi',
+  'Raffles', 'Banyan Tree', 'Como', 'One&Only',
+];
+
+const HOTEL_BRAND_RE = new RegExp(
+  `(?:The\\s+)?(?:${KNOWN_HOTEL_BRANDS.join('|')})(?:\\s+(?:Hotel|Resort|Spa|Suites|Tower|Palace|Lodge|Residences|Collection))*(?:\\s+[A-Z][a-zA-Z]+)*(?:\\s+(?:at|in|of|by)\\s+[A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)*)?`,
+  'gi'
+);
+
+/**
+ * Replaces hallucinated hotel names with "Your Hotel" when no hotel was selected.
+ */
+export function enforceHotelPlaceholder(text: string): string {
+  if (!text || typeof text !== 'string') return text;
+  return text.replace(HOTEL_BRAND_RE, 'Your Hotel');
+}
+
+/**
+ * Enforces hotel placeholder across an entire generated day object.
+ * Only call this when the user has NOT selected a hotel.
+ */
+export function enforceHotelPlaceholderOnDay(day: any): any {
+  if (!day || typeof day !== 'object') return day;
+
+  // Day-level text fields
+  if (day.title) day.title = enforceHotelPlaceholder(day.title);
+  if (day.theme) day.theme = enforceHotelPlaceholder(day.theme);
+  if (typeof day.narrative === 'string') {
+    day.narrative = enforceHotelPlaceholder(day.narrative);
+  } else if (day.narrative && typeof day.narrative === 'object') {
+    if (day.narrative.theme) day.narrative.theme = enforceHotelPlaceholder(day.narrative.theme);
+    if (Array.isArray(day.narrative.highlights)) {
+      day.narrative.highlights = day.narrative.highlights.map((h: string) => enforceHotelPlaceholder(h));
+    }
+  }
+  if (Array.isArray(day.accommodationNotes)) {
+    day.accommodationNotes = day.accommodationNotes.map((n: string) => enforceHotelPlaceholder(n));
+  } else if (typeof day.accommodationNotes === 'string') {
+    day.accommodationNotes = enforceHotelPlaceholder(day.accommodationNotes);
+  }
+  if (Array.isArray(day.practicalTips)) {
+    day.practicalTips = day.practicalTips.map((t: string) => enforceHotelPlaceholder(t));
+  } else if (typeof day.practicalTips === 'string') {
+    day.practicalTips = enforceHotelPlaceholder(day.practicalTips);
+  }
+
+  // Activity-level text fields
+  if (Array.isArray(day.activities)) {
+    for (const act of day.activities) {
+      if (!act || typeof act !== 'object') continue;
+      if (act.title) act.title = enforceHotelPlaceholder(act.title);
+      if (act.name) act.name = enforceHotelPlaceholder(act.name);
+      if (act.description) act.description = enforceHotelPlaceholder(act.description);
+      if (typeof act.tips === 'string') act.tips = enforceHotelPlaceholder(act.tips);
+      if (act.voyanceInsight) act.voyanceInsight = enforceHotelPlaceholder(act.voyanceInsight);
+      if (act.bestTime) act.bestTime = enforceHotelPlaceholder(act.bestTime);
+      if (act.location?.name) act.location.name = enforceHotelPlaceholder(act.location.name);
+      if (act.location?.address) act.location.address = enforceHotelPlaceholder(act.location.address);
+      if (act.personalization?.whyThisFits) {
+        act.personalization.whyThisFits = enforceHotelPlaceholder(act.personalization.whyThisFits);
+      }
+      if (act.transportation?.instructions) {
+        act.transportation.instructions = enforceHotelPlaceholder(act.transportation.instructions);
+      }
+      if (act.transit?.description) act.transit.description = enforceHotelPlaceholder(act.transit.description);
+      if (act.transit?.to) act.transit.to = enforceHotelPlaceholder(act.transit.to);
+      if (act.transit?.from) act.transit.from = enforceHotelPlaceholder(act.transit.from);
+    }
+  }
+
+  return day;
+}
+
 export function sanitizeDateFields(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(sanitizeDateFields);
