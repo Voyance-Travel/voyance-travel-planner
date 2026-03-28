@@ -954,9 +954,12 @@ function estimateCostByCategory(
   const isDining = ['breakfast', 'brunch', 'lunch', 'dinner', 'dining', 'coffee', 'cafe'].includes(cat);
   const withTax = isDining ? baseCost * 1.2 : baseCost;
   
-  // Multiply by travelers and round to nearest $5
+  // Multiply by travelers and round
   const total = withTax * travelers;
-  return Math.round(total / 5) * 5;
+  const isTransportCategory = ['transportation', 'transport', 'transfer'].includes(cat);
+  return isTransportCategory
+    ? Math.round(total)        // Transport: round to nearest $1
+    : Math.round(total / 5) * 5; // Everything else: round to nearest $5
 }
 
 type CostBasis = 'per_person' | 'flat';
@@ -997,7 +1000,8 @@ function isNeverFreeCategory(category: string, title: string): boolean {
   const neverFreeKeywords = [
     'breakfast', 'brunch', 'lunch', 'dinner', 'cruise', 'tour',
     'restaurant', 'café', 'cafe', 'transfer', 'airport', 'taxi',
-    'uber', 'private car', 'shuttle', 'train to', 'bus to'
+    'uber', 'private car', 'shuttle',
+    // Removed: 'train to', 'bus to' — public transit CAN be free (day pass, included transfer)
   ];
   if (neverFreeKeywords.some(kw => titleLower.includes(kw))) {
     return true;
