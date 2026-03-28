@@ -10336,7 +10336,12 @@ function ActivityRow({
           <p className="text-xs text-muted-foreground mt-0.5">→ {formatTime(activity.endTime)}</p>
         )}
         {activity.duration && (
-          <p className="text-xs text-primary/70 mt-0.5 font-medium">{activity.duration}</p>
+          <p className="text-xs text-primary/70 mt-0.5 font-medium">
+            {(activityType === 'accommodation' || titleLower.includes('return to') || titleLower.includes('freshen up'))
+              && activity.durationMinutes && activity.durationMinutes > 180
+              ? 'Overnight'
+              : activity.duration}
+          </p>
         )}
       </div>
 
