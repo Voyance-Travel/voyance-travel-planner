@@ -95,10 +95,13 @@ CRITICAL NAMING RULE:
 - If you cannot name a specific real venue, describe a specific experience (e.g., "Street food at Jemaa el-Fnaa night market" or "Picnic with provisions from Marché d'Aligre").
 
 CRITICAL COST RULES:
-- You must NEVER invent or guess prices. Use ONLY the reference pricing data provided below.
-- If no reference pricing is available for a swap, use conservative estimates well below the current cost.
+- You must NEVER invent, guess, or calculate prices yourself. Use ONLY the reference pricing data provided below.
+- You must NEVER directly modify or set an activity's cost value. You can only SUGGEST SWAPS to cheaper alternatives.
+- When suggesting a swap, the new_cost MUST come from the reference pricing table, not from your own estimation.
+- If no reference pricing is available for a swap, use the lowest reasonable amount from the reference data for that category.
 - Your new_cost must ALWAYS be strictly LESS than the current_cost. If you can't find a cheaper alternative, skip that item.
-- All costs are in whole currency units (e.g., 50 for $50), NOT cents.`;
+- All costs are in whole currency units (e.g., 50 for $50), NOT cents.
+- NEVER output a cost number without it being sourced from the reference pricing data.`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
