@@ -6831,9 +6831,9 @@ export function EditorialItinerary({
                         </Badge>
                       )}
                     </div>
-                    {hotelSelection.pricePerNight && totalDays > 1 && (
+                    {hotelSelection.pricePerNight && days.length > 1 && (
                       <div className="text-sm text-muted-foreground">
-                        ${hotelSelection.pricePerNight}/night × {Math.max(1, totalDays - 1)} nights = <strong className="text-foreground">${(hotelSelection.pricePerNight * Math.max(1, totalDays - 1)).toLocaleString()}</strong>
+                        ${hotelSelection.pricePerNight}/night × {Math.max(1, days.length - 1)} nights = <strong className="text-foreground">${(hotelSelection.pricePerNight * Math.max(1, days.length - 1)).toLocaleString()}</strong>
                       </div>
                     )}
                     
