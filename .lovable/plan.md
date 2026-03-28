@@ -1,123 +1,93 @@
 
 
-## Fix: Hotel Cards & Flights Tab Polish
+## Fix: Strip Leaked AI Reasoning from User-Facing Text
 
-This is a multi-part fix touching flight cards, hotel cards, the Arrival Game Plan, and in-itinerary accommodation cards.
+### Problem
+Internal AI reasoning text is leaking into itinerary cards in three patterns:
+1. **Location names** contain search qualifiers: `"Kagurazaka Ishikawa (Satellite or High-End alternative in Chiyoda/Minato)"`
+2. **Descriptions** contain slot/requirement references: `"slot: A traditional..."`, `"Fulfills the solo retreat slot."`, `"Fulfills the accommodation requirement."`
+3. **Tips** contain raw metadata: `"Tomorrow: Wake 08:00. Breakfast at The Lounge (Level 39 of Hotel, ~0.1km, ~$40)..."`
 
----
+### Root Cause
+The existing sanitizers (`sanitizeActivityText`, `sanitizeActivityName`, `sanitizeAITextField`) strip system label prefixes (EDGE_ACTIVITY, etc.) and CJK artifacts, but have no rules for:
+- Parenthetical search qualifiers with "or", "alternative", "Satellite"
+- "slot:" prefixes or "Fulfills the...slot/requirement" sentences
+- Distance/cost metadata like `~0.1km, ~$40`
 
-### Part 1: Flight Cards — Show Complete Information
+### Fix — Two Files
 
-**File:** `src/components/itinerary/SortableFlightLegCards.tsx`
+**File 1: `src/utils/activityNameSanitizer.ts`**
 
-**Current state:** Cards show times and cabin class but lack origin airport name, airline, duration, stops, price, and use raw ISO dates.
+Add new regex patterns to `sanitizeActivityText()` and `sanitizeActivityName()`:
 
-**Changes:**
+```typescript
+// Strip AI search qualifiers from names/locations
+// e.g. "(Satellite or High-End alternative in Chiyoda/Minato)"
+// e.g. "(or high-end Kaiseki alternative)"
+const AI_QUALIFIER_RE = /\s*\((?:[^)]*?\b(?:alternative|satellite|or\s+high.end|similar|equivalent|comparable)\b[^)]*?)\)/gi;
 
-1. **Format dates** — Replace raw `2026-04-15` with `Wed, Apr 15` using `format(parseISO(date), 'EEE, MMM d')` from date-fns. Apply to the date display at line 149.
+// Strip "slot: " prefix from descriptions
+const SLOT_PREFIX_RE = /^slot:\s*/i;
 
-2. **Show origin airport** — The `getAirportDisplay()` function already exists but only displays when there's a code. At lines 166-167, the departure side shows `leg.departure?.time` and `getAirportDisplay(leg.departure?.airport)`. If airport is empty, show nothing — no change needed there, but the parent component (EditorialItinerary) needs to ensure it passes airport codes from flightSelection. Verify `getAirportDisplay` handles missing codes gracefully.
+// Strip "Fulfills the ... slot/requirement." sentences
+const FULFILLS_RE = /\.?\s*Fulfills the\s+[^.]*?(?:slot|requirement|block)\.\s*/gi;
 
-3. **Add price display** — After the route visualization (line 189), add a price row:
-   ```
-   {leg.price && (
-     <div className="text-right mt-2">
-       <span className="text-lg font-semibold">${leg.price.toLocaleString()}</span>
-       <span className="text-xs text-muted-foreground">/person</span>
-     </div>
-   )}
-   ```
+// Strip distance/cost metadata in tips: "(Level 39 of Hotel, ~0.1km, ~$40)"
+// and "~0.1km" / "~$40" standalone fragments
+const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/gi;
+const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
+```
 
-4. **Show stops** — In the route visualization center (line 174-179), replace the plain plane icon with stops info when available. Could derive from layover data or add a `stops` field to `FlightLegDisplay`.
+Add these to `sanitizeActivityText()`:
+```typescript
+export function sanitizeActivityText(text: string | undefined | null): string {
+  if (!text) return '';
+  return text
+    .replace(SYSTEM_LABEL_RE, '')
+    .replace(AI_QUALIFIER_RE, '')
+    .replace(SLOT_PREFIX_RE, '')
+    .replace(FULFILLS_RE, ' ')
+    .replace(META_DISTANCE_COST_RE, '')
+    .replace(INLINE_META_RE, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+```
 
-5. **Hide mark buttons for single-leg trips and non-editors** — Line 228: the condition `totalLegs > 1` already hides for single-leg. Add `&& isEditable` to also hide from viewers:
-   ```typescript
-   {totalLegs > 1 && isEditable && (
-   ```
+Add `AI_QUALIFIER_RE` to `sanitizeActivityName()` after the system prefix strip:
+```typescript
+sanitized = sanitized.replace(AI_QUALIFIER_RE, '').trim();
+```
 
----
+**File 2: `src/components/itinerary/EditorialItinerary.tsx`**
 
-### Part 2: Hotel Card — Dates and Cost Breakdown
+Apply sanitization to three currently-unsanitized render points:
 
-**File:** `src/components/itinerary/EditorialItinerary.tsx` (~lines 6807-6860)
+1. **`locationText`** (~line 10055-10057) — wrap in `sanitizeActivityText`:
+```typescript
+const rawLocationName = sanitizeActivityText(activity.location?.name?.trim());
+```
 
-**Current state:** Shows check-in/out times and $/night but not stay dates or total cost.
+2. **`activity.tips`** (~line 10118-10120) — wrap in `sanitizeActivityText`:
+```typescript
+{sanitizeActivityText(activity.tips)}
+```
 
-**Changes:**
+3. **Transport card titles** — the transport title inherits the destination's location name (e.g., "Travel to Yoyogi Park West Spa or High-End Boutique Wellness"). Since titles go through `sanitizeActivityName`, adding `AI_QUALIFIER_RE` there covers this case automatically.
 
-1. **Add stay dates** — After check-in/out pills (line 6822), add:
-   ```
-   {startDate && endDate && (
-     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 text-sm">
-       <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-       <span className="font-medium">{format(parseISO(startDate), 'MMM d')} – {format(parseISO(endDate), 'MMM d')}</span>
-     </div>
-   )}
-   ```
-
-2. **Add total cost** — After the $/night pill:
-   ```
-   {hotelSelection.pricePerNight && totalDays > 0 && (
-     <div className="text-sm text-muted-foreground">
-       ${hotelSelection.pricePerNight}/night × {Math.max(1, totalDays - 1)} nights = <strong>${hotelSelection.pricePerNight * Math.max(1, totalDays - 1)}</strong>
-     </div>
-   )}
-   ```
-
-3. **Show room type** — If `hotelSelection.roomType` exists, display it as a badge.
-
-4. **Website domain** — Line 6855: Change `'Website'` to show the domain:
-   ```typescript
-   {hotelSelection.website
-     ? new URL(hotelSelection.website).hostname.replace('www.', '')
-     : 'Maps'}
-   ```
-
----
-
-### Part 3: Arrival Game Plan Fixes
-
-**File:** `src/components/itinerary/EditorialItinerary.tsx` (~lines 8738-8750, 8822-8840)
-
-1. **Fix "Arrive at airport" label** — Line 8745: Change from `"Arrive at airport by {recommendedArrival}"` to `"Leave for the airport by {recommendedArrival}"` since this refers to the origin departure, not the destination arrival.
-
-2. **Check-in time consistency** — Line 8837-8838: The check-in time currently reads from `effectiveHotelSelection?.checkInTime || effectiveHotelSelection?.checkIn`. Ensure it falls back to `'3:00 PM'` (the standard) and label it clearly:
-   ```
-   Check-in from {checkInTime} (early luggage storage usually available)
-   ```
-
-3. **Fix postLanding contradiction** — The `getPostLandingAdvice()` at line 8655 says "Store luggage, explore immediately" for early arrivals, but the itinerary starts with hotel check-in. Change early arrival advice to:
-   ```
-   action: 'Head to hotel, drop bags & start exploring'
-   ```
-
----
-
-### Part 4: In-Itinerary Hotel Card Consistency
-
-**File:** `src/components/itinerary/EditorialItinerary.tsx`
-
-1. **"Included in your stay" badge** — In the activity card renderer, when `isAccommodation` is true (already detected by the pricing fix), add a small badge:
-   ```
-   <Badge variant="secondary" className="text-[10px]">Included in your stay</Badge>
-   ```
-   This goes in the cost display area of accommodation cards, replacing the "$0" or "Free" text with a more meaningful indicator.
-
-2. **Fix return-to-hotel duration** — The duration bug (8h for 10:25 PM → 11:59 PM) likely comes from the AI generating end_time as next-day or the duration calculation treating overnight as same-day. In the duration display logic, cap accommodation card durations: if category is accommodation and calculated duration > 3 hours, either hide the duration or show "Overnight" instead.
-
-3. **Mark buttons already hidden for single-leg** — Covered in Part 1.
-
----
+### Result
+| Before | After |
+|--------|-------|
+| `Kagurazaka Ishikawa (Satellite or High-End alternative in Chiyoda/Minato)` | `Kagurazaka Ishikawa` |
+| `Sushi Kanesaka (or high-end Kaiseki alternative)` | `Sushi Kanesaka` |
+| `Yoyogi Park West Spa or High-End Boutique Wellness` | `Yoyogi Park West Spa` |
+| `slot: A traditional Japanese head spa...` | `A traditional Japanese head spa...` |
+| `Rest and enjoy... Fulfills the accommodation requirement.` | `Rest and enjoy...` |
+| `Tomorrow: Wake 08:00. Breakfast at The Lounge (Level 39 of Hotel, ~0.1km, ~$40)` | `Tomorrow: Wake 08:00. Breakfast at The Lounge` |
 
 ### Files Changed
-
 | File | Changes |
 |------|---------|
-| `src/components/itinerary/SortableFlightLegCards.tsx` | Format dates, add price, hide mark buttons for non-editors |
-| `src/components/itinerary/EditorialItinerary.tsx` | Hotel card dates/total, Arrival Game Plan labels, accommodation badge, duration cap |
-
-### Not in Scope (Separate Tickets)
-- Hotel photo fetching (requires Places API integration — tracked separately)
-- Transport cost API accuracy (the static fallbacks for Tokyo are already correct; API response issues are backend)
-- Activity card pricing ($836/$850) — already fixed in the pricing consistency ticket
+| `src/utils/activityNameSanitizer.ts` | Add AI qualifier, slot, fulfills, and metadata regexes to both sanitize functions |
+| `src/components/itinerary/EditorialItinerary.tsx` | Wrap locationText, tips, and location name renders in sanitization |
 
