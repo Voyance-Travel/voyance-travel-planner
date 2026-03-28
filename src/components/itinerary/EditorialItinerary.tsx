@@ -1066,6 +1066,10 @@ function getActivityCostInfo(
   const looksLikelyFree = FREE_ATTRACTION_KEYWORDS.some(kw => titleLower.includes(kw)) &&
     ['sightseeing', 'explore', 'cultural', 'activity', 'attraction'].includes(catLower);
   
+  if (looksLikelyFree && !isNeverFreeCategory(category, title)) {
+    return { amount: 0, isEstimated: false, confidence: 'medium' as const, basis: 'flat' as CostBasis };
+  }
+  
   const shouldNeverBeFree = isNeverFreeCategory(category, title);
   // Use explicit basis from backend if available, otherwise infer
   const basis: CostBasis = (activity as any).costBasis || (activity as any).cost?.basis || inferCostBasis(category, title);
