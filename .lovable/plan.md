@@ -1,48 +1,54 @@
 
 
-## Fix: Budget and Payments Tab Alignment
+## Fix Transit Activities All Showing Same Cost
 
-### Current State
+### Problem
+Every transport activity shows the same cost (e.g., $30 in NYC) because `estimateCostSync()` maps all transport to a single `transport_base_usd` field, and `isNeverFreeCategory()` forces estimation even when the AI correctly returns $0 for walking/public transit.
 
-Both **BudgetTab** and **PaymentsTab** already use `useTripFinancialSnapshot` which reads from the `activity_costs` table — they share the same data source. Many of the fixes in the prompt are **already implemented**:
+### Changes
 
-- **Fix 2** (dual-sync): `syncBudgetFromDays` already syncs to `activity_costs` (lines 1394-1448)
-- **Fix 3** (flight/hotel on load): Already syncs flight/hotel to `activity_costs` on page load (lines 1458-1486)
-- **Fix 4** (chat sync): `ItineraryAssistant.tsx` already syncs to `activity_costs` after chat edits (lines 449-484)
+**1. Mode-aware transport estimation — `src/lib/cost-estimation.ts` (line ~396)**
 
-### Remaining Issue
+After `baseField` is determined, add a transport-specific early return that infers mode from the title and uses realistic base costs:
+- Walking/stroll → $0
+- Subway/metro/bus/tram → $3 base
+- Train/rail → $5 base
+- Ferry/boat → $8 base
+- Taxi/cab → $20 base
+- Uber/rideshare → $18 base
+- Shuttle/airport bus → $12 base
+- Private car → $40 base
+- Generic → $5 base
 
-**PaymentsTab line 225** — when `activity_costs` table is empty or stale (e.g., fresh trip load before sync completes), `financialSnapshot.tripTotalCents` returns 0. The current code:
+Cap the city cost multiplier at 1.3 for public transit (fares don't scale like restaurant prices). Round to nearest $1 instead of $5.
 
+**2. Remove public transit from never-free keywords — `src/components/itinerary/EditorialItinerary.tsx` (line ~997-1001)**
+
+Remove `'train to'` and `'bus to'` from `neverFreeKeywords`. Keep taxi, uber, shuttle, airport, private car (genuinely never free).
+
+**3. AI prompt improvements — `supabase/functions/generate-itinerary/index.ts`**
+
+At line 9510, add mode-specific pricing guidance after the existing transit instruction:
+- Walking = $0, Subway/Metro/Bus = actual local fare ($2-5), Taxi = distance-based ($10-40)
+- Title must include mode: "Travel to [place] via [mode]"
+
+At line 9670, update the CRITICAL REMINDERS transit instruction to include realistic per-mode costs.
+
+**4. Transport-specific rounding — `src/components/itinerary/EditorialItinerary.tsx` (line ~959)**
+
+Change `estimateCostByCategory` to round transport to nearest $1 instead of $5:
 ```typescript
-const estimatedTotal = financialSnapshot.loading ? payableTotalCents : financialSnapshot.tripTotalCents;
+const isTransportCategory = ['transportation', 'transport', 'transfer'].includes(cat);
+return isTransportCategory
+  ? Math.round(total)
+  : Math.round(total / 5) * 5;
 ```
-
-Shows `$0` total once loading finishes, even though `payableItems` correctly lists flights, hotels, and activities with real costs. The user sees line items totaling thousands of dollars but a "$0 Trip Total" header.
-
-### Fix
-
-**File: `src/components/itinerary/PaymentsTab.tsx` — line 225**
-
-Change:
-```typescript
-const estimatedTotal = financialSnapshot.loading ? payableTotalCents : financialSnapshot.tripTotalCents;
-```
-
-To:
-```typescript
-const estimatedTotal = financialSnapshot.loading
-  ? payableTotalCents
-  : (financialSnapshot.tripTotalCents > 0 ? financialSnapshot.tripTotalCents : payableTotalCents);
-```
-
-When the snapshot loads successfully with data, use it (canonical source). When it returns 0 (empty `activity_costs`), fall back to `payableTotalCents` — the sum of visible line items — so the total always matches what the user sees.
-
-This is a one-line change that ensures Budget and Payments tabs agree when data is present, and prevents a $0 display when `activity_costs` hasn't been populated yet.
 
 ### Files changed
 
 | File | Change |
 |------|--------|
-| `src/components/itinerary/PaymentsTab.tsx` | Add fallback to `payableTotalCents` when snapshot returns 0 |
+| `src/lib/cost-estimation.ts` | Add mode-aware transport pricing with capped multiplier |
+| `src/components/itinerary/EditorialItinerary.tsx` | Remove public transit from never-free list; transport rounding to $1 |
+| `supabase/functions/generate-itinerary/index.ts` | Add per-mode transport pricing guidance to AI prompt |
 
