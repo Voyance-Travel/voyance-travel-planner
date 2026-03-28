@@ -387,7 +387,73 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
   
   // Priority 3: Category-based estimation with title inference
   const normalizedCategory = category.toLowerCase().trim();
-  
+
+  // ─── Transport mode-aware pricing ───
+  if (['transport', 'transfer', 'transportation'].includes(normalizedCategory)) {
+    const titleLower = (params.title || '').toLowerCase();
+    let transportBase: number;
+
+    if (titleLower.includes('walk') || titleLower.includes('stroll')) {
+      return {
+        amount: 0,
+        currency: 'USD',
+        isEstimated: false,
+        confidence: 'high' as const,
+        source: 'category_estimate' as const,
+        reason: 'Walking is free',
+      };
+    } else if (titleLower.includes('subway') || titleLower.includes('metro')) {
+      transportBase = 3;
+    } else if (titleLower.includes('bus') && !titleLower.includes('airport')) {
+      transportBase = 3;
+    } else if (titleLower.includes('train') || titleLower.includes('rail')) {
+      transportBase = 5;
+    } else if (titleLower.includes('tram') || titleLower.includes('trolley') || titleLower.includes('streetcar')) {
+      transportBase = 3;
+    } else if (titleLower.includes('ferry') || titleLower.includes('boat') || titleLower.includes('water taxi')) {
+      transportBase = 8;
+    } else if (titleLower.includes('taxi') || titleLower.includes('cab')) {
+      transportBase = 20;
+    } else if (titleLower.includes('uber') || titleLower.includes('lyft') || titleLower.includes('rideshare') || titleLower.includes('ride')) {
+      transportBase = 18;
+    } else if (titleLower.includes('shuttle') || titleLower.includes('airport bus')) {
+      transportBase = 12;
+    } else if (titleLower.includes('private') || titleLower.includes('car service')) {
+      transportBase = 40;
+    } else {
+      const viaMatch = titleLower.match(/via\s+(.+)/);
+      if (viaMatch) {
+        const viaMode = viaMatch[1];
+        if (/\d\s*(train|line|metro|subway)/.test(viaMode) || /line\s*\d/.test(viaMode)) {
+          transportBase = 3;
+        } else if (/bus|route/.test(viaMode)) {
+          transportBase = 3;
+        } else if (/taxi|cab|uber|lyft/.test(viaMode)) {
+          transportBase = 20;
+        } else {
+          transportBase = 5;
+        }
+      } else {
+        transportBase = 5;
+      }
+    }
+
+    const isPublicTransit = transportBase <= 8;
+    const transitMultiplier = isPublicTransit
+      ? Math.min(costIndex.cost_multiplier, 1.3)
+      : costIndex.cost_multiplier;
+    const amount = Math.max(0, Math.round(transportBase * transitMultiplier));
+
+    return {
+      amount,
+      currency: 'USD',
+      isEstimated: true,
+      confidence: isPublicTransit ? 'medium' as const : 'low' as const,
+      source: 'category_estimate' as const,
+      reason: `Estimated ${isPublicTransit ? 'public transit' : 'private transport'} fare in ${destinationName}`,
+    };
+  }
+
   // Try to infer meal type from title if category is generic "dining"
   let baseField: keyof CostIndex;
   if (normalizedCategory === 'dining' && params.title) {
