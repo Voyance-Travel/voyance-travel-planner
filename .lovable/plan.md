@@ -1,38 +1,35 @@
 
 
-## Map Backend Phase Names to User-Friendly Text
+## Hotel Name Enforcement (Post-Processing)
 
 ### Problem
-The generation progress screen shows raw backend phase names like "Pre chain setup" and "Generating day 2" instead of polished user-facing text. The `useRotatingMessage` hook in `GenerationPhases.tsx` (lines 133-138) does a naive `replace(/_/g, ' ')` conversion instead of a proper mapping.
+When no hotel is selected, `hotelName` is set to `'Your Hotel'` and the prompt tells the AI not to invent hotels. The AI ignores this and generates specific luxury hotel names (Peninsula, Four Seasons, Conrad, etc.).
 
-### Change — Single file: `src/components/planner/shared/GenerationPhases.tsx`
+### Changes
 
-**1. Add a `PHASE_DISPLAY_TEXT` map and `getPhaseDisplayText()` function** (above the `useRotatingMessage` hook):
+**1. `supabase/functions/generate-itinerary/sanitization.ts` — Add two new exports**
 
-- Static map for known phases: `pre_chain_setup` → "Setting up your trip...", `prompt_built` → "Preparing your personalized plan...", `context_loaded_day_N` → handled dynamically, `generating_day_N` → "Building Day N...", `post_processing` → "Polishing your itinerary...", `enrichment_complete` → "Almost there...", `saving` → "Saving your itinerary...", `done` → "Your itinerary is ready!"
-- Dynamic pattern matching for `generating_day_(\d+)` and `context_loaded_day_(\d+)` via regex
-- Fallback: title-case the snake_case string + `console.warn` for unknown phases
+Add `enforceHotelPlaceholder(text)` and `enforceHotelPlaceholderOnDay(day)` at the end of the file:
 
-**2. Replace lines 133-138** in the `useRotatingMessage` hook:
+- `KNOWN_HOTEL_BRANDS` array covering ~30 luxury chains (Peninsula, Four Seasons, Ritz-Carlton, Park Hyatt, Aman, Mandarin Oriental, Conrad, St. Regis, Waldorf Astoria, Shangri-La, Rosewood, Hoshinoya, etc.)
+- `HOTEL_BRAND_RE` regex that matches brand + optional city/suffix (e.g. "The Peninsula Tokyo", "Four Seasons Hotel at Otemachi")
+- `enforceHotelPlaceholder(text)` — replaces matched hotel names with "Your Hotel"
+- `enforceHotelPlaceholderOnDay(day)` — walks all text fields on a day object (title, theme, narrative, accommodationNotes, practicalTips, and every activity's title/name/description/tips/voyanceInsight/bestTime/location.name/location.address/personalization.whyThisFits/transit.description/transit.to/transit.from/transportation.instructions)
 
-Replace the naive formatting:
+**2. `supabase/functions/generate-itinerary/index.ts` — Call after each day parse (2 locations)**
+
+At both parse sites (~line 2421 and ~line 10323), after `sanitizeGeneratedDay(...)` returns and before the existing post-processing block (line ~2554), add:
+
 ```typescript
-const phase = data.current_phase
-  .replace(/_/g, ' ')
-  .replace(/day (\d+)/i, 'Day $1')
-  .replace(/^(\w)/, (c: string) => c.toUpperCase());
-setLivePhase(phase);
+if (!dayCity?.hotelName || dayCity.hotelName === 'Your Hotel') {
+  generatedDay = enforceHotelPlaceholderOnDay(generatedDay);
+}
 ```
 
-With:
-```typescript
-setLivePhase(getPhaseDisplayText(data.current_phase));
-```
+This uses the already-available `dayCity?.hotelName` and `context.hotelData?.hotelName` to decide whether enforcement is needed — same variables already used at line 2559.
 
-**3. Admin page (`GenerationLogs.tsx`) stays unchanged** — admins should see raw phase names for debugging.
+**3. Redeploy** the `generate-itinerary` edge function.
 
-### Result
-Users see: "Setting up your trip..." → "Building Day 1..." → "Building Day 2 of 5..." → "Polishing your itinerary..." → "Your itinerary is ready!"
-
-Never see: `pre_chain_setup`, `generating_day_2`, `post_processing`, or any snake_case text.
+### Why it works
+Instead of relying on prompt instructions (which the AI ignores), we mechanically replace every known hotel brand mention after generation. The regex covers 30+ brands with optional city suffixes. Even partial coverage eliminates the most common hallucinations.
 
