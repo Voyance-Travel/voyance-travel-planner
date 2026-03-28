@@ -1,78 +1,85 @@
 
 
-## Fix: Return to Hotel Duration Calculation Bug
+## Fix: Description Text Quality Issues
 
-### Problem
+Three distinct problems in AI-generated activity text.
 
-"Return to Hotel" cards show 8-hour durations because the AI sets `endTime` to the next morning (e.g., 6:30 AM) or 11:59 PM, treating the entire overnight sleep as activity duration. A "Return to Hotel" at 10:25 PM should be a ~15-minute card (arrive, settle in), not an 8-hour event.
+---
 
-### Root Cause
+### Issue 1: Empty Parentheses "()" in Descriptions
 
-Two issues compound:
+**Root cause**: After `sanitizeAITextField` strips content inside parentheses (via `AI_QUALIFIER_RE`, `META_DISTANCE_COST_RE`), the empty `()` shell is left behind. No cleanup pass removes empty parens.
 
-1. **AI-generated cards** — The AI sometimes sets `endTime` to the next morning or 11:59 PM for "Return to Hotel" activities, treating overnight sleep as duration. The `duration` string comes directly from AI output (e.g., "8h 00m").
+**Fix** — Add to `sanitizeAITextField` in `sanitization.ts` (line ~80, before the final whitespace cleanup):
+```typescript
+.replace(/\(\s*\)/g, '')  // Strip empty parentheses left after content removal
+```
 
-2. **Backend normalization** — `calculateDuration(startTime, endTime)` at line 2458 in `index.ts` blindly subtracts, producing large `durationMinutes` values. No special handling for end-of-day accommodation.
+Also add the same rule to the client-side `sanitizeAIOutput` in `src/utils/textSanitizer.ts`.
 
-3. **Front-end partial fix** — Line 10340-10342 in `EditorialItinerary.tsx` already shows "Overnight" when `durationMinutes > 180` for accommodation, but this still shows a misleading label for what should be a brief activity.
+**File**: `supabase/functions/generate-itinerary/sanitization.ts`, `src/utils/textSanitizer.ts`
 
-### Fix — Two changes
+---
 
-**Change 1: Backend — Clamp end-of-day accommodation cards (`index.ts`, after line ~2476)**
+### Issue 2: Hallucinated Forward References ("tomorrow's DisneySea adventure")
 
-After the logistics auto-fix block, add a pass that detects "Return to Hotel" / "Freshen up" / end-of-day accommodation cards and clamps their duration:
+**Root cause**: The prompt instructs the AI to add a "NEXT MORNING PREVIEW" in the last activity's tips field (line 9424). The AI sometimes leaks this forward-reference into Return to Hotel *descriptions* instead of tips, and fabricates content that doesn't match the actual next day.
+
+**Fix** — Add a post-generation sanitizer in `sanitization.ts` that strips forward-reference phrases from descriptions:
+```typescript
+// In sanitizeAITextField, add:
+const FORWARD_REF_RE = /\.?\s*(?:rest|recharge|prepare|get ready)\s+for\s+tomorrow'?s?\s+[^.]+(?:adventure|day|exploration|experience|excursion)[^.]*\.?/gi;
+```
+
+Also add a dedicated pass in `index.ts` (near the existing category/breakfast normalizers) that specifically targets Return to Hotel descriptions:
+- If description mentions "tomorrow" and doesn't match the actual next day's theme, replace with the bookend validator's clean template: `"Time at ${hotelName} to rest and refresh."`
+
+**File**: `supabase/functions/generate-itinerary/sanitization.ts`, `supabase/functions/generate-itinerary/index.ts`
+
+---
+
+### Issue 3: Generic/Placeholder Business Names
+
+**Root cause**: The prompt prohibits generic meal names but doesn't extend this to non-dining activities (wellness, cafés). "Boutique Wellness in Omotesando" and "a kissaten" slip through because validation only checks dining activities for real names.
+
+**Fix** — Add a post-generation validator in `index.ts` (near existing normalizers) that flags generic activity titles:
 
 ```typescript
-// Clamp end-of-day accommodation cards to realistic duration
-const accomTitle = (normalizedAct.title || '').toLowerCase();
-const isReturnToHotel = normalizedAct.category?.toLowerCase() === 'accommodation' &&
-  (accomTitle.includes('return to') || accomTitle.includes('freshen up') || 
-   accomTitle.includes('rest at') || accomTitle.includes('back to'));
+const GENERIC_TITLE_RE = /^(a |an |the |some |boutique |local )/i;
+const VAGUE_TITLE_KEYWORDS = /\b(or high.end|or similar|boutique wellness|local spa|nearby café)\b/i;
+const INDEFINITE_ARTICLE_START = /^(a|an)\s+[a-z]/i;
 
-if (isReturnToHotel && normalizedAct.durationMinutes > 60) {
-  // "Return to hotel" is a 15-min activity, not an overnight stay
-  const clampedDuration = 15;
-  normalizedAct.durationMinutes = clampedDuration;
-  if (normalizedAct.startTime) {
-    const startMins = timeToMinutes(normalizedAct.startTime);
-    normalizedAct.endTime = minutesToHHMM(startMins + clampedDuration);
+for (const day of allDays) {
+  for (const act of day.activities || []) {
+    const title = (act.title || '').trim();
+    // Flag titles starting with indefinite articles ("a kissaten") 
+    // or containing search-result language ("or High-End")
+    if (INDEFINITE_ARTICLE_START.test(title) || VAGUE_TITLE_KEYWORDS.test(title)) {
+      // Capitalize and clean up but can't invent a real name
+      // At minimum, strip the vague qualifiers
+      act.title = sanitizeAITextField(title);
+      console.log(`[Generic title warning] "${title}" may be a placeholder`);
+    }
   }
-  normalizedAct.duration = '15 min';
-  console.log(`[Duration fix] Clamped "${normalizedAct.title}" from ${act.durationMinutes || '?'}min to ${clampedDuration}min`);
 }
 ```
 
-Also apply the same logic in the **bookend validator** — its "Return to" cards already use `dur=15` so they're fine, but AI-generated ones that survive alongside should also be clamped.
-
-**Change 2: Front-end — Better fallback for accommodation cards (`EditorialItinerary.tsx`, line ~10338-10343)**
-
-Update the display logic so accommodation cards with unreasonable durations show the clamped value, not "Overnight":
-
-```typescript
-// Replace the current accommodation duration display logic
-{(activityType === 'accommodation' || titleLower.includes('return to') || titleLower.includes('freshen up'))
-  ? (activity.durationMinutes && activity.durationMinutes > 180
-    ? (titleLower.includes('check-in') || titleLower.includes('checkout') 
-       ? activity.duration 
-       : null)  // Hide duration entirely for return-to-hotel cards with bad data
-    : activity.duration)
-  : activity.duration}
+Also update the prompt (near line 9422) to extend the real-name requirement beyond meals:
+```
+ALL activities must use REAL, SPECIFIC venue names — not generic descriptions.
+"Boutique Wellness in Omotesando" = VIOLATION. Use the actual spa/studio name.
+"a kissaten" = VIOLATION. Name the specific kissaten.
 ```
 
-This hides the duration line entirely for "Return to Hotel" cards with obviously wrong durations (>3 hours), rather than showing "Overnight" or "8h 00m".
+**File**: `supabase/functions/generate-itinerary/index.ts`
 
-### Result
+---
 
-| Before | After |
-|--------|-------|
-| Day 2: Return to Hotel 10:25 PM → 11:59 PM, "8h 00m" | 10:25 PM → 10:40 PM, "15 min" |
-| Day 4: Return to Hotel 10:30 PM → 6:30 AM, "8:00" | 10:30 PM → 10:45 PM, "15 min" |
-| Front-end shows "Overnight" for >3h accommodation | Duration hidden or shows correct 15 min |
-
-### Files Changed
+### Summary of Changes
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/index.ts` | Clamp Return to Hotel / Freshen up durationMinutes to 15min, fix endTime |
-| `src/components/itinerary/EditorialItinerary.tsx` | Hide duration display for accommodation cards with unreasonable duration values |
+| `supabase/functions/generate-itinerary/sanitization.ts` | Add empty `()` removal + forward-reference stripping to `sanitizeAITextField` |
+| `src/utils/textSanitizer.ts` | Add empty `()` removal to client-side `sanitizeAIOutput` |
+| `supabase/functions/generate-itinerary/index.ts` | Add Return to Hotel description cleaner, generic title warning, and prompt updates requiring real venue names for all activities |
 
