@@ -7392,6 +7392,148 @@ If the purpose is a specific event, plan at least ONE full day around that event
         console.warn('[Stage 4.9] Auto route optimization failed (non-blocking):', routeErr);
       }
 
+      // =======================================================================
+      // STAGE 4.92: Post-enrichment geographic reorder
+      // Re-run geographic validation now that activities have verified GPS coords.
+      // Stage 3.5 ran pre-enrichment when most activities lacked coordinates.
+      // =======================================================================
+      try {
+        const { isTimeFixed } = await import('./auto-route-optimizer.ts');
+        let reorderCount = 0;
+        for (let dayIdx = 0; dayIdx < enrichedDays.length; dayIdx++) {
+          const day = enrichedDays[dayIdx];
+          if (!day.activities || day.activities.length < 3) continue;
+
+          const activitiesWithLocation = day.activities.map((act: any) => ({
+            id: act.id,
+            title: act.title || act.name || '',
+            coordinates: act.location?.coordinates,
+            neighborhood: act.location?.address?.split(',')[0],
+            isLocked: isTimeFixed(act),
+            category: act.category,
+          }));
+
+          const dayAnchor = determineDayAnchor(activitiesWithLocation, undefined, hotelNeighborhood, cityZones);
+          const validation = validateDayGeography(activitiesWithLocation, dayAnchor, travelConstraints, cityZones);
+
+          if (!validation.isValid && validation.violations?.some((v: any) => v.type === 'backtracking' || v.type === 'long_hop')) {
+            const reordered = reorderActivitiesOptimally(activitiesWithLocation, dayAnchor);
+            const reorderedIds = reordered.map((a: any) => a.id);
+            // Preserve original time slots, just reorder activities
+            const originalTimes = day.activities.map((a: any) => ({ startTime: a.startTime, endTime: a.endTime }));
+            day.activities = [...day.activities].sort((a: any, b: any) => {
+              const aIdx = reorderedIds.indexOf(a.id);
+              const bIdx = reorderedIds.indexOf(b.id);
+              return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+            });
+            // Reassign original time slots to reordered activities
+            day.activities.forEach((act: any, i: number) => {
+              if (originalTimes[i]) {
+                act.startTime = originalTimes[i].startTime;
+                act.endTime = originalTimes[i].endTime;
+              }
+            });
+            reorderCount++;
+            console.log(`[Stage 4.92] Reordered Day ${dayIdx + 1} activities by geographic proximity (score: ${validation.score})`);
+          }
+        }
+        console.log(`[Stage 4.92] ✓ Post-enrichment geographic reorder: ${reorderCount} days reordered`);
+      } catch (geoErr) {
+        console.warn('[Stage 4.92] Post-enrichment geographic reorder failed (non-blocking):', geoErr);
+      }
+
+      // =======================================================================
+      // STAGE 4.93: Name-location cross-check
+      // Detect when AI-generated title contains a neighborhood that contradicts
+      // the verified Google Places address. E.g. "Ginza Toyoda" at Kagurazaka.
+      // =======================================================================
+      try {
+        const KNOWN_NEIGHBORHOODS = ['ginza','shibuya','shinjuku','asakusa','roppongi',
+          'omotesando','ebisu','akihabara','ueno','ikebukuro','sumida','kagurazaka','otemachi',
+          'nihonbashi','meguro','daikanyama','nakameguro','azabu','akasaka','harajuku',
+          'tsukiji','odaiba','shimokitazawa','yanaka','nezu','sendagi','roppongi','minato',
+          'chiyoda','taito','setagaya','nakano','koenji','kichijoji','marunouchi',
+          'montmartre','marais','saint-germain','bastille','belleville','pigalle','oberkampf',
+          'trastevere','monti','testaccio','prati','esquilino','aventino',
+          'soho','shoreditch','mayfair','camden','brixton','notting hill','chelsea',
+          'el born','gracia','eixample','raval','barceloneta','gothic quarter',
+          'tribeca','williamsburg','dumbo','greenpoint','bushwick','astoria'];
+        let nameFixCount = 0;
+        for (const day of enrichedDays) {
+          for (const act of day.activities as any[]) {
+            if (!act.verified?.placeId || !act.location?.address) continue;
+            const title = (act.title || '').toLowerCase();
+            const address = (act.location.address || '').toLowerCase();
+            const titleNeighborhood = KNOWN_NEIGHBORHOODS.find(n => title.includes(n));
+            const addressNeighborhood = KNOWN_NEIGHBORHOODS.find(n => address.includes(n));
+            if (titleNeighborhood && addressNeighborhood && titleNeighborhood !== addressNeighborhood) {
+              const re = new RegExp(`\\b${titleNeighborhood}\\b`, 'gi');
+              const oldTitle = act.title;
+              act.title = (act.title || '').replace(re, addressNeighborhood.charAt(0).toUpperCase() + addressNeighborhood.slice(1));
+              nameFixCount++;
+              console.log(`[Stage 4.93] Fixed name-location mismatch: "${oldTitle}" → "${act.title}" (address is in ${addressNeighborhood}, not ${titleNeighborhood})`);
+            }
+          }
+        }
+        console.log(`[Stage 4.93] ✓ Name-location cross-check: ${nameFixCount} mismatches fixed`);
+      } catch (nameErr) {
+        console.warn('[Stage 4.93] Name-location cross-check failed (non-blocking):', nameErr);
+      }
+
+      // =======================================================================
+      // STAGE 4.95: Transport title consistency
+      // Sync transport card destinations with the next non-transport activity's
+      // verified location name. Prevents "Metro to Omotesando" → Roppongi.
+      // =======================================================================
+      try {
+        let transportFixCount = 0;
+        for (const day of enrichedDays) {
+          for (let i = 0; i < day.activities.length; i++) {
+            const act = day.activities[i] as any;
+            const cat = (act.category || '').toLowerCase();
+            if (cat !== 'transport' && cat !== 'transportation' && cat !== 'transit') continue;
+
+            // Find next non-transport activity
+            let nextAct: any = null;
+            for (let j = i + 1; j < day.activities.length; j++) {
+              const nc = ((day.activities[j] as any).category || '').toLowerCase();
+              if (nc !== 'transport' && nc !== 'transportation' && nc !== 'transit') {
+                nextAct = day.activities[j];
+                break;
+              }
+            }
+            if (!nextAct) continue;
+
+            const nextLocationName = nextAct.location?.name || nextAct.title || '';
+            if (!nextLocationName) continue;
+
+            // Extract transport mode from current title
+            const modeMatch = (act.title || '').match(/^(taxi|metro|walk|train|bus|ferry|uber|rideshare|drive|subway)\s+to\b/i)
+              || (act.title || '').match(/^travel\s+to\s+.+\s+via\s+(.+)$/i);
+
+            if (modeMatch) {
+              const mode = modeMatch[1] || 'Travel';
+              const oldTitle = act.title;
+              act.title = `${mode.charAt(0).toUpperCase() + mode.slice(1)} to ${nextLocationName}`;
+              if (oldTitle !== act.title) transportFixCount++;
+            } else if ((act.title || '').toLowerCase().startsWith('travel to')) {
+              const oldTitle = act.title;
+              act.title = `Travel to ${nextLocationName}`;
+              if (oldTitle !== act.title) transportFixCount++;
+            }
+
+            // Sync transport card's location to destination
+            act.location = { ...act.location, name: nextLocationName, address: nextAct.location?.address || act.location?.address || '' };
+            if (nextAct.location?.coordinates) {
+              act.location.coordinates = nextAct.location.coordinates;
+            }
+          }
+        }
+        console.log(`[Stage 4.95] ✓ Transport title consistency: ${transportFixCount} transport cards synced`);
+      } catch (transportErr) {
+        console.warn('[Stage 4.95] Transport title consistency failed (non-blocking):', transportErr);
+      }
+
       // STAGE 5: Trip Overview (with enriched data from Stage 1.9)
       const overview = generateTripOverview(enrichedDays, context, {
         travelAdvisory: fetchedTravelAdvisory,

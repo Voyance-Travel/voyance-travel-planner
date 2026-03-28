@@ -96,7 +96,7 @@ function haversineDistance(a: Coordinates, b: Coordinates): number {
  * - Activities with booking_required
  * - Activities matching reservation/show patterns
  */
-function isTimeFixed(act: ActivityLike): boolean {
+export function isTimeFixed(act: ActivityLike): boolean {
   if (act.isLocked) return true;
   if (act.bookingRequired) return true;
   const cat = (act.category || '').toLowerCase();
