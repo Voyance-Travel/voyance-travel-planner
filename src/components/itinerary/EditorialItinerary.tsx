@@ -8668,7 +8668,7 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
     } else if (hours >= 12) {
       return { action: 'Check in, then lunch & explore', reason: 'Afternoon arrival - grab lunch and explore the neighborhood' };
     } else {
-      return { action: 'Store luggage, explore immediately', reason: 'Early arrival - make the most of your first day!' };
+      return { action: 'Head to hotel, drop bags & start exploring', reason: 'Early arrival - make the most of your first day!' };
     }
   };
 
@@ -8758,7 +8758,7 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                   <Clock className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="font-medium text-sm">Arrive at airport by {recommendedArrival}</p>
+                  <p className="font-medium text-sm">Leave for the airport by {recommendedArrival}</p>
                   <p className="text-xs text-muted-foreground">
                     We recommend 2.5 hours before your {departureTime} departure for international flights
                   </p>
@@ -8850,8 +8850,8 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
                 )}
                 {(effectiveHotelSelection?.checkInDate || allHotels?.[0]?.checkInDate) && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Check-in: {safeFormatDate(effectiveHotelSelection?.checkInDate || allHotels?.[0]?.checkInDate, 'MMM d', 'Date TBD')}
-                    {(effectiveHotelSelection?.checkInTime || effectiveHotelSelection?.checkIn || allHotels?.[0]?.hotel?.checkIn) && ` at ${effectiveHotelSelection?.checkInTime || effectiveHotelSelection?.checkIn || allHotels?.[0]?.hotel?.checkIn}`}
+                    Check-in from {safeFormatDate(effectiveHotelSelection?.checkInDate || allHotels?.[0]?.checkInDate, 'MMM d', 'Date TBD')}
+                    {` at ${effectiveHotelSelection?.checkInTime || effectiveHotelSelection?.checkIn || allHotels?.[0]?.hotel?.checkIn || '3:00 PM'}`} (early luggage storage usually available)
                   </p>
                 )}
               </div>
