@@ -1,36 +1,41 @@
 
 
-## Fix: Generation Logs Not Persisting
+## Fix: Consistent Hotel Placeholder When None Provided
 
 ### Problem
-The `generation_logs` table has **0 rows** despite a trip generating at 17:42 UTC today. The timer code exists in the source files but no `[perf]` log lines appear in edge function logs, meaning the **deployed function doesn't have the latest code**.
+When no hotel is selected, `hotelName` and `hotelAddress` stay empty. The AI has no constraint, so it hallucates a different luxury hotel each day (Conrad, Peninsula, Four Seasons, etc.).
 
-### Root Cause
-The edge function needs to be **redeployed** so the `GenerationTimer` instrumentation takes effect. The code changes to `index.ts`, `action-generate-trip-day.ts`, and `generation-timer.ts` were saved to files but the running function is still the old version.
+### Fix
+Replace lines 428–431 in `supabase/functions/generate-itinerary/flight-hotel-context.ts` with a placeholder that sets `hotelName = 'Your Hotel'` and adds explicit AI prompt instructions to never invent hotel names.
 
-### Fix (2 steps)
+### Changes
 
-**Step 1: Redeploy the edge function**
-Use the deploy tool to push the current `generate-itinerary` function code. This is the primary fix — once deployed, `timer.init()` will create rows in `generation_logs` and all phase/token/model tracking will start recording.
+**File: `supabase/functions/generate-itinerary/flight-hotel-context.ts` (lines 428–431)**
 
-**Step 2: Add a diagnostic log to confirm timer init**
-Add a `console.log` right after `timer.init()` in `action-generate-trip.ts` (line 116) to confirm the log row was created:
+Replace the current warning-only block:
 ```typescript
-const logId = await timer.init(destination, totalDays, travelers || 1);
-console.log(`[generate-trip] Timer initialized, logId=${logId}`);
+} else if (!hotel) {
+  console.log(`[FlightHotel] ⚠️ NO HOTEL DATA FOUND - hotel_selection is empty or missing`);
+  console.log(`[FlightHotel] Raw hotel_selection value:`, JSON.stringify(hotelRaw));
+}
 ```
 
-This way, even if the DB insert silently fails, we'll see it in edge function logs.
+With:
+```typescript
+} else if (!hotel) {
+  console.log(`[FlightHotel] ⚠ NO HOTEL DATA FOUND - using placeholder`);
+  hotelName = 'Your Hotel';
+  hotelAddress = '';
+  sections.push(`\n${'='.repeat(40)}\n ACCOMMODATION (Placeholder)\n${'='.repeat(40)}`);
+  sections.push(`  🏨 Hotel: Your Hotel (not yet selected)`);
+  sections.push(`  ⚠️ IMPORTANT: The traveler has NOT selected a hotel yet.`);
+  sections.push(`  - Use "Your Hotel" as the hotel name in ALL days consistently.`);
+  sections.push(`  - Do NOT invent or suggest specific hotel names.`);
+  sections.push(`  - Do NOT generate "Breakfast at [Hotel Name]" cards — instead use "Breakfast at Your Hotel".`);
+  sections.push(`  - Do NOT generate hotel-specific tips (lobby views, spa access, etc).`);
+  sections.push(`  - Freshen-up and return cards should reference "Your Hotel" only.`);
+}
+```
 
-### Files Changed
-
-| File | Change |
-|------|--------|
-| `supabase/functions/generate-itinerary/action-generate-trip.ts` | Add diagnostic log after `timer.init()` |
-| Edge function deployment | Redeploy `generate-itinerary` to pick up all timer changes |
-
-### Verification
-After redeployment, trigger a test generation and check:
-1. Edge function logs show `[perf]` phase markers and `[generate-trip] Timer initialized, logId=...`
-2. `generation_logs` table has a new row with `status`, `phase_timings`, `model_used`, and token counts populated
+Then **redeploy** the `generate-itinerary` edge function.
 
