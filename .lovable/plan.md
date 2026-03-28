@@ -1,95 +1,78 @@
 
 
-## Fix: Breakfast at Wrong Hotels
+## Fix: Return to Hotel Duration Calculation Bug
 
 ### Problem
-On 3 of 5 days, the AI generates breakfast at a *different* hotel than the guest's own (e.g., "Grand Kitchen at Palace Hotel Tokyo" when staying at Four Seasons Otemachi). For luxury hotels with acclaimed in-house restaurants, this is illogical.
 
-### Root Causes
-1. **Prompt says "near the hotel"** — Line 281 in `meal-policy.ts` instructs: *"A real named café/restaurant near the hotel"* — not AT the hotel
-2. **Standard day prompt (line 9355)** says: *"Near hotel, real restaurant name"*
-3. **Departure prompts** say: *"Breakfast at hotel or nearby café"* — vague
-4. **Culinary archetype explicitly bans hotel breakfast** — `archetype-constraints.ts` line 1135: *"Hotel breakfast = VIOLATION"*
-5. **No post-generation check** verifies breakfast location against the guest's hotel
+"Return to Hotel" cards show 8-hour durations because the AI sets `endTime` to the next morning (e.g., 6:30 AM) or 11:59 PM, treating the entire overnight sleep as activity duration. A "Return to Hotel" at 10:25 PM should be a ~15-minute card (arrive, settle in), not an 8-hour event.
 
-### Fix — Three targeted changes
+### Root Cause
 
-**Change 1: Update breakfast prompt in `meal-policy.ts` (line 281)**
+Two issues compound:
 
-Make breakfast default to the guest's hotel restaurant, with an external option only when variety is desired:
+1. **AI-generated cards** — The AI sometimes sets `endTime` to the next morning or 11:59 PM for "Return to Hotel" activities, treating overnight sleep as duration. The `duration` string comes directly from AI output (e.g., "8h 00m").
 
-```
-BREAKFAST (MANDATORY): Prefer the hotel's own restaurant/café 
-(e.g., "Breakfast at [Hotel Restaurant Name]"). For variety, 
-alternate with a real named café within walking distance on 
-some days — but at least 3 of every 5 days should be at the 
-hotel. NEVER send the guest to a DIFFERENT hotel for breakfast.
-```
+2. **Backend normalization** — `calculateDuration(startTime, endTime)` at line 2458 in `index.ts` blindly subtracts, producing large `durationMinutes` values. No special handling for end-of-day accommodation.
 
-**Change 2: Update standard day structure in `index.ts` (line 9355)**
+3. **Front-end partial fix** — Line 10340-10342 in `EditorialItinerary.tsx` already shows "Overnight" when `durationMinutes > 180` for accommodation, but this still shows a misleading label for what should be a brief activity.
 
-Change from "Near hotel" to "At hotel restaurant or nearby café — NEVER at a different hotel":
+### Fix — Two changes
 
-```
-1. BREAKFAST (category: "dining") — At the hotel's own restaurant 
-   (preferred) or a real café nearby. NEVER at a DIFFERENT hotel's 
-   restaurant. Use the hotel name: [hotelName].
-```
+**Change 1: Backend — Clamp end-of-day accommodation cards (`index.ts`, after line ~2476)**
 
-Also update all departure day prompts (lines 8730, 8806, 8866, 9061) similarly.
-
-**Change 3: Post-generation breakfast validator in `index.ts`**
-
-After the category normalizer (Stage 2 area), add a pass that checks breakfast activities for other hotel names:
+After the logistics auto-fix block, add a pass that detects "Return to Hotel" / "Freshen up" / end-of-day accommodation cards and clamps their duration:
 
 ```typescript
-// Post-generation: fix breakfast at wrong hotel
-const HOTEL_KEYWORDS = /\b(hotel|palace|hyatt|marriott|hilton|ritz|aman|mandarin|peninsula|shangri|intercontinental|westin|sheraton|conrad|waldorf|st\.?\s*regis|four\s*seasons|park\s*hyatt|andaz|w\s+hotel)\b/i;
+// Clamp end-of-day accommodation cards to realistic duration
+const accomTitle = (normalizedAct.title || '').toLowerCase();
+const isReturnToHotel = normalizedAct.category?.toLowerCase() === 'accommodation' &&
+  (accomTitle.includes('return to') || accomTitle.includes('freshen up') || 
+   accomTitle.includes('rest at') || accomTitle.includes('back to'));
 
-for (const day of allDays) {
-  for (const act of day.activities || []) {
-    const title = (act.title || '').toLowerCase();
-    const isBreakfast = title.includes('breakfast') && 
-      (act.category || '').toLowerCase() === 'dining';
-    if (!isBreakfast || !hotelName) continue;
-    
-    const hotelNameLower = hotelName.toLowerCase();
-    const mentionsOtherHotel = HOTEL_KEYWORDS.test(title) && 
-      !title.includes(hotelNameLower.split(' ').slice(-2).join(' '));
-    
-    if (mentionsOtherHotel) {
-      act.title = `Breakfast at ${hotelName}`;
-      act.description = `Start the morning at your hotel's restaurant.`;
-      if (act.location) act.location.name = hotelName;
-      console.log(`[Breakfast fix] Changed "${title}" → "Breakfast at ${hotelName}"`);
-    }
+if (isReturnToHotel && normalizedAct.durationMinutes > 60) {
+  // "Return to hotel" is a 15-min activity, not an overnight stay
+  const clampedDuration = 15;
+  normalizedAct.durationMinutes = clampedDuration;
+  if (normalizedAct.startTime) {
+    const startMins = timeToMinutes(normalizedAct.startTime);
+    normalizedAct.endTime = minutesToHHMM(startMins + clampedDuration);
   }
+  normalizedAct.duration = '15 min';
+  console.log(`[Duration fix] Clamped "${normalizedAct.title}" from ${act.durationMinutes || '?'}min to ${clampedDuration}min`);
 }
 ```
 
-**Change 4: Soften culinary archetype constraint in `archetype-constraints.ts`**
+Also apply the same logic in the **bookend validator** — its "Return to" cards already use `dur=15` so they're fine, but AI-generated ones that survive alongside should also be clamped.
 
-Change line 1135 from blanket "Hotel breakfast = VIOLATION" to:
+**Change 2: Front-end — Better fallback for accommodation cards (`EditorialItinerary.tsx`, line ~10338-10343)**
+
+Update the display logic so accommodation cards with unreasonable durations show the clamped value, not "Overnight":
+
+```typescript
+// Replace the current accommodation duration display logic
+{(activityType === 'accommodation' || titleLower.includes('return to') || titleLower.includes('freshen up'))
+  ? (activity.durationMinutes && activity.durationMinutes > 180
+    ? (titleLower.includes('check-in') || titleLower.includes('checkout') 
+       ? activity.duration 
+       : null)  // Hide duration entirely for return-to-hotel cards with bad data
+    : activity.duration)
+  : activity.duration}
 ```
-Hotel breakfast at budget/chain hotels = VIOLATION (unless exceptional).
-Luxury hotel restaurants (Four Seasons, Aman, Park Hyatt, etc.) are 
-ACCEPTABLE and often PREFERRED for breakfast.
-```
+
+This hides the duration line entirely for "Return to Hotel" cards with obviously wrong durations (>3 hours), rather than showing "Overnight" or "8h 00m".
 
 ### Result
 
 | Before | After |
 |--------|-------|
-| Day 3: "Grand Kitchen at Palace Hotel Tokyo" | "Breakfast at Four Seasons Otemachi" |
-| Day 4: "The Restaurant by Aman Tokyo" | "Breakfast at Four Seasons Otemachi" |
-| Day 5: generic "a kissaten" placeholder | "Breakfast at Four Seasons Otemachi" |
-| Culinary archetype bans all hotel breakfast | Luxury hotel breakfast is preferred |
+| Day 2: Return to Hotel 10:25 PM → 11:59 PM, "8h 00m" | 10:25 PM → 10:40 PM, "15 min" |
+| Day 4: Return to Hotel 10:30 PM → 6:30 AM, "8:00" | 10:30 PM → 10:45 PM, "15 min" |
+| Front-end shows "Overnight" for >3h accommodation | Duration hidden or shows correct 15 min |
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/meal-policy.ts` | Update breakfast instruction to prefer hotel restaurant |
-| `supabase/functions/generate-itinerary/index.ts` | Update day structure prompt + departure prompts; add post-gen breakfast validator |
-| `supabase/functions/generate-itinerary/archetype-constraints.ts` | Soften hotel breakfast prohibition for luxury hotels |
+| `supabase/functions/generate-itinerary/index.ts` | Clamp Return to Hotel / Freshen up durationMinutes to 15min, fix endTime |
+| `src/components/itinerary/EditorialItinerary.tsx` | Hide duration display for accommodation cards with unreasonable duration values |
 
