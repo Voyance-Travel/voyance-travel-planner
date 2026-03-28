@@ -204,6 +204,10 @@ export async function handleGenerateTripDay(
 
   const cityInfo = dayCityMap?.[dayNumber - 1];
 
+  // Progress: context loaded
+  const contextPct = 5 + Math.round((Math.max(0, dayNumber - 1) / totalDays) * 90);
+  await timer.updateProgress(`context_loaded_day_${dayNumber}`, contextPct);
+
   // Load existing days from itinerary_data (for context)
   const existingData = (tripCheck.itinerary_data as any) || {};
   const existingDays: any[] = Array.isArray(existingData.days) ? existingData.days : [];
@@ -282,6 +286,8 @@ export async function handleGenerateTripDay(
   let dayResult: any = null;
   let lastError: string | null = null;
   const dayGenStart = Date.now();
+
+  await timer.updateProgress(`generating_day_${dayNumber}`, contextPct + 2);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -423,6 +429,9 @@ export async function handleGenerateTripDay(
         }
       }
 
+      timer.addError('all_days_failed', lastError || 'Unknown');
+      await timer.finalize('failed');
+
       return new Response(
         JSON.stringify({ status: 'failed', dayNumber, error: lastError }),
         { headers: jsonHeaders }
@@ -483,6 +492,9 @@ export async function handleGenerateTripDay(
           }
         }
       }
+
+      timer.addError('partial_failure', `${failedDays.length} days failed: ${failedDays.join(', ')}`);
+      await timer.finalize('failed');
 
       return new Response(
         JSON.stringify({ status: 'partial', dayNumber, failedDays, error: lastError }),
@@ -1002,6 +1014,10 @@ export async function handleGenerateTripDay(
       } catch (metaErr) {
         console.error('[generate-trip-day] Failed to update chain failure metadata:', metaErr);
       }
+
+      // Finalize timer — chain broke so generation won't continue
+      timer.addError('chain_broken', `Chain to day ${dayNumber + 1} failed after ${maxRetries} attempts`);
+      await timer.finalize('failed');
     }
 
     return new Response(
