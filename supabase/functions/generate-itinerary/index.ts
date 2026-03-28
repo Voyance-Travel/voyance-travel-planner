@@ -10331,6 +10331,12 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           throw new Error("Invalid AI response format");
         }
 
+        // End parse phase, start post-processing
+        if (innerTimer) {
+          innerTimer.endPhase(`parse_response_day_${dayNumber}`);
+          innerTimer.startPhase(`post_processing_day_${dayNumber}`);
+        }
+
         // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
         // This ensures AI knows to skip those time slots, saving money and guaranteeing locks work
 
