@@ -1,72 +1,46 @@
 
 
-## Fix: Payments Tab — Math Gap & Missing Flights
+## Fix: Suppress False Hours Warnings (Blue Note Case)
 
-Two root causes explain both the $4,328 gap and the $0 flights.
+**Problem**: The hours data "Thursday: Open 06:00–10:30" is clearly wrong for a jazz club with evening performances. The system trusts it blindly and shows a scary amber warning.
+
+**Root cause**: `isVenueOpenOnDay()` in `truth-anchors.ts` parses hours and flags conflicts without any plausibility check. Google Places sometimes returns incorrect hours (especially for venues with irregular schedules like live music clubs).
 
 ---
 
-### Problem 1: Flights Show $0
+### Fix: Add hours plausibility guard
 
-**Root cause**: `usePayableItems` checks `flightSelection?.totalPrice` (line 108), but the `FlightSelection` interface doesn't have a `totalPrice` field — it only has `outbound`, `return`, and `legs[]`, each with individual `price` fields. So the check always fails and flights are never added.
+**File: `supabase/functions/generate-itinerary/truth-anchors.ts`** — in `isVenueOpenOnDay()` (line ~466), before returning the "not within range" violation:
 
-**Fix** in `src/hooks/usePayableItems.ts`:
-- Compute flight total from legs: sum all `leg.price` values, or fall back to `outbound.price + return.price`
-- Also check the `activity_costs` DB rows for a `flight` category (day_number=0) as a secondary fallback when no flight selection exists
-- Update the `flightSelection` type in the hook's interface to include `legs?: { price?: number; airline?: string }[]`
+Add a check: if ALL parsed time ranges close before noon (720 mins) AND the scheduled time is evening (≥17:00 / 1020 mins), the hours data is almost certainly wrong. Return `isOpen: true` instead of flagging a violation.
 
 ```typescript
-// Replace the simple totalPrice check with:
-const flightTotal = flightSelection?.totalPrice 
-  || (flightSelection as any)?.legs?.reduce((s, l) => s + (l?.price || 0), 0)
-  || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0));
-
-if (flightTotal > 0) {
-  // ... create flight payable item with flightTotal
-}
-
-// Also: if no flight from selection, check activity_costs for flight row
-if (!flightTotal && activityCosts?.length) {
-  const flightRow = activityCosts.find(r => r.category === 'flight' && r.day_number === 0);
-  if (flightRow && flightRow.cost_per_person_usd > 0) {
-    // Add flight from DB ledger
+if (!withinRange) {
+  // Plausibility guard: if hours show venue closing before noon
+  // but activity is scheduled for evening, the hours data is suspect
+  const allCloseBeforeNoon = timeRanges.every(r => {
+    const effectiveClose = r.close <= r.open ? r.close + 1440 : r.close;
+    return effectiveClose <= 720; // noon
+  });
+  if (allCloseBeforeNoon && scheduledMins >= 1020) { // 17:00+
+    // Hours data is implausible for an evening activity — suppress warning
+    return { isOpen: true };
   }
+  
+  return { isOpen: false, reason: `...` };
 }
 ```
 
----
+This catches the exact pattern: morning-only hours (06:00–10:30) with an evening activity (20:45). It won't affect legitimate warnings like a museum closing at 5 PM when scheduled at 6 PM.
 
-### Problem 2: Activity Costs Are Per-Person, Not Multiplied by Travelers
-
-**Root cause**: The `usePayableItems` hook reads `activity.cost.amount` which is the per-person cost. It stores this directly as `amountCents` without multiplying by `travelers`. Meanwhile, `useTripFinancialSnapshot` computes the trip total as `cost_per_person_usd × num_travelers` from the DB. This creates the gap:
-
-- Snapshot: $100/pp × 2 travelers = $200 per activity
-- Payable items: $100 per activity (per-person only)
-
-For a trip with 2 travelers and ~$4,800 in per-person activity costs, this explains the ~$4,328 gap (activities counted at 1× instead of 2×).
-
-**Fix** in `src/hooks/usePayableItems.ts`:
-- Activity amounts should reflect total group cost (per-person × travelers) to match the trip total
-- Add the `/pp` label in the UI display, but the `amountCents` value should be the total payable amount
-
-```typescript
-// Line 218: multiply by travelers for total payable amount
-amountCents: Math.round(cost * travelers * 100),
-```
-
-This ensures the Payments tab total = Trip Total shown in the header.
+**Additionally**, in `index.ts` Stage 4.5 (line ~7327), add the same category-aware guard: for categories like `nightlife`, `entertainment`, `bar`, `jazz`, `club` — if the hours look implausible (close before noon), skip the closedRisk tag entirely.
 
 ---
 
-### Problem 3: DB Reconciliation Also Uses Per-Person
-
-The reconciliation block (lines 252-288) also doesn't account for the fact that `cost_per_person_usd × num_travelers` should give total, but it already does this correctly on line 266. However, the JSON-parsed activities above don't, causing a mismatch between the two paths.
-
----
-
-### Summary
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/hooks/usePayableItems.ts` | (1) Compute flight total from leg prices when `totalPrice` missing. (2) Add DB fallback for flight costs. (3) Multiply activity per-person costs by `travelers` so totals match snapshot. (4) Update `flightSelection` interface to include `legs`. |
+| `supabase/functions/generate-itinerary/truth-anchors.ts` | Add plausibility guard in `isVenueOpenOnDay()` — suppress false violations when hours close before noon but activity is evening |
+| `supabase/functions/generate-itinerary/index.ts` | Add category-aware plausibility check in Stage 4.5 before tagging `closedRisk` |
 
