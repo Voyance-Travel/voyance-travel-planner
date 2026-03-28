@@ -1,47 +1,42 @@
 
 
-## Fix Final Departure Card — Dedup + Design
+## Fix Hotel Pricing Mismatch Between Budget & Payments
 
-### Problem 1: Dedup patterns miss city names
+### Root Cause
 
-"Transfer to Narita Airport (NRT)" is not caught by `"transfer to airport"` because "Narita" sits between the words. Same for "Transfer to Tokyo Station" vs `"transfer to station"`.
+Two different calculation paths produce different hotel prices:
 
-**Fix**: Replace substring matching with smarter keyword detection that checks for the presence of key tokens regardless of what's between them:
+**Budget tab** → `useTripFinancialSnapshot` → reads `activity_costs` table → hotel row written by `syncHotelToLedger` which correctly computes `totalPrice` or `pricePerNight × nights` (from check-in/check-out dates).
 
+**Payments tab** → `usePayableItems` → reads `hotelSelection` JSON directly → line 130:
 ```js
-// Instead of: t.includes('transfer to airport')
-// Use: t.includes('transfer to') && (t.includes('airport') || t.includes('station') || ...)
-const isTransferActivity = t.includes('transfer to') && 
-  (t.includes('airport') || t.includes('station') || t.includes('port') || t.includes('terminal'));
-const isDepartureActivity = t.includes('departure from') || t.includes('depart from');
-const isHeadingTo = (t.includes('head to') || t.includes('travel to')) && 
-  (t.includes('airport') || t.includes('station') || t.includes('port'));
+const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * days.length;
 ```
 
-This catches "Transfer to Narita Airport (NRT)", "Departure from Narita Airport", "Head to Tokyo Station", etc.
+**Problem**: `days.length` is the number of **days** (e.g. 7), but hotels charge per **night** (e.g. 6). When `totalPrice` is missing and only `pricePerNight` exists, the Payments tab overcharges by one night.
 
-**File**: `EditorialItinerary.tsx` lines 1816-1832
+Additionally, `syncHotelToLedger` calls `upsertLogisticsCost` with `numTravelers=1` (default), which stores the full hotel cost as `cost_per_person_usd`. The snapshot then multiplies `cost_per_person_usd × num_travelers` — this works correctly only because both default to 1. But if `numTravelers` were ever passed differently, it would break.
 
-### Problem 2: Card looks bad
+### Fix
 
-Current card shows:
-- "HEADING HOME" small label
-- "TRAIN" bold uppercase label (from `transportName`)
-- "Train home" as title — redundant with the label above
+**File: `src/hooks/usePayableItems.ts` — line 130**
 
-**Fixes in `InterCityTransportCard.tsx`**:
+Change the fallback from `days.length` to `Math.max(1, days.length - 1)` to match the standard nights calculation used everywhere else:
 
-1. **Remove redundant transport type label** when variant is `final` — the "HEADING HOME" header already signals what this is. Instead show the carrier/route info where the label currently sits.
+```js
+// Before
+const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * days.length;
 
-2. **Better title generation** in `EditorialItinerary.tsx`: Instead of `"Train home"`, generate something like `"Train to [home city]"` or just use the carrier name + route. When no home city is known, use the route (`Tokyo → Home`) rather than the generic "Train home".
+// After
+const nights = Math.max(1, days.length - 1);
+const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * nights;
+```
 
-3. **Clean up the card layout for final variant**: Merge the transport type into the heading line so it reads `"Heading Home · Train"` instead of stacking three separate text elements.
+This is a one-line fix in one file that aligns the Payments tab with the Budget tab and the DB ledger.
 
 ### Files changed
 
 | File | Change |
 |------|--------|
-| `EditorialItinerary.tsx` (~line 1816) | Replace substring dedup with token-based matching |
-| `EditorialItinerary.tsx` (~line 1746) | Generate better title using route info |
-| `InterCityTransportCard.tsx` (~line 80) | For final variant, merge transport type into heading, remove redundant label |
+| `src/hooks/usePayableItems.ts` | Fix hotel nights calculation: `days.length` → `Math.max(1, days.length - 1)` |
 
