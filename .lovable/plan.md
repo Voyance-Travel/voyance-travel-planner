@@ -1,37 +1,50 @@
 
+The issue is still the same class of failure: a render-time `.toLowerCase()` is being called on a value that is sometimes missing or malformed in itinerary data.
 
-# Fix: Persistent `.toLowerCase()` crash in itinerary render
+What I found:
+- `ActivityRow` is still the failing area in `src/components/itinerary/EditorialItinerary.tsx`.
+- The last sweep fixed several transport/title cases, but there are still unguarded normalization paths nearby.
+- In particular:
+  - `src/components/itinerary/EditorialItinerary.tsx:10458` uses `activityType.toLowerCase()`
+  - `src/components/itinerary/EditorialItinerary.tsx:1168-1170` returns `activity.category || activity.type || 'activity'` without coercion, so a non-string truthy value can flow into render and then crash on `.toLowerCase()`
+  - `src/lib/cost-estimation.ts` still has older bare calls in the estimation path:
+    - `title.toLowerCase()`
+    - `city.toLowerCase()`
+    - `country.toLowerCase()`
+    - `category.toLowerCase()`
 
-## Problem
-The crash persists with the **new bundle** (`Bp3QcUDA`), confirming the PWA fix worked but an unguarded `.toLowerCase()` still exists in the render path. The file has **249 `.toLowerCase()` calls** across 11K lines, making it impractical to find the exact one from a minified stack trace.
+Do I know what the issue is?
+Yes. The previous fix was incomplete. Some `.toLowerCase()` calls were guarded, but the code still assumes certain backend fields are always strings. If the AI/backend sends an object, number, or other truthy non-string value for `category`, `type`, `city`, `country`, or `title`, the render/estimation path can still crash.
 
-## Root cause
-Multiple functions in `EditorialItinerary.tsx` and `cost-estimation.ts` call `.toLowerCase()` on values that can be `undefined` when activity data from the AI backend is incomplete. The fallback chains (e.g., `activity.category || activity.type || 'activity'`) look safe in isolation, but edge cases exist where intermediate values are non-null but non-string (e.g., an object, a number, or `false`).
+Implementation plan:
+1. Harden `getActivityType` in `EditorialItinerary.tsx`
+- Make it return a guaranteed lowercase-safe string using `safeLower` or `String(...)`.
+- This prevents downstream render code from receiving non-string `activityType`.
 
-## Fix: Nuclear defensive sweep
+2. Fix the remaining render-path crash in `ActivityRow`
+- Replace `activityType.toLowerCase()` with a safe normalized value derived once from `safeLower(activityType)`.
+- Reuse that normalized value in the non-reviewable activity logic.
 
-### 1. Guard `cost-estimation.ts` (2 bare calls)
-- **Line 332**: `category.toLowerCase()` → `(category || 'activity').toLowerCase()`
-- **Line 402**: `category.toLowerCase()` → `(category || 'activity').toLowerCase()`
-- **Lines 363, 371**: `city.toLowerCase()`, `country.toLowerCase()` — already inside null checks but add `|| ''` for safety
+3. Finish the defensive sweep in `cost-estimation.ts`
+- Guard remaining bare `.toLowerCase()` calls in:
+  - `inferMealTypeFromTitle`
+  - `getCostIndex`
+  - `estimateCost`
+- Normalize `category`, `title`, `city`, and `country` with safe coercion before string operations.
 
-### 2. Guard remaining bare calls in `EditorialItinerary.tsx`
-- **Lines 1040-1041**: `category.toLowerCase()` and `title.toLowerCase()` → use `safeLower()` or add `|| ''` guards
-- **Line 2580**: `newMode.toLowerCase()` → `(newMode || '').toLowerCase()`
-- **Line 2610**: `newMode.toLowerCase()` → `(newMode || '').toLowerCase()`
-- **Line 2619**: `newMode.toLowerCase()` → `(newMode || '').toLowerCase()`
-- **Lines 8573-8576**: `o.mode.toLowerCase()` → `(o.mode || '').toLowerCase()`
+4. Keep the fix narrow and consistent
+- Reuse the existing `src/utils/safeLower.ts` helper instead of mixing new ad hoc patterns.
+- Do not change feature behavior; only harden inputs so malformed itinerary payloads fall back to safe defaults.
 
-### 3. Add a safety wrapper at the top of `ActivityRow`
-Add an early-return guard: if `activity` is nullish, return `null`. This prevents all downstream property accesses from crashing.
+Expected result:
+- No more itinerary white-screen/render crash from undefined or non-string values hitting `.toLowerCase()`.
+- Bad backend data will degrade to default behavior (`activity`, empty string matching, default cost heuristics) instead of crashing the page.
 
-### 4. Add `safeLower` to `getActivityType` and `getActivityCostInfo`
-Replace raw `||` chains with explicit `safeLower()` calls to handle non-string edge cases (e.g., `activity.category` being an object or number).
-
-## Files to modify
-- `src/lib/cost-estimation.ts` — guard 2 bare `.toLowerCase()` calls
-- `src/components/itinerary/EditorialItinerary.tsx` — guard ~8 bare `.toLowerCase()` calls + add ActivityRow null check
-
-## Expected result
-No more render crashes from `.toLowerCase()` regardless of what data shape the AI backend returns.
-
+Technical details:
+- Files to update:
+  - `src/components/itinerary/EditorialItinerary.tsx`
+  - `src/lib/cost-estimation.ts`
+- Likely code changes:
+  - import and use `safeLower`
+  - sanitize `getActivityType`
+  - replace remaining direct `.toLowerCase()` calls on uncertain values
