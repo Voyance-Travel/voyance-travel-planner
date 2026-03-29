@@ -1,54 +1,59 @@
 
 
-# Fix: Ensure 3 Meals Per Day (Except Arrival/Departure)
+# Fix: Ensure Hotel Relaxing & Airport Departure Cards
 
 ## Problem
+Two types of activity cards are missing from generated itineraries:
+1. **Hotel relaxing card** — When returning to the hotel mid-day (e.g., between afternoon and evening), only a transport entry exists. There's no dedicated accommodation card showing time at the hotel (freshen up, rest, change clothes).
+2. **Airport departure card** — On the last day, the "Departure" card (security, check-in, boarding) may be stripped by frontend dedup logic.
 
-When no flight data is provided, the meal policy for Day 1 defaults to `['dinner']` only (assuming a conservative afternoon arrival). This means breakfast and lunch are skipped on Day 1. The user wants all standard days — including Day 1 without flight data — to have breakfast, lunch, and dinner.
+## Root Causes
 
-Data confirms: Vienna trip `c28f...` Day 1 has **zero dining activities** out of 7 total activities. The meal guard should catch this but the policy itself only requires dinner, so nothing is flagged as missing.
+### Hotel Relaxing (Backend)
+In `compile-prompt.ts` line 425, the "HOTEL RETURN" instruction says "REQUIRED **if dinner is far from hotel**" — making it conditional. The AI often skips it. The bookend repair (`repair-day.ts` line 689-696) does inject "Freshen up at [Hotel]" but only when a transport-to-hotel activity exists without a following accommodation card. If the AI skips both the transport AND the accommodation card, nothing catches it.
 
-## Root Cause
+**Fix**: Make the hotel return instruction unconditional in the prompt, and strengthen the bookend repair to guarantee a mid-evening hotel return on full exploration days.
 
-In `supabase/functions/generate-itinerary/meal-policy.ts`, lines 148-150:
+### Airport Departure (Frontend)
+In `EditorialItinerary.tsx` lines 1865-1890, when a synthetic departure card is injected, the dedup filter strips AI-generated activities matching hub tokens (`airport`, `station`, etc.) including departure/security cards. The "Departure" card from the AI (with "Check-in, security, and boarding") gets caught by this filter because its title contains "airport" or "departure" keywords.
 
-```typescript
-// No arrival time — conservative (assume afternoon arrival)
-return meal('midday_arrival', ['dinner'], usableHours,
-  'Arrival time unknown — conservatively planning dinner only.');
-```
-
-When `isFirstDay` is true but no `arrivalTime24` is provided, only dinner is required. Similarly, when `isLastDay` is true with no departure time, only breakfast is required (line 184).
+**Fix**: Preserve AI-generated "Departure" / "Security" cards that have category `transport` and describe airport procedures, rather than stripping all airport-keyword matches.
 
 ## Changes
 
-### File: `supabase/functions/generate-itinerary/meal-policy.ts`
-
-**Change 1 — Day 1 without flight data (line 148-150):**
-When no arrival time is provided, treat it as a morning arrival (full day) instead of assuming afternoon:
+### 1. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` (~line 425)
+Make hotel return mandatory on full exploration days (not conditional on dinner distance):
 
 ```typescript
-// No arrival time — assume full day available (morning start)
-return meal('morning_arrival', ['breakfast', 'lunch', 'dinner'], usableHours,
-  'Arrival time unknown — planning a full day with all 3 meals. Add flight details to adjust if arriving later.');
+// Before:
+${flightContext.hotelName ? `6. HOTEL RETURN (REQUIRED if dinner is far from hotel) — ...` : ''}
+
+// After:
+${flightContext.hotelName ? `6. HOTEL RETURN (REQUIRED) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30 min. Every full day MUST include a hotel return between afternoon activities and dinner. This MUST be a separate activity card.` : ''}
 ```
 
-**Change 2 — Last day without departure time (line 183-185):**
-When no departure time is provided, plan breakfast + lunch instead of breakfast only:
+### 2. `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (~line 698)
+Strengthen end-of-day hotel return to also guarantee a mid-day return on full exploration days (when day has both lunch and dinner):
+
+After the existing end-of-day hotel return (line 698-706), add a mid-day return check:
+- If the day has both a lunch and dinner activity but NO accommodation card between them, inject "Freshen up at [Hotel]" with a 30-minute slot between the last afternoon activity and dinner.
+
+### 3. `src/components/itinerary/EditorialItinerary.tsx` (~line 1880)
+Preserve AI-generated departure/security cards during dedup. The filter currently removes all activities with "departure" in the title — modify to keep activities with category `transport` that describe airport check-in/security procedures (not transfer/transit activities):
 
 ```typescript
-// No departure time — plan morning + lunch before checkout
-return meal('midday_departure', ['breakfast', 'lunch'], usableHours,
-  'Departure time unknown — planning breakfast + lunch. Add flight details for better planning.');
+// Add exclusion: keep "Departure" cards that describe airport procedures
+const isAirportProcedure = t.includes('departure') && 
+  (act.description || '').toLowerCase().includes('security') || 
+  (act.description || '').toLowerCase().includes('check-in') || 
+  (act.description || '').toLowerCase().includes('boarding');
+if (isAirportProcedure) return true; // Keep this card
+
+const isDepartureActivity = t.includes('departure from') || ...
 ```
-
-## Why This Is Safe
-
-- If the user later adds flight data, the meal policy will recalculate with the actual times
-- The meal guard + validation pipeline still enforces whatever the policy says
-- Mid-trip days (the main concern) are already correct — they get `full_exploration` with all 3 meals
-- This only changes the default when flight info is missing, which should err on the side of **more meals, not fewer**
 
 ## Files to modify
-- `supabase/functions/generate-itinerary/meal-policy.ts` — 2 small edits to default meal requirements
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — make hotel return mandatory
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add mid-day hotel return guarantee
+- `src/components/itinerary/EditorialItinerary.tsx` — preserve airport departure cards in dedup
 
