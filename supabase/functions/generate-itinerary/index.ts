@@ -12947,7 +12947,7 @@ Return ONLY the JSON array, no other text.`;
     // The chain continues server-side even if the user closes their browser.
     // ==========================================================================
     if (action === 'generate-trip-day') {
-      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip } = params;
+      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip, generationLogId } = params;
 
       if (!tripId || !dayNumber || !totalDays) {
         return new Response(
@@ -12956,7 +12956,19 @@ Return ONLY the JSON array, no other text.`;
         );
       }
 
-      console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'})`);
+      console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'}, logId: ${generationLogId || 'none'})`);
+
+      // Resume generation timer for progress tracking
+      let innerTimer: GenerationTimer | null = null;
+      if (generationLogId) {
+        try {
+          innerTimer = new GenerationTimer(tripId, supabase);
+          await innerTimer.resume(generationLogId, destination || '', totalDays || 1, travelers || 1);
+        } catch (e) {
+          console.warn('[generate-trip-day] Timer resume failed (non-blocking):', e);
+          innerTimer = null;
+        }
+      }
 
       // Guard: check trip is still in "generating" state AND run ID matches (user might have cancelled or a new run started)
       const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data').eq('id', tripId).single();
@@ -13051,6 +13063,12 @@ Return ONLY the JSON array, no other text.`;
         }).eq('id', tripId);
       }
 
+      // Update generation timer: context loaded for this day
+      if (innerTimer) {
+        const dayPct = Math.round(10 + ((dayNumber - 1) / totalDays) * 80);
+        await innerTimer.updateProgress(`context_loaded_day_${dayNumber}`, dayPct);
+      }
+
       // ─── PER-CITY STATUS: Mark city as 'generating' on first day ───
       if (isMultiCity && dayCityMap && cityInfo) {
         const prevCityInfo = dayNumber > 1 ? dayCityMap[dayNumber - 2] : null;
@@ -13121,6 +13139,13 @@ Return ONLY the JSON array, no other text.`;
           if (!data.day) throw new Error(`No day data returned for day ${dayNumber}`);
 
           dayResult = data.day;
+
+          // Update generation timer: AI generation complete for this day
+          if (innerTimer) {
+            const genPct = Math.round(10 + ((dayNumber - 0.5) / totalDays) * 80);
+            await innerTimer.updateProgress(`generated_day_${dayNumber}`, genPct);
+          }
+
           break; // success
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -13135,6 +13160,12 @@ Return ONLY the JSON array, no other text.`;
       if (!dayResult) {
         // This day failed after all retries — mark as partial/failed
         console.error(`[generate-trip-day] Day ${dayNumber} failed permanently: ${lastError}`);
+
+        // Finalize timer as failed
+        if (innerTimer) {
+          innerTimer.addError(`day_${dayNumber}_generation`, lastError || 'Unknown error');
+          await innerTimer.finalize('failed');
+        }
         
         const { data: failTrip } = await supabase.from('trips').select('metadata, unlocked_day_count').eq('id', tripId).single();
         const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
@@ -13391,6 +13422,12 @@ Return ONLY the JSON array, no other text.`;
 
         console.log(`[generate-trip-day] ✅ Trip ${tripId} generation complete: ${totalDays} days`);
 
+        // Finalize generation timer as completed
+        if (innerTimer) {
+          await innerTimer.updateProgress('completing', 95);
+          await innerTimer.finalize('completed');
+        }
+
         // Trigger next journey leg if applicable
         await triggerNextJourneyLeg(supabase, tripId);
 
@@ -13412,6 +13449,12 @@ Return ONLY the JSON array, no other text.`;
             generation_current_city: nextCityName,
           },
         }).eq('id', tripId);
+
+        // Update generation timer: day saved
+        if (innerTimer) {
+          const savedPct = Math.round(10 + (dayNumber / totalDays) * 80);
+          await innerTimer.updateProgress(`saved_day_${dayNumber}`, savedPct);
+        }
 
         console.log(`[generate-trip-day] Day ${dayNumber}/${totalDays} complete, chaining to day ${dayNumber + 1}`);
 
@@ -13437,6 +13480,7 @@ Return ONLY the JSON array, no other text.`;
           totalDays,
           generationRunId,
           isFirstTrip: isFirstTrip || false,
+          generationLogId,
         });
 
         // Retry loop with exponential backoff for intermittent 403 errors
