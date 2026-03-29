@@ -1,72 +1,136 @@
 
 
-## Fix: Description Text Quality Issues
+## Decomposing the Monolith: Incremental Pipeline Architecture
 
-**Root cause**: The `action-generate-trip-day.ts` file (the primary generation path) has NO post-processing for forward references, generic titles, or phantom hotels. All of those cleanup steps only exist in the Stage 2 handler in `index.ts` (~lines 2554-2594). Days generated via `action-generate-trip-day.ts` skip all of them.
+### The Problem
 
-### Changes
+`index.ts` is **13,491 lines** containing three massive inline handlers:
+- `generate-full` (~2,800 lines, 5028-7810) — legacy full pipeline
+- `generate-day` (~4,000 lines, 7815-11821) — single day AI call + post-processing
+- `generate-trip-day` (~600 lines, 12910-13491) — **duplicate** of `action-generate-trip-day.ts`
 
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+The duplication is the root cause of most bugs. There are TWO implementations of `generate-trip-day` (the extracted 1,048-line `action-generate-trip-day.ts` AND the inline 12910-13491 block in index.ts). The extracted version passes restaurant pools; the inline one doesn't. Hotel rotation bugs, missing restaurant data, and inconsistent sanitization all trace back to this split-brain.
 
-After `dayResult` is confirmed valid (line 545, after `dayResult!.dayNumber = dayNumber`), add a post-processing block that mirrors the Stage 2 cleanup from index.ts:
+### Architecture Today
 
-```typescript
-import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField } from './sanitization.ts';
-
-// ... after line 545 (dayResult!.dayNumber = dayNumber):
-
-// ── POST-PROCESSING: sanitize, strip phantoms, fix forward refs, clean generic titles ──
-{
-  const resolvedDest = cityInfo?.cityName || destination;
-  sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest);
-  
-  const hasHotel = !!(cityInfo?.hotelName || flightHotelContext?.hotelName);
-  if (!hasHotel) {
-    stripPhantomHotelActivities(dayResult, false);
-  }
-
-  // Forward-ref fix: strip hallucinated tomorrow references from accommodation descriptions
-  const hotelName = cityInfo?.hotelName || flightHotelContext?.hotelName || 'your hotel';
-  for (const act of (dayResult.activities || [])) {
-    const cat = (act.category || '').toLowerCase();
-    const title = (act.title || '').toLowerCase();
-    const isReturnAccom = cat === 'accommodation' &&
-      (title.includes('return to') || title.includes('freshen up') || title.includes('back to') || title.includes('settle in'));
-    if (isReturnAccom && act.description && /tomorrow/i.test(act.description)) {
-      act.description = `Time at ${hotelName} to rest and refresh.`;
-    }
-  }
-
-  // Generic title validator: clean placeholder business names
-  const INDEFINITE_ARTICLE_START = /^(a|an)\s+[a-z]/i;
-  const VAGUE_TITLE_KEYWORDS = /\b(or high.end|or similar|boutique wellness|local spa|nearby caf[eé])\b/i;
-  for (const act of (dayResult.activities || [])) {
-    const title = (act.title || '').trim();
-    if (INDEFINITE_ARTICLE_START.test(title) || VAGUE_TITLE_KEYWORDS.test(title)) {
-      act.title = sanitizeAITextField(title, resolvedDest);
-      act.name = act.title;
-    }
-  }
-}
+```text
+index.ts (13,491 lines)
+├── Routing switch (~300 lines)
+├── generate-full handler (2,800 lines) ← legacy, rarely used
+├── generate-day handler (4,000 lines) ← the actual AI call
+├── Extracted action delegates (get-trip, save, sync, etc.) ← clean
+├── generate-trip inline (600 lines) ← DUPLICATE of action-generate-trip.ts
+└── generate-trip-day inline (580 lines) ← DUPLICATE of action-generate-trip-day.ts
 ```
 
-**File: `supabase/functions/generate-itinerary/sanitization.ts`**
+### Strategy: Extract in Phases, Never Break the Chain
 
-Strengthen the FORWARD_REF_RE to also catch broader "tomorrow" references in descriptions (not just "rest for tomorrow's"):
+We don't rewrite from scratch. We extract the `generate-day` handler (the 4,000-line core) into its own action file, then delete the inline duplicates. Each phase is independently deployable.
 
-```typescript
-// Add a second forward-ref pattern for broader "tomorrow" hallucinations
-const TOMORROW_REF_RE = /\b(?:for |before )?tomorrow'?s?\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+(?:adventure|exploration|experience|excursion|day|visit)\b[^.]*/gi;
+---
+
+### Phase 1: Kill the Inline Duplicates (Zero Risk)
+
+**Goal**: Remove the duplicate `generate-trip` and `generate-trip-day` handlers from index.ts that are already extracted into action files.
+
+**File: `index.ts`**
+- Delete lines 12292-12903 (inline `generate-trip`) — already handled by `action-generate-trip.ts`
+- Delete lines 12910-13491 (inline `generate-trip-day`) — already handled by `action-generate-trip-day.ts`
+- The routing at the top already imports and delegates to these action files, so the inline blocks are dead code that only runs if the extracted handlers are somehow skipped
+
+**Verify**: Confirm the routing switch at the top of the serve handler routes `generate-trip` and `generate-trip-day` to the extracted handlers BEFORE reaching the inline blocks.
+
+**Impact**: ~1,200 lines removed. Eliminates the split-brain where the inline version doesn't pass restaurant pools.
+
+---
+
+### Phase 2: Extract `generate-day` Into Its Own Action File
+
+**Goal**: Move the 4,000-line `generate-day`/`regenerate-day` handler out of index.ts into `action-generate-day.ts`.
+
+**File: `action-generate-day.ts`** (new)
+- Move lines 7815-11821 from index.ts
+- Import all the same modules it currently uses (prompt-library, truth-anchors, sanitization, etc.)
+- Export as `handleGenerateDay(supabase, userId, params)`
+
+**File: `index.ts`**
+- Add `import { handleGenerateDay } from './action-generate-day.ts'`
+- Replace the 4,000-line inline block with a 3-line delegate
+
+**Impact**: index.ts drops from ~13,500 to ~9,500 lines. The `generate-day` logic becomes independently testable.
+
+---
+
+### Phase 3: Extract `generate-full` Into Its Own Action File
+
+**Goal**: Move the legacy 2,800-line `generate-full` handler out.
+
+**File: `action-generate-full.ts`** (new)
+- Move lines 5028-7810 from index.ts
+- Export as `handleGenerateFull(supabase, userId, params)`
+
+**Impact**: index.ts drops to ~6,700 lines (just routing + shared types/interfaces).
+
+---
+
+### Phase 4: Split `generate-day` Into Focused Steps
+
+Once `generate-day` is in its own file, break it into composable steps:
+
+**File: `steps/build-day-context.ts`**
+- Hotel resolution, flight context, meal policy, restaurant pool injection
+- ~800 lines extracted
+
+**File: `steps/build-day-prompt.ts`**
+- All prompt assembly (archetype, DNA, dietary, weather, geographic zones)
+- ~1,200 lines extracted
+
+**File: `steps/call-ai-and-parse.ts`**
+- The actual AI call, JSON extraction, retry logic
+- ~600 lines extracted
+
+**File: `steps/post-process-day.ts`**
+- Sanitization, dedup, truth anchors, Google Places enrichment, route optimization, meal compliance
+- ~1,400 lines extracted
+
+Then `action-generate-day.ts` becomes a ~200-line orchestrator:
+```text
+context = buildDayContext(params)
+prompt  = buildDayPrompt(context)
+rawDay  = callAIAndParse(prompt)
+result  = postProcessDay(rawDay, context)
+return result
 ```
 
-Add this as a `.replace()` call after the existing `FORWARD_REF_RE` replacement in `sanitizeAITextField`.
+---
 
-### Summary
+### Phase 5: Dedicated Post-Generation Checks (Your Workflow 3-6)
 
-| File | Change |
-|---|---|
-| `action-generate-trip-day.ts` | Add sanitization, phantom hotel stripping, forward-ref fix, and generic title cleanup after day generation |
-| `sanitization.ts` | Add broader tomorrow-reference regex to catch "tomorrow's DisneySea adventure" patterns |
+Once step 4 is done, post-processing becomes easy to reason about because it's isolated:
 
-This ensures both generation paths (Stage 2 in index.ts and action-generate-trip-day.ts) apply identical post-processing.
+```text
+postProcessDay(rawDay, context):
+  1. sanitizeText(rawDay)           — strip AI commentary, phantoms
+  2. checkDuplicateActivities()     — trip-wide dedup
+  3. checkDuplicateRestaurants()    — meal repeat swap from pool
+  4. validatePreferences()          — budget, dietary, pacing
+  5. addBuffersAndRoutes()          — travel times, reorder by proximity
+  6. enforceMealCompliance()        — inject missing meals
+```
+
+Each step is a pure function: takes day data in, returns cleaned day data out. If any step fails, the previous step's output is still valid.
+
+---
+
+### Recommended Execution Order
+
+| Phase | Risk | Lines Removed | Effort |
+|-------|------|---------------|--------|
+| Phase 1: Kill duplicates | Very low | ~1,200 | Small |
+| Phase 2: Extract generate-day | Low | ~4,000 moved | Medium |
+| Phase 3: Extract generate-full | Low | ~2,800 moved | Medium |
+| Phase 4: Split into steps | Medium | 0 (refactor) | Large |
+| Phase 5: Clean post-processing | Low | 0 (refactor) | Medium |
+
+I recommend starting with **Phase 1** immediately — it's the highest-value, lowest-risk change that fixes the restaurant pool and hotel rotation bugs caused by the duplicate code paths.
 
