@@ -1,45 +1,49 @@
 
 
-# Fix: Generation logs falsely report "completed" for failed itineraries
+# Enhanced Generation Logs: Meals, Transport & LLM Tracking
 
-## Problem
+## What changes
 
-The generation finalization logic has **two conflicting status computations**:
+### 1. Add per-day LLM model tracking to `_diagnostics` (action-generate-day.ts)
+The AI model name is already captured via `addTokenUsage(... aiResult.model)` at the trip level, but not included in the per-day `_diagnostics` object. We'll add `model` and `tokens` to the `_diagnostics` response so each day's log entry records which model was called and token counts.
 
-1. **Lines 876-877** correctly compute `isComplete` using three conditions: `allDaysHaveActivities && dayCountMatches && noFailedDays`
-2. **Lines 954 and 989** only check `allDaysHaveActivities`, ignoring `dayCountMatches` and `noFailedDays`
+**File:** `supabase/functions/generate-itinerary/action-generate-day.ts`
+- Add `model`, `promptTokens`, `completionTokens` fields to the `_diagnostics` object (~line 1038)
+- Capture from `aiResult.model` and `aiResult.usage`
 
-This means a trip where days failed (tracked in `failed_day_numbers` metadata) or where day count doesn't match expectations still gets marked as `completed` in `generation_logs` and `ready` in the `itinerary_status` column — as long as every day in the array has at least one activity (which placeholder/structural days do).
+### 2. Pass LLM info through to `addDayTiming` (action-generate-trip-day.ts)
+The `addDayTiming` calls at lines 984 and 1052 already pass `meals` and `transport` from diagnostics. We'll also pass the new `llm` field.
 
-Additionally, placeholder days injected at lines 913-924 contain structural activities (checkout, transfer, departure), so they pass the `activities.length > 0` check even though they were never truly generated.
+**File:** `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- At both `addDayTiming` call sites, add the LLM diagnostics as a 5th optional parameter
 
-## Evidence from the database
+### 3. Extend `GenerationTimer.addDayTiming` to accept LLM info (generation-timer.ts)
+Add an optional `llm` parameter to the method signature and include it in the day timing entry.
 
-- Multiple trips show `itinerary_status: ready` but `generation_completed_days < generation_total_days` (e.g., Tokyo 3/5, Paris 2/4)
-- All recent `generation_logs` rows show `status: completed` with empty errors arrays
+**File:** `supabase/functions/generate-itinerary/generation-timer.ts`
+- Add `llm?: { model: string; promptTokens: number; completionTokens: number }` parameter
+- Store in the day timing entry
 
-## Fix (1 file)
+### 4. Enhance admin UI to show meals, transport & LLM per day (GenerationLogs.tsx)
+Expand the `DayTimingsTable` component to render the meals, transport, and LLM columns that are already stored in the `day_timings` JSONB but currently hidden.
 
-**`supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+**File:** `src/pages/admin/GenerationLogs.tsx`
+- Update `GenerationLog` type to include `meals`, `transport`, `llm` in day_timings entries
+- Add columns: Meals (required/found/guard fired), Transport (mode, transition day), LLM (model name, tokens)
+- Show meal guard warnings with colored indicators
+- Show which model was used per day
 
-Replace the two inconsistent status checks with the already-computed `isComplete` variable:
+## Summary of data flow
 
-1. **Line 954**: Change `allDaysHaveActivities ? 'ready' : 'partial'` to use `isComplete ? 'ready' : 'partial'`
-2. **Line 965**: Change the `generation_completed_days` ternary to use `isComplete` instead of `allDaysHaveActivities`
-3. **Line 970-971**: Change `chain_broken_at_day` and `chain_error` conditionals to use `isComplete`
-4. **Line 989**: Change `timer.finalize(allDaysHaveActivities ? 'completed' : 'failed')` to `timer.finalize(isComplete ? 'completed' : 'failed')`
-5. **Line 991**: Update the log message to use `isComplete`
+```text
+action-generate-day.ts  →  _diagnostics { meals, transport, llm }
+                        ↓
+action-generate-trip-day.ts  →  timer.addDayTiming(..., meals, transport, llm)
+                             ↓
+generation-timer.ts  →  day_timings JSONB in generation_logs table
+                     ↓
+GenerationLogs.tsx   →  renders meals/transport/LLM columns per day
+```
 
-This ensures that failed days, day count mismatches, and placeholder-only days all correctly result in `failed` generation logs and `partial` trip status, making the recovery UI ("Incomplete Itinerary" banner) appear as intended.
-
-## Technical details
-
-| Line | Current | Fixed |
-|------|---------|-------|
-| 954 | `allDaysHaveActivities ? 'ready' : 'partial'` | `isComplete ? 'ready' : 'partial'` |
-| 965 | `allDaysHaveActivities ? totalDays : ...` | `isComplete ? totalDays : ...` |
-| 970 | `allDaysHaveActivities ? null : emptyDaysList[0]` | `isComplete ? null : ...` |
-| 971 | `allDaysHaveActivities ? null : ...` | `isComplete ? null : ...` |
-| 989 | `allDaysHaveActivities ? 'completed' : 'failed'` | `isComplete ? 'completed' : 'failed'` |
-| 991 | `allDaysHaveActivities` in log string | `isComplete` |
+No database schema changes needed — all data fits in existing JSONB columns.
 
