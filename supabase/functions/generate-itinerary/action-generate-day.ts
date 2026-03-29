@@ -7,8 +7,6 @@
 
 import { corsHeaders, verifyTripAccess } from './action-types.ts';
 import type {
-  StrictActivity,
-  StrictDay,
   ValidationContext,
 } from './generation-types.ts';
 import {
@@ -27,10 +25,6 @@ import {
   getAirportTransferMinutes,
   getAirportTransferFare,
 } from './generation-utils.ts';
-import {
-  enrichActivityWithRetry,
-  enrichItinerary,
-} from './venue-enrichment.ts';
 import {
   sanitizeDateString,
   sanitizeOptionFields,
@@ -73,6 +67,8 @@ import { validateDay, type ValidateDayInput } from './pipeline/validate-day.ts';
 import { repairDay, type RepairDayInput } from './pipeline/repair-day.ts';
 import { compilePrompt } from './pipeline/compile-prompt.ts';
 import { persistDay } from './pipeline/persist-day.ts';
+import { callAI, AICallError } from './pipeline/ai-call.ts';
+import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
 
 export async function handleGenerateDay(
   supabase: any,
@@ -174,169 +170,39 @@ export async function handleGenerateDay(
   flightContext = prompt.flightContext;
 
   try {
-    let data: any = null;
-    const maxAttempts = 5;
+    // ═══════════════════════════════════════════════════════════════════════
+    // AI CALL: Extracted to pipeline/ai-call.ts (Phase 6)
+    // ═══════════════════════════════════════════════════════════════════════
     if (innerTimer) innerTimer.startPhase(`ai_call_day_${dayNumber}`);
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      // Fall back to a faster model after 3 failed attempts to reduce provider timeouts
-      const model = attempt <= 3 ? "google/gemini-3-flash-preview" : "google/gemini-2.5-flash";
-      if (attempt > 3) {
-        console.log(`[generate-day] Falling back to ${model} after ${attempt - 1} failures`);
-      }
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "create_day_itinerary",
-              description: "Creates a structured day itinerary",
-              parameters: {
-                type: "object",
-                properties: {
-                  dayNumber: { type: "number" },
-                  date: { type: "string" },
-                  theme: { type: "string" },
-                  title: { type: "string", description: "Day title like 'Arrival Day' or 'Historic Exploration'" },
-                  activities: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        id: { type: "string" },
-                        title: { type: "string", description: "Activity display name (REQUIRED)" },
-                        name: { type: "string", description: "Alias for title" },
-                        description: { type: "string" },
-                        category: { type: "string", enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"] },
-                        startTime: { type: "string", description: "HH:MM format (24-hour)" },
-                        endTime: { type: "string", description: "HH:MM format (24-hour)" },
-                        duration: { type: "string" },
-                        location: { 
-                          type: "object",
-                          properties: {
-                            name: { type: "string" },
-                            address: { type: "string" }
-                          }
-                        },
-                        estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"], description: "per_person = price per traveler, flat = total price for the group/vehicle, per_room = per room per night" } } },
-                        cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"] } } },
-                        bookingRequired: { type: "boolean" },
-                        tips: { type: "string", description: "Insider tip for this activity (must be specific, actionable, 30+ chars)" },
-                        coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
-                        type: { type: "string" },
-                        suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity (group trips)" },
-                        isHiddenGem: { type: "boolean", description: "true if this is a hidden gem discovered through deep research. NOT for mainstream tourist attractions." },
-                        hasTimingHack: { type: "boolean", description: "true if scheduling at this specific time provides a meaningful advantage" },
-                        bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time is optimal" },
-                        crowdLevel: { type: "string", enum: ["low", "moderate", "high"], description: "Expected crowd level at the scheduled time" },
-                        voyanceInsight: { type: "string", description: "A unique Voyance-only insight about this place" },
-                        personalization: {
-                          type: "object",
-                          properties: {
-                            tags: { type: "array", items: { type: "string" } },
-                            whyThisFits: { type: "string", description: "Why this fits THIS traveler's DNA" },
-                            confidence: { type: "number" },
-                            matchedInputs: { type: "array", items: { type: "string" } }
-                          },
-                          required: ["tags", "whyThisFits", "confidence"]
-                        }
-                      },
-                      required: ["title", "category", "startTime", "endTime", "location", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
-                    }
-                  },
-                  accommodationNotes: { type: "array", items: { type: "string" }, description: "2-3 accommodation tips for this destination" },
-                  practicalTips: { type: "array", items: { type: "string" }, description: "3-4 practical travel tips for this destination" },
-                  narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
-                },
-                required: ["dayNumber", "date", "theme", "activities"]
-              }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
-        }),
+    let aiResult;
+    try {
+      aiResult = await callAI({
+        systemPrompt,
+        userPrompt,
+        apiKey: LOVABLE_API_KEY,
+        dayNumber,
       });
-
-      if (!response.ok) {
-        const status = response.status;
-        if (status === 429) {
-          return new Response(
-            JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        if (status === 402) {
-          return new Response(
-            JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
-            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const errorText = await response.text();
-        console.error(`[generate-day] AI gateway error (attempt ${attempt}): ${status}`, errorText);
-
-        // Retry transient 5xx (including 524 provider timeout)
-        if (attempt < maxAttempts && status >= 500) {
-          const backoff = Math.min(2000 * attempt, 8000);
-          console.log(`[generate-day] Retrying in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`);
-          await new Promise((resolve) => setTimeout(resolve, backoff));
-          continue;
-        }
-
-        throw new Error("AI generation failed");
+    } catch (err) {
+      if (err instanceof AICallError) {
+        return new Response(
+          JSON.stringify({ error: err.userMessage }),
+          { status: err.statusCode, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-
-      data = await response.json();
-
-      // The gateway can sometimes return HTTP 200 with an error payload.
-      if ((data as any)?.error) {
-        console.error(`[generate-day] AI Gateway error payload (attempt ${attempt}):`, (data as any).error);
-        const raw = (data as any).error?.message || 'Internal Server Error';
-        const errorCode = (data as any).error?.code;
-        // Treat 500, 524 (provider timeout), and generic errors as transient
-        const isTransient = raw === 'Internal Server Error' || raw === 'Provider returned error' || errorCode === 500 || errorCode === 524;
-        if (attempt < maxAttempts && isTransient) {
-          const backoff = Math.min(2000 * attempt, 8000);
-          console.log(`[generate-day] Provider error (code ${errorCode}), retrying in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`);
-          await new Promise((resolve) => setTimeout(resolve, backoff));
-          data = null;
-          continue;
-        }
-
-        const msg = raw === 'Internal Server Error' || raw === 'Provider returned error'
-          ? 'AI service temporarily unavailable. Please try again in a moment.'
-          : raw;
-        throw new Error(`AI service error: ${msg}`);
-      }
-
-      break;
+      throw err;
     }
-
-    if (!data) {
-      throw new Error('AI generation failed');
-    }
+    const { data } = aiResult;
 
     // Record AI phase timing, token usage, and model
     if (innerTimer) {
       innerTimer.endPhase(`ai_call_day_${dayNumber}`);
       try {
-        const usage = data.usage;
-        const modelUsed = data.model || 'unknown';
-        if (usage) {
-          innerTimer.addTokenUsage(usage.prompt_tokens || 0, usage.completion_tokens || 0, modelUsed);
-        } else {
-          innerTimer.addTokenUsage(0, 0, modelUsed);
-        }
+        innerTimer.addTokenUsage(
+          aiResult.usage?.prompt_tokens || 0,
+          aiResult.usage?.completion_tokens || 0,
+          aiResult.model,
+        );
       } catch (_e) { /* non-blocking */ }
-      // Write progress after AI call completes — this is the longest phase
       const aiDonePct = 5 + Math.round(((dayNumber - 0.3) / Math.max(1, totalDays || 1)) * 90);
       await innerTimer.updateProgress(`day_${dayNumber}_ai_complete`, aiDonePct);
       innerTimer.startPhase(`parse_response_day_${dayNumber}`);
@@ -476,212 +342,21 @@ export async function handleGenerateDay(
       console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
     }
     // =======================================================================
-    // STEP: ENRICH NEW ACTIVITIES (ratings, photos, coordinates)
-    // This ensures regenerated activities have the same rich data as initial generation
+    // ENRICHMENT + OPENING HOURS: Extracted to pipeline/enrich-day.ts (Phase 6)
     // =======================================================================
     const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY') || '';
-    
-    // Only enrich unlocked (newly generated) activities
-    const activitiesToEnrich = normalizedActivities.filter((a: { isLocked?: boolean }) => !a.isLocked);
-    const alreadyEnriched = normalizedActivities.filter((a: { isLocked?: boolean }) => a.isLocked);
-    
-    if (activitiesToEnrich.length > 0 && GOOGLE_MAPS_API_KEY) {
-      console.log(`[generate-day] Enriching ${activitiesToEnrich.length} new activities with ratings/photos...`);
-      
-      // Time budget: cap enrichment so the overall request stays within edge runtime limits.
-      // AI generation + prompt building already consumed significant time; leave headroom for DB saves.
-      const ENRICHMENT_TIME_BUDGET_MS = 25_000;
-      const enrichStartedAt = Date.now();
-      
-      // Enrich in parallel batches of 3 to avoid rate limits
-      const batchSize = 3;
-      const enrichedActivities: StrictActivity[] = [];
-      let enrichmentBudgetExceeded = false;
-      
-      for (let i = 0; i < activitiesToEnrich.length; i += batchSize) {
-        // Check time budget before starting next batch
-        const elapsed = Date.now() - enrichStartedAt;
-        if (elapsed >= ENRICHMENT_TIME_BUDGET_MS) {
-          console.warn(`[generate-day] Enrichment time budget reached (${elapsed}ms). Skipping remaining ${activitiesToEnrich.length - i} activities.`);
-          enrichedActivities.push(...activitiesToEnrich.slice(i));
-          enrichmentBudgetExceeded = true;
-          break;
-        }
-        
-        const batch = activitiesToEnrich.slice(i, i + batchSize);
-        const enrichedBatch = await Promise.all(
-          batch.map(async (act: StrictActivity) => {
-            try {
-              const result = await enrichActivityWithRetry(
-                act,
-                destination,
-                supabaseUrl,
-                supabaseKey,
-                GOOGLE_MAPS_API_KEY,
-                LOVABLE_API_KEY,
-                1 // maxRetries
-              );
-              return result.activity;
-            } catch (e) {
-              console.log(`[generate-day] Enrichment failed for "${act.title}":`, e);
-              return act; // Return original if enrichment fails
-            }
-          })
-        );
-        enrichedActivities.push(...enrichedBatch);
-      }
-      
-      if (enrichmentBudgetExceeded) {
-        console.log(`[generate-day] Enrichment partial: ${enrichedActivities.filter((a: { rating?: unknown }) => a.rating).length} enriched, rest returned as-is`);
-      }
-      
-      // Merge enriched activities back with locked ones and sort by time
-      normalizedActivities = [...enrichedActivities, ...alreadyEnriched];
-      normalizedActivities.sort((a: { startTime?: string }, b: { startTime?: string }) => {
-        const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-        const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-        return aTime - bTime;
-      });
-      
-      const enrichedWithRatings = enrichedActivities.filter((a: { rating?: unknown }) => a.rating).length;
-      console.log(`[generate-day] Enrichment complete: ${enrichedWithRatings}/${activitiesToEnrich.length} activities got ratings`);
-    } else if (!GOOGLE_MAPS_API_KEY) {
-      console.log('[generate-day] Skipping enrichment: GOOGLE_MAPS_API_KEY not configured');
-    }
 
-    // =======================================================================
-    // Opening Hours Validation for single-day generation
-    // Confirmed closures → REMOVE. Uncertain → tag as closedRisk warning.
-    // =======================================================================
-    if (date) {
-      const dayDate = new Date(date);
-      const dayOfWeek = dayDate.getDay();
-      const { isVenueOpenOnDay, isVenueClosedAllDay } = await import('./truth-anchors.ts');
-      
-      const activitiesToRemove: string[] = [];
-      for (const act of normalizedActivities) {
-        if (!act.openingHours || act.openingHours.length === 0) continue;
-        const skipCats = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation'];
-        if (skipCats.includes(act.category?.toLowerCase() || '')) continue;
-        
-        const result = isVenueOpenOnDay(act.openingHours, dayOfWeek, act.startTime);
-        if (!result.isOpen) {
-          const closedAllDay = isVenueClosedAllDay(act.openingHours, dayOfWeek);
-          if (closedAllDay) {
-            // Confirmed closed → remove
-            console.log(`[generate-day] ✗ "${act.title}" — REMOVED (confirmed closed all day)`);
-            activitiesToRemove.push(act.id);
-          } else {
-            // Time conflict only → try shifting into venue's open window (same logic as Stage 4.5)
-            const DAY_NAMES_SD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const dayNameSD = DAY_NAMES_SD[dayOfWeek];
-            const dayEntrySD = act.openingHours.find((h: string) => h.toLowerCase().startsWith(dayNameSD.toLowerCase()));
-            let didFix = false;
-
-            if (dayEntrySD && act.startTime) {
-              const entryLowerSD = dayEntrySD.toLowerCase();
-              // Parse opening time
-              let venueOpenMins = -1;
-              let venueCloseMins = -1;
-              const timeMatchSD = entryLowerSD.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
-              if (timeMatchSD) {
-                let oh = parseInt(timeMatchSD[1]);
-                const om = parseInt(timeMatchSD[2]);
-                const op = timeMatchSD[3]?.toUpperCase();
-                if (op === 'PM' && oh !== 12) oh += 12;
-                if (op === 'AM' && oh === 12) oh = 0;
-                venueOpenMins = oh * 60 + om;
-              }
-              const closeMatchSD = entryLowerSD.match(/[–\-−to]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i);
-              if (closeMatchSD) {
-                let ch = parseInt(closeMatchSD[1]);
-                const cm = parseInt(closeMatchSD[2]);
-                const cp = closeMatchSD[3]?.toUpperCase();
-                if (cp === 'PM' && ch !== 12) ch += 12;
-                if (cp === 'AM' && ch === 12) ch = 0;
-                venueCloseMins = ch * 60 + cm;
-                if (venueCloseMins === 0) venueCloseMins = 1440;
-              }
-
-              if (venueOpenMins >= 0 && venueCloseMins > 0) {
-                const oldMinsSD = parseInt(act.startTime.split(':')[0]) * 60 + parseInt(act.startTime.split(':')[1]);
-                const durationSD = act.endTime
-                  ? (parseInt(act.endTime.split(':')[0]) * 60 + parseInt(act.endTime.split(':')[1])) - oldMinsSD
-                  : 60;
-                let newStartMinsSD = -1;
-
-                if (oldMinsSD < venueOpenMins) {
-                  newStartMinsSD = venueOpenMins + 10;
-                } else if (oldMinsSD >= venueCloseMins || (oldMinsSD + durationSD) > venueCloseMins) {
-                  const latestStartSD = venueCloseMins - durationSD - 15;
-                  if (latestStartSD >= venueOpenMins + 10) {
-                    newStartMinsSD = latestStartSD;
-                  } else {
-                    // Duration doesn't fit → remove
-                    console.log(`[generate-day] ✗ "${act.title}" — REMOVED (duration ${durationSD}min doesn't fit in venue hours)`);
-                    activitiesToRemove.push(act.id);
-                    didFix = true;
-                  }
-                }
-
-                if (!didFix && newStartMinsSD >= 0 && newStartMinsSD !== oldMinsSD) {
-                  // Hard-constraint check: don't shift if it squeezes against checkout/departure
-                  // Only treat checkout as hard stop if day has a flight departure
-                  const dayHasFlightDepSD = normalizedActivities.some((fa: any) => {
-                    const ftL = (fa.title || fa.name || '').toLowerCase();
-                    const fcL = (fa.category || '').toLowerCase();
-                    return fcL === 'transport' && (ftL.includes('airport') || ftL.includes('flight'));
-                  });
-                  
-                  const hardStopActSD = normalizedActivities.find((ha: any) => {
-                    const hCat = (ha.category || '').toLowerCase();
-                    const hTitle = (ha.title || ha.name || '').toLowerCase();
-                    const isCheckoutSD = hCat === 'accommodation' && (hTitle.includes('check') || hTitle.includes('checkout'));
-                    if (isCheckoutSD && !dayHasFlightDepSD) return false;
-                    return isCheckoutSD
-                      || (hCat === 'transport' && (hTitle.includes('depart') || hTitle.includes('airport') || hTitle.includes('flight') || hTitle.includes('train')));
-                  });
-                  if (hardStopActSD && hardStopActSD.startTime) {
-                    const hardStopMinsSD = parseInt(hardStopActSD.startTime.split(':')[0]) * 60 + parseInt(hardStopActSD.startTime.split(':')[1]);
-                    const estimatedEndSD = newStartMinsSD + durationSD + 20;
-                    if (estimatedEndSD > hardStopMinsSD) {
-                      console.log(`[generate-day] ✗ "${act.title}" — REMOVED (shifted time would exceed hard stop at ${hardStopMinsSD}min)`);
-                      activitiesToRemove.push(act.id);
-                      didFix = true;
-                    }
-                  }
-                  
-                  if (!didFix && newStartMinsSD >= 0 && newStartMinsSD !== oldMinsSD) {
-                    const newST = `${Math.floor(newStartMinsSD / 60).toString().padStart(2, '0')}:${(newStartMinsSD % 60).toString().padStart(2, '0')}`;
-                    const newEndMinsSD = newStartMinsSD + durationSD;
-                    act.startTime = newST;
-                    if (act.endTime) {
-                      act.endTime = `${Math.floor(newEndMinsSD / 60).toString().padStart(2, '0')}:${(newEndMinsSD % 60).toString().padStart(2, '0')}`;
-                    }
-                    console.log(`[generate-day] ✓ "${act.title}" shifted to ${newST} (venue hours: ${Math.floor(venueOpenMins / 60).toString().padStart(2, '0')}:${(venueOpenMins % 60).toString().padStart(2, '0')}–${Math.floor(venueCloseMins / 60).toString().padStart(2, '0')}:${(venueCloseMins % 60).toString().padStart(2, '0')})`);
-                    didFix = true;
-                  }
-                }
-              }
-            }
-
-            if (!didFix) {
-              // Couldn't parse hours → fall back to warning tag
-              console.warn(`[generate-day] ⚠️ "${act.title}" time conflict (unparseable hours): ${result.reason}`);
-              (act as any).closedRisk = true;
-              (act as any).closedRiskReason = result.reason;
-            }
-          }
-        }
-      }
-      
-      if (activitiesToRemove.length > 0) {
-        normalizedActivities = normalizedActivities.filter((a: { id: string }) => !activitiesToRemove.includes(a.id));
-        console.log(`[generate-day] Removed ${activitiesToRemove.length} confirmed-closed activities`);
-      }
-    }
+    normalizedActivities = await enrichAndValidateHours({
+      activities: normalizedActivities,
+      destination,
+      date,
+      supabaseUrl,
+      supabaseKey,
+      googleMapsApiKey: GOOGLE_MAPS_API_KEY || '',
+      lovableApiKey: LOVABLE_API_KEY,
+    });
 
     // =======================================================================
     // AUTO ROUTE OPTIMIZATION: Reorder flexible activities by proximity
