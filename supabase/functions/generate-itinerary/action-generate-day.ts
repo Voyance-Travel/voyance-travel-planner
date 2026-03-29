@@ -169,11 +169,15 @@ export async function handleGenerateDay(
   } = prompt;
   flightContext = prompt.flightContext;
 
+  // ── DIAGNOSTICS TRACKING ──
+  const _diagTimers = { aiCallStart: 0, aiCallEnd: 0, enrichStart: 0, enrichEnd: 0 };
+
   try {
     // ═══════════════════════════════════════════════════════════════════════
     // AI CALL: Extracted to pipeline/ai-call.ts (Phase 6)
     // ═══════════════════════════════════════════════════════════════════════
     if (innerTimer) innerTimer.startPhase(`ai_call_day_${dayNumber}`);
+    _diagTimers.aiCallStart = Date.now();
     let aiResult;
     try {
       aiResult = await callAI({
@@ -191,6 +195,7 @@ export async function handleGenerateDay(
       }
       throw err;
     }
+    _diagTimers.aiCallEnd = Date.now();
     const { data } = aiResult;
 
     // Record AI phase timing, token usage, and model
@@ -348,6 +353,7 @@ export async function handleGenerateDay(
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY') || '';
 
+    _diagTimers.enrichStart = Date.now();
     normalizedActivities = await enrichAndValidateHours({
       activities: normalizedActivities,
       destination,
@@ -357,6 +363,7 @@ export async function handleGenerateDay(
       googleMapsApiKey: GOOGLE_MAPS_API_KEY || '',
       lovableApiKey: LOVABLE_API_KEY,
     });
+    _diagTimers.enrichEnd = Date.now();
 
     // =======================================================================
     // AUTO ROUTE OPTIMIZATION: Reorder flexible activities by proximity
@@ -937,6 +944,7 @@ export async function handleGenerateDay(
     // Now pre-fetches real venues from verified_venues table so fallbacks
     // use REAL restaurant names instead of generic "dinner spot" text.
     // ====================================================================
+    let mealGuardResult: { alreadyCompliant: boolean; activities: any[]; injectedMeals: string[] } | null = null;
     if (dayMealPolicy && dayMealPolicy.requiredMeals.length > 0) {
       // Build meal fallback venues from restaurant pool first, then verified_venues
       let mealFallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
@@ -988,7 +996,7 @@ export async function handleGenerateDay(
 
       // Chain restaurant filtering is now handled by pipeline/validate-day + repair-day
 
-      const mealGuardResult = enforceRequiredMealsFinalGuard(
+      mealGuardResult = enforceRequiredMealsFinalGuard(
         generatedDay.activities || [],
         dayMealPolicy.requiredMeals,
         dayNumber,
@@ -1013,6 +1021,37 @@ export async function handleGenerateDay(
       await innerTimer.updateProgress(`day_${dayNumber}_post_processing_complete`, postProcPct);
     }
 
+    // ── BUILD DIAGNOSTICS ──
+    const mealCategories = ['dining', 'food', 'restaurant', 'cafe', 'breakfast', 'lunch', 'dinner'];
+    const foundMeals: string[] = [];
+    for (const act of (generatedDay.activities || [])) {
+      const cat = (act.category || '').toLowerCase();
+      const title = (act.title || '').toLowerCase();
+      if (mealCategories.includes(cat) || /\b(breakfast|lunch|dinner|brunch)\b/i.test(title)) {
+        if (/breakfast|brunch/i.test(title)) foundMeals.push('breakfast');
+        else if (/lunch/i.test(title)) foundMeals.push('lunch');
+        else if (/dinner/i.test(title)) foundMeals.push('dinner');
+        else foundMeals.push(cat);
+      }
+    }
+
+    const _diagnostics = {
+      aiCallMs: _diagTimers.aiCallEnd - _diagTimers.aiCallStart,
+      enrichMs: _diagTimers.enrichEnd - _diagTimers.enrichStart,
+      meals: {
+        required: dayMealPolicy?.requiredMeals || [],
+        found: [...new Set(foundMeals)],
+        guardFired: !!(mealGuardResult && !mealGuardResult.alreadyCompliant),
+        injected: mealGuardResult?.injectedMeals || [],
+      },
+      transport: {
+        isTransitionDay: resolvedIsTransitionDay,
+        mode: resolvedTransportMode || null,
+        hadInterCityTravel: !!(resolvedNextLegTransport && resolvedNextLegTransport !== 'none'),
+        fallbackInjected: false,
+      },
+    };
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -1022,6 +1061,7 @@ export async function handleGenerateDay(
         usedPersonalization: !!preferenceContext,
         flightAware: !!(flightContext.arrivalTime || flightContext.returnDepartureTime),
         preservedLocked: lockedActivities.length,
+        _diagnostics,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
