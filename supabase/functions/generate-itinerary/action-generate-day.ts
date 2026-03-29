@@ -169,9 +169,7 @@ export async function handleGenerateDay(
     metadata, mustDoActivitiesRaw: mustDoActivities,
     preferenceContext, dayConstraints,
   } = prompt;
-  let flightContext2 = prompt.flightContext;
-  // Overwrite flightContext from facts with schema-updated version
-  flightContext = flightContext2;
+  flightContext = prompt.flightContext;
 
   try {
     let data: any = null;
