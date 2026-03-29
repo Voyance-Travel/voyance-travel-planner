@@ -2421,7 +2421,7 @@ Generate activities for this day following ALL constraints above.`;
       let generatedDay: StrictDay;
       if (toolCall?.function?.arguments) {
         // Standard tool call response
-        generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber) as StrictDay;
+        generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, context.destination) as StrictDay;
       } else if (message?.content) {
         // Fallback: AI returned content instead of tool call
         console.log("[Stage 2] AI returned content instead of tool_call, attempting to parse...");
@@ -2429,7 +2429,7 @@ Generate activities for this day following ALL constraints above.`;
           const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
           const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber) as StrictDay;
+            generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, context.destination) as StrictDay;
           } else {
             console.error("[Stage 2] No JSON found in content:", contentStr.substring(0, 500));
             throw new Error("Invalid AI response format - no JSON in content");
@@ -10338,7 +10338,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         let generatedDay;
         if (toolCall?.function?.arguments) {
           // Standard tool call response
-          generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber);
+          generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, destination);
         } else if (message?.content) {
           // Fallback: AI returned content instead of tool call
           console.log("[generate-day] AI returned content instead of tool_call, attempting to parse...");
@@ -10347,7 +10347,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
             const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-              generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber);
+              generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, destination);
             } else {
               console.error("[generate-day] No JSON found in content:", contentStr.substring(0, 500));
               throw new Error("Invalid AI response format - no JSON in content");
@@ -12909,7 +12909,7 @@ Return ONLY the JSON array, no other text.`;
       });
 
       // Retry loop with exponential backoff for intermittent 403 errors
-      const maxRetries = 3;
+      const maxRetries = 5;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const response = await fetch(generateUrl, {
@@ -12931,7 +12931,7 @@ Return ONLY the JSON array, no other text.`;
           console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} error:`, err);
         }
         if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 2000 * attempt));
+          await new Promise(r => setTimeout(r, 3000 * attempt));
         }
       }
 
@@ -13485,7 +13485,7 @@ Return ONLY the JSON array, no other text.`;
         });
 
         // Retry loop with exponential backoff for intermittent 403 errors
-        const maxRetries = 3;
+        const maxRetries = 5;
         let chainSuccess = false;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
@@ -13511,7 +13511,7 @@ Return ONLY the JSON array, no other text.`;
             console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} error:`, err);
           }
           if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, 2000 * attempt));
+            await new Promise(r => setTimeout(r, 3000 * attempt));
           }
         }
         if (!chainSuccess) {
