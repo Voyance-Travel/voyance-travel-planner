@@ -14,6 +14,22 @@ Phase 2 extracted ~1,200 lines of deterministic fact-gathering and rule-derivati
 - **`action-generate-day.ts`** — Replaced inline logic with calls to `compileDayFacts()` and `compileDaySchema()`.
 - **`action-generate-trip-day.ts`** — Wired in `StageLogger` to record AI response timing and flush pipeline artifacts to `trip.metadata.pipeline_logs`.
 
-## Next: Phase 3 — Validators & Repair
+# Phase 3: Validators & Repair — COMPLETED
 
-Extract the post-generation validation and repair logic from `action-generate-day.ts` into `pipeline/validate-day.ts` and `pipeline/repair-day.ts`. These will consume the `DaySchema` and validate AI output against it, then apply deterministic repairs for known failure codes.
+## Summary
+
+Phase 3 extracted ~580 lines of inline post-processing from `action-generate-day.ts` into two structured pipeline modules:
+
+1. **`pipeline/validate-day.ts`** — Pure inspection function that classifies every issue by `FailureCode`. Checks: PHANTOM_HOTEL, CHAIN_RESTAURANT, GENERIC_VENUE, TITLE_LABEL_LEAK, CHRONOLOGY, TIME_OVERLAP, MEAL_ORDER, MEAL_MISSING, MEAL_DUPLICATE, LOGISTICS_SEQUENCE, DUPLICATE_CONCEPT, WEAK_PERSONALIZATION. Returns `ValidationResult[]` with severity, activity index, and autoRepairable flag.
+
+2. **`pipeline/repair-day.ts`** — Deterministic repairs keyed to failure codes, executed in strict order: phantom hotel strip → chain removal → pre-arrival filter → chronology sort → trip-wide dedup (with pool swap) → personalization violations → departure sequence (6-rule validator) → bookend injection (hotel returns + transit gaps) → label leak strip. Returns `RepairAction[]` for logging.
+
+### Changes to existing files
+- **`action-generate-day.ts`** — Replaced inline trip-wide validation, personalization check, departure validator, bookend validator, and chain filter (~580 lines) with `validateDay()` + `repairDay()` pipeline calls. Meal guard stays inline (needs DB-backed fallback venues).
+
+## Next: Phase 4 — TBD
+
+Potential directions:
+- Extract prompt construction into `pipeline/compile-prompt.ts`
+- Move venue enrichment (Google Maps) into a dedicated pipeline stage
+- Add pipeline logging for validation/repair results via StageLogger
