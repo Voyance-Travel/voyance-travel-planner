@@ -7,8 +7,6 @@
 
 import { corsHeaders, verifyTripAccess } from './action-types.ts';
 import type {
-  StrictActivity,
-  StrictDay,
   ValidationContext,
 } from './generation-types.ts';
 import {
@@ -27,9 +25,6 @@ import {
   getAirportTransferMinutes,
   getAirportTransferFare,
 } from './generation-utils.ts';
-import {
-  enrichItinerary,
-} from './venue-enrichment.ts';
 import {
   sanitizeDateString,
   sanitizeOptionFields,
