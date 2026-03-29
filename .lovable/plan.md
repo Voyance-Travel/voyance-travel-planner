@@ -1,73 +1,92 @@
 
+Goal: replace the partial fixes with end-to-end enforcement at the final save path, because the current code only solved parts of the problem.
 
-## Itinerary Content Quality Fixes — 5 Root Causes
+What the audit shows now
+- Bug 1 is only partially fixed:
+  - Client `mealGuard.ts` already skips zero-activity days.
+  - Chain retries in `index.ts` are already 5 attempts.
+  - But the backend still injects fallback meals in `day-validation.ts` via `enforceRequiredMealsFinalGuard()`, and both `generate-day` and chain-save paths still call it. That can still turn failed/empty days into fake meal-only days.
+  - The trip page already has stalled/resume behavior, but it does not give a persistent “this itinerary is incomplete” state once shell days are saved.
+- Bug 2 is only partially fixed:
+  - New regexes exist in `sanitization.ts`, but they are still too narrow and only run early in the pipeline.
+  - Later post-processing can still reintroduce user-visible leak text, especially meal fallback copy.
+- Bug 3 is not actually fixed:
+  - `enforceHotelPlaceholderOnDay()` only renames hallucinated hotel brands to “Your Hotel”.
+  - The prompt still contains unconditional hotel/check-in/return-to-hotel instructions even when no hotel exists.
+- Bug 4 is under-fixed:
+  - `deduplicateCrossDayVenues()` currently uses exact title/location matching only.
+  - The codebase already has stronger concept-similarity dedup helpers elsewhere, but the new path does not use them.
+- Bug 5 is under-fixed:
+  - The current time sorter only parses raw `HH:MM`, so `3:15 PM` vs `5:30 PM` can still sort incorrectly.
+  - Ordering is being enforced too early instead of at the final outbound/save stage.
 
-This plan addresses five distinct quality issues found in generated itineraries. Changes span the edge function sanitization layer, the generation chain handler, and the client-side meal guard.
+Implementation plan
 
----
+1. Stop backend meal fallback from masking broken or ungenerated days
+- Update `enforceRequiredMealsFinalGuard()` in `supabase/functions/generate-itinerary/day-validation.ts` so it refuses to inject meals when a day has no real non-logistics activities.
+- Add a returned flag such as `isUngeneratedDay` / `skipInjectionReason` so callers can distinguish “missing one meal” from “this day never generated”.
+- In both `generate-day` and `generate-trip-day` save paths in `supabase/functions/generate-itinerary/index.ts`, if a day is effectively empty:
+  - do not inject meals,
+  - mark the day as ungenerated,
+  - surface it as a generation failure / partial generation condition instead of accepting the shell.
+- Preserve `chain_broken_at_day` metadata and use it as the source of truth for incomplete itineraries.
 
-### Bug 1: Empty Days Masked by Placeholder Meals
+2. Make incomplete generation visible in the UI instead of hiding it
+- In `src/pages/TripDetail.tsx`, add a persistent incomplete-generation banner when:
+  - `metadata.chain_broken_at_day` exists, or
+  - any loaded day is flagged `_ungenerated`, or
+  - completed days are lower than expected.
+- Reuse the existing resume flow (`handleResumeGeneration`) for the action, but change the copy so users clearly understand some days are incomplete rather than merely “paused”.
+- For day rendering, show a clear incomplete-day state instead of generic meals if a day is flagged `_ungenerated`.
 
-**Problem**: When the generation chain breaks at Day N, Days N+1 onward have zero activities. The client-side `mealGuard.ts` then injects generic placeholder meals ("Breakfast at a boulangerie-café"), hiding the failure from users.
+3. Strengthen sanitization and run it at the final output boundary
+- In `supabase/functions/generate-itinerary/sanitization.ts`, broaden the leak patterns so they catch:
+  - unicode dash ranges in booking text (`2–4`, `2—4`),
+  - longer self-commentary phrases (`wellness interest specifically`, `aligns with your request`, etc.),
+  - more schema leak field names and punctuation variants.
+- Add a final “last pass” sanitization call in `supabase/functions/generate-itinerary/index.ts` after all post-processing, dedup, meal enforcement, hotel cleanup, and title normalization — not just right after JSON parse.
+- Remove or rewrite backend meal-fallback copy that still produces visible placeholder text like “Find a real restaurant”.
 
-**Fix**: In `mealGuard.ts` `enforceItineraryMealCompliance()`, skip meal injection when a day has zero activities and flag it as `_ungenerated = true`. Also increase chain retries from 3→5 and backoff from 2000→3000ms in `index.ts` (line 13487-13513).
+4. Fix phantom hotel generation at both prompt and post-processing layers
+- In `supabase/functions/generate-itinerary/index.ts` and any shared prompt builder used by day generation, gate all hotel check-in / return-to-hotel instructions behind real hotel presence.
+- When no hotel exists, inject explicit prompt rules:
+  - no hotel check-in/check-out cards,
+  - no named hotel fabrication,
+  - use generic accommodation wording only if absolutely necessary.
+- In `supabase/functions/generate-itinerary/sanitization.ts`, add a new strip step that removes accommodation activities entirely when no hotel is booked, instead of only replacing the fabricated brand name.
+- Keep `enforceHotelPlaceholderOnDay()` as a secondary fallback, but no longer treat it as the main fix.
 
----
+5. Replace exact-match cross-day dedup with concept-based dedup
+- Refactor `deduplicateCrossDayVenues()` to use the stronger concept-similarity/location-based logic already present elsewhere in the generation code.
+- Dedup by:
+  - normalized venue title,
+  - `location.name`,
+  - concept similarity for renamed variants of the same attraction.
+- Keep meals, transport, and legitimate recurring logistics exempt.
+- Run this right before persistence, so no later transformation can reintroduce duplicates.
 
-### Bug 2: Missing Sanitization Regex Patterns
+6. Rebuild chronological ordering using robust time normalization
+- Replace the current sanitization time parser with one that understands both 24h and 12h strings.
+- Normalize `startTime`, `endTime`, and `time` into a comparable form before sorting.
+- Enforce ordering as the final structural pass before save/return, not earlier in sanitization only.
+- If overlaps are corrected, shift both start and end while preserving duration.
 
-**Problem**: Several leaked AI text patterns slip through existing sanitization:
-- `,type` — schema field not in TEXT_SCHEMA_LEAK list
-- `BOOK 2-4 WEEKS` — freestanding uppercase booking urgency (BOOK_CODE_RE only catches `book_now` style)
-- `This addresses the wellness interest` — AI self-commentary not caught by AI_SELF_COMMENTARY_RE
-- `the destination` as placeholder text
+Files to update
+- `supabase/functions/generate-itinerary/index.ts`
+- `supabase/functions/generate-itinerary/day-validation.ts`
+- `supabase/functions/generate-itinerary/sanitization.ts`
+- `supabase/functions/generate-itinerary/prompt-library.ts` (if hotel bookend rules are sourced there)
+- `src/pages/TripDetail.tsx`
+- Possibly the day UI component that renders incomplete days, if it needs explicit empty-state messaging
 
-**Fix in `sanitization.ts`**:
-1. Add 4 new regex patterns: `BOOKING_URGENCY_TEXT_RE`, `AI_ADDRESSES_RE`, `COMMA_FIELD_LEAK_RE`, `GENERIC_DESTINATION_RE`
-2. Add optional `destination` parameter to `sanitizeAITextField()` — when provided, replace "the destination"/"the city" with actual city name
-3. Add `destination` parameter to `sanitizeGeneratedDay()` and pass it through to all `sanitizeAITextField` calls
-4. Update all callers of `sanitizeGeneratedDay` in `index.ts` (lines 2423, 2431, 10340, 10349) to pass the destination
+Verification
+- Re-test 4-day Paris and Tokyo generations.
+- Confirm:
+  - no meal-only shell days are accepted,
+  - incomplete chains show a visible retry/resume state,
+  - no leaked `,type` / booking urgency / self-commentary / “the destination” text,
+  - no phantom hotel cards when no hotel is booked,
+  - no Louvre-style attraction repeats across days even with variant titles,
+  - 12h and 24h times render in correct chronological order.
 
----
-
-### Bug 3: Phantom Hotels
-
-**Already handled** — The codebase already has `enforceHotelPlaceholder()` and `enforceHotelPlaceholderOnDay()` in `sanitization.ts` (lines 259-340) that replace hallucinated hotel brands with "Your Hotel". No additional code changes needed for this bug. The existing 30+ brand regex covers the reported "Hotel Le Meurice" case (Meurice is not in the list, but can be added if needed). Will add "Le Meurice" and a few other common Paris hotels to the brand list as a small enhancement.
-
----
-
-### Bug 4: Cross-Day Venue Duplication
-
-**Problem**: The AI is told about previous days' activities via `previousActivities` (line 13042-13047), but enforcement is prompt-only. When the AI ignores the instruction, duplicates like "Louvre on Day 1 AND Day 2" go straight to the database.
-
-**Fix**: Add a `deduplicateCrossDayVenues()` function in `sanitization.ts` that:
-- Builds a set of venue names/location names from `existingDays`
-- Filters activities from the new day, removing sightseeing/attraction/museum/landmark/tour activities whose name matches a previous day
-- Keeps meals, transport, and hotel activities (those can legitimately repeat)
-- Call it in the `generate-trip-day` handler (around line 13141) after `dayResult` is obtained, before saving
-
----
-
-### Bug 5: Activities Out of Chronological Order
-
-**Problem**: AI sometimes generates activities with out-of-order or overlapping times. No post-generation enforcement exists.
-
-**Fix**: Add time-ordering logic at the end of `sanitizeGeneratedDay()`:
-1. Sort activities by `startTime` using minute parsing
-2. Walk the sorted list and push overlapping activities forward by 15 minutes
-3. Add helper functions `parseTimeToMinutes()` and `minutesToHHMM()` to `sanitization.ts`
-
----
-
-### Files Changed
-
-| File | Changes |
-|------|---------|
-| `supabase/functions/generate-itinerary/sanitization.ts` | Add 4 regex patterns, `destination` param to `sanitizeAITextField`/`sanitizeGeneratedDay`, time-ordering logic, `deduplicateCrossDayVenues()`, add "Le Meurice" to hotel brands |
-| `supabase/functions/generate-itinerary/index.ts` | Pass `destination` to `sanitizeGeneratedDay` calls (4 locations), call `deduplicateCrossDayVenues` after day generation, increase chain retries 3→5 and backoff 2000→3000ms |
-| `src/utils/mealGuard.ts` | Skip meal injection on zero-activity days, flag as `_ungenerated` |
-
-### Deployment
-
-Single edge function redeploy after all changes. No database migrations needed.
-
+This is the right next step because the current code already contains parts of the previous fix, but the remaining failures are caused by enforcement happening in the wrong layer, too early, or with weaker logic than the codebase already supports.
