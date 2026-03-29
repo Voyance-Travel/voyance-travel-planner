@@ -1,45 +1,45 @@
 
 
-# Fix Activity Cards Rendering Twice / Day Collapse
+# Fix Missing Travel Buffers Warning
 
-## Root Cause Analysis
+## Problem
+The "X activities have no travel buffer" warning counts every consecutive activity pair with zero/negative gap, but ignores that **transport activities ARE the travel buffer**. When Activity A → Transport → Activity B exists, both the A→Transport and Transport→B gaps are counted as "missing buffer" even though transit is present.
 
-**1. Days 2+ collapse to show only 1 activity:**
-
-The `DayCard` component (line 9099) has `overflow-hidden` on its outer container. Inside, the activities section is wrapped in a `motion.div` with `initial={{ height: 0, opacity: 0 }}` (line 9312). When switching days via the day picker (line 5669), the DayCard receives a new `key={selectedDay.dayNumber}` (line 6111), causing React to **remount** it. On remount, framer-motion replays the `initial` animation — starting at `height: 0`. Combined with `overflow-hidden`, this clips all content.
-
-The animation from `height: 0` to `height: 'auto'` is a known framer-motion reliability issue. Day 1 works because it's the first mount and the animation completes successfully. Days 2+ remount into the same animation, which can glitch and leave content clipped.
-
-**2. Activity text appears twice in DOM:**
-
-This is by design — each activity renders **two** `ActivityRow` components: one wrapped in `sm:hidden` (mobile, line 9491) and one in `hidden sm:block` (desktop, line 9561). Text extraction tools see both. This is standard responsive rendering and not a bug, but contributes to confusion.
+## Root Cause
+In `EditorialItinerary.tsx` (lines 9350-9363), the `zeroGapCount` loop iterates over all consecutive activity pairs without skipping transport entries. Since transport activities (category `"transport"`) represent the travel buffer itself, pairs involving them should be excluded from the count.
 
 ## Changes
 
-### 1. `EditorialItinerary.tsx` — Fix the collapse animation (DayCard component, ~line 9309-9316)
+### File: `src/components/itinerary/EditorialItinerary.tsx` (~line 9352)
 
-When `effectiveExpanded` is already `true` on mount, skip the entry animation by setting `initial={false}`. This prevents the `height: 0` → `height: auto` animation from firing on day switch:
+Update the zero-gap counting loop to skip pairs where either activity is a transport entry:
 
 ```typescript
-<AnimatePresence initial={false}>
-  {effectiveExpanded && (
-    <motion.div
-      key="day-content"
-      initial={{ height: 0, opacity: 0 }}
-      animate={{ height: 'auto', opacity: 1 }}
-      exit={{ height: 0, opacity: 0 }}
-      transition={{ duration: 0.3 }}
-    >
+const acts = day.activities || [];
+let zeroGapCount = 0;
+for (let i = 0; i < acts.length - 1; i++) {
+  // Transport entries ARE the travel buffer — skip pairs involving them
+  const catA = ((acts[i] as any).category || '').toLowerCase();
+  const catB = ((acts[i + 1] as any).category || '').toLowerCase();
+  if (catA === 'transport' || catB === 'transport') continue;
+
+  const gap = computeGapMinutes(
+    acts[i].endTime,
+    acts[i].startTime || (acts[i] as any).time,
+    acts[i].duration,
+    acts[i + 1].startTime || (acts[i + 1] as any).time,
+  );
+  if (gap !== null && gap <= 0) {
+    const sameLocation = !!(acts[i].location?.name && acts[i + 1].location?.name && acts[i].location.name === acts[i + 1].location.name);
+    if (!sameLocation) zeroGapCount++;
+  }
+}
 ```
 
-Adding `initial={false}` to `AnimatePresence` tells framer-motion to skip the entry animation when the child is already present on first render. Since days are always expanded when selected (line 5670 sets `expandedDays` to include the clicked day), the content renders at full height immediately instead of animating from zero.
-
-### 2. No changes needed for the "twice in DOM" issue
-
-The dual mobile/desktop rendering is intentional responsive design. No fix required.
+## Issue B: 120-minute Travel Estimate
+The "Travel to Ganko Yakiniku — 120 min" text is AI-generated content in the activity title, not computed by any backend distance function. The auto-route optimizer uses coordinates for reordering but doesn't generate duration text. The transit-estimate edge function (which does compute durations correctly) is only called by the Refresh Day tool, not during generation. This is an AI hallucination in the prompt response — fixing it would require prompt changes, which is out of scope per the user's constraints.
 
 ## Files to modify
-- `src/components/itinerary/EditorialItinerary.tsx` — add `initial={false}` to `AnimatePresence` in DayCard (~line 9309)
+- `src/components/itinerary/EditorialItinerary.tsx` — skip transport activities in zero-gap count
 
-One targeted edit. No backend changes, no new files.
-
+One targeted edit.
