@@ -1,6 +1,19 @@
 
 
 
+## Phase 4: Clean Up `index.ts` — Remove Dead Imports & Duplicates
+
+### Status: DONE ✅
+
+### Completed
+- Removed ~340 lines of unused imports (generation-types, generation-utils, venue-enrichment, sanitization, currency-utils, budget-constraints, personalization-enforcer, truth-anchors, explainability, geographic-coherence, prompt-library, meal-policy, dietary-rules, trip-duration-rules, reservation-urgency, jet-lag-calculator, weather-backup, daily-estimates, group-archetype-blending, pre-booked-commitments, must-do-priorities, packing-suggestions, archetype-data, trip-type-modifiers, profile-loader, destination-essentials, user-context-normalization, flight-hotel-context, preference-context)
+- Removed duplicate `corsHeaders` definition — now imported from `action-types.ts`
+- Removed duplicate `verifyTripAccess` function — already in `action-types.ts`
+- Removed all stale "moved to X" placeholder comments
+- Fixed buggy catch block that referenced out-of-scope `params`/`supabase` variables
+- Consolidated CRUD action dispatch to share a single `ActionContext` instance
+- **Result: `index.ts` reduced from 743 → 183 lines (75% reduction)**
+
 ## Phase 3: Extract `generate-full` Pipeline
 
 ### Status: DONE ✅
