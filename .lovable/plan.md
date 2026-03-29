@@ -2,7 +2,7 @@
 
 ## Phase 2: Extract `generate-day` Handler to Action File
 
-### Status: Steps 1-2 DONE, Step 3 IN PROGRESS
+### Status: DONE ✅
 
 ### Completed
 
@@ -15,22 +15,27 @@
 - `generation-utils.ts` now includes: `getDestinationId`, `getAirportTransferMinutes`, `getAirportTransferFare`
 - `generation-types.ts` already had all types from prior step
 - `index.ts` now imports from both new modules instead of defining inline
-- Inline type definitions (MultiCityDayInfo, GenerationContext, StrictActivity, StrictDay, etc.) removed from index.ts
-- Inline functions (calculateDays, formatDate, etc.) removed from index.ts
-- Venue enrichment block (~840 lines) removed from index.ts
 - **Result: index.ts reduced from 12,322 → 11,184 lines (-1,138 lines)**
 - **All 17 smoke tests pass** ✅
 
-### Remaining
+**Step 3: Extracted generate-day handler into `action-generate-day.ts`** ✅
+- Moved `validateItineraryPersonalization` + `buildValidationContext` into `generation-types.ts` (shared by both paths)
+- Moved `triggerNextJourneyLeg` above `finalSaveItinerary` in index.ts (scoping fix)
+- Deleted `STRICT_ITINERARY_TOOL` dead code (~164 lines)
+- Created `action-generate-day.ts` (4,579 lines) with `handleGenerateDay(supabase, userId, params)`
+- Fixed `body.date` → `params.date`, `supabaseClient` → `supabase`, `effectiveHotelData` → `flightContext` references
+- Updated index.ts routing to delegate:
+  ```typescript
+  if (action === 'generate-day' || action === 'regenerate-day') {
+    return handleGenerateDay(supabase, authResult.userId, params);
+  }
+  ```
+- **Result: index.ts reduced from 11,184 → 6,431 lines (-4,753 lines)**
 
-**Step 3: Move generate-day handler into `action-generate-day.ts`**
-- Move lines ~7600–12030 (the `if (action === 'generate-day' || action === 'regenerate-day')` block)
-- Move `triggerNextJourneyLeg` (defined inside the handler block)
-- Export `handleGenerateDay(supabase, userId, params)`
-- Update index.ts routing to delegate
-- Expected reduction: index.ts → ~5,800 lines
+### Final Metrics
 
-**Step 4: Update plan.md** — Mark Phase 2 as done
-
-### Risk Notes
-- The `validateItineraryPersonalization` and `buildValidationContext` functions remain inline in index.ts — they're used by both generate-full and generate-day. Moving them to a shared module is optional (they could go to generation-types.ts or a new validation.ts).
+| File | Before | After |
+|---|---|---|
+| `index.ts` | 11,184 lines | 6,431 lines |
+| `action-generate-day.ts` | — | 4,579 lines |
+| `generation-types.ts` | 411 lines | 680 lines |
