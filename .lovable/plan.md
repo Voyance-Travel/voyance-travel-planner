@@ -1,230 +1,183 @@
 
-Bottom line:
 
-- Do not keep growing one massive prompt.
-- Do not split everything into lots of mini-prompts either.
-- The best production setup here is a hybrid:
-  - deterministic pipeline for rules, timing, hotel/flight truth, meals, and sequencing
-  - one constrained AI generation pass per day
-  - targeted repair passes only when a validator proves something failed
+# Pipeline Refactor: Phased Rollout Plan
 
-What the code looks like today:
+## Current State Summary
 
-1. `action-generate-trip.ts`
-   - good pattern
-   - computes trip-wide `generation_context` once
-   - starts server-side self-chaining
+| File | Lines | Role | Problem |
+|------|-------|------|---------|
+| `action-generate-day.ts` | 4,583 | Prompt + logistics + validation + repair | Monolith doing everything |
+| `action-generate-full.ts` | 2,962 | Legacy full-trip generation | Parallel path, duplicates rules |
+| `generation-core.ts` | 3,172 | Shared generation infra | Overlapping cleanup with sanitization |
+| `sanitization.ts` | 318 | Text cleanup + business rules | Mixed concerns |
+| `day-validation.ts` | 876 | Meal guards, chain blocklist | Good but disconnected from pipeline |
+| `action-generate-trip.ts` | ~500 | Trip orchestrator | Good pattern, keep |
+| `action-generate-trip-day.ts` | 1,118 | Day chain loop | Good pattern, keep |
 
-2. `action-generate-trip-day.ts`
-   - also good pattern
-   - generates one day at a time
-   - retries, updates heartbeat, saves partial progress
-   - then applies post-processing before chaining to the next day
+---
 
-3. `action-generate-day.ts`
-   - this is the main problem area
-   - it is still a very large “everything” function
-   - it mixes prompt building, logistics, last-day rules, multi-city rules, personalization, validation, and repair
+## Phase 0: Foundation (No behavior changes)
 
-4. `sanitization.ts`
-   - now contains text cleanup plus behavior fixes
-   - that makes it useful, but also makes debugging harder because it becomes another rule engine
+**Goal**: Add types and stage logging without touching any generation logic. Nothing can break because nothing changes.
 
-5. `generation-core.ts` + `action-generate-full.ts`
-   - still contain overlapping legacy logic
-   - some cleanup/repair rules exist there too
-   - this means fixes can land in one path and miss another
+**Files created**:
+- `pipeline/types.ts` -- DaySchema, DayFacts, SlotType, ValidationError types, failure codes enum
+- `pipeline/stage-logger.ts` -- writes stage artifacts (compiled schema, raw AI output, validation report) to `trip.metadata.generation_logs[dayN]`
 
-6. `useGenerationPoller.ts`
-   - has multiple self-heal/status interpretations
-   - useful for resilience, but it shows the backend state model is still carrying ambiguity
+**Files changed**: None. These are new, unused modules.
 
-The real holes right now:
+**Verification**: Deploy, generate a trip. Everything works exactly as before. New files exist but are not called.
 
-- Multiple authorities for the same rule
-  - meals, hotel truth, chronology, title cleanup, departure logic all appear in multiple places
+---
 
-- Too much prompt responsibility
-  - the prompt is being asked to handle structure, logistics, venue quality, personalization, naming, cleanliness, and output formatting all at once
+## Phase 1: Retire Legacy Path
 
-- Too much repair after generation
-  - phantom hotel fixes, label stripping, meal fixes, chronology fixes, etc.
-  - this helps symptoms, but hides root cause
+**Goal**: Make `action-generate-full.ts` a thin redirect to the day-chain pipeline. One authoritative path.
 
-- Legacy path overlap
-  - `generate-full` and the day-chain world both exist
-  - that makes troubleshooting inconsistent
+**Files changed**:
+- `action-generate-full.ts` -- gut the 2,962-line implementation; replace with a call to `action-generate-trip.ts` logic (compile context, then chain day-by-day)
+- `index.ts` -- `generate-full` action routes through the same trip orchestrator
 
-- Weak stage-level debugging
-  - when something goes wrong, you mostly see the final bad day
-  - you do not have a clean artifact trail for:
-    - compiled rules
-    - exact day schema
-    - raw model output
-    - validator failures
-    - repaired result
+**What stays working**: The day-chain path (`generate-trip` -> `generate-trip-day` -> `generate-day`) is untouched. The legacy path just delegates to it now.
 
-What I would move to instead:
+**Risk**: Low. The day-chain path already handles all trip types. If any edge case relied on legacy-only logic, it surfaces immediately.
+
+---
+
+## Phase 2: Extract Deterministic Compilers
+
+**Goal**: Pull rule logic OUT of `action-generate-day.ts` into isolated, testable modules. The main file still calls them -- behavior stays identical.
+
+**Files created**:
+- `pipeline/compile-day-facts.ts` -- extracts hotel truth, flight truth, city/day mapping, meal policy, must-dos, budget caps from generation_context. Returns a `DayFacts` object.
+- `pipeline/compile-day-schema.ts` -- takes DayFacts and produces a `DaySchema`: slots, time windows, required meals, locked logistics, constraints. Pure deterministic code.
+
+**Files changed**:
+- `action-generate-day.ts` -- at the top of the generation function, call `compileDayFacts()` and `compileDaySchema()`. Pass the schema downstream. The existing prompt-building code still runs, but now it reads from the schema object instead of re-deriving rules inline.
+
+**Key principle**: This is a refactor, not a rewrite. The prompt still gets built the same way, but the facts feeding it come from a single compiled source.
+
+**Verification**: Generate trips. Output should be identical. Stage logger (Phase 0) now saves the compiled schema for each day -- you can inspect it.
+
+---
+
+## Phase 3: Validator with Failure Taxonomy
+
+**Goal**: Replace scattered post-processing checks with a single structured validator that classifies issues by error code.
+
+**Files created**:
+- `pipeline/validate-day.ts` -- runs all checks against a generated day, returns `ValidationResult[]` with typed error codes:
 
 ```text
-Trip Facts -> Day Schema -> AI Fill -> Validator -> Targeted Repair -> Save
+PHANTOM_HOTEL      -- hotel activity with no booking
+MEAL_ORDER         -- lunch after 17:00, breakfast after 14:00
+TITLE_LABEL_LEAK   -- "Voyance Pick", "Staff Pick" in title
+LOGISTICS_SEQUENCE -- departure items out of order
+GENERIC_VENUE      -- placeholder names like "Local Restaurant"
+DUPLICATE_CONCEPT  -- same activity as previous day
+CHRONOLOGY         -- activities not sorted by time
+TIME_OVERLAP       -- overlapping time windows
+CHAIN_RESTAURANT   -- blocklisted chain in meal
 ```
 
-Recommended target architecture:
+**Files changed**:
+- `action-generate-trip-day.ts` -- after calling `handleGenerateDay`, run `validateDay()` and log results via stage logger. Existing sanitization still runs (we're adding classification, not removing fixes yet).
+- `sanitization.ts` -- no changes yet. It still runs. The validator runs in parallel to classify what sanitization is catching.
 
-1. Deterministic fact compiler
-   - build trip truth once:
-     - hotel truth
-     - flight truth
-     - city/day mapping
-     - meal policy
-     - must-dos
-     - budget caps
-     - allowed/banned activity types
-     - restaurant pools
-   - this should be code, not prompt text
+**Verification**: Generate trips. Check `generation_logs` for each day -- you now see exactly which issues were detected and what error codes they got. This is the debugging breakthrough.
 
-2. Deterministic day schema compiler
-   - produce a structured “DaySchema” for each day:
-     - date
-     - earliest start / latest end
-     - required sequence
-     - required meals
-     - transition requirements
-     - locked logistics
-     - allowed slot count
-     - hard no-go rules
-   - this becomes the source of truth for the day
+---
 
-3. Compact AI generation step
-   - the AI should only fill the slots
-   - not decide foundational rules
-   - give it:
-     - schema
-     - user preferences
-     - candidate venues
-     - allowed restaurant pool
-     - prior-day dedup context
-   - require strict structured output
+## Phase 4: Deterministic Repair Layer
 
-4. Deterministic validators
-   - validators should classify issues, not hide them
-   - example failure codes:
-     - `PHANTOM_HOTEL`
-     - `MEAL_ORDER`
-     - `TITLE_LABEL_LEAK`
-     - `LOGISTICS_SEQUENCE`
-     - `GENERIC_VENUE`
-     - `DUPLICATE_CONCEPT`
+**Goal**: Move business-rule fixes out of `sanitization.ts` and into a structured repair module that acts on validator output.
 
-5. Targeted repair layer
-   - deterministic repair for:
-     - title cleanup
-     - chronology sorting
-     - time normalization
-     - hotel substitution
-     - label stripping
-   - small focused AI repair only for semantic issues:
-     - missing must-do
-     - wrong restaurant type
-     - weak personalization
-     - duplicate concept with no good deterministic swap
+**Files created**:
+- `pipeline/repair-day.ts` -- deterministic repairs keyed to error codes:
+  - `MEAL_ORDER` -> reassign meal times
+  - `PHANTOM_HOTEL` -> strip hotel activities
+  - `TITLE_LABEL_LEAK` -> strip labels
+  - `CHRONOLOGY` -> sort by startTime
+  - `LOGISTICS_SEQUENCE` -> reorder departure sequence
+  - `CHAIN_RESTAURANT` -> flag for AI re-pick
 
-6. Single save/final guard
-   - one pipeline owns normalization and DB write
-   - no parallel save authorities
+**Files changed**:
+- `sanitization.ts` -- remove meal time validation, phantom hotel stripping, and chronology sorting. Keep only text-level cleanup (CJK stripping, schema leak removal, word dedup, em-dash replacement).
+- `action-generate-trip-day.ts` -- replace post-generation sanitization calls with: `validate -> repair -> text-sanitize` pipeline.
 
-My direct answer to your question:
+**Verification**: Generate trips. Same output quality, but now every fix is traceable: validator detected it, repair fixed it, logs show both.
 
-- Yes, you should break it up further.
-- But not into many blind mini-prompts.
-- Break it into deterministic stages, and keep AI only where AI actually helps.
+---
 
-The rule of thumb should be:
+## Phase 5: Shrink the Prompt
 
-- If it is a hard rule, do it in code.
-- If it is ranking/selection/copywriting, let AI do it.
-- If it failed validation, repair only that failure, not the whole day.
+**Goal**: Remove hard rules from the AI prompt that are now enforced by code. The prompt becomes focused on venue selection, descriptions, and personalization.
 
-What should stop living inside the giant prompt:
+**Files changed**:
+- `action-generate-day.ts` / `prompt-library.ts` -- remove prompt sections for:
+  - Meal ordering rules
+  - Hotel truth enforcement
+  - Departure sequencing
+  - Title formatting rules
+  - Chronology guarantees
+  - Logistics buffer math
+- Keep prompt sections for:
+  - Venue quality and selection criteria
+  - Description writing style
+  - Personalization and vibe
+  - Budget-appropriate recommendations
 
-- meal ordering
-- hotel truth
-- departure sequence
-- airport vs non-airport logic
-- chronology guarantees
-- title sanitization
-- banned internal labels
-- exact logistics buffers
+**Expected result**: Prompt shrinks significantly. AI has fewer degrees of freedom. Deterministic code owns the rules. AI owns the creativity.
 
-Those should all be deterministic.
+---
 
-What should stay AI-driven:
+## Phase 6: Targeted AI Repair (Optional)
 
-- choosing the best venue from constrained candidates
-- writing good descriptions and why-this-fits copy
-- balancing vibe within already-fixed slot boundaries
-- making the itinerary feel premium and personalized
+**Goal**: For semantic issues that code can't fix deterministically, use small focused repair prompts.
 
-Best practical refactor from the current codebase:
+**Files created**:
+- `pipeline/ai-repair.ts` -- small, targeted prompts for:
+  - Missing must-do activity (re-generate one slot)
+  - Wrong restaurant cuisine type (swap one venue)
+  - Weak personalization (rewrite one description)
+  - Duplicate concept with no code-swappable alternative
 
-1. Make one generation path authoritative
-   - either retire `generate-full`
-   - or make it delegate into the same chained day pipeline only
+These are micro-prompts, not full-day regenerations. They only fire when the validator flags a specific semantic issue.
 
-2. Split `action-generate-day.ts` into explicit stages
-   - `compileDayFacts`
-   - `compileDaySchema`
-   - `buildGenerationInput`
-   - `generateDay`
-   - `validateDay`
-   - `repairDay`
+---
 
-3. Narrow `sanitization.ts`
-   - keep it text cleanup + harmless formatting only
-   - move business rules out of sanitization
+## Rollout Summary
 
-4. Add stage artifacts for debugging
-   - save:
-     - compiled schema
-     - prompt payload
-     - raw AI output
-     - validation report
-     - repaired output
-   - then every bug becomes traceable to one stage
+```text
+Phase 0: Types + logger          -- zero risk, additive only
+Phase 1: Retire legacy path      -- low risk, one path
+Phase 2: Extract compilers       -- refactor, same behavior
+Phase 3: Validator taxonomy       -- additive, parallel to existing
+Phase 4: Repair layer            -- swap sanitization internals
+Phase 5: Shrink prompt           -- remove redundant AI rules
+Phase 6: AI micro-repairs        -- optional, semantic fixes
+```
 
-5. Add failure taxonomy before more fixes
-   - that alone will make troubleshooting much easier than continuing regex-by-regex fixes
+Each phase is independently deployable and testable. If any phase introduces a regression, you roll back that phase only. The system works correctly at every intermediate state.
 
-Will this be more accurate and more time-efficient?
+### Technical Details
 
-Yes, if done this way.
+**New directory structure**:
+```text
+supabase/functions/generate-itinerary/
+  pipeline/
+    types.ts              -- DaySchema, DayFacts, ValidationError, FailureCode
+    stage-logger.ts       -- saves artifacts to trip metadata
+    compile-day-facts.ts  -- hotel/flight/meal/must-do truth
+    compile-day-schema.ts -- slots, time windows, constraints
+    validate-day.ts       -- structured validator with error codes
+    repair-day.ts         -- deterministic fixes keyed to error codes
+    ai-repair.ts          -- targeted micro-prompts (Phase 6)
+```
 
-Why accuracy improves:
-- the model gets fewer degrees of freedom
-- hard constraints stop being “suggestions”
-- fixes become surgical instead of global
+**Existing files narrowed**:
+- `sanitization.ts` -- text cleanup only (CJK, labels, dedup, dashes)
+- `action-generate-full.ts` -- thin redirect to day-chain
+- `action-generate-day.ts` -- calls compilers, builds smaller prompt, calls AI
+- `generation-core.ts` -- shared infra only, no rule enforcement
 
-Why troubleshooting improves:
-- every defect can be traced to one stage
-- you stop asking “which of the many cleanup layers caused this?”
-
-Why performance can improve:
-- deterministic validation is cheaper than regenerating full days
-- small repair prompts are cheaper than full-day reruns
-- smaller prompts are more stable and less token-heavy
-
-Recommended rollout order:
-
-1. Unify to one active path
-2. Add validator error codes + stage logging
-3. Move hotel/meal/logistics rules out of sanitization
-4. Introduce compiled day schema
-5. Shrink the main prompt
-6. Add targeted repair prompts only for semantic failures
-
-If I were guiding this refactor, the main architectural principle would be:
-
-“Stop asking the model to invent the rules and then asking code to clean up the mess. Give code ownership of the rules, and let the model operate inside a constrained box.”
-
-That is the cleanest path to production accuracy and reliable troubleshooting for this itinerary system.
