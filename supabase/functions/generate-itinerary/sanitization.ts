@@ -94,12 +94,24 @@ const ALTERNATIVE_SUGGESTION_RE = /\s*Alternative:\s*[^.]+\.?\s*/g;
 // 7. Standalone boolean field leaks: isVoyancePick: true
 const STANDALONE_BOOL_RE = /\s+(?:is[A-Z]\w+):\s*(?:true|false|null)\.?\s*/g;
 
+// 8. Freestanding booking urgency text (not in parentheses)
+const BOOKING_URGENCY_TEXT_RE = /\b(?:BOOK|RESERVE|SECURE)\s+\d[\d-]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|BEFORE|OUT|EARLY)?\b/gi;
+
+// 9. AI self-referential commentary about addressing preferences
+const AI_ADDRESSES_RE = /(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+\w+\s+(?:interest|preference|request|need|requirement)\b[^.]*\.?/gi;
+
+// 10. Schema field leaks with comma prefix: ,type ,category ,slot etc.
+const COMMA_FIELD_LEAK_RE = /,\s*(?:type|category|slot|isVoyancePick|optionGroup|isOption|tags|bookingRequired)\b[^,.]*/gi;
+
+// 11. Generic placeholder "the destination" / "the city" instead of actual city name
+const GENERIC_DESTINATION_RE = /\b(?:the destination|the city|this destination|this city)\b/gi;
+
 // Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
 const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''\u2018\u2019-]+/gi;
 
-export function sanitizeAITextField(text: string | undefined | null): string {
+export function sanitizeAITextField(text: string | undefined | null, destination?: string): string {
   if (!text || typeof text !== 'string') return '';
-  return text
+  let result = text
     .replace(CJK_ARTIFACTS, '')
     .replace(TEXT_SCHEMA_LEAK, '')
     .replace(SYSTEM_PREFIXES_RE, '')
@@ -125,12 +137,21 @@ export function sanitizeAITextField(text: string | undefined | null): string {
     .replace(AI_SELF_COMMENTARY_RE, '')
     .replace(ALTERNATIVE_SUGGESTION_RE, '')
     .replace(STANDALONE_BOOL_RE, '')
+    .replace(BOOKING_URGENCY_TEXT_RE, '')
+    .replace(AI_ADDRESSES_RE, '')
+    .replace(COMMA_FIELD_LEAK_RE, '')
     .replace(/\(\s*\)/g, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
-    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '')
-    .trim();
+    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '');
+
+  // Replace generic "the destination" with actual city name
+  if (destination) {
+    result = result.replace(GENERIC_DESTINATION_RE, destination);
+  }
+
+  return result.trim();
 }
 
 /**
