@@ -72,6 +72,7 @@ import type { LockedActivity } from './pipeline/types.ts';
 import { validateDay, type ValidateDayInput } from './pipeline/validate-day.ts';
 import { repairDay, type RepairDayInput } from './pipeline/repair-day.ts';
 import { compilePrompt } from './pipeline/compile-prompt.ts';
+import { persistDay } from './pipeline/persist-day.ts';
 
 export async function handleGenerateDay(
   supabase: any,
@@ -92,7 +93,8 @@ export async function handleGenerateDay(
     mustDoActivities: paramMustDoActivities, interestCategories: paramInterestCategories, generationRules: paramGenerationRules,
     pacing: paramPacing, isFirstTimeVisitor: paramIsFirstTimeVisitor,
     hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity,
-    restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants, generationLogId: paramGenerationLogId } = params;
+    restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants, generationLogId: paramGenerationLogId,
+    hotelName: paramHotelName, action: paramAction } = params;
   
   // userId comes from the function parameter (authenticated user ID)
   // Security guard: if request body includes userId that differs from auth token, log and reject
@@ -1102,6 +1104,38 @@ export async function handleGenerateDay(
           console.log(`[pipeline] Day ${dayNumber} validation: all checks passed`);
         }
 
+        // --- Pre-resolve multi-city hotel for repair guarantees ---
+        let resolvedRepairHotelName = (flightContext as any).hotelName || paramHotelName || undefined;
+        let resolvedRepairHotelAddr = (flightContext as any).hotelAddress || '';
+        if (tripId && resolvedIsMultiCity && (!resolvedRepairHotelName || resolvedRepairHotelName === 'Hotel')) {
+          try {
+            const { data: tripCitiesForHotel } = await supabase
+              .from('trip_cities')
+              .select('city_name, hotel_selection, city_order, nights, days_total')
+              .eq('trip_id', tripId)
+              .order('city_order', { ascending: true });
+            if (tripCitiesForHotel && tripCitiesForHotel.length > 0) {
+              let dc = 0;
+              for (const city of tripCitiesForHotel) {
+                const cityNights = (city as any).nights || (city as any).days_total || 1;
+                for (let n = 0; n < cityNights; n++) {
+                  dc++;
+                  if (dc === dayNumber) {
+                    const rawHotel = city.hotel_selection as any;
+                    const cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : rawHotel;
+                    if (cityHotel?.name) resolvedRepairHotelName = cityHotel.name;
+                    if (cityHotel?.address) resolvedRepairHotelAddr = cityHotel.address;
+                    break;
+                  }
+                }
+                if (dc >= dayNumber) break;
+              }
+            }
+          } catch (e) {
+            console.warn('[pipeline] Could not resolve multi-city hotel for repair:', e);
+          }
+        }
+
         // --- REPAIR ---
         const repairInput: RepairDayInput = {
           day: currentDayMinimal,
@@ -1111,11 +1145,19 @@ export async function handleGenerateDay(
           isLastDay,
           arrivalTime24: validationInput.arrivalTime24,
           returnDepartureTime24: validationInput.returnDepartureTime24,
-          hotelName: validationInput.hotelName,
+          hotelName: resolvedRepairHotelName,
+          hotelAddress: resolvedRepairHotelAddr,
           hasHotel: validationInput.hasHotel,
           lockedActivities: lockedActivities as any[],
           restaurantPool: paramRestaurantPool || undefined,
           usedRestaurants: paramUsedRestaurants || undefined,
+          // New fields for post-gen guarantees (Part B)
+          isTransitionDay: resolvedIsTransitionDay,
+          isMultiCity: resolvedIsMultiCity,
+          isLastDayInCity: resolvedIsLastDayInCity,
+          resolvedDestination: resolvedDestination || destination,
+          nextLegTransport: resolvedNextLegTransport,
+          hotelOverride: resolvedHotelOverride ? { name: resolvedHotelOverride.name, address: resolvedHotelOverride.address } : undefined,
         };
 
         const { day: repairedDay, repairs } = repairDay(repairInput);
@@ -1134,238 +1176,30 @@ export async function handleGenerateDay(
     }
 
     // =======================================================================
+    // PERSIST: Day upsert, activity insert, UUID mapping, version save
+    // Extracted to pipeline/persist-day.ts (Phase 5)
+    // =======================================================================
     if (tripId) {
       try {
-        // Upsert day row
-        const { data: dayRow, error: dayError } = await supabase
-          .from('itinerary_days')
-          .upsert({
-            trip_id: tripId,
-            day_number: dayNumber,
-            date: date,
-            title: generatedDay.title,
-            theme: generatedDay.theme,
-            narrative: generatedDay.narrative || null,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'trip_id,day_number' })
-          .select('id')
-          .single();
-        
-        if (dayError) {
-          console.error('[generate-day] Failed to upsert day:', dayError);
-        } else if (dayRow) {
-          // Delete old non-locked activities for this day, then insert new ones
-          await supabase
-            .from('itinerary_activities')
-            .delete()
-            .eq('itinerary_day_id', dayRow.id)
-            .eq('is_locked', false);
-          
-          // Insert all activities.
-          // IMPORTANT: The DB primary key is UUID, but the AI/frontend may produce ephemeral string IDs.
-          // We store those in external_id and let the DB generate UUIDs, then we return UUIDs back to the client.
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-          const isValidUUID = (str: string | undefined): boolean => !!str && uuidRegex.test(str);
-
-          const makeRow = (
-            act: {
-              id?: string;
-              title?: string;
-              name?: string;
-              description?: string;
-              category?: string;
-              startTime?: string;
-              endTime?: string;
-              durationMinutes?: number;
-              location?: { name?: string; address?: string };
-              cost?: { amount: number; currency: string };
-              isLocked?: boolean;
-              tags?: string[];
-              bookingRequired?: boolean;
-              tips?: string;
-              photos?: unknown;
-              walkingDistance?: string;
-              walkingTime?: string;
-              transportation?: unknown;
-              rating?: unknown;
-              website?: string;
-              viatorProductCode?: string;
-            },
-            idx: number
-          ) => ({
-            itinerary_day_id: dayRow.id,
-            trip_id: tripId,
-            sort_order: idx,
-            title: act.title || act.name || 'Activity',
-            name: act.name || act.title,
-            description: act.description || null,
-            category: act.category || 'activity',
-            start_time: act.startTime || null,
-            end_time: act.endTime || null,
-            duration_minutes: act.durationMinutes || null,
-            location: act.location || null,
-            cost: act.cost || null,
-            tags: act.tags || null,
-            is_locked: act.isLocked || false,
-            booking_required: act.bookingRequired || false,
-            tips: act.tips || null,
-            photos: act.photos || null,
-            walking_distance: act.walkingDistance || null,
-            walking_time: act.walkingTime || null,
-            transportation: act.transportation || null,
-            rating: act.rating || null,
-            website: act.website || null,
-            viator_product_code: act.viatorProductCode || null,
-          });
-
-          const uuidRows = normalizedActivities
-            .filter((a: { id?: string }) => isValidUUID(a.id))
-            .map((act: any, idx: number) => ({
-              id: act.id,
-              external_id: act.external_id || null,
-              ...makeRow(act, idx),
-            }));
-
-          const externalRows = normalizedActivities
-            .filter((a: { id?: string }) => !isValidUUID(a.id))
-            .map((act: any, idx: number) => ({
-              external_id: act.id || null,
-              ...makeRow(act, idx),
-            }));
-
-          // 1) Preserve/update UUID-based activities (e.g., locked activities already in DB)
-          if (uuidRows.length > 0) {
-            const { error: uuidErr } = await supabase
-              .from('itinerary_activities')
-              .upsert(uuidRows, { onConflict: 'id' });
-            if (uuidErr) {
-              console.error('[generate-day] Failed to upsert UUID activities:', uuidErr);
-            }
-          }
-
-          // 2) Insert external-id based activities (newly generated)
-          // NOTE: We use delete-then-insert instead of upsert because there is no
-          // unique constraint on (trip_id, itinerary_day_id, external_id), which
-          // caused 42P10 errors and silently dropped activities.
-          let persistedExternal: Array<{ id: string; external_id: string | null; is_locked: boolean | null }> = [];
-          if (externalRows.length > 0) {
-            // First, delete existing non-locked external-id activities for this day
-            // so we can cleanly insert the new set
-            const externalIds = externalRows
-              .map((r: any) => r.external_id)
-              .filter(Boolean);
-            
-            if (externalIds.length > 0 && itineraryDayId) {
-              await supabase
-                .from('itinerary_activities')
-                .delete()
-                .eq('trip_id', tripId)
-                .eq('itinerary_day_id', itineraryDayId)
-                .eq('is_locked', false)
-                .in('external_id', externalIds);
-            }
-
-            // Also clean up any orphan non-locked activities for this day
-            // that don't have UUIDs (leftover from previous failed inserts)
-            if (itineraryDayId) {
-              const keepUuids = uuidRows.map((r: any) => r.id);
-              if (keepUuids.length > 0) {
-                await supabase
-                  .from('itinerary_activities')
-                  .delete()
-                  .eq('trip_id', tripId)
-                  .eq('itinerary_day_id', itineraryDayId)
-                  .eq('is_locked', false)
-                  .not('id', 'in', `(${keepUuids.join(',')})`);
-              }
-            }
-
-            // Now insert fresh rows
-            const { data, error: extErr } = await supabase
-              .from('itinerary_activities')
-              .insert(externalRows)
-              .select('id, external_id, is_locked');
-            if (extErr) {
-              console.error('[generate-day] Failed to insert external-id activities:', extErr);
-            } else {
-              persistedExternal = (data || []) as any;
-            }
-          }
-
-          // Update the returned payload to use DB UUID ids (so future lock toggles + regen are stable)
-          if (persistedExternal.length > 0) {
-            const map = new Map(
-              persistedExternal
-                .filter(r => r.external_id)
-                .map(r => [r.external_id as string, r])
-            );
-
-            normalizedActivities = normalizedActivities.map((act: any) => {
-              if (isValidUUID(act.id)) return act;
-              const row = act.id ? map.get(act.id) : undefined;
-              if (!row) return act;
-              return {
-                ...act,
-                id: row.id,
-                isLocked: row.is_locked ?? act.isLocked,
-              };
-            });
-
-            // Ensure the response day uses the updated IDs
-            generatedDay.activities = normalizedActivities;
-          }
-
-          console.log(
-            `[generate-day] Persisted activities to itinerary_activities (uuid=${uuidRows.length}, external=${externalRows.length})`
-          );
-        }
+        const persistResult = await persistDay({
+          supabase,
+          tripId,
+          dayNumber,
+          date,
+          generatedDay,
+          normalizedActivities,
+          action: paramAction,
+          profile,
+          resolvedIsTransitionDay,
+          resolvedTransitionFrom,
+          resolvedTransitionTo,
+          resolvedTransportMode,
+          resolvedDestination,
+        });
+        normalizedActivities = persistResult.normalizedActivities;
+        generatedDay.activities = normalizedActivities;
       } catch (persistErr) {
         console.error('[generate-day] Persist error:', persistErr);
-      }
-    }
-
-    // Save version to itinerary_versions table for undo functionality
-    if (tripId) {
-      try {
-        // Build DNA snapshot for this generation version
-        const versionDnaSnapshot = profile ? {
-          archetype: profile.archetype,
-          secondaryArchetype: profile.secondaryArchetype,
-          archetypeSource: profile.archetypeSource,
-          traitScores: profile.traitScores,
-          budgetTier: profile.budgetTier,
-          dataCompleteness: profile.dataCompleteness,
-          isFallback: profile.isFallback,
-          snapshotAt: new Date().toISOString(),
-        } : null;
-
-        const { error: versionError } = await supabase
-          .from('itinerary_versions')
-          .insert({
-            trip_id: tripId,
-            day_number: dayNumber,
-            activities: generatedDay.activities,
-            day_metadata: {
-              title: generatedDay.title,
-              theme: generatedDay.theme,
-              narrative: generatedDay.narrative,
-              isTransitionDay: resolvedIsTransitionDay || undefined,
-              transitionFrom: resolvedTransitionFrom || undefined,
-              transitionTo: resolvedTransitionTo || undefined,
-              transportType: resolvedTransportMode || undefined,
-              city: resolvedDestination || undefined,
-            },
-            created_by_action: action === 'regenerate-day' ? 'regenerate' : 'generate',
-            dna_snapshot: versionDnaSnapshot,
-          });
-        
-        if (versionError) {
-          console.error('[generate-day] Failed to save version:', versionError);
-        } else {
-          console.log('[generate-day] Saved version for day', dayNumber);
-        }
-      } catch (vErr) {
-        console.error('[generate-day] Version save error:', vErr);
       }
     }
 
@@ -1396,259 +1230,8 @@ export async function handleGenerateDay(
       }
     }
 
-    // =====================================================================
-    // POST-GENERATION: Guarantee Hotel Check-in (mirrors Stage 2.56)
-    // If this is Day 1 or a multi-city transition day, ensure check-in exists
-    // =====================================================================
-    const normalizedActivities2 = generatedDay?.activities || [];
-    const needsCheckInGuarantee = dayNumber === 1 || resolvedIsTransitionDay;
-
-    if (needsCheckInGuarantee && normalizedActivities2.length > 0) {
-      const hasCheckIn = normalizedActivities2.some((a: any) => {
-        const t = (a.title || a.name || '').toLowerCase();
-        const cat = (a.category || '').toLowerCase();
-        return (
-          cat === 'accommodation' && (
-            t.includes('check-in') || t.includes('check in') ||
-            t.includes('checkin') || t.includes('settle in') ||
-            t.includes('refresh') || t.includes('hotel')
-          )
-        );
-      });
-
-      if (!hasCheckIn) {
-        // Resolve hotel name: multi-city first, then flightContext
-        let hotelName = flightContext.hotelName || 'Hotel';
-        let hotelAddress = flightContext.hotelAddress || '';
-
-        // For multi-city, try to load hotel from trip_cities
-        if (tripId && resolvedIsMultiCity) {
-          try {
-            const { data: tripCitiesForHotel } = await supabase
-              .from('trip_cities')
-              .select('city_name, hotel_selection, city_order, nights, days_total')
-              .eq('trip_id', tripId)
-              .order('city_order', { ascending: true });
-
-            if (tripCitiesForHotel && tripCitiesForHotel.length > 0) {
-              let dc = 0;
-              for (const city of tripCitiesForHotel) {
-                const cityNights = (city as any).nights || (city as any).days_total || 1;
-                for (let n = 0; n < cityNights; n++) {
-                  dc++;
-                  if (dc === dayNumber) {
-                    const rawHotel = city.hotel_selection as any;
-                    const cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : rawHotel;
-                    if (cityHotel?.name) hotelName = cityHotel.name;
-                    if (cityHotel?.address) hotelAddress = cityHotel.address;
-                    break;
-                  }
-                }
-                if (dc >= dayNumber) break;
-              }
-            }
-          } catch (e) {
-            console.warn('[generate-day] Could not resolve multi-city hotel for check-in:', e);
-          }
-        }
-
-        // Determine check-in time: 45 min before first activity, minimum 12:00
-        const firstAct = normalizedActivities2[0];
-        const firstStartMin = parseTimeToMinutes(firstAct?.startTime || '15:00') || (15 * 60);
-        const checkInStartMin = Math.max(12 * 60, firstStartMin - 45);
-        const checkInStart = minutesToHHMM(checkInStartMin);
-        const checkInEnd = minutesToHHMM(checkInStartMin + 30);
-
-        const checkInActivity = {
-          id: `day${dayNumber}-checkin-regen-${Date.now()}`,
-          title: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination}`,
-          name: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination}`,
-          description: dayNumber === 1
-            ? 'Check in, freshen up, and get oriented to the area'
-            : `Check in to hotel in ${resolvedDestination}, freshen up after travel`,
-          startTime: checkInStart,
-          endTime: checkInEnd,
-          category: 'accommodation',
-          type: 'accommodation',
-          location: { name: hotelName, address: hotelAddress },
-          cost: { amount: 0, currency: 'USD' },
-          bookingRequired: false,
-          isLocked: false,
-          durationMinutes: 30,
-        };
-
-        normalizedActivities2.unshift(checkInActivity);
-        generatedDay.activities = normalizedActivities2;
-        console.log(`[generate-day] ✓ Injected missing Hotel Check-in at ${checkInStart}-${checkInEnd} (hotel: ${hotelName}) for Day ${dayNumber}`);
-      } else {
-        console.log(`[generate-day] Day ${dayNumber} already has check-in activity — no injection needed`);
-      }
-    }
-
-    // =====================================================================
-    // POST-GENERATION: Guarantee Hotel Checkout (mirrors check-in guarantee)
-    // If this is the last day of the trip OR last day in a city, ensure checkout exists
-    // =====================================================================
-    const activitiesForCheckout = generatedDay?.activities || [];
-    const needsCheckoutGuarantee = isLastDay || (resolvedIsLastDayInCity && !resolvedIsTransitionDay);
-
-    if (needsCheckoutGuarantee && activitiesForCheckout.length > 0) {
-      const hasCheckout = activitiesForCheckout.some((a: any) => {
-        const t = (a.title || a.name || '').toLowerCase();
-        const cat = (a.category || '').toLowerCase();
-        return (
-          cat === 'accommodation' && (
-            t.includes('check-out') || t.includes('check out') ||
-            t.includes('checkout')
-          )
-        );
-      });
-
-      if (!hasCheckout) {
-        // Resolve hotel name
-        let checkoutHotelName = resolvedHotelOverride?.name || flightContext.hotelName || 'Hotel';
-        let checkoutHotelAddress = resolvedHotelOverride?.address || flightContext.hotelAddress || '';
-
-        // For multi-city, try to load hotel from trip_cities (reuse same logic as check-in)
-        if (tripId && resolvedIsMultiCity && checkoutHotelName === 'Hotel') {
-          try {
-            const { data: tripCitiesForCheckout } = await supabase
-              .from('trip_cities')
-              .select('city_name, hotel_selection, city_order, nights, days_total')
-              .eq('trip_id', tripId)
-              .order('city_order', { ascending: true });
-
-            if (tripCitiesForCheckout && tripCitiesForCheckout.length > 0) {
-              let dc = 0;
-              for (const city of tripCitiesForCheckout) {
-                const cityNights = (city as any).nights || (city as any).days_total || 1;
-                for (let n = 0; n < cityNights; n++) {
-                  dc++;
-                  if (dc === dayNumber) {
-                    const rawHotel = city.hotel_selection as any;
-                    const cityHotel = Array.isArray(rawHotel) && rawHotel.length > 0 ? rawHotel[0] : rawHotel;
-                    if (cityHotel?.name) checkoutHotelName = cityHotel.name;
-                    if (cityHotel?.address) checkoutHotelAddress = cityHotel.address;
-                    break;
-                  }
-                }
-                if (dc >= dayNumber) break;
-              }
-            }
-          } catch (e) {
-            console.warn('[generate-day] Could not resolve multi-city hotel for checkout:', e);
-          }
-        }
-
-        // Determine checkout time
-        let checkoutStartMin: number;
-        const returnDep24 = flightContext.returnDepartureTime24 || (flightContext.returnDepartureTime ? normalizeTo24h(flightContext.returnDepartureTime) : null);
-        const returnDepMins = returnDep24 ? (parseTimeToMinutes(returnDep24) ?? null) : null;
-        if (isLastDay && returnDepMins !== null) {
-          // 3.5 hours before flight, minimum 07:00
-          checkoutStartMin = Math.max(7 * 60, returnDepMins - 210);
-        } else {
-          // Default: 11:00 AM for intermediate city departures or no-flight last day
-          checkoutStartMin = 11 * 60;
-        }
-
-        const checkoutStart = minutesToHHMM(checkoutStartMin);
-        const checkoutEnd = minutesToHHMM(checkoutStartMin + 30);
-
-        const checkoutActivity = {
-          id: `day${dayNumber}-checkout-guarantee-${Date.now()}`,
-          title: `Hotel Checkout from ${checkoutHotelName}`,
-          name: `Hotel Checkout from ${checkoutHotelName}`,
-          description: isLastDay
-            ? 'Check out, collect luggage, and prepare for departure.'
-            : `Check out from ${checkoutHotelName}. Store luggage if needed before continuing your day.`,
-          startTime: checkoutStart,
-          endTime: checkoutEnd,
-          category: 'accommodation',
-          type: 'accommodation',
-          location: { name: checkoutHotelName, address: checkoutHotelAddress },
-          cost: { amount: 0, currency: 'USD' },
-          bookingRequired: false,
-          isLocked: false,
-          durationMinutes: 30,
-        };
-
-        // Insert chronologically
-        let insertIdx = activitiesForCheckout.length;
-        for (let i = 0; i < activitiesForCheckout.length; i++) {
-          const actStart = parseTimeToMinutes(activitiesForCheckout[i].startTime || '') ?? 99999;
-          if (checkoutStartMin <= actStart) {
-            insertIdx = i;
-            break;
-          }
-        }
-        activitiesForCheckout.splice(insertIdx, 0, checkoutActivity);
-        generatedDay.activities = activitiesForCheckout;
-        console.log(`[generate-day] ✓ Injected missing Hotel Checkout at ${checkoutStart}-${checkoutEnd} (hotel: ${checkoutHotelName}) for Day ${dayNumber}`);
-      } else {
-        console.log(`[generate-day] Day ${dayNumber} already has checkout activity — no injection needed`);
-      }
-    }
-
-    // ====================================================================
-    // DEPARTURE DAY SEQUENCE FIX (generate-day path):
-    // If checkout exists AFTER airport transfer, swap them & re-anchor times
-    // ====================================================================
-    if (isLastDay && generatedDay.activities.length > 1) {
-      const checkoutIdx = generatedDay.activities.findIndex((a: any) => {
-        const t = (a.title || '').toLowerCase();
-        return t.includes('checkout') || t.includes('check-out') || t.includes('check out');
-      });
-      const airportIdx = generatedDay.activities.findIndex((a: any) => {
-        const t = (a.title || '').toLowerCase();
-        return (t.includes('airport') || t.includes('departure transfer')) &&
-               ((a.category || '').toLowerCase() === 'transport' || t.includes('transfer'));
-      });
-
-      if (checkoutIdx !== -1 && airportIdx !== -1 && checkoutIdx > airportIdx) {
-        console.log(`[generate-day] Fixing departure sequence: checkout@${checkoutIdx} → before airport@${airportIdx}`);
-        const checkoutAct = generatedDay.activities[checkoutIdx];
-        const airportAct = generatedDay.activities[airportIdx];
-
-        const checkoutDur = Math.max(5, ((parseTimeToMinutes(checkoutAct.endTime) ?? 0) - (parseTimeToMinutes(checkoutAct.startTime) ?? 0))) || 15;
-        const transferDur = Math.max(10, ((parseTimeToMinutes(airportAct.endTime) ?? 0) - (parseTimeToMinutes(airportAct.startTime) ?? 0))) || 60;
-
-        checkoutAct.startTime = airportAct.startTime;
-        checkoutAct.endTime = addMinutesToHHMM(checkoutAct.startTime, checkoutDur);
-        airportAct.startTime = checkoutAct.endTime;
-        airportAct.endTime = addMinutesToHHMM(airportAct.startTime, transferDur);
-
-        generatedDay.activities[airportIdx] = checkoutAct;
-        generatedDay.activities[checkoutIdx] = airportAct;
-        generatedDay.activities.sort((a: any, b: any) => {
-          const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
-          const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
-          return ta - tb;
-        });
-      }
-    }
-
-    // ====================================================================
-    // NON-FLIGHT DEPARTURE DAY: Strip airport activities (generate-day path)
-    // ====================================================================
-    if (resolvedIsLastDayInCity && !isLastDay && resolvedNextLegTransport && resolvedNextLegTransport !== 'flight') {
-      const beforeCount = generatedDay.activities.length;
-      generatedDay.activities = generatedDay.activities.filter((a: any) => {
-        const t = (a.title || '').toLowerCase();
-        const isAirportRef =
-          t.includes('airport') ||
-          t.includes('taxi to airport') ||
-          t.includes('transfer to airport') ||
-          t.includes('departure transfer to airport') ||
-          t.includes('flight departure') ||
-          t.includes('head to airport');
-        return !isAirportRef;
-      });
-      const removed = beforeCount - generatedDay.activities.length;
-      if (removed > 0) {
-        console.log(`[generate-day] Day ${dayNumber}: Stripped ${removed} airport activities (next leg is ${resolvedNextLegTransport}, not flight)`);
-      }
-    }
+    // Post-gen hotel check-in, checkout, departure sequence, and airport stripping
+    // are now handled by pipeline/repair-day.ts (steps 9-12)
 
     // ====================================================================
     if (allUserIdsForAttribution.length > 1 && generatedDay?.activities?.length) {

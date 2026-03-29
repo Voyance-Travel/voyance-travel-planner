@@ -150,7 +150,7 @@ serve(async (req) => {
     }
 
     if (action === 'generate-day' || action === 'regenerate-day') {
-      return handleGenerateDay(supabase, authResult.userId, params);
+      return handleGenerateDay(supabase, authResult.userId, { ...params, action });
     }
 
     if (action === 'generate-trip') {
