@@ -27,6 +27,7 @@ import {
   sanitizeDateFields,
   normalizeDurationString,
   enforceHotelPlaceholderOnDay,
+  deduplicateCrossDayVenues,
 } from './sanitization.ts';
 
 import {
