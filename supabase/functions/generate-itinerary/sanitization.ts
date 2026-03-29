@@ -254,6 +254,10 @@ const PHANTOM_HOTEL_TITLE_PATTERNS = [
   /\btaxi to (?:the )?hotel\b/i,
   /\btransfer to (?:the )?hotel\b/i,
   /\bback to (?:the )?hotel\b/i,
+  /\bnear your hotel\b/i,
+  /\bat your hotel\b/i,
+  /\bcaf[ée] near.*hotel\b/i,
+  /\bsettle in\b/i,
 ];
 
 const PHANTOM_HOTEL_CATEGORIES = ['hotel_checkin', 'hotel_checkout', 'accommodation'];

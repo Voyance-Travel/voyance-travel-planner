@@ -51,8 +51,8 @@ export function compileDaySchema(input: DaySchemaInput): CompiledSchema {
       const settleInEnd = addMinutesToHHMM(hotelCheckIn, 30);
       const earliestSightseeing = addMinutesToHHMM(settleInEnd, 30);
 
-      const hotelNameDisplay = flightContext.hotelName || 'Selected Hotel';
-      const hotelAddressDisplay = flightContext.hotelAddress || 'Hotel Address';
+      const hotelNameDisplay = flightContext.hotelName || '';
+      const hotelAddressDisplay = flightContext.hotelAddress || '';
 
       console.log(`[compile-day-schema] Day1 arrival at ${arrival24}: morning=${isMorningArrival}, afternoon=${isAfternoonArrival}`);
 

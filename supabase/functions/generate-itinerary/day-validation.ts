@@ -750,7 +750,7 @@ function getDestinationHint(destination: string, mealType: RequiredMeal): { venu
   }
   // Generic but better than "Local Café"
   const generic: Record<RequiredMeal, { venueSuffix: string; description: string }> = {
-    breakfast: { venueSuffix: 'café near your hotel', description: 'Morning coffee and a local breakfast — ask your hotel for their favorite nearby spot' },
+    breakfast: { venueSuffix: 'local café', description: 'Morning coffee and a local breakfast at a well-reviewed nearby spot' },
     lunch: { venueSuffix: 'neighborhood restaurant', description: 'Midday meal at a well-reviewed local spot near your activities' },
     dinner: { venueSuffix: 'restaurant', description: 'Evening dinner at a popular local restaurant — reservations recommended' },
   };
