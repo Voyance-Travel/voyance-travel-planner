@@ -231,6 +231,8 @@ import {
 import { compileDayFacts } from './pipeline/compile-day-facts.ts';
 import { compileDaySchema } from './pipeline/compile-day-schema.ts';
 import type { LockedActivity } from './pipeline/types.ts';
+import { validateDay, type ValidateDayInput } from './pipeline/validate-day.ts';
+import { repairDay, type RepairDayInput } from './pipeline/repair-day.ts';
 
 export async function handleGenerateDay(
   supabase: any,
