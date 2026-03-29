@@ -52,20 +52,23 @@ Extracted ~930 lines of prompt assembly into `pipeline/compile-prompt.ts`. Added
 
 **Result:** Monolith dropped from 1,361 → **1,036 lines** (down from original ~2,900).
 
-## Remaining Blocks in `action-generate-day.ts`
+## Remaining Blocks in `action-generate-day.ts` (1,036 lines)
 
-| Block | ~Lines | Notes |
-|-------|--------|-------|
-| AI call + retry | ~170 | Could extract to `pipeline/ai-call.ts` |
-| Parse + normalize | ~80 | Inline, tightly coupled to AI response shape |
-| Locked activity merge + semantic dedup | ~45 | Inline |
-| Enrichment + opening hours | ~200 | I/O-heavy, depends on Google Maps API |
-| Auto route optimization | ~12 | Inline |
-| Must-do event overlap + backfill | ~170 | Inline |
-| Transition day assembly | ~130 | Inline |
-| Pipeline validate + repair call | ~70 | Already wired to pipeline |
-| Attribution backfill | ~20 | Inline |
-| Meal final guard | ~75 | Inline, needs DB |
+Pipeline refactor is **functionally complete**. The orchestrator retains blocks that are small, tightly coupled, or have diminishing extraction returns:
+
+| Block | ~Lines | Status |
+|-------|--------|--------|
+| Parse + normalize | ~80 | Stays — tightly coupled to AI response |
+| Locked merge + semantic dedup | ~45 | Stays — small |
+| Auto route optimization | ~12 | Stays — single call |
+| Must-do overlap + backfill | ~160 | Optional extraction candidate |
+| Transition day assembly | ~145 | Optional extraction candidate |
+| Validate + repair call | ~170 | Wired to pipeline modules |
+| Persist call | ~22 | Already extracted |
+| Attribution backfill | ~20 | Stays — tiny |
+| Meal final guard | ~70 | Stays — needs DB, small |
+
+**Summary:** Orchestrator reduced from ~2,900 → **1,036 lines** (~64% reduction). Eight pipeline modules now handle types, facts, schema, prompt, validation, repair, persistence, AI calls, and enrichment.
 
 ## Pipeline Module Inventory
 
