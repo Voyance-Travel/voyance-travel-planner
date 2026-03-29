@@ -244,6 +244,12 @@ export function enforceItineraryMealCompliance(
   for (const day of days) {
     if (!day.activities || !Array.isArray(day.activities)) continue;
 
+    // Skip meal injection on completely empty days — flag as ungenerated
+    if (day.activities.length === 0) {
+      (day as any)._ungenerated = true;
+      continue;
+    }
+
     const requiredMeals: MealType[] = isFullExplorationDay(day, totalDays)
       ? ['breakfast', 'lunch', 'dinner']
       : [];
@@ -303,6 +309,12 @@ export async function enforceItineraryMealComplianceAsync(
 
   for (const day of days) {
     if (!day.activities || !Array.isArray(day.activities)) continue;
+
+    // Skip meal injection on completely empty days — flag as ungenerated
+    if (day.activities.length === 0) {
+      (day as any)._ungenerated = true;
+      continue;
+    }
 
     const requiredMeals: MealType[] = isFullExplorationDay(day, totalDays)
       ? ['breakfast', 'lunch', 'dinner']
