@@ -208,9 +208,11 @@ export async function callAI(input: AICallInput): Promise<AICallResult> {
     }
 
     // Success
+    const usage = data.usage || {};
+    console.log(`[ai-call] ✓ Day ${dayNumber}: model=${data.model || model}, tokens=${usage.prompt_tokens || 0}+${usage.completion_tokens || 0}, attempt=${attempt}`);
     return {
       data,
-      usage: data.usage,
+      usage,
       model: data.model || model,
     };
   }
