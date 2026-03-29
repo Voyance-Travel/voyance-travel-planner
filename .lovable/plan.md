@@ -1,52 +1,45 @@
 
-I inspected the current code and the new error report. The strongest conclusion is that this is now a two-part issue: one remaining render-time string guard gap in `EditorialItinerary`, plus a stale frontend bundle problem caused by PWA/service-worker caching.
 
-What I confirmed
-- The published crash still points to the same old bundle hash: `index-SuNP7A_H.js`.
-- The app still has PWA enabled in `vite.config.ts` via `vite-plugin-pwa`.
-- `src/main.tsx` tries to clear caches manually, but that does not reliably prevent an already-installed service worker from serving stale assets.
-- `client_errors` is receiving other frontend inserts, so logging works in general; the absence of recent render-crash rows points to users still executing an older cached build.
-- Several previously targeted `EditorialItinerary` guards are already present.
-- One additional unguarded high-risk path still exists in `EditorialItinerary.tsx`:
-  - `category.toLowerCase()`
-  - `title.toLowerCase()`
-  inside the cost-estimation helper around lines `1036-1043`
+# Fix: Generation logs falsely report "completed" for failed itineraries
 
-Plan
-1. Harden the remaining render-time gap in `EditorialItinerary`
-   - Replace direct `category.toLowerCase()` and `title.toLowerCase()` with defensive normalization.
-   - Prefer the existing `safeLower()` helper so the pattern is consistent with the project’s defensive rendering strategy.
+## Problem
 
-2. Remove the stale-bundle source for frontend deploys
-   - Disable the PWA plugin in `vite.config.ts` for now, since this app is actively suffering from stale published bundles.
-   - Keep the app installability/offline discussion separate; for this bug, reliability matters more than caching.
+The generation finalization logic has **two conflicting status computations**:
 
-3. Clean up startup behavior in `src/main.tsx`
-   - Remove the ad-hoc service worker update / cache purge block once PWA is disabled.
-   - If desired, replace it with a small unregister routine for existing service workers on load so old clients stop using stale caches.
+1. **Lines 876-877** correctly compute `isComplete` using three conditions: `allDaysHaveActivities && dayCountMatches && noFailedDays`
+2. **Lines 954 and 989** only check `allDaysHaveActivities`, ignoring `dayCountMatches` and `noFailedDays`
 
-4. Preserve diagnostics
-   - Keep `ErrorBoundary`, `GlobalErrorHandler`, and `useErrorTracker` as-is.
-   - Optionally add one breadcrumb field to the itinerary render helper if you want future `client_errors` rows to identify the failing itinerary section more precisely.
+This means a trip where days failed (tracked in `failed_day_numbers` metadata) or where day count doesn't match expectations still gets marked as `completed` in `generation_logs` and `ready` in the `itinerary_status` column — as long as every day in the array has at least one activity (which placeholder/structural days do).
 
-Files to update
-- `src/components/itinerary/EditorialItinerary.tsx`
-- `vite.config.ts`
-- `src/main.tsx`
-- optionally `src/utils/logClientError.ts`
+Additionally, placeholder days injected at lines 913-924 contain structural activities (checkout, transfer, departure), so they pass the `activities.length > 0` check even though they were never truly generated.
 
-Expected result
-- The remaining realistic `.toLowerCase()` render crash in the itinerary renderer is removed.
-- New frontend publishes should stop serving the stale `index-SuNP7A_H.js` bundle.
-- Future crashes, if any, should come from the current build and be much easier to diagnose.
+## Evidence from the database
 
-Technical details
-- Current confirmed unguarded code:
-  - `src/components/itinerary/EditorialItinerary.tsx:1036-1043`
-- Current confirmed PWA source:
-  - `vite.config.ts:22-61`
-- Current manual cache logic:
-  - `src/main.tsx:72-93`
+- Multiple trips show `itinerary_status: ready` but `generation_completed_days < generation_total_days` (e.g., Tokyo 3/5, Paris 2/4)
+- All recent `generation_logs` rows show `status: completed` with empty errors arrays
 
-Implementation note
-- I would treat disabling PWA/service-worker caching as part of this fix, not as a separate cleanup. The repeated old asset hash is too consistent to ignore.
+## Fix (1 file)
+
+**`supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+
+Replace the two inconsistent status checks with the already-computed `isComplete` variable:
+
+1. **Line 954**: Change `allDaysHaveActivities ? 'ready' : 'partial'` to use `isComplete ? 'ready' : 'partial'`
+2. **Line 965**: Change the `generation_completed_days` ternary to use `isComplete` instead of `allDaysHaveActivities`
+3. **Line 970-971**: Change `chain_broken_at_day` and `chain_error` conditionals to use `isComplete`
+4. **Line 989**: Change `timer.finalize(allDaysHaveActivities ? 'completed' : 'failed')` to `timer.finalize(isComplete ? 'completed' : 'failed')`
+5. **Line 991**: Update the log message to use `isComplete`
+
+This ensures that failed days, day count mismatches, and placeholder-only days all correctly result in `failed` generation logs and `partial` trip status, making the recovery UI ("Incomplete Itinerary" banner) appear as intended.
+
+## Technical details
+
+| Line | Current | Fixed |
+|------|---------|-------|
+| 954 | `allDaysHaveActivities ? 'ready' : 'partial'` | `isComplete ? 'ready' : 'partial'` |
+| 965 | `allDaysHaveActivities ? totalDays : ...` | `isComplete ? totalDays : ...` |
+| 970 | `allDaysHaveActivities ? null : emptyDaysList[0]` | `isComplete ? null : ...` |
+| 971 | `allDaysHaveActivities ? null : ...` | `isComplete ? null : ...` |
+| 989 | `allDaysHaveActivities ? 'completed' : 'failed'` | `isComplete ? 'completed' : 'failed'` |
+| 991 | `allDaysHaveActivities` in log string | `isComplete` |
+
