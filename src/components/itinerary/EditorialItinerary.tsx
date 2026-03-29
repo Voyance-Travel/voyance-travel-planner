@@ -1037,8 +1037,8 @@ function getActivityCostInfo(
   const title = activity.title || '';
   
   // Walk connectors are always free — skip estimation entirely
-  const catLower = category.toLowerCase();
-  const titleLower = title.toLowerCase();
+  const catLower = (category || '').toLowerCase();
+  const titleLower = (title || '').toLowerCase();
   const isWalk = ['walk', 'walking', 'stroll'].includes(catLower) ||
     /\bwalk\b|\bstroll\b|\bwalking\b/i.test(titleLower);
   if (isWalk) {
@@ -2577,7 +2577,7 @@ export function EditorialItinerary({
                   ...act.transportation,
                   method: newMode,
                   estimatedCost: {
-                    amount: modeCosts[newMode.toLowerCase()] ?? 0,
+                    amount: modeCosts[(newMode || '').toLowerCase()] ?? 0,
                     currency: act.transportation.estimatedCost?.currency || 'USD',
                   },
                 },
@@ -2607,7 +2607,7 @@ export function EditorialItinerary({
             if (act.id !== activityId || !act.transportation) return act;
             const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
             const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
-            const newTitle = destMatch ? `${mLabels[newMode.toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
+            const newTitle = destMatch ? `${mLabels[(newMode || '').toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
             return {
               ...act,
               title: newTitle,
@@ -2616,7 +2616,7 @@ export function EditorialItinerary({
                 ...act.transportation,
                 method: newMode,
                 estimatedCost: {
-                  amount: modeCosts[newMode.toLowerCase()] ?? 0,
+                  amount: modeCosts[(newMode || '').toLowerCase()] ?? 0,
                   currency: act.transportation.estimatedCost?.currency || 'USD',
                 },
               },
@@ -8570,10 +8570,10 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
         if (data?.options) {
           // Map API response to our format
           const taxiOption = data.options.find((o: TransferOption) => 
-            o.mode.toLowerCase().includes('taxi') || o.mode.toLowerCase().includes('ride')
+            (o.mode || '').toLowerCase().includes('taxi') || (o.mode || '').toLowerCase().includes('ride')
           );
           const transitOption = data.options.find((o: TransferOption) => 
-            o.mode.toLowerCase().includes('train') || o.mode.toLowerCase().includes('bus')
+            (o.mode || '').toLowerCase().includes('train') || (o.mode || '').toLowerCase().includes('bus')
           );
           
           setTransferData({
@@ -9887,6 +9887,7 @@ function ActivityRow({
   onPhotoResolved,
   isManualMode = false,
 }: ActivityRowProps) {
+  if (!activity) return null;
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const activityType = getActivityType(activity);

@@ -329,7 +329,7 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
   } = params;
   
   // Block accommodation categories — hotel costs are tracked separately in Budget/Payments
-  const normalizedCategoryEarly = category.toLowerCase().trim();
+  const normalizedCategoryEarly = (category || 'activity').toLowerCase().trim();
   if (['accommodation', 'hotel', 'stay', 'check-in', 'checkout', 'check-out'].includes(normalizedCategoryEarly)) {
     return {
       amount: 0,
@@ -360,7 +360,7 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
   // Try partial matches
   if (!costIndex && city) {
     for (const [key, value] of costIndexCache.entries()) {
-      if (key.startsWith(`${city.toLowerCase()}|`)) {
+      if (key.startsWith(`${(city || '').toLowerCase()}|`)) {
         costIndex = value;
         break;
       }
@@ -368,7 +368,7 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
   }
   if (!costIndex && country) {
     for (const [key, value] of costIndexCache.entries()) {
-      if (key.endsWith(`|${country.toLowerCase()}`)) {
+      if (key.endsWith(`|${(country || '').toLowerCase()}`)) {
         costIndex = value;
         break;
       }
@@ -399,7 +399,7 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
   }
   
   // Priority 3: Category-based estimation with title inference
-  const normalizedCategory = category.toLowerCase().trim();
+  const normalizedCategory = (category || 'activity').toLowerCase().trim();
 
   // ─── Transport mode-aware pricing ───
   if (['transport', 'transfer', 'transportation'].includes(normalizedCategory)) {
