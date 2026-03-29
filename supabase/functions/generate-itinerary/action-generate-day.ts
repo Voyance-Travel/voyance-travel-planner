@@ -10,8 +10,6 @@ import type {
   StrictActivity,
   StrictDay,
   ValidationContext,
-  validateItineraryPersonalization,
-  buildValidationContext,
 } from './generation-types.ts';
 import {
   validateItineraryPersonalization,
@@ -222,8 +220,6 @@ import {
   minutesToHHMM,
   addMinutesToHHMM,
   normalizeTo24h,
-} from './flight-hotel-context.ts';
-import {
   getFlightHotelContext,
 } from './flight-hotel-context.ts';
 import {
