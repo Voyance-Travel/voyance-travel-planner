@@ -385,6 +385,8 @@ async function _handleGenerateTripDayInner(
       if (!data.day) throw new Error(`No day data returned for day ${dayNumber}`);
 
       dayResult = data.day;
+      // Capture pipeline diagnostics from generate-day response
+      (dayResult as any).__diagnostics = data._diagnostics || null;
       aiCallDurationMs = Date.now() - dayGenStart;
       stageLogger.logAIResponse(data.day, aiCallDurationMs);
       timer.endPhase(`day_${dayNumber}_total`);
@@ -978,7 +980,12 @@ async function _handleGenerateTripDayInner(
       const cat = (act.category || 'other').toLowerCase();
       dayCategories[cat] = (dayCategories[cat] || 0) + 1;
     }
-    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0, dayCategories);
+    const diag1 = (dayResult as any)?.__diagnostics || {};
+    timer.addDayTiming(
+      dayNumber, dayGenTotal, diag1.aiCallMs || 0, diag1.enrichMs || 0,
+      dayResult?.activities?.length || 0, dayCategories,
+      diag1.meals || undefined, diag1.transport || undefined,
+    );
     await timer.finalize(allDaysHaveActivities ? 'completed' : 'failed');
 
     console.log(`[generate-trip-day] ${allDaysHaveActivities ? '✅' : '⚠️'} Trip ${tripId} generation ${allDaysHaveActivities ? 'complete' : 'partial (shell days)'}: ${totalDays} days, status=${finalStatus}`);
@@ -1041,7 +1048,12 @@ async function _handleGenerateTripDayInner(
       const cat = (act.category || 'other').toLowerCase();
       dayCats[cat] = (dayCats[cat] || 0) + 1;
     }
-    timer.addDayTiming(dayNumber, dayGenTotal, 0, 0, dayResult?.activities?.length || 0, dayCats);
+    const diag2 = (dayResult as any)?.__diagnostics || {};
+    timer.addDayTiming(
+      dayNumber, dayGenTotal, diag2.aiCallMs || 0, diag2.enrichMs || 0,
+      dayResult?.activities?.length || 0, dayCats,
+      diag2.meals || undefined, diag2.transport || undefined,
+    );
     const progressPct = 5 + Math.round((dayNumber / totalDays) * 90);
     await timer.updateProgress(`Day ${dayNumber}/${totalDays} complete`, progressPct);
 
