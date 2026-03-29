@@ -90,8 +90,10 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)\b/gi, '')
     // AI self-referential commentary
     .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+\w+\s+(?:interest|preference|request|need|requirement)\b[^.]*\.?/gi, '')
-    // Strip "Voyance Pick" / "Hotel Pick" labels
-    .replace(/\s*(?:Voyance\s+Pick|Hotel\s+Pick)\s*/gi, '')
+    // Strip "Voyance Pick" / "Hotel Pick" and variant internal labels
+    .replace(/\s*(?:Voyance\s+(?:Pick|Recommendation|Choice)|Hotel\s+Pick|Staff\s+Pick)\s*/gi, '')
+    // Deduplicate consecutive repeated words: "Pantheon Pantheon" → "Pantheon"
+    .replace(/\b(\w{3,})\s+\1\b/gi, '$1')
     .replace(/\(\s*\)/g, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
