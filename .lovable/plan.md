@@ -78,3 +78,5 @@ Extracted ~930 lines of prompt assembly into `pipeline/compile-prompt.ts`. Added
 | `pipeline/validate-day.ts` | 561 | Pure validation (no mutations) |
 | `pipeline/repair-day.ts` | 725 | Deterministic repairs (12 steps) |
 | `pipeline/persist-day.ts` | 258 | DB persistence + versioning |
+| `pipeline/ai-call.ts` | 219 | AI call + retry + error handling |
+| `pipeline/enrich-day.ts` | 291 | Enrichment + opening hours |
