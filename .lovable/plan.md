@@ -1,35 +1,109 @@
 
 
-# Phase 2: Extract Deterministic Compilers — COMPLETED
+# Phase 4: Extract Prompt Construction
 
-## Summary
+## Goal
 
-Phase 2 extracted ~1,200 lines of deterministic fact-gathering and rule-derivation logic from `action-generate-day.ts` into two isolated, testable modules:
+Extract the ~930 lines of prompt assembly (lines 317–1260) from `action-generate-day.ts` into `pipeline/compile-prompt.ts`. This is the largest remaining block in the monolith. After this, the main file becomes a thin orchestrator: compile facts → compile schema → compile prompt → AI call → parse → enrich → validate/repair → persist → respond.
 
-1. **`pipeline/compile-day-facts.ts`** — async function that consolidates all DB queries and fact extraction (transition days, locked activities, preferences, flight/hotel context) into a typed `CompiledFacts` return.
-2. **`pipeline/compile-day-schema.ts`** — pure function that takes resolved facts and executes the day-mode classification decision tree, producing a `CompiledSchema` with `dayConstraints` string.
+## What lives in these lines today
 
-### Also completed
-- **`pipeline/types.ts`** — Added `LockedActivity`, `CompiledFacts`, `CompiledSchema`, `DaySchemaInput` types.
-- **`action-generate-day.ts`** — Replaced inline logic with calls to `compileDayFacts()` and `compileDaySchema()`.
-- **`action-generate-trip-day.ts`** — Wired in `StageLogger` to record AI response timing and flush pipeline artifacts to `trip.metadata.pipeline_logs`.
+| Block | Lines | Description |
+|-------|-------|-------------|
+| Preference context | 317-333 | `getLearnedPreferences`, `getUserPreferences`, `buildPreferenceContext` |
+| Trip intents | 335-348 | Query `trip_intents` table |
+| Must-do parsing & scheduling | 350-450 | `parseMustDoInput`, `scheduleMustDos`, prompt construction |
+| Interest categories | 452-461 | Category label mapping |
+| Generation rules | 463-467 | `formatGenerationRules` |
+| Visitor type + pacing | 469-478 | Static prompt blocks |
+| Must-haves + pre-booked | 480-512 | Checklist and commitment analysis |
+| Additional notes | 518-543 | Trip purpose injection |
+| Timing instructions | 570-694 | First day / last day / regular day meal policy + structure |
+| Transition day override | 700-725 | `buildTransitionDayPrompt` |
+| Profile + archetype | 727-950 | `loadTravelerProfile`, generation context read, budget, blended traits, archetype guidance |
+| Voyance Picks | 952-973 | DB query + prompt |
+| Collaborator attribution | 975-1053 | DB query + prompt |
+| System prompt assembly | 1055-1126 | Final concatenation |
+| User prompt assembly | 1128-1260 | User-facing prompt with budget, meal rules, skip list, restaurant pool |
 
-# Phase 3: Validators & Repair — COMPLETED
+All of this is prompt string construction. Some parts need DB queries (trip intents, Voyance Picks, collaborators), making the function async.
 
-## Summary
+## New file: `pipeline/compile-prompt.ts`
 
-Phase 3 extracted ~580 lines of inline post-processing from `action-generate-day.ts` into two structured pipeline modules:
+Single exported function:
 
-1. **`pipeline/validate-day.ts`** — Pure inspection function that classifies every issue by `FailureCode`. Checks: PHANTOM_HOTEL, CHAIN_RESTAURANT, GENERIC_VENUE, TITLE_LABEL_LEAK, CHRONOLOGY, TIME_OVERLAP, MEAL_ORDER, MEAL_MISSING, MEAL_DUPLICATE, LOGISTICS_SEQUENCE, DUPLICATE_CONCEPT, WEAK_PERSONALIZATION. Returns `ValidationResult[]` with severity, activity index, and autoRepairable flag.
+```typescript
+export async function compilePrompt(
+  supabase: any,
+  userId: string,
+  params: CompilePromptInput,
+): Promise<CompiledPrompt>
+```
 
-2. **`pipeline/repair-day.ts`** — Deterministic repairs keyed to failure codes, executed in strict order: phantom hotel strip → chain removal → pre-arrival filter → chronology sort → trip-wide dedup (with pool swap) → personalization violations → departure sequence (6-rule validator) → bookend injection (hotel returns + transit gaps) → label leak strip. Returns `RepairAction[]` for logging.
+**Input** (`CompilePromptInput`): Bundles the data already available from `compileDayFacts` + `compileDaySchema` plus raw request params (tripId, dayNumber, travelers, budgetTier, preferences, previousDayActivities, etc.).
 
-### Changes to existing files
-- **`action-generate-day.ts`** — Replaced inline trip-wide validation, personalization check, departure validator, bookend validator, and chain filter (~580 lines) with `validateDay()` + `repairDay()` pipeline calls. Meal guard stays inline (needs DB-backed fallback venues).
+**Output** (`CompiledPrompt`):
+```typescript
+interface CompiledPrompt {
+  systemPrompt: string;
+  userPrompt: string;
+  // Extracted side-effects needed by post-processing
+  mustDoEventItems: ScheduledMustDo[];
+  dayMealPolicy: MealPolicy;
+  lockedActivities: LockedActivity[];
+  allUserIdsForAttribution: string[];
+  actualDailyBudgetPerPerson: number | null;
+  profile: UnifiedTravelerProfile;
+  effectiveBudgetTier: string;
+  isSmartFinish: boolean;
+}
+```
 
-## Next: Phase 4 — TBD
+The function does all DB queries (trip intents, Voyance Picks, collaborators, budget, generation context) and string assembly internally. Returns the final prompt pair plus metadata needed by downstream post-processing.
 
-Potential directions:
-- Extract prompt construction into `pipeline/compile-prompt.ts`
-- Move venue enrichment (Google Maps) into a dedicated pipeline stage
-- Add pipeline logging for validation/repair results via StageLogger
+## Changes to `action-generate-day.ts`
+
+Replace lines ~317–1260 with:
+
+```typescript
+const prompt = await compilePrompt(supabase, userId, {
+  facts, schema, params, metadata, /* ... */
+});
+const { systemPrompt, userPrompt, mustDoEventItems, dayMealPolicy, ... } = prompt;
+```
+
+Net reduction: ~900 lines.
+
+## Changes to `pipeline/types.ts`
+
+Add `CompilePromptInput` and `CompiledPrompt` interfaces.
+
+## What does NOT change
+
+- `prompt-library.ts` — still called by `compilePrompt`, not modified
+- `meal-policy.ts` — still called by `compilePrompt`, not modified
+- `archetype-data.ts` — still called by `compilePrompt`, not modified
+- All other pipeline modules — untouched
+- Post-processing blocks (enrichment, opening hours, must-do backfill, persist, etc.) — stay in `action-generate-day.ts` for now
+
+## Execution order
+
+1. Add `CompilePromptInput` and `CompiledPrompt` types to `pipeline/types.ts`
+2. Create `pipeline/compile-prompt.ts` — extract all prompt assembly logic
+3. Wire into `action-generate-day.ts` — replace ~900 lines with single call
+4. Update `.lovable/plan.md`
+
+## Risk
+
+**Medium-low.** Pure extraction of string concatenation + DB reads. The prompt strings must be identical. Any difference surfaces immediately as changed AI behavior. The side-effect data (mustDoEventItems, profile, etc.) that post-processing depends on is returned explicitly in `CompiledPrompt`.
+
+## After Phase 4
+
+The monolith drops from ~2,900 to ~2,000 lines. Remaining blocks are:
+- AI call + retry (~200 lines) — could become `pipeline/ai-call.ts`
+- Parse + normalize (~80 lines)
+- Enrichment + opening hours (~300 lines) — I/O, stays or becomes `pipeline/enrich.ts`
+- Must-do backfill + transition fallback (~310 lines) — deterministic, could fold into repair
+- DB persistence (~230 lines) — could become `pipeline/persist-day.ts`
+- Post-generation guarantees (~410 lines) — most should fold into repair
+
