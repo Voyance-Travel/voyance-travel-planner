@@ -73,6 +73,8 @@ import { validateDay, type ValidateDayInput } from './pipeline/validate-day.ts';
 import { repairDay, type RepairDayInput } from './pipeline/repair-day.ts';
 import { compilePrompt } from './pipeline/compile-prompt.ts';
 import { persistDay } from './pipeline/persist-day.ts';
+import { callAI, AICallError } from './pipeline/ai-call.ts';
+import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
 
 export async function handleGenerateDay(
   supabase: any,
@@ -174,169 +176,39 @@ export async function handleGenerateDay(
   flightContext = prompt.flightContext;
 
   try {
-    let data: any = null;
-    const maxAttempts = 5;
+    // ═══════════════════════════════════════════════════════════════════════
+    // AI CALL: Extracted to pipeline/ai-call.ts (Phase 6)
+    // ═══════════════════════════════════════════════════════════════════════
     if (innerTimer) innerTimer.startPhase(`ai_call_day_${dayNumber}`);
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      // Fall back to a faster model after 3 failed attempts to reduce provider timeouts
-      const model = attempt <= 3 ? "google/gemini-3-flash-preview" : "google/gemini-2.5-flash";
-      if (attempt > 3) {
-        console.log(`[generate-day] Falling back to ${model} after ${attempt - 1} failures`);
-      }
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "create_day_itinerary",
-              description: "Creates a structured day itinerary",
-              parameters: {
-                type: "object",
-                properties: {
-                  dayNumber: { type: "number" },
-                  date: { type: "string" },
-                  theme: { type: "string" },
-                  title: { type: "string", description: "Day title like 'Arrival Day' or 'Historic Exploration'" },
-                  activities: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        id: { type: "string" },
-                        title: { type: "string", description: "Activity display name (REQUIRED)" },
-                        name: { type: "string", description: "Alias for title" },
-                        description: { type: "string" },
-                        category: { type: "string", enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"] },
-                        startTime: { type: "string", description: "HH:MM format (24-hour)" },
-                        endTime: { type: "string", description: "HH:MM format (24-hour)" },
-                        duration: { type: "string" },
-                        location: { 
-                          type: "object",
-                          properties: {
-                            name: { type: "string" },
-                            address: { type: "string" }
-                          }
-                        },
-                        estimatedCost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"], description: "per_person = price per traveler, flat = total price for the group/vehicle, per_room = per room per night" } } },
-                        cost: { type: "object", properties: { amount: { type: "number" }, currency: { type: "string" }, basis: { type: "string", enum: ["per_person", "flat", "per_room"] } } },
-                        bookingRequired: { type: "boolean" },
-                        tips: { type: "string", description: "Insider tip for this activity (must be specific, actionable, 30+ chars)" },
-                        coordinates: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } } },
-                        type: { type: "string" },
-                        suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity (group trips)" },
-                        isHiddenGem: { type: "boolean", description: "true if this is a hidden gem discovered through deep research. NOT for mainstream tourist attractions." },
-                        hasTimingHack: { type: "boolean", description: "true if scheduling at this specific time provides a meaningful advantage" },
-                        bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time is optimal" },
-                        crowdLevel: { type: "string", enum: ["low", "moderate", "high"], description: "Expected crowd level at the scheduled time" },
-                        voyanceInsight: { type: "string", description: "A unique Voyance-only insight about this place" },
-                        personalization: {
-                          type: "object",
-                          properties: {
-                            tags: { type: "array", items: { type: "string" } },
-                            whyThisFits: { type: "string", description: "Why this fits THIS traveler's DNA" },
-                            confidence: { type: "number" },
-                            matchedInputs: { type: "array", items: { type: "string" } }
-                          },
-                          required: ["tags", "whyThisFits", "confidence"]
-                        }
-                      },
-                      required: ["title", "category", "startTime", "endTime", "location", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
-                    }
-                  },
-                  accommodationNotes: { type: "array", items: { type: "string" }, description: "2-3 accommodation tips for this destination" },
-                  practicalTips: { type: "array", items: { type: "string" }, description: "3-4 practical travel tips for this destination" },
-                  narrative: { type: "object", properties: { theme: { type: "string" }, highlights: { type: "array", items: { type: "string" } } } }
-                },
-                required: ["dayNumber", "date", "theme", "activities"]
-              }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
-        }),
+    let aiResult;
+    try {
+      aiResult = await callAI({
+        systemPrompt,
+        userPrompt,
+        apiKey: LOVABLE_API_KEY,
+        dayNumber,
       });
-
-      if (!response.ok) {
-        const status = response.status;
-        if (status === 429) {
-          return new Response(
-            JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        if (status === 402) {
-          return new Response(
-            JSON.stringify({ error: "AI credits exhausted. Please add credits to continue." }),
-            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const errorText = await response.text();
-        console.error(`[generate-day] AI gateway error (attempt ${attempt}): ${status}`, errorText);
-
-        // Retry transient 5xx (including 524 provider timeout)
-        if (attempt < maxAttempts && status >= 500) {
-          const backoff = Math.min(2000 * attempt, 8000);
-          console.log(`[generate-day] Retrying in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`);
-          await new Promise((resolve) => setTimeout(resolve, backoff));
-          continue;
-        }
-
-        throw new Error("AI generation failed");
+    } catch (err) {
+      if (err instanceof AICallError) {
+        return new Response(
+          JSON.stringify({ error: err.userMessage }),
+          { status: err.statusCode, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
-
-      data = await response.json();
-
-      // The gateway can sometimes return HTTP 200 with an error payload.
-      if ((data as any)?.error) {
-        console.error(`[generate-day] AI Gateway error payload (attempt ${attempt}):`, (data as any).error);
-        const raw = (data as any).error?.message || 'Internal Server Error';
-        const errorCode = (data as any).error?.code;
-        // Treat 500, 524 (provider timeout), and generic errors as transient
-        const isTransient = raw === 'Internal Server Error' || raw === 'Provider returned error' || errorCode === 500 || errorCode === 524;
-        if (attempt < maxAttempts && isTransient) {
-          const backoff = Math.min(2000 * attempt, 8000);
-          console.log(`[generate-day] Provider error (code ${errorCode}), retrying in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`);
-          await new Promise((resolve) => setTimeout(resolve, backoff));
-          data = null;
-          continue;
-        }
-
-        const msg = raw === 'Internal Server Error' || raw === 'Provider returned error'
-          ? 'AI service temporarily unavailable. Please try again in a moment.'
-          : raw;
-        throw new Error(`AI service error: ${msg}`);
-      }
-
-      break;
+      throw err;
     }
-
-    if (!data) {
-      throw new Error('AI generation failed');
-    }
+    const { data } = aiResult;
 
     // Record AI phase timing, token usage, and model
     if (innerTimer) {
       innerTimer.endPhase(`ai_call_day_${dayNumber}`);
       try {
-        const usage = data.usage;
-        const modelUsed = data.model || 'unknown';
-        if (usage) {
-          innerTimer.addTokenUsage(usage.prompt_tokens || 0, usage.completion_tokens || 0, modelUsed);
-        } else {
-          innerTimer.addTokenUsage(0, 0, modelUsed);
-        }
+        innerTimer.addTokenUsage(
+          aiResult.usage?.prompt_tokens || 0,
+          aiResult.usage?.completion_tokens || 0,
+          aiResult.model,
+        );
       } catch (_e) { /* non-blocking */ }
-      // Write progress after AI call completes — this is the longest phase
       const aiDonePct = 5 + Math.round(((dayNumber - 0.3) / Math.max(1, totalDays || 1)) * 90);
       await innerTimer.updateProgress(`day_${dayNumber}_ai_complete`, aiDonePct);
       innerTimer.startPhase(`parse_response_day_${dayNumber}`);
