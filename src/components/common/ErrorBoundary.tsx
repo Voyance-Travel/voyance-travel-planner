@@ -1,5 +1,4 @@
 import { Component, ReactNode } from 'react';
-import { AlertCircle } from 'lucide-react';
 import { logClientError, extractFailingComponent } from '@/utils/logClientError';
 
 interface Props {
@@ -63,7 +62,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <div className="flex min-h-[60vh] items-center justify-center bg-background px-6">
             <div className="text-center max-w-md">
               <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                <AlertCircle className="h-9 w-9 text-primary" />
+                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               </div>
               <h2 className="text-2xl md:text-3xl font-serif font-normal text-foreground mb-3">
                 Small detour.
