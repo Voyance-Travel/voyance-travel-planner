@@ -30,7 +30,7 @@ function formatCurrency(amount: number | null | undefined, currency: string = 'U
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: currency.toUpperCase(),
+      currency: (currency || 'USD').toUpperCase(),
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
@@ -71,8 +71,8 @@ export function TransitBadge({
   const isMobile = useIsMobile();
   const [expanded, setExpanded] = useState(isMobile ? false : showDetails);
   
-  const icon = transportIcons[transportation.method.toLowerCase()] || <MapPin className="h-2.5 w-2.5" />;
-  const currentMode = transportation.method.toLowerCase();
+  const icon = transportIcons[(transportation.method || 'walk').toLowerCase()] || <MapPin className="h-2.5 w-2.5" />;
+  const currentMode = (transportation.method || 'walk').toLowerCase();
   const isWalking = ['walk', 'walking'].includes(currentMode);
 
   const costDisplay = !isWalking && transportation.estimatedCost?.amount && transportation.estimatedCost.amount > 0
