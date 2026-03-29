@@ -2418,7 +2418,7 @@ Generate activities for this day following ALL constraints above.`;
       let generatedDay: StrictDay;
       if (toolCall?.function?.arguments) {
         // Standard tool call response
-        generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber) as StrictDay;
+        generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, dayDestination) as StrictDay;
       } else if (message?.content) {
         // Fallback: AI returned content instead of tool call
         console.log("[Stage 2] AI returned content instead of tool_call, attempting to parse...");
@@ -2426,7 +2426,7 @@ Generate activities for this day following ALL constraints above.`;
           const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
           const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber) as StrictDay;
+            generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, dayDestination) as StrictDay;
           } else {
             console.error("[Stage 2] No JSON found in content:", contentStr.substring(0, 500));
             throw new Error("Invalid AI response format - no JSON in content");
@@ -10318,7 +10318,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         let generatedDay;
         if (toolCall?.function?.arguments) {
           // Standard tool call response
-          generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber);
+          generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, resolvedDestination);
         } else if (message?.content) {
           // Fallback: AI returned content instead of tool call
           console.log("[generate-day] AI returned content instead of tool_call, attempting to parse...");
@@ -10327,7 +10327,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
             const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-              generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber);
+              generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, resolvedDestination);
             } else {
               console.error("[generate-day] No JSON found in content:", contentStr.substring(0, 500));
               throw new Error("Invalid AI response format - no JSON in content");

@@ -67,9 +67,9 @@ const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/g
 const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
 const FORWARD_REF_RE = /\.?\s*(?:rest|recharge|prepare|get ready)\s+for\s+tomorrow'?s?\s+[^.]+(?:adventure|day|exploration|experience|excursion)[^.]*\.?/gi;
 
-export function sanitizeAITextField(text: string | undefined | null): string {
+export function sanitizeAITextField(text: string | undefined | null, destination?: string): string {
   if (!text || typeof text !== 'string') return '';
-  return text
+  let result = text
     .replace(CJK_ARTIFACTS, '')
     .replace(TEXT_SCHEMA_LEAK, '')
     .replace(SYSTEM_PREFIXES_RE, '')
@@ -84,69 +84,77 @@ export function sanitizeAITextField(text: string | undefined | null): string {
     .replace(/[🔴🟡🟢🔵]\s*(?:Book|Reserve|BOOK|RESERVE)[^.]*\.?\s*/g, '')
     .replace(/\b(?:book_now|book_soon|book_early|reserve_early|reserve_now)\b/gi, '')
     .replace(/(?:^|\.\s*)\s*(?:Reservation\s*)?[Uu]rgency[:\s]+\w+\.?\s*/gi, '')
+    // AI self-referential commentary
+    .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+\w+\s+(?:interest|preference|request|need|requirement)\b[^.]*\.?/gi, '')
     .replace(/\(\s*\)/g, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
-    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '')
-    .trim();
+    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '');
+
+  // Replace generic "the destination" with actual city name
+  if (destination) {
+    result = result.replace(/\b(?:the destination|the city|this destination|this city)\b/gi, destination);
+  }
+
+  return result.trim();
 }
 
 /**
  * Deep-sanitize all user-facing text fields in a generated day object.
  */
-export function sanitizeGeneratedDay(day: any, dayNumber: number): any {
+export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: string): any {
   if (!day || typeof day !== 'object') return day;
 
-  const cleanTitle = sanitizeAITextField(day.title);
-  const cleanTheme = sanitizeAITextField(day.theme);
+  const cleanTitle = sanitizeAITextField(day.title, destination);
+  const cleanTheme = sanitizeAITextField(day.theme, destination);
   day.title = cleanTitle || cleanTheme || `Day ${dayNumber}`;
   day.theme = cleanTheme || cleanTitle || day.title;
 
   if (day.narrative && typeof day.narrative === 'object') {
-    if (day.narrative.theme) day.narrative.theme = sanitizeAITextField(day.narrative.theme) || day.theme;
+    if (day.narrative.theme) day.narrative.theme = sanitizeAITextField(day.narrative.theme, destination) || day.theme;
     if (Array.isArray(day.narrative.highlights)) {
       day.narrative.highlights = day.narrative.highlights
-        .map((h: string) => sanitizeAITextField(h))
+        .map((h: string) => sanitizeAITextField(h, destination))
         .filter((h: string) => h.length > 0);
     }
   }
 
   if (Array.isArray(day.accommodationNotes)) {
     day.accommodationNotes = day.accommodationNotes
-      .map((n: string) => sanitizeAITextField(n))
+      .map((n: string) => sanitizeAITextField(n, destination))
       .filter((n: string) => n.length > 0);
   }
   if (Array.isArray(day.practicalTips)) {
     day.practicalTips = day.practicalTips
-      .map((t: string) => sanitizeAITextField(t))
+      .map((t: string) => sanitizeAITextField(t, destination))
       .filter((t: string) => t.length > 0);
   }
 
   if (Array.isArray(day.activities)) {
     day.activities = day.activities.map((act: any, idx: number) => {
       if (!act || typeof act !== 'object') return act;
-      const cleanActTitle = sanitizeAITextField(act.title);
-      const cleanActName = sanitizeAITextField(act.name);
+      const cleanActTitle = sanitizeAITextField(act.title, destination);
+      const cleanActName = sanitizeAITextField(act.name, destination);
       act.title = cleanActTitle || cleanActName || `Activity ${idx + 1}`;
       act.name = act.title;
-      if (act.description) act.description = sanitizeAITextField(act.description) || undefined;
-      if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips) || undefined;
+      if (act.description) act.description = sanitizeAITextField(act.description, destination) || undefined;
+      if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips, destination) || undefined;
       if (act.location && typeof act.location === 'object') {
-        if (act.location.name) act.location.name = sanitizeAITextField(act.location.name) || act.location.name;
-        if (act.location.address) act.location.address = sanitizeAITextField(act.location.address) || act.location.address;
+        if (act.location.name) act.location.name = sanitizeAITextField(act.location.name, destination) || act.location.name;
+        if (act.location.address) act.location.address = sanitizeAITextField(act.location.address, destination) || act.location.address;
       }
       if (act.transportation && typeof act.transportation === 'object') {
-        if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions) || undefined;
+        if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions, destination) || undefined;
         const method = (act.transportation.method || '').toLowerCase();
         if (method === 'walk' || method === 'walking') {
           act.transportation.estimatedCost = { amount: 0, currency: act.transportation.estimatedCost?.currency || 'USD' };
         }
       }
-      if (act.voyanceInsight) act.voyanceInsight = sanitizeAITextField(act.voyanceInsight) || undefined;
-      if (act.bestTime) act.bestTime = sanitizeAITextField(act.bestTime) || undefined;
+      if (act.voyanceInsight) act.voyanceInsight = sanitizeAITextField(act.voyanceInsight, destination) || undefined;
+      if (act.bestTime) act.bestTime = sanitizeAITextField(act.bestTime, destination) || undefined;
       if (act.personalization && typeof act.personalization === 'object') {
-        if (act.personalization.whyThisFits) act.personalization.whyThisFits = sanitizeAITextField(act.personalization.whyThisFits) || undefined;
+        if (act.personalization.whyThisFits) act.personalization.whyThisFits = sanitizeAITextField(act.personalization.whyThisFits, destination) || undefined;
       }
       return act;
     });
