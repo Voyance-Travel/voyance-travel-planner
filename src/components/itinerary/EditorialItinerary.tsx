@@ -5919,7 +5919,7 @@ export function EditorialItinerary({
                       const legs = flightSelection?.legs;
                       const arrivalLeg = legs?.find(l => {
                         const arrAirport = (l.arrival?.airport || '').toLowerCase();
-                        const cityName = arrivingCity.cityName.toLowerCase();
+                        const cityName = (arrivingCity.cityName || '').toLowerCase();
                         return arrAirport.includes(cityName) || cityName.includes(arrAirport);
                       });
                       
@@ -7783,7 +7783,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
     }
 
     const country = destinationCountry?.toLowerCase() || '';
-    const dest = destination.toLowerCase();
+    const dest = (destination || '').toLowerCase();
     
     // UK / London
     if (country.includes('uk') || country.includes('united kingdom') || country.includes('england') || dest.includes('london')) {
@@ -7992,7 +7992,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
   // Get entry requirements based on destination
   const getEntryRequirements = () => {
     const country = destinationCountry?.toLowerCase() || '';
-    const dest = destination.toLowerCase();
+    const dest = (destination || '').toLowerCase();
     
     // UK
     if (country.includes('uk') || country.includes('united kingdom') || country.includes('england') || dest.includes('london')) {
@@ -8686,7 +8686,7 @@ function ArrivalGamePlan({ flightSelection, hotelSelection, allHotels, destinati
       'default': { taxi: { duration: '30-50 min', cost: 'Varies' }, train: { duration: '30-45 min', cost: 'Varies' } },
     };
     
-    const destKey = destination.toLowerCase().trim();
+    const destKey = (destination || '').toLowerCase().trim();
     return transferFallback[destKey] || 
       Object.entries(transferFallback).find(([key]) => destKey.includes(key) || key.includes(destKey))?.[1] ||
       transferFallback['default'];
@@ -9903,7 +9903,7 @@ function ActivityRow({
   const activityTitle = sanitizeActivityName(activity.title || (activity as { name?: string }).name);
   
   // Use placeholder for thumbnail when no photo exists (skip for downtime/transport)
-  const titleLower = activityTitle.toLowerCase();
+  const titleLower = (activityTitle || '').toLowerCase();
   const isDowntime = activity.timeBlockType === 'downtime' || titleLower.includes('free time');
   const isTransport = activityType === 'transportation' || activityType === 'transport';
   const isCheckIn = titleLower.includes('check-in') || titleLower.includes('check in');
@@ -9996,10 +9996,10 @@ function ActivityRow({
     locationName.includes('intercontinental') ||
     locationName.includes('resort') ||
     locationName.includes('inn') ||
-    activityTitle.toLowerCase().includes('breakfast at hotel') ||
-    activityTitle.toLowerCase().includes('breakfast at the hotel') ||
-    activityTitle.toLowerCase().includes('lunch at hotel') ||
-    activityTitle.toLowerCase().includes('dinner at hotel')
+    (activityTitle || '').toLowerCase().includes('breakfast at hotel') ||
+    (activityTitle || '').toLowerCase().includes('breakfast at the hotel') ||
+    (activityTitle || '').toLowerCase().includes('lunch at hotel') ||
+    (activityTitle || '').toLowerCase().includes('dinner at hotel')
   );
   
   // For hotel dining activities, use accommodation category and hotel search term
@@ -10135,7 +10135,7 @@ function ActivityRow({
       || (activity.durationMinutes ? `${activity.durationMinutes} min` : null);
 
     const transportIcon = (() => {
-      const t = activityTitle.toLowerCase();
+      const t = (activityTitle || '').toLowerCase();
       if (t.includes('walk') || t.includes('stroll')) return <Footprints className="h-3.5 w-3.5" aria-hidden="true" />;
       if (t.includes('taxi') || t.includes('uber') || t.includes('lyft') || t.includes('cab') || t.includes('rideshare') || t.includes('drive'))
         return <Car className="h-3.5 w-3.5" />;
@@ -10147,7 +10147,7 @@ function ActivityRow({
     })();
 
     // Walking is always free — override any AI-hallucinated cost
-    const isWalkingTransport = activityTitle.toLowerCase().includes('walk') || activityTitle.toLowerCase().includes('stroll');
+    const isWalkingTransport = (activityTitle || '').toLowerCase().includes('walk') || (activityTitle || '').toLowerCase().includes('stroll');
     // Use transport-specific cost from route data, NOT the general estimation engine
     const transportEstCost = activity.transportation?.estimatedCost?.amount;
     const transportCost = isWalkingTransport ? null
