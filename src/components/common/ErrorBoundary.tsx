@@ -43,14 +43,9 @@ export default class ErrorBoundary extends Component<Props, State> {
             <div className="text-center max-w-md">
               <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
                 <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
-                  <path d="M3 7v4a1 1 0 0 0 1 1h3" />
-                  <path d="M7 7v10" />
-                  <path d="M10 8.5V7h4v1.5" />
-                  <path d="M10 8.5a2.5 2.5 0 0 0 5 0" />
-                  <path d="M14 7v10" />
-                  <path d="M17 7v4a1 1 0 0 1-1 1h-3" />
-                  <circle cx="12" cy="20" r="1" />
-                  <path d="M12 17v2" />
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4" />
+                  <path d="M12 16h.01" />
                 </svg>
               </div>
               <h2 className="text-2xl md:text-3xl font-serif font-normal text-foreground mb-3">
