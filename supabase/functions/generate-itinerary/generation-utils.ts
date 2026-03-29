@@ -5,6 +5,8 @@
  * extract and import anywhere.
  */
 
+import type { AirportTransferFare } from './flight-hotel-context.ts';
+
 // =============================================================================
 // DATE / TIME UTILITIES
 // =============================================================================
@@ -92,8 +94,33 @@ export function haversineDistanceKm(
 }
 
 // =============================================================================
-// AIRPORT TRANSFER HELPERS
+// DATABASE LOOKUP HELPERS
 // =============================================================================
+
+/**
+ * Resolve city name to destination UUID for dynamic feature matching.
+ */
+export async function getDestinationId(supabase: any, destination: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('destinations')
+      .select('id')
+      .or(`city.ilike.%${destination}%,country.ilike.%${destination}%`)
+      .limit(1);
+
+    if (error) {
+      console.warn(`[getDestinationId] Query failed:`, error.message);
+      return null;
+    }
+
+    const id = data?.[0]?.id || null;
+    console.log(`[getDestinationId] ${destination} → ${id || 'not found'}`);
+    return id;
+  } catch (e) {
+    console.warn(`[getDestinationId] Exception:`, e);
+    return null;
+  }
+}
 
 /**
  * Fetch airport transfer time from destinations table.
@@ -127,5 +154,49 @@ export async function getAirportTransferMinutes(
   } catch (e) {
     console.error('[AirportTransfer] Error fetching transfer time:', e);
     return 45;
+  }
+}
+
+/**
+ * Fetch airport transfer fare from database to sync with Airport Game Plan.
+ * Falls back to null if no data found.
+ */
+export async function getAirportTransferFare(
+  supabase: any,
+  city: string,
+  airportCode?: string,
+): Promise<AirportTransferFare | null> {
+  try {
+    let query = supabase
+      .from('airport_transfer_fares')
+      .select('taxi_cost_min, taxi_cost_max, train_cost, bus_cost, currency, currency_symbol, taxi_is_fixed_price')
+      .ilike('city', city);
+
+    if (airportCode) {
+      query = query.eq('airport_code', airportCode.toUpperCase());
+    }
+
+    const { data, error } = await query.limit(1);
+
+    if (error || !data?.length) {
+      console.log(`[AirportFare] No fare found for ${city}${airportCode ? ` (${airportCode})` : ''}`);
+      return null;
+    }
+
+    const fare = data[0];
+    console.log(`[AirportFare] Found fare for ${city}: taxi €${fare.taxi_cost_min}-${fare.taxi_cost_max}, train €${fare.train_cost}`);
+
+    return {
+      taxiCostMin: fare.taxi_cost_min,
+      taxiCostMax: fare.taxi_cost_max,
+      trainCost: fare.train_cost,
+      busCost: fare.bus_cost,
+      currency: fare.currency || 'EUR',
+      currencySymbol: fare.currency_symbol || '€',
+      taxiIsFixedPrice: fare.taxi_is_fixed_price || false,
+    };
+  } catch (e) {
+    console.error('[AirportFare] Error fetching fare:', e);
+    return null;
   }
 }
