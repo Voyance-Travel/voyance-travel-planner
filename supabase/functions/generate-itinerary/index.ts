@@ -615,6 +615,1756 @@ function buildValidationContext(
 // getDestinationId moved to ./generation-utils.ts
 
 
+// =============================================================================
+// TOURIST TRAP SKIP LIST
+// Destination-specific activities we tell users to avoid - AI must not plan these
+// =============================================================================
+// Skip list, budget intent, budget constraints, archetype constraints, and generation rules
+// moved to ./budget-constraints.ts
+
+
+// User context normalization moved to ./user-context-normalization.ts
+import {
+  normalizeUserContext,
+  buildNormalizedPromptContext,
+  blendTraitWithOverride,
+  calculateQuizCompleteness,
+  deduplicatePreferences,
+  inferArchetypesFromTraits,
+  type NormalizedTraits,
+  type NormalizedUserContext,
+} from './user-context-normalization.ts';
+
+// =============================================================================
+// RATE LIMITING - Database-backed (survives cold starts)
+// =============================================================================
+import { checkDbRateLimit, type RateLimitRule } from "../_shared/db-rate-limiter.ts";
+
+const RATE_LIMIT_RULES: Record<string, RateLimitRule> = {
+  'generate-full': { maxRequests: 3, windowMs: 300000 }, // 3 full generations per 5 min
+  'generate-day': { maxRequests: 20, windowMs: 60000 },   // 20 day generations per min
+  default: { maxRequests: 20, windowMs: 60000 }           // 20 requests per min for other actions
+};
+
+async function checkRateLimit(
+  supabaseAdmin: any,
+  userId: string,
+  action: string
+): Promise<{ allowed: boolean; remaining: number }> {
+  const rule = RATE_LIMIT_RULES[action] || RATE_LIMIT_RULES.default;
+  const result = await checkDbRateLimit(
+    supabaseAdmin,
+    userId,
+    `generate-itinerary:${action}`,
+    rule,
+    userId,
+  );
+  return { allowed: result.allowed, remaining: result.remaining };
+}
+
+// =============================================================================
+// STRICT SCHEMA FOR AI GENERATION (Tool Definition)
+// =============================================================================
+
+const STRICT_ITINERARY_TOOL = {
+  type: "function",
+  function: {
+    name: "create_complete_itinerary",
+    description: "Creates a complete, structured travel itinerary with all required details including COORDINATES, COSTS, and COMPREHENSIVE TAGS",
+    parameters: {
+      type: "object",
+      properties: {
+        days: {
+          type: "array",
+          description: "Array of daily itinerary plans",
+          items: {
+            type: "object",
+            properties: {
+              dayNumber: { type: "integer", minimum: 1 },
+              date: { type: "string", description: "Date in YYYY-MM-DD format" },
+              title: { type: "string", description: "Day title (e.g., 'Historic Exploration')" },
+              activities: {
+                type: "array",
+                minItems: 3,
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    title: { type: "string" },
+                    startTime: { type: "string", description: "HH:MM format (24-hour)" },
+                    endTime: { type: "string", description: "HH:MM format (24-hour)" },
+                    category: {
+                      type: "string",
+                      enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"]
+                    },
+                    location: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string", description: "Venue name" },
+                        address: { type: "string", description: "Full street address with city and postal code" },
+                        coordinates: {
+                          type: "object",
+                          properties: {
+                            lat: { type: "number", description: "Latitude (e.g., 48.8584)" },
+                            lng: { type: "number", description: "Longitude (e.g., 2.2945)" }
+                          },
+                          required: ["lat", "lng"],
+                          description: "REQUIRED: Approximate GPS coordinates for the venue"
+                        }
+                      },
+                      required: ["name", "address", "coordinates"]
+                    },
+                    cost: {
+                      type: "object",
+                      properties: {
+                        amount: { type: "number", minimum: 0, description: "REQUIRED: Realistic cost per person in local currency. Use 0 ONLY for truly free attractions (parks, churches, viewpoints). NEVER use 0 for: dining, restaurants, breakfast, lunch, dinner, cruises, tours, shows, or any paid activity." },
+                        currency: { type: "string", description: "ISO currency code (USD, EUR, GBP, etc.)" }
+                      },
+                      required: ["amount", "currency"]
+                    },
+                    description: { type: "string", description: "Activity description (2-3 sentences)" },
+                    tags: { 
+                      type: "array", 
+                      items: { type: "string" }, 
+                      minItems: 5,
+                      description: "REQUIRED: 5-8 comprehensive tags for search. Include: category tags (museum, park), experience tags (romantic, family-friendly), time tags (morning, sunset), price tags (free, budget-friendly, premium), mood tags (adventure, relaxation)"
+                    },
+                    bookingRequired: { type: "boolean" },
+                    transportation: {
+                      type: "object",
+                      properties: {
+                        method: { 
+                          type: "string", 
+                          enum: ["walk", "metro", "bus", "taxi", "uber", "tram", "train", "car"],
+                          description: "SMART MODE SELECTION: walk (<1km), metro/tram/bus (1-8km in cities with transit), uber/taxi (>3km or no transit), train (inter-city)"
+                        },
+                        duration: { type: "string" },
+                        distanceKm: { type: "number", description: "Estimated distance in kilometers between locations" },
+                        estimatedCost: {
+                          type: "object",
+                          description: "Estimated cost for this transport leg. OMIT entirely for walking (walking is free). Only include for paid transport like taxi, metro, bus, rideshare.",
+                          properties: {
+                            amount: { type: "number", description: "Cost in local currency. Use 0 for free transport." },
+                            currency: { type: "string", description: "ISO currency code" }
+                          },
+                          required: ["amount", "currency"]
+                        },
+                        instructions: { type: "string", description: "Include specific transit lines, stations, or route details when applicable" }
+                      },
+                      required: ["method", "duration"]
+                    },
+                    tips: { type: "string", description: "Insider tip or recommendation" },
+                    contextualTips: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          type: { type: "string", enum: ["timing", "booking", "money_saving", "transit", "cultural", "safety", "hidden_gem", "weather", "general"] },
+                          text: { type: "string", description: "Specific, actionable tip (30+ chars)" }
+                        },
+                        required: ["type", "text"]
+                      },
+                      minItems: 1,
+                      maxItems: 4,
+                      description: "1-4 typed contextual tips for this activity (timing, booking, money-saving, transit, cultural, safety, hidden gem, weather)"
+                    },
+                    rating: {
+                      type: "object",
+                      properties: {
+                        value: { type: "number", minimum: 1, maximum: 5 },
+                        totalReviews: { type: "integer", minimum: 0 }
+                      },
+                      required: ["value", "totalReviews"]
+                    },
+                    website: { type: "string", description: "Official website URL if available" },
+                    priceLevel: { type: "integer", minimum: 1, maximum: 4, description: "Price level 1-4 ($ to $$$$)" },
+                    reviewHighlights: { 
+                      type: "array", 
+                      items: { type: "string" }, 
+                      maxItems: 3,
+                      description: "2-3 short review snippets highlighting what visitors love"
+                    },
+                    // =========================================================
+                    // PERSONALIZATION GUARANTEE FIELDS
+                    // =========================================================
+                    personalization: {
+                      type: "object",
+                      description: "REQUIRED: Prove why this activity was chosen for THIS specific user",
+                      properties: {
+                        tags: {
+                          type: "array",
+                          items: { type: "string" },
+                          minItems: 2,
+                          maxItems: 6,
+                          description: "Machine-checkable tags tied to user inputs. MUST include at least 2 from: romantic, family-friendly, solo-traveler, local-authentic, tourist-highlight, budget-friendly, premium, splurge, low-pace, high-pace, accessible, adventure, relaxation, foodie, cultural, outdoor, indoor. Match to user's actual preferences."
+                        },
+                        whyThisFits: {
+                          type: "string",
+                          description: "1-2 sentences explaining why this activity fits THIS user. MUST reference at least ONE specific user input (trait, preference, trip intent, or dietary need). Example: 'Chosen for your high authenticity score - this neighborhood gem is off the tourist path' or 'Matches your seafood preference with locally-caught specialties'."
+                        },
+                        confidence: {
+                          type: "number",
+                          minimum: 0,
+                          maximum: 1,
+                          description: "How confident are you this matches the user? 0.9+ = strong match to stated preferences, 0.7-0.9 = good fit, 0.5-0.7 = general recommendation"
+                        },
+                        matchedInputs: {
+                          type: "array",
+                          items: { type: "string" },
+                          minItems: 1,
+                          description: "Which specific user inputs influenced this choice. Examples: 'authenticity_trait:+8', 'food_likes:seafood', 'trip_intent:romantic', 'pace:relaxed', 'budget:premium', 'dietary:vegetarian'"
+                        }
+                      },
+                      required: ["tags", "whyThisFits", "confidence", "matchedInputs"]
+                    }
+                  },
+                  required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "description", "tags", "bookingRequired", "transportation", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
+                }
+              }
+            },
+            required: ["dayNumber", "date", "title", "activities"]
+          }
+        }
+      },
+      required: ["days"]
+    }
+  }
+};
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+// =============================================================================
+// GROUP PREFERENCE BLENDING - For multi-traveler trips with linked friends
+// =============================================================================
+
+// =============================================================================
+// EXTRACTED MODULES — Preference context, flight/hotel, group blending
+// =============================================================================
+import {
+  getFlightHotelContext,
+  getDynamicTransferPricing,
+  getAirportTransferTime,
+  parseTimeToMinutes,
+  minutesToHHMM,
+  addMinutesToHHMM,
+  normalizeTo24h,
+  type FlightHotelContextResult,
+  type AirportTransferFare,
+  type DynamicTransferResult,
+} from './flight-hotel-context.ts';
+
+import {
+  getTravelDNAV2,
+  getTraitOverrides,
+  getUserPreferences,
+  getLearnedPreferences,
+  getBehavioralEnrichment,
+  getCollaboratorPreferences,
+  blendGroupPreferences,
+  buildTravelDNAContext,
+  buildPreferenceContext,
+  enrichPreferencesWithAI,
+  type TravelDNAProfile,
+  type PreferenceProfile,
+} from './preference-context.ts';
+
+// Types, group blending, and collaborator preferences moved to ./preference-context.ts
+
+// FlightHotelContextResult, time helpers, and getDynamicTransferPricing moved to ./flight-hotel-context.ts
+
+/**
+ * Fetch airport transfer fare from database to sync with Airport Game Plan
+ * Falls back to database query if dynamic pricing fails
+ */
+async function getAirportTransferFare(supabase: any, city: string, airportCode?: string): Promise<AirportTransferFare | null> {
+  try {
+    let query = supabase
+      .from('airport_transfer_fares')
+      .select('taxi_cost_min, taxi_cost_max, train_cost, bus_cost, currency, currency_symbol, taxi_is_fixed_price')
+      .ilike('city', city);
+    
+    if (airportCode) {
+      query = query.eq('airport_code', airportCode.toUpperCase());
+    }
+    
+    const { data, error } = await query.limit(1);
+    
+    if (error || !data?.length) {
+      console.log(`[AirportFare] No fare found for ${city}${airportCode ? ` (${airportCode})` : ''}`);
+      return null;
+    }
+    
+    const fare = data[0];
+    console.log(`[AirportFare] Found fare for ${city}: taxi €${fare.taxi_cost_min}-${fare.taxi_cost_max}, train €${fare.train_cost}`);
+    
+    return {
+      taxiCostMin: fare.taxi_cost_min,
+      taxiCostMax: fare.taxi_cost_max,
+      trainCost: fare.train_cost,
+      busCost: fare.bus_cost,
+      currency: fare.currency || 'EUR',
+      currencySymbol: fare.currency_symbol || '€',
+      taxiIsFixedPrice: fare.taxi_is_fixed_price || false,
+    };
+  } catch (e) {
+    console.error('[AirportFare] Error fetching fare:', e);
+    return null;
+  }
+}
+
+/**
+ * Fetch airport transfer time from destinations table
+ * Returns destination-specific transfer time, or default 45 minutes
+ */
+async function getAirportTransferMinutes(supabase: any, destination: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('destinations')
+      .select('airport_transfer_minutes, city')
+      .or(`city.ilike.%${destination}%,country.ilike.%${destination}%`)
+      .limit(1);
+    
+    if (error || !data?.length) {
+      console.log(`[AirportTransfer] No destination found for "${destination}", using default 45 min`);
+      return 45;
+    }
+    
+    const transferTime = data[0].airport_transfer_minutes || 45;
+    console.log(`[AirportTransfer] Found ${data[0].city}: ${transferTime} minutes`);
+    return transferTime;
+  } catch (e) {
+    console.error('[AirportTransfer] Error fetching transfer time:', e);
+    return 45;
+  }
+}
+
+// getFlightHotelContext moved to ./flight-hotel-context.ts
+
+// getLearnedPreferences and getBehavioralEnrichment moved to ./preference-context.ts
+
+// getUserPreferences, getTravelDNAV2, getTraitOverrides moved to ./preference-context.ts
+
+// buildTravelDNAContext, buildPreferenceContext, enrichPreferencesWithAI moved to ./preference-context.ts
+
+function calculateDays(startDate: string, endDate: string): number {
+  // Timezone-safe: parse as local dates to avoid UTC off-by-one
+  const [sy, sm, sd] = startDate.split('-').map(Number);
+  const [ey, em, ed] = endDate.split('-').map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+  // Inclusive end-date: last day IS an activity day (March 7-9 = 3 days)
+  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+function formatDate(startDate: string, dayOffset: number): string {
+  const [y, m, d] = startDate.split('-').map(Number);
+  const date = new Date(y, m - 1, d + dayOffset);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function timeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function calculateDuration(start: string, end: string): number {
+  return timeToMinutes(end) - timeToMinutes(start);
+}
+
+function getCategoryIcon(category: string): string {
+  const icons: Record<string, string> = {
+    sightseeing: 'map-pin',
+    dining: 'utensils',
+    cultural: 'landmark',
+    shopping: 'shopping-bag',
+    relaxation: 'spa',
+    transport: 'car',
+    accommodation: 'bed',
+    activity: 'activity'
+  };
+  return icons[category] || 'star';
+}
+
+// =============================================================================
+// STAGE 1: CONTEXT PREPARATION
+// =============================================================================
+
+interface DirectTripData {
+  tripId: string;
+  destination: string;
+  destinationCountry?: string;
+  startDate: string;
+  endDate: string;
+  travelers?: number;
+  tripType?: string;
+  budgetTier?: string;
+  userId?: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function prepareContext(supabase: any, tripId: string, userId?: string, directTripData?: DirectTripData, requestSmartFinishMode?: boolean): Promise<GenerationContext | null> {
+  console.log(`[Stage 1] Preparing context for trip ${tripId}`);
+
+  // First try to fetch from database
+  const { data: trip, error } = await supabase
+    .from('trips')
+    .select('*')
+    .eq('id', tripId)
+    .maybeSingle();
+
+  // If we have direct trip data, use it as fallback (for localStorage/demo mode trips)
+  if (!trip && directTripData) {
+    console.log('[Stage 1] Trip not in database, using direct trip data');
+    
+    const totalDays = calculateDays(directTripData.startDate, directTripData.endDate);
+    
+    const context: GenerationContext = {
+      tripId: directTripData.tripId,
+      userId: directTripData.userId || userId || 'anonymous',
+      destination: directTripData.destination,
+      destinationCountry: directTripData.destinationCountry,
+      startDate: directTripData.startDate,
+      endDate: directTripData.endDate,
+      totalDays,
+      travelers: directTripData.travelers || 1,
+      tripType: directTripData.tripType,
+      budgetTier: directTripData.budgetTier,
+      pace: 'moderate',
+      interests: [],
+      currency: 'USD'
+    };
+    
+    // Set daily budget based on tier
+    const budgetMap: Record<string, number> = {
+      budget: 75,
+      economy: 100,
+      standard: 150,
+      comfort: 200,
+      premium: 300,
+      luxury: 500
+    };
+    context.dailyBudget = budgetMap[context.budgetTier || 'standard'] || 150;
+    
+    console.log(`[Stage 1] Context prepared from direct data: ${context.totalDays} days in ${context.destination}`);
+    return context;
+  }
+
+  if (error || !trip) {
+    console.error('[Stage 1] Trip not found:', error);
+    return null;
+  }
+
+  const totalDays = calculateDays(trip.start_date, trip.end_date);
+
+  const context: GenerationContext = {
+    tripId: trip.id,
+    userId: userId || trip.user_id,
+    destination: trip.destination,
+    destinationCountry: trip.destination_country,
+    startDate: trip.start_date,
+    endDate: trip.end_date,
+    totalDays,
+    travelers: trip.travelers || 1,
+    childrenCount: trip.metadata?.childrenCount || 0,
+    childrenAges: trip.metadata?.childrenAges || [],
+    tripType: trip.trip_type,
+    budgetTier: trip.budget_tier,
+    pace: trip.metadata?.pacing || trip.metadata?.pace || 'moderate',
+    interests: trip.metadata?.interests || [],
+    currency: 'USD',
+    // Phase 2: Origin city and timezone for jet lag calculation
+    originCity: trip.origin_city,
+    destinationTimezone: resolveTimezone(trip.destination) || undefined,
+    jetLagSensitivity: trip.metadata?.jetLagSensitivity || 'moderate',
+    // Celebration day from user selection
+    celebrationDay: trip.metadata?.celebrationDay,
+    // User research notes / must-do activities from Page 2 paste field (can be string or array)
+    mustDoActivities: (() => {
+      const raw = trip.metadata?.mustDoActivities;
+      if (Array.isArray(raw)) return raw.join('\n');
+      return raw || undefined;
+    })(),
+    // "Anything else" / additional notes from planner
+    additionalNotes: (trip.metadata?.additionalNotes as string) || undefined,
+    // Interest categories selected by user (e.g. ['history', 'food', 'nightlife'])
+    interestCategories: (trip.metadata?.interestCategories as string[]) || undefined,
+    // Structured must-haves checklist (schedule constraints, hotel prefs, etc.)
+    mustHaves: (trip.metadata?.mustHaves as Array<{label: string; notes?: string}>) || undefined,
+    // Structured generation rules (blocked time, events, hotel changes, guest changes)
+    generationRules: (trip.metadata?.generationRules as any[]) || undefined,
+    // Pre-booked commitments (shows, reservations, tours with fixed times)
+    preBookedCommitments: (trip.metadata?.preBookedCommitments as PreBookedCommitment[]) || undefined,
+    firstTimePerCity: trip.metadata?.firstTimePerCity || undefined,
+    // Smart Finish detection: prefer direct request body flag (avoids DB race condition),
+    // then fall back to metadata checks for backward compatibility
+    isSmartFinish: requestSmartFinishMode === true || trip.metadata?.smartFinishMode === true || (trip.metadata?.smartFinishSource || '').toString().includes('manual_builder'),
+    smartFinishRequested: requestSmartFinishMode === true || !!trip.metadata?.smartFinishRequestedAt,
+    tripVibe: trip.metadata?.tripVibe || undefined,
+    tripPriorities: trip.metadata?.tripPriorities || undefined,
+    // User constraints from chat planner (full-day events, time blocks, preferences)
+    userConstraints: (trip.metadata?.userConstraints as any[]) || undefined,
+    // Flight details from chat planner
+    flightDetails: (trip.metadata?.flightDetails as string) || undefined,
+  };
+
+  // Set daily budget based on tier (fallback)
+  const budgetMap: Record<string, number> = {
+    budget: 75,
+    economy: 100,
+    standard: 150,
+    comfort: 200,
+    premium: 300,
+    luxury: 500
+  };
+   context.dailyBudget = budgetMap[context.budgetTier || 'standard'] || 150;
+
+  // Override with ACTUAL user-set budget if available
+  const budgetTotalCents = trip.budget_total_cents;
+  if (budgetTotalCents && budgetTotalCents > 0) {
+    context.budgetTotalCents = budgetTotalCents;
+    const travelers = context.travelers || 1;
+    const days = context.totalDays || 1;
+    // Subtract committed costs (flight + hotel) to get activity-only budget
+    const flightCents = trip.flight_selection?.legs
+      ? (trip.flight_selection.legs as any[]).reduce((sum: number, leg: any) => sum + (leg.price || 0), 0) * 100
+      : trip.flight_selection?.outbound?.price ? Math.round((trip.flight_selection.outbound.price + (trip.flight_selection.return?.price || 0)) * 100) : 0;
+    const hotelCents = trip.hotel_selection?.pricePerNight ? Math.round(trip.hotel_selection.pricePerNight * days * 100) : 0;
+    const activityBudgetCents = Math.max(0, budgetTotalCents - flightCents - hotelCents);
+    const actualDailyPerPerson = Math.round(activityBudgetCents / days / travelers) / 100; // convert to dollars
+    context.actualDailyBudgetPerPerson = actualDailyPerPerson;
+    context.dailyBudget = actualDailyPerPerson; // Override tier-based estimate
+    console.log(`[Stage 1] User budget: $${budgetTotalCents / 100} total, $${actualDailyPerPerson}/day/person for activities (after flight=$${flightCents / 100}, hotel=$${hotelCents / 100})`);
+  }
+
+  // Store tripCities ref for per-city budget override (populated later in multi-city block)
+  let resolvedTripCities: any[] | null = null;
+
+  // =========================================================================
+  // MULTI-CITY SUPPORT: Build day→city mapping from destinations or trip_cities
+  // =========================================================================
+  if (trip.is_multi_city) {
+    context.isMultiCity = true;
+    console.log(`[Stage 1] Multi-city trip detected`);
+    
+    // PRIORITY: Query trip_cities FIRST (has transport_type), fall back to destinations JSONB
+    let tripCitiesResolved = false;
+    try {
+      const { data: tripCities } = await supabase
+        .from('trip_cities')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('city_order', { ascending: true });
+      
+      if (tripCities && tripCities.length >= 2) {
+        resolvedTripCities = tripCities; // Store for per-city budget override
+        const dayMap: MultiCityDayInfo[] = [];
+        for (let i = 0; i < tripCities.length; i++) {
+          const city = tripCities[i];
+          const nights = city.nights || city.days_total || 1;
+          
+          // Extract per-city hotel info
+          // hotel_selection can be an array [{name:...}] or a plain object {name:...}
+          const rawHotel = city.hotel_selection as any;
+          // Normalize hotel list: always work with an array
+          const hotelList: any[] = Array.isArray(rawHotel) ? rawHotel : (rawHotel ? [rawHotel] : []);
+          
+          for (let n = 0; n < nights; n++) {
+            const isTransition = n === 0 && i > 0;
+            const isSameCountry = isTransition && tripCities[i - 1].country === city.country;
+            const defaultTransport = isSameCountry ? 'train' : 'flight';
+            const resolvedTransport = isTransition
+              ? (city.transport_type || tripCities[i - 1].transport_type || defaultTransport)
+              : undefined;
+
+            // Date-aware hotel resolution for split-stay within a single city
+            const dayDate = new Date(context.startDate);
+            dayDate.setDate(dayDate.getDate() + dayMap.length);
+            const dateStr = dayDate.toISOString().split('T')[0];
+
+            let cityHotel: any = null;
+            if (hotelList.length > 1) {
+              // Try to match by date range (checkInDate/checkOutDate on each hotel)
+              cityHotel = hotelList.find((h: any) => {
+                const cin = h.checkInDate || h.check_in_date || context.startDate;
+                const cout = h.checkOutDate || h.check_out_date;
+                return cin && cout && dateStr >= cin && dateStr < cout;
+              });
+              // Fix A: If no hotel matched by date (dates missing), infer by evenly splitting nights
+              if (!cityHotel) {
+                const daysPerHotel = Math.max(1, Math.floor(nights / hotelList.length));
+                const hotelIndex = Math.min(Math.floor(n / daysPerHotel), hotelList.length - 1);
+                cityHotel = hotelList[hotelIndex];
+                console.log(`[Stage 1] Split-stay date inference: day ${n} of ${nights} in ${city.city_name} → hotel[${hotelIndex}] "${cityHotel?.name}"`);
+              }
+            } else {
+              cityHotel = hotelList[0] || null;
+            }
+
+            const hotelName = cityHotel?.name as string | undefined;
+            const hotelAddress = cityHotel?.address as string | undefined;
+            const hotelNeighborhood = (cityHotel?.neighborhood as string) || hotelAddress;
+            const hotelCheckIn = (cityHotel?.checkIn || cityHotel?.checkInTime || cityHotel?.check_in) as string | undefined;
+            const hotelCheckOut = (cityHotel?.checkOut || cityHotel?.checkOutTime || cityHotel?.check_out) as string | undefined;
+
+            // Detect hotel change within same city (split-stay)
+            const prevEntry = dayMap.length > 0 ? dayMap[dayMap.length - 1] : null;
+            const isHotelChange = !!(prevEntry && prevEntry.hotelName && hotelName && prevEntry.hotelName !== hotelName && prevEntry.cityName === city.city_name);
+            const previousHotelName = isHotelChange ? prevEntry!.hotelName : undefined;
+
+            // Capture next-leg transport details on last day in city for departure prompt
+            let nextLegTransport: string | undefined;
+            let nextLegCity: string | undefined;
+            let nextLegTransportDetails: Record<string, any> | undefined;
+            if (n === nights - 1) {
+              const nextCity = tripCities.find((c: any) => c.city_order === city.city_order + 1);
+              if (nextCity) {
+                const isSameCountryNext = nextCity.country === city.country;
+                nextLegTransport = (nextCity as any).transport_type || (isSameCountryNext ? 'train' : 'flight');
+                nextLegCity = nextCity.city_name || '';
+                if ((nextCity as any).transport_details) {
+                  const rawTd = (nextCity as any).transport_details;
+                  nextLegTransportDetails = { ...rawTd };
+                  if (rawTd.operator && !rawTd.carrier) nextLegTransportDetails!.carrier = rawTd.operator;
+                  if (!rawTd.duration && rawTd.inTransitDuration) nextLegTransportDetails!.duration = rawTd.inTransitDuration;
+                  if (nextLegTransport === 'car') {
+                    if (rawTd.pickupLocation && !rawTd.departureStation) nextLegTransportDetails!.departureStation = rawTd.pickupLocation;
+                    if (rawTd.rentalCompany && !rawTd.carrier) nextLegTransportDetails!.carrier = rawTd.rentalCompany;
+                  }
+                }
+              }
+            }
+
+            dayMap.push({
+              cityName: city.city_name,
+              country: city.country,
+              isTransitionDay: isTransition,
+              transitionFrom: isTransition ? tripCities[i - 1].city_name : undefined,
+              transitionTo: isTransition ? city.city_name : undefined,
+              transportType: resolvedTransport,
+              hotelName,
+              hotelAddress,
+              hotelNeighborhood,
+              hotelCheckIn,
+              hotelCheckOut,
+              isFirstDayInCity: n === 0 || isHotelChange,
+              isLastDayInCity: n === nights - 1,
+              isHotelChange,
+              previousHotelName,
+              nextLegTransport,
+              nextLegCity,
+              nextLegTransportDetails,
+            });
+          }
+        }
+        while (dayMap.length < totalDays) {
+          const last = dayMap[dayMap.length - 1] || { cityName: context.destination, isTransitionDay: false };
+          dayMap.push({ ...last, isTransitionDay: false });
+        }
+        context.multiCityDayMap = dayMap.slice(0, totalDays);
+        tripCitiesResolved = true;
+        console.log(`[Stage 1] Multi-city day map (from trip_cities): ${context.multiCityDayMap.map(d => `${d.cityName}${d.isTransitionDay ? '(T)' : ''}`).join(' → ')}`);
+
+        // ─── PER-CITY BUDGET OVERRIDE ───
+        if (budgetTotalCents && budgetTotalCents > 0 && resolvedTripCities) {
+          // Build a city-name → daily budget map for use in day generation
+          const perCityDailyBudget: Record<string, number> = {};
+          const travelers = context.travelers || 1;
+          for (const city of resolvedTripCities) {
+            const allocatedCents = (city as any).allocated_budget_cents;
+            if (allocatedCents && allocatedCents > 0) {
+              const cityNights = city.nights || city.days_total || 1;
+              const cityHotelCents = city.hotel_cost_cents || 0;
+              const cityActivityBudgetCents = Math.max(0, allocatedCents - cityHotelCents);
+              const dailyPerPerson = Math.round(cityActivityBudgetCents / cityNights / travelers) / 100;
+              perCityDailyBudget[city.city_name] = dailyPerPerson;
+              console.log(`[Stage 1] City "${city.city_name}" budget: $${(allocatedCents/100).toFixed(2)} total, $${dailyPerPerson}/day/person for activities`);
+            }
+          }
+          if (Object.keys(perCityDailyBudget).length > 0) {
+            context.perCityDailyBudget = perCityDailyBudget;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[Stage 1] Failed to query trip_cities, falling back to destinations JSONB:`, e);
+    }
+
+    // Fallback: destinations JSONB (lacks transportType)
+    if (!tripCitiesResolved) {
+      const destinations = trip.destinations as Array<{ city: string; country?: string; nights: number; order?: number }> | null;
+      
+      if (destinations && destinations.length >= 2) {
+        const sorted = [...destinations].sort((a, b) => (a.order || 0) - (b.order || 0));
+        
+        const dayMap: MultiCityDayInfo[] = [];
+        for (let i = 0; i < sorted.length; i++) {
+          const dest = sorted[i];
+          const nights = dest.nights || 1;
+          
+          for (let n = 0; n < nights; n++) {
+            const isTransition = n === 0 && i > 0;
+            const isSameCountry = isTransition && sorted[i - 1].country === dest.country;
+            dayMap.push({
+              cityName: dest.city,
+              country: dest.country,
+              isTransitionDay: isTransition,
+              transitionFrom: isTransition ? sorted[i - 1].city : undefined,
+              transitionTo: isTransition ? dest.city : undefined,
+              transportType: isTransition ? (isSameCountry ? 'train' : 'flight') : undefined,
+            });
+          }
+        }
+        
+        while (dayMap.length < totalDays) {
+          const last = dayMap[dayMap.length - 1] || { cityName: context.destination, isTransitionDay: false };
+          dayMap.push({ ...last, isTransitionDay: false });
+        }
+        context.multiCityDayMap = dayMap.slice(0, totalDays);
+        
+        console.log(`[Stage 1] Multi-city day map (from destinations JSONB): ${context.multiCityDayMap.map(d => d.cityName).join(' → ')}`);
+      }
+    }
+    
+    // If we still have no day map, log a warning (single-city or malformed data)
+    if (!context.multiCityDayMap) {
+      console.warn('[Stage 1] Multi-city trip detected but no day map could be built from trip_cities or destinations');
+    }
+  }
+
+  console.log(`[Stage 1] Context prepared: ${context.totalDays} days in ${context.destination}${context.isMultiCity ? ' (multi-city)' : ''}`);
+  return context;
+}
+
+// =============================================================================
+// STAGE 2: AI GENERATION WITH BATCH PROCESSING, VALIDATION & RETRY
+// =============================================================================
+
+// Day validation + deduplication extracted to ./day-validation.ts
+import {
+  validateGeneratedDay,
+  deduplicateActivities,
+  sanitizeActivityTitles,
+  detectMealSlots,
+  enforceRequiredMealsFinalGuard,
+  isChainRestaurant,
+  filterChainRestaurants,
+  type DayValidationResult,
+  type StrictDayMinimal,
+} from './day-validation.ts';
+
+
+
+// Generate a single day with retry logic
+async function generateSingleDayWithRetry(
+  context: GenerationContext,
+  preferenceContext: string,
+  dayNumber: number,
+  previousDays: StrictDay[],
+  flightHotelContext: string,
+  LOVABLE_API_KEY: string,
+  supabaseClient: any, // For DB-driven destination essentials
+  perplexityApiKey?: string,
+  maxRetries: number = 2
+): Promise<StrictDay> {
+  const isFirstDay = dayNumber === 1;
+  const isLastDay = dayNumber === context.totalDays;
+  const date = formatDate(context.startDate, dayNumber - 1);
+
+  // Build previous activities list to avoid repetition
+  const previousActivities = previousDays.flatMap(d => 
+    d.activities.map(a => a.title).filter(Boolean)
+  );
+
+  // ==========================================================================
+  // PHASE 9: Use modular prompt library for DNA-driven personalization
+  // The library builds prompts based on:
+  // 1. Flight data → Hotel data → DNA (interdependent decision tree)
+  // 2. Full persona manuscript injection
+  // 3. Day-specific constraints based on arrival/departure
+  // ==========================================================================
+  
+  let dnaPromptSection = '';
+  let dayConstraintsSection = '';
+  
+  if (context.travelerDNA) {
+    const tripCtx: PromptTripContext = {
+      destination: context.destination,
+      destinationCountry: context.destinationCountry,
+      startDate: context.startDate,
+      endDate: context.endDate,
+      totalDays: context.totalDays,
+      travelers: context.travelers,
+      tripType: context.tripType,
+      budgetTier: context.budgetTier,
+      currency: context.currency,
+    };
+    
+    const flightData = context.flightData || { hasOutboundFlight: false, hasReturnFlight: false } as any;
+    
+    // Per-day hotel override: use multi-city dayMap hotel when available (fixes wrong-hotel bug)
+    const dayCity0 = context.multiCityDayMap?.[dayNumber - 1];
+    const effectiveHotelData = (dayCity0?.hotelName)
+      ? { hasHotel: true, hotelName: dayCity0.hotelName, hotelAddress: dayCity0.hotelAddress, hotelNeighborhood: dayCity0.hotelNeighborhood, checkInTime: dayCity0.hotelCheckIn || '15:00', checkOutTime: dayCity0.hotelCheckOut || '11:00' }
+      : (context.hotelData || { hasHotel: false } as any);
+    
+    const { personaPrompt, dayConstraints } = buildDayPrompt(
+      flightData,
+      effectiveHotelData,
+      context.travelerDNA,
+      tripCtx,
+      dayNumber,
+      dayCity0?.isLastDayInCity ? {
+        isLastDayInCity: true,
+        nextLegTransport: dayCity0.nextLegTransport,
+        nextLegCity: dayCity0.nextLegCity,
+        nextLegTransportDetails: dayCity0.nextLegTransportDetails,
+      } : undefined
+    );
+    
+    dnaPromptSection = personaPrompt;
+    dayConstraintsSection = dayConstraints.constraints;
+    
+    console.log(`[Stage 2] Day ${dayNumber}: Using prompt library - energy=${dayConstraints.energyLevel}, maxActivities=${dayConstraints.maxActivities}, earliest=${dayConstraints.earliestStartTime}`);
+  }
+
+  // Quality enforcement rules that get stricter with retries
+  const qualityRules = [
+    'QUALITY RULES (STRICTLY ENFORCED):',
+    '1. Every activity MUST have a title, startTime, endTime, category, and location',
+    '2. Times MUST be in HH:MM format (24-hour, e.g., "09:00", "14:30")',
+    '3. Hotel check-in/checkout: bookingRequired=false, cost.amount=0',
+    '4. Airport transfers: bookingRequired=false (user arranges transport)',
+    '5. Free time/leisure: bookingRequired=false, cost.amount=0',
+    '6. Only tours, museums, and ticketed attractions should have bookingRequired=true',
+    '7. NO DUPLICATE ACTIVITIES: NEVER schedule the same type of activity back-to-back. NEVER schedule two of the same category on the same day (e.g., two comedy shows, two museum visits, two walking tours). If the user requested ONE comedy show, generate exactly ONE.',
+    '8. **TRIP-WIDE UNIQUENESS**: Each unique experience (cooking class, wine tasting, etc.) should appear AT MOST ONCE in the ENTIRE trip unless the user explicitly requested it on multiple days (e.g., "US Open Day 1, Day 2, Day 3")',
+    '9. VARIETY PER DAY: Mix sightseeing, cultural sites, museums, outdoor activities, dining',
+    '10. **ACTIVITY TITLE NAMING — CRITICAL**: The "title" field MUST be the venue or experience name ONLY. NEVER append the category, type, or a repeated word. Examples of WRONG titles: "Barton Springs Pool Pool", "Zilker Botanical Garden Garden", "Franklin Barbecue Barbecue", "Cosmic Coffee Coffee & Beer", "Record shopping shopping". CORRECT titles: "Barton Springs Pool", "Zilker Botanical Garden", "Franklin Barbecue", "Cosmic Coffee + Beer Garden". If the place name already contains the activity type (e.g., "Pool", "Garden", "Barbecue", "Coffee"), do NOT add it again.',
+    '11. **DINING TITLE — CRITICAL**: For ALL dining/restaurant activities (category: "dining"), the "title" MUST be the restaurant or cafe name. NEVER use the neighborhood, district, or area as the title. Put the neighborhood in the "neighborhood" field instead. WRONG: { title: "Gaslamp Quarter", description: "Juniper & Ivy" }. WRONG: { title: "La Jolla", description: "The Taco Stand fish tacos" }. WRONG: { title: "Balboa Park", description: "The Prado restaurant" }. RIGHT: { title: "Juniper & Ivy", neighborhood: "Gaslamp Quarter" }. RIGHT: { title: "The Taco Stand", description: "fish tacos", neighborhood: "La Jolla" }. RIGHT: { title: "The Prado", neighborhood: "Balboa Park" }.',
+    isFirstDay ? `12. **DAY 1 ARRIVAL STRUCTURE — CRITICAL**: Day 1 MUST begin with hotel arrival as the FIRST activity (category: accommodation). Travelers arrive with bags — getting to the hotel is the #1 priority. If no flight time is given, assume a morning arrival (10:00 AM luggage drop). The hotel standard check-in time is ${effectiveHotelData?.checkInTime || '15:00'}. If the traveler arrives BEFORE ${effectiveHotelData?.checkInTime || '15:00'}, title it "Luggage Drop & Early Exploration" and note "Early check-in subject to availability (standard check-in: ${effectiveHotelData?.checkInTime || '15:00'})" in the description. If arriving AT or AFTER ${effectiveHotelData?.checkInTime || '15:00'}, title it "Hotel Check-in & Refresh". Do NOT include "Arrival at Airport", "Arrival and Baggage Claim", or "Airport Transfer to Hotel" — arrival logistics are handled by a separate UI component.` : '',
+    isLastDay && context.totalDays > 1 ? '12. LAST DAY MUST end with: Checkout → Transfer → Departure' : '',
+    '13. **HOTEL FIDELITY — CRITICAL**: If a specific hotel name and address are provided in the accommodation section, you MUST use that EXACT hotel name for ALL accommodation activities (check-in, return to hotel, freshen up, checkout, etc.). Do NOT invent, substitute, or suggest a different hotel. The user has already booked their accommodation.',
+    '14. **NO KEYWORD STUFFING**: Activity titles must be concise (max 8 words). NEVER pad titles with synonym lists of location types (e.g., "borough town place locale district quarter sector area"). Use the specific venue or activity name only.',
+    '15. **ALL REAL VENUE NAMES — CRITICAL**: ALL activities must use REAL, SPECIFIC venue names — not generic descriptions. This applies to ALL categories (wellness, cafés, nightlife, shopping, etc.), not just dining. WRONG: "Boutique Wellness in Omotesando". WRONG: "a kissaten". WRONG: "Local Spa". RIGHT: "Omotesando Koffee". RIGHT: "Kayabacho Sabō". RIGHT: "HIGASHIYA GINZA".',
+    !isFirstDay ? '16. **NO CHECK-IN ON NON-ARRIVAL DAYS**: On days after Day 1 (or after the first day at a new hotel), do NOT title accommodation activities as "Check-in at [Hotel]". Use "Return to [Hotel]" or "Freshen up at [Hotel]" instead. "Check-in" implies arrival — use it only on the day the traveler first arrives at that hotel.' : '',
+  ].filter(Boolean).join('\n');
+
+  // Build list of previous experience types for stricter rejection
+  const previousExperienceTypes = new Set<string>();
+  for (const prevDay of previousDays) {
+    for (const act of prevDay.activities || []) {
+      const title = (act.title || '').toLowerCase();
+      if (/\b(class|workshop|lesson|masterclass)\b/.test(title) && /\b(cook|bake|pastry|culinary|food)\b/.test(title)) {
+        previousExperienceTypes.add('culinary_class');
+      }
+      if (/\b(wine|tasting|vineyard)\b/.test(title)) {
+        previousExperienceTypes.add('wine_tasting');
+      }
+    }
+  }
+
+  let lastError: Error | null = null;
+  let lastValidation: DayValidationResult | null = null;
+  let lastGeneratedOutput: string | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[Stage 2] Generating day ${dayNumber}/${context.totalDays} (attempt ${attempt + 1}/${maxRetries + 1})`);
+
+      // Build retry-specific prompt additions
+      let retryPrompt = '';
+      if (attempt > 0 && lastValidation) {
+        const errorList = lastValidation.errors.map(e => `  - ${e}`).join('\n');
+        const warningList = lastValidation.warnings.map(w => `  - ${w}`).join('\n');
+        if (lastGeneratedOutput) {
+          // Focused "fix this" prompt — sends previous output as context to avoid full regeneration
+          retryPrompt = `\n\n⚠️ YOUR PREVIOUS OUTPUT HAD VALIDATION ERRORS. Here is your previous JSON output — fix ONLY the issues listed below and return the corrected complete day JSON. Do NOT change activities that are working correctly.\n\nERRORS TO FIX:\n${errorList}${lastValidation.warnings.length > 0 ? `\n\nWARNINGS:\n${warningList}` : ''}\n\nPREVIOUS OUTPUT (fix and return):\n${lastGeneratedOutput.substring(0, 8000)}`;
+          console.log(`[Stage 2] Using focused retry prompt (${retryPrompt.length} chars vs full regen)`);
+        } else {
+          retryPrompt = `\n\n⚠️ PREVIOUS ATTEMPT FAILED VALIDATION. FIX THESE ISSUES:\n`;
+          if (lastValidation.errors.length > 0) {
+            retryPrompt += `ERRORS (must fix):\n${errorList}\n`;
+          }
+          if (lastValidation.warnings.length > 0) {
+            retryPrompt += `WARNINGS (should fix):\n${warningList}\n`;
+          }
+        }
+      }
+
+      // Build destination essentials prompt (non-negotiables + hidden gems)
+      // Now uses DB-driven data with freshness-based Perplexity enrichment
+      const authenticityScore = context.travelerDNA?.traits?.authenticity || 0;
+      // Resolve isFirstTimeVisitor per-city for multi-city trips
+      const dayCityForVisitor = context.multiCityDayMap?.[dayNumber - 1];
+      const currentCityName = dayCityForVisitor?.cityName || context.destination;
+      const isFirstTimeVisitor = context.firstTimePerCity
+        ? (context.firstTimePerCity[currentCityName] ?? context.isFirstTimeVisitor ?? true)
+        : (context.isFirstTimeVisitor ?? true);
+      const destinationEssentialsPrompt = supabaseClient
+        ? await buildDestinationEssentialsPromptWithDB(
+            supabaseClient,
+            context.destination,
+            context.totalDays,
+            authenticityScore,
+            isFirstTimeVisitor,
+            perplexityApiKey
+          )
+        : buildDestinationEssentialsPrompt(
+            context.destination,
+            context.totalDays,
+            authenticityScore,
+            isFirstTimeVisitor
+          );
+
+      // Build the system prompt with FULL DNA injection + Destination Essentials
+      // The GENERATION HIERARCHY establishes clear conflict resolution priorities
+      
+      // ==========================================================================
+      // PHASE 11: COMPREHENSIVE CONSTRAINTS - What Archetypes ACTUALLY Mean
+      // ==========================================================================
+      // Use the new comprehensive constraint system that includes:
+      // 1. Full archetype definitions with meanings, violations, and day structure
+      // 2. Trip-wide variety rules (no spa every day, no Michelin every day)
+      // 3. Unscheduled time requirements for flexible archetypes
+      // 4. Pacing enforcement based on pace trait
+      // 5. Budget reality constraints with explicit price limits
+      // 6. Anti-gaming naming rules
+      const comprehensiveConstraints = buildAllConstraints(
+        context.travelerDNA?.primaryArchetype,
+        context.budgetTier,
+        {
+          pace: context.travelerDNA?.traits?.pace || 0,
+          budget: context.travelerDNA?.traits?.budget || 0
+        }
+      );
+      
+      // Get archetype day structure for activity limits
+      const archetypeDefinition = getArchetypeDefinition(context.travelerDNA?.primaryArchetype);
+      const baseMaxActivitiesFromArchetype = archetypeDefinition.dayStructure.maxScheduledActivities;
+      // Use archetype min if defined, otherwise derive from schedule constraints or default to reasonable floor
+      const baseMinActivitiesFromArchetype = archetypeDefinition.dayStructure.minScheduledActivities
+        || Math.max(3, Math.ceil(baseMaxActivitiesFromArchetype * 0.6));
+
+      // Smart Finish should output a fully polished day (anchors + added value), not a sparse archetype-only day.
+      const isSmartFinishGeneration = !!context.isSmartFinish;
+      // Override activity counts for transition days — they have a fixed structure (6-8)
+      const isTransitionDayForCounts = context.multiCityDayMap?.[dayNumber - 1]?.isTransitionDay || false;
+      const effectiveMinActivities = isTransitionDayForCounts
+        ? 6
+        : isSmartFinishGeneration
+          ? (isFirstDay || isLastDay ? Math.max(6, baseMinActivitiesFromArchetype) : Math.max(8, baseMinActivitiesFromArchetype))
+          : baseMinActivitiesFromArchetype;
+      const effectiveMaxActivities = isTransitionDayForCounts
+        ? 10
+        : isSmartFinishGeneration
+          ? (isFirstDay || isLastDay ? Math.max(10, baseMaxActivitiesFromArchetype) : Math.max(14, baseMaxActivitiesFromArchetype))
+          : baseMaxActivitiesFromArchetype;
+      
+      // =========================================================================
+      // PHASE 12: Experience Affinity - What TO prioritize (the "pull" side)
+      // =========================================================================
+      const experienceGuidancePrompt = buildExperienceGuidancePrompt(
+        context.travelerDNA?.primaryArchetype
+      );
+      
+      // =========================================================================
+      // PHASE 12B: Destination × Archetype Guide - City-specific recommendations
+      // =========================================================================
+      const destinationGuidancePrompt = buildDestinationGuidancePrompt(
+        context.destination,
+        context.travelerDNA?.primaryArchetype || 'balanced_story_collector'
+      );
+      
+      const generationHierarchy = `
+${'='.repeat(70)}
+🎯 TRAIT MODERATION — THE MOST IMPORTANT RULE
+${'='.repeat(70)}
+
+Archetype traits are SEASONING, not the entire meal. The dominant archetype trait should influence ~30-40% of activities. The remaining 60-70% should be well-rounded travel anyone would enjoy. Do NOT max out any single trait. Every day should feel different.
+
+FREE ACTIVITIES ARE VALID FOR ALL ARCHETYPES. A sunset walk is luxury, a park is adventurous, a market is cultural.
+
+PER-ARCHETYPE DAILY BUDGET CEILINGS (per person, USD):
+- Budget: ~$15-20/day | Economy: ~$30-45/day | Standard: ~$50-80/day
+- Comfort: ~$100-150/day | Premium: ~$150-250/day | Luxury: ~$250-400/day
+Optimize DOWNWARD within each tier. Luxury ≠ unlimited. A 15-day luxury trip should be ~$4,000-$6,000 total, NOT $36,000.
+
+${'='.repeat(70)}
+⚖️ GENERATION HIERARCHY — CONFLICT RESOLUTION RULES
+${'='.repeat(70)}
+
+When rules conflict, follow this priority order (1 = highest):
+
+1. USER'S EXPLICIT INTERESTS & RESEARCH (highest priority)
+   → If the user selected "Food & Cuisine", "Adventure", or "Nightlife" in their profile, those determine WHAT activities appear
+   → If the user pasted specific restaurant/venue names, those MUST appear by name
+   → User interests override archetype activity restrictions
+
+2. DESTINATION ESSENTIALS
+   → First-time visitors MUST see iconic landmarks (Colosseum in Rome, Eiffel Tower in Paris)
+   → These are non-negotiable unless user explicitly says "skip"
+
+3. ARCHETYPE NARRATIVE TONE (defines HOW activities are described, NOT what activities to include)
+   → The archetype determines writing style, pacing feel, and descriptive tone
+   → Interpreted through TRAIT MODERATION: 30-40% trait-aligned, 60-70% varied
+   → Archetype "avoid" list applies ONLY when it doesn't conflict with the user's explicit interests
+
+4. EXPERIENCE AFFINITY (secondary guidance)
+   → Use these to fill REMAINING slots after user interests and essentials are placed
+
+5. BUDGET CONSTRAINTS
+   → Budget tier + budget trait score determine price limits
+   → Use per-archetype daily budget ceilings above
+
+6. PACING CONSTRAINTS → HARD LIMITS on activity density
+7. VARIETY RULES → Max 1 spa per trip, Max 1 Michelin per trip (unless specific archetypes)
+8. TRAIT MODIFIERS (lowest priority — fine-tuning only)
+
+CRITICAL: User's explicit profile interests and pasted research ALWAYS outrank archetype defaults.
+The archetype shapes the narrative VOICE, not the activity SELECTION.
+
+${'='.repeat(70)}
+
+${comprehensiveConstraints}
+
+${experienceGuidancePrompt}
+
+${destinationGuidancePrompt}
+`;
+
+      // Phase 2: Build temporal intelligence prompts
+      const tripDurationPrompt = buildTripDurationPrompt(context.totalDays, !!context.flightData?.hasOutboundFlight, !!context.flightData?.hasReturnFlight);
+      const childrenAgesPrompt = context.childrenAges?.length ? buildChildrenAgesPrompt(context.childrenAges) : '';
+      const jetLagPrompt = buildJetLagPrompt(context.originCity || null, context.destinationTimezone || null, undefined, undefined, context.jetLagSensitivity);
+      const weatherBackupPrompt = buildWeatherBackupPrompt(context.destination, context.startDate);
+      const reservationPrompt = buildReservationUrgencyPrompt();
+      const dailyEstimatesPrompt = buildDailyEstimatesPrompt(context.budgetTier);
+
+      const systemPrompt = `You are an expert travel planner. Generate a SINGLE day's itinerary with PERFECT data quality.
+
+${generationHierarchy}
+
+${qualityRules}
+
+${tripDurationPrompt}
+${childrenAgesPrompt}
+${jetLagPrompt}
+${weatherBackupPrompt}
+${reservationPrompt}
+${dailyEstimatesPrompt}
+
+${destinationEssentialsPrompt ? `${destinationEssentialsPrompt}
+
+` : ''}${dnaPromptSection ? `${'='.repeat(70)}
+TRAVELER DNA PROFILE (CRITICAL - Customize EVERYTHING to this person)
+${'='.repeat(70)}
+${dnaPromptSection}` : ''}
+
+${dayConstraintsSection ? `${'='.repeat(70)}
+DAY-SPECIFIC CONSTRAINTS (Flight/Hotel/DNA driven)
+${'='.repeat(70)}
+${dayConstraintsSection}` : ''}
+
+${preferenceContext ? `${'='.repeat(70)}
+🚨 USER'S EXPLICIT REQUESTS (MUST BE HONORED — FAILURE = REJECTED ITINERARY) 🚨
+${'='.repeat(70)}
+${preferenceContext}
+
+⚠️ If the user asked for a specific activity (e.g., "skiing", "surfing", "hiking"), you MUST include it in the itinerary.
+⚠️ If the user specified dietary preferences (e.g., "light dinner", "vegetarian"), respect them in ALL restaurant choices.
+⚠️ Ignoring explicit user requests is the #1 reason itineraries get rejected. DO NOT substitute generic activities.
+` : 'ADDITIONAL CONTEXT: (none)'}
+
+${flightHotelContext}${retryPrompt}
+
+${context.collaboratorTravelers && context.collaboratorTravelers.length > 0 ? `
+${'='.repeat(70)}
+🎯 GROUP TRIP ATTRIBUTION — suggestedFor REQUIRED
+${'='.repeat(70)}
+This is a GROUP TRIP. Some activities need a "suggestedFor" field to show which traveler's DNA inspired the choice.
+
+Travelers in this group:
+${context.collaboratorTravelers.map(t => `  - "${t.userId}" (${t.name})`).join('\n')}
+
+Rules:
+- LOGISTICAL activities (hotel check-in/check-out, airport arrival/departure, transfers, transit, packing, travel days) → DO NOT include suggestedFor. These are not DNA-driven.
+- USER-REQUESTED must-do activities (things the user explicitly asked for, e.g. "US Open", a specific restaurant they named) → set suggestedFor to ALL traveler IDs comma-separated: "${context.collaboratorTravelers.map(t => t.userId).join(',')}" — these were requested by the group, not inspired by any individual's DNA.
+- AI-CHOSEN activities (restaurants, bars, experiences YOU picked based on personality traits) → set suggestedFor to the SINGLE traveler whose DNA most influenced the pick. Only use comma-separated IDs if the activity genuinely matches multiple travelers' unique traits.
+- Use the primary planner's ID ("${context.userId}") ONLY when it specifically matches their profile, NOT as a default
+` : ''}
+
+${'='.repeat(70)}
+🧠 VOYANCE INTELLIGENCE FIELDS — MANDATORY FOR EVERY ACTIVITY
+${'='.repeat(70)}
+For EVERY activity you generate, you MUST include ALL of these intelligence fields:
+
+1. "tips" (string, 30+ chars): A specific, actionable insider tip. NOT generic advice. Example: "Ask for the corner table with harbor view — regulars know it's the best seat" or "The gift shop has a back entrance that skips the main queue"
+2. "crowdLevel" (string): Must be "low", "moderate", or "high" — your estimate at the SCHEDULED time
+3. "isHiddenGem" (boolean): true ONLY for genuine discoveries (not in top-10 TripAdvisor, not in mainstream guides). At least 1-2 per day should be true.
+4. "hasTimingHack" (boolean): true if THIS specific time slot gives an advantage (crowd avoidance, golden hour, special access). At least 2-3 per day should be true.
+5. "bestTime" (string): If hasTimingHack=true, explain WHY (e.g., "Arrives before the 10am tour bus rush")
+6. "voyanceInsight" (string): One unique fact most travelers don't know. Example: "The second floor has a hidden terrace that's not on any map"
+7. "personalization.whyThisFits" (string): MUST reference at LEAST ONE specific traveler trait, preference, past trip, or interest by name. 
+   ❌ BAD: "This fits your travel style" (too generic)
+   ❌ BAD: "Popular with tourists" (not personalized)
+   ✅ GOOD: "Your authenticity score of +7 means you'll prefer this local izakaya over the tourist-facing ramen chain"
+   ✅ GOOD: "Since you loved the street food in Bangkok, this hawker-style market will feel familiar"
+   ✅ GOOD: "With your luxury budget tier and love of omakase, this 8-seat counter is your signature meal"
+8. "contextualTips" (array of objects): 1-4 TYPED tips per activity. Each tip has a "type" and "text":
+   - "timing": Queue/crowd advice for this specific time. E.g., "Crown Jewels queue is shortest before 10am"
+   - "booking": Reservation/ticket advice. E.g., "Books up 3 weeks in advance — reserve now"
+   - "money_saving": Ways to save. E.g., "London Pass covers this + 2 other stops on your trip, saving £15"
+   - "transit": Getting there tips. E.g., "Oyster card is cheaper than individual tickets"
+   - "cultural": Etiquette/context. E.g., "Tipping 10-15% at restaurants; service charge often included"
+   - "safety": Practical warnings. E.g., "Cash only at this market" or "No shorts allowed in this church"
+   - "hidden_gem": Nearby discovery. E.g., "2 min away: The Lamb pub (est. 1729) — great mid-afternoon pint"
+   - "weather": Weather-specific advice. E.g., "March averages 8°C — pack layers and a rain jacket"
+   Every paid activity should have at least 1 contextual tip. Dining should include booking or cultural tips.
+
+DO NOT leave these fields empty or omit them. They are the core intelligence layer.
+
+${'='.repeat(70)}
+🎯 CURATED PICKS — ONE BEST CHOICE PER SLOT (CRITICAL)
+${'='.repeat(70)}
+CRITICAL: Generate exactly ONE activity or restaurant per time slot. Do NOT generate multiple options, alternatives, or choices for any slot. Do NOT include isOption, optionGroup, or any selection/choice mechanism in the output. Every slot must have a single, definitive, curated recommendation based on the traveler's DNA. You are a personal travel curator delivering a finished plan — not a quiz with multiple choice answers.
+If the traveler wants to swap an activity later, they can use the swap feature.
+
+${'='.repeat(70)}
+⏱️ BUFFER TIME — MANDATORY REALISTIC GAPS (CRITICAL)
+${'='.repeat(70)}
+REQUIRED — BUFFER TIME: Include realistic travel and transition time between every activity. NEVER schedule activities back-to-back with zero gap. Minimum gaps:
+- 5 minutes between activities at the same venue/location
+- 10-15 minutes between nearby activities within walking distance
+- 15-20 minutes for restaurant arrivals (be seated, review menu, order)
+- 20-30 minutes for hotel check-in or check-out
+- 30-60 minutes for airport-related activities (security, customs, boarding)
+- Include actual transit time between locations not within walking distance
+Example: If an activity ends at 14:00 and the next location is a 20-minute taxi ride away, schedule the next activity at 14:30 (20 min transit + 10 min buffer), NOT at 14:00 or 14:20.
+
+${'='.repeat(70)}
+🏛️ OPERATING HOURS — HARD CONSTRAINT
+${'='.repeat(70)}
+REQUIRED — OPERATING HOURS: Never schedule an activity before its opening time or after its closing time. If a museum opens at 10:00, the earliest arrival is 10:00 — not 09:45, not 09:30. If a restaurant's last seating is 21:00, do not schedule a 20:45 dinner that would run past closing. When exact hours are unknown, use conservative defaults: most attractions 09:30-17:00, restaurants lunch 11:30-14:00 and dinner 18:00-21:30, outdoor activities sunrise to sunset.
+
+${'='.repeat(70)}
+🏷️ ARCHETYPE NAMING — EXACT MATCH ONLY
+${'='.repeat(70)}
+IMPORTANT — ARCHETYPE NAMES: When referring to the traveler's archetype or style, use ONLY the exact archetype name from their Travel DNA profile. Do not invent, modify, or embellish archetype names. If the profile says 'Luxury Seeker', write 'Luxury Seeker' — never 'Luxury Luminary', 'Luxury Connoisseur', 'Luxury Maven', or any creative variation. The archetype name must match exactly what exists in the system.
+
+${'='.repeat(70)}
+⚖️ ARCHETYPE BALANCE — SEASONING NOT THE MEAL
+${'='.repeat(70)}
+IMPORTANT — ARCHETYPE BALANCE: The traveler's archetype influences 30-40% of the itinerary. It is seasoning, NOT the entire meal. Every day must include a MIX of archetype-aligned and universally enjoyable activities.
+
+Rules:
+- Luxury Seeker: Quality experiences, but NOT helicopters, limos, VIP everything, or $500 dinners at every meal. A nice hotel, a great restaurant for dinner, and then they walk through a market, visit a free park, grab street food for lunch. Total trip budget ceiling: ~$4,000 for 15 days.
+- Adventure Enthusiast: One adventurous activity per day MAX. They also eat at cafés, visit museums, and relax. Not skydiving → bungee jumping → white water rafting in one day.
+- Culture Scholar: One cultural deep-dive per day, not four back-to-back museums. They also eat local food, explore neighborhoods, shop.
+- Budget Traveler: $200-300 total trip budget. Street food, hostels, free attractions, public transit. Never suggest expensive restaurants or paid experiences unless free alternatives don't exist.
+- Mid-Range: ~$1,000 total. Mix of affordable and moderate. 3-star hotels, some paid attractions, mostly casual dining with one nice dinner.
+- Foodie: Food-focused doesn't mean every activity is eating. One signature food experience per day + regular sightseeing.
+
+The goal: if you removed the archetype label, the itinerary should still read like a great, varied trip that anyone would enjoy.
+
+${'='.repeat(70)}
+✍️ OUTPUT QUALITY — CLEAN TEXT (CRITICAL)
+${'='.repeat(70)}
+OUTPUT QUALITY: All text must be clean, professional, correctly spelled English. Double-check every word. No garbled characters, no corrupted fragments, no mixed languages (unless providing a local place name in parentheses). No Chinese, Japanese, or other non-Latin characters in date fields or English text sections. No leaked schema field names (e.g., "duration:4" or "practicalTips;|") in user-facing text.
+
+${'='.repeat(70)}
+📋 ACCOMMODATION NOTES & PRACTICAL TIPS — REQUIRED (Day 1 only)
+${'='.repeat(70)}
+On Day 1 ONLY, include these top-level arrays in your response:
+- "accommodationNotes": 2-3 tips about where to stay (best neighborhoods, hotel styles, booking tips)
+- "practicalTips": 3-4 practical travel tips (transport, money-saving, cultural etiquette, safety, connectivity)
+These help the traveler prepare for their trip.
+`;
+
+      // Build banned experience types list for this day
+      const bannedTypes: string[] = [];
+      if (previousExperienceTypes.has('culinary_class')) {
+        bannedTypes.push('cooking classes', 'baking classes', 'culinary workshops', 'pastry classes', 'food classes');
+      }
+      if (previousExperienceTypes.has('wine_tasting')) {
+        bannedTypes.push('wine tastings', 'vineyard tours', 'winery visits');
+      }
+
+      // Resolve per-day destination for multi-city trips
+      const dayCity = context.multiCityDayMap?.[dayNumber - 1];
+      const dayDestination = dayCity?.cityName || context.destination;
+      const dayCountry = dayCity?.country || context.destinationCountry;
+      const isTransitionDay = dayCity?.isTransitionDay || false;
+      
+      // Derive city-boundary flags for post-processing airport strip (fixes dead-code bug)
+      const isLastDayInCity = dayCity?.isLastDayInCity || false;
+      const nextDayInfoForStrip = context.multiCityDayMap?.[dayNumber]; // dayNumber is 0-indexed+1, so [dayNumber] = next day
+      const nextLegTransport = nextDayInfoForStrip?.transportType || '';
+      
+      let multiCityPrompt = '';
+      if (context.isMultiCity && dayCity) {
+        const cityFirstTime = context.firstTimePerCity
+          ? (context.firstTimePerCity[dayDestination] ?? true)
+          : (context.isFirstTimeVisitor ?? true);
+        const visitorLabel = cityFirstTime ? 'FIRST-TIME visitor' : 'RETURNING visitor';
+        multiCityPrompt = `\n🌍 MULTI-CITY TRIP: This day is in **${dayDestination}${dayCountry ? `, ${dayCountry}` : ''}**. ALL activities MUST be located in ${dayDestination}.\n👤 VISITOR STATUS for ${dayDestination}: Traveler is a ${visitorLabel}.${cityFirstTime ? ' Include iconic landmarks and must-see attractions.' : ' Skip tourist staples — focus on hidden gems, local favorites, and deeper neighborhood exploration.'}`;
+        
+        // Inject per-city hotel context for geographic anchoring
+        if (dayCity.hotelName) {
+          const hotelArea = dayCity.hotelNeighborhood || dayCity.hotelAddress || '';
+          const checkInTime = dayCity.hotelCheckIn || '15:00';
+          const checkOutTime = dayCity.hotelCheckOut || '11:00';
+          multiCityPrompt += `\n🏨 ACCOMMODATION in ${dayDestination}: "${dayCity.hotelName}"${hotelArea ? ` — Address: ${hotelArea}` : ''}.`;
+          multiCityPrompt += `\n   Check-in: ${checkInTime}, Check-out: ${checkOutTime}.`;
+          multiCityPrompt += `\n   🚫 CRITICAL: The user has ALREADY SELECTED this hotel. Use "${dayCity.hotelName}" for ALL accommodation references (check-in, return to hotel, freshen up, etc.). Do NOT invent, suggest, or substitute a different hotel.`;
+          multiCityPrompt += `\n   ⚠️ Start each day from this hotel area and plan return in the evening.`;
+          
+          if (dayCity.isFirstDayInCity && !dayCity.isTransitionDay) {
+            // Very first city, first day — arrival logistics
+            multiCityPrompt += `\n   📍 ARRIVAL DAY: Traveler arrives and needs to get to the hotel. Include transit to ${dayCity.hotelName}, check-in (~30-60 min to settle in), THEN afternoon/evening activities near the hotel area.`;
+          } else if (dayCity.isFirstDayInCity && dayCity.isTransitionDay) {
+            // Transition day — handled by transition prompt, but add hotel check-in note
+            multiCityPrompt += `\n   📍 CHECK-IN DAY: After arriving in ${dayDestination}, traveler checks into ${dayCity.hotelName}. Allow time for check-in and settling before activities.`;
+          }
+          
+          if (dayCity.isLastDayInCity) {
+            // Look ahead to find the next city's transport mode
+            const nextDayInfo = context.multiCityDayMap?.[dayNumber];
+            const nextLegTransport = dayCity.nextLegTransport || nextDayInfo?.transportType || 'flight';
+            const nextLegCity = dayCity.nextLegCity || nextDayInfo?.cityName || 'the next destination';
+            const isNonFlightFullGen = nextLegTransport !== 'flight';
+            const transportLabelFullGen = nextLegTransport.toUpperCase();
+            multiCityPrompt += `\n   📍 CHECKOUT & DEPARTURE DAY: Traveler checks out of ${dayCity.hotelName} (typically by 11:00 AM). The traveler departs TODAY by ${transportLabelFullGen} to ${nextLegCity}. Plan morning around checkout — breakfast at/near hotel, pack and check out, then transfer to ${isNonFlightFullGen ? transportLabelFullGen.toLowerCase() + ' station' : 'airport'} and depart.`;
+            if (isNonFlightFullGen) {
+              multiCityPrompt += `\n   ⚠️ DO NOT mention airports, flights, or "Transfer to Airport". The next leg is by ${transportLabelFullGen}.`;
+              multiCityPrompt += `\n   ⚠️ IGNORE any flight departure data in the system prompt. This is NOT a flight departure day. Plan checkout → transfer to ${transportLabelFullGen.toLowerCase()} station → departure by ${transportLabelFullGen}.`;
+              // Inject real transport schedule if available
+              const nextTd = dayCity.nextLegTransportDetails || nextDayInfo?.nextLegTransportDetails;
+              if (nextTd?.departureTime) {
+                multiCityPrompt += `\n   🚆 CONFIRMED ${transportLabelFullGen} SCHEDULE: Departs ${nextTd.departureTime}${nextTd.departureStation ? ` from ${nextTd.departureStation}` : ''}${nextTd.carrier ? ` (${nextTd.carrier})` : ''}. Plan checkout and transfer backwards from this time.`;
+              }
+            }
+          }
+          
+          // Hotel change within same city (split-stay)
+          if ((dayCity as any).isHotelChange && (dayCity as any).previousHotelName) {
+            const prevHotel = (dayCity as any).previousHotelName;
+            multiCityPrompt += `\n   📍 HOTEL CHANGE: Traveler checks out of "${prevHotel}" and checks into "${dayCity.hotelName}".`;
+            multiCityPrompt += `\n   Plan checkout from "${prevHotel}" in the morning (by ${checkOutTime}), then check-in at "${dayCity.hotelName}" (from ${checkInTime}), then afternoon/evening activities.`;
+            multiCityPrompt += `\n   Include BOTH a checkout activity for "${prevHotel}" AND a check-in activity for "${dayCity.hotelName}".`;
+          }
+        }
+        
+        if (isTransitionDay && dayCity.transitionFrom) {
+          // Use the full transition day prompt builder instead of the weak 2-line fallback
+          const transitionPrompt = buildTransitionDayPrompt({
+            transitionFrom: dayCity.transitionFrom,
+            transitionFromCountry: context.multiCityDayMap?.find(d => d.cityName === dayCity.transitionFrom)?.country,
+            transitionTo: dayDestination,
+            transitionToCountry: dayCountry,
+            transportType: dayCity.transportType,
+            travelers: context.travelers,
+            budgetTier: context.budgetTier,
+            primaryArchetype: context.travelerDNA?.primaryArchetype,
+            currency: context.currency,
+          });
+          multiCityPrompt += `\n${transitionPrompt}`;
+        }
+      }
+
+      const dayConstraintsForMeals = (context.userConstraints || []).filter((constraint: any) => {
+        if (constraint?.day == null) return false;
+        return Number(constraint.day) === dayNumber;
+      });
+      const lockedHoursForMeals = dayConstraintsForMeals.reduce((sum: number, constraint: any) => {
+        if (constraint?.type === 'full_day_event') return sum + 12;
+        if (constraint?.type === 'time_block') return sum + (Number(constraint.durationHours) || 2);
+        return sum;
+      }, 0);
+      const hasFullDayEventForMeals = dayConstraintsForMeals.some((constraint: any) => constraint?.type === 'full_day_event');
+      const dayMealPolicyInput: MealPolicyInput = {
+        dayNumber,
+        totalDays: context.totalDays,
+        isFirstDay,
+        isLastDay,
+        isTransitionDay,
+        hasFullDayEvent: hasFullDayEventForMeals,
+        arrivalTime24: context.flightData?.arrivalTime24,
+        departureTime24: context.flightData?.departureTime24,
+        lockedHours: lockedHoursForMeals,
+      };
+      const dayMealPolicy = deriveMealPolicy(dayMealPolicyInput);
+      const mealRequirementsBlock = buildMealRequirementsPrompt(dayMealPolicy);
+      console.log(`[Stage 2] Day ${dayNumber} meal policy: mode=${dayMealPolicy.dayMode}, required=[${dayMealPolicy.requiredMeals.join(', ')}], usableHours=${dayMealPolicy.usableHours}`);
+
+      // Calculate day-of-week for operating hours awareness
+      const dateObj = new Date(date);
+      const DAY_NAMES_GEN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayOfWeekName = DAY_NAMES_GEN[dateObj.getDay()];
+      
+      const userPrompt = `Generate Day ${dayNumber} of ${context.totalDays} for ${dayDestination}${dayCountry ? `, ${dayCountry}` : ''}.
+
+DATE: ${date} (${dayOfWeekName})
+TRAVELERS: ${context.travelers}
+BUDGET: ${context.budgetTier || 'standard'} (~$${context.dailyBudget}/day per person)${context.actualDailyBudgetPerPerson != null ? `
+⚠️ HARD BUDGET CAP: The user has set a real budget of ~$${Math.round(context.actualDailyBudgetPerPerson * context.travelers)}/day total ($${context.actualDailyBudgetPerPerson}/person) for activities.
+${context.actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: This budget is unrealistically low for ${context.destination || 'this destination'}. Do your best:
+- Prioritize FREE activities: parks, temples, markets, viewpoints, walking tours, beaches, street art, public plazas.
+- For meals, suggest the cheapest realistic options: street food stalls, convenience stores, budget eateries. Use real local prices.
+- Do NOT invent fake low prices. If a typical meal costs $8-12 in this city, say so — do not claim $2.
+- Include a "budget_note" field in your response: a 1-sentence honest note like "This budget is very tight for Tokyo — we've maximized free activities but meals will be the main expense."
+- Still aim to fill the day with great experiences — many of the best travel moments are free.` : context.actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: This is a lean budget. Lean heavily on free attractions, street food, and self-guided exploration. Limit paid activities to 1-2 per day max. Use realistic local prices — do not underestimate costs to fit the budget.` : `Stay within this cap. If an activity is expensive, balance with free/cheap alternatives elsewhere in the day.`}` : ''}
+ARCHETYPE: ${context.travelerDNA?.primaryArchetype || 'balanced'}
+ACTIVITY COUNT: ${effectiveMinActivities}-${effectiveMaxActivities} per day${isSmartFinishGeneration ? ' (SMART FINISH POLISH TARGET)' : ' (from archetype day structure - HARD LIMITS)'}
+⚠️ MINIMUM ${effectiveMinActivities} activities required. Going UNDER = FAILURE. Going OVER ${effectiveMaxActivities} = FAILURE.
+${mealRequirementsBlock}
+${isSmartFinishGeneration ? 'SMART FINISH HARD RULE: Keep ALL user-provided anchor activities by exact name and build additional activities around them — never replace or drop anchors.' : ''}
+${multiCityPrompt}
+
+${(() => {
+  // Separate recurring events from regular activities for dedup prompt
+  const mustDoList = (context.mustDoActivities || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+  const recurringPrevious: string[] = [];
+  const nonRecurringPrevious: string[] = [];
+  for (const prevAct of previousActivities) {
+    if (isRecurringEvent({ title: prevAct }, mustDoList)) {
+      recurringPrevious.push(prevAct);
+    } else {
+      nonRecurringPrevious.push(prevAct);
+    }
+  }
+  let lines = '';
+  if (nonRecurringPrevious.length > 0) {
+    lines += `AVOID REPEATING THESE ACTIVITIES (already done on previous days): ${nonRecurringPrevious.join(', ')}\n`;
+  }
+  if (recurringPrevious.length > 0) {
+    lines += `THESE ARE MULTI-DAY EVENTS the traveler is attending across multiple days. CREATE A FULL ATTENDANCE ACTIVITY for each (not just a transfer to the venue): ${recurringPrevious.join(', ')}\n`;
+  }
+  lines += `\n🍽️ MEAL VARIETY RULE: Every breakfast, lunch, and dinner MUST be at a DIFFERENT restaurant/café than any previous day. Never recommend the same venue twice across the trip. Variety in cuisine type is also encouraged.\n`;
+  return lines;
+})()}
+NOTE: The previous-activities list is ONLY for de-duplication. Do NOT treat it as a signal for spending style.
+${bannedTypes.length > 0 ? `\n🚫 BANNED EXPERIENCE TYPES (already done on previous days - DO NOT INCLUDE): ${bannedTypes.join(', ')}\n` : ''}
+
+CRITICAL REMINDERS:
+1. ${effectiveMinActivities}-${effectiveMaxActivities} scheduled activities required. Going under ${effectiveMinActivities} OR over ${effectiveMaxActivities} = FAILURE.
+2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
+3. Check the budget constraints. If value-focused, no €100+ experiences.
+4. ${context.travelerDNA?.primaryArchetype === 'flexible_wanderer' || context.travelerDNA?.primaryArchetype === 'slow_traveler' || (context.travelerDNA?.traits?.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
+${context.isMultiCity ? `5. ALL activities MUST be in ${dayDestination}. Do NOT include activities from other cities.` : ''}
+
+⏰ OPERATING HOURS — HARD RULE (THIS DAY IS ${dayOfWeekName.toUpperCase()}):
+- NEVER schedule an activity before the venue opens or after it closes.
+- If a museum/attraction opens at 10:00, the EARLIEST you can schedule a visit is 10:00 (plus buffer time for arrival/entry).
+- If a bar/lounge closes at 23:00, you MUST schedule it to END by 23:00 — NOT start at 23:00.
+- Many European museums close on MONDAYS. If today is Monday, do NOT schedule museum visits — use an alternative.
+- Restaurants: do NOT schedule lunch at a place that opens for dinner only, or dinner at a lunch-only spot.
+- Markets often have specific operating days — verify the market is open on ${dayOfWeekName} before including it.
+- If you are unsure whether a venue is open on ${dayOfWeekName}, set closedRisk: true and suggest an alternative. WARNING: Confirmed-closed venues will be REMOVED from the itinerary in post-processing. Only use closedRisk for genuine uncertainty.
+${(() => {
+  // Inject known venue hours from verified_venues cache
+  if (context.venueHoursCache && context.venueHoursCache.length > 0) {
+    const dayIdx = dateObj.getDay();
+    const DAY_N = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dn = DAY_N[dayIdx];
+    const relevantHours = context.venueHoursCache
+      .map(v => {
+        const entry = v.opening_hours?.find(h => h.toLowerCase().startsWith(dn.toLowerCase()));
+        return entry ? `  • ${v.name}: ${entry}` : null;
+      })
+      .filter(Boolean)
+      .slice(0, 40); // Limit to avoid prompt bloat
+    if (relevantHours.length > 0) {
+      return `\n📋 KNOWN VENUE HOURS FOR ${dayOfWeekName.toUpperCase()} (from verified data — MUST RESPECT):\n${relevantHours.join('\n')}\nCONSTRAINT: If you include any venue listed above, schedule it WITHIN the hours shown. Violations = GENERATION FAILURE.`;
+    }
+  }
+  return '';
+})()}
+
+🌐 LANGUAGE — HARD RULE:
+- ALL text output (titles, descriptions, tips, addresses) MUST be in clean, correctly spelled English.
+- For non-Latin-script destinations, use standard English transliterations or well-known English names.
+- NEVER output Chinese characters (汉字), Japanese (漢字/かな), Korean (한글), Arabic, Cyrillic, or Thai script.
+- NEVER produce garbled, corrupted, or nonsensical text fragments.
+
+Generate activities for this day following ALL constraints above.`;
+
+      let data: any = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+            tools: [{
+              type: "function",
+              function: {
+                name: "create_day_itinerary",
+                description: "Creates a validated day itinerary",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    dayNumber: { type: "number" },
+                    date: { type: "string" },
+                    title: { type: "string" },
+                    theme: { type: "string" },
+                    activities: {
+                      type: "array",
+                      minItems: 3,
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string" },
+                          title: { type: "string" },
+                          startTime: { type: "string", description: "HH:MM 24-hour format" },
+                          endTime: { type: "string", description: "HH:MM 24-hour format" },
+                          category: { type: "string", enum: ["sightseeing", "dining", "cultural", "shopping", "relaxation", "transport", "accommodation", "activity"] },
+                          location: {
+                            type: "object",
+                            properties: {
+                              name: { type: "string" },
+                              address: { type: "string" },
+                              coordinates: {
+                                type: "object",
+                                properties: { lat: { type: "number" }, lng: { type: "number" } },
+                                required: ["lat", "lng"]
+                              }
+                            },
+                            required: ["name", "address"]
+                          },
+                          cost: {
+                            type: "object",
+                            properties: {
+                              amount: { type: "number", minimum: 0 },
+                              currency: { type: "string" }
+                            },
+                            required: ["amount", "currency"]
+                          },
+                          description: { type: "string" },
+                          tags: { type: "array", items: { type: "string" }, minItems: 5 },
+                          bookingRequired: { type: "boolean" },
+                          transportation: {
+                            type: "object",
+                            description: "COST RULES: walk/walking → estimatedCost.amount MUST be 0 (walking is free). metro/subway → 1-5. bus → 1-4. taxi/uber/rideshare → use realistic local rates.",
+                            properties: {
+                              method: { type: "string" },
+                              duration: { type: "string" },
+                              estimatedCost: {
+                                type: "object",
+                                properties: { amount: { type: "number" }, currency: { type: "string" } }
+                              },
+                              instructions: { type: "string" }
+                            }
+                          },
+                          tips: { type: "string", description: "Insider tip for this activity (must be specific, actionable, 30+ chars)" },
+                          contextualTips: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                type: { type: "string", enum: ["timing", "booking", "money_saving", "transit", "cultural", "safety", "hidden_gem", "weather", "general"] },
+                                text: { type: "string" }
+                              },
+                              required: ["type", "text"]
+                            },
+                            description: "1-4 typed contextual tips"
+                          },
+                          rating: {
+                            type: "object",
+                            properties: { value: { type: "number" }, totalReviews: { type: "number" } }
+                          },
+                          website: { type: "string" },
+                          suggestedFor: { type: "string", description: "User ID of the traveler whose preferences most influenced this activity choice (group trips only)" },
+                          isHiddenGem: { type: "boolean", description: "true if this is a hidden gem discovered through deep research (Reddit, local sources, new openings). NOT for mainstream tourist attractions." },
+                          hasTimingHack: { type: "boolean", description: "true if scheduling at this specific time provides a meaningful advantage (avoiding crowds, better light, special access)" },
+                          bestTime: { type: "string", description: "If hasTimingHack=true, explain why this time slot is optimal (e.g. '9am avoids the 11am-3pm crowds')" },
+                          crowdLevel: { type: "string", enum: ["low", "moderate", "high"], description: "Expected crowd level at the scheduled time" },
+                          voyanceInsight: { type: "string", description: "A unique Voyance-only insight about this place that typical travel guides miss" },
+                          personalization: {
+                            type: "object",
+                            properties: {
+                              tags: { type: "array", items: { type: "string" }, description: "Machine-checkable tags from user inputs (e.g. romantic, foodie, low-pace)" },
+                              whyThisFits: { type: "string", description: "1-2 sentences explaining why this activity fits THIS specific traveler's DNA/preferences" },
+                              confidence: { type: "number", description: "0-1 confidence score for this recommendation" },
+                              matchedInputs: { type: "array", items: { type: "string" }, description: "Which user preferences influenced this choice" }
+                            },
+                            required: ["tags", "whyThisFits", "confidence"]
+                          }
+                        },
+                        required: ["id", "title", "startTime", "endTime", "category", "location", "cost", "bookingRequired", "personalization", "tips", "crowdLevel", "isHiddenGem", "hasTimingHack"]
+                      }
+                    },
+                    accommodationNotes: { type: "array", items: { type: "string" }, description: "2-3 accommodation tips for this destination (e.g. best neighborhoods to stay, hotel recommendations, booking tips)" },
+                    practicalTips: { type: "array", items: { type: "string" }, description: "3-4 practical travel tips for this destination (e.g. transport tips, money-saving advice, cultural etiquette, safety tips)" },
+                    transportComparison: {
+                      type: "array",
+                      description: "Transport options for transition days between cities. Required when isTransitionDay is true.",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "string" },
+                          mode: { type: "string", enum: ["train", "flight", "bus", "car", "ferry"] },
+                          operator: { type: "string" },
+                          inTransitDuration: { type: "string" },
+                          doorToDoorDuration: { type: "string" },
+                          cost: {
+                            type: "object",
+                            properties: {
+                              perPerson: { type: "number" },
+                              total: { type: "number" },
+                              currency: { type: "string" },
+                              includesTransfers: { type: "boolean" }
+                            },
+                            required: ["perPerson", "total", "currency"]
+                          },
+                          departure: {
+                            type: "object",
+                            properties: {
+                              point: { type: "string" },
+                              neighborhood: { type: "string" }
+                            }
+                          },
+                          arrival: {
+                            type: "object",
+                            properties: {
+                              point: { type: "string" },
+                              neighborhood: { type: "string" }
+                            }
+                          },
+                          pros: { type: "array", items: { type: "string" } },
+                          cons: { type: "array", items: { type: "string" } },
+                          bookingTip: { type: "string" },
+                          scenicOpportunities: { type: "array", items: { type: "string" } },
+                          isRecommended: { type: "boolean" },
+                          recommendationReason: { type: "string" }
+                        },
+                        required: ["id", "mode", "operator", "inTransitDuration", "doorToDoorDuration", "cost", "departure", "arrival", "pros", "cons", "isRecommended"]
+                      }
+                    },
+                    selectedTransportId: { type: "string", description: "ID of the recommended transport option" }
+                  },
+                  required: ["dayNumber", "date", "title", "activities"]
+                }
+              }
+            }],
+            tool_choice: { type: "function", function: { name: "create_day_itinerary" } },
+          }),
+        });
+
+        if (!response.ok) {
+          const status = response.status;
+          const errorText = await response.text();
+          console.error(`[Stage 2] AI Gateway error for day ${dayNumber} (attempt ${attempt}): ${status}`, errorText);
+
+          // Retry transient 5xx
+          if (attempt < 3 && status >= 500) {
+            await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+            continue;
+          }
+
+          throw new Error(status === 429 ? 'Rate limit exceeded' : status === 402 ? 'Credits exhausted' : 'AI generation failed');
+        }
+
+        data = await response.json();
+
+        // The gateway can sometimes return HTTP 200 with an error payload.
+        if ((data as any)?.error) {
+          console.error(`[Stage 2] AI Gateway error payload (attempt ${attempt}):`, (data as any).error);
+          const raw = (data as any).error?.message || 'Internal Server Error';
+          const isTransient = raw === 'Internal Server Error' || (data as any).error?.code === 500;
+          if (attempt < 3 && isTransient) {
+            await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+            data = null;
+            continue;
+          }
+
+          const msg = raw === 'Internal Server Error'
+            ? 'AI service temporarily unavailable. Please try again in a moment.'
+            : raw;
+          throw new Error(`AI service error: ${msg}`);
+        }
+
+        break;
+      }
+
+      if (!data) {
+        throw new Error('AI generation failed');
+      }
+
+      // Track cost for this day generation
+      // Note: This is cumulative - we're tracking per-day for now
+      const dayTracker = trackCost('full_itinerary_day', 'google/gemini-3-flash-preview');
+      dayTracker.setTripId(context.tripId);
+      if (context.userId) dayTracker.setUserId(context.userId);
+      dayTracker.recordAiUsage(data);
+      dayTracker.addMetadata('dayNumber', dayNumber);
+      dayTracker.addMetadata('destination', context.destination);
+      await dayTracker.save();
+
+      const message = data.choices?.[0]?.message;
+      const toolCall = message?.tool_calls?.[0];
+
+      let generatedDay: StrictDay;
+      if (toolCall?.function?.arguments) {
+        // Standard tool call response
+        generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, dayDestination) as StrictDay;
+      } else if (message?.content) {
+        // Fallback: AI returned content instead of tool call
+        console.log("[Stage 2] AI returned content instead of tool_call, attempting to parse...");
+        try {
+          const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+          const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, dayDestination) as StrictDay;
+          } else {
+            console.error("[Stage 2] No JSON found in content:", contentStr.substring(0, 500));
+            throw new Error("Invalid AI response format - no JSON in content");
+          }
+        } catch (parseErr) {
+          console.error("[Stage 2] Failed to parse content as JSON:", parseErr);
+          throw new Error("Invalid AI response format - content not parseable");
+        }
+      } else {
+        console.error("[Stage 2] Invalid AI response - no tool_calls or content:", JSON.stringify(data).substring(0, 1000));
+        throw new Error("Invalid AI response format");
+      }
+
+      // Normalize the day data
+      generatedDay.dayNumber = dayNumber;
+      generatedDay.date = date;
+      generatedDay.title = generatedDay.title || generatedDay.theme || `Day ${dayNumber}`;
+
+      // Store output for focused retry prompts (reduces token waste by ~60%)
+      try { lastGeneratedOutput = JSON.stringify(generatedDay).substring(0, 10000); } catch { lastGeneratedOutput = null; }
+
+      // Normalize activities
+      generatedDay.activities = generatedDay.activities.map((act, idx) => {
+        // CRITICAL: Convert costs from local currency to USD
+        // AI may return costs in local currency (e.g., JPY 6000 for ¥6000 dinner in Japan)
+        const rawCost = act.cost || (act as any).estimatedCost;
+        const normalizedCost = normalizeCostToUSD(rawCost);
+        
+        const normalizedAct = {
+          ...act,
+          id: act.id || `day${dayNumber}-act${idx + 1}-${Date.now()}`,
+          title: act.title || `Activity ${idx + 1}`,
+          durationMinutes: calculateDuration(act.startTime, act.endTime),
+          categoryIcon: getCategoryIcon(act.category || 'activity'),
+          cost: normalizedCost, // Always use USD-normalized cost
+        };
+
+        // Auto-fix logistics activities
+        const logisticsKeywords = ['check-in', 'checkout', 'check-out', 'arrival', 'departure', 'transfer',
+          'free time', 'at leisure', 'leisure time', 'downtime', 'rest',
+          'relax at hotel', 'explore on your own', 'personal time'];
+        const isLogistics = logisticsKeywords.some(kw => normalizedAct.title.toLowerCase().includes(kw)) ||
+                            ['transport', 'accommodation', 'downtime', 'free_time'].includes(normalizedAct.category?.toLowerCase() || '');
+        
+        if (isLogistics) {
+          normalizedAct.bookingRequired = false;
+          // Only zero out non-transfer logistics
+          if (!normalizedAct.title.toLowerCase().includes('transfer')) {
+            normalizedAct.cost = { amount: 0, currency: 'USD' };
+          }
+        }
+
+        // Auto-set bookingRequired for categories that genuinely need it
+        const bookableCategories = ['museum', 'tour', 'cultural', 'activity', 'show', 'entertainment'];
+        const bookableKeywords = ['museum', 'tour', 'guided', 'cooking class', 'wine tasting',
+          'tickets', 'skip-the-line', 'timed entry', 'reservation'];
+        const isBookable = bookableCategories.includes(normalizedAct.category?.toLowerCase() || '') ||
+          bookableKeywords.some(kw => normalizedAct.title.toLowerCase().includes(kw));
+        if (isBookable && !isLogistics) {
+          normalizedAct.bookingRequired = true;
+        }
+
+        // Clamp end-of-day accommodation cards to realistic duration
+        const accomTitle = (normalizedAct.title || '').toLowerCase();
+        const isReturnToHotel = normalizedAct.category?.toLowerCase() === 'accommodation' &&
+          (accomTitle.includes('return to') || accomTitle.includes('freshen up') || 
+           accomTitle.includes('rest at') || accomTitle.includes('back to') ||
+           accomTitle.includes('wind down') || accomTitle.includes('settle in'));
+
+        if (isReturnToHotel && normalizedAct.durationMinutes > 60) {
+          const clampedDuration = 15;
+          const origDuration = normalizedAct.durationMinutes;
+          normalizedAct.durationMinutes = clampedDuration;
+          if (normalizedAct.startTime) {
+            const startMins = parseTimeToMinutes(normalizedAct.startTime);
+            if (startMins !== null) {
+              normalizedAct.endTime = minutesToHHMM(startMins + clampedDuration);
+            }
+          }
+          normalizedAct.duration = '15 min';
+          console.log(`[Duration fix] Clamped "${normalizedAct.title}" from ${origDuration}min to ${clampedDuration}min`);
+        }
+
+        // Derive intelligence fields if AI didn't set them
+        deriveIntelligenceFields(normalizedAct);
+
+        return normalizedAct;
+      });
+
+      // ==========================================================================
+      // HOTEL ADDRESS CORRECTION: Overwrite AI-hallucinated addresses on
+      // accommodation/hotel-return activities with the actual hotel data.
+      // The AI sometimes generates wrong addresses for "Return to Hotel" or
+      // "Rest & Recharge" activities despite being given the correct address.
+      // ==========================================================================
+      {
+        const actualHotelName = dayCity?.hotelName || context.hotelData?.hotelName;
+        const actualHotelAddress = dayCity?.hotelAddress || context.hotelData?.hotelAddress;
+        if (actualHotelName || actualHotelAddress) {
+          const hotelKeywords = ['hotel', 'check-in', 'check in', 'checkout', 'check-out', 'check out', 'freshen up', 'rest & recharge', 'rest and recharge', 'return to', 'settle in', 'wind down', "dad's", "mom's", "parent", "home base", 'airbnb', 'vacation rental'];
+          for (const act of generatedDay.activities) {
+            const cat = (act.category || '').toLowerCase();
+            const title = (act.title || '').toLowerCase();
+            const isAccommodationActivity = cat === 'accommodation' || cat === 'relaxation' ||
+              hotelKeywords.some(kw => title.includes(kw));
+            
+            if (isAccommodationActivity && (cat === 'accommodation' || cat === 'relaxation' || title.includes('hotel') || title.includes('home') || title.includes('airbnb') || title.includes('return') || title.includes('check'))) {
+              if (actualHotelName && act.location) {
+                act.location.name = actualHotelName;
+              }
+              if (actualHotelAddress && act.location) {
+                act.location.address = actualHotelAddress;
+              }
+              if (!act.location && (actualHotelName || actualHotelAddress)) {
+                (act as any).location = {
+                  name: actualHotelName || 'Accommodation',
+                  address: actualHotelAddress || '',
+                };
+              }
+            }
+          }
+        }
+      }
+
+      // ==========================================================================
+      // PHANTOM HOTEL STRIPPING: Remove fabricated hotel activities when no hotel booked
+      // ==========================================================================
+      {
+        const hasHotel = !!(dayCity?.hotelName || context.hotelData?.hotelName);
+        if (!hasHotel) {
+          stripPhantomHotelActivities(generatedDay, false);
+        }
+      }
+
+
+
+
+
       // from Return to Hotel descriptions that reference non-existent next-day plans
       // ==========================================================================
       {
