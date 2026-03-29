@@ -1,41 +1,40 @@
 
+The published error is still consistent with a frontend render-time `.toLowerCase()` on a missing value, but the important clue is this: the stack is still coming from the same published bundle `index-SuNP7A_H.js`, and the database has no corresponding `client_errors` rows. That strongly suggests the live site is still serving an older/cached frontend build, so some of the guards already present in the repo are not yet what users are executing.
 
-# Fix: Publish the fixes + guard remaining unguarded calls
+What I confirmed in the code:
+- `ErrorBoundary` is already enhanced to capture `componentStack`, `failing_component`, route, and tag `toLowerCase` crashes.
+- The previously planned guards already exist in:
+  - `EditActivityModal`
+  - `ImportActivitiesModal`
+  - key `EditorialItinerary` spots like `budgetTier`, `d.city`, and `carrier`.
+- The codebase still contains additional unguarded high-risk calls in `EditorialItinerary` that can crash when itinerary data is partially missing:
+  - `newMode.toLowerCase()` in transport-edit fallback logic
+  - `arrivingCity.cityName.toLowerCase()`
+  - `destination.toLowerCase()` in destination safety / entry / transfer helper sections
 
-## Root cause of the current error
-The error `index-SuNP7A_H.js:2615:49429` is from the **old cached production bundle**. None of the guards or logging we've added over the last several messages are live yet. The production site must be republished.
+Most likely cause
+1. The published site is still on a stale cached bundle.
+2. If publishing alone does not clear it, there are still a few remaining unguarded `EditorialItinerary` calls that can produce the exact same runtime error on incomplete trip data.
 
-## Remaining unguarded `.toLowerCase()` calls to fix before publishing
+Implementation plan
+1. Harden the remaining high-risk `EditorialItinerary` calls:
+   - Guard all `newMode.toLowerCase()` usages with `(newMode || '').toLowerCase()`
+   - Guard `arrivingCity.cityName` with `(arrivingCity.cityName || '').toLowerCase()`
+   - Guard all `destination.toLowerCase()` usages with `(destination || '').toLowerCase()`
+2. Add lightweight breadcrumb metadata around the key `EditorialItinerary` helper blocks that still do string normalization so future crashes tell us which section failed.
+3. Verify the client logging path is triggered for render crashes on published routes by checking that `client_errors` receives rows after deployment.
+4. Publish/update the frontend so the new bundle replaces `index-SuNP7A_H.js` in production and clears the stale cached path.
 
-I found a few more spots that lack null guards:
+Files to update
+- `src/components/itinerary/EditorialItinerary.tsx`
+- possibly `src/utils/logClientError.ts` only if we want one extra breadcrumb field normalization, but most logging is already in place
 
-| File | Line | Issue |
-|------|------|-------|
-| `EditActivityModal.tsx` | 53-54 | `currentValue.toLowerCase()` — safe by type but should be hardened |
-| `ImportActivitiesModal.tsx` | 386 | `g.detectedLabel.toLowerCase()` — no null guard |
+Expected result
+- The remaining realistic `.toLowerCase()` crash points in the itinerary renderer are removed.
+- The next published build should either eliminate the white-screen crash or give much better diagnostics tied to the exact render section.
+- If the live site still reports `index-SuNP7A_H.js` after publish, that would confirm a cache/service-worker rollout issue rather than just missing null guards.
 
-These are lower risk than the EditorialItinerary ones already fixed, but worth guarding for completeness.
-
-## Implementation
-
-### 1. `src/components/itinerary/EditActivityModal.tsx` (line 52-54)
-Guard `currentValue` and `s` in the suggestion filter:
-```typescript
-const cv = (currentValue || '').toLowerCase().trim();
-const filtered = suggestions.filter(s => {
-  const sl = (s || '').toLowerCase();
-  return sl !== cv && sl.includes(cv);
-}).slice(0, 4);
-```
-
-### 2. `src/components/itinerary/ImportActivitiesModal.tsx` (line 386)
-Guard `g.detectedLabel`:
-```typescript
-const cityIdx = days.findIndex(d => 
-  (d.city || '').toLowerCase() === (g.detectedLabel || '').toLowerCase()
-);
-```
-
-### 3. Publish
-After these final guards, you need to click **Publish → Update** to push the new bundle to production and bust the stale PWA cache.
-
+Technical notes
+- I would focus on `EditorialItinerary` first rather than broad repo-wide cleanup, because the current stack shape and prior fixes point there.
+- I would not change backend/database schema for this issue.
+- The current absence of `client_errors` records means logging is not yet proving useful in production because the newer frontend bundle is probably not the one executing.
