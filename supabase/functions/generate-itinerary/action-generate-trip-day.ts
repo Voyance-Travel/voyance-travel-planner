@@ -985,6 +985,7 @@ async function _handleGenerateTripDayInner(
       dayNumber, dayGenTotal, diag1.aiCallMs || 0, diag1.enrichMs || 0,
       dayResult?.activities?.length || 0, dayCategories,
       diag1.meals || undefined, diag1.transport || undefined,
+      undefined, diag1.llm || undefined,
     );
     await timer.finalize(isComplete ? 'completed' : 'failed');
 
@@ -1053,6 +1054,7 @@ async function _handleGenerateTripDayInner(
       dayNumber, dayGenTotal, diag2.aiCallMs || 0, diag2.enrichMs || 0,
       dayResult?.activities?.length || 0, dayCats,
       diag2.meals || undefined, diag2.transport || undefined,
+      undefined, diag2.llm || undefined,
     );
     const progressPct = 5 + Math.round((dayNumber / totalDays) * 90);
     await timer.updateProgress(`Day ${dayNumber}/${totalDays} complete`, progressPct);
