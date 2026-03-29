@@ -9887,9 +9887,9 @@ function ActivityRow({
   onPhotoResolved,
   isManualMode = false,
 }: ActivityRowProps) {
-  if (!activity) return null;
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
+  if (!activity) return null;
   const activityType = getActivityType(activity);
   const style = activityStyles[activityType] || activityStyles.activity;
   const rawRating = getActivityRating(activity);
