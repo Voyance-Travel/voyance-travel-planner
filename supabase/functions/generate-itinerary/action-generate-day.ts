@@ -2126,582 +2126,132 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     generatedDay.title = generatedDay.title || generatedDay.theme || `Day ${dayNumber}`;
 
     // =======================================================================
-    // TRIP-WIDE DUPLICATE VALIDATION (same as full generation path)
-    // Build previousDays from existing itinerary, call validateGeneratedDay
+    // PIPELINE PHASE 3: VALIDATE + REPAIR
+    // Replaces inline trip-wide dedup, personalization, departure sequence,
+    // and bookend validators with structured pipeline calls.
     // =======================================================================
-    if (tripId) {
+    {
+      // Sync generatedDay.activities with normalizedActivities before pipeline
+      generatedDay.activities = normalizedActivities;
+
       try {
-        // Fetch trip's itinerary_data to build previousDays
-        const { data: tripItinData } = await supabase
-          .from('trips')
-          .select('itinerary_data')
-          .eq('id', tripId)
-          .single();
-
-        const existingDays = (tripItinData?.itinerary_data as any)?.days || [];
-        const previousDaysForValidation: StrictDayMinimal[] = existingDays
-          .filter((d: any) => d.dayNumber !== dayNumber)
-          .map((d: any) => ({
-            dayNumber: d.dayNumber || 0,
-            date: d.date || '',
-            title: d.title || d.theme || '',
-            theme: d.theme,
-            activities: (d.activities || []).map((a: any) => ({
-              id: a.id || '',
-              title: a.title || a.name || '',
-              startTime: a.startTime || a.start_time || '',
-              endTime: a.endTime || a.end_time || '',
-              category: a.category || 'activity',
-              location: a.location || { name: '', address: '' },
-              cost: a.cost || a.estimatedCost || { amount: 0, currency: 'USD' },
-              description: a.description || '',
-              tags: a.tags || [],
-              bookingRequired: a.bookingRequired || false,
-              transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
-            })),
-          }));
-
-        if (previousDaysForValidation.length > 0) {
-          const isFirstDay = dayNumber === 1;
-          const isLastDay = dayNumber === totalDays;
-          const mustDoList = (paramMustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
-
-          // Build the current day in StrictDayMinimal format
-          const currentDayForValidation: StrictDayMinimal = {
-            dayNumber,
-            date: date || '',
-            title: generatedDay.title || '',
-            theme: generatedDay.theme,
-            activities: (generatedDay.activities || []).map((a: any) => ({
-              id: a.id || '',
-              title: a.title || a.name || '',
-              startTime: a.startTime || '',
-              endTime: a.endTime || '',
-              category: a.category || 'activity',
-              location: a.location || { name: '', address: '' },
-              cost: a.cost || a.estimatedCost || { amount: 0, currency: 'USD' },
-              description: a.description || '',
-              tags: a.tags || [],
-              bookingRequired: a.bookingRequired || false,
-              transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
-            })),
-          };
-
-          const dayValidation = validateGeneratedDay(
-            currentDayForValidation,
-            dayNumber,
-            isFirstDay,
-            isLastDay,
-            totalDays,
-            previousDaysForValidation,
-            false, // not smart finish
-            mustDoList,
-            dayMealPolicy?.requiredMeals
-          );
-
-          if (dayValidation.errors.length > 0) {
-            console.warn(`[generate-day] Trip-wide validation errors for Day ${dayNumber}:`, dayValidation.errors);
-
-            // Strip duplicates found by validation instead of full retry
-            // Remove activities flagged as TRIP-WIDE DUPLICATE or CONCEPT SIMILARITY
-            // For MEAL REPEAT: try to swap from pool first, only keep duplicate as last resort
-            const duplicateTitles: string[] = [];
-            const mealRepeatTitles: string[] = [];
-            for (const err of dayValidation.errors) {
-              const mealMatch = err.match(/MEAL REPEAT:\s*"([^"]+)"/i);
-              if (mealMatch) {
-                mealRepeatTitles.push(mealMatch[1]);
-                continue;
-              }
-              const titleMatch = err.match(/(?:TRIP-WIDE DUPLICATE|CONCEPT SIMILARITY):\s*"([^"]+)"/i);
-              if (titleMatch) {
-                duplicateTitles.push(titleMatch[1].toLowerCase());
-              }
-            }
-
-            // MEAL REPEAT: swap duplicates from pool instead of keeping them
-            if (mealRepeatTitles.length > 0) {
-              const poolAvailable = (paramRestaurantPool || []) as any[];
-              const usedSetLocal = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
-              // Also mark all restaurants in current day as used
-              for (const act of generatedDay.activities) {
-                if ((act.category || '').toLowerCase() === 'dining') {
-                  usedSetLocal.add((act.title || '').toLowerCase());
-                }
-              }
-
-              for (const repeatTitle of mealRepeatTitles) {
-                const repeatLower = repeatTitle.toLowerCase();
-                // Find the duplicate activity in this day
-                const dupeIdx = generatedDay.activities.findIndex((act: any) =>
-                  (act.title || '').toLowerCase().includes(repeatLower) || repeatLower.includes((act.title || '').toLowerCase())
-                );
-                if (dupeIdx === -1) continue;
-                const dupeAct = generatedDay.activities[dupeIdx];
-                if (dupeAct.isLocked) continue;
-
-                // Determine meal type from the activity
-                const startHour = parseInt((dupeAct.startTime || '12:00').split(':')[0], 10);
-                const mealType = startHour < 11 ? 'breakfast' : startHour < 15 ? 'lunch' : 'dinner';
-
-                // Find unused pool restaurant for this meal type
-                const replacement = poolAvailable.find((r: any) => {
-                  const rName = (r.name || '').toLowerCase();
-                  if (usedSetLocal.has(rName)) return false;
-                  return r.mealType === mealType || r.mealType === 'any';
-                });
-
-                if (replacement) {
-                  console.log(`[generate-day] 🔄 Swapping duplicate dining "${dupeAct.title}" → "${replacement.name}" (pool-dedup-swap)`);
-                  generatedDay.activities[dupeIdx] = {
-                    ...dupeAct,
-                    title: `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} at ${replacement.name}`,
-                    description: `${replacement.cuisine || 'Local cuisine'} in ${replacement.neighborhood || 'the city'}. ${replacement.priceRange || '$$'}.`,
-                    location: { name: replacement.name, address: replacement.address || '', neighborhood: replacement.neighborhood || '' },
-                    source: 'pool-dedup-swap',
-                  };
-                  usedSetLocal.add(replacement.name.toLowerCase());
-                } else {
-                  console.log(`[generate-day] ⚠️ No pool replacement for duplicate "${dupeAct.title}" — keeping (real restaurant > placeholder)`);
-                }
-              }
-              normalizedActivities = generatedDay.activities;
-            }
-
-            // Strip non-dining duplicates
-            if (duplicateTitles.length > 0) {
-              const beforeCount = generatedDay.activities.length;
-              generatedDay.activities = generatedDay.activities.filter((act: any) => {
-                const actTitle = (act.title || '').toLowerCase();
-                const actCategory = (act.category || '').toLowerCase();
-                const isDupe = duplicateTitles.some(dt => actTitle.includes(dt) || dt.includes(actTitle));
-                if (isDupe) {
-                  if (act.isLocked) return true;
-                  console.log(`[generate-day] 🗑️ Removing duplicate activity "${act.title}" (matched trip-wide validation)`);
-                  return false;
-                }
-                return true;
-              });
-              const removedCount = beforeCount - generatedDay.activities.length;
-              if (removedCount > 0) {
-                console.log(`[generate-day] ✓ Stripped ${removedCount} trip-wide duplicate activities from Day ${dayNumber}`);
-                normalizedActivities = generatedDay.activities;
-              }
-            }
-          }
-
-          if (dayValidation.warnings.length > 0) {
-            console.log(`[generate-day] Trip-wide validation warnings for Day ${dayNumber}:`, dayValidation.warnings);
-          }
+        // Build previousDays for trip-wide dedup
+        let previousDaysForPipeline: StrictDayMinimal[] = [];
+        if (tripId) {
+          const { data: tripItinData } = await supabase
+            .from('trips')
+            .select('itinerary_data')
+            .eq('id', tripId)
+            .single();
+          const existingDays = (tripItinData?.itinerary_data as any)?.days || [];
+          previousDaysForPipeline = existingDays
+            .filter((d: any) => d.dayNumber !== dayNumber)
+            .map((d: any) => ({
+              dayNumber: d.dayNumber || 0,
+              date: d.date || '',
+              title: d.title || d.theme || '',
+              theme: d.theme,
+              activities: (d.activities || []).map((a: any) => ({
+                id: a.id || '',
+                title: a.title || a.name || '',
+                startTime: a.startTime || a.start_time || '',
+                endTime: a.endTime || a.end_time || '',
+                category: a.category || 'activity',
+                location: a.location || { name: '', address: '' },
+                cost: a.cost || a.estimatedCost || { amount: 0, currency: 'USD' },
+                description: a.description || '',
+                tags: a.tags || [],
+                bookingRequired: a.bookingRequired || false,
+                transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+              })),
+            }));
         }
-      } catch (validationErr) {
-        console.warn('[generate-day] Trip-wide duplicate validation failed (non-blocking):', validationErr);
-      }
-    }
 
-    // =======================================================================
-    // PERSONALIZATION VALIDATION: Check avoid-list & dietary violations
-    // Ported from generate-full Stage 2 — ensures per-day quality bar
-    // =======================================================================
-    if (tripId && profile) {
-      try {
-        const userPrefsForVal = userId ? await getUserPreferences(supabase, userId) : null;
-        const budgetIntentForVal = deriveBudgetIntent(
-          effectiveBudgetTier,
-          profile.traitScores.budget,
-          profile.traitScores.comfort
-        );
-        
-        const tripIntentsForVal = profile.tripIntents || [];
-        const valContext = buildValidationContext(
-          userPrefsForVal || {},
-          budgetIntentForVal,
-          profile.traitScores,
-          tripIntentsForVal
-        );
-        
-        // Override with unified profile data for accuracy
-        if (profile.dietaryRestrictions.length > 0) {
-          valContext.dietaryRestrictions = profile.dietaryRestrictions;
-        }
-        if (profile.avoidList.length > 0) {
-          valContext.avoidList = [...valContext.avoidList, ...profile.avoidList];
-        }
-        
-        const personalizationResult = validateItineraryPersonalization(
-          [{ ...generatedDay, activities: normalizedActivities }] as StrictDay[],
-          valContext
-        );
-        
-        if (personalizationResult.violations.length > 0) {
-          const criticalViolations = personalizationResult.violations.filter(v => v.severity === 'critical');
-          console.warn(`[generate-day] Personalization validation: ${personalizationResult.violations.length} violations (${criticalViolations.length} critical), score=${personalizationResult.personalizationScore}/100`);
-          
-          // Strip activities with critical avoid-list or dietary violations
-          if (criticalViolations.length > 0) {
-            const criticalActivityIds = new Set(criticalViolations.map(v => v.activityId).filter(Boolean));
-            if (criticalActivityIds.size > 0) {
-              const beforeCount = generatedDay.activities.length;
-              generatedDay.activities = generatedDay.activities.filter((act: any) => {
-                if (act.isLocked) return true;
-                if (criticalActivityIds.has(act.id)) {
-                  console.log(`[generate-day] 🚫 Removing "${act.title}" — critical personalization violation`);
-                  return false;
-                }
-                return true;
-              });
-              normalizedActivities = generatedDay.activities;
-              const removedCount = beforeCount - generatedDay.activities.length;
-              if (removedCount > 0) {
-                console.log(`[generate-day] ✓ Stripped ${removedCount} activities with critical personalization violations`);
-              }
-            }
-          }
+        // Build the current day in StrictDayMinimal format for validation
+        const currentDayMinimal: StrictDayMinimal = {
+          dayNumber,
+          date: date || '',
+          title: generatedDay.title || '',
+          theme: generatedDay.theme,
+          activities: (generatedDay.activities || []).map((a: any) => ({
+            id: a.id || '',
+            title: a.title || a.name || '',
+            startTime: a.startTime || '',
+            endTime: a.endTime || '',
+            category: a.category || 'activity',
+            location: a.location || { name: '', address: '' },
+            cost: a.cost || a.estimatedCost || { amount: 0, currency: 'USD' },
+            description: a.description || '',
+            tags: a.tags || [],
+            bookingRequired: a.bookingRequired || false,
+            transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+          })),
+        };
+
+        // Gather avoid list and dietary restrictions from profile
+        const pipelineAvoidList = profile?.avoidList || [];
+        const pipelineDietaryRestrictions = profile?.dietaryRestrictions || [];
+        const mustDoList = (paramMustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+
+        // --- VALIDATE ---
+        const validationInput: ValidateDayInput = {
+          day: currentDayMinimal,
+          dayNumber,
+          isFirstDay,
+          isLastDay,
+          totalDays,
+          hasHotel: !!(flightContext as any).hotelName,
+          hotelName: (flightContext as any).hotelName || paramHotelName || undefined,
+          arrivalTime24: flightContext.arrivalTime24,
+          returnDepartureTime24: flightContext.returnDepartureTime24
+            || (flightContext.returnDepartureTime ? normalizeTo24h(flightContext.returnDepartureTime) : undefined)
+            || undefined,
+          requiredMeals: dayMealPolicy?.requiredMeals || [],
+          previousDays: previousDaysForPipeline,
+          avoidList: pipelineAvoidList,
+          dietaryRestrictions: pipelineDietaryRestrictions,
+          mustDoActivities: mustDoList,
+        };
+
+        const validationResults = validateDay(validationInput);
+
+        const errorCount = validationResults.filter(r => r.severity === 'error' || r.severity === 'critical').length;
+        const warningCount = validationResults.filter(r => r.severity === 'warning').length;
+        if (validationResults.length > 0) {
+          console.log(`[pipeline] Day ${dayNumber} validation: ${validationResults.length} issues (${errorCount} errors, ${warningCount} warnings)`);
         } else {
-          console.log(`[generate-day] ✓ Personalization validation passed (score=${personalizationResult.personalizationScore}/100)`);
+          console.log(`[pipeline] Day ${dayNumber} validation: all checks passed`);
         }
-      } catch (persValErr) {
-        console.warn('[generate-day] Personalization validation failed (non-blocking):', persValErr);
-      }
-    }
 
-    // =======================================================================
-    // DEPARTURE DAY SEQUENCE VALIDATOR
-    // Enforces correct ordering: Breakfast → Checkout → Transport → Security → Flight
-    // Must run BEFORE the bookend validator to prevent nonsensical injections
-    // =======================================================================
-    if (isLastDay && generatedDay.activities?.length > 1) {
-      try {
-        const depFlight24 = flightContext.returnDepartureTime24
-          || (flightContext.returnDepartureTime ? normalizeTo24h(flightContext.returnDepartureTime) : null)
-          || null;
-
-        const dvHotelName = (() => {
-          const accomAct = generatedDay.activities?.find((a: any) =>
-            (a.category || '').toLowerCase() === 'accommodation' &&
-            !(a.title || '').toLowerCase().includes('checkout') &&
-            !(a.title || '').toLowerCase().includes('check-out')
-          );
-          if (accomAct) return accomAct.location?.name || accomAct.title?.replace(/^(Return to |Freshen up at |Check.?in at )/i, '') || null;
-          return flightContext.hotelName || null;
-        })();
-
-        let dvFixCount = 0;
-
-        // --- Classify activities ---
-        type DvRole = 'breakfast' | 'checkout' | 'airport-transport' | 'airport-security' | 'flight' | 'other';
-        const dvClassify = (a: any): DvRole => {
-          const t = (a.title || '').toLowerCase();
-          const cat = (a.category || '').toLowerCase();
-          const tags = (a.tags || []).map((tg: string) => tg.toLowerCase());
-          const loc = (a.location?.name || '').toLowerCase();
-
-          // Flight
-          if (cat === 'flight' || t.includes('flight departure') || t.includes('departure flight') ||
-              (t.includes('\u2192') && cat === 'transport' && (t.includes('home') || tags.includes('flight')))) {
-            return 'flight';
-          }
-          // Airport security / departure check-in
-          if (t.includes('airport departure') || t.includes('airport security') ||
-              t.includes('security and boarding') || t.includes('check-in at airport') ||
-              t.includes('departure and security') || (t.includes('security') && loc.includes('airport'))) {
-            return 'airport-security';
-          }
-          // Airport transport
-          if ((cat === 'transport' || cat === 'transit') &&
-              (t.includes('airport') || (t.includes('transfer to') && loc.includes('airport')) ||
-               loc.includes('airport') || t.includes('head to airport') || t.includes('taxi to airport'))) {
-            return 'airport-transport';
-          }
-          // Checkout
-          if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) {
-            return 'checkout';
-          }
-          // Breakfast
-          if ((cat === 'dining' || cat === 'restaurant' || cat === 'food') &&
-              (t.includes('breakfast') || t.includes('morning meal') || tags.includes('breakfast'))) {
-            return 'breakfast';
-          }
-          return 'other';
+        // --- REPAIR ---
+        const repairInput: RepairDayInput = {
+          day: currentDayMinimal,
+          validationResults,
+          dayNumber,
+          isFirstDay,
+          isLastDay,
+          arrivalTime24: validationInput.arrivalTime24,
+          returnDepartureTime24: validationInput.returnDepartureTime24,
+          hotelName: validationInput.hotelName,
+          hasHotel: validationInput.hasHotel,
+          lockedActivities: lockedActivities as any[],
+          restaurantPool: paramRestaurantPool || undefined,
+          usedRestaurants: paramUsedRestaurants || undefined,
         };
 
-        const dvRoles = generatedDay.activities.map((a: any) => ({ act: a, role: dvClassify(a) }));
+        const { day: repairedDay, repairs } = repairDay(repairInput);
 
-        const breakfastItems = dvRoles.filter((r: any) => r.role === 'breakfast');
-        const checkoutItems = dvRoles.filter((r: any) => r.role === 'checkout');
-        const airportTransportItems = dvRoles.filter((r: any) => r.role === 'airport-transport');
-        const airportSecurityItems = dvRoles.filter((r: any) => r.role === 'airport-security');
-        const flightItems = dvRoles.filter((r: any) => r.role === 'flight');
-
-        // --- R1: Breakfast before checkout ---
-        if (breakfastItems.length > 0 && checkoutItems.length > 0) {
-          const bIdx = generatedDay.activities.indexOf(breakfastItems[0].act);
-          const cIdx = generatedDay.activities.indexOf(checkoutItems[0].act);
-          if (bIdx > cIdx) {
-            const [breakfast] = generatedDay.activities.splice(bIdx, 1);
-            const newCIdx = generatedDay.activities.indexOf(checkoutItems[0].act);
-            generatedDay.activities.splice(newCIdx, 0, breakfast);
-
-            const checkoutStart = parseTimeToMinutes(checkoutItems[0].act.startTime) ?? 480;
-            const breakfastStart = checkoutStart - 60;
-            breakfast.startTime = minutesToHHMM(Math.max(breakfastStart, 360));
-            breakfast.endTime = minutesToHHMM(Math.max(breakfastStart, 360) + 45);
-            checkoutItems[0].act.startTime = breakfast.endTime;
-            checkoutItems[0].act.endTime = addMinutesToHHMM(breakfast.endTime, 15);
-
-            console.log(`[departure-validator] \ud83d\udd04 Moved breakfast before checkout on Day ${dayNumber}`);
-            dvFixCount++;
-          }
+        if (repairs.length > 0) {
+          console.log(`[pipeline] Day ${dayNumber} repairs: ${repairs.length} fixes applied — ${repairs.map(r => r.action).join(', ')}`);
         }
 
-        // --- R6: Breakfast location — override if not near hotel ---
-        if (breakfastItems.length > 0 && dvHotelName) {
-          const bAct = breakfastItems[0].act;
-          const bLoc = (bAct.location?.name || '').toLowerCase();
-          const hotelLower = dvHotelName.toLowerCase();
-          const isNearHotel = bLoc.includes(hotelLower) || bLoc.includes('hotel') ||
-            bLoc.includes('lobby') || hotelLower.includes(bLoc);
-          if (!isNearHotel && bLoc.length > 0) {
-            console.log(`[departure-validator] \ud83d\udd04 Overriding breakfast location "${bAct.location?.name}" \u2192 "near ${dvHotelName}"`);
-            bAct.location = { name: `Near ${dvHotelName}`, address: bAct.location?.address || '' };
-            bAct.description = (bAct.description || '').replace(/at .+?(?:\.|$)/, `near ${dvHotelName}.`);
-            dvFixCount++;
-          }
-        }
+        // Apply repaired activities back
+        generatedDay.activities = repairedDay.activities;
+        normalizedActivities = generatedDay.activities;
 
-        // --- R4: Single airport transport, remove nonsensical ones ---
-        if (airportTransportItems.length > 1) {
-          const toKeep = airportTransportItems[airportTransportItems.length - 1].act;
-          for (const item of airportTransportItems) {
-            if (item.act !== toKeep) {
-              const idx = generatedDay.activities.indexOf(item.act);
-              if (idx !== -1) {
-                console.log(`[departure-validator] \ud83d\uddd1\ufe0f Removed duplicate airport transport "${item.act.title}"`);
-                generatedDay.activities.splice(idx, 1);
-                dvFixCount++;
-              }
-            }
-          }
-        }
-        // Remove nonsensical walk-to-airport transports
-        for (let i = generatedDay.activities.length - 1; i >= 0; i--) {
-          const a = generatedDay.activities[i];
-          const t = (a.title || '').toLowerCase();
-          const cat = (a.category || '').toLowerCase();
-          if ((cat === 'transport' || cat === 'transit') && t.includes('walk') &&
-              (t.includes('airport') || (a.location?.name || '').toLowerCase().includes('airport'))) {
-            const dur = a.durationMinutes || 0;
-            if (dur <= 15 || t.includes('walk to')) {
-              console.log(`[departure-validator] \ud83d\uddd1\ufe0f Removed nonsensical transport "${a.title}"`);
-              generatedDay.activities.splice(i, 1);
-              dvFixCount++;
-            }
-          }
-        }
-
-        // --- R2: Airport security immediately before flight ---
-        if (airportSecurityItems.length > 0 && flightItems.length > 0) {
-          const secAct = airportSecurityItems[0].act;
-          const flightAct = flightItems[0].act;
-          const secIdx = generatedDay.activities.indexOf(secAct);
-          const flightIdx = generatedDay.activities.indexOf(flightAct);
-          if (secIdx !== -1 && flightIdx !== -1 && secIdx !== flightIdx - 1) {
-            generatedDay.activities.splice(secIdx, 1);
-            const newFlightIdx = generatedDay.activities.indexOf(flightAct);
-            generatedDay.activities.splice(newFlightIdx, 0, secAct);
-            console.log(`[departure-validator] \ud83d\udd04 Moved airport security to pre-flight position`);
-            dvFixCount++;
-          }
-        }
-
-        // --- R3: No activities after airport security except flight/transport ---
-        if (airportSecurityItems.length > 0) {
-          const secAct = airportSecurityItems[0].act;
-          const secIdx = generatedDay.activities.indexOf(secAct);
-          if (secIdx !== -1) {
-            const afterSecurity = generatedDay.activities.slice(secIdx + 1);
-            const misplaced = afterSecurity.filter((a: any) => {
-              const role = dvClassify(a);
-              return role !== 'flight' && role !== 'airport-transport' && role !== 'airport-security';
-            });
-            for (const mis of misplaced) {
-              const misIdx = generatedDay.activities.indexOf(mis);
-              if (misIdx !== -1) {
-                generatedDay.activities.splice(misIdx, 1);
-                const atIdx = generatedDay.activities.findIndex((a: any) => dvClassify(a) === 'airport-transport');
-                const insertAt = atIdx !== -1 ? atIdx : (generatedDay.activities.indexOf(checkoutItems[0]?.act) ?? 0);
-                generatedDay.activities.splice(Math.max(0, insertAt), 0, mis);
-                console.log(`[departure-validator] \ud83d\udd04 Moved "${mis.title}" before airport transport (was after security)`);
-                dvFixCount++;
-              }
-            }
-          }
-        }
-
-        // --- R5: Time window enforcement ---
-        if (depFlight24 && checkoutItems.length > 0) {
-          const depMins = parseTimeToMinutes(depFlight24) ?? null;
-          if (depMins !== null) {
-            const airportBuffer = 150; // 2.5h international default
-            const arriveAirportBy = depMins - airportBuffer;
-
-            const transportCard = generatedDay.activities.find((a: any) => dvClassify(a) === 'airport-transport');
-            const transportDuration = transportCard?.durationMinutes || 45;
-
-            const latestCheckoutMins = arriveAirportBy - transportDuration - 30;
-
-            const cIdx = generatedDay.activities.indexOf(checkoutItems[0].act);
-            const tIdx = transportCard ? generatedDay.activities.indexOf(transportCard) : -1;
-
-            if (cIdx !== -1 && tIdx !== -1 && tIdx > cIdx + 1) {
-              const between = generatedDay.activities.slice(cIdx + 1, tIdx);
-              let currentTime = parseTimeToMinutes(checkoutItems[0].act.endTime) ?? latestCheckoutMins;
-
-              for (let j = between.length - 1; j >= 0; j--) {
-                const act = between[j];
-                const actDur = act.durationMinutes || 60;
-                if (currentTime + actDur > arriveAirportBy - transportDuration) {
-                  const idx = generatedDay.activities.indexOf(act);
-                  if (idx !== -1) {
-                    console.log(`[departure-validator] \ud83d\uddd1\ufe0f Removed "${act.title}" \u2014 doesn't fit departure window`);
-                    generatedDay.activities.splice(idx, 1);
-                    dvFixCount++;
-                  }
-                } else {
-                  currentTime += actDur + 15;
-                }
-              }
-            }
-
-            // Re-anchor checkout if too late
-            const checkoutMins = parseTimeToMinutes(checkoutItems[0].act.startTime) ?? 0;
-            if (checkoutMins > latestCheckoutMins) {
-              checkoutItems[0].act.startTime = minutesToHHMM(Math.max(latestCheckoutMins, 360));
-              checkoutItems[0].act.endTime = addMinutesToHHMM(checkoutItems[0].act.startTime, 15);
-              console.log(`[departure-validator] \ud83d\udd04 Re-anchored checkout to ${checkoutItems[0].act.startTime} for departure window`);
-              dvFixCount++;
-
-              if (breakfastItems.length > 0) {
-                const newCheckoutMins = parseTimeToMinutes(checkoutItems[0].act.startTime) ?? 480;
-                breakfastItems[0].act.startTime = minutesToHHMM(Math.max(newCheckoutMins - 60, 360));
-                breakfastItems[0].act.endTime = minutesToHHMM(Math.max(newCheckoutMins - 15, 405));
-                console.log(`[departure-validator] \ud83d\udd04 Re-anchored breakfast to ${breakfastItems[0].act.startTime}`);
-              }
-            }
-          }
-        }
-
-        // Re-sort by startTime after all fixes
-        if (dvFixCount > 0) {
-          generatedDay.activities.sort((a: any, b: any) => {
-            const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
-            const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
-            return ta - tb;
-          });
-          normalizedActivities = generatedDay.activities;
-          console.log(`[departure-validator] \u2713 Day ${dayNumber} departure sequence validated (${dvFixCount} fixes applied)`);
-        } else {
-          console.log(`[departure-validator] \u2713 Day ${dayNumber} departure sequence OK \u2014 no fixes needed`);
-        }
-      } catch (dvErr) {
-        console.warn('[departure-validator] Non-blocking error:', dvErr);
+      } catch (pipelineErr) {
+        console.warn('[pipeline] Validate/repair failed (non-blocking):', pipelineErr);
       }
-    }
-
-    // =======================================================================
-    // TRANSPORT & HOTEL BOOKEND VALIDATOR
-    // Ensures consistent Activity → Transport → Activity pattern
-    // and that hotel returns/arrivals always have visible cards
-    // =======================================================================
-    try {
-      const bookendHotelName = (() => {
-        const accomAct = generatedDay.activities?.find((a: any) => 
-          (a.category || '').toLowerCase() === 'accommodation' && 
-          !(a.title || '').toLowerCase().includes('checkout') &&
-          !(a.title || '').toLowerCase().includes('check-out')
-        );
-        if (accomAct) return accomAct.location?.name || accomAct.title?.replace(/^(Return to |Freshen up at |Check.?in at )/i, '') || null;
-        return paramHotelName || null;
-      })();
-
-      if (bookendHotelName && generatedDay.activities?.length > 0) {
-        const bActs = generatedDay.activities;
-        const bIsTransport = (a: any) => (a.category || '').toLowerCase() === 'transport';
-        const bIsAccom = (a: any) => (a.category || '').toLowerCase() === 'accommodation';
-        const bIsHotelRelated = (a: any) => {
-          const t = (a.title || '').toLowerCase();
-          const l = (a.location?.name || '').toLowerCase();
-          const hn = bookendHotelName.toLowerCase();
-          return t.includes(hn) || l.includes(hn) || t.includes('hotel') || t.includes('return to') || t.includes('freshen up');
-        };
-        const bOffset = (ts: string, min: number): string => {
-          if (!ts) return '';
-          const p = ts.split(':');
-          if (p.length < 2) return ts;
-          const tot = parseInt(p[0], 10) * 60 + parseInt(p[1], 10) + min;
-          return `${String(Math.floor(tot / 60) % 24).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
-        };
-        const bAccomCard = (label: string, st: string, dur: number) => ({
-          id: `bookend-${label.replace(/\s/g, '-').toLowerCase()}-${dayNumber}-${Date.now()}`,
-          title: `${label} ${bookendHotelName}`,
-          category: 'accommodation',
-          description: `Time at ${bookendHotelName} to rest and refresh.`,
-          startTime: st, endTime: bOffset(st, dur), durationMinutes: dur,
-          location: { name: bookendHotelName, address: '' },
-          cost: { amount: 0, currency: 'USD' }, isLocked: false,
-          tags: ['hotel', 'rest'], source: 'bookend-validator',
-        });
-        const bTransCard = (from: string, to: string, st: string) => ({
-          id: `transport-gap-${dayNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          title: `Travel to ${to}`, category: 'transport',
-          description: `Transit from ${from} to ${to}.`,
-          startTime: st, endTime: bOffset(st, 15), durationMinutes: 15,
-          location: { name: to, address: '' },
-          cost: { amount: 0, currency: 'USD' }, isLocked: false,
-          tags: ['transport'], transportation: { method: 'walking', duration: '15 min' },
-          source: 'bookend-validator',
-        });
-
-        // 1. Mid-day hotel transports without accommodation card
-        for (let i = 0; i < bActs.length - 1; i++) {
-          if (bIsTransport(bActs[i]) && bIsHotelRelated(bActs[i]) && !bIsAccom(bActs[i + 1])) {
-            const card = bAccomCard('Freshen up at', bActs[i].endTime || bOffset(bActs[i].startTime || '14:00', 15), 30);
-            bActs.splice(i + 1, 0, card);
-            console.log(`[bookend-validator] 🏨 Injected "Freshen up at ${bookendHotelName}" after transport on Day ${dayNumber}`);
-          }
-        }
-
-        // 2. End-of-day hotel return
-        const bVisible = bActs.filter((a: any) => !bIsTransport(a));
-        const bLast = bVisible[bVisible.length - 1];
-        if (bLast && !bIsAccom(bLast)) {
-          const et = bLast.endTime || '22:00';
-          bActs.push(bTransCard(bLast.location?.name || bLast.title || 'venue', bookendHotelName, et));
-          bActs.push(bAccomCard('Return to', bOffset(et, 20), 15));
-          console.log(`[bookend-validator] 🏨 Injected "Return to ${bookendHotelName}" at end of Day ${dayNumber}`);
-        }
-
-        // 3. Ensure transport between every pair of visible activities at different locations
-        const bRebuilt: any[] = [];
-        for (let i = 0; i < bActs.length; i++) {
-          bRebuilt.push(bActs[i]);
-          if (i < bActs.length - 1) {
-            const curr = bActs[i], next = bActs[i + 1];
-            if (bIsTransport(curr) || bIsTransport(next)) continue;
-            const cLoc = (curr.location?.name || curr.title || '').toLowerCase();
-            const nLoc = (next.location?.name || next.title || '').toLowerCase();
-            if (cLoc && nLoc && cLoc !== nLoc) {
-              bRebuilt.push(bTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || ''));
-              console.log(`[bookend-validator] 🚕 Injected transit gap: "${curr.title}" → "${next.title}" on Day ${dayNumber}`);
-            }
-          }
-        }
-        generatedDay.activities = bRebuilt;
-        normalizedActivities = bRebuilt;
-        console.log(`[bookend-validator] ✓ Day ${dayNumber} bookend validation complete (${bRebuilt.length} activities)`);
-      }
-    } catch (bookendErr) {
-      console.warn('[bookend-validator] Non-blocking error:', bookendErr);
     }
 
     // =======================================================================
