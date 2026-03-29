@@ -565,7 +565,6 @@ export function stripPhantomHotelActivities(day: any, hasHotelBooked: boolean): 
 
   return day;
 }
-}
 
 export function sanitizeDateFields(obj: any): any {
   if (obj === null || obj === undefined) return obj;
