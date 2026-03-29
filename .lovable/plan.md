@@ -1,63 +1,73 @@
 
 
-## Fix: Generation Logging — Add Timer Updates to `generate-trip-day` Handler
+## Itinerary Content Quality Fixes — 5 Root Causes
 
-### Root Cause (Confirmed)
+This plan addresses five distinct quality issues found in generated itineraries. Changes span the edge function sanitization layer, the generation chain handler, and the client-side meal guard.
 
-The `generate-trip-day` handler (line 12949 in `index.ts`) is the actual orchestrator that runs day-by-day. It:
-1. Does NOT extract `generationLogId` from params (line 12950)
-2. Does NOT create an `innerTimer`
-3. Does NOT call `updateProgress()` or `finalize()` anywhere
-4. Does NOT pass `generationLogId` in the chain body to the next day (line 13422-13440)
+---
 
-The `generate-day` handler (line 7831) does create an `innerTimer` with local phase tracking, but only uses `startPhase`/`endPhase` (local-only) — never `updateProgress`. And the `generate-trip-day` handler that calls it has zero timer logic at all.
+### Bug 1: Empty Days Masked by Placeholder Meals
 
-### Changes — Single file: `supabase/functions/generate-itinerary/index.ts`
+**Problem**: When the generation chain breaks at Day N, Days N+1 onward have zero activities. The client-side `mealGuard.ts` then injects generic placeholder meals ("Breakfast at a boulangerie-café"), hiding the failure from users.
 
-**1. Extract `generationLogId` from params (line 12950)**
+**Fix**: In `mealGuard.ts` `enforceItineraryMealCompliance()`, skip meal injection when a day has zero activities and flag it as `_ungenerated = true`. Also increase chain retries from 3→5 and backoff from 2000→3000ms in `index.ts` (line 13487-13513).
 
-Add `generationLogId` to the destructured params.
+---
 
-**2. Create and resume timer after guards pass (~line 12959)**
+### Bug 2: Missing Sanitization Regex Patterns
 
-```typescript
-let innerTimer: GenerationTimer | null = null;
-if (generationLogId) {
-  try {
-    innerTimer = new GenerationTimer(tripId, supabase);
-    await innerTimer.resume(generationLogId, destination || '', totalDays || 1, travelers || 1);
-  } catch (e) {
-    console.warn('[generate-trip-day] Timer resume failed (non-blocking):', e);
-    innerTimer = null;
-  }
-}
-```
+**Problem**: Several leaked AI text patterns slip through existing sanitization:
+- `,type` — schema field not in TEXT_SCHEMA_LEAK list
+- `BOOK 2-4 WEEKS` — freestanding uppercase booking urgency (BOOK_CODE_RE only catches `book_now` style)
+- `This addresses the wellness interest` — AI self-commentary not caught by AI_SELF_COMMENTARY_RE
+- `the destination` as placeholder text
 
-**3. Add `updateProgress` calls at key points:**
+**Fix in `sanitization.ts`**:
+1. Add 4 new regex patterns: `BOOKING_URGENCY_TEXT_RE`, `AI_ADDRESSES_RE`, `COMMA_FIELD_LEAK_RE`, `GENERIC_DESTINATION_RE`
+2. Add optional `destination` parameter to `sanitizeAITextField()` — when provided, replace "the destination"/"the city" with actual city name
+3. Add `destination` parameter to `sanitizeGeneratedDay()` and pass it through to all `sanitizeAITextField` calls
+4. Update all callers of `sanitizeGeneratedDay` in `index.ts` (lines 2423, 2431, 10340, 10349) to pass the destination
 
-- After context loading / heartbeat update (~line 13052): `await innerTimer?.updateProgress(\`context_loaded_day_${dayNumber}\`, 10 + ((dayNumber - 1) / totalDays) * 80)`
-- After AI call succeeds (~line 13123): `await innerTimer?.updateProgress(\`generated_day_${dayNumber}\`, 10 + ((dayNumber - 0.5) / totalDays) * 80)`
-- After day saved to DB (line 13390 for last day, line 13414 for mid-chain): `await innerTimer?.updateProgress(\`saved_day_${dayNumber}\`, 10 + (dayNumber / totalDays) * 80)`
+---
 
-**4. Add `finalize('completed')` when all days done (line 13392):**
+### Bug 3: Phantom Hotels
 
-After the "generation complete" log, call `await innerTimer?.finalize('completed')`.
+**Already handled** — The codebase already has `enforceHotelPlaceholder()` and `enforceHotelPlaceholderOnDay()` in `sanitization.ts` (lines 259-340) that replace hallucinated hotel brands with "Your Hotel". No additional code changes needed for this bug. The existing 30+ brand regex covers the reported "Hotel Le Meurice" case (Meurice is not in the list, but can be added if needed). Will add "Le Meurice" and a few other common Paris hotels to the brand list as a small enhancement.
 
-**5. Add `finalize('failed')` on permanent failure (line 13137):**
+---
 
-After logging permanent failure, call `await innerTimer?.finalize('failed')`.
+### Bug 4: Cross-Day Venue Duplication
 
-**6. Pass `generationLogId` in chain body (line 13422-13440):**
+**Problem**: The AI is told about previous days' activities via `previousActivities` (line 13042-13047), but enforcement is prompt-only. When the AI ignores the instruction, duplicates like "Louvre on Day 1 AND Day 2" go straight to the database.
 
-Add `generationLogId,` to the chain body object so subsequent days can resume the same timer.
+**Fix**: Add a `deduplicateCrossDayVenues()` function in `sanitization.ts` that:
+- Builds a set of venue names/location names from `existingDays`
+- Filters activities from the new day, removing sightseeing/attraction/museum/landmark/tour activities whose name matches a previous day
+- Keeps meals, transport, and hotel activities (those can legitimately repeat)
+- Call it in the `generate-trip-day` handler (around line 13141) after `dayResult` is obtained, before saving
 
-**7. Also pass `generationLogId` to the `generate-day` inner call (line 13086-13111):**
+---
 
-Add `generationLogId,` so the inner `generate-day` handler's `innerTimer` also connects to the same log row.
+### Bug 5: Activities Out of Chronological Order
 
-**8. Redeploy** the edge function.
+**Problem**: AI sometimes generates activities with out-of-order or overlapping times. No post-generation enforcement exists.
 
-### What This Fixes
+**Fix**: Add time-ordering logic at the end of `sanitizeGeneratedDay()`:
+1. Sort activities by `startTime` using minute parsing
+2. Walk the sorted list and push overlapping activities forward by 15 minutes
+3. Add helper functions `parseTimeToMinutes()` and `minutesToHHMM()` to `sanitization.ts`
 
-After deployment, the `generation_logs` row will update in real-time as each day progresses through context loading, AI generation, and saving. The admin diagnostics page will show live phase progression and final duration/status instead of being permanently stuck at 10%.
+---
+
+### Files Changed
+
+| File | Changes |
+|------|---------|
+| `supabase/functions/generate-itinerary/sanitization.ts` | Add 4 regex patterns, `destination` param to `sanitizeAITextField`/`sanitizeGeneratedDay`, time-ordering logic, `deduplicateCrossDayVenues()`, add "Le Meurice" to hotel brands |
+| `supabase/functions/generate-itinerary/index.ts` | Pass `destination` to `sanitizeGeneratedDay` calls (4 locations), call `deduplicateCrossDayVenues` after day generation, increase chain retries 3→5 and backoff 2000→3000ms |
+| `src/utils/mealGuard.ts` | Skip meal injection on zero-activity days, flag as `_ungenerated` |
+
+### Deployment
+
+Single edge function redeploy after all changes. No database migrations needed.
 
