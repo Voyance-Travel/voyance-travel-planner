@@ -609,6 +609,44 @@ async function _handleGenerateTripDayInner(
         act.name = act.title;
       }
     }
+    // Meal-time coherence: fix meal keywords contradicting time slot
+    const MEAL_KW_RE = /\b(breakfast|brunch|lunch|dinner|supper)\b/i;
+    const MEAL_RANGES: Record<string, [number, number]> = {
+      Breakfast: [360, 659], Lunch: [660, 899], Dinner: [1020, 1379],
+    };
+    const canonMeal = (kw: string) => {
+      const lc = kw.toLowerCase();
+      if (lc === 'breakfast' || lc === 'brunch') return 'Breakfast';
+      if (lc === 'lunch') return 'Lunch';
+      if (lc === 'dinner' || lc === 'supper') return 'Dinner';
+      return null;
+    };
+    const correctMealForTime = (mins: number) => {
+      for (const [label, [lo, hi]] of Object.entries(MEAL_RANGES)) {
+        if (mins >= lo && mins <= hi) return label;
+      }
+      return null;
+    };
+    const parseTimeMins = (t: string): number | null => {
+      const m24 = t.match(/^(\d{1,2}):(\d{2})$/);
+      if (m24) return parseInt(m24[1], 10) * 60 + parseInt(m24[2], 10);
+      return null;
+    };
+    for (const act of (dayResult!.activities || [])) {
+      const m = MEAL_KW_RE.exec(act.title || '');
+      if (!m) continue;
+      const titleMeal = canonMeal(m[1]);
+      if (!titleMeal) continue;
+      const mins = parseTimeMins(act.startTime || act.start_time || '');
+      if (mins === null || mins === 0) continue;
+      const correct = correctMealForTime(mins);
+      if (!correct || correct === titleMeal) continue;
+      const replacement = m[1][0] === m[1][0].toUpperCase() ? correct : correct.toLowerCase();
+      console.log(`[generate-trip-day] MealCoherence: "${act.title}" at ${act.startTime}: ${titleMeal} → ${correct}`);
+      act.title = act.title!.slice(0, m.index) + replacement + act.title!.slice(m.index + m[1].length);
+      if (act.name) act.name = act.title;
+    }
+
     console.log(`[generate-trip-day] Post-processing complete for day ${dayNumber}`);
   }
 
