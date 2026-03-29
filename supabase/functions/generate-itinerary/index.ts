@@ -874,71 +874,8 @@ import {
 
 // FlightHotelContextResult, time helpers, and getDynamicTransferPricing moved to ./flight-hotel-context.ts
 
-/**
- * Fetch airport transfer fare from database to sync with Airport Game Plan
- * Falls back to database query if dynamic pricing fails
- */
-async function getAirportTransferFare(supabase: any, city: string, airportCode?: string): Promise<AirportTransferFare | null> {
-  try {
-    let query = supabase
-      .from('airport_transfer_fares')
-      .select('taxi_cost_min, taxi_cost_max, train_cost, bus_cost, currency, currency_symbol, taxi_is_fixed_price')
-      .ilike('city', city);
-    
-    if (airportCode) {
-      query = query.eq('airport_code', airportCode.toUpperCase());
-    }
-    
-    const { data, error } = await query.limit(1);
-    
-    if (error || !data?.length) {
-      console.log(`[AirportFare] No fare found for ${city}${airportCode ? ` (${airportCode})` : ''}`);
-      return null;
-    }
-    
-    const fare = data[0];
-    console.log(`[AirportFare] Found fare for ${city}: taxi €${fare.taxi_cost_min}-${fare.taxi_cost_max}, train €${fare.train_cost}`);
-    
-    return {
-      taxiCostMin: fare.taxi_cost_min,
-      taxiCostMax: fare.taxi_cost_max,
-      trainCost: fare.train_cost,
-      busCost: fare.bus_cost,
-      currency: fare.currency || 'EUR',
-      currencySymbol: fare.currency_symbol || '€',
-      taxiIsFixedPrice: fare.taxi_is_fixed_price || false,
-    };
-  } catch (e) {
-    console.error('[AirportFare] Error fetching fare:', e);
-    return null;
-  }
-}
+// getAirportTransferFare, getAirportTransferMinutes moved to ./generation-utils.ts
 
-/**
- * Fetch airport transfer time from destinations table
- * Returns destination-specific transfer time, or default 45 minutes
- */
-async function getAirportTransferMinutes(supabase: any, destination: string): Promise<number> {
-  try {
-    const { data, error } = await supabase
-      .from('destinations')
-      .select('airport_transfer_minutes, city')
-      .or(`city.ilike.%${destination}%,country.ilike.%${destination}%`)
-      .limit(1);
-    
-    if (error || !data?.length) {
-      console.log(`[AirportTransfer] No destination found for "${destination}", using default 45 min`);
-      return 45;
-    }
-    
-    const transferTime = data[0].airport_transfer_minutes || 45;
-    console.log(`[AirportTransfer] Found ${data[0].city}: ${transferTime} minutes`);
-    return transferTime;
-  } catch (e) {
-    console.error('[AirportTransfer] Error fetching transfer time:', e);
-    return 45;
-  }
-}
 
 // getFlightHotelContext moved to ./flight-hotel-context.ts
 
@@ -946,65 +883,15 @@ async function getAirportTransferMinutes(supabase: any, destination: string): Pr
 
 // getUserPreferences, getTravelDNAV2, getTraitOverrides moved to ./preference-context.ts
 
-// buildTravelDNAContext, buildPreferenceContext, enrichPreferencesWithAI moved to ./preference-context.ts
+// calculateDays, formatDate, timeToMinutes, calculateDuration, getCategoryIcon moved to ./generation-utils.ts
 
-function calculateDays(startDate: string, endDate: string): number {
-  // Timezone-safe: parse as local dates to avoid UTC off-by-one
-  const [sy, sm, sd] = startDate.split('-').map(Number);
-  const [ey, em, ed] = endDate.split('-').map(Number);
-  const start = new Date(sy, sm - 1, sd);
-  const end = new Date(ey, em - 1, ed);
-  // Inclusive end-date: last day IS an activity day (March 7-9 = 3 days)
-  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-}
-
-function formatDate(startDate: string, dayOffset: number): string {
-  const [y, m, d] = startDate.split('-').map(Number);
-  const date = new Date(y, m - 1, d + dayOffset);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function timeToMinutes(time: string): number {
-  const [hours, minutes] = time.split(':').map(Number);
-  return hours * 60 + minutes;
-}
-
-function calculateDuration(start: string, end: string): number {
-  return timeToMinutes(end) - timeToMinutes(start);
-}
-
-function getCategoryIcon(category: string): string {
-  const icons: Record<string, string> = {
-    sightseeing: 'map-pin',
-    dining: 'utensils',
-    cultural: 'landmark',
-    shopping: 'shopping-bag',
-    relaxation: 'spa',
-    transport: 'car',
-    accommodation: 'bed',
-    activity: 'activity'
-  };
-  return icons[category] || 'star';
-}
 
 // =============================================================================
 // STAGE 1: CONTEXT PREPARATION
 // =============================================================================
 
-interface DirectTripData {
-  tripId: string;
-  destination: string;
-  destinationCountry?: string;
-  startDate: string;
-  endDate: string;
-  travelers?: number;
-  tripType?: string;
-  budgetTier?: string;
-  userId?: string;
-}
+// DirectTripData moved to ./generation-types.ts
+
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function prepareContext(supabase: any, tripId: string, userId?: string, directTripData?: DirectTripData, requestSmartFinishMode?: boolean): Promise<GenerationContext | null> {
