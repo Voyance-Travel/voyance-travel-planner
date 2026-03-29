@@ -1,41 +1,63 @@
 
 
-## Fix: Generation Logging Stuck at "pre_chain_setup (10%)"
+## Fix: Generation Logging — Add Timer Updates to `generate-trip-day` Handler
 
-### Root Cause
-The `supabase` client already uses `SUPABASE_SERVICE_ROLE_KEY` (line 4970-4973 of index.ts), so RLS bypass is in place. The real issue is that `updateProgress()` and `finalize()` in `generation-timer.ts` do not check the `{ error }` object returned by Supabase — they only have `try/catch` blocks, which never fire because the Supabase JS client returns errors in the response object rather than throwing.
+### Root Cause (Confirmed)
 
-### Changes
+The `generate-trip-day` handler (line 12949 in `index.ts`) is the actual orchestrator that runs day-by-day. It:
+1. Does NOT extract `generationLogId` from params (line 12950)
+2. Does NOT create an `innerTimer`
+3. Does NOT call `updateProgress()` or `finalize()` anywhere
+4. Does NOT pass `generationLogId` in the chain body to the next day (line 13422-13440)
 
-**1. `supabase/functions/generate-itinerary/generation-timer.ts`**
+The `generate-day` handler (line 7831) does create an `innerTimer` with local phase tracking, but only uses `startPhase`/`endPhase` (local-only) — never `updateProgress`. And the `generate-trip-day` handler that calls it has zero timer logic at all.
 
-- **`updateProgress()` (lines 152-169)**: Destructure `{ error }` from the `.update()` call. Log it if present. Add null-logId warning.
-- **`finalize()` (lines 208-222)**: Same fix — destructure `{ error }`, log on failure, log success message.
-- **`init()` (lines 40-63)**: Already checks `error` but improve logging format for consistency.
+### Changes — Single file: `supabase/functions/generate-itinerary/index.ts`
 
-**2. Database migration: Disable RLS on `generation_logs`**
+**1. Extract `generationLogId` from params (line 12950)**
 
-This is an internal instrumentation table with no user-facing data. Disabling RLS removes any policy issues as a factor:
+Add `generationLogId` to the destructured params.
 
-```sql
-ALTER TABLE public.generation_logs DISABLE ROW LEVEL SECURITY;
+**2. Create and resume timer after guards pass (~line 12959)**
+
+```typescript
+let innerTimer: GenerationTimer | null = null;
+if (generationLogId) {
+  try {
+    innerTimer = new GenerationTimer(tripId, supabase);
+    await innerTimer.resume(generationLogId, destination || '', totalDays || 1, travelers || 1);
+  } catch (e) {
+    console.warn('[generate-trip-day] Timer resume failed (non-blocking):', e);
+    innerTimer = null;
+  }
+}
 ```
 
-**3. Data fix: Clean up stuck rows**
+**3. Add `updateProgress` calls at key points:**
 
-Use the insert tool to update stuck rows:
+- After context loading / heartbeat update (~line 13052): `await innerTimer?.updateProgress(\`context_loaded_day_${dayNumber}\`, 10 + ((dayNumber - 1) / totalDays) * 80)`
+- After AI call succeeds (~line 13123): `await innerTimer?.updateProgress(\`generated_day_${dayNumber}\`, 10 + ((dayNumber - 0.5) / totalDays) * 80)`
+- After day saved to DB (line 13390 for last day, line 13414 for mid-chain): `await innerTimer?.updateProgress(\`saved_day_${dayNumber}\`, 10 + (dayNumber / totalDays) * 80)`
 
-```sql
-UPDATE generation_logs
-SET status = 'completed',
-    current_phase = 'completed (retroactive fix)',
-    progress_pct = 100
-WHERE status IN ('in_progress', 'started')
-  AND created_at < NOW() - INTERVAL '10 minutes';
-```
+**4. Add `finalize('completed')` when all days done (line 13392):**
 
-**4. Redeploy** the `generate-itinerary` edge function.
+After the "generation complete" log, call `await innerTimer?.finalize('completed')`.
+
+**5. Add `finalize('failed')` on permanent failure (line 13137):**
+
+After logging permanent failure, call `await innerTimer?.finalize('failed')`.
+
+**6. Pass `generationLogId` in chain body (line 13422-13440):**
+
+Add `generationLogId,` to the chain body object so subsequent days can resume the same timer.
+
+**7. Also pass `generationLogId` to the `generate-day` inner call (line 13086-13111):**
+
+Add `generationLogId,` so the inner `generate-day` handler's `innerTimer` also connects to the same log row.
+
+**8. Redeploy** the edge function.
 
 ### What This Fixes
-After deployment, every `updateProgress()` and `finalize()` call will either succeed (updating the log row in real-time) or log the exact error to edge function logs for debugging. The admin diagnostics page will show live phase progression instead of everything frozen at 10%.
+
+After deployment, the `generation_logs` row will update in real-time as each day progresses through context loading, AI generation, and saving. The admin diagnostics page will show live phase progression and final duration/status instead of being permanently stuck at 10%.
 
