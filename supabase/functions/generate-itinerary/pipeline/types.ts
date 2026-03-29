@@ -150,6 +150,101 @@ export interface PreBookedSlot {
 }
 
 // =============================================================================
+// LOCKED ACTIVITY — Activities the user has locked in place
+// =============================================================================
+
+export interface LockedActivity {
+  id: string;
+  title: string;
+  name?: string;
+  description?: string;
+  category?: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes?: number;
+  location?: { name?: string; address?: string };
+  cost?: { amount: number; currency: string };
+  isLocked: boolean;
+  tags?: string[];
+  bookingRequired?: boolean;
+  tips?: string;
+  photos?: unknown;
+  transportation?: unknown;
+  [key: string]: unknown;
+}
+
+// =============================================================================
+// COMPILED FACTS — Return type of compileDayFacts()
+// =============================================================================
+
+export interface CompiledFacts {
+  // Transition context
+  resolvedIsTransitionDay: boolean;
+  resolvedTransitionFrom: string;
+  resolvedTransitionTo: string;
+  resolvedTransportMode: string;
+  resolvedTransportDetails: any;
+  resolvedNextLegTransport: string;
+  resolvedNextLegCity: string;
+  resolvedNextLegTransportDetails: any;
+  resolvedHotelOverride: any;
+  resolvedIsMultiCity: boolean;
+  resolvedIsLastDayInCity: boolean;
+  resolvedDestination: string;
+  resolvedCountry: string;
+
+  // Locked activities
+  lockedActivities: LockedActivity[];
+  lockedSlotsInstruction: string;
+
+  // Flight/hotel (with overrides applied)
+  flightContext: any;
+  isFirstDay: boolean;
+  isLastDay: boolean;
+
+  // Transport preferences
+  transportPreferencePrompt: string;
+  resolvedTransportModes: string[];
+  resolvedPrimaryTransport: string | undefined;
+  resolvedHasRentalCar: boolean;
+
+  // Pre-resolved for schema compiler (avoids DB calls in pure function)
+  arrivalAirportDisplay: string;
+  airportTransferMinutes: number;
+}
+
+// =============================================================================
+// COMPILED SCHEMA — Return type of compileDaySchema()
+// =============================================================================
+
+export interface CompiledSchema {
+  dayConstraints: string;
+  /** Possibly modified flightContext (e.g. stripped return flight for non-flight departures) */
+  flightContext: any;
+}
+
+export interface DaySchemaInput {
+  isFirstDay: boolean;
+  isLastDay: boolean;
+  dayNumber: number;
+  totalDays: number;
+  destination: string;
+  flightContext: any;
+  resolvedIsLastDayInCity: boolean;
+  resolvedIsMultiCity: boolean;
+  resolvedNextLegTransport: string;
+  resolvedNextLegCity: string;
+  resolvedNextLegTransportDetails: any;
+  resolvedHotelOverride: any;
+  resolvedIsTransitionDay: boolean;
+  paramIsFirstDayInCity: boolean;
+  paramIsTransitionDay: boolean;
+  mustDoEventItems: any[];
+  arrivalAirportDisplay: string;
+  airportTransferMinutes: number;
+}
+
+// =============================================================================
 // DAY SCHEMA — Slot-based structure the AI must fill (Phase 2)
 // =============================================================================
 
