@@ -92,7 +92,7 @@ function parseTransitDestination(title: string): string {
 }
 
 function getModeIcon(mode: string) {
-  const m = mode.toLowerCase();
+  const m = (mode || '').toLowerCase();
   if (m.includes('taxi') || m.includes('rideshare') || m.includes('car') || m.includes('uber'))
     return <Car className="h-4 w-4" />;
   if (m.includes('train') || m.includes('metro') || m.includes('subway'))
@@ -143,8 +143,9 @@ export function TransitModePicker({
   const [loadingRouteId, setLoadingRouteId] = useState<string | null>(null);
   const [showAllStepsFor, setShowAllStepsFor] = useState<string | null>(null);
 
-  const transitDestination = parseTransitDestination(activityTitle);
-  const isAirportRoute = activityTitle.toLowerCase().includes('airport');
+  const safeTitle = activityTitle || '';
+  const transitDestination = parseTransitDestination(safeTitle);
+  const isAirportRoute = safeTitle.toLowerCase().includes('airport');
 
   const fetchOptions = useCallback(async () => {
     if (hasFetched || isLoading) return;
@@ -390,8 +391,8 @@ export function TransitModePicker({
 
               {/* Options list — Level 1 */}
               {!isLoading && options.map((option) => {
-                const isCurrentMode = activityTitle.toLowerCase().includes(option.mode.toLowerCase()) ||
-                  activityTitle.toLowerCase().includes(option.label.toLowerCase().split(' ')[0]);
+                const isCurrentMode = safeTitle.toLowerCase().includes((option.mode || '').toLowerCase()) ||
+                  safeTitle.toLowerCase().includes((option.label || '').toLowerCase().split(' ')[0]);
                 const isDetailExpanded = expandedOptionId === option.id;
 
                 return (

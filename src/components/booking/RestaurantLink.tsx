@@ -20,7 +20,7 @@ const urlCache = new Map<string, { url: string | null; timestamp: number }>();
 const CACHE_TTL_MS = 1000 * 60 * 60; // 1 hour
 
 function getCacheKey(name: string, destination: string): string {
-  return `${name.toLowerCase().trim()}|${destination.toLowerCase().trim()}`;
+  return `${(name || '').toLowerCase().trim()}|${(destination || '').toLowerCase().trim()}`;
 }
 
 function cleanRestaurantName(name: string): string {

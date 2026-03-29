@@ -1,4 +1,6 @@
 import { Component, ReactNode } from 'react';
+import { AlertCircle } from 'lucide-react';
+import { logClientError } from '@/utils/logClientError';
 
 interface Props {
   children: ReactNode;
@@ -23,6 +25,22 @@ export default class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: unknown): void {
     console.error('[ErrorBoundary] Caught error:', error.message, error.stack);
     console.error('[ErrorBoundary] Component stack:', errorInfo);
+
+    // Persist to client_errors table so render crashes are visible in backend logs
+    const componentStack = typeof errorInfo === 'object' && errorInfo !== null
+      ? (errorInfo as any).componentStack
+      : undefined;
+
+    logClientError(
+      error.message,
+      error.stack,
+      'ErrorBoundary',
+      {
+        source: 'error_boundary',
+        componentStack: componentStack?.slice(0, 3000),
+        route: window.location.pathname + window.location.search,
+      }
+    );
   }
 
   render(): ReactNode {
@@ -42,11 +60,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <div className="flex min-h-[60vh] items-center justify-center bg-background px-6">
             <div className="text-center max-w-md">
               <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M12 8v4" />
-                  <path d="M12 16h.01" />
-                </svg>
+                <AlertCircle className="h-9 w-9 text-primary" />
               </div>
               <h2 className="text-2xl md:text-3xl font-serif font-normal text-foreground mb-3">
                 Small detour.
@@ -59,16 +73,10 @@ export default class ErrorBoundary extends Component<Props, State> {
                   onClick={() => window.location.reload()}
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                    <path d="M3 3v5h5" />
-                    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                    <path d="M16 21h5v-5" />
-                  </svg>
                   Refresh page
                 </button>
                 <button
-                  onClick={() => window.location.href = '/'}
+                  onClick={() => { window.location.href = '/'; }}
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 border border-border text-foreground rounded-lg hover:bg-muted transition-colors font-medium"
                 >
                   Go home
