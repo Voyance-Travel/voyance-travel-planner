@@ -24,6 +24,16 @@ async function getUserId(): Promise<string | null> {
   }
 }
 
+/**
+ * Extract the deepest (first) component name from a React componentStack string.
+ * e.g. "\n    at MyComponent (src/...)" → "MyComponent"
+ */
+export function extractFailingComponent(componentStack?: string): string | null {
+  if (!componentStack) return null;
+  const match = componentStack.match(/^\s*at\s+(\w+)/m);
+  return match?.[1] ?? null;
+}
+
 export async function logClientError(
   errorMessage: string,
   stackTrace?: string,

@@ -1,6 +1,6 @@
 import { Component, ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
-import { logClientError } from '@/utils/logClientError';
+import { logClientError, extractFailingComponent } from '@/utils/logClientError';
 
 interface Props {
   children: ReactNode;
@@ -26,19 +26,22 @@ export default class ErrorBoundary extends Component<Props, State> {
     console.error('[ErrorBoundary] Caught error:', error.message, error.stack);
     console.error('[ErrorBoundary] Component stack:', errorInfo);
 
-    // Persist to client_errors table so render crashes are visible in backend logs
     const componentStack = typeof errorInfo === 'object' && errorInfo !== null
       ? (errorInfo as any).componentStack
       : undefined;
 
+    const failingComponent = extractFailingComponent(componentStack);
+
     logClientError(
       error.message,
       error.stack,
-      'ErrorBoundary',
+      failingComponent || 'ErrorBoundary',
       {
         source: 'error_boundary',
+        failing_component: failingComponent,
         componentStack: componentStack?.slice(0, 3000),
         route: window.location.pathname + window.location.search,
+        error_type: error.message?.includes('toLowerCase') ? 'toLowerCase_crash' : 'render_crash',
       }
     );
   }
