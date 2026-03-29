@@ -66,6 +66,7 @@ const FULFILLS_RE = /\.?\s*Fulfills the\s+[^.]*?(?:slot|requirement|block)\.\s*/
 const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/gi;
 const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
 const FORWARD_REF_RE = /\.?\s*(?:rest|recharge|prepare|get ready)\s+for\s+tomorrow'?s?\s+[^.]+(?:adventure|day|exploration|experience|excursion)[^.]*\.?/gi;
+const TOMORROW_REF_RE = /\b(?:for |before )?tomorrow'?s?\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+(?:adventure|exploration|experience|excursion|day|visit)\b[^.]*/gi;
 
 export function sanitizeAITextField(text: string | undefined | null, destination?: string): string {
   if (!text || typeof text !== 'string') return '';
@@ -80,6 +81,7 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(META_DISTANCE_COST_RE, '')
     .replace(INLINE_META_RE, '')
     .replace(FORWARD_REF_RE, '')
+    .replace(TOMORROW_REF_RE, '')
     .replace(/\b(?:BOOK|RESERVE|SECURE)\s+\d[\d-]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|BEFORE|OUT|EARLY)?\b/gi, '')
     .replace(/[🔴🟡🟢🔵]\s*(?:Book|Reserve|BOOK|RESERVE)[^.]*\.?\s*/g, '')
     .replace(/\b(?:book_now|book_soon|book_early|reserve_early|reserve_now)\b/gi, '')

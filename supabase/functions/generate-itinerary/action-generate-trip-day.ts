@@ -11,6 +11,7 @@ import { corsHeaders } from './action-types.ts';
 import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
+import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField } from './sanitization.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -543,6 +544,41 @@ export async function handleGenerateTripDay(
     console.log(`[generate-trip-day] Derived missing date for day ${dayNumber}: ${dayResult!.date}`);
   }
   dayResult!.dayNumber = dayNumber;
+
+  // ── POST-PROCESSING: sanitize, strip phantoms, fix forward refs, clean generic titles ──
+  {
+    const resolvedDest = cityInfo?.cityName || destination;
+    sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest);
+    
+    const hasHotel = !!(cityInfo?.hotelName);
+    if (!hasHotel) {
+      stripPhantomHotelActivities(dayResult, false);
+    }
+
+    // Forward-ref fix: strip hallucinated tomorrow references from accommodation descriptions
+    const hotelName = cityInfo?.hotelName || 'your hotel';
+    for (const act of (dayResult!.activities || [])) {
+      const cat = (act.category || '').toLowerCase();
+      const title = (act.title || '').toLowerCase();
+      const isReturnAccom = cat === 'accommodation' &&
+        (title.includes('return to') || title.includes('freshen up') || title.includes('back to') || title.includes('settle in'));
+      if (isReturnAccom && act.description && /tomorrow/i.test(act.description)) {
+        act.description = `Time at ${hotelName} to rest and refresh.`;
+      }
+    }
+
+    // Generic title validator: clean placeholder business names
+    const INDEFINITE_ARTICLE_START = /^(a|an)\s+[a-z]/i;
+    const VAGUE_TITLE_KEYWORDS = /\b(or high.end|or similar|boutique wellness|local spa|nearby caf[eé])\b/i;
+    for (const act of (dayResult!.activities || [])) {
+      const title = (act.title || '').trim();
+      if (INDEFINITE_ARTICLE_START.test(title) || VAGUE_TITLE_KEYWORDS.test(title)) {
+        act.title = sanitizeAITextField(title, resolvedDest);
+        act.name = act.title;
+      }
+    }
+    console.log(`[generate-trip-day] Post-processing complete for day ${dayNumber}`);
+  }
 
   // Save it
   const filteredExisting = existingDays.filter((d: any) => d?.dayNumber !== dayNumber);
