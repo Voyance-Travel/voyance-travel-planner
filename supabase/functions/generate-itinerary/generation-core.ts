@@ -1648,6 +1648,40 @@ Generate activities for this day following ALL constraints above.`;
           return ta - tb;
         });
 
+        // MEAL-TIME COHERENCE: Fix meal keywords that contradict the time slot
+        // e.g., "Lunch" at 19:10 should become "Dinner"
+        const MEAL_KW_RE = /\b(breakfast|brunch|lunch|dinner|supper)\b/i;
+        const MEAL_RANGES: Record<string, [number, number]> = {
+          Breakfast: [360, 659], Lunch: [660, 899], Dinner: [1020, 1379],
+        };
+        function canonMeal(kw: string): string | null {
+          const lc = kw.toLowerCase();
+          if (lc === 'breakfast' || lc === 'brunch') return 'Breakfast';
+          if (lc === 'lunch') return 'Lunch';
+          if (lc === 'dinner' || lc === 'supper') return 'Dinner';
+          return null;
+        }
+        function correctMealForTime(mins: number): string | null {
+          for (const [label, [lo, hi]] of Object.entries(MEAL_RANGES)) {
+            if (mins >= lo && mins <= hi) return label;
+          }
+          return null;
+        }
+        for (const act of generatedDay.activities) {
+          const m = MEAL_KW_RE.exec(act.title || '');
+          if (!m) continue;
+          const titleMeal = canonMeal(m[1]);
+          if (!titleMeal) continue;
+          const mins = parseTimeToMinutes(act.startTime || '');
+          if (mins === null || mins === 0) continue;
+          const correct = correctMealForTime(mins);
+          if (!correct || correct === titleMeal) continue;
+          const replacement = m[1][0] === m[1][0].toUpperCase() ? correct : correct.toLowerCase();
+          console.log(`[Stage 2] MealCoherence: "${act.title}" at ${act.startTime}: ${titleMeal} → ${correct}`);
+          act.title = act.title!.slice(0, m.index) + replacement + act.title!.slice(m.index + m[1].length);
+          if (act.name) act.name = act.title;
+        }
+
         let shifted = false;
         for (let i = 0; i < generatedDay.activities.length - 1; i++) {
           const current = generatedDay.activities[i];
