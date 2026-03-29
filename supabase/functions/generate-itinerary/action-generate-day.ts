@@ -92,7 +92,8 @@ export async function handleGenerateDay(
     mustDoActivities: paramMustDoActivities, interestCategories: paramInterestCategories, generationRules: paramGenerationRules,
     pacing: paramPacing, isFirstTimeVisitor: paramIsFirstTimeVisitor,
     hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity,
-    restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants, generationLogId: paramGenerationLogId } = params;
+    restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants, generationLogId: paramGenerationLogId,
+    hotelName: paramHotelName, action: paramAction } = params;
   
   // userId comes from the function parameter (authenticated user ID)
   // Security guard: if request body includes userId that differs from auth token, log and reject
@@ -1154,6 +1155,7 @@ export async function handleGenerateDay(
         if (dayError) {
           console.error('[generate-day] Failed to upsert day:', dayError);
         } else if (dayRow) {
+          const itineraryDayId = dayRow.id;
           // Delete old non-locked activities for this day, then insert new ones
           await supabase
             .from('itinerary_activities')
@@ -1355,7 +1357,7 @@ export async function handleGenerateDay(
               transportType: resolvedTransportMode || undefined,
               city: resolvedDestination || undefined,
             },
-            created_by_action: action === 'regenerate-day' ? 'regenerate' : 'generate',
+            created_by_action: paramAction === 'regenerate-day' ? 'regenerate' : 'generate',
             dna_snapshot: versionDnaSnapshot,
           });
         
