@@ -1,55 +1,61 @@
 
 
-## Decomposing the Monolith: Incremental Pipeline Architecture
+## Phase 2: Extract `generate-day` Handler to Action File
 
-### Phase 1: Kill Inline Duplicates ✅ DONE
+### Current State
 
-Replaced the inline `generate-trip` (lines 12292-12903) and `generate-trip-day` (lines 12910-13465) blocks in `index.ts` with 3-line delegation calls to the already-extracted `action-generate-trip.ts` and `action-generate-trip-day.ts` handlers.
+The `generate-day`/`regenerate-day` handler spans **lines 7815–12248** (~4,433 lines) in `index.ts`. The previous blocker (inline utility functions) is **already resolved** — all utilities used by this handler are imported from extracted modules (`flight-hotel-context.ts`, `day-validation.ts`, `sanitization.ts`, etc.).
 
-**Key finding**: The handlers were imported but never actually called — the inline duplicates were the ONLY active code path. This was the root cause of restaurant pool and hotel rotation bugs (the inline version didn't pass restaurant pools).
+### What This Handler Uses
 
-**Result**: ~1,170 lines removed. index.ts dropped from 13,491 → 12,322 lines. All 17 smoke tests pass.
+**Imported modules** (already extracted — no work needed):
+- `parseTimeToMinutes`, `minutesToHHMM`, `addMinutesToHHMM`, `normalizeTo24h` from `flight-hotel-context.ts`
+- `validateGeneratedDay`, `filterChainRestaurants`, `enforceRequiredMealsFinalGuard`, `detectMealSlots` from `day-validation.ts`
+- `sanitizeGeneratedDay`, `stripPhantomHotelActivities`, `sanitizeAITextField` from `sanitization.ts`
+- `parseMustDoInput`, `validateMustDosInItinerary` from `must-do-priorities.ts`
+- `deriveMealPolicy`, `buildMealRequirementsPrompt` from `meal-policy.ts`
+- All prompt-building, truth-anchor, dietary, geographic modules — already imported at top of index.ts
 
----
+**Inline dependencies** (defined earlier in index.ts, must be extracted or shared):
+- Types: `GenerationContext`, `StrictActivity`, `StrictDay`, `MultiCityDayInfo`, `EnrichmentStats`, `TripOverview`
+- Functions: `prepareContext`, `enrichActivity`, `enrichItinerary`, `generateTripOverview`, `finalSaveItinerary`, `calculateDays`, `formatDate`, `timeToMinutes`, `calculateDuration`, `getCategoryIcon`, `normalizeVenueName`, `checkVenueCache`, `cacheVerifiedVenue`, `verifyVenueWithDualAI`, `verifyVenueWithGooglePlaces`, `haversineDistanceKm`, `getDestinationCenter`, `isBookableActivity`, `searchViatorForActivity`, `enrichActivityWithRetry`
+- Also: `validateAuth`, `checkRateLimit`, `verifyTripAccess`, `corsHeaders`
 
-### Phase 2: Extract `generate-day` to Action File — PENDING
+### Plan
 
-**Scope**: Lines 7812-12248 (~4,436 lines) — the `generate-day`/`regenerate-day` handler.
+**Step 1: Create `generation-types.ts`** — Extract shared types/interfaces
+- Move `GenerationContext`, `StrictActivity`, `StrictDay`, `MultiCityDayInfo`, `TripOverview`, `TravelAdvisory`, `LocalEventInfo`, `EnrichedItinerary`, `ValidationContext` from index.ts into this new shared file
+- Both `index.ts` and the new action file import from here
 
-**Blocker**: This handler has deep implicit dependencies on utility functions defined inline in index.ts (e.g., `parseTimeToMinutes`, `minutesToHHMM`, `addMinutesToHHMM`, `normalizeTo24h`, `filterChainRestaurants`, and many more). These must first be extracted into a shared utils module before the handler can be moved.
+**Step 2: Create `generation-utils.ts`** — Extract shared utility functions
+- Move `calculateDays`, `formatDate`, `timeToMinutes`, `calculateDuration`, `getCategoryIcon`, `normalizeVenueName` 
+- These are pure functions with zero dependencies — safe to extract
 
-**Next steps**:
-1. Audit all utility functions used by generate-day that are defined in index.ts
-2. Extract them into `generation-utils.ts` (or similar)
-3. Move the generate-day handler into `action-generate-day.ts`
-4. Replace inline block with delegation call
+**Step 3: Create `action-generate-day.ts`** — Move the handler
+- Move lines 7815–12248 from `index.ts`
+- Export `handleGenerateDay(supabase: any, userId: string, params: Record<string, any>): Promise<Response>`
+- Import types from `generation-types.ts`, utils from `generation-utils.ts`, and all existing extracted modules
+- The handler needs `corsHeaders`, `verifyTripAccess`, `LOVABLE_API_KEY`, `supabaseUrl`, `supabaseKey`, `GOOGLE_MAPS_API_KEY` — pass these via params or import from `action-types.ts`
+- Venue enrichment functions (`enrichActivity`, `verifyVenueWithDualAI`, etc.) stay in index.ts for now since `generate-full` also uses them. They'll move in Phase 3.
 
----
+**Step 4: Update `index.ts` routing**
+- Import `handleGenerateDay` from `action-generate-day.ts`
+- Replace the 4,433-line inline block with:
+```typescript
+if (action === 'generate-day' || action === 'regenerate-day') {
+  return handleGenerateDay(supabase, authResult.userId, params);
+}
+```
 
-### Phase 3: Extract `generate-full` to Action File — PENDING
+**Step 5: Update `plan.md`** — Mark Phase 2 as done
 
-**Scope**: Lines 5028-7810 (~2,782 lines) — the legacy `generate-full` handler.
+### Impact
+- `index.ts` drops from ~12,322 to ~7,900 lines
+- `generate-day` becomes independently readable and testable
+- No functional changes — identical behavior, just code location moves
 
-Same dependency issue as Phase 2. Should be done after Phase 2 since the utility extraction will already be complete.
+### Risk Mitigation
+- The handler's auth check (userId mismatch, trip access verification) moves with it — no security gap
+- All module imports are path-relative within the same `generate-itinerary/` directory — no import resolution issues
+- Edge function deployment bundles the entire directory, so new files are automatically included
 
----
-
-### Phase 4: Split `generate-day` Into Focused Steps — PENDING (after Phase 2)
-
-Break `action-generate-day.ts` into:
-- `steps/build-day-context.ts` — Hotel resolution, flight context, meal policy, restaurant pool
-- `steps/build-day-prompt.ts` — Prompt assembly (archetype, DNA, dietary, weather)
-- `steps/call-ai-and-parse.ts` — AI call, JSON extraction, retry logic
-- `steps/post-process-day.ts` — Sanitization, dedup, enrichment, route optimization
-
----
-
-### Phase 5: Dedicated Post-Generation Checks — PENDING (after Phase 4)
-
-Clean post-processing pipeline:
-1. sanitizeText → strip AI commentary, phantoms
-2. checkDuplicateActivities → trip-wide dedup
-3. checkDuplicateRestaurants → meal repeat swap from pool
-4. validatePreferences → budget, dietary, pacing
-5. addBuffersAndRoutes → travel times, reorder by proximity
-6. enforceMealCompliance → inject missing meals
