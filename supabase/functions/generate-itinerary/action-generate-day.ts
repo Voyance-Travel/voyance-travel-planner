@@ -1176,239 +1176,30 @@ export async function handleGenerateDay(
     }
 
     // =======================================================================
+    // PERSIST: Day upsert, activity insert, UUID mapping, version save
+    // Extracted to pipeline/persist-day.ts (Phase 5)
+    // =======================================================================
     if (tripId) {
       try {
-        // Upsert day row
-        const { data: dayRow, error: dayError } = await supabase
-          .from('itinerary_days')
-          .upsert({
-            trip_id: tripId,
-            day_number: dayNumber,
-            date: date,
-            title: generatedDay.title,
-            theme: generatedDay.theme,
-            narrative: generatedDay.narrative || null,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'trip_id,day_number' })
-          .select('id')
-          .single();
-        
-        if (dayError) {
-          console.error('[generate-day] Failed to upsert day:', dayError);
-        } else if (dayRow) {
-          const itineraryDayId = dayRow.id;
-          // Delete old non-locked activities for this day, then insert new ones
-          await supabase
-            .from('itinerary_activities')
-            .delete()
-            .eq('itinerary_day_id', dayRow.id)
-            .eq('is_locked', false);
-          
-          // Insert all activities.
-          // IMPORTANT: The DB primary key is UUID, but the AI/frontend may produce ephemeral string IDs.
-          // We store those in external_id and let the DB generate UUIDs, then we return UUIDs back to the client.
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-          const isValidUUID = (str: string | undefined): boolean => !!str && uuidRegex.test(str);
-
-          const makeRow = (
-            act: {
-              id?: string;
-              title?: string;
-              name?: string;
-              description?: string;
-              category?: string;
-              startTime?: string;
-              endTime?: string;
-              durationMinutes?: number;
-              location?: { name?: string; address?: string };
-              cost?: { amount: number; currency: string };
-              isLocked?: boolean;
-              tags?: string[];
-              bookingRequired?: boolean;
-              tips?: string;
-              photos?: unknown;
-              walkingDistance?: string;
-              walkingTime?: string;
-              transportation?: unknown;
-              rating?: unknown;
-              website?: string;
-              viatorProductCode?: string;
-            },
-            idx: number
-          ) => ({
-            itinerary_day_id: dayRow.id,
-            trip_id: tripId,
-            sort_order: idx,
-            title: act.title || act.name || 'Activity',
-            name: act.name || act.title,
-            description: act.description || null,
-            category: act.category || 'activity',
-            start_time: act.startTime || null,
-            end_time: act.endTime || null,
-            duration_minutes: act.durationMinutes || null,
-            location: act.location || null,
-            cost: act.cost || null,
-            tags: act.tags || null,
-            is_locked: act.isLocked || false,
-            booking_required: act.bookingRequired || false,
-            tips: act.tips || null,
-            photos: act.photos || null,
-            walking_distance: act.walkingDistance || null,
-            walking_time: act.walkingTime || null,
-            transportation: act.transportation || null,
-            rating: act.rating || null,
-            website: act.website || null,
-            viator_product_code: act.viatorProductCode || null,
-          });
-
-          const uuidRows = normalizedActivities
-            .filter((a: { id?: string }) => isValidUUID(a.id))
-            .map((act: any, idx: number) => ({
-              id: act.id,
-              external_id: act.external_id || null,
-              ...makeRow(act, idx),
-            }));
-
-          const externalRows = normalizedActivities
-            .filter((a: { id?: string }) => !isValidUUID(a.id))
-            .map((act: any, idx: number) => ({
-              external_id: act.id || null,
-              ...makeRow(act, idx),
-            }));
-
-          // 1) Preserve/update UUID-based activities (e.g., locked activities already in DB)
-          if (uuidRows.length > 0) {
-            const { error: uuidErr } = await supabase
-              .from('itinerary_activities')
-              .upsert(uuidRows, { onConflict: 'id' });
-            if (uuidErr) {
-              console.error('[generate-day] Failed to upsert UUID activities:', uuidErr);
-            }
-          }
-
-          // 2) Insert external-id based activities (newly generated)
-          // NOTE: We use delete-then-insert instead of upsert because there is no
-          // unique constraint on (trip_id, itinerary_day_id, external_id), which
-          // caused 42P10 errors and silently dropped activities.
-          let persistedExternal: Array<{ id: string; external_id: string | null; is_locked: boolean | null }> = [];
-          if (externalRows.length > 0) {
-            // First, delete existing non-locked external-id activities for this day
-            // so we can cleanly insert the new set
-            const externalIds = externalRows
-              .map((r: any) => r.external_id)
-              .filter(Boolean);
-            
-            if (externalIds.length > 0 && itineraryDayId) {
-              await supabase
-                .from('itinerary_activities')
-                .delete()
-                .eq('trip_id', tripId)
-                .eq('itinerary_day_id', itineraryDayId)
-                .eq('is_locked', false)
-                .in('external_id', externalIds);
-            }
-
-            // Also clean up any orphan non-locked activities for this day
-            // that don't have UUIDs (leftover from previous failed inserts)
-            if (itineraryDayId) {
-              const keepUuids = uuidRows.map((r: any) => r.id);
-              if (keepUuids.length > 0) {
-                await supabase
-                  .from('itinerary_activities')
-                  .delete()
-                  .eq('trip_id', tripId)
-                  .eq('itinerary_day_id', itineraryDayId)
-                  .eq('is_locked', false)
-                  .not('id', 'in', `(${keepUuids.join(',')})`);
-              }
-            }
-
-            // Now insert fresh rows
-            const { data, error: extErr } = await supabase
-              .from('itinerary_activities')
-              .insert(externalRows)
-              .select('id, external_id, is_locked');
-            if (extErr) {
-              console.error('[generate-day] Failed to insert external-id activities:', extErr);
-            } else {
-              persistedExternal = (data || []) as any;
-            }
-          }
-
-          // Update the returned payload to use DB UUID ids (so future lock toggles + regen are stable)
-          if (persistedExternal.length > 0) {
-            const map = new Map(
-              persistedExternal
-                .filter(r => r.external_id)
-                .map(r => [r.external_id as string, r])
-            );
-
-            normalizedActivities = normalizedActivities.map((act: any) => {
-              if (isValidUUID(act.id)) return act;
-              const row = act.id ? map.get(act.id) : undefined;
-              if (!row) return act;
-              return {
-                ...act,
-                id: row.id,
-                isLocked: row.is_locked ?? act.isLocked,
-              };
-            });
-
-            // Ensure the response day uses the updated IDs
-            generatedDay.activities = normalizedActivities;
-          }
-
-          console.log(
-            `[generate-day] Persisted activities to itinerary_activities (uuid=${uuidRows.length}, external=${externalRows.length})`
-          );
-        }
+        const persistResult = await persistDay({
+          supabase,
+          tripId,
+          dayNumber,
+          date,
+          generatedDay,
+          normalizedActivities,
+          action: paramAction,
+          profile,
+          resolvedIsTransitionDay,
+          resolvedTransitionFrom,
+          resolvedTransitionTo,
+          resolvedTransportMode,
+          resolvedDestination,
+        });
+        normalizedActivities = persistResult.normalizedActivities;
+        generatedDay.activities = normalizedActivities;
       } catch (persistErr) {
         console.error('[generate-day] Persist error:', persistErr);
-      }
-    }
-
-    // Save version to itinerary_versions table for undo functionality
-    if (tripId) {
-      try {
-        // Build DNA snapshot for this generation version
-        const versionDnaSnapshot = profile ? {
-          archetype: profile.archetype,
-          secondaryArchetype: profile.secondaryArchetype,
-          archetypeSource: profile.archetypeSource,
-          traitScores: profile.traitScores,
-          budgetTier: profile.budgetTier,
-          dataCompleteness: profile.dataCompleteness,
-          isFallback: profile.isFallback,
-          snapshotAt: new Date().toISOString(),
-        } : null;
-
-        const { error: versionError } = await supabase
-          .from('itinerary_versions')
-          .insert({
-            trip_id: tripId,
-            day_number: dayNumber,
-            activities: generatedDay.activities,
-            day_metadata: {
-              title: generatedDay.title,
-              theme: generatedDay.theme,
-              narrative: generatedDay.narrative,
-              isTransitionDay: resolvedIsTransitionDay || undefined,
-              transitionFrom: resolvedTransitionFrom || undefined,
-              transitionTo: resolvedTransitionTo || undefined,
-              transportType: resolvedTransportMode || undefined,
-              city: resolvedDestination || undefined,
-            },
-            created_by_action: paramAction === 'regenerate-day' ? 'regenerate' : 'generate',
-            dna_snapshot: versionDnaSnapshot,
-          });
-        
-        if (versionError) {
-          console.error('[generate-day] Failed to save version:', versionError);
-        } else {
-          console.log('[generate-day] Saved version for day', dayNumber);
-        }
-      } catch (vErr) {
-        console.error('[generate-day] Version save error:', vErr);
       }
     }
 
