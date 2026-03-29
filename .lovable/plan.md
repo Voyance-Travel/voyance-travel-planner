@@ -1,114 +1,122 @@
-# Pipeline Refactor: Phased Rollout Plan
 
-## Architecture Principle
-> "Stop asking the model to invent the rules and then asking code to clean up the mess.
-> Give code ownership of the rules, and let the model operate inside a constrained box."
 
-## Pipeline Flow
+# Phase 2: Extract Deterministic Compilers
+
+## What this phase does
+
+Pull the fact-gathering and rule-derivation logic out of `action-generate-day.ts` (lines ~250–1700) into two isolated, testable modules. The main file still calls them and builds the same prompt — behavior stays identical.
+
+## Current state in the monolith
+
+Lines ~250–880 of `action-generate-day.ts` do fact extraction:
+- Transition day resolution from `trip_cities` (lines 294–430)
+- Locked activity loading from DB, JSON fallback, legacy fallback (lines 436–564)
+- User preferences, trip intents, must-do parsing (lines 596–728)
+- Interest categories, generation rules, pacing, visitor type (lines 730–757)
+- Pre-booked commitments, additional notes (lines 758–822)
+- Flight/hotel context fetch + overrides + preference fallbacks (lines 824–880)
+
+Lines ~883–1680 do day-mode classification and constraint derivation:
+- First day: morning/afternoon/evening arrival decision tree (lines 889–1154)
+- Last day: flight vs non-flight departure, early/midday/afternoon/evening (lines 1155–1619)
+- Multi-city boundary constraints (lines 1622–1681)
+
+All of this is deterministic — it reads DB rows, does time math, and produces strings. None of it needs AI.
+
+## New files
+
+### 1. `pipeline/compile-day-facts.ts`
+
+Extracts all deterministic truth into a `DayFacts` object. Sources:
+- `trip_cities` → transition day, city mapping, per-city hotel
+- `itinerary_days` / `itinerary_activities` → locked activities
+- `getFlightHotelContext()` → flight/hotel truth (reuse existing module)
+- `deriveMealPolicy()` → required meals (reuse existing module)
+- Trip metadata → must-dos, pre-booked commitments, pacing, visitor type
+- User preferences → arrival/departure time fallbacks
+
+Input: `supabase`, `tripId`, `dayNumber`, `totalDays`, `params` (the existing request params)
+Output: `DayFacts` (already defined in `pipeline/types.ts`)
+
+This consolidates lines ~250–880 of the monolith into one function with a typed return.
+
+### 2. `pipeline/compile-day-schema.ts`
+
+Takes `DayFacts` and produces a `DaySchema` with concrete slots and constraints. This is the decision tree that currently lives in lines ~883–1680:
+- Classify `dayMode` (morning_arrival, late_departure, transition_day, etc.)
+- Compute `earliestStart` / `latestEnd` from flight times + buffers
+- Build locked slots (arrival, hotel check-in, checkout, departure transfer)
+- Build fillable meal slots with time windows
+- Build fillable activity slots (count based on usable hours + pacing)
+- Set constraints (max activities, buffer minutes, prior-day dedup list)
+
+Input: `DayFacts`
+Output: `DaySchema` (already defined in `pipeline/types.ts`)
+
+Pure function — no DB calls, no side effects, fully testable.
+
+## Changes to existing files
+
+### `action-generate-day.ts`
+
+At the top of `handleGenerateDay()`, after auth checks (~line 290):
+
 ```
-Trip Facts → Day Schema → AI Fill → Validator → Targeted Repair → Save
+const dayFacts = await compileDayFacts(supabase, tripId, dayNumber, totalDays, params);
+const daySchema = compileDaySchema(dayFacts);
 ```
 
-## Current State Summary
+Then replace the inline fact-gathering and decision tree code with reads from these objects. The prompt-building code downstream still runs — it just reads `dayFacts.hotelName` instead of `flightContext.hotelName`, and `daySchema.earliestStart` instead of computing it inline.
 
-| File | Lines | Role | Problem |
-|------|-------|------|---------|
-| `action-generate-day.ts` | 4,583 | Prompt + logistics + validation + repair | Monolith doing everything |
-| `action-generate-full.ts` | 2,962 | Legacy full-trip generation | Parallel path, duplicates rules |
-| `generation-core.ts` | 3,172 | Shared generation infra | Overlapping cleanup with sanitization |
-| `sanitization.ts` | 318 | Text cleanup + business rules | Mixed concerns |
-| `day-validation.ts` | 876 | Meal guards, chain blocklist | Good but disconnected from pipeline |
-| `action-generate-trip.ts` | ~500 | Trip orchestrator | Good pattern, keep |
-| `action-generate-trip-day.ts` | 1,118 | Day chain loop | Good pattern, keep |
+This is a refactor, not a rewrite. The prompt strings produced should be identical.
 
----
+### `action-generate-trip-day.ts`
 
-## ✅ Phase 0: Foundation (COMPLETE)
+Wire in the `StageLogger` (from Phase 0) to log `dayFacts` and `daySchema` after each day generates:
 
-**Files created**:
-- `pipeline/types.ts` — DayFacts, DaySchema, DaySlot, ValidationResult, FailureCode enum, StageArtifacts, RepairAction, StageTiming
-- `pipeline/stage-logger.ts` — StageLogger class that persists artifacts to `trip.metadata.pipeline_logs[day_N]`
-
-**Status**: Deployed. Zero behavior changes. New files exist but are not called by any generation code.
-
----
-
-## ✅ Phase 1: Retire Legacy Path (COMPLETE)
-
-**Goal**: Make `action-generate-full.ts` a thin redirect to the day-chain pipeline.
-
-**Files changed**:
-- `action-generate-full.ts` — gutted 2,962-line implementation; now a ~80-line redirect to `handleGenerateTrip`
-- `index.ts` — simplified `generate-full` dispatch (removed `authHeader` pass)
-- `enrich-manual-trip/index.ts` — changed action from `generate-full` to `generate-trip` with full params
-- `index.test.ts` — updated test for legacy redirect
-
-**Status**: Deployed. One authoritative generation path (day-chain). Legacy `generate-full` action still works as a redirect.
-
----
-
-## Phase 2: Extract Deterministic Compilers
-
-**Goal**: Pull rule logic OUT of `action-generate-day.ts` into isolated, testable modules.
-
-**Files created**:
-- `pipeline/compile-day-facts.ts` — extracts hotel/flight/meal/must-do truth from GenerationContext → DayFacts
-- `pipeline/compile-day-schema.ts` — takes DayFacts → DaySchema (slots, time windows, constraints)
-
-**Files changed**:
-- `action-generate-day.ts` — call compilers at top, feed schema downstream. Same behavior, single source.
-
----
-
-## Phase 3: Validator with Failure Taxonomy
-
-**Goal**: Structured validator that classifies issues by error code (additive, runs alongside existing sanitization).
-
-**Files created**:
-- `pipeline/validate-day.ts` — returns `ValidationResult[]` with typed codes: PHANTOM_HOTEL, MEAL_ORDER, TITLE_LABEL_LEAK, LOGISTICS_SEQUENCE, GENERIC_VENUE, DUPLICATE_CONCEPT, CHRONOLOGY, TIME_OVERLAP, CHAIN_RESTAURANT
-
-**Files changed**:
-- `action-generate-trip-day.ts` — run `validateDay()` after generation, log via StageLogger
-
----
-
-## Phase 4: Deterministic Repair Layer
-
-**Goal**: Move business-rule fixes out of `sanitization.ts` into structured repair keyed to error codes.
-
-**Files created**:
-- `pipeline/repair-day.ts` — deterministic repairs: MEAL_ORDER→reassign times, PHANTOM_HOTEL→strip, CHRONOLOGY→sort, etc.
-
-**Files changed**:
-- `sanitization.ts` — narrow to text-only cleanup (CJK, labels, dedup, dashes)
-- `action-generate-trip-day.ts` — pipeline becomes: validate → repair → text-sanitize
-
----
-
-## Phase 5: Shrink the Prompt
-
-**Goal**: Remove hard rules from AI prompt that code now enforces.
-
-**Files changed**:
-- `action-generate-day.ts` / `prompt-library.ts` — remove meal ordering, hotel truth, departure sequencing, title formatting, chronology, logistics buffer rules from prompt. Keep venue quality, descriptions, personalization, vibe.
-
----
-
-## Phase 6: Targeted AI Repair (Optional)
-
-**Files created**:
-- `pipeline/ai-repair.ts` — micro-prompts for semantic issues only (missing must-do, wrong cuisine, weak personalization)
-
----
-
-## New Directory Structure
 ```
-supabase/functions/generate-itinerary/pipeline/
-  types.ts              ✅ DONE — DaySchema, DayFacts, ValidationResult, FailureCode
-  stage-logger.ts       ✅ DONE — StageLogger class
-  compile-day-facts.ts  — Phase 2
-  compile-day-schema.ts — Phase 2
-  validate-day.ts       — Phase 3
-  repair-day.ts         — Phase 4
-  ai-repair.ts          — Phase 6
+const logger = new StageLogger(supabase, tripId, dayNumber);
+// ... after generation ...
+logger.logFacts(dayFacts, factsMs);
+logger.logSchema(daySchema, schemaMs);
+await logger.flush();
 ```
+
+## What does NOT change
+
+- `flight-hotel-context.ts` — still called by `compileDayFacts`, not modified
+- `meal-policy.ts` — still called by `compileDayFacts`, not modified
+- `sanitization.ts` — untouched
+- `prompt-library.ts` — untouched
+- Frontend — no changes
+- AI prompt content — identical output, just sourced from compiled objects
+
+## DayFacts additions needed
+
+The existing `DayFacts` type in `pipeline/types.ts` needs a few fields to cover what the monolith currently tracks:
+- `transportMode?: string` (train/flight/car/bus/ferry for transition/departure)
+- `transportDetails?: object` (carrier, station, departure time)
+- `nextLegTransport?: string`
+- `nextLegCity?: string`
+- `lockedActivities: LockedActivity[]` (the locked slots loaded from DB)
+- `pacing?: string` (relaxed/balanced/packed)
+- `isFirstTimeVisitor?: boolean`
+- `interestCategories?: string[]`
+- `additionalNotes?: string`
+- `smartFinishMode?: boolean`
+
+## Risk
+
+**Low.** This is a pure extraction refactor. The compiler functions produce the same data that's currently computed inline. If any field is wrong, it surfaces immediately as a prompt difference. The stage logger makes it inspectable.
+
+## Verification
+
+Generate a trip before and after. Compare the `pipeline_logs` output (compiled facts + schema) against the console logs from the current inline code. The day constraints string should be identical.
+
+## Estimated scope
+
+- `compile-day-facts.ts`: ~300-400 lines (extracted from ~600 lines of inline code)
+- `compile-day-schema.ts`: ~250-350 lines (extracted from ~800 lines of decision tree)
+- `action-generate-day.ts`: net reduction of ~1,000-1,200 lines
+- `pipeline/types.ts`: ~15 lines of additions to `DayFacts`
+
