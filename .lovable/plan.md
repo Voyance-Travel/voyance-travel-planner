@@ -1,62 +1,119 @@
 
+Fix this in three layers, because we now know it is not just “one missed null guard”.
 
-# Audit: Push Notification Pipeline Gaps + End-to-End Testing Strategy
+## What I found
 
-## Current State
+1. The crash is still plausibly coming from the trip-detail render tree, because there are still several unguarded runtime `.toLowerCase()` calls in itinerary-related components beyond the first batch we fixed.
+2. Your client-side logging gap is real: `useErrorTracker()` writes unhandled browser errors to `client_errors`, but `ErrorBoundary.componentDidCatch()` only writes to `console.error`. So React render crashes can show the “Small detour” screen without being persisted to your logs.
+3. The “weird Small detour graphic” is not what the current code contains anymore. `src/components/common/ErrorBoundary.tsx` already has a clean exclamation-circle SVG. If production still shows the old/broken visual, the published client is likely serving a stale cached PWA bundle.
 
-The push notification system is **incomplete**:
+## Implementation plan
 
-1. **`pushService.ts`** (client) — Registers device tokens via Capacitor and stores them in the `push_tokens` table. This works for native apps only (`Capacitor.isNativePlatform()`).
+### 1. Close the logging blind spot for React render crashes
+Update the error handling path so React boundary failures are stored in the backend, not just printed to console.
 
-2. **`trip-notifications` edge function** — Schedules notifications by writing them into `trips.metadata.scheduledNotifications`. Has actions: `schedule`, `get-due`, `mark-sent`, `get-user-notifications`. But **it never actually delivers push notifications** — it only stores and reads them from trip metadata.
+- Extract the existing `client_errors` insert logic from `useErrorTracker.ts` into a shared helper.
+- Call that helper from:
+  - `useErrorTracker()` for window errors / unhandled rejections
+  - `ErrorBoundary.componentDidCatch()` for React render crashes
+- Include metadata such as:
+  - route
+  - component stack
+  - error message / stack
+  - build/version marker if available
+  - source = `error_boundary` vs `window_error`
 
-3. **`send-trip-reminders` edge function** — Sends **email** reminders only (via Zoho SMTP). No push delivery.
+Result: if this happens again, you’ll see the exact frontend failure in `client_errors` instead of only in browser console.
 
-4. **No push delivery function exists.** There is no edge function that reads `push_tokens` and sends via APNs or FCM. The tokens are collected but never used.
+### 2. Finish the defensive rendering pass in the actual failing trip-detail path
+Apply function-level guards to the remaining likely crash points we found.
 
-## What Needs to Happen
+Highest-priority files:
+- `src/components/booking/RestaurantLink.tsx`
+  - `getCacheKey(name, destination)` currently does `name.toLowerCase()` / `destination.toLowerCase()` with no runtime guard
+  - this is a strong candidate because `InlineBookingActions` can still pass a missing activity title into `RestaurantLink`
+- `src/components/itinerary/TransitModePicker.tsx`
+  - guard `activityTitle.toLowerCase()`
+  - guard `option.mode.toLowerCase()` / `option.label.toLowerCase()`
+  - guard helper `getModeIcon(mode)`
+- `src/components/itinerary/TransitGapIndicator.tsx`
+  - guard `prevDuration.toLowerCase()`
+  - guard `method.toLowerCase()`
+  - keep category guard pattern consistent
+- `src/components/itinerary/WeatherForecast.tsx`
+  - guard `condition.toLowerCase()`
+  - guard `d.condition.toLowerCase()`
+- `src/components/itinerary/EditorialItinerary.tsx`
+  - replace repeated direct `.toLowerCase()` calls with already-normalized locals where possible
+  - make every title/category/type-derived string fallback to `''` or `'activity'` before normalization
 
-### Step 1: Create `send-push` edge function
-A new edge function that:
-- Accepts `userId`, `title`, `body`, and optional `data` (e.g. `{ tripId }`)
-- Looks up the user's device tokens from `push_tokens`
-- Sends via FCM HTTP v1 API (works for both iOS and Android when configured through Firebase)
-- Logs delivery success/failure
-- Returns result to caller
+Preferred approach:
+- add a tiny shared helper like `safeLower(value: unknown): string`
+- use it in render-critical code instead of ad hoc string assumptions
 
-Requires: **FCM service account key** stored as a secret. Without this, push delivery is impossible regardless of code.
+Result: malformed itinerary data won’t crash the page even if titles/categories are missing.
 
-### Step 2: Wire `trip-notifications` to call `send-push`
-Update the `get-due` action (or create a `process-due` action) to:
-- Fetch due notifications
-- Call `send-push` for each
-- Mark as sent
+### 3. Make the “Small detour” UI deterministic
+Even though the repo already shows the corrected icon, I’d harden this anyway so the fallback can’t look corrupted again.
 
-### Step 3: Wire `send-trip-reminders` to also push
-After sending email, also call `send-push` so users get both channels.
+- Replace the inline SVG in `ErrorBoundary` with a standard Lucide icon component (for example `AlertCircle`)
+- Keep the fallback UI minimal and dependency-light
+- Optionally add a tiny error code / “reload app” hint so support can identify boundary hits faster
 
-### Step 4: Add health checks to E2E tests
-Add to `e2e/critical-paths.spec.ts`:
-- `send-push` responds to OPTIONS (not 404)
-- `trip-notifications` with `get-user-notifications` returns valid JSON
-- `push_tokens` table exists and is queryable
+Result: the fallback screen becomes visually reliable and easier to recognize.
 
-## Prerequisite Question
+### 4. Fix the stale published bundle / PWA cache risk
+Because the code and the production visual appear out of sync, address the publishing cache path directly.
 
-Before building the `send-push` function, we need to know: **Do you have Firebase Cloud Messaging (FCM) set up for this app?** Push delivery requires either:
-- An FCM server key (for Android + iOS via Firebase)
-- An APNs auth key (for iOS-only direct delivery)
+- Review the PWA/service worker behavior in:
+  - `src/main.tsx`
+  - `vite.config.ts`
+- Add a one-time stale-cache recovery path for published clients, for example:
+  - force service worker update more aggressively
+  - clear outdated caches on version mismatch
+  - or temporarily disable the PWA worker until the app is stable again
+- Ensure new deployments cannot keep serving an old boundary UI bundle after refresh
 
-Without one of these configured as a secret, the delivery function would have nothing to call. The client-side registration code (`pushService.ts`) already uses Capacitor's push plugin, which typically sits on top of FCM/APNs.
+Result: when a fix is deployed, users actually get the fix.
 
-## Files to create/edit
+### 5. Add regression coverage so this does not repeat silently
+Add targeted tests for the exact failure class.
 
-| File | Change |
-|------|--------|
-| `supabase/functions/send-push/index.ts` | **New** — Push delivery via FCM |
-| `supabase/functions/trip-notifications/index.ts` | Add `process-due` action that calls `send-push` |
-| `e2e/critical-paths.spec.ts` | Add push function health check |
+#### Unit/component coverage
+Render these components with incomplete data:
+- `InlineBookingActions`
+- `RestaurantLink`
+- `TransitModePicker`
+- `TransitGapIndicator`
+- `WeatherForecast`
+- key `EditorialItinerary` activity-row helpers
 
-## Risk
-**Low for the wiring.** The main blocker is whether FCM/APNs credentials exist. Without them, we can build the plumbing but delivery will fail silently.
+Test data should include:
+- missing `title`
+- missing `category`
+- missing `type`
+- missing weather condition
+- missing transport mode/label
 
+#### End-to-end smoke coverage
+Add a critical-path test that:
+- opens a trip with sparse/malformed itinerary items
+- confirms the page renders instead of hitting the boundary
+- verifies `client_errors` receives entries when a forced boundary error is triggered in test mode
+
+#### Publish verification
+After deploy, explicitly verify:
+- published site serves the latest asset hash
+- boundary icon matches current code
+- hard refresh/new session no longer shows old fallback art
+
+## Expected outcome
+
+After this pass:
+- the page should stop crashing on missing string fields
+- React render crashes will finally be visible in your backend logs
+- the “Small detour” screen will render consistently
+- published fixes won’t be masked by stale PWA/cache behavior
+
+## No database schema changes needed
+This should be code-only. The existing `client_errors` table is already in place; it just isn’t being used by `ErrorBoundary`.
