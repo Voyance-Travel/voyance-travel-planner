@@ -1,40 +1,52 @@
 
-The published error is still consistent with a frontend render-time `.toLowerCase()` on a missing value, but the important clue is this: the stack is still coming from the same published bundle `index-SuNP7A_H.js`, and the database has no corresponding `client_errors` rows. That strongly suggests the live site is still serving an older/cached frontend build, so some of the guards already present in the repo are not yet what users are executing.
+I inspected the current code and the new error report. The strongest conclusion is that this is now a two-part issue: one remaining render-time string guard gap in `EditorialItinerary`, plus a stale frontend bundle problem caused by PWA/service-worker caching.
 
-What I confirmed in the code:
-- `ErrorBoundary` is already enhanced to capture `componentStack`, `failing_component`, route, and tag `toLowerCase` crashes.
-- The previously planned guards already exist in:
-  - `EditActivityModal`
-  - `ImportActivitiesModal`
-  - key `EditorialItinerary` spots like `budgetTier`, `d.city`, and `carrier`.
-- The codebase still contains additional unguarded high-risk calls in `EditorialItinerary` that can crash when itinerary data is partially missing:
-  - `newMode.toLowerCase()` in transport-edit fallback logic
-  - `arrivingCity.cityName.toLowerCase()`
-  - `destination.toLowerCase()` in destination safety / entry / transfer helper sections
+What I confirmed
+- The published crash still points to the same old bundle hash: `index-SuNP7A_H.js`.
+- The app still has PWA enabled in `vite.config.ts` via `vite-plugin-pwa`.
+- `src/main.tsx` tries to clear caches manually, but that does not reliably prevent an already-installed service worker from serving stale assets.
+- `client_errors` is receiving other frontend inserts, so logging works in general; the absence of recent render-crash rows points to users still executing an older cached build.
+- Several previously targeted `EditorialItinerary` guards are already present.
+- One additional unguarded high-risk path still exists in `EditorialItinerary.tsx`:
+  - `category.toLowerCase()`
+  - `title.toLowerCase()`
+  inside the cost-estimation helper around lines `1036-1043`
 
-Most likely cause
-1. The published site is still on a stale cached bundle.
-2. If publishing alone does not clear it, there are still a few remaining unguarded `EditorialItinerary` calls that can produce the exact same runtime error on incomplete trip data.
+Plan
+1. Harden the remaining render-time gap in `EditorialItinerary`
+   - Replace direct `category.toLowerCase()` and `title.toLowerCase()` with defensive normalization.
+   - Prefer the existing `safeLower()` helper so the pattern is consistent with the project’s defensive rendering strategy.
 
-Implementation plan
-1. Harden the remaining high-risk `EditorialItinerary` calls:
-   - Guard all `newMode.toLowerCase()` usages with `(newMode || '').toLowerCase()`
-   - Guard `arrivingCity.cityName` with `(arrivingCity.cityName || '').toLowerCase()`
-   - Guard all `destination.toLowerCase()` usages with `(destination || '').toLowerCase()`
-2. Add lightweight breadcrumb metadata around the key `EditorialItinerary` helper blocks that still do string normalization so future crashes tell us which section failed.
-3. Verify the client logging path is triggered for render crashes on published routes by checking that `client_errors` receives rows after deployment.
-4. Publish/update the frontend so the new bundle replaces `index-SuNP7A_H.js` in production and clears the stale cached path.
+2. Remove the stale-bundle source for frontend deploys
+   - Disable the PWA plugin in `vite.config.ts` for now, since this app is actively suffering from stale published bundles.
+   - Keep the app installability/offline discussion separate; for this bug, reliability matters more than caching.
+
+3. Clean up startup behavior in `src/main.tsx`
+   - Remove the ad-hoc service worker update / cache purge block once PWA is disabled.
+   - If desired, replace it with a small unregister routine for existing service workers on load so old clients stop using stale caches.
+
+4. Preserve diagnostics
+   - Keep `ErrorBoundary`, `GlobalErrorHandler`, and `useErrorTracker` as-is.
+   - Optionally add one breadcrumb field to the itinerary render helper if you want future `client_errors` rows to identify the failing itinerary section more precisely.
 
 Files to update
 - `src/components/itinerary/EditorialItinerary.tsx`
-- possibly `src/utils/logClientError.ts` only if we want one extra breadcrumb field normalization, but most logging is already in place
+- `vite.config.ts`
+- `src/main.tsx`
+- optionally `src/utils/logClientError.ts`
 
 Expected result
-- The remaining realistic `.toLowerCase()` crash points in the itinerary renderer are removed.
-- The next published build should either eliminate the white-screen crash or give much better diagnostics tied to the exact render section.
-- If the live site still reports `index-SuNP7A_H.js` after publish, that would confirm a cache/service-worker rollout issue rather than just missing null guards.
+- The remaining realistic `.toLowerCase()` render crash in the itinerary renderer is removed.
+- New frontend publishes should stop serving the stale `index-SuNP7A_H.js` bundle.
+- Future crashes, if any, should come from the current build and be much easier to diagnose.
 
-Technical notes
-- I would focus on `EditorialItinerary` first rather than broad repo-wide cleanup, because the current stack shape and prior fixes point there.
-- I would not change backend/database schema for this issue.
-- The current absence of `client_errors` records means logging is not yet proving useful in production because the newer frontend bundle is probably not the one executing.
+Technical details
+- Current confirmed unguarded code:
+  - `src/components/itinerary/EditorialItinerary.tsx:1036-1043`
+- Current confirmed PWA source:
+  - `vite.config.ts:22-61`
+- Current manual cache logic:
+  - `src/main.tsx:72-93`
+
+Implementation note
+- I would treat disabling PWA/service-worker caching as part of this fix, not as a separate cleanup. The repeated old asset hash is too consistent to ignore.
