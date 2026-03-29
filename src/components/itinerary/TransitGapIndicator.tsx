@@ -136,7 +136,7 @@ export function computeGapMinutes(
 }
 
 function getModeIcon(mode: string) {
-  const m = mode.toLowerCase();
+  const m = (mode || '').toLowerCase();
   if (m.includes('taxi') || m.includes('rideshare') || m.includes('car') || m.includes('uber'))
     return <Car className="h-4 w-4" />;
   if (m.includes('train') || m.includes('metro') || m.includes('subway'))
@@ -152,7 +152,7 @@ function getModeIcon(mode: string) {
 
 function getGapTransportIcon(method?: string, gapMinutes?: number) {
   if (method) {
-    const m = method.toLowerCase();
+    const m = (method || '').toLowerCase();
     if (m.includes('metro') || m.includes('train') || m.includes('subway')) return <Train className="h-3.5 w-3.5" />;
     if (m.includes('taxi') || m.includes('uber') || m.includes('car') || m.includes('cab') || m.includes('driv')) return <Car className="h-3.5 w-3.5" />;
     if (m.includes('bus') || m.includes('shuttle')) return <Bus className="h-3.5 w-3.5" />;
@@ -165,7 +165,7 @@ function getGapTransportIcon(method?: string, gapMinutes?: number) {
 
 function getGapTransportLabel(method?: string, gapMinutes?: number): string {
   if (method) {
-    const m = method.toLowerCase();
+    const m = (method || '').toLowerCase();
     if (m.includes('metro') || m.includes('subway')) return 'Metro';
     if (m.includes('train')) return 'Train';
     if (m.includes('taxi') || m.includes('cab')) return 'Taxi';
