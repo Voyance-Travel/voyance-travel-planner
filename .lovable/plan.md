@@ -1,109 +1,48 @@
 
 
-# Phase 4: Extract Prompt Construction
+# Phase 4 Cleanup: Remove Dead Imports & Simplify
 
-## Goal
+## What needs to happen
 
-Extract the ~930 lines of prompt assembly (lines 317–1260) from `action-generate-day.ts` into `pipeline/compile-prompt.ts`. This is the largest remaining block in the monolith. After this, the main file becomes a thin orchestrator: compile facts → compile schema → compile prompt → AI call → parse → enrich → validate/repair → persist → respond.
+After the prompt extraction in Phase 4, `action-generate-day.ts` has ~15 import blocks that are now completely unused — their functions moved into `compile-prompt.ts`. Cleaning these up removes noise and makes the remaining orchestrator easier to read.
 
-## What lives in these lines today
+## Dead imports to remove (lines 50–216)
 
-| Block | Lines | Description |
-|-------|-------|-------------|
-| Preference context | 317-333 | `getLearnedPreferences`, `getUserPreferences`, `buildPreferenceContext` |
-| Trip intents | 335-348 | Query `trip_intents` table |
-| Must-do parsing & scheduling | 350-450 | `parseMustDoInput`, `scheduleMustDos`, prompt construction |
-| Interest categories | 452-461 | Category label mapping |
-| Generation rules | 463-467 | `formatGenerationRules` |
-| Visitor type + pacing | 469-478 | Static prompt blocks |
-| Must-haves + pre-booked | 480-512 | Checklist and commitment analysis |
-| Additional notes | 518-543 | Trip purpose injection |
-| Timing instructions | 570-694 | First day / last day / regular day meal policy + structure |
-| Transition day override | 700-725 | `buildTransitionDayPrompt` |
-| Profile + archetype | 727-950 | `loadTravelerProfile`, generation context read, budget, blended traits, archetype guidance |
-| Voyance Picks | 952-973 | DB query + prompt |
-| Collaborator attribution | 975-1053 | DB query + prompt |
-| System prompt assembly | 1055-1126 | Final concatenation |
-| User prompt assembly | 1128-1260 | User-facing prompt with budget, meal rules, skip list, restaurant pool |
+These entire import blocks are unused in the body of `action-generate-day.ts`:
 
-All of this is prompt string construction. Some parts need DB queries (trip intents, Voyance Picks, collaborators), making the function async.
+| Import block | From module | Why dead |
+|---|---|---|
+| `buildSkipListPrompt`, `deriveBudgetIntent`, `buildBudgetConstraintsBlock`, `formatGenerationRules`, `BudgetIntent` | `budget-constraints.ts` | Moved to compile-prompt |
+| `deriveForcedSlots`, `deriveScheduleConstraints`, `reconcileGroupPreferences`, `validateDayPersonalization`, `buildForcedSlotsPrompt`, `buildScheduleConstraintsPrompt`, `buildGroupReconciliationPrompt` + types | `personalization-enforcer.ts` | Moved to compile-prompt |
+| `calculateTruthAnchorConfidence`, `needsFallback`, `verifyFromGooglePlaces`, `verifyFromCache`, `generateFallback`, `buildTruthAnchorPrompt`, `validateTruthAnchors`, `validateOpeningHours` + types | `truth-anchors.ts` | Moved to compile-prompt |
+| `getCuratedZones`, `assignToZone`, `determineDayAnchor`, etc. + types | `geographic-coherence.ts` | Moved to compile-prompt |
+| `buildDayPrompt`, `buildPersonaManuscript`, `extractFlightData`, `extractHotelData`, `buildTravelerDNA`, `buildTransitionDayPrompt`, `buildFlightIntelligencePrompt` + types | `prompt-library.ts` | Moved to compile-prompt |
+| `deriveMealPolicy`, `buildMealRequirementsPrompt` + types (`MealPolicyInput`, `RequiredMeal`) | `meal-policy.ts` | Moved to compile-prompt (keep `MealPolicy` type if used) |
+| `buildDietaryEnforcementPrompt`, `expandDietaryAvoidList`, `checkDietaryViolations`, `getMaxDietarySeverity` + type | `dietary-rules.ts` | Moved to compile-prompt |
+| `getTripDurationConfig`, `calculateDayEnergies`, `buildTripDurationPrompt`, `analyzeChildrenAges`, `buildChildrenAgesPrompt` | `trip-duration-rules.ts` | Moved to compile-prompt |
+| `buildReservationUrgencyPrompt` | `reservation-urgency.ts` | Moved to compile-prompt |
+| `calculateJetLagImpact`, `buildJetLagPrompt`, `resolveTimezone` | `jet-lag-calculator.ts` | Moved to compile-prompt |
+| `buildWeatherBackupPrompt`, `determineSeason` | `weather-backup.ts` | Moved to compile-prompt |
+| `buildDailyEstimatesPrompt` | `daily-estimates.ts` | Moved to compile-prompt |
+| `blendGroupArchetypes`, `blendTraitScores`, `TravelerArchetype` | `group-archetype-blending.ts` | Moved to compile-prompt |
+| `analyzePreBookedCommitments`, `PreBookedCommitment` | `pre-booked-commitments.ts` | Moved to compile-prompt |
+| `buildTripTypePromptSection`, `getTripTypeModifier`, `getTripTypeInteraction` | `trip-type-modifiers.ts` | Moved to compile-prompt |
+| `loadTravelerProfile` | `profile-loader.ts` | Moved to compile-prompt (keep type aliases `UnifiedTravelerProfile` etc. — still used downstream) |
+| `buildDestinationEssentialsPrompt`, `buildDestinationEssentialsPromptWithDB`, `getDestinationIntelligence`, `hasCuratedEssentials` | `destination-essentials.ts` | Moved to compile-prompt |
+| `getUserPreferences`, `getLearnedPreferences`, `buildPreferenceContext` | `preference-context.ts` | Moved to compile-prompt |
+| Most of `archetype-data.ts` exports | `archetype-data.ts` | Moved to compile-prompt |
 
-## New file: `pipeline/compile-prompt.ts`
+## Additional cleanup
 
-Single exported function:
+1. **Simplify `flightContext` variable** — Remove the `flightContext2` intermediary (lines 333-335). Just assign `flightContext = prompt.flightContext` directly.
 
-```typescript
-export async function compilePrompt(
-  supabase: any,
-  userId: string,
-  params: CompilePromptInput,
-): Promise<CompiledPrompt>
-```
+2. **Check for redundant schema compilation** — The previous summary mentioned a redundant `compileDaySchema` call around lines 552-565 that may have been left behind. Verify and remove if present.
 
-**Input** (`CompilePromptInput`): Bundles the data already available from `compileDayFacts` + `compileDaySchema` plus raw request params (tripId, dayNumber, travelers, budgetTier, preferences, previousDayActivities, etc.).
+3. **Update `.lovable/plan.md`** — Mark Phase 4 as completed and outline remaining phases.
 
-**Output** (`CompiledPrompt`):
-```typescript
-interface CompiledPrompt {
-  systemPrompt: string;
-  userPrompt: string;
-  // Extracted side-effects needed by post-processing
-  mustDoEventItems: ScheduledMustDo[];
-  dayMealPolicy: MealPolicy;
-  lockedActivities: LockedActivity[];
-  allUserIdsForAttribution: string[];
-  actualDailyBudgetPerPerson: number | null;
-  profile: UnifiedTravelerProfile;
-  effectiveBudgetTier: string;
-  isSmartFinish: boolean;
-}
-```
+## Scope
 
-The function does all DB queries (trip intents, Voyance Picks, collaborators, budget, generation context) and string assembly internally. Returns the final prompt pair plus metadata needed by downstream post-processing.
-
-## Changes to `action-generate-day.ts`
-
-Replace lines ~317–1260 with:
-
-```typescript
-const prompt = await compilePrompt(supabase, userId, {
-  facts, schema, params, metadata, /* ... */
-});
-const { systemPrompt, userPrompt, mustDoEventItems, dayMealPolicy, ... } = prompt;
-```
-
-Net reduction: ~900 lines.
-
-## Changes to `pipeline/types.ts`
-
-Add `CompilePromptInput` and `CompiledPrompt` interfaces.
-
-## What does NOT change
-
-- `prompt-library.ts` — still called by `compilePrompt`, not modified
-- `meal-policy.ts` — still called by `compilePrompt`, not modified
-- `archetype-data.ts` — still called by `compilePrompt`, not modified
-- All other pipeline modules — untouched
-- Post-processing blocks (enrichment, opening hours, must-do backfill, persist, etc.) — stay in `action-generate-day.ts` for now
-
-## Execution order
-
-1. Add `CompilePromptInput` and `CompiledPrompt` types to `pipeline/types.ts`
-2. Create `pipeline/compile-prompt.ts` — extract all prompt assembly logic
-3. Wire into `action-generate-day.ts` — replace ~900 lines with single call
-4. Update `.lovable/plan.md`
-
-## Risk
-
-**Medium-low.** Pure extraction of string concatenation + DB reads. The prompt strings must be identical. Any difference surfaces immediately as changed AI behavior. The side-effect data (mustDoEventItems, profile, etc.) that post-processing depends on is returned explicitly in `CompiledPrompt`.
-
-## After Phase 4
-
-The monolith drops from ~2,900 to ~2,000 lines. Remaining blocks are:
-- AI call + retry (~200 lines) — could become `pipeline/ai-call.ts`
-- Parse + normalize (~80 lines)
-- Enrichment + opening hours (~300 lines) — I/O, stays or becomes `pipeline/enrich.ts`
-- Must-do backfill + transition fallback (~310 lines) — deterministic, could fold into repair
-- DB persistence (~230 lines) — could become `pipeline/persist-day.ts`
-- Post-generation guarantees (~410 lines) — most should fold into repair
+- 1 file modified: `action-generate-day.ts` (remove ~80 lines of dead imports, simplify 3 lines of flightContext)
+- 1 file updated: `.lovable/plan.md`
+- No behavioral changes — pure dead code removal
 
