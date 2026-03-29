@@ -1499,13 +1499,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
     // This ensures AI knows to skip those time slots, saving money and guaranteeing locks work
 
-    // Strip phantom hotel activities if no hotel is booked
-    {
-      const hasHotel = !!(flightContext as any).hotelName;
-      if (!hasHotel) {
-        stripPhantomHotelActivities(generatedDay, false);
-      }
-    }
+    // Phantom hotel stripping is now handled by pipeline/validate-day + repair-day
 
     // Normalize activities: ensure title exists, add IDs and enhancements
     let normalizedActivities = generatedDay.activities.map((act: { 
