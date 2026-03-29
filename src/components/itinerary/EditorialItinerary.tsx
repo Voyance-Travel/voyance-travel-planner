@@ -9306,7 +9306,7 @@ function DayCard({
       </div>
 
       {/* Activities */}
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
          {effectiveExpanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
