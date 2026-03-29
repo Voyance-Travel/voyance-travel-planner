@@ -250,10 +250,7 @@ export async function handleGenerateDay(
     hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity,
     restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants, generationLogId: paramGenerationLogId } = params;
   
-  // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
-  // This is the critical fix - frontend calls often omit userId, but auth token is always present
-  const userId = authResult.userId;
-  
+  // userId comes from the function parameter (authenticated user ID)
   // Security guard: if request body includes userId that differs from auth token, log and reject
   if (params.userId && params.userId !== userId) {
     console.warn(`[generate-day] userId mismatch! auth=${userId}, params=${params.userId} - rejecting`);
