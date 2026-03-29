@@ -1874,6 +1874,11 @@ export function EditorialItinerary({
               return true;
             }
             const t = (act.title || '').toLowerCase();
+            const desc = (act.description || '').toLowerCase();
+            // Preserve AI-generated airport procedure cards (security, check-in, boarding)
+            const isAirportProcedure = (t.includes('departure') || t.includes('airport')) &&
+              (desc.includes('security') || desc.includes('check-in') || desc.includes('boarding') || desc.includes('check in'));
+            if (isAirportProcedure) return true;
             // Token-based dedup: "transfer to" + any hub keyword
             const hasHubToken = HUB_TOKENS.some(h => t.includes(h));
             const isTransferActivity = (t.includes('transfer to') || t.includes('transit to')) && hasHubToken;
