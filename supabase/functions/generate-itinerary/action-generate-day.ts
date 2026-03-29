@@ -944,6 +944,7 @@ export async function handleGenerateDay(
     // Now pre-fetches real venues from verified_venues table so fallbacks
     // use REAL restaurant names instead of generic "dinner spot" text.
     // ====================================================================
+    let mealGuardResult: { alreadyCompliant: boolean; activities: any[]; injectedMeals: string[] } | null = null;
     if (dayMealPolicy && dayMealPolicy.requiredMeals.length > 0) {
       // Build meal fallback venues from restaurant pool first, then verified_venues
       let mealFallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
@@ -995,7 +996,7 @@ export async function handleGenerateDay(
 
       // Chain restaurant filtering is now handled by pipeline/validate-day + repair-day
 
-      const mealGuardResult = enforceRequiredMealsFinalGuard(
+      mealGuardResult = enforceRequiredMealsFinalGuard(
         generatedDay.activities || [],
         dayMealPolicy.requiredMeals,
         dayNumber,
@@ -1040,8 +1041,8 @@ export async function handleGenerateDay(
       meals: {
         required: dayMealPolicy?.requiredMeals || [],
         found: [...new Set(foundMeals)],
-        guardFired: !!(dayMealPolicy && dayMealPolicy.requiredMeals.length > 0 && typeof mealGuardResult !== 'undefined' && !mealGuardResult?.alreadyCompliant),
-        injected: (typeof mealGuardResult !== 'undefined' && mealGuardResult?.injectedMeals) || [],
+        guardFired: !!(mealGuardResult && !mealGuardResult.alreadyCompliant),
+        injected: mealGuardResult?.injectedMeals || [],
       },
       transport: {
         isTransitionDay: resolvedIsTransitionDay,
