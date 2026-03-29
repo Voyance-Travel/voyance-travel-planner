@@ -647,7 +647,7 @@ export function validateItineraryPersonalization(
 /**
  * Extract validation context from user preferences
  */
-function buildValidationContext(
+export function buildValidationContext(
   prefs: Record<string, any>,
   budgetIntent: BudgetIntent | null,
   traitScores: Record<string, number>,
