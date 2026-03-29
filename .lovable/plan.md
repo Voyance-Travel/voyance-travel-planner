@@ -1,45 +1,54 @@
 
 
-# Fix Missing Travel Buffers Warning
+# Fix: Ensure 3 Meals Per Day (Except Arrival/Departure)
 
 ## Problem
-The "X activities have no travel buffer" warning counts every consecutive activity pair with zero/negative gap, but ignores that **transport activities ARE the travel buffer**. When Activity A → Transport → Activity B exists, both the A→Transport and Transport→B gaps are counted as "missing buffer" even though transit is present.
+
+When no flight data is provided, the meal policy for Day 1 defaults to `['dinner']` only (assuming a conservative afternoon arrival). This means breakfast and lunch are skipped on Day 1. The user wants all standard days — including Day 1 without flight data — to have breakfast, lunch, and dinner.
+
+Data confirms: Vienna trip `c28f...` Day 1 has **zero dining activities** out of 7 total activities. The meal guard should catch this but the policy itself only requires dinner, so nothing is flagged as missing.
 
 ## Root Cause
-In `EditorialItinerary.tsx` (lines 9350-9363), the `zeroGapCount` loop iterates over all consecutive activity pairs without skipping transport entries. Since transport activities (category `"transport"`) represent the travel buffer itself, pairs involving them should be excluded from the count.
+
+In `supabase/functions/generate-itinerary/meal-policy.ts`, lines 148-150:
+
+```typescript
+// No arrival time — conservative (assume afternoon arrival)
+return meal('midday_arrival', ['dinner'], usableHours,
+  'Arrival time unknown — conservatively planning dinner only.');
+```
+
+When `isFirstDay` is true but no `arrivalTime24` is provided, only dinner is required. Similarly, when `isLastDay` is true with no departure time, only breakfast is required (line 184).
 
 ## Changes
 
-### File: `src/components/itinerary/EditorialItinerary.tsx` (~line 9352)
+### File: `supabase/functions/generate-itinerary/meal-policy.ts`
 
-Update the zero-gap counting loop to skip pairs where either activity is a transport entry:
+**Change 1 — Day 1 without flight data (line 148-150):**
+When no arrival time is provided, treat it as a morning arrival (full day) instead of assuming afternoon:
 
 ```typescript
-const acts = day.activities || [];
-let zeroGapCount = 0;
-for (let i = 0; i < acts.length - 1; i++) {
-  // Transport entries ARE the travel buffer — skip pairs involving them
-  const catA = ((acts[i] as any).category || '').toLowerCase();
-  const catB = ((acts[i + 1] as any).category || '').toLowerCase();
-  if (catA === 'transport' || catB === 'transport') continue;
-
-  const gap = computeGapMinutes(
-    acts[i].endTime,
-    acts[i].startTime || (acts[i] as any).time,
-    acts[i].duration,
-    acts[i + 1].startTime || (acts[i + 1] as any).time,
-  );
-  if (gap !== null && gap <= 0) {
-    const sameLocation = !!(acts[i].location?.name && acts[i + 1].location?.name && acts[i].location.name === acts[i + 1].location.name);
-    if (!sameLocation) zeroGapCount++;
-  }
-}
+// No arrival time — assume full day available (morning start)
+return meal('morning_arrival', ['breakfast', 'lunch', 'dinner'], usableHours,
+  'Arrival time unknown — planning a full day with all 3 meals. Add flight details to adjust if arriving later.');
 ```
 
-## Issue B: 120-minute Travel Estimate
-The "Travel to Ganko Yakiniku — 120 min" text is AI-generated content in the activity title, not computed by any backend distance function. The auto-route optimizer uses coordinates for reordering but doesn't generate duration text. The transit-estimate edge function (which does compute durations correctly) is only called by the Refresh Day tool, not during generation. This is an AI hallucination in the prompt response — fixing it would require prompt changes, which is out of scope per the user's constraints.
+**Change 2 — Last day without departure time (line 183-185):**
+When no departure time is provided, plan breakfast + lunch instead of breakfast only:
+
+```typescript
+// No departure time — plan morning + lunch before checkout
+return meal('midday_departure', ['breakfast', 'lunch'], usableHours,
+  'Departure time unknown — planning breakfast + lunch. Add flight details for better planning.');
+```
+
+## Why This Is Safe
+
+- If the user later adds flight data, the meal policy will recalculate with the actual times
+- The meal guard + validation pipeline still enforces whatever the policy says
+- Mid-trip days (the main concern) are already correct — they get `full_exploration` with all 3 meals
+- This only changes the default when flight info is missing, which should err on the side of **more meals, not fewer**
 
 ## Files to modify
-- `src/components/itinerary/EditorialItinerary.tsx` — skip transport activities in zero-gap count
+- `supabase/functions/generate-itinerary/meal-policy.ts` — 2 small edits to default meal requirements
 
-One targeted edit.
