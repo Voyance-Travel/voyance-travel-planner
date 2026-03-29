@@ -567,19 +567,6 @@ export async function prepareContext(supabase: any, tripId: string, userId?: str
 // STAGE 2: AI GENERATION WITH BATCH PROCESSING, VALIDATION & RETRY
 // =============================================================================
 
-// Day validation + deduplication extracted to ./day-validation.ts
-import {
-  validateGeneratedDay,
-  deduplicateActivities,
-  sanitizeActivityTitles,
-  detectMealSlots,
-  enforceRequiredMealsFinalGuard,
-  isChainRestaurant,
-  filterChainRestaurants,
-  type DayValidationResult,
-  type StrictDayMinimal,
-} from './day-validation.ts';
-
 
 
 // Generate a single day with retry logic
