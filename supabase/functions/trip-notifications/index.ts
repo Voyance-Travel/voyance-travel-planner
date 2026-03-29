@@ -335,6 +335,50 @@ serve(async (req) => {
       );
     }
 
+    if (action === 'process-due') {
+      // Fetch due notifications, send push for each, mark as sent
+      const dueNotifications = await getDueNotifications(supabase);
+      console.log(`[trip-notifications] Processing ${dueNotifications.length} due notifications`);
+
+      const results: Array<{ notificationId: string; pushResult: unknown }> = [];
+
+      for (const { tripId, notification } of dueNotifications) {
+        try {
+          // Call send-push edge function
+          const pushRes = await fetch(
+            `${supabaseUrl}/functions/v1/send-push`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseKey}`,
+              },
+              body: JSON.stringify({
+                userId: notification.userId,
+                title: notification.title,
+                body: notification.message,
+                data: { tripId, activityId: notification.activityId, type: notification.type },
+              }),
+            }
+          );
+
+          const pushResult = await pushRes.json();
+          results.push({ notificationId: notification.id, pushResult });
+
+          // Mark as sent regardless of push outcome (notification was processed)
+          await markNotificationSent(supabase, tripId, notification.id);
+        } catch (err) {
+          console.error(`[trip-notifications] Failed to process notification ${notification.id}:`, err);
+          results.push({ notificationId: notification.id, pushResult: { error: String(err) } });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, processed: results.length, results }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (action === 'mark-sent') {
       const { tripId, notificationId } = params;
       
