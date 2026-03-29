@@ -947,7 +947,7 @@ function estimateCostByCategory(
     estimate = { base: 25, budgetMod: { budget: 0.6, moderate: 1, luxury: 1.5, splurge: 2.0 } };
   }
   
-  const budgetMultiplier = estimate.budgetMod[budgetTier.toLowerCase()] || 1;
+  const budgetMultiplier = estimate.budgetMod[(budgetTier || 'moderate').toLowerCase()] || 1;
   const baseCost = estimate.base * budgetMultiplier;
   
   // Add 20% for tip/tax on dining categories
@@ -1752,7 +1752,7 @@ export function EditorialItinerary({
     // === Final departure day: inject return flight/train card on last day ===
     // Multi-city guard: only inject on the last day if it belongs to the final city
     const isLastCity = !allHotels || allHotels.length <= 1 ||
-      (d.city && allHotels.length > 0 && d.city.toLowerCase() === allHotels[allHotels.length - 1]?.cityName?.toLowerCase());
+      (d.city && allHotels.length > 0 && (d.city || '').toLowerCase() === (allHotels[allHotels.length - 1]?.cityName || '').toLowerCase());
     if (dayIndex === rawDays.length - 1 && !d.isDepartureDay && !d.isTransitionDay && isLastCity && flightSelection) {
       if (!updatedActivities.some(a => (a as any).__syntheticFinalDeparture)) {
         // Find the return leg: prefer isDestinationDeparture-marked leg, then flightSelection.return, then last leg
@@ -1778,7 +1778,7 @@ export function EditorialItinerary({
           // Detect transport type: prefer explicit transportMode, then heuristic
           const explicitMode = (flightSelection as any).transportMode as string | undefined;
           const tType: string = explicitMode
-            || (flightNum ? 'flight' : (carrier && !carrier.toLowerCase().includes('train') ? 'flight' : 'train'));
+            || (flightNum ? 'flight' : (carrier && !(carrier || '').toLowerCase().includes('train') ? 'flight' : 'train'));
           const transportLabel = tType === 'rideshare' ? 'Rideshare'
             : tType.charAt(0).toUpperCase() + tType.slice(1);
           const terminalWord = tType === 'flight' ? 'airport'
@@ -2531,7 +2531,7 @@ export function EditorialItinerary({
                 const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
                 if (destMatch) {
                   const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
-                  const newTitle = `${mLabels[newMode.toLowerCase()] || newMode} to ${destMatch[1]}`;
+                  const newTitle = `${mLabels[(newMode || '').toLowerCase()] || newMode} to ${destMatch[1]}`;
                   updatedAct.title = newTitle;
                   if (updatedAct.location) updatedAct.location = { ...updatedAct.location, name: newTitle };
                 }
@@ -2541,7 +2541,7 @@ export function EditorialItinerary({
               if (act.id === activityId && act.transportation) {
                 const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
                 const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
-                const newTitle = destMatch ? `${mLabels[newMode.toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
+                const newTitle = destMatch ? `${mLabels[(newMode || '').toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
                 return {
                   ...act,
                   title: newTitle,
@@ -2568,7 +2568,7 @@ export function EditorialItinerary({
               if (act.id !== activityId || !act.transportation) return act;
               const mLabels: Record<string, string> = { walking: 'Walk', walk: 'Walk', metro: 'Metro', bus: 'Bus', uber: 'Rideshare', taxi: 'Taxi', train: 'Train', subway: 'Metro', rideshare: 'Rideshare', car: 'Drive' };
               const destMatch = (act.title || '').match(/^.+?\sto\s(.+)$/i);
-              const newTitle = destMatch ? `${mLabels[newMode.toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
+              const newTitle = destMatch ? `${mLabels[(newMode || '').toLowerCase()] || newMode} to ${destMatch[1]}` : act.title;
               return {
                 ...act,
                 title: newTitle,
