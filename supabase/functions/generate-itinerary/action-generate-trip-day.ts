@@ -121,13 +121,45 @@ export async function handleGenerateTripDay(
     );
   }
 
-  console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'})`);
-
-  // ── PERFORMANCE TIMER ──
+  // Create timer early so we can finalize in the catch block
   const timer = new GenerationTimer(tripId, supabase);
   if (generationLogId) {
-    await timer.resume(generationLogId, destination || '', totalDays, travelers || 1);
+    try {
+      await timer.resume(generationLogId, destination || '', totalDays, travelers || 1);
+    } catch (e) {
+      console.warn('[generate-trip-day] Timer resume failed (non-blocking):', e);
+    }
   }
+
+  try {
+    return await _handleGenerateTripDayInner(supabase, userId, params, timer);
+  } catch (fatalErr) {
+    console.error(`[generate-trip-day] FATAL error on day ${dayNumber}:`, fatalErr);
+    timer.addError(`day_${dayNumber}_fatal`, String(fatalErr));
+    // Only finalize if this is the last day or the error is unrecoverable
+    if (dayNumber >= totalDays) {
+      await timer.finalize('failed');
+    } else {
+      // Update progress with error info but don't finalize — next day may succeed
+      await timer.updateProgress(`day_${dayNumber}_fatal_error`, Math.round((dayNumber / totalDays) * 100));
+    }
+    return new Response(
+      JSON.stringify({ error: String(fatalErr), status: 'failed', dayNumber }),
+      { status: 500, headers: jsonHeaders }
+    );
+  }
+}
+
+async function _handleGenerateTripDayInner(
+  supabase: any,
+  userId: string,
+  params: Record<string, any>,
+  timer: GenerationTimer,
+): Promise<Response> {
+  const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip, generationLogId } = params;
+
+  console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'})`);
+
   timer.startPhase(`day_${dayNumber}_total`);
 
   // Guard: check trip is still in "generating" state AND run ID matches

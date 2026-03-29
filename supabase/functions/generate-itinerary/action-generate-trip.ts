@@ -57,6 +57,43 @@ export async function handleGenerateTrip(
   }
 
   // ── PERFORMANCE TIMER ──
+  // Clean up stale in_progress log rows before creating a new one
+  try {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: staleRows } = await supabase
+      .from('generation_logs')
+      .select('id')
+      .eq('trip_id', tripId)
+      .eq('status', 'in_progress')
+      .lt('created_at', fiveMinAgo);
+    
+    if (staleRows && staleRows.length > 0) {
+      const staleIds = staleRows.map((r: any) => r.id);
+      await supabase
+        .from('generation_logs')
+        .update({ status: 'failed', current_phase: 'stale_cleanup', progress_pct: 0 })
+        .in('id', staleIds);
+      console.log(`[generate-trip] Cleaned up ${staleIds.length} stale generation_logs rows`);
+    }
+    // Also clean up any 'started' rows older than 5 minutes (never progressed)
+    const { data: stuckStarted } = await supabase
+      .from('generation_logs')
+      .select('id')
+      .eq('trip_id', tripId)
+      .eq('status', 'started')
+      .lt('created_at', fiveMinAgo);
+    if (stuckStarted && stuckStarted.length > 0) {
+      const stuckIds = stuckStarted.map((r: any) => r.id);
+      await supabase
+        .from('generation_logs')
+        .update({ status: 'failed', current_phase: 'stale_cleanup', progress_pct: 0 })
+        .in('id', stuckIds);
+      console.log(`[generate-trip] Cleaned up ${stuckIds.length} stuck 'started' generation_logs rows`);
+    }
+  } catch (cleanupErr) {
+    console.warn('[generate-trip] Stale log cleanup failed (non-blocking):', cleanupErr);
+  }
+
   const timer = new GenerationTimer(tripId, supabase);
 
   // Guard: prevent double generation if already in progress (not a resume)
