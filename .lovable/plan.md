@@ -1,75 +1,75 @@
 
 
-## Phase 2, Step 3: Extract generate-day Handler — Safe Plan
+## Phase 2, Step 3: Extract generate-day Handler — Implementation Plan
 
-### What We're Moving
+### Summary
+Move the `generate-day`/`regenerate-day` handler (lines 6677–11110, ~4,433 lines) from `index.ts` into `action-generate-day.ts`. Fix shared dependency issues first, then extract.
 
-The `generate-day`/`regenerate-day` handler block: **lines 6677–11110** (~4,433 lines) from `index.ts` into a new `action-generate-day.ts`.
+### Pre-Move Fixes (in index.ts)
 
-### Pre-Move: Fix Scoping Issues
+1. **Move `triggerNextJourneyLeg` out of the generate-day block** (lines 6726–6824)
+   - It's defined inside generate-day but called by `finalSaveItinerary` at line 3460
+   - Move it to just above `finalSaveItinerary` (around line 3400) so both generate-full and generate-day can access it
+   - The copy in `action-save-itinerary.ts` and `action-generate-trip-day.ts` already exists — index.ts just needs its own accessible copy
 
-**`triggerNextJourneyLeg` (lines 6730–6824)** is defined INSIDE the generate-day block but called by `finalSaveItinerary` (line 3460) which is in the generate-full pipeline. This is a scoping bug — it works via function hoisting but is logically in the wrong place.
+2. **Move `validateItineraryPersonalization` + `buildValidationContext` to `generation-types.ts`**
+   - Lines 355–613 in index.ts → append to generation-types.ts
+   - Both generate-full (line 5705) and generate-day (line 10087) use them
+   - They depend on `checkDietaryViolations` and `isRecurringEvent` — add those as imports to generation-types.ts
+   - Update index.ts to import from generation-types.ts instead
 
-- Move `triggerNextJourneyLeg` OUT of the generate-day block and into a shared location (keep it in `index.ts` above `finalSaveItinerary`, or put it in `generation-utils.ts`)
-- It is NOT called by generate-day itself — only by generate-full's `finalSaveItinerary`
-
-### Shared Dependencies (Stay in index.ts)
-
-These inline functions are used by BOTH generate-full and generate-day — they stay in `index.ts`:
-
-| Function | Lines | Used By |
-|---|---|---|
-| `validateItineraryPersonalization` | 355–578 | generate-full (5705), generate-day (10087) |
-| `buildValidationContext` | 583–613 | generate-full (5698), generate-day (10072) |
-| `corsHeaders` | 340–345 | Everything |
-| `verifyTripAccess` | 3747–3798 | generate-full, generate-day (6701) |
-| `validateAuth` | 3719–3735 | Main routing |
-| `checkRateLimit` | 649–663 | Main routing |
-| `STRICT_ITINERARY_TOOL` | 669–832 | DEAD CODE (unused) — can delete |
-
-**Resolution**: Export `validateItineraryPersonalization`, `buildValidationContext`, `corsHeaders`, and `verifyTripAccess` so the new action file can import them. Two options:
-1. Move them to `generation-utils.ts` or `action-types.ts` (cleanest)
-2. Keep in `index.ts` and re-export (quick but less clean)
-
-**Recommended**: Move `validateItineraryPersonalization` + `buildValidationContext` into `generation-types.ts` (they use types already defined there). `corsHeaders` and `verifyTripAccess` are already duplicated in `action-types.ts` — use those imports.
+3. **Delete `STRICT_ITINERARY_TOOL`** (lines 669–832) — dead code, never referenced
 
 ### The Extraction
 
-**New file: `action-generate-day.ts`**
-- Export `handleGenerateDay(supabase, userId, params): Promise<Response>`
-- Contains all logic from lines 6677–11110 (minus triggerNextJourneyLeg)
-- Imports from existing modules: `sanitization.ts`, `day-validation.ts`, `meal-policy.ts`, `prompt-library.ts`, `truth-anchors.ts`, `geographic-coherence.ts`, `personalization-enforcer.ts`, `flight-hotel-context.ts`, `preference-context.ts`, `venue-enrichment.ts`, `generation-types.ts`, `generation-utils.ts`, etc.
-- Reads env vars directly via `Deno.env.get()` (same pattern as current code)
-- Imports `corsHeaders` from `action-types.ts`
-- Imports `verifyTripAccess` from `action-types.ts`
-- Imports `validateItineraryPersonalization`, `buildValidationContext` from `generation-types.ts`
+4. **Create `action-generate-day.ts`**
+   - Export `handleGenerateDay(supabase: any, userId: string, params: Record<string, any>): Promise<Response>`
+   - Contains all logic from lines 6677–11110 (minus triggerNextJourneyLeg which stays in index.ts)
+   - Fix `body.date` references (lines 7309, 7313) → use `params.date` instead
+   - Imports from existing extracted modules:
+     - `corsHeaders`, `verifyTripAccess` from `./action-types.ts`
+     - Types from `./generation-types.ts`
+     - Utils from `./generation-utils.ts`
+     - `enrichActivityWithRetry`, `enrichItinerary` from `./venue-enrichment.ts`
+     - `sanitizeGeneratedDay`, etc. from `./sanitization.ts`
+     - `validateGeneratedDay`, `StrictDayMinimal`, etc. from `./day-validation.ts`
+     - `deriveMealPolicy`, etc. from `./meal-policy.ts`
+     - `buildDayPrompt`, etc. from `./prompt-library.ts`
+     - `getFlightHotelContext`, etc. from `./flight-hotel-context.ts`
+     - `getUserPreferences`, `getLearnedPreferences`, `buildPreferenceContext` from `./preference-context.ts`
+     - All other modules (truth-anchors, geographic-coherence, personalization-enforcer, etc.)
+   - Env vars read via `Deno.env.get()` directly (same pattern as existing code)
 
-**Updated `index.ts`**
-- Replace 4,433-line block with:
+5. **Update `index.ts` routing**
+   - Add import: `import { handleGenerateDay } from './action-generate-day.ts'`
+   - Replace the 4,433-line block with:
 ```typescript
 if (action === 'generate-day' || action === 'regenerate-day') {
   return handleGenerateDay(supabase, authResult.userId, params);
 }
 ```
-- Move `triggerNextJourneyLeg` to just above `finalSaveItinerary` (where it's actually called)
-- Delete `STRICT_ITINERARY_TOOL` (dead code, 163 lines)
-- Result: index.ts drops from ~11,184 to ~6,600 lines
 
-### Execution Steps
+6. **Update `.lovable/plan.md`** — mark Phase 2 Step 3 as done
 
-1. Move `validateItineraryPersonalization` + `buildValidationContext` into `generation-types.ts`
-2. Move `triggerNextJourneyLeg` up in `index.ts` (above `finalSaveItinerary`)
-3. Delete `STRICT_ITINERARY_TOOL` dead code
-4. Create `action-generate-day.ts` with the handler block
-5. Update `index.ts` routing to delegate
-6. Update `index.ts` imports (add import for `handleGenerateDay`)
-7. Run smoke tests to verify all 17 pass
+### Technical Details
 
-### Risk Assessment
+- **`body.date` fix**: The handler references `body.date` at lines 7309/7313 inside a closure. Since `body = { action, ...params }`, `body.date === params.date`. Replace with `params.date`.
+- **Import graph**: The new file imports ~20 modules, all already extracted and path-relative within `generate-itinerary/`.
+- **`GenerationTimer`**: Already imported at top of index.ts from `./generation-timer.ts` — add same import in new file.
+- **`loadTravelerProfile`**: Imported from `./profile-loader.ts` — add in new file.
 
-- **Zero logic changes** — pure code relocation
-- `triggerNextJourneyLeg` move is fixing a pre-existing scoping smell
-- All module imports are relative within the same directory
-- Smoke tests cover both `generate-day` and `regenerate-day` actions
-- `generate-full` continues working — its shared deps stay accessible
+### Impact
+
+| Metric | Before | After |
+|---|---|---|
+| `index.ts` lines | ~11,184 | ~6,400 |
+| New files | 0 | 1 (`action-generate-day.ts`) |
+| Updated files | 0 | 3 (`index.ts`, `generation-types.ts`, `.lovable/plan.md`) |
+| Functional changes | None | None |
+
+### Risk Mitigation
+- Pure code relocation — no logic changes
+- `body.date` → `params.date` is a safe substitution (same value)
+- All 17 smoke tests verify no 500s after extraction
+- `generate-full` keeps working because shared deps are now importable from `generation-types.ts`
 
