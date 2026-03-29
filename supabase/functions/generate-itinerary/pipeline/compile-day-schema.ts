@@ -115,7 +115,8 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
 
 DO NOT plan activities before ${arrival24}. The day starts when the plane lands.`;
       } else if (isMorningArrival) {
-        dayConstraints = `
+        if (hasHotelData) {
+          dayConstraints = `
 THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is a MORNING ARRIVAL - the traveler has likely been traveling overnight.
 
@@ -148,8 +149,33 @@ MORNING ARRIVAL GUIDELINES:
 - Earliest sightseeing/exploration: ${earliestSightseeing}
 
 DO NOT plan activities before ${arrival24}. The day starts when the plane lands.`;
+        } else {
+          dayConstraints = `
+THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
+This is a MORNING ARRIVAL - the traveler has likely been traveling overnight.
+⚠️ NO HOTEL BOOKED: Do NOT reference any hotel. No hotel check-in, no hotel breakfast, no return to hotel.
+
+TRAVELER CONTEXT:
+- The traveler has been on a long flight and may have jet lag
+- They need to clear customs/immigration (estimate: 1 hour)
+
+REQUIRED ACTIVITY SEQUENCE:
+1. "Arrival at ${arrivalAirportDisplay}" 
+   - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
+   - category: "transport"
+   - description: "Clear customs and collect luggage"
+
+MORNING ARRIVAL GUIDELINES:
+- After arrival, the traveler may want a light breakfast or brunch at a local café
+- Start with LOW-ENERGY activities: a café, a leisurely neighborhood walk, or a nearby park
+- Build energy throughout the day - save more intensive sightseeing for afternoon
+- Earliest sightseeing/exploration: ${earliestSightseeing}
+
+DO NOT plan activities before ${arrival24}. The day starts when the plane lands.`;
+        }
       } else if (isAfternoonArrival) {
-        dayConstraints = `
+        if (hasHotelData) {
+          dayConstraints = `
 THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is an AFTERNOON ARRIVAL.
 
@@ -176,6 +202,26 @@ AFTERNOON ARRIVAL GUIDELINES:
 - Save major attractions for full days
 
 DO NOT plan activities before ${arrival24}. The day starts when the plane lands.`;
+        } else {
+          dayConstraints = `
+THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
+This is an AFTERNOON ARRIVAL.
+⚠️ NO HOTEL BOOKED: Do NOT reference any hotel. No hotel check-in, no return to hotel.
+
+REQUIRED ACTIVITY SEQUENCE:
+1. "Arrival at ${arrivalAirportDisplay}"
+   - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
+   - category: "transport"
+   - description: "Clear customs and collect luggage"
+
+AFTERNOON ARRIVAL GUIDELINES:
+- Plan 1-2 light activities in the city
+- End the day with a nice dinner at a local restaurant
+- Earliest exploration: ${earliestSightseeing}
+- Save major attractions for full days
+
+DO NOT plan activities before ${arrival24}. The day starts when the plane lands.`;
+        }
       } else {
         // Evening arrival
         dayConstraints = `
@@ -351,7 +397,7 @@ THE TRAVELER IS LEAVING BY ${modeLabel.toUpperCase()}. Keep it simple.`;
         const airportArrival = addMinutesToHHMM(departure24, -checkInBuffer);
         let latestSightseeing = addMinutesToHHMM(hotelCheckout, -60);
 
-        const hotelNameDisplay = flightContext.hotelName || 'Hotel';
+        const hotelNameDisplay = flightContext.hotelName || '';
 
         const isEarlyFlight = departureMins < (12 * 60);
         const isMidDayFlight = departureMins >= (12 * 60) && departureMins < (15 * 60);
