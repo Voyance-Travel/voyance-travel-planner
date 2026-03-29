@@ -168,6 +168,30 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     });
   }
 
+  // ---- Meal time validation: fix misplaced meals ----
+  if (day.activities && Array.isArray(day.activities)) {
+    for (const act of day.activities) {
+      const titleLower = (act.title || '').toLowerCase();
+      const categoryLower = (act.category || '').toLowerCase();
+      const hour = parseInt((act.startTime || '00:00').split(':')[0], 10);
+
+      if ((titleLower.includes('lunch') || categoryLower === 'lunch') && hour >= 17) {
+        act.startTime = '12:30';
+        act.endTime = '13:30';
+      } else if ((titleLower.includes('breakfast') || categoryLower === 'breakfast') && hour >= 14) {
+        act.startTime = '08:00';
+        act.endTime = '09:00';
+      }
+    }
+
+    // Re-sort activities chronologically after meal time corrections
+    day.activities.sort((a: any, b: any) => {
+      const tA = a.startTime || '00:00';
+      const tB = b.startTime || '00:00';
+      return tA.localeCompare(tB);
+    });
+  }
+
   return day;
 }
 
