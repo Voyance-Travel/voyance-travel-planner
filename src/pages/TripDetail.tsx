@@ -340,8 +340,25 @@ export default function TripDetail() {
         queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
       }
     },
-    onStalled: () => {
+    onStalled: async () => {
       setGenerationStalled(true);
+      // Mark trip as failed so user can cleanly retry on next page load
+      if (tripId) {
+        try {
+          const currentMeta = (tripRef.current?.metadata as Record<string, unknown>) || {};
+          await supabase.from('trips').update({
+            itinerary_status: 'failed',
+            metadata: {
+              ...currentMeta,
+              generation_error: 'Generation timed out or stalled',
+              stalled_at: new Date().toISOString(),
+            },
+          }).eq('id', tripId);
+          console.log('[TripDetail] Marked trip as failed after stall');
+        } catch (e) {
+          console.warn('[TripDetail] Failed to mark trip as failed on stall:', e);
+        }
+      }
     },
   });
 
@@ -2337,10 +2354,10 @@ export default function TripDetail() {
                     <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
                   </div>
                   <div className="text-center space-y-3 max-w-md">
-                    <h3 className="text-xl font-serif font-semibold">Reconnecting...</h3>
+                    <h3 className="text-xl font-serif font-semibold">Generation was interrupted</h3>
                     <p className="text-muted-foreground">
-                      Generation paused at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
-                      Attempting to resume automatically.
+                      Progress stopped at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
+                      You can retry to pick up where it left off.
                     </p>
                     {generationPoller.totalDays > 0 && (
                       <div className="w-64 mx-auto">

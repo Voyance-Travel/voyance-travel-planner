@@ -4988,6 +4988,8 @@ serve(async (req) => {
   }
 
   try {
+  // === OUTER TRY: guarantees CORS headers even on catastrophic failures ===
+  try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
@@ -13627,6 +13629,47 @@ Return ONLY the JSON array, no other text.`;
 
     return new Response(
       JSON.stringify({ success: false, error: "Itinerary generation failed", code: "GENERATE_ERROR" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+  // === END OUTER TRY ===
+  } catch (catastrophicError) {
+    console.error("[generate-itinerary] CATASTROPHIC ERROR:", catastrophicError);
+
+    // Best-effort: try to mark trip as failed
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+      const emergencySupa = createClient(supabaseUrl, serviceKey);
+
+      try {
+        const bodyClone = req.clone();
+        const body = await bodyClone.json();
+        if (body?.tripId) {
+          await emergencySupa.from('trips').update({
+            itinerary_status: 'failed',
+            metadata: {
+              generation_error: String(catastrophicError),
+              crash_type: 'catastrophic',
+              crashed_at: new Date().toISOString()
+            }
+          }).eq('id', body.tripId);
+          console.log(`[generate-itinerary] Marked trip ${body.tripId} as failed after catastrophic error`);
+        }
+      } catch {
+        // Can't extract tripId — nothing more we can do
+      }
+    } catch {
+      // Can't even create supabase client — just return the error
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Generation encountered an unexpected error. Please try again.",
+        code: "CATASTROPHIC_ERROR"
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
