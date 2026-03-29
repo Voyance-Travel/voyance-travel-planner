@@ -2,24 +2,37 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { deriveMealPolicy } from "./meal-policy.ts";
 import { detectMealSlots, validateGeneratedDay, deduplicateActivities, enforceRequiredMealsFinalGuard, type StrictDayMinimal, type StrictActivityMinimal } from "./day-validation.ts";
 
+// Maps meal keywords to appropriate time slots so time-based detection doesn't
+// conflict with keyword-based detection (e.g. "Lunch" at 10:00 would also match breakfast).
+function mealAwareStartHour(title: string, fallbackIndex: number): number {
+  const t = title.toLowerCase();
+  if (t.includes('breakfast') || t.includes('brunch')) return 8;
+  if (t.includes('lunch')) return 12;
+  if (t.includes('dinner')) return 19;
+  return 8 + fallbackIndex * 2;
+}
+
 function buildDay(titles: string[], dayNumber: number = 2): StrictDayMinimal {
   return {
     dayNumber,
     date: "2026-06-02",
     title: "Test Day",
-    activities: titles.map((title, index) => ({
-      id: `act-${index + 1}`,
-      title,
-      startTime: `${String(8 + index * 2).padStart(2, '0')}:00`,
-      endTime: `${String(9 + index * 2).padStart(2, '0')}:00`,
-      category: title.toLowerCase().includes('breakfast') || title.toLowerCase().includes('lunch') || title.toLowerCase().includes('dinner') ? 'dining' : 'activity',
-      location: { name: title, address: 'Test Address' },
-      cost: { amount: 10, currency: 'USD' },
-      description: title,
-      tags: [],
-      bookingRequired: false,
-      transportation: { method: 'walk', duration: '10 min', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
-    })),
+    activities: titles.map((title, index) => {
+      const startHour = mealAwareStartHour(title, index);
+      return {
+        id: `act-${index + 1}`,
+        title,
+        startTime: `${String(startHour).padStart(2, '0')}:00`,
+        endTime: `${String(startHour + 1).padStart(2, '0')}:00`,
+        category: title.toLowerCase().includes('breakfast') || title.toLowerCase().includes('lunch') || title.toLowerCase().includes('dinner') ? 'dining' : 'activity',
+        location: { name: title, address: 'Test Address' },
+        cost: { amount: 10, currency: 'USD' },
+        description: title,
+        tags: [],
+        bookingRequired: false,
+        transportation: { method: 'walk', duration: '10 min', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+      };
+    }),
   };
 }
 
