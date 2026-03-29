@@ -290,6 +290,160 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 9. HOTEL CHECK-IN GUARANTEE (Day 1 or transition day) ---
+  const needsCheckIn = dayNumber === 1 || isTransitionDay;
+  if (needsCheckIn && activities.length > 0) {
+    const hasCheckIn = activities.some((a: any) => {
+      const t = (a.title || a.name || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      return cat === 'accommodation' && (
+        t.includes('check-in') || t.includes('check in') ||
+        t.includes('checkin') || t.includes('settle in') ||
+        t.includes('refresh') || t.includes('hotel')
+      );
+    });
+
+    if (!hasCheckIn) {
+      const hn = hotelName || 'Hotel';
+      const ha = hotelAddress || '';
+      const firstAct = activities[0];
+      const firstStartMin = parseTimeToMinutes(firstAct?.startTime || '15:00') ?? (15 * 60);
+      const checkInStartMin = Math.max(12 * 60, firstStartMin - 45);
+      const checkInStart = minutesToHHMM(checkInStartMin);
+      const checkInEnd = minutesToHHMM(checkInStartMin + 30);
+
+      const checkInActivity = {
+        id: `day${dayNumber}-checkin-repair-${Date.now()}`,
+        title: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination || 'destination'}`,
+        name: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination || 'destination'}`,
+        description: dayNumber === 1
+          ? 'Check in, freshen up, and get oriented to the area'
+          : `Check in to hotel in ${resolvedDestination || 'destination'}, freshen up after travel`,
+        startTime: checkInStart,
+        endTime: checkInEnd,
+        category: 'accommodation',
+        type: 'accommodation',
+        location: { name: hn, address: ha },
+        cost: { amount: 0, currency: 'USD' },
+        bookingRequired: false,
+        isLocked: false,
+        durationMinutes: 30,
+        source: 'repair-checkin-guarantee',
+      };
+
+      activities.unshift(checkInActivity);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkin_guarantee' });
+    }
+  }
+
+  // --- 10. HOTEL CHECKOUT GUARANTEE (last day or last day in city) ---
+  const needsCheckout = isLastDay || (isLastDayInCity && !isTransitionDay);
+  if (needsCheckout && activities.length > 0) {
+    const hasCheckout = activities.some((a: any) => {
+      const t = (a.title || a.name || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      return cat === 'accommodation' && (
+        t.includes('check-out') || t.includes('check out') || t.includes('checkout')
+      );
+    });
+
+    if (!hasCheckout) {
+      const coHotelName = hotelOverride?.name || hotelName || 'Hotel';
+      const coHotelAddr = hotelOverride?.address || hotelAddress || '';
+
+      let checkoutStartMin: number;
+      const depMins = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
+      if (isLastDay && depMins !== null) {
+        checkoutStartMin = Math.max(7 * 60, depMins - 210);
+      } else {
+        checkoutStartMin = 11 * 60;
+      }
+
+      const checkoutStart = minutesToHHMM(checkoutStartMin);
+      const checkoutEnd = minutesToHHMM(checkoutStartMin + 30);
+
+      const checkoutActivity = {
+        id: `day${dayNumber}-checkout-repair-${Date.now()}`,
+        title: `Hotel Checkout from ${coHotelName}`,
+        name: `Hotel Checkout from ${coHotelName}`,
+        description: isLastDay
+          ? 'Check out, collect luggage, and prepare for departure.'
+          : `Check out from ${coHotelName}. Store luggage if needed before continuing your day.`,
+        startTime: checkoutStart,
+        endTime: checkoutEnd,
+        category: 'accommodation',
+        type: 'accommodation',
+        location: { name: coHotelName, address: coHotelAddr },
+        cost: { amount: 0, currency: 'USD' },
+        bookingRequired: false,
+        isLocked: false,
+        durationMinutes: 30,
+        source: 'repair-checkout-guarantee',
+      };
+
+      // Insert chronologically
+      let insertIdx = activities.length;
+      for (let i = 0; i < activities.length; i++) {
+        const actStart = parseTimeToMinutes(activities[i].startTime || '') ?? 99999;
+        if (checkoutStartMin <= actStart) { insertIdx = i; break; }
+      }
+      activities.splice(insertIdx, 0, checkoutActivity);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkout_guarantee' });
+    }
+  }
+
+  // --- 11. DEPARTURE SEQUENCE FIX (checkout after airport swap) ---
+  if (isLastDay && activities.length > 1) {
+    const checkoutIdx = activities.findIndex((a: any) => {
+      const t = (a.title || '').toLowerCase();
+      return t.includes('checkout') || t.includes('check-out') || t.includes('check out');
+    });
+    const airportIdx = activities.findIndex((a: any) => {
+      const t = (a.title || '').toLowerCase();
+      return (t.includes('airport') || t.includes('departure transfer')) &&
+             ((a.category || '').toLowerCase() === 'transport' || t.includes('transfer'));
+    });
+
+    if (checkoutIdx !== -1 && airportIdx !== -1 && checkoutIdx > airportIdx) {
+      const checkoutAct = activities[checkoutIdx];
+      const airportAct = activities[airportIdx];
+
+      const checkoutDur = Math.max(5, ((parseTimeToMinutes(checkoutAct.endTime) ?? 0) - (parseTimeToMinutes(checkoutAct.startTime) ?? 0))) || 15;
+      const transferDur = Math.max(10, ((parseTimeToMinutes(airportAct.endTime) ?? 0) - (parseTimeToMinutes(airportAct.startTime) ?? 0))) || 60;
+
+      checkoutAct.startTime = airportAct.startTime;
+      checkoutAct.endTime = addMinutesToHHMM(checkoutAct.startTime, checkoutDur);
+      airportAct.startTime = checkoutAct.endTime;
+      airportAct.endTime = addMinutesToHHMM(airportAct.startTime, transferDur);
+
+      activities[airportIdx] = checkoutAct;
+      activities[checkoutIdx] = airportAct;
+      activities.sort((a: any, b: any) => {
+        const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+        const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+        return ta - tb;
+      });
+      repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'swapped_checkout_before_airport' });
+    }
+  }
+
+  // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---
+  if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegTransport !== 'flight') {
+    const beforeCount = activities.length;
+    activities = activities.filter((a: any) => {
+      const t = (a.title || '').toLowerCase();
+      const isAirportRef =
+        t.includes('airport') || t.includes('taxi to airport') ||
+        t.includes('transfer to airport') || t.includes('departure transfer to airport') ||
+        t.includes('flight departure') || t.includes('head to airport');
+      return !isAirportRef || lockedIds.has(a.id);
+    });
+    const removed = beforeCount - activities.length;
+    if (removed > 0) {
+      repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: `stripped_${removed}_airport_refs_non_flight_leg` });
+    }
+  }
+
   return {
     day: { ...input.day, activities },
     repairs,
