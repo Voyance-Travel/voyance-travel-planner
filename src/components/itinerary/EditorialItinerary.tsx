@@ -10657,7 +10657,7 @@ function ActivityRow({
               </div>
             )}
             {/* Transportation to next (gated by premium) */}
-            {activity.timeBlockType !== 'downtime' && activity.transportation && !isLast && (
+            {activity.timeBlockType !== 'downtime' && activity.transportation?.method && !isLast && (
               <div data-tour="transit-badge">
                 <TransitBadge 
                   transportation={activity.transportation}
