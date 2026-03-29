@@ -49,10 +49,11 @@ function SuggestionChips({
   onSelect: (value: string) => void;
   currentValue: string;
 }) {
-  const filtered = suggestions.filter(s => 
-    s.toLowerCase() !== currentValue.toLowerCase().trim() && 
-    s.toLowerCase().includes(currentValue.toLowerCase().trim())
-  ).slice(0, 4);
+  const cv = (currentValue || '').toLowerCase().trim();
+  const filtered = suggestions.filter(s => {
+    const sl = (s || '').toLowerCase();
+    return sl !== cv && sl.includes(cv);
+  }).slice(0, 4);
 
   if (filtered.length === 0) return null;
 
