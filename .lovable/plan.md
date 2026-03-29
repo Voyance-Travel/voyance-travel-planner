@@ -36,6 +36,22 @@ Extracted ~930 lines of prompt assembly into `pipeline/compile-prompt.ts`. Added
 
 **Result:** Monolith dropped from 1,780 → **1,361 lines** (down from original ~2,900).
 
+### Phase 6: Extract Enrichment + Post-Processing ✅
+
+**AI Call + Retry → `pipeline/ai-call.ts` (~219 lines):**
+- Extracted model selection, retry with backoff, fallback model after 3 failures
+- Error classification (429/402/5xx) with typed `AICallError` class
+- Tool schema moved out of monolith into the module
+- Returns structured `AICallResult` with data, usage, and model info
+
+**Enrichment + Opening Hours → `pipeline/enrich-day.ts` (~291 lines):**
+- Google Maps enrichment with time budget (25s cap)
+- Batch processing (3 parallel) with budget enforcement
+- Opening hours validation: confirmed closures → remove, time conflicts → shift
+- Hard-constraint checks against checkout/departure activities
+
+**Result:** Monolith dropped from 1,361 → **1,036 lines** (down from original ~2,900).
+
 ## Remaining Blocks in `action-generate-day.ts`
 
 | Block | ~Lines | Notes |
