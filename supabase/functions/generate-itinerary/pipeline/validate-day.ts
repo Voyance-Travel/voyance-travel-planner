@@ -1,0 +1,561 @@
+/**
+ * Pipeline Validator — Structured day validation returning typed ValidationResult[].
+ *
+ * Phase 3: Pure inspection, no mutations. Classifies every issue by FailureCode.
+ * Consumes facts from compile-day-facts and the generated day output.
+ */
+
+import { FAILURE_CODES, type ValidationResult, type FailureCode } from './types.ts';
+import {
+  CHAIN_RESTAURANT_BLOCKLIST,
+  isChainRestaurant,
+  detectMealSlots,
+  type StrictActivityMinimal,
+  type StrictDayMinimal,
+} from '../day-validation.ts';
+import type { RequiredMeal } from '../meal-policy.ts';
+
+// =============================================================================
+// GENERIC VENUE PATTERNS — placeholders the AI sometimes generates
+// =============================================================================
+
+const GENERIC_VENUE_PATTERNS = [
+  /^local restaurant$/i,
+  /^a nice caf[eé]$/i,
+  /^nearby restaurant$/i,
+  /^local caf[eé]$/i,
+  /^a local spot$/i,
+  /^restaurant$/i,
+  /^cafe$/i,
+  /^a restaurant$/i,
+  /^dining spot$/i,
+  /^dinner spot$/i,
+  /^lunch spot$/i,
+  /^breakfast spot$/i,
+];
+
+const LABEL_LEAK_PATTERNS = [
+  /voyance pick/i,
+  /staff pick/i,
+  /editor'?s? pick/i,
+  /ai pick/i,
+  /top pick/i,
+  /our pick/i,
+];
+
+// =============================================================================
+// INPUT TYPES
+// =============================================================================
+
+export interface ValidateDayInput {
+  /** The generated day to validate */
+  day: StrictDayMinimal;
+  dayNumber: number;
+  isFirstDay: boolean;
+  isLastDay: boolean;
+  totalDays: number;
+
+  /** Hotel context */
+  hasHotel: boolean;
+  hotelName?: string;
+
+  /** Flight context */
+  arrivalTime24?: string;
+  returnDepartureTime24?: string;
+
+  /** Required meals for this day */
+  requiredMeals: RequiredMeal[];
+
+  /** Activities from previous days for trip-wide dedup */
+  previousDays: StrictDayMinimal[];
+
+  /** User's avoid list and dietary restrictions */
+  avoidList?: string[];
+  dietaryRestrictions?: string[];
+
+  /** Must-do activities */
+  mustDoActivities?: string[];
+}
+
+// =============================================================================
+// MAIN VALIDATE FUNCTION
+// =============================================================================
+
+/**
+ * Validate a generated day. Returns ValidationResult[] — pure inspection, no mutations.
+ */
+export function validateDay(input: ValidateDayInput): ValidationResult[] {
+  const results: ValidationResult[] = [];
+
+  const { day, dayNumber, isFirstDay, isLastDay, hasHotel, hotelName,
+    arrivalTime24, returnDepartureTime24, requiredMeals, previousDays,
+    avoidList, dietaryRestrictions, mustDoActivities } = input;
+
+  const activities = day.activities || [];
+
+  // --- PHANTOM_HOTEL ---
+  checkPhantomHotel(activities, hasHotel, results);
+
+  // --- CHAIN_RESTAURANT ---
+  checkChainRestaurants(activities, results);
+
+  // --- GENERIC_VENUE ---
+  checkGenericVenues(activities, results);
+
+  // --- TITLE_LABEL_LEAK ---
+  checkLabelLeaks(activities, results);
+
+  // --- CHRONOLOGY ---
+  checkChronology(activities, results);
+
+  // --- TIME_OVERLAP ---
+  checkTimeOverlap(activities, results);
+
+  // --- MEAL_ORDER ---
+  checkMealOrder(activities, results);
+
+  // --- MEAL_MISSING ---
+  checkMealMissing(activities, requiredMeals, results);
+
+  // --- MEAL_DUPLICATE ---
+  checkMealDuplicate(activities, results);
+
+  // --- LOGISTICS_SEQUENCE (departure day only) ---
+  if (isLastDay) {
+    checkLogisticsSequence(activities, returnDepartureTime24, results);
+  }
+
+  // --- DUPLICATE_CONCEPT (trip-wide) ---
+  if (previousDays.length > 0) {
+    checkDuplicateConcept(activities, previousDays, mustDoActivities || [], results);
+  }
+
+  // --- WEAK_PERSONALIZATION ---
+  if ((avoidList && avoidList.length > 0) || (dietaryRestrictions && dietaryRestrictions.length > 0)) {
+    checkPersonalization(activities, avoidList || [], dietaryRestrictions || [], results);
+  }
+
+  return results;
+}
+
+// =============================================================================
+// INDIVIDUAL CHECK FUNCTIONS
+// =============================================================================
+
+function parseTime(timeStr: string): number | null {
+  if (!timeStr) return null;
+  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const mins = parseInt(match[2], 10);
+  const period = match[3]?.toUpperCase();
+  if (period === 'PM' && hours !== 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+  if (!period && hours >= 24) return null;
+  return hours * 60 + mins;
+}
+
+function checkPhantomHotel(activities: StrictActivityMinimal[], hasHotel: boolean, results: ValidationResult[]): void {
+  if (hasHotel) return;
+  for (let i = 0; i < activities.length; i++) {
+    const cat = (activities[i].category || '').toLowerCase();
+    if (cat === 'accommodation') {
+      results.push({
+        code: FAILURE_CODES.PHANTOM_HOTEL,
+        severity: 'error',
+        message: `Activity "${activities[i].title}" is an accommodation card but no hotel is booked`,
+        activityIndex: i,
+        field: 'category',
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
+function checkChainRestaurants(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  for (let i = 0; i < activities.length; i++) {
+    const cat = (activities[i].category || '').toLowerCase();
+    if (!cat.includes('dining') && !cat.includes('restaurant') && !cat.includes('food')) continue;
+    if (isChainRestaurant(activities[i].title)) {
+      results.push({
+        code: FAILURE_CODES.CHAIN_RESTAURANT,
+        severity: 'error',
+        message: `"${activities[i].title}" is a chain restaurant`,
+        activityIndex: i,
+        field: 'title',
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
+function checkGenericVenues(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  for (let i = 0; i < activities.length; i++) {
+    const title = activities[i].title || '';
+    if (GENERIC_VENUE_PATTERNS.some(re => re.test(title.trim()))) {
+      results.push({
+        code: FAILURE_CODES.GENERIC_VENUE,
+        severity: 'warning',
+        message: `"${title}" is a generic placeholder venue name`,
+        activityIndex: i,
+        field: 'title',
+        autoRepairable: false,
+      });
+    }
+  }
+}
+
+function checkLabelLeaks(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  for (let i = 0; i < activities.length; i++) {
+    const title = activities[i].title || '';
+    if (LABEL_LEAK_PATTERNS.some(re => re.test(title))) {
+      results.push({
+        code: FAILURE_CODES.TITLE_LABEL_LEAK,
+        severity: 'warning',
+        message: `"${title}" contains an internal label that should not be user-facing`,
+        activityIndex: i,
+        field: 'title',
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
+function checkChronology(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  let prevMins: number | null = null;
+  for (let i = 0; i < activities.length; i++) {
+    const mins = parseTime(activities[i].startTime);
+    if (mins === null) continue;
+    if (prevMins !== null && mins < prevMins) {
+      results.push({
+        code: FAILURE_CODES.CHRONOLOGY,
+        severity: 'error',
+        message: `Activity "${activities[i].title}" at ${activities[i].startTime} is before the previous activity ending`,
+        activityIndex: i,
+        field: 'startTime',
+        autoRepairable: true,
+      });
+    }
+    prevMins = parseTime(activities[i].endTime) ?? mins;
+  }
+}
+
+function checkTimeOverlap(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  for (let i = 1; i < activities.length; i++) {
+    const prevEnd = parseTime(activities[i - 1].endTime);
+    const currStart = parseTime(activities[i].startTime);
+    if (prevEnd !== null && currStart !== null && currStart < prevEnd) {
+      // Allow small overlaps for transport cards (≤5 min)
+      if (prevEnd - currStart <= 5) continue;
+      results.push({
+        code: FAILURE_CODES.TIME_OVERLAP,
+        severity: 'warning',
+        message: `"${activities[i].title}" overlaps with "${activities[i - 1].title}" by ${prevEnd - currStart} minutes`,
+        activityIndex: i,
+        field: 'startTime',
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
+function checkMealOrder(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  for (let i = 0; i < activities.length; i++) {
+    const title = (activities[i].title || '').toLowerCase();
+    const cat = (activities[i].category || '').toLowerCase();
+    const startMins = parseTime(activities[i].startTime);
+    if (startMins === null) continue;
+
+    const isDining = cat.includes('dining') || cat.includes('restaurant') || cat.includes('food');
+    if (!isDining) continue;
+
+    // Breakfast after 14:00
+    if ((title.includes('breakfast') || title.includes('brunch')) && startMins > 14 * 60) {
+      results.push({
+        code: FAILURE_CODES.MEAL_ORDER,
+        severity: 'error',
+        message: `Breakfast "${activities[i].title}" scheduled at ${activities[i].startTime} (after 14:00)`,
+        activityIndex: i,
+        field: 'startTime',
+        autoRepairable: true,
+      });
+    }
+
+    // Lunch after 17:00
+    if (title.includes('lunch') && startMins > 17 * 60) {
+      results.push({
+        code: FAILURE_CODES.MEAL_ORDER,
+        severity: 'error',
+        message: `Lunch "${activities[i].title}" scheduled at ${activities[i].startTime} (after 17:00)`,
+        activityIndex: i,
+        field: 'startTime',
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
+function checkMealMissing(activities: StrictActivityMinimal[], requiredMeals: RequiredMeal[], results: ValidationResult[]): void {
+  if (requiredMeals.length === 0) return;
+  const detected = detectMealSlots(activities);
+  for (const meal of requiredMeals) {
+    if (!detected.includes(meal)) {
+      results.push({
+        code: FAILURE_CODES.MEAL_MISSING,
+        severity: 'error',
+        message: `Required meal "${meal}" is not present in the day`,
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
+function checkMealDuplicate(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+  const MEAL_KEYWORDS: Record<string, string[]> = {
+    breakfast: ['breakfast', 'brunch'],
+    lunch: ['lunch'],
+    dinner: ['dinner', 'supper'],
+  };
+
+  for (let i = 1; i < activities.length; i++) {
+    const prevTitle = (activities[i - 1].title || '').toLowerCase();
+    const currTitle = (activities[i].title || '').toLowerCase();
+    const prevCat = (activities[i - 1].category || '').toLowerCase();
+    const currCat = (activities[i].category || '').toLowerCase();
+
+    if (!currCat.includes('dining') && !prevCat.includes('dining')) continue;
+
+    for (const [meal, keywords] of Object.entries(MEAL_KEYWORDS)) {
+      const prevIs = keywords.some(kw => prevTitle.includes(kw));
+      const currIs = keywords.some(kw => currTitle.includes(kw));
+      if (prevIs && currIs) {
+        results.push({
+          code: FAILURE_CODES.MEAL_DUPLICATE,
+          severity: 'warning',
+          message: `Back-to-back ${meal} activities: "${activities[i - 1].title}" and "${activities[i].title}"`,
+          activityIndex: i,
+          autoRepairable: false,
+        });
+      }
+    }
+  }
+}
+
+function checkLogisticsSequence(activities: StrictActivityMinimal[], depTime24: string | undefined, results: ValidationResult[]): void {
+  type DvRole = 'breakfast' | 'checkout' | 'airport-transport' | 'airport-security' | 'flight' | 'other';
+
+  const classify = (a: StrictActivityMinimal): DvRole => {
+    const t = (a.title || '').toLowerCase();
+    const cat = (a.category || '').toLowerCase();
+
+    if (cat === 'flight' || t.includes('flight departure') || t.includes('departure flight')) return 'flight';
+    if (t.includes('airport departure') || t.includes('airport security') || t.includes('security and boarding')) return 'airport-security';
+    if ((cat === 'transport' || cat === 'transit') && (t.includes('airport') || t.includes('head to airport'))) return 'airport-transport';
+    if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) return 'checkout';
+    if ((cat === 'dining' || cat === 'restaurant' || cat === 'food') && (t.includes('breakfast') || t.includes('morning meal'))) return 'breakfast';
+    return 'other';
+  };
+
+  const roles = activities.map((a, i) => ({ act: a, role: classify(a), idx: i }));
+  const breakfast = roles.find(r => r.role === 'breakfast');
+  const checkout = roles.find(r => r.role === 'checkout');
+  const security = roles.find(r => r.role === 'airport-security');
+  const flight = roles.find(r => r.role === 'flight');
+
+  // R1: Breakfast must be before checkout
+  if (breakfast && checkout && breakfast.idx > checkout.idx) {
+    results.push({
+      code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+      severity: 'error',
+      message: 'Breakfast is scheduled after checkout',
+      activityIndex: breakfast.idx,
+      autoRepairable: true,
+    });
+  }
+
+  // R2: Security must be immediately before flight
+  if (security && flight && security.idx !== flight.idx - 1) {
+    results.push({
+      code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+      severity: 'error',
+      message: 'Airport security is not immediately before flight',
+      activityIndex: security.idx,
+      autoRepairable: true,
+    });
+  }
+
+  // R3: No non-transport activities after security
+  if (security) {
+    for (let i = security.idx + 1; i < activities.length; i++) {
+      const role = classify(activities[i]);
+      if (role !== 'flight' && role !== 'airport-transport' && role !== 'airport-security') {
+        results.push({
+          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+          severity: 'error',
+          message: `"${activities[i].title}" is scheduled after airport security`,
+          activityIndex: i,
+          autoRepairable: true,
+        });
+      }
+    }
+  }
+
+  // R4: Multiple airport transports
+  const transports = roles.filter(r => r.role === 'airport-transport');
+  if (transports.length > 1) {
+    for (let i = 0; i < transports.length - 1; i++) {
+      results.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        severity: 'warning',
+        message: `Duplicate airport transport: "${transports[i].act.title}"`,
+        activityIndex: transports[i].idx,
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
+function normalizeText(input: string): string {
+  return (input || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const STRIP_VERBS_RE = /\b(guided|visit|explore|discover|tour|walk|stroll|head|go|return|morning|afternoon|evening|a|an|the|to|of|at|in|on|and|with|for)\b/g;
+
+function conceptSimilarity(a: string, b: string): boolean {
+  if (!a || !b || a.length < 5 || b.length < 5) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+
+  const aVenue = a.replace(STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
+  const bVenue = b.replace(STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
+  if (aVenue.length > 5 && bVenue.length > 5 && (aVenue.includes(bVenue) || bVenue.includes(aVenue))) return true;
+
+  const aWords = new Set(a.split(/\s+/));
+  const bWords = new Set(b.split(/\s+/));
+  const intersection = [...aWords].filter(w => bWords.has(w) && w.length > 3);
+  const minLen = Math.min(aWords.size, bWords.size);
+  return minLen > 0 && intersection.length / minLen > 0.6;
+}
+
+function extractConcept(title: string): string {
+  const conceptPart = normalizeText(title).split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
+  return conceptPart
+    .replace(/\b(class|tour|experience|visit|workshop|session|lesson|masterclass)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function checkDuplicateConcept(
+  activities: StrictActivityMinimal[],
+  previousDays: StrictDayMinimal[],
+  mustDoActivities: string[],
+  results: ValidationResult[]
+): void {
+  const previousConcepts = new Set<string>();
+  const previousLocations = new Set<string>();
+
+  for (const prevDay of previousDays) {
+    for (const prevAct of prevDay.activities || []) {
+      const concept = extractConcept(normalizeText(prevAct.title || ''));
+      if (concept.length > 5) previousConcepts.add(concept);
+      const locName = normalizeText(prevAct.location?.name || '');
+      if (locName.length > 5) previousLocations.add(locName);
+    }
+  }
+
+  const mustDoSet = new Set(mustDoActivities.map(s => s.toLowerCase()));
+
+  for (let i = 0; i < activities.length; i++) {
+    const act = activities[i];
+    const cat = (act.category || '').toLowerCase();
+    if (cat === 'transport' || cat === 'accommodation') continue;
+
+    // Skip must-do activities
+    const actTitleLower = (act.title || '').toLowerCase();
+    if (mustDoSet.has(actTitleLower)) continue;
+
+    const actConcept = extractConcept(normalizeText(act.title || ''));
+    const actLocName = normalizeText(act.location?.name || '');
+
+    // Location dedup
+    if (actLocName.length > 5 && previousLocations.has(actLocName)) {
+      results.push({
+        code: FAILURE_CODES.DUPLICATE_CONCEPT,
+        severity: 'error',
+        message: `"${act.title}" visits the same location as a previous day`,
+        activityIndex: i,
+        autoRepairable: true,
+      });
+      continue;
+    }
+
+    // Concept dedup
+    for (const prevConcept of previousConcepts) {
+      if (conceptSimilarity(actConcept, prevConcept)) {
+        const isDining = cat.includes('dining');
+        results.push({
+          code: FAILURE_CODES.DUPLICATE_CONCEPT,
+          severity: isDining ? 'error' : 'error',
+          message: `"${act.title}" is too similar to a previous day's activity`,
+          activityIndex: i,
+          autoRepairable: true,
+        });
+        break;
+      }
+    }
+  }
+}
+
+function checkPersonalization(
+  activities: StrictActivityMinimal[],
+  avoidList: string[],
+  dietaryRestrictions: string[],
+  results: ValidationResult[]
+): void {
+  const avoidLower = avoidList.map(s => s.toLowerCase());
+  const dietaryLower = dietaryRestrictions.map(s => s.toLowerCase());
+
+  for (let i = 0; i < activities.length; i++) {
+    const title = (activities[i].title || '').toLowerCase();
+    const desc = (activities[i].description || '').toLowerCase();
+    const cat = (activities[i].category || '').toLowerCase();
+
+    // Check avoid list
+    for (const avoid of avoidLower) {
+      if (avoid.length < 3) continue;
+      if (title.includes(avoid) || desc.includes(avoid)) {
+        results.push({
+          code: FAILURE_CODES.WEAK_PERSONALIZATION,
+          severity: 'error',
+          message: `"${activities[i].title}" matches avoid-list item "${avoid}"`,
+          activityIndex: i,
+          autoRepairable: true,
+        });
+        break;
+      }
+    }
+
+    // Check dietary restrictions on dining activities
+    if (cat.includes('dining') || cat.includes('restaurant') || cat.includes('food')) {
+      for (const restriction of dietaryLower) {
+        if (restriction.length < 3) continue;
+        // Check if a non-compliant food type appears
+        if (title.includes(restriction) || desc.includes(restriction)) {
+          results.push({
+            code: FAILURE_CODES.WEAK_PERSONALIZATION,
+            severity: 'warning',
+            message: `"${activities[i].title}" may conflict with dietary restriction "${restriction}"`,
+            activityIndex: i,
+            autoRepairable: false,
+          });
+        }
+      }
+    }
+  }
+}
