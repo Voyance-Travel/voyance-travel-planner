@@ -1,67 +1,81 @@
 
 
-## Enhance Generation Logging: LLM Model, Token Counts, Categories, Inner Phase Timing
+## Fix: Remove Phantom Hotels When No Hotel Is Booked
 
-The timer infrastructure exists but is only half-wired. The expensive inner work (AI call, parsing, enrichment) inside `index.ts` is not instrumented, and the model/token/category data is never recorded.
-
----
-
-### What's Missing Today
-
-| Data Point | DB Column Exists? | Currently Logged? |
-|---|---|---|
-| Which LLM model is called | Yes (`model_used`) | No |
-| Token counts (prompt/completion) | Yes (`prompt_token_count`, `completion_token_count`) | No |
-| Per-phase timing inside generate-day | Yes (`phase_timings`) | Only outer `day_N_total`, not inner AI/enrich/parse |
-| Activity categories per day | No | No |
-
----
+The function `stripPhantomHotelActivities` does not exist anywhere in the codebase. It needs to be created in `sanitization.ts` and called in the `generate-trip-day` handler after the day result is received.
 
 ### Changes
 
-**1. Wire timer into `index.ts` generate-day action (~line 2200)**
+**1. `supabase/functions/generate-itinerary/sanitization.ts` — Add `stripPhantomHotelActivities`**
 
-Pass `generationLogId` through the `generate-day` request payload from `action-generate-trip-day.ts`. Inside `index.ts`, reconstruct the timer and wrap the key phases:
+New exported function that removes fabricated hotel activities when no hotel is booked:
 
-- `ai_call_day_N` — the main Gemini 3 Flash call (~line 2201)
-- `parse_response_day_N` — JSON parsing of AI output
-- `venue_enrichment_day_N` — Google Places + GPT-5-nano semantic verification (~line 3720)
-- `cost_estimation_day_N` — pricing logic
-- `bookend_validation` — the post-processing validator
-
-This gives the waterfall chart real per-phase bars instead of just one `day_N_total` block.
-
-**2. Record LLM model name**
-
-After the AI call completes, write `model_used: 'google/gemini-3-flash-preview'` to the generation_logs row. Since venue verification also uses `openai/gpt-5-nano`, track both in a new `models_used` JSONB field (or append to `phase_timings` metadata).
-
-Simpler approach: add the model name to each phase key, e.g. `ai_call_day_1 [gemini-3-flash]`, so it shows in the waterfall naturally.
-
-**3. Record token counts**
-
-The Lovable AI gateway returns `usage.prompt_tokens` and `usage.completion_tokens` in the response. After the AI call, parse these from the response and accumulate them. On `finalize()`, write totals to `prompt_token_count` and `completion_token_count`.
-
-**4. Track categories per day**
-
-Add a `category_breakdown` field to each `day_timings` entry:
-```json
-{ "day": 1, "total_ms": 62000, "ai_ms": 45000, "enrich_ms": 8000, "activities": 8,
-  "categories": { "dining": 3, "activity": 2, "transport": 2, "nightlife": 1 } }
+```typescript
+export function stripPhantomHotelActivities(day: any, hasHotel: boolean): any {
+  if (!day || hasHotel || !Array.isArray(day.activities)) return day;
+  
+  const PHANTOM_PATTERNS = [
+    /\bcheck[\s-]?in\b/i,
+    /\bcheck[\s-]?out\b/i,
+    /\breturn to (?:the )?hotel\b/i,
+    /\bhotel breakfast\b/i,
+    /\bsettle into\b.*\bhotel\b/i,
+    /\bfreshen up\b.*\bhotel\b/i,
+  ];
+  
+  const PHANTOM_CATEGORIES = ['hotel_checkin', 'hotel_checkout', 'accommodation'];
+  
+  // Known luxury hotel brand patterns the AI fabricates
+  const FABRICATED_HOTEL_RE = /\b(?:Hotel\s+Le\s+\w+|Le\s+Meurice|The\s+Peninsula|Ritz|Four\s+Seasons|Mandarin\s+Oriental|St\.\s*Regis|Park\s+Hyatt|Aman|Rosewood)\b/i;
+  
+  day.activities = day.activities.filter((act: any) => {
+    if (!act) return false;
+    const title = (act.title || act.name || '').toLowerCase();
+    const category = (act.category || '').toLowerCase();
+    
+    // Remove by category
+    if (PHANTOM_CATEGORIES.includes(category)) return false;
+    
+    // Remove by title pattern
+    if (PHANTOM_PATTERNS.some(re => re.test(title))) return false;
+    
+    // Remove activities referencing fabricated hotel names
+    if (FABRICATED_HOTEL_RE.test(act.title || '') || FABRICATED_HOTEL_RE.test(act.description || '')) return false;
+    
+    return true;
+  });
+  
+  return day;
+}
 ```
 
-After parsing the AI response, count activities by category and include in `addDayTiming()`.
+**2. `supabase/functions/generate-itinerary/index.ts` — Wire it in the `generate-trip-day` handler**
 
----
+Two changes:
+
+a) **Load `hotel_selection`** — At ~line 12905 where trip data is fetched, add `hotel_selection` to the select:
+```
+.select('itinerary_status, metadata, itinerary_data, hotel_selection')
+```
+
+b) **Call stripPhantomHotelActivities** — After `dayResult` is received successfully (~line 13066), determine `hasHotel` and strip phantoms:
+```typescript
+// Determine if user actually booked a hotel
+const hasHotel = !!(tripCheck as any).hotel_selection || !!(cityInfo?.hotelName);
+
+// Strip phantom hotel activities if no hotel booked
+if (!hasHotel) {
+  const { stripPhantomHotelActivities } = await import('./sanitization.ts');
+  dayResult = stripPhantomHotelActivities(dayResult, false);
+}
+```
+
+c) **Add to imports** — Add `stripPhantomHotelActivities` to the existing sanitization import at line 22-28.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/generate-itinerary/generation-timer.ts` | Add `addTokenUsage()` method, extend `addDayTiming()` to accept categories, write token totals in `finalize()` |
-| `supabase/functions/generate-itinerary/action-generate-trip-day.ts` | Pass `generationLogId` in the `generate-day` request body; count categories from `dayResult.activities` before calling `addDayTiming()` |
-| `supabase/functions/generate-itinerary/index.ts` | Import timer, reconstruct from logId in generate-day action, wrap AI call / parse / enrichment / cost phases with `startPhase`/`endPhase`, extract token counts from AI response |
-
-### Migration
-
-None needed — `model_used`, `prompt_token_count`, and `completion_token_count` columns already exist. Category data goes inside the existing `day_timings` JSONB.
+| `supabase/functions/generate-itinerary/sanitization.ts` | Add `stripPhantomHotelActivities` function |
+| `supabase/functions/generate-itinerary/index.ts` | Import new function, load `hotel_selection` in trip query, call strip after day generation |
 
