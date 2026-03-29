@@ -951,7 +951,7 @@ async function _handleGenerateTripDayInner(
 
   if (dayNumber >= totalDays) {
     // All days complete — but only mark ready if all days have real activities
-    const finalStatus = allDaysHaveActivities ? 'ready' : 'partial';
+    const finalStatus = isComplete ? 'ready' : 'partial';
     const emptyDaysList = updatedDays
       .filter((d: any) => !Array.isArray(d.activities) || d.activities.length === 0)
       .map((d: any) => d.dayNumber);
@@ -962,13 +962,13 @@ async function _handleGenerateTripDayInner(
       unlocked_day_count: newUnlocked,
       metadata: {
         ...meta,
-        generation_completed_days: allDaysHaveActivities ? totalDays : updatedDays.filter((d: any) => Array.isArray(d.activities) && d.activities.length > 0).length,
+        generation_completed_days: isComplete ? totalDays : updatedDays.filter((d: any) => Array.isArray(d.activities) && d.activities.length > 0).length,
         generation_completed_at: new Date().toISOString(),
         generation_heartbeat: new Date().toISOString(),
         generation_total_days: totalDays,
         generation_current_city: null,
-        chain_broken_at_day: allDaysHaveActivities ? null : emptyDaysList[0],
-        chain_error: allDaysHaveActivities ? null : `Shell days detected: ${emptyDaysList.join(', ')} have 0 activities`,
+        chain_broken_at_day: isComplete ? null : emptyDaysList[0],
+        chain_error: isComplete ? null : `Shell days detected: ${emptyDaysList.join(', ')} have 0 activities`,
         empty_days_at_completion: emptyDaysList.length > 0 ? emptyDaysList : null,
       },
     }).eq('id', tripId);
@@ -986,9 +986,9 @@ async function _handleGenerateTripDayInner(
       dayResult?.activities?.length || 0, dayCategories,
       diag1.meals || undefined, diag1.transport || undefined,
     );
-    await timer.finalize(allDaysHaveActivities ? 'completed' : 'failed');
+    await timer.finalize(isComplete ? 'completed' : 'failed');
 
-    console.log(`[generate-trip-day] ${allDaysHaveActivities ? '✅' : '⚠️'} Trip ${tripId} generation ${allDaysHaveActivities ? 'complete' : 'partial (shell days)'}: ${totalDays} days, status=${finalStatus}`);
+    console.log(`[generate-trip-day] ${isComplete ? '✅' : '⚠️'} Trip ${tripId} generation ${isComplete ? 'complete' : 'partial (failed/missing days)'}: ${totalDays} days, status=${finalStatus}`);
 
     // ── SYNC NORMALIZED TABLES on chain completion ──────────────────
     // This ensures itinerary_days + itinerary_activities stay in sync
