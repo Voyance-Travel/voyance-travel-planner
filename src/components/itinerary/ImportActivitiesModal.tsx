@@ -383,7 +383,7 @@ export function ImportActivitiesModal({
       // Auto-match city groups to day indices
       const matched = parsed.map(g => {
         // Try to match by city name
-        const cityIdx = days.findIndex(d => d.city?.toLowerCase() === g.detectedLabel.toLowerCase());
+        const cityIdx = days.findIndex(d => (d.city || '').toLowerCase() === (g.detectedLabel || '').toLowerCase());
         if (cityIdx >= 0) {
           g.targetDayIndex = cityIdx;
         }
