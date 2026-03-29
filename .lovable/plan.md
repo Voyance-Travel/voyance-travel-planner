@@ -1,50 +1,34 @@
 
-The issue is still the same class of failure: a render-time `.toLowerCase()` is being called on a value that is sometimes missing or malformed in itinerary data.
 
-What I found:
-- `ActivityRow` is still the failing area in `src/components/itinerary/EditorialItinerary.tsx`.
-- The last sweep fixed several transport/title cases, but there are still unguarded normalization paths nearby.
-- In particular:
-  - `src/components/itinerary/EditorialItinerary.tsx:10458` uses `activityType.toLowerCase()`
-  - `src/components/itinerary/EditorialItinerary.tsx:1168-1170` returns `activity.category || activity.type || 'activity'` without coercion, so a non-string truthy value can flow into render and then crash on `.toLowerCase()`
-  - `src/lib/cost-estimation.ts` still has older bare calls in the estimation path:
-    - `title.toLowerCase()`
-    - `city.toLowerCase()`
-    - `country.toLowerCase()`
-    - `category.toLowerCase()`
+# Fix: `.toLowerCase()` crash in TransitBadge
 
-Do I know what the issue is?
-Yes. The previous fix was incomplete. Some `.toLowerCase()` calls were guarded, but the code still assumes certain backend fields are always strings. If the AI/backend sends an object, number, or other truthy non-string value for `category`, `type`, `city`, `country`, or `title`, the render/estimation path can still crash.
+## Root cause identified
 
-Implementation plan:
-1. Harden `getActivityType` in `EditorialItinerary.tsx`
-- Make it return a guaranteed lowercase-safe string using `safeLower` or `String(...)`.
-- This prevents downstream render code from receiving non-string `activityType`.
+The persistent crash is in `src/components/itinerary/TransitBadge.tsx`, **not** in `EditorialItinerary.tsx`. Lines 74-75 call `transportation.method.toLowerCase()` without a null guard:
 
-2. Fix the remaining render-path crash in `ActivityRow`
-- Replace `activityType.toLowerCase()` with a safe normalized value derived once from `safeLower(activityType)`.
-- Reuse that normalized value in the non-reviewable activity logic.
+```typescript
+const icon = transportIcons[transportation.method.toLowerCase()] || ...;
+const currentMode = transportation.method.toLowerCase();
+```
 
-3. Finish the defensive sweep in `cost-estimation.ts`
-- Guard remaining bare `.toLowerCase()` calls in:
-  - `inferMealTypeFromTitle`
-  - `getCostIndex`
-  - `estimateCost`
-- Normalize `category`, `title`, `city`, and `country` with safe coercion before string operations.
+When the edge function request is interrupted (as the logs show: "Server request interrupted — likely network disconnect"), the last day's data may be saved with incomplete `transportation` objects where `method` is `undefined`. Every re-render of any activity with such a `transportation` object triggers this crash.
 
-4. Keep the fix narrow and consistent
-- Reuse the existing `src/utils/safeLower.ts` helper instead of mixing new ad hoc patterns.
-- Do not change feature behavior; only harden inputs so malformed itinerary payloads fall back to safe defaults.
+This explains why:
+- It crashes on the **last day** (network interruption during generation)
+- Previous fixes to `EditorialItinerary.tsx` didn't help (the crash is in a separate file)
+- The crash fires repeatedly (React retries rendering in the error boundary loop)
 
-Expected result:
-- No more itinerary white-screen/render crash from undefined or non-string values hitting `.toLowerCase()`.
-- Bad backend data will degrade to default behavior (`activity`, empty string matching, default cost heuristics) instead of crashing the page.
+## Changes
 
-Technical details:
-- Files to update:
-  - `src/components/itinerary/EditorialItinerary.tsx`
-  - `src/lib/cost-estimation.ts`
-- Likely code changes:
-  - import and use `safeLower`
-  - sanitize `getActivityType`
-  - replace remaining direct `.toLowerCase()` calls on uncertain values
+### 1. Guard `TransitBadge.tsx` (the actual crash site)
+- Line 74: `transportation.method.toLowerCase()` → `(transportation.method || 'walk').toLowerCase()`
+- Line 75: same guard
+- Line 34: `currency.toUpperCase()` → `(currency || 'USD').toUpperCase()`
+
+### 2. Guard the `transportation` prop in `EditorialItinerary.tsx`
+- Where `TransitBadge` is rendered (line ~10660), add a guard: only render if `transportation.method` is truthy. This prevents passing malformed transportation objects entirely.
+
+## Files to modify
+- `src/components/itinerary/TransitBadge.tsx` — guard 2 bare `.toLowerCase()` and 1 `.toUpperCase()`
+- `src/components/itinerary/EditorialItinerary.tsx` — add `transportation.method` guard before rendering TransitBadge
+
