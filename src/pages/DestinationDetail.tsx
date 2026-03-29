@@ -199,7 +199,7 @@ export default function DestinationDetail() {
     const combined: Activity[] = [];
     
     for (const act of [...attractionsAsActivities, ...activitiesAsActivities]) {
-      const key = act.title.toLowerCase();
+      const key = (act.title || '').toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
         combined.push(act);

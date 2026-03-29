@@ -59,12 +59,12 @@ const ARRIVAL_KEYWORDS = ['arrival', 'land', 'airport', 'arrive', 'flight in', '
 const DEPARTURE_KEYWORDS = ['departure', 'depart', 'flight out', 'head to airport', 'airport transfer', 'leave for airport'];
 
 function isArrivalActivity(title: string): boolean {
-  const lower = title.toLowerCase();
+  const lower = (title || '').toLowerCase();
   return ARRIVAL_KEYWORDS.some(k => lower.includes(k));
 }
 
 function isDepartureActivity(title: string): boolean {
-  const lower = title.toLowerCase();
+  const lower = (title || '').toLowerCase();
   return DEPARTURE_KEYWORDS.some(k => lower.includes(k));
 }
 

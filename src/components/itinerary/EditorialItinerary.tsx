@@ -990,8 +990,8 @@ const NEVER_FREE_CATEGORIES = [
 ];
 
 function isNeverFreeCategory(category: string, title: string): boolean {
-  const cat = category.toLowerCase();
-  const titleLower = title.toLowerCase();
+  const cat = (category || '').toLowerCase();
+  const titleLower = (title || '').toLowerCase();
   
   // Check category
   if (NEVER_FREE_CATEGORIES.some(nfc => cat.includes(nfc))) return true;
@@ -1018,8 +1018,8 @@ const FLAT_RATE_KEYWORDS = [
 ];
 
 function inferCostBasis(category: string, title: string): CostBasis {
-  const cat = category.toLowerCase();
-  const t = title.toLowerCase();
+  const cat = (category || '').toLowerCase();
+  const t = (title || '').toLowerCase();
   // Explicit basis from backend
   if (FLAT_RATE_KEYWORDS.some(kw => cat.includes(kw) || t.includes(kw))) return 'flat';
   return 'per_person';
