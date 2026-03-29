@@ -193,6 +193,58 @@ export function normalizeDurationString(raw: string | undefined | null): string 
   return raw; // Unparseable — pass through
 }
 
+// =============================================================================
+// PHANTOM HOTEL STRIPPING — Remove fabricated hotel activities when no hotel booked
+// =============================================================================
+
+const PHANTOM_HOTEL_TITLE_PATTERNS = [
+  /\bcheck[\s-]?in\b/i,
+  /\bcheck[\s-]?out\b/i,
+  /\breturn to (?:the )?hotel\b/i,
+  /\bhotel breakfast\b/i,
+  /\bsettle into\b.*\bhotel\b/i,
+  /\bfreshen up\b.*\bhotel\b/i,
+  /\brest (?:&|and) recharge\b.*\bhotel\b/i,
+  /\bwind down\b.*\bhotel\b/i,
+];
+
+const PHANTOM_HOTEL_CATEGORIES = ['hotel_checkin', 'hotel_checkout', 'accommodation'];
+
+// Known luxury hotel brand patterns the AI fabricates
+const FABRICATED_HOTEL_RE = /\b(?:Hotel\s+Le\s+\w+|Le\s+Meurice|The\s+Peninsula|Ritz\s+\w+|Four\s+Seasons|Mandarin\s+Oriental|St\.\s*Regis|Park\s+Hyatt|Aman\w*|Rosewood|Waldorf\s+Astoria|W\s+Hotel|Shangri[\s-]La|InterContinental|Sofitel|Fairmont|The\s+Langham|Belmond|Raffles|Oberoi|Taj\s+\w+|Peninsula\s+\w+)\b/i;
+
+/**
+ * Remove fabricated hotel activities when no hotel is booked.
+ * When hasHotel is true, activities are kept as-is.
+ */
+export function stripPhantomHotelActivities(day: any, hasHotel: boolean): any {
+  if (!day || hasHotel || !Array.isArray(day.activities)) return day;
+
+  const before = day.activities.length;
+  day.activities = day.activities.filter((act: any) => {
+    if (!act) return false;
+    const title = (act.title || act.name || '');
+    const category = (act.category || '').toLowerCase();
+
+    // Remove by category
+    if (PHANTOM_HOTEL_CATEGORIES.includes(category)) return false;
+
+    // Remove by title pattern
+    if (PHANTOM_HOTEL_TITLE_PATTERNS.some(re => re.test(title))) return false;
+
+    // Remove activities referencing fabricated hotel names
+    if (FABRICATED_HOTEL_RE.test(act.title || '') || FABRICATED_HOTEL_RE.test(act.description || '')) return false;
+
+    return true;
+  });
+
+  if (day.activities.length < before) {
+    console.log(`[stripPhantomHotelActivities] Removed ${before - day.activities.length} phantom hotel activities`);
+  }
+
+  return day;
+}
+
 export function sanitizeDateFields(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(sanitizeDateFields);
