@@ -10277,7 +10277,7 @@ function ActivityRow({
                   className="w-full mt-3 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-2.5 text-left cursor-pointer hover:bg-primary/10 transition-colors group"
                 >
                   <Lightbulb className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span className="text-xs text-primary font-medium">Find a real restaurant for this meal</span>
+                  <span className="text-xs text-primary font-medium">Get a restaurant recommendation</span>
                   <ChevronRight className="h-3 w-3 text-primary/50 ml-auto group-hover:translate-x-0.5 transition-transform" />
                 </button>
               ) : (
@@ -10648,7 +10648,7 @@ function ActivityRow({
                     className="w-full mt-3 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.04] p-2.5 text-left cursor-pointer hover:bg-primary/10 transition-colors group"
                   >
                     <Lightbulb className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <span className="text-xs text-primary font-medium">Find a real restaurant for this meal</span>
+                    <span className="text-xs text-primary font-medium">Get a restaurant recommendation</span>
                     <ChevronRight className="h-3 w-3 text-primary/50 ml-auto group-hover:translate-x-0.5 transition-transform" />
                   </button>
                 ) : (
