@@ -183,6 +183,9 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       } else if ((titleLower.includes('breakfast') || categoryLower === 'breakfast') && hour >= 14) {
         act.startTime = '08:00';
         act.endTime = '09:00';
+      } else if ((titleLower.includes('dinner') || categoryLower === 'dinner') && hour < 11) {
+        act.startTime = '19:00';
+        act.endTime = '20:15';
       }
     }
 
