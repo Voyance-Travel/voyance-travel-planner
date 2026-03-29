@@ -120,7 +120,7 @@ export function computeGapMinutes(
     
     let durationMin = 60;
     if (prevDuration) {
-      const d = prevDuration.toLowerCase();
+      const d = (prevDuration || '').toLowerCase();
       const hoursMatch = d.match(/([\d.]+)\s*(?:hours?|hrs?|h)/);
       const minsMatch = d.match(/([\d.]+)\s*(?:minutes?|mins?|m(?!onth))/);
       durationMin = 0;
