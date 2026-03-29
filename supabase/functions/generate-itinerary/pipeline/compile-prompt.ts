@@ -422,7 +422,7 @@ ${dayMealPolicy.requiredMeals.includes('breakfast') ? (flightContext.hotelName ?
 3. MORNING ACTIVITIES — At least 1 paid + 1 free activity
 ${dayMealPolicy.requiredMeals.includes('lunch') ? '4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips' : ''}
 5. AFTERNOON ACTIVITIES — At least 1-2 paid + 1 free activity  
-${flightContext.hotelName ? `6. HOTEL RETURN (REQUIRED if dinner is far from hotel) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30-60 min. This MUST be a separate activity card, not just a transport entry.` : ''}
+${flightContext.hotelName ? `6. HOTEL RETURN (REQUIRED) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30 min. Every full day MUST include a hotel return between afternoon activities and dinner. This MUST be a separate activity card with dedicated time, not just a transport entry. Include a preceding transport card to get back to the hotel.` : ''}
 ${dayMealPolicy.requiredMeals.includes('dinner') ? '7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips' : ''}
 8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot (at least 1 suggestion). Use category: "dining" for bars, lounges, and cocktail venues. Use category: "activity" for shows, clubs, and entertainment. NEVER use "wellness", "nightlife", or "relaxation" as a category for bars/lounges.
 ${flightContext.hotelName ? `9. RETURN TO HOTEL (REQUIRED as LAST activity) — "Return to [EXACT Hotel Name]" with category "accommodation". This is the FINAL card of every day. MUST appear after ALL other activities including nightlife. Include transport mode in a preceding transport activity.` : ''}

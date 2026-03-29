@@ -695,6 +695,25 @@ function repairBookends(
     }
   }
 
+  // 1b. Mid-day hotel return guarantee: if day has both lunch and dinner but no accommodation card between them
+  const lunchIdx = activities.findIndex(a => (a.category === 'dining') && /\b(lunch|midday meal)\b/i.test(a.title || ''));
+  const dinnerIdx = activities.findIndex(a => (a.category === 'dining') && /\b(dinner|evening meal)\b/i.test(a.title || ''));
+  if (lunchIdx >= 0 && dinnerIdx > lunchIdx) {
+    const hasMidDayAccom = activities.slice(lunchIdx + 1, dinnerIdx).some(a => isAccom(a));
+    if (!hasMidDayAccom) {
+      // Find last non-transport activity before dinner to insert after
+      let insertIdx = dinnerIdx;
+      for (let j = dinnerIdx - 1; j > lunchIdx; j--) {
+        if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
+      }
+      const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
+      const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd);
+      const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
+      activities.splice(insertIdx, 0, transportCard, accomCard);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
+    }
+  }
+
   // 2. End-of-day hotel return
   const visible = activities.filter(a => !isTransport(a));
   const last = visible[visible.length - 1];
