@@ -12,6 +12,7 @@ import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
 import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField } from './sanitization.ts';
+import { StageLogger } from './pipeline/stage-logger.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -311,9 +312,13 @@ async function _handleGenerateTripDayInner(
   dayDate.setDate(dayDate.getDate() + dayNumber - 1);
   const formattedDate = dayDate.toISOString().split('T')[0];
 
+  // ── STAGE LOGGER: track pipeline artifacts for this day ──
+  const stageLogger = new StageLogger(supabase, tripId, dayNumber);
+
   const MAX_RETRIES = 4;
   let dayResult: any = null;
   let lastError: string | null = null;
+  let aiCallDurationMs = 0;
   const dayGenStart = Date.now();
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -380,6 +385,8 @@ async function _handleGenerateTripDayInner(
       if (!data.day) throw new Error(`No day data returned for day ${dayNumber}`);
 
       dayResult = data.day;
+      aiCallDurationMs = Date.now() - dayGenStart;
+      stageLogger.logAIResponse(data.day, aiCallDurationMs);
       timer.endPhase(`day_${dayNumber}_total`);
       break;
     } catch (err) {
@@ -648,6 +655,14 @@ async function _handleGenerateTripDayInner(
     }
 
     console.log(`[generate-trip-day] Post-processing complete for day ${dayNumber}`);
+  }
+
+  // Flush stage logger (non-blocking, non-fatal)
+  try {
+    await stageLogger.flush();
+    console.log(`[generate-trip-day] ${stageLogger.getSummary()}`);
+  } catch (logErr) {
+    console.warn('[generate-trip-day] StageLogger flush failed (non-fatal):', logErr);
   }
 
   // Save it
