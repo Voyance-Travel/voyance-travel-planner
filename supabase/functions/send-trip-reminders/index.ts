@@ -491,6 +491,29 @@ const handler = async (req: Request): Promise<Response> => {
           daysUntil: trip.daysUntil,
           reminderType: trip.reminderType 
         });
+
+        // Also send push notification to mobile devices
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/send-push`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({
+              userId: trip.user_id,
+              title: `${trip.daysUntil} day${trip.daysUntil !== 1 ? 's' : ''} until ${trip.destination}!`,
+              body: `Your trip "${trip.name}" is coming up. Check your itinerary!`,
+              data: { tripId: trip.id, type: 'trip_reminder' },
+            }),
+          });
+          logStep("Push notification sent", { tripId: trip.id });
+        } catch (pushErr) {
+          logStep("Push notification failed (non-blocking)", { 
+            tripId: trip.id, 
+            error: pushErr instanceof Error ? pushErr.message : String(pushErr) 
+          });
+        }
       }
     }
 
