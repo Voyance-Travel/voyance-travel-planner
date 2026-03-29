@@ -13141,6 +13141,9 @@ Return ONLY the JSON array, no other text.`;
 
           dayResult = data.day;
 
+          // Cross-day venue deduplication enforcement
+          dayResult = deduplicateCrossDayVenues(dayResult, existingDays, dayNumber);
+
           // Update generation timer: AI generation complete for this day
           if (innerTimer) {
             const genPct = Math.round(10 + ((dayNumber - 0.5) / totalDays) * 80);
