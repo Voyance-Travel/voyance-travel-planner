@@ -121,10 +121,14 @@ function useRotatingMessage(tripId?: string, isActive?: boolean) {
 
     const poll = async () => {
       try {
+        // Filter out stale logs older than 10 minutes to avoid showing orphaned data
+        const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
         const { data } = await supabase
           .from('generation_logs')
           .select('current_phase, progress_pct, status')
           .eq('trip_id', tripId)
+          .gte('created_at', tenMinAgo)
+          .neq('status', 'failed')
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
