@@ -28,7 +28,6 @@ import {
   getAirportTransferFare,
 } from './generation-utils.ts';
 import {
-  enrichActivityWithRetry,
   enrichItinerary,
 } from './venue-enrichment.ts';
 import {
