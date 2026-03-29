@@ -26,7 +26,12 @@ interface GenerationLog {
   total_duration_ms: number | null;
   status: string;
   phase_timings: Record<string, number>;
-  day_timings: Array<{ day: number; total_ms: number; ai_ms: number; enrich_ms: number; activities: number }>;
+  day_timings: Array<{
+    day: number; total_ms: number; ai_ms: number; enrich_ms: number; activities: number;
+    meals?: { required: string[]; found: string[]; guardFired: boolean; injected?: string[] };
+    transport?: { isTransitionDay: boolean; mode?: string | null; hadInterCityTravel?: boolean; fallbackInjected?: boolean };
+    llm?: { model: string; promptTokens: number; completionTokens: number };
+  }>;
   errors: Array<{ phase: string; error: string; timestamp: string }>;
   num_days: number | null;
   num_guests: number | null;
@@ -127,28 +132,63 @@ function DayTimingsTable({ dayTimings }: { dayTimings: GenerationLog['day_timing
   if (!dayTimings || dayTimings.length === 0) return <p className="text-xs text-muted-foreground">No per-day data</p>;
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-16">Day</TableHead>
-          <TableHead>Total</TableHead>
-          <TableHead>AI</TableHead>
-          <TableHead>Enrich</TableHead>
-          <TableHead className="text-right">Activities</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {dayTimings.map(d => (
-          <TableRow key={d.day}>
-            <TableCell className="font-medium">{d.day}</TableCell>
-            <TableCell className="font-mono text-xs">{formatDuration(d.total_ms)}</TableCell>
-            <TableCell className="font-mono text-xs">{formatDuration(d.ai_ms)}</TableCell>
-            <TableCell className="font-mono text-xs">{formatDuration(d.enrich_ms)}</TableCell>
-            <TableCell className="text-right">{d.activities}</TableCell>
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-12">Day</TableHead>
+            <TableHead>Total</TableHead>
+            <TableHead>AI</TableHead>
+            <TableHead>Enrich</TableHead>
+            <TableHead className="text-right">Acts</TableHead>
+            <TableHead>Meals</TableHead>
+            <TableHead>Transport</TableHead>
+            <TableHead>LLM</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {dayTimings.map(d => (
+            <TableRow key={d.day}>
+              <TableCell className="font-medium">{d.day}</TableCell>
+              <TableCell className="font-mono text-xs">{formatDuration(d.total_ms)}</TableCell>
+              <TableCell className="font-mono text-xs">{formatDuration(d.ai_ms)}</TableCell>
+              <TableCell className="font-mono text-xs">{formatDuration(d.enrich_ms)}</TableCell>
+              <TableCell className="text-right">{d.activities}</TableCell>
+              <TableCell className="text-xs">
+                {d.meals ? (
+                  <div className="space-y-0.5">
+                    <span className={d.meals.guardFired ? 'text-yellow-500 font-semibold' : 'text-muted-foreground'}>
+                      {d.meals.found?.join(', ') || 'none'}
+                    </span>
+                    {d.meals.guardFired && (
+                      <div className="text-yellow-500 text-[10px]">⚠ guard fired{d.meals.injected?.length ? ` (+${d.meals.injected.join(', ')})` : ''}</div>
+                    )}
+                  </div>
+                ) : <span className="text-muted-foreground">--</span>}
+              </TableCell>
+              <TableCell className="text-xs">
+                {d.transport ? (
+                  <div className="space-y-0.5">
+                    <span>{d.transport.mode || 'local'}</span>
+                    {d.transport.isTransitionDay && <span className="ml-1 text-primary text-[10px]">✈ transition</span>}
+                  </div>
+                ) : <span className="text-muted-foreground">--</span>}
+              </TableCell>
+              <TableCell className="text-xs font-mono">
+                {d.llm ? (
+                  <div className="space-y-0.5">
+                    <span className="text-foreground">{d.llm.model?.split('/')?.pop() || d.llm.model}</span>
+                    <div className="text-muted-foreground text-[10px]">
+                      {d.llm.promptTokens + d.llm.completionTokens} tok
+                    </div>
+                  </div>
+                ) : <span className="text-muted-foreground">--</span>}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 

@@ -1050,6 +1050,11 @@ export async function handleGenerateDay(
         hadInterCityTravel: !!(resolvedNextLegTransport && resolvedNextLegTransport !== 'none'),
         fallbackInjected: false,
       },
+      llm: {
+        model: aiResult?.model || 'unknown',
+        promptTokens: aiResult?.usage?.prompt_tokens || 0,
+        completionTokens: aiResult?.usage?.completion_tokens || 0,
+      },
     };
 
     return new Response(

@@ -114,13 +114,14 @@ export class GenerationTimer {
     }
   }
 
-  /** Record per-day timing breakdown with optional category counts, meals, transport, and validation diagnostics. */
+  /** Record per-day timing breakdown with optional category counts, meals, transport, validation, and LLM diagnostics. */
   addDayTiming(
     day: number, totalMs: number, aiMs: number, enrichMs: number, activityCount: number,
     categories?: Record<string, number>,
     meals?: { required: string[]; found: string[]; guardFired: boolean; injected?: string[] },
     transport?: { isTransitionDay: boolean; mode?: string | null; hadInterCityTravel?: boolean; fallbackInjected?: boolean },
     validation?: { totalChecks?: number; errors?: number; warnings?: number; repairsApplied?: number },
+    llm?: { model: string; promptTokens: number; completionTokens: number },
   ) {
     try {
       const entry: any = { day, total_ms: totalMs, ai_ms: aiMs, enrich_ms: enrichMs, activities: activityCount };
@@ -130,6 +131,7 @@ export class GenerationTimer {
       if (meals) entry.meals = meals;
       if (transport) entry.transport = transport;
       if (validation) entry.validation = validation;
+      if (llm) entry.llm = llm;
       this.dayTimings.push(entry);
     } catch (e) {
       // Never break generation
