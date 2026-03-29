@@ -179,6 +179,7 @@ export function useGenerationPoller({
         if (!onReadyCalledRef.current) {
           onReadyCalledRef.current = true;
           onReadyRef.current?.();
+          fireBackgroundCleanup(tripId);
         }
         return;
       }
@@ -199,6 +200,7 @@ export function useGenerationPoller({
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
             onReadyRef.current?.();
+            fireBackgroundCleanup(tripId);
           }
           return;
         }
@@ -215,6 +217,7 @@ export function useGenerationPoller({
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
             onReadyRef.current?.();
+            fireBackgroundCleanup(tripId);
           }
           return;
         }
@@ -233,6 +236,7 @@ export function useGenerationPoller({
             if (!onReadyCalledRef.current) {
               onReadyCalledRef.current = true;
               onReadyRef.current?.();
+              fireBackgroundCleanup(tripId);
             }
             return;
           }
