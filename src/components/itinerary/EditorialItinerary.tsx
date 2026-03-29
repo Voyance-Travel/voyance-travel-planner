@@ -9350,6 +9350,11 @@ function DayCard({
                 const acts = day.activities || [];
                 let zeroGapCount = 0;
                 for (let i = 0; i < acts.length - 1; i++) {
+                  // Transport entries ARE the travel buffer — skip pairs involving them
+                  const catA = ((acts[i] as any).category || '').toLowerCase();
+                  const catB = ((acts[i + 1] as any).category || '').toLowerCase();
+                  if (catA === 'transport' || catB === 'transport') continue;
+
                   const gap = computeGapMinutes(
                     acts[i].endTime,
                     acts[i].startTime || (acts[i] as any).time,
