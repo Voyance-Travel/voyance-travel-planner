@@ -1,119 +1,65 @@
 
-Fix this in three layers, because we now know it is not just “one missed null guard”.
 
-## What I found
+# Plan: Enhance Error Logging to Diagnose the `.toLowerCase()` Crash
 
-1. The crash is still plausibly coming from the trip-detail render tree, because there are still several unguarded runtime `.toLowerCase()` calls in itinerary-related components beyond the first batch we fixed.
-2. Your client-side logging gap is real: `useErrorTracker()` writes unhandled browser errors to `client_errors`, but `ErrorBoundary.componentDidCatch()` only writes to `console.error`. So React render crashes can show the “Small detour” screen without being persisted to your logs.
-3. The “weird Small detour graphic” is not what the current code contains anymore. `src/components/common/ErrorBoundary.tsx` already has a clean exclamation-circle SVG. If production still shows the old/broken visual, the published client is likely serving a stale cached PWA bundle.
+## The Problem With Current Logging
 
-## Implementation plan
+The `client_errors` table has **zero records** of the `.toLowerCase()` crash. Here's why:
 
-### 1. Close the logging blind spot for React render crashes
-Update the error handling path so React boundary failures are stored in the backend, not just printed to console.
+1. **Production is serving a stale bundle.** The error comes from `index-SuNP7A_H.js` — a cached production asset. Your code changes (guards, ErrorBoundary logging) exist in the repo but have **not reached the user's browser** yet. The PWA cache or CDN is still serving the old JS bundle.
 
-- Extract the existing `client_errors` insert logic from `useErrorTracker.ts` into a shared helper.
-- Call that helper from:
-  - `useErrorTracker()` for window errors / unhandled rejections
-  - `ErrorBoundary.componentDidCatch()` for React render crashes
-- Include metadata such as:
-  - route
-  - component stack
-  - error message / stack
-  - build/version marker if available
-  - source = `error_boundary` vs `window_error`
+2. **Even when deployed, the logging is incomplete.** The `logClientError` call in `ErrorBoundary.componentDidCatch` does not capture enough to trace the crash to a specific function. The minified stack (`Lat`, `XR`, `AQ`) is useless without a source map. The `componentStack` from React only shows the component tree, not which internal function called `.toLowerCase()`.
 
-Result: if this happens again, you’ll see the exact frontend failure in `client_errors` instead of only in browser console.
+## What Needs to Change
 
-### 2. Finish the defensive rendering pass in the actual failing trip-detail path
-Apply function-level guards to the remaining likely crash points we found.
+### 1. Force the stale cache out (highest priority)
+The cache-busting code added to `main.tsx` exists in the repo but hasn't reached production. Until the user's browser loads the new bundle, no new logging will fire. We need to:
+- **Publish the app** so the new code reaches the CDN
+- Add a `<meta>` cache-control header in `index.html` to prevent aggressive caching of the HTML shell
+- Ensure the service worker `skipWaiting()` + `clients.claim()` is working in `vite.config.ts` PWA config
 
-Highest-priority files:
-- `src/components/booking/RestaurantLink.tsx`
-  - `getCacheKey(name, destination)` currently does `name.toLowerCase()` / `destination.toLowerCase()` with no runtime guard
-  - this is a strong candidate because `InlineBookingActions` can still pass a missing activity title into `RestaurantLink`
-- `src/components/itinerary/TransitModePicker.tsx`
-  - guard `activityTitle.toLowerCase()`
-  - guard `option.mode.toLowerCase()` / `option.label.toLowerCase()`
-  - guard helper `getModeIcon(mode)`
-- `src/components/itinerary/TransitGapIndicator.tsx`
-  - guard `prevDuration.toLowerCase()`
-  - guard `method.toLowerCase()`
-  - keep category guard pattern consistent
-- `src/components/itinerary/WeatherForecast.tsx`
-  - guard `condition.toLowerCase()`
-  - guard `d.condition.toLowerCase()`
-- `src/components/itinerary/EditorialItinerary.tsx`
-  - replace repeated direct `.toLowerCase()` calls with already-normalized locals where possible
-  - make every title/category/type-derived string fallback to `''` or `'activity'` before normalization
+### 2. Add source maps for production builds
+Without source maps, the minified stack (`Lat at line 2615:49429`) is untraceable. We should:
+- Enable `build.sourcemap: 'hidden'` in `vite.config.ts` (generates `.map` files but doesn't expose them to browsers)
+- Or enable `build.sourcemap: true` temporarily to decode the crash
 
-Preferred approach:
-- add a tiny shared helper like `safeLower(value: unknown): string`
-- use it in render-critical code instead of ad hoc string assumptions
+### 3. Enrich the ErrorBoundary log with the failing component name
+Currently `componentDidCatch` logs `componentName: 'ErrorBoundary'` — that's the boundary itself, not the component that crashed. We should:
+- Parse the React `componentStack` to extract the first (deepest) component name
+- Log it as `failing_component` in the metadata
+- Add the `error.message` verbatim so we can filter by "toLowerCase"
 
-Result: malformed itinerary data won’t crash the page even if titles/categories are missing.
+### 4. Add a breadcrumb trail for the render path
+Since 249 `.toLowerCase()` calls exist in `EditorialItinerary.tsx` alone, we need to narrow down which function crashes. Add a lightweight breadcrumb system:
+- Before each major render function in EditorialItinerary, push a breadcrumb string (e.g. `'estimateActivityCost'`, `'resolveTransportMode'`)
+- On crash, include the last breadcrumb in the error metadata
+- This is zero-cost in the happy path (just a variable assignment)
 
-### 3. Make the “Small detour” UI deterministic
-Even though the repo already shows the corrected icon, I’d harden this anyway so the fallback can’t look corrupted again.
+### 5. Guard the remaining 3 unguarded `.toLowerCase()` calls
+While the logging improvements will help future diagnosis, we should also fix the known remaining unguarded calls:
 
-- Replace the inline SVG in `ErrorBoundary` with a standard Lucide icon component (for example `AlertCircle`)
-- Keep the fallback UI minimal and dependency-light
-- Optionally add a tiny error code / “reload app” hint so support can identify boundary hits faster
+| File | Line | Unguarded call |
+|------|------|----------------|
+| `EditorialItinerary.tsx` | 950 | `budgetTier.toLowerCase()` |
+| `EditorialItinerary.tsx` | 1755 | `d.city.toLowerCase()` and `cityName?.toLowerCase()` |
+| `EditorialItinerary.tsx` | 1781 | `carrier.toLowerCase()` |
 
-Result: the fallback screen becomes visually reliable and easier to recognize.
+These are strong crash candidates — `budgetTier`, `d.city`, and `carrier` can all be undefined.
 
-### 4. Fix the stale published bundle / PWA cache risk
-Because the code and the production visual appear out of sync, address the publishing cache path directly.
+## Files to Change
 
-- Review the PWA/service worker behavior in:
-  - `src/main.tsx`
-  - `vite.config.ts`
-- Add a one-time stale-cache recovery path for published clients, for example:
-  - force service worker update more aggressively
-  - clear outdated caches on version mismatch
-  - or temporarily disable the PWA worker until the app is stable again
-- Ensure new deployments cannot keep serving an old boundary UI bundle after refresh
+| File | Change |
+|------|--------|
+| `index.html` | Add `<meta>` no-cache for HTML shell |
+| `vite.config.ts` | Enable hidden source maps; verify PWA `skipWaiting` config |
+| `src/utils/logClientError.ts` | Add `failing_component` extraction from componentStack |
+| `src/components/common/ErrorBoundary.tsx` | Parse componentStack for deepest component; include in metadata |
+| `src/components/itinerary/EditorialItinerary.tsx` | Guard lines 950, 1755, 1781; add render breadcrumbs to major functions |
 
-Result: when a fix is deployed, users actually get the fix.
+## Expected Outcome
 
-### 5. Add regression coverage so this does not repeat silently
-Add targeted tests for the exact failure class.
+After publishing:
+1. Users get the new bundle (cache-busted)
+2. If the crash still occurs, `client_errors` will contain the exact component, breadcrumb trail, route, and (with source maps) a readable stack trace
+3. The 3 remaining unguarded calls are fixed, which may eliminate the crash entirely
 
-#### Unit/component coverage
-Render these components with incomplete data:
-- `InlineBookingActions`
-- `RestaurantLink`
-- `TransitModePicker`
-- `TransitGapIndicator`
-- `WeatherForecast`
-- key `EditorialItinerary` activity-row helpers
-
-Test data should include:
-- missing `title`
-- missing `category`
-- missing `type`
-- missing weather condition
-- missing transport mode/label
-
-#### End-to-end smoke coverage
-Add a critical-path test that:
-- opens a trip with sparse/malformed itinerary items
-- confirms the page renders instead of hitting the boundary
-- verifies `client_errors` receives entries when a forced boundary error is triggered in test mode
-
-#### Publish verification
-After deploy, explicitly verify:
-- published site serves the latest asset hash
-- boundary icon matches current code
-- hard refresh/new session no longer shows old fallback art
-
-## Expected outcome
-
-After this pass:
-- the page should stop crashing on missing string fields
-- React render crashes will finally be visible in your backend logs
-- the “Small detour” screen will render consistently
-- published fixes won’t be masked by stale PWA/cache behavior
-
-## No database schema changes needed
-This should be code-only. The existing `client_errors` table is already in place; it just isn’t being used by `ErrorBoundary`.
