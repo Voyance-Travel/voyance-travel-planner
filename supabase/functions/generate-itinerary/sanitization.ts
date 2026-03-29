@@ -57,7 +57,7 @@ export function sanitizeOptionFields(obj: any): any {
 // DEEP TEXT SANITIZATION — Strip CJK artifacts & schema-leak fragments
 // =============================================================================
 const CJK_ARTIFACTS = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F]+/g;
-const TEXT_SCHEMA_LEAK = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
+const TEXT_SCHEMA_LEAK = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay|type)\s*[:;|]\s*[^,;|]*/gi;
 const SYSTEM_PREFIXES_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*:?\s*/gi;
 const AI_QUALIFIER_RE = /\s*\((?:[^)]*?\b(?:alternative|satellite|or\s+high.end|similar|equivalent|comparable)\b[^)]*?)\)/gi;
 const TRAILING_OR_QUALIFIER_RE = /\s+or\s+(?:high.end|similar|equivalent|comparable)\b[^,.]*/gi;
@@ -86,8 +86,12 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/[🔴🟡🟢🔵]\s*(?:Book|Reserve|BOOK|RESERVE)[^.]*\.?\s*/g, '')
     .replace(/\b(?:book_now|book_soon|book_early|reserve_early|reserve_now)\b/gi, '')
     .replace(/(?:^|\.\s*)\s*(?:Reservation\s*)?[Uu]rgency[:\s]+\w+\.?\s*/gi, '')
+    .replace(/\b(?:BOOK|RESERVE|SECURE)\s+(?:ASAP|IMMEDIATELY|NOW|IN ADVANCE|WELL AHEAD|EARLY)\b/gi, '')
+    .replace(/\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)\b/gi, '')
     // AI self-referential commentary
     .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+\w+\s+(?:interest|preference|request|need|requirement)\b[^.]*\.?/gi, '')
+    // Strip "Voyance Pick" / "Hotel Pick" labels
+    .replace(/\s*(?:Voyance\s+Pick|Hotel\s+Pick)\s*/gi, '')
     .replace(/\(\s*\)/g, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
@@ -216,16 +220,20 @@ const PHANTOM_HOTEL_TITLE_PATTERNS = [
   /\bcheck[\s-]?out\b/i,
   /\breturn to (?:the )?hotel\b/i,
   /\bhotel breakfast\b/i,
+  /\bbreakfast at\b.*\bhotel\b/i,
   /\bsettle into\b.*\bhotel\b/i,
   /\bfreshen up\b.*\bhotel\b/i,
   /\brest (?:&|and) recharge\b.*\bhotel\b/i,
   /\bwind down\b.*\bhotel\b/i,
+  /\btaxi to (?:the )?hotel\b/i,
+  /\btransfer to (?:the )?hotel\b/i,
+  /\bback to (?:the )?hotel\b/i,
 ];
 
 const PHANTOM_HOTEL_CATEGORIES = ['hotel_checkin', 'hotel_checkout', 'accommodation'];
 
 // Known luxury hotel brand patterns the AI fabricates
-const FABRICATED_HOTEL_RE = /\b(?:Hotel\s+Le\s+\w+|Le\s+Meurice|The\s+Peninsula|Ritz\s+\w+|Four\s+Seasons|Mandarin\s+Oriental|St\.\s*Regis|Park\s+Hyatt|Aman\w*|Rosewood|Waldorf\s+Astoria|W\s+Hotel|Shangri[\s-]La|InterContinental|Sofitel|Fairmont|The\s+Langham|Belmond|Raffles|Oberoi|Taj\s+\w+|Peninsula\s+\w+)\b/i;
+const FABRICATED_HOTEL_RE = /\b(?:Hotel\s+Le\s+\w+|Le\s+Meurice|The\s+Peninsula|Ritz\s+\w+|Four\s+Seasons|Mandarin\s+Oriental|St\.\s*Regis|Park\s+Hyatt|Aman\w*|Rosewood|Waldorf\s+Astoria|W\s+Hotel|Shangri[\s-]La|InterContinental|Sofitel|Fairmont|The\s+Langham|Belmond|Raffles|Oberoi|Taj\s+\w+|Peninsula\s+\w+|Iconic\s+\w+\s+Hotel|The\s+\w+\s+Iconic\b)\b/i;
 
 /**
  * Remove fabricated hotel activities when no hotel is booked.
@@ -248,6 +256,11 @@ export function stripPhantomHotelActivities(day: any, hasHotel: boolean): any {
 
     // Remove activities referencing fabricated hotel names
     if (FABRICATED_HOTEL_RE.test(act.title || '') || FABRICATED_HOTEL_RE.test(act.description || '')) return false;
+
+    // Generic catch-all: any activity with "Hotel" in the title when no hotel is booked
+    // and the category is dining, transport, or accommodation
+    const hotelRelatedCategories = ['dining', 'transport', 'transportation', 'transit', 'accommodation'];
+    if (/\bhotel\b/i.test(title) && hotelRelatedCategories.includes(category)) return false;
 
     return true;
   });

@@ -76,6 +76,9 @@ export function sanitizeActivityName(name: string | undefined | null): string {
   // Strip trailing "or High-End Boutique Wellness" without parens
   sanitized = sanitized.replace(TRAILING_OR_QUALIFIER_RE, '').trim();
 
+  // Strip "Voyance Pick" / "Hotel Pick" internal label suffixes
+  sanitized = sanitized.replace(/\s*(?:Voyance\s+Pick|Hotel\s+Pick)\s*$/gi, '').trim();
+
   // Also handle case-insensitive matching for robustness
   const lowerName = sanitized.toLowerCase();
   for (const prefix of SYSTEM_PREFIXES) {
@@ -121,6 +124,10 @@ export function sanitizeActivityName(name: string | undefined | null): string {
     }
   }
 
+  // Remove any consecutive duplicate word (case-insensitive)
+  // e.g., "Pantheon Pantheon" → "Pantheon", "The The Restaurant" → "The Restaurant"
+  sanitized = sanitized.replace(/\b(\w+)\s+\1\b/gi, '$1');
+
   // Strip trailing geographic synonym stuffing
   // e.g., "Central Park walk borough town place locale district" → "Central Park walk"
   const GEO_SYNONYMS = new Set([
@@ -146,11 +153,13 @@ export function sanitizeActivityName(name: string | undefined | null): string {
  * no dedup logic, just prefix removal.
  */
 const SYSTEM_LABEL_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*:?\s*/gi;
+const VOYANCE_PICK_RE = /\s*(?:Voyance\s+Pick|Hotel\s+Pick)\s*/gi;
 
 export function sanitizeActivityText(text: string | undefined | null): string {
   if (!text) return '';
   return text
     .replace(SYSTEM_LABEL_RE, '')
+    .replace(VOYANCE_PICK_RE, '')
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
     .replace(SLOT_PREFIX_RE, '')
