@@ -94,17 +94,23 @@ const ALTERNATIVE_SUGGESTION_RE = /\s*Alternative:\s*[^.]+\.?\s*/g;
 // 7. Standalone boolean field leaks: isVoyancePick: true
 const STANDALONE_BOOL_RE = /\s+(?:is[A-Z]\w+):\s*(?:true|false|null)\.?\s*/g;
 
-// 8. Freestanding booking urgency text (not in parentheses)
-const BOOKING_URGENCY_TEXT_RE = /\b(?:BOOK|RESERVE|SECURE)\s+\d[\d-]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|BEFORE|OUT|EARLY)?\b/gi;
+// 8. Freestanding booking urgency text (not in parentheses) — handles unicode dashes too
+const BOOKING_URGENCY_TEXT_RE = /\b(?:BOOK|RESERVE|SECURE)\s+\d[\d\-–—]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|BEFORE|OUT|EARLY)?\b/gi;
 
-// 9. AI self-referential commentary about addressing preferences
-const AI_ADDRESSES_RE = /(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+\w+\s+(?:interest|preference|request|need|requirement)\b[^.]*\.?/gi;
+// 9. AI self-referential commentary about addressing preferences — broadened
+const AI_ADDRESSES_RE = /(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects|is designed for|was chosen for|specifically targets)\s+(?:the|your|their)\s+\w+(?:\s+\w+)?\s+(?:interest|preference|request|need|requirement|specifically|in particular)\b[^.]*\.?/gi;
 
 // 10. Schema field leaks with comma prefix: ,type ,category ,slot etc.
-const COMMA_FIELD_LEAK_RE = /,\s*(?:type|category|slot|isVoyancePick|optionGroup|isOption|tags|bookingRequired)\b[^,.]*/gi;
+const COMMA_FIELD_LEAK_RE = /,\s*(?:type|category|slot|isVoyancePick|optionGroup|isOption|tags|bookingRequired|isTransitionDay|dayMode|budgetTier)\b[^,.]*/gi;
 
 // 11. Generic placeholder "the destination" / "the city" instead of actual city name
 const GENERIC_DESTINATION_RE = /\b(?:the destination|the city|this destination|this city)\b/gi;
+
+// 12. Broader self-commentary: "This [verb] the wellness interest specifically"
+const AI_INTEREST_COMMENTARY_RE = /(?:^|\.\s*)(?:This|It|The activity)\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects|specifically targets)\s+[^.]{5,80}(?:interest|preference|specifically|requirement|request)[^.]*\.?\s*/gi;
+
+// 13. "Find a real restaurant" placeholder text from meal guard fallbacks
+const FIND_RESTAURANT_RE = /Tap\s+"Find a real restaurant"[^.]*\.?\s*/gi;
 
 // Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
 const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''\u2018\u2019-]+/gi;
@@ -139,7 +145,9 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(STANDALONE_BOOL_RE, '')
     .replace(BOOKING_URGENCY_TEXT_RE, '')
     .replace(AI_ADDRESSES_RE, '')
+    .replace(AI_INTEREST_COMMENTARY_RE, '')
     .replace(COMMA_FIELD_LEAK_RE, '')
+    .replace(FIND_RESTAURANT_RE, '')
     .replace(/\(\s*\)/g, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
@@ -263,11 +271,23 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
   return day;
 }
 
-// === Time helpers for sanitization ===
+// === Time helpers for sanitization — handles both 12h ("3:15 PM") and 24h ("15:15") ===
 function sanitizationParseTimeToMinutes(time: string): number {
   if (!time) return 0;
-  const match = time.match(/(\d{1,2}):(\d{2})/);
-  return match ? parseInt(match[1]) * 60 + parseInt(match[2]) : 0;
+  const cleaned = time.trim().toLowerCase();
+  // Try 12h format first: "3:15 PM", "11:00 am", "9 pm"
+  const match12 = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
+  if (match12) {
+    let h = parseInt(match12[1], 10);
+    const m = parseInt(match12[2] || '0', 10);
+    if (match12[3] === 'pm' && h !== 12) h += 12;
+    if (match12[3] === 'am' && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  // 24h format: "14:30", "9:00"
+  const match24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
+  return 0;
 }
 
 function minutesToHHMM(mins: number): string {
@@ -289,6 +309,29 @@ const NON_REPEATABLE_CATEGORIES = new Set([
  * Remove activities from newDay that duplicate venues from previousDays.
  * Only filters non-meal, non-transport, non-hotel categories.
  */
+// Verb-stripping regex for concept similarity
+const DEDUP_STRIP_VERBS_RE = /\b(guided|visit|explore|discover|tour|walk|stroll|head|go|return|morning|afternoon|evening|a|an|the|to|of|at|in|on|and|with|for)\b/g;
+
+function dedupConceptSimilarity(a: string, b: string): boolean {
+  if (!a || !b || a.length < 4 || b.length < 4) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  // Strip common verbs and check containment
+  const aVenue = a.replace(DEDUP_STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
+  const bVenue = b.replace(DEDUP_STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
+  if (aVenue.length > 4 && bVenue.length > 4 && (aVenue.includes(bVenue) || bVenue.includes(aVenue))) return true;
+  // Word overlap
+  const aWords = new Set(a.split(/\s+/).filter(w => w.length > 3));
+  const bWords = new Set(b.split(/\s+/).filter(w => w.length > 3));
+  if (aWords.size === 0 || bWords.size === 0) return false;
+  const overlap = [...aWords].filter(w => bWords.has(w));
+  return overlap.length / Math.min(aWords.size, bWords.size) > 0.6;
+}
+
+/**
+ * Remove activities from newDay that duplicate venues from previousDays.
+ * Uses concept-similarity matching (not just exact title) + location.name anchoring.
+ */
 export function deduplicateCrossDayVenues(
   newDay: any,
   previousDays: any[],
@@ -296,15 +339,23 @@ export function deduplicateCrossDayVenues(
 ): any {
   if (!newDay?.activities || !previousDays?.length) return newDay;
 
+  // Build previous venue data with both exact names and normalized concepts
   const previousVenueNames = new Set<string>();
+  const previousConcepts: string[] = [];
   for (const prevDay of previousDays) {
     if (!prevDay?.activities) continue;
     for (const act of prevDay.activities) {
       const name = (act.title || act.name || '').toLowerCase().trim();
-      if (name.length > 3) previousVenueNames.add(name);
+      if (name.length > 3) {
+        previousVenueNames.add(name);
+        previousConcepts.push(name);
+      }
       if (act.location?.name) {
         const locName = act.location.name.toLowerCase().trim();
-        if (locName.length > 3) previousVenueNames.add(locName);
+        if (locName.length > 3) {
+          previousVenueNames.add(locName);
+          previousConcepts.push(locName);
+        }
       }
     }
   }
@@ -318,9 +369,22 @@ export function deduplicateCrossDayVenues(
     // Only dedup non-meal, non-transport activities
     if (!NON_REPEATABLE_CATEGORIES.has(category)) return true;
 
+    // Exact match
     if (previousVenueNames.has(name) || (locationName && previousVenueNames.has(locationName))) {
-      console.log(`[dedup] Removing "${name}" from day ${dayNumber} - already in previous day`);
+      console.log(`[dedup] Removing "${name}" from day ${dayNumber} - exact match in previous day`);
       return false;
+    }
+
+    // Concept similarity (catches "Louvre Museum" vs "Visit the Louvre", etc.)
+    for (const prevConcept of previousConcepts) {
+      if (dedupConceptSimilarity(name, prevConcept)) {
+        console.log(`[dedup] Removing "${name}" from day ${dayNumber} - concept match with "${prevConcept}"`);
+        return false;
+      }
+      if (locationName && dedupConceptSimilarity(locationName, prevConcept)) {
+        console.log(`[dedup] Removing "${name}" from day ${dayNumber} - location concept match with "${prevConcept}"`);
+        return false;
+      }
     }
 
     return true;
@@ -463,6 +527,44 @@ export function enforceHotelPlaceholderOnDay(day: any): any {
   }
 
   return day;
+}
+
+// =============================================================================
+// PHANTOM HOTEL STRIPPING — Remove fabricated hotel activities when no hotel booked
+// =============================================================================
+const PHANTOM_HOTEL_PATTERN = /\b(?:hotel|check.?in|check.?out|return to (?:the |your )?(?:hotel|room|suite))\b/i;
+
+/**
+ * Strips accommodation activities that reference phantom/fabricated hotels
+ * when no real hotel is booked. Keeps activities that just mention "hotel" in passing
+ * (e.g. "hotel bar", "rooftop lounge at hotel").
+ */
+export function stripPhantomHotelActivities(day: any, hasHotelBooked: boolean): any {
+  if (hasHotelBooked || !day?.activities) return day;
+
+  const before = day.activities.length;
+  day.activities = day.activities.filter((act: any) => {
+    const title = (act.title || act.name || '').toLowerCase();
+    const category = (act.category || '').toLowerCase();
+
+    // Remove explicit accommodation check-in/check-out
+    if (category === 'hotel_checkin' || category === 'hotel_checkout') return false;
+    if (category === 'accommodation' && PHANTOM_HOTEL_PATTERN.test(title)) return false;
+
+    // Remove "Return to Hotel" / "Freshen up at Hotel" / "Check-in at [Hotel Name]"
+    if (/^(?:return to|freshen up at|check.?in at|settle into|arrive at)\s/i.test(title) &&
+        PHANTOM_HOTEL_PATTERN.test(title)) return false;
+
+    return true;
+  });
+
+  const removed = before - day.activities.length;
+  if (removed > 0) {
+    console.log(`[stripPhantomHotel] Removed ${removed} phantom hotel activity(ies) from day`);
+  }
+
+  return day;
+}
 }
 
 export function sanitizeDateFields(obj: any): any {

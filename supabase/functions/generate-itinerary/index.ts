@@ -28,6 +28,7 @@ import {
   normalizeDurationString,
   enforceHotelPlaceholderOnDay,
   deduplicateCrossDayVenues,
+  stripPhantomHotelActivities,
 } from './sanitization.ts';
 
 import {
@@ -2025,6 +2026,13 @@ These help the traveler prepare for their trip.
           multiCityPrompt += `\n   Check-in: ${checkInTime}, Check-out: ${checkOutTime}.`;
           multiCityPrompt += `\n   🚫 CRITICAL: The user has ALREADY SELECTED this hotel. Use "${dayCity.hotelName}" for ALL accommodation references (check-in, return to hotel, freshen up, etc.). Do NOT invent, suggest, or substitute a different hotel.`;
           multiCityPrompt += `\n   ⚠️ Start each day from this hotel area and plan return in the evening.`;
+        } else {
+          // BUG 3 FIX: No hotel booked — explicitly instruct AI to NOT fabricate hotel activities
+          multiCityPrompt += `\n🏨 ACCOMMODATION in ${dayDestination}: The traveler has NOT selected a hotel or accommodation.`;
+          multiCityPrompt += `\n   🚫 Do NOT include any hotel check-in, hotel check-out, or "return to hotel" activities.`;
+          multiCityPrompt += `\n   🚫 Do NOT invent or fabricate hotel names. If you must reference lodging, say "your accommodation".`;
+          multiCityPrompt += `\n   🚫 Do NOT generate activities with category "accommodation".`;
+        }
           
           if (dayCity.isFirstDayInCity && !dayCity.isTransitionDay) {
             // Very first city, first day — arrival logistics
@@ -3181,41 +3189,65 @@ Generate activities for this day following ALL constraints above.`;
         // MEAL FINAL GUARD — shared helper, single source of truth
         // Runs AFTER all post-processing (dedup, etc.) to guarantee meals
         // ====================================================================
-        const mealGuardResult = enforceRequiredMealsFinalGuard(
-          generatedDay.activities || [],
-          dayMealPolicy.requiredMeals,
-          dayNumber,
-          context.destination || 'the destination',
-          context.currency || 'USD',
-          dayMealPolicy.dayMode,
-        );
-        if (!mealGuardResult.alreadyCompliant) {
-          // If NOT the last attempt, treat meal guard firing as a retry trigger
-          // instead of silently accepting placeholders
-          if (!isLastAttempt) {
-            const missingList = mealGuardResult.injectedMeals.map(m => m.toUpperCase()).join(', ');
-            console.warn(`[Stage 2] Day ${dayNumber}: Meal guard detected missing [${missingList}] — triggering retry instead of accepting placeholders`);
-            // Add specific meal-missing errors to trigger a focused retry
-            lastValidation = {
-              isValid: false,
-              errors: [
-                `🚨 MISSING MEALS: Your response is missing ${missingList} dining activities. You MUST include a REAL, NAMED restaurant for each of: ${missingList}. Generic names like "Local Café" or "Breakfast spot" are NOT acceptable. Include the actual restaurant name, category="dining", and the meal type keyword in the title.`
-              ],
-              warnings: [],
-            };
-            lastError = new Error(`Meal guard fired: missing [${missingList}]`);
-            console.log(`[Stage 2] Day ${dayNumber} missing meals [${missingList}], retrying (attempt ${attempt + 1})...`);
-            if (attempt < maxRetries) {
-              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-            }
-            continue;
-          }
-          // Last attempt — accept the guard fallbacks
-          generatedDay.activities = mealGuardResult.activities as any;
-          console.warn(`[Stage 2] Day ${dayNumber}: FINAL ATTEMPT — Meal guard injected [${mealGuardResult.injectedMeals.join(', ')}] (destination-aware fallbacks)`);
+        // BUG 1 FIX: Check if day has real non-logistics activities before meal injection
+        const LOGISTICS_CHECK_CATS = new Set(['transport', 'accommodation', 'downtime', 'free_time', 'transit']);
+        const realActivityCountForMealGuard = (generatedDay.activities || []).filter((a: any) => {
+          const cat = (a.category || '').toLowerCase();
+          return !LOGISTICS_CHECK_CATS.has(cat);
+        }).length;
+        
+        if (realActivityCountForMealGuard === 0) {
+          console.warn(`[Stage 2] Day ${dayNumber}: 0 real activities — skipping meal guard, marking as ungenerated`);
+          (generatedDay as any)._ungenerated = true;
         } else {
-          console.log(`[Stage 2] Day ${dayNumber}: Meal guard passed — all required meals present`);
+          const mealGuardResult = enforceRequiredMealsFinalGuard(
+            generatedDay.activities || [],
+            dayMealPolicy.requiredMeals,
+            dayNumber,
+            context.destination || 'the destination',
+            context.currency || 'USD',
+            dayMealPolicy.dayMode,
+          );
+          if (!mealGuardResult.alreadyCompliant) {
+            // If NOT the last attempt, treat meal guard firing as a retry trigger
+            // instead of silently accepting placeholders
+            if (!isLastAttempt) {
+              const missingList = mealGuardResult.injectedMeals.map(m => m.toUpperCase()).join(', ');
+              console.warn(`[Stage 2] Day ${dayNumber}: Meal guard detected missing [${missingList}] — triggering retry instead of accepting placeholders`);
+              // Add specific meal-missing errors to trigger a focused retry
+              lastValidation = {
+                isValid: false,
+                errors: [
+                  `🚨 MISSING MEALS: Your response is missing ${missingList} dining activities. You MUST include a REAL, NAMED restaurant for each of: ${missingList}. Generic names like "Local Café" or "Breakfast spot" are NOT acceptable. Include the actual restaurant name, category="dining", and the meal type keyword in the title.`
+                ],
+                warnings: [],
+              };
+              lastError = new Error(`Meal guard fired: missing [${missingList}]`);
+              console.log(`[Stage 2] Day ${dayNumber} missing meals [${missingList}], retrying (attempt ${attempt + 1})...`);
+              if (attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+              }
+              continue;
+            }
+            // Last attempt — accept the guard fallbacks
+            generatedDay.activities = mealGuardResult.activities as any;
+            console.warn(`[Stage 2] Day ${dayNumber}: FINAL ATTEMPT — Meal guard injected [${mealGuardResult.injectedMeals.join(', ')}] (destination-aware fallbacks)`);
+          } else {
+            console.log(`[Stage 2] Day ${dayNumber}: Meal guard passed — all required meals present`);
+          }
         }
+
+        // BUG 3 FIX: Strip phantom hotel activities when no real hotel is booked
+        {
+          const hasHotel = !!(context.hotelData?.hasHotel) || !!(context.multiCityDayMap?.[dayNumber - 1]?.hotelName);
+          if (!hasHotel) {
+            generatedDay = stripPhantomHotelActivities(generatedDay, false);
+          }
+        }
+
+        // FINAL-PASS SANITIZATION: Run sanitizeGeneratedDay one more time after ALL
+        // post-processing to catch any leak text reintroduced by meal guard, dedup, etc.
+        generatedDay = sanitizeGeneratedDay(generatedDay, dayNumber, context.destination);
 
         // Tag day with multi-city info
         if (context.isMultiCity && dayCity) {
@@ -12233,22 +12265,46 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             }
           }
 
-          const mealGuardResult = enforceRequiredMealsFinalGuard(
-            generatedDay.activities || [],
-            dayMealPolicy.requiredMeals,
-            dayNumber,
-            resolvedDestination || destination || 'the destination',
-            'USD',
-            dayMealPolicy.dayMode,
-            mealFallbackVenues,
-          );
-          if (!mealGuardResult.alreadyCompliant) {
-            generatedDay.activities = mealGuardResult.activities as any;
-            normalizedActivities = generatedDay.activities;
-            console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'REAL POOL venues' : 'destination-aware fallbacks'} before return`);
+          // BUG 1 FIX: Check for real activities before meal injection
+          const GEN_LOGISTICS_CATS = new Set(['transport', 'accommodation', 'downtime', 'free_time', 'transit']);
+          const genRealActCount = (generatedDay.activities || []).filter((a: any) => {
+            const cat = (a.category || '').toLowerCase();
+            return !GEN_LOGISTICS_CATS.has(cat);
+          }).length;
+
+          if (genRealActCount === 0) {
+            console.warn(`[generate-day] ⚠️ Day ${dayNumber} has 0 real activities — skipping meal guard, marking as ungenerated`);
+            (generatedDay as any)._ungenerated = true;
           } else {
-            console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
+            const mealGuardResult = enforceRequiredMealsFinalGuard(
+              generatedDay.activities || [],
+              dayMealPolicy.requiredMeals,
+              dayNumber,
+              resolvedDestination || destination || 'the destination',
+              'USD',
+              dayMealPolicy.dayMode,
+              mealFallbackVenues,
+            );
+            if (!mealGuardResult.alreadyCompliant) {
+              generatedDay.activities = mealGuardResult.activities as any;
+              normalizedActivities = generatedDay.activities;
+              console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'REAL POOL venues' : 'destination-aware fallbacks'} before return`);
+            } else {
+              console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
+            }
           }
+
+          // BUG 3 FIX: Strip phantom hotel activities in generate-day path
+          {
+            const genDayCity = context?.multiCityDayMap?.[dayNumber - 1];
+            const genHasHotel = !!(context?.hotelData?.hasHotel) || !!(genDayCity?.hotelName);
+            if (!genHasHotel) {
+              generatedDay = stripPhantomHotelActivities(generatedDay, false);
+            }
+          }
+
+          // FINAL-PASS SANITIZATION: catch any leak text from post-processing
+          generatedDay = sanitizeGeneratedDay(generatedDay, dayNumber, resolvedDestination || destination);
         }
 
         // End post-processing phase

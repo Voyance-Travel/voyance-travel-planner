@@ -689,6 +689,20 @@ export async function handleGenerateTripDay(
     const d = updatedDays[i];
     if (!d?.activities || !Array.isArray(d.activities)) continue;
     const dn = d.dayNumber || (i + 1);
+
+    // BUG 1 FIX: Do NOT inject meals into days with zero real activities.
+    // These are ungenerated shell days — masking them with placeholder meals hides failures.
+    const LOGISTICS_CATS = new Set(['transport', 'accommodation', 'downtime', 'free_time', 'transit']);
+    const realActCount = d.activities.filter((a: any) => {
+      const cat = (a.category || '').toLowerCase();
+      return !LOGISTICS_CATS.has(cat);
+    }).length;
+    if (realActCount === 0) {
+      console.warn(`[generate-trip-day] ⚠️ Day ${dn} has 0 real activities — skipping meal injection, marking as ungenerated`);
+      (updatedDays[i] as any)._ungenerated = true;
+      continue;
+    }
+
     const policy = deriveMealPolicy({
       dayNumber: dn,
       totalDays,
