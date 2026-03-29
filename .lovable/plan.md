@@ -1,41 +1,62 @@
 
 
-# Fix: Null Guard `.toLowerCase()` Crashes
+# Audit: Push Notification Pipeline Gaps + End-to-End Testing Strategy
 
-## Root Cause
+## Current State
 
-Several helper functions accept `string` parameters but receive `undefined` at runtime when activities from the backend are missing `title`, `category`, or `type`. Calling `.toLowerCase()` on `undefined` crashes the render loop, triggering the ErrorBoundary repeatedly.
+The push notification system is **incomplete**:
 
-## Files to Fix
+1. **`pushService.ts`** (client) — Registers device tokens via Capacitor and stores them in the `push_tokens` table. This works for native apps only (`Capacitor.isNativePlatform()`).
 
-### 1. `src/utils/plannerUtils.ts` (lines 50, 75)
-- `getActivityIconName(type)` — add `(type || 'activity').toLowerCase()`
-- `getActivityColor(category)` — add `(category || 'activity').toLowerCase()`
+2. **`trip-notifications` edge function** — Schedules notifications by writing them into `trips.metadata.scheduledNotifications`. Has actions: `schedule`, `get-due`, `mark-sent`, `get-user-notifications`. But **it never actually delivers push notifications** — it only stores and reads them from trip metadata.
 
-### 2. `src/components/booking/InlineBookingActions.tsx` (lines 119, 124, 141)
-Three internal functions take `title: string` but receive undefined from callers:
-- `isDiningActivity(title)` — guard with `const lowerTitle = (title || '').toLowerCase()`
-- `isHotelAmenityActivity(title)` — same guard
-- `isNonBookableActivity(title)` — same guard
+3. **`send-trip-reminders` edge function** — Sends **email** reminders only (via Zoho SMTP). No push delivery.
 
-This is the most likely crash site: `InlineBookingActions` is rendered for every activity in the itinerary, and line 225 passes `activity.title` directly which can be undefined.
+4. **No push delivery function exists.** There is no edge function that reads `push_tokens` and sends via APNs or FCM. The tokens are collected but never used.
 
-### 3. `src/pages/DestinationDetail.tsx` (line 202)
-- `act.title.toLowerCase()` — change to `(act.title || '').toLowerCase()`
+## What Needs to Happen
 
-### 4. `src/components/itinerary/EditorialItinerary.tsx`
-- Line 10716: change `title: activity.title` to `title: activity.title || ''` when passing to `InlineBookingActions`
-- Line 992-994 (`isNeverFreeCategory`): guard both params with `(category || '').toLowerCase()` and `(title || '').toLowerCase()`
-- Line 1020-1022 (`inferCostBasis`): same guards
+### Step 1: Create `send-push` edge function
+A new edge function that:
+- Accepts `userId`, `title`, `body`, and optional `data` (e.g. `{ tripId }`)
+- Looks up the user's device tokens from `push_tokens`
+- Sends via FCM HTTP v1 API (works for both iOS and Android when configured through Firebase)
+- Logs delivery success/failure
+- Returns result to caller
 
-### 5. `src/services/flightItineraryPatch.ts` (lines 62, 67)
-- `isArrivalActivity(title)` and `isDepartureActivity(title)` — guard with `(title || '').toLowerCase()`
+Requires: **FCM service account key** stored as a secret. Without this, push delivery is impossible regardless of code.
 
-## Approach
+### Step 2: Wire `trip-notifications` to call `send-push`
+Update the `get-due` action (or create a `process-due` action) to:
+- Fetch due notifications
+- Call `send-push` for each
+- Mark as sent
 
-Add defensive null guards at the function level (not at every call site). This is the fastest, safest fix — all changes are `(param || '').toLowerCase()` or `(param || 'default').toLowerCase()`. No behavioral change for valid data.
+### Step 3: Wire `send-trip-reminders` to also push
+After sending email, also call `send-push` so users get both channels.
+
+### Step 4: Add health checks to E2E tests
+Add to `e2e/critical-paths.spec.ts`:
+- `send-push` responds to OPTIONS (not 404)
+- `trip-notifications` with `get-user-notifications` returns valid JSON
+- `push_tokens` table exists and is queryable
+
+## Prerequisite Question
+
+Before building the `send-push` function, we need to know: **Do you have Firebase Cloud Messaging (FCM) set up for this app?** Push delivery requires either:
+- An FCM server key (for Android + iOS via Firebase)
+- An APNs auth key (for iOS-only direct delivery)
+
+Without one of these configured as a secret, the delivery function would have nothing to call. The client-side registration code (`pushService.ts`) already uses Capacitor's push plugin, which typically sits on top of FCM/APNs.
+
+## Files to create/edit
+
+| File | Change |
+|------|--------|
+| `supabase/functions/send-push/index.ts` | **New** — Push delivery via FCM |
+| `supabase/functions/trip-notifications/index.ts` | Add `process-due` action that calls `send-push` |
+| `e2e/critical-paths.spec.ts` | Add push function health check |
 
 ## Risk
-
-**Minimal.** These are pure null-coalescing guards. Activities with undefined titles will fall through to default/fallback paths instead of crashing.
+**Low for the wiring.** The main blocker is whether FCM/APNs credentials exist. Without them, we can build the plumbing but delivery will fail silently.
 
