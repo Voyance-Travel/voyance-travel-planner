@@ -422,7 +422,7 @@ serve(async (req) => {
     // --- Load trip ---
     const { data: trip, error: tripError } = await supabase
       .from("trips")
-      .select("id, itinerary_data, destination, user_id, start_date, end_date, metadata, smart_finish_purchased, creation_source, updated_at")
+      .select("id, itinerary_data, destination, destination_country, user_id, start_date, end_date, metadata, smart_finish_purchased, creation_source, updated_at, travelers, trip_type, budget_tier, is_multi_city")
       .eq("id", tripId)
       .single();
 
