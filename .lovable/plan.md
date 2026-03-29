@@ -1,112 +1,56 @@
-# Pipeline Refactor: Phased Rollout Plan
 
-## Architecture Principle
-> "Stop asking the model to invent the rules and then asking code to clean up the mess.
-> Give code ownership of the rules, and let the model operate inside a constrained box."
 
-## Pipeline Flow
-```
-Trip Facts → Day Schema → AI Fill → Validator → Targeted Repair → Save
-```
+# Phase 1: Retire Legacy `generate-full` Path
 
-## Current State Summary
+## What exists today
 
-| File | Lines | Role | Problem |
-|------|-------|------|---------|
-| `action-generate-day.ts` | 4,583 | Prompt + logistics + validation + repair | Monolith doing everything |
-| `action-generate-full.ts` | 2,962 | Legacy full-trip generation | Parallel path, duplicates rules |
-| `generation-core.ts` | 3,172 | Shared generation infra | Overlapping cleanup with sanitization |
-| `sanitization.ts` | 318 | Text cleanup + business rules | Mixed concerns |
-| `day-validation.ts` | 876 | Meal guards, chain blocklist | Good but disconnected from pipeline |
-| `action-generate-trip.ts` | ~500 | Trip orchestrator | Good pattern, keep |
-| `action-generate-trip-day.ts` | 1,118 | Day chain loop | Good pattern, keep |
+- **`action-generate-full.ts`** (2,962 lines) — a monolithic pipeline that does its own context prep, preference blending, prompt building, AI generation, enrichment, and saving. It's a complete parallel universe to the day-chain pipeline.
+- **`index.ts`** — routes `action === 'generate-full'` to `handleGenerateFull()`.
+- **One external caller**: `enrich-manual-trip/index.ts` calls `generate-itinerary` with `action: "generate-full"` and `smartFinishMode: true`. This is the "Smart Finish" flow for manual trips.
+- **No frontend callers**: The frontend uses `generate-trip` (day-chain). Only the test file and `enrich-manual-trip` reference `generate-full`.
 
----
+## What changes
 
-## ✅ Phase 0: Foundation (COMPLETE)
+### 1. Gut `action-generate-full.ts` → thin redirect
 
-**Files created**:
-- `pipeline/types.ts` — DayFacts, DaySchema, DaySlot, ValidationResult, FailureCode enum, StageArtifacts, RepairAction, StageTiming
-- `pipeline/stage-logger.ts` — StageLogger class that persists artifacts to `trip.metadata.pipeline_logs[day_N]`
+Replace the 2,962-line implementation with ~30 lines that:
+- Extract `tripId`, `smartFinishMode` from params
+- Write `smartFinishMode` into `trip.metadata` if truthy (so the day-chain pipeline picks it up)
+- Call `handleGenerateTrip()` with the same `tripId` + standard params from the trip record
+- Return whatever `handleGenerateTrip` returns
 
-**Status**: Deployed. Zero behavior changes. New files exist but are not called by any generation code.
+This means `generate-full` becomes an alias for `generate-trip` — same day-chain pipeline, same post-processing, one path.
 
----
+### 2. Update `index.ts` routing
 
-## Phase 1: Retire Legacy Path
+The `generate-full` action block currently passes `authHeader` to `handleGenerateFull`. The new thin redirect won't need it (self-chaining is handled by `handleGenerateTrip` internally). Simplify the dispatch to match the `generate-trip` pattern.
 
-**Goal**: Make `action-generate-full.ts` a thin redirect to the day-chain pipeline.
+### 3. Update `enrich-manual-trip/index.ts`
 
-**Files changed**:
-- `action-generate-full.ts` — gut implementation; delegate to `action-generate-trip.ts` logic
-- `index.ts` — `generate-full` routes through same trip orchestrator
+Change the call from `action: "generate-full"` to `action: "generate-trip"` with the correct params shape. This eliminates the need for the redirect entirely, but we keep the redirect in `action-generate-full.ts` as a safety net for any other callers.
 
-**Risk**: Low. Day-chain path already handles all trip types.
+### 4. Update test file
 
----
+`index.test.ts` references `generate-full` — update to use `generate-trip` or adjust expectations.
 
-## Phase 2: Extract Deterministic Compilers
+## What does NOT change
 
-**Goal**: Pull rule logic OUT of `action-generate-day.ts` into isolated, testable modules.
+- `action-generate-trip.ts` — untouched, it's the target
+- `action-generate-trip-day.ts` — untouched
+- `action-generate-day.ts` — untouched
+- `sanitization.ts` — untouched
+- Frontend code — no frontend uses `generate-full`
 
-**Files created**:
-- `pipeline/compile-day-facts.ts` — extracts hotel/flight/meal/must-do truth from GenerationContext → DayFacts
-- `pipeline/compile-day-schema.ts` — takes DayFacts → DaySchema (slots, time windows, constraints)
+## Risk assessment
 
-**Files changed**:
-- `action-generate-day.ts` — call compilers at top, feed schema downstream. Same behavior, single source.
+**Low risk.** The day-chain pipeline already handles all trip types including Smart Finish (it reads `smartFinishMode` from metadata). The only real caller (`enrich-manual-trip`) just needs its action name updated. The old 2,962-line file becomes dead code replaced by a redirect.
 
----
+## Files touched
 
-## Phase 3: Validator with Failure Taxonomy
+| File | Change |
+|------|--------|
+| `action-generate-full.ts` | Gut → ~30-line redirect to `handleGenerateTrip` |
+| `index.ts` | Simplify `generate-full` dispatch (drop `authHeader` pass) |
+| `enrich-manual-trip/index.ts` | Change action from `generate-full` to `generate-trip` |
+| `index.test.ts` | Update test to match new routing |
 
-**Goal**: Structured validator that classifies issues by error code (additive, runs alongside existing sanitization).
-
-**Files created**:
-- `pipeline/validate-day.ts` — returns `ValidationResult[]` with typed codes: PHANTOM_HOTEL, MEAL_ORDER, TITLE_LABEL_LEAK, LOGISTICS_SEQUENCE, GENERIC_VENUE, DUPLICATE_CONCEPT, CHRONOLOGY, TIME_OVERLAP, CHAIN_RESTAURANT
-
-**Files changed**:
-- `action-generate-trip-day.ts` — run `validateDay()` after generation, log via StageLogger
-
----
-
-## Phase 4: Deterministic Repair Layer
-
-**Goal**: Move business-rule fixes out of `sanitization.ts` into structured repair keyed to error codes.
-
-**Files created**:
-- `pipeline/repair-day.ts` — deterministic repairs: MEAL_ORDER→reassign times, PHANTOM_HOTEL→strip, CHRONOLOGY→sort, etc.
-
-**Files changed**:
-- `sanitization.ts` — narrow to text-only cleanup (CJK, labels, dedup, dashes)
-- `action-generate-trip-day.ts` — pipeline becomes: validate → repair → text-sanitize
-
----
-
-## Phase 5: Shrink the Prompt
-
-**Goal**: Remove hard rules from AI prompt that code now enforces.
-
-**Files changed**:
-- `action-generate-day.ts` / `prompt-library.ts` — remove meal ordering, hotel truth, departure sequencing, title formatting, chronology, logistics buffer rules from prompt. Keep venue quality, descriptions, personalization, vibe.
-
----
-
-## Phase 6: Targeted AI Repair (Optional)
-
-**Files created**:
-- `pipeline/ai-repair.ts` — micro-prompts for semantic issues only (missing must-do, wrong cuisine, weak personalization)
-
----
-
-## New Directory Structure
-```
-supabase/functions/generate-itinerary/pipeline/
-  types.ts              ✅ DONE — DaySchema, DayFacts, ValidationResult, FailureCode
-  stage-logger.ts       ✅ DONE — StageLogger class
-  compile-day-facts.ts  — Phase 2
-  compile-day-schema.ts — Phase 2
-  validate-day.ts       — Phase 3
-  repair-day.ts         — Phase 4
-  ai-repair.ts          — Phase 6
-```
