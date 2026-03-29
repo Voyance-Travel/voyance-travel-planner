@@ -2552,7 +2552,16 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       // ==========================================================================
-      // FORWARD-REFERENCE SANITIZATION: Strip hallucinated "tomorrow's X adventure"
+      // PHANTOM HOTEL STRIPPING: Remove fabricated hotel activities when no hotel booked
+      // ==========================================================================
+      {
+        const hasHotel = !!(dayCity?.hotelName || context.hotelData?.hotelName);
+        if (!hasHotel) {
+          stripPhantomHotelActivities(generatedDay, false);
+        }
+      }
+
+
       // from Return to Hotel descriptions that reference non-existent next-day plans
       // ==========================================================================
       {
