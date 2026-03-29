@@ -2294,7 +2294,39 @@ export default function TripDetail() {
               onActivitySkip={handleActivitySkip}
             />
             </ErrorBoundary>
-          ) : isServerGenerating || generationStalled ? (
+          ) : (() => {
+            // BUG 2 FIX: Show persistent incomplete-generation banner when itinerary has ungenerated days
+            const meta = (trip.metadata as Record<string, unknown>) || {};
+            const chainBroken = meta.chain_broken_at_day as number | undefined;
+            const itinData = trip.itinerary_data as { days?: Array<{ _ungenerated?: boolean; activities?: unknown[] }> } | null;
+            const ungeneratedDays = (itinData?.days || []).filter(d => (d as any)._ungenerated || (Array.isArray(d.activities) && d.activities.length === 0));
+            const hasIncompleteItinerary = hasItinerary && (chainBroken || ungeneratedDays.length > 0);
+            return hasIncompleteItinerary ? (
+              <div className="mb-4 p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30">
+                <div className="flex items-start gap-3">
+                  <span className="text-lg">⚠️</span>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sm">Incomplete Itinerary</h4>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {chainBroken 
+                        ? `Generation was interrupted at Day ${chainBroken}. Some days may be missing activities.`
+                        : `${ungeneratedDays.length} day(s) have no activities and need to be regenerated.`}
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
+                      onClick={handleResumeGeneration}
+                      disabled={resumingGeneration}
+                    >
+                      {resumingGeneration ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Resuming…</> : 'Resume Generation'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null;
+          })() ?? null}
+          {isServerGenerating || generationStalled ? (
             /* Server-side generation in progress or stalled — use GenerationPhases for
                consistent animation + progress display (airplane/globe animation) */
             <div className="space-y-6">
