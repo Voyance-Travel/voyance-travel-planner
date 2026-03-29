@@ -115,6 +115,8 @@ test.describe("Edge Function Availability", () => {
     "spend-credits",
     "parse-travel-story",
     "calculate-travel-dna",
+    "send-push",
+    "trip-notifications",
   ];
 
   for (const fn of criticalFunctions) {
