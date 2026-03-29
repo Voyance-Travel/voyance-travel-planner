@@ -1,48 +1,99 @@
 
 
-## Investigation Results: Why Generation Logs Appear Stuck
+## Rome Trip Audit — Fix Plan
 
-### Root Causes Found
+### Investigation Summary
 
-**1. Multiple log rows per trip — latest one masks progress**
-Each generation attempt calls `timer.init()` which creates a **new** `generation_logs` row. The client polls for the newest row (`ORDER BY created_at DESC LIMIT 1`). When a trip is retried, the newest row starts at 0% and if the chain breaks early, it stays stuck — hiding the older row that had actual progress data.
+Queried the actual trip data (`1c405809`). Confirmed:
+- `hotel_selection` is **NULL** — the AI fabricated "The Pantheon Iconic Rome Hotel" entirely
+- Day 1: 9 activities in DB, Day 2: 11, Day 3: 12, Day 4: 3
+- No days are locked (`metadata.isLocked` is null on all days)
+- Day 3/4 "only 1 visible" is likely a frontend rendering issue (needs browser investigation)
 
-Evidence from the database — trip `cf8debc2` has **8 separate log rows**, most stuck at various phases:
-- Row at 0% (`init`, `started`)
-- Row at 10% (`pre_chain_setup`)
-- Multiple rows at 26% and 42%
+### Fixes (6 total)
 
-**2. Orphaned logs never get finalized**
-When the edge function times out or the self-chaining breaks, `timer.finalize()` is never called. The log row stays as `in_progress` indefinitely with no `total_duration_ms`. There's no cleanup mechanism.
+---
 
-**3. `action-generate-day.ts` never writes progress to DB**
-The inner day-generation handler resumes the timer and tracks phases in memory, but never calls `updateProgress()`. Only `action-generate-trip-day.ts` writes progress to DB — and only **after** a day fully completes. This means there's zero visibility into what's happening during the 30-120 seconds while a day is actively being generated.
+**FIX 1: Strip "Voyance Pick" / "Hotel Pick" from titles**
 
-### Fix Plan
+Both `sanitizeAITextField` (backend, `sanitization.ts`) and `sanitizeActivityName` (frontend, `activityNameSanitizer.ts`) lack rules for these suffixes.
 
-**File: `supabase/functions/generate-itinerary/action-generate-trip.ts`**
-- Before creating a new timer, check for an existing `in_progress` log row for this trip. If found and it's stale (>5 min old), mark it `failed` before creating a new one. This prevents orphaned rows from accumulating.
+- Add regex: `/\s*(?:Voyance\s+Pick|Hotel\s+Pick)\s*$/gi` to strip from titles
+- Backend: Add to `sanitizeAITextField` in `sanitization.ts` line ~85
+- Frontend: Add to `sanitizeActivityName` in `activityNameSanitizer.ts` after system prefix stripping
 
-**File: `supabase/functions/generate-itinerary/action-generate-day.ts`**
-- Add `updateProgress()` calls at key milestones within the day generation:
-  - After context is loaded (~phase start)
-  - After AI call completes
-  - After post-processing
-- This gives real-time visibility instead of only updating when a day fully completes in the orchestrator.
+---
 
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
-- Add a `try/finally` block around the main logic to ensure `timer.finalize('failed')` is called even when the function crashes or times out.
-- In the error/timeout path where the chain breaks, explicitly finalize the timer before returning.
+**FIX 2: Expand phantom hotel stripping patterns**
 
-**File: `src/components/planner/shared/GenerationPhases.tsx`**
-- Update the polling query to also filter out logs older than 10 minutes as stale, so the UI doesn't show ancient stuck progress.
+`stripPhantomHotelActivities` in `sanitization.ts` misses:
+- "Breakfast at \<fabricated hotel\>" (only catches "hotel breakfast", not "breakfast at...hotel")
+- "Taxi to Hotel" (no pattern for generic hotel transport)
+- Non-luxury fabricated names like "The Pantheon Iconic Rome Hotel" (not in `FABRICATED_HOTEL_RE`)
 
-### Summary
+Changes to `sanitization.ts`:
+- Add patterns: `/\bbreakfast at\b.*\bhotel\b/i`, `/\btaxi to (?:the )?hotel\b/i`, `/\btransfer to (?:the )?hotel\b/i`
+- Add a generic catch-all: any title containing "Hotel" when `hasHotel === false` AND category is `dining`, `transport`, or `accommodation` should be stripped
 
-| Issue | Root Cause | Fix |
-|---|---|---|
-| Logs stuck at 0-10% | Multiple rows per trip, newest one masks progress | Clean up stale rows before creating new ones |
-| No mid-day progress | `action-generate-day.ts` never writes to DB | Add `updateProgress()` calls at key milestones |
-| Logs never show "complete" on failure | `finalize()` not called on crash/timeout | Wrap in try/finally |
-| Client shows stale data | Polling picks up orphaned rows | Filter out stale logs in query |
+---
+
+**FIX 3: Fix consecutive duplicate word in titles**
+
+"The Pantheon Pantheon Iconic Rome Hotel Pick" — existing dedup only checks last two words. Need general consecutive-word dedup in `sanitizeActivityName`.
+
+Add after line 122 in `activityNameSanitizer.ts`:
+```typescript
+// Remove any consecutive duplicate word (case-insensitive)
+sanitized = sanitized.replace(/\b(\w+)\s+\1\b/gi, '$1');
+```
+
+---
+
+**FIX 4: Fix meal time ordering (Lunch at 19:10 after Dinner at 19:00)**
+
+Two issues:
+1. Activities are not sorted chronologically after generation — "Lunch at Chorus Café" at 19:10 appears after "Dinner at Palazzo Fendi" at 19:00
+2. A meal labeled "Lunch" at 19:10 should be relabeled "Dinner" (or removed as duplicate dinner)
+
+Changes:
+- In `generation-core.ts` post-processing (around the chronological sort at line 1645), apply `enforceMealTimeCoherence` to all meal activities after sorting
+- In `action-generate-trip-day.ts`, add the same meal coherence check after day assembly
+
+---
+
+**FIX 5: Investigate Day 3/4 rendering bug (browser required)**
+
+Day 3 has 12 activities in DB but user reports only 1 visible. Days are NOT locked. This requires browser investigation to determine if:
+- `canViewDay()` is returning false incorrectly
+- The `DayCard` component is filtering activities
+- A CSS/layout issue is hiding content
+
+This fix requires using browser tools to inspect the live trip page.
+
+---
+
+**FIX 6: Backend text sanitization for `,type` leaks, booking urgency, AI self-commentary**
+
+These are already partially handled by `sanitizeAITextField` (lines 85-91 in `sanitization.ts`), but the `TEXT_SCHEMA_LEAK` regex may be too narrow. Verify coverage and add:
+- `,type` at field boundaries: `/,\s*type\b/gi` stripping
+- Ensure `BOOK/RESERVE` urgency regex covers all variants seen in production
+
+---
+
+### Deployment Order
+
+1. FIX 1 + FIX 3 (title sanitization — immediate visual improvement, both frontend + backend)
+2. FIX 2 (phantom hotel stripping — prevents fabricated hotel from appearing)
+3. FIX 4 (meal time ordering — fixes scheduling confusion)
+4. FIX 5 (browser investigation for rendering bug)
+5. FIX 6 (text quality polish)
+
+### Files Modified
+
+| File | Fixes |
+|---|---|
+| `src/utils/activityNameSanitizer.ts` | FIX 1, FIX 3 |
+| `supabase/functions/generate-itinerary/sanitization.ts` | FIX 1, FIX 2, FIX 6 |
+| `supabase/functions/generate-itinerary/generation-core.ts` | FIX 4 |
+| `supabase/functions/generate-itinerary/action-generate-trip-day.ts` | FIX 4 |
 
