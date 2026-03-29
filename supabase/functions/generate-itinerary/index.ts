@@ -17,6 +17,61 @@ import type { ActionContext } from './action-types.ts';
 import { GenerationTimer } from './generation-timer.ts';
 
 // =============================================================================
+// SHARED TYPES — Imported from generation-types.ts (single source of truth)
+// =============================================================================
+import type {
+  MultiCityDayInfo,
+  GenerationContext,
+  StrictActivity,
+  StrictDay,
+  TravelAdvisory,
+  LocalEventInfo,
+  TripOverview,
+  EnrichedItinerary,
+  EnrichmentStats,
+  ValidationViolation,
+  ValidationWarning,
+  ValidationResult,
+  ValidationContext,
+  VenueVerification,
+  CachedVenue,
+  DirectTripData,
+} from './generation-types.ts';
+
+// =============================================================================
+// SHARED UTILITIES — Imported from generation-utils.ts
+// =============================================================================
+import {
+  calculateDays,
+  formatDate,
+  timeToMinutes,
+  calculateDuration,
+  getCategoryIcon,
+  normalizeVenueName,
+  haversineDistanceKm,
+  getDestinationId,
+  getAirportTransferMinutes,
+  getAirportTransferFare,
+} from './generation-utils.ts';
+
+// =============================================================================
+// VENUE ENRICHMENT PIPELINE — Imported from venue-enrichment.ts
+// =============================================================================
+import {
+  checkVenueCache,
+  cacheVerifiedVenue,
+  getDestinationCenter,
+  verifyVenueWithGooglePlaces,
+  verifyVenueWithDualAI,
+  fetchActivityImage,
+  isBookableActivity,
+  searchViatorForActivity,
+  enrichActivity,
+  enrichActivityWithRetry,
+  enrichItinerary,
+} from './venue-enrichment.ts';
+
+// =============================================================================
 // EXTRACTED MODULES — Reduce bundle size for deploy
 // =============================================================================
 import {
