@@ -1203,7 +1203,7 @@ TIMELINE:
 DEPARTURE DAY ACTIVITIES: 1-2 maximum (breakfast + farewell only)
 
 REQUIRED SEQUENCE:
-1. "Breakfast at ${effectiveHotelData?.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
+1. "Breakfast at ${flightContext.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - startTime: "${breakfastStart}", endTime: "${breakfastEnd}"
    - category: "dining"
    - Near hotel
@@ -1339,7 +1339,7 @@ LUGGAGE REALITY:
 DEPARTURE DAY ACTIVITIES: 1 maximum (near hotel only)
 
 ⚠️ CRITICAL SEQUENCE - CHECKOUT MUST HAPPEN BEFORE AIRPORT TRANSFER:
-1. "Breakfast at ${effectiveHotelData?.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
+1. "Breakfast at ${flightContext.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - startTime: "${breakfastStart}", endTime: "${breakfastEnd}"
    - category: "dining"
    - NEAR HOTEL
@@ -1534,7 +1534,7 @@ TIMELINE:
 DEPARTURE DAY ACTIVITIES: 2-3 activities (breakfast + 1-2 farewell experiences)
 
 REALISTIC STRUCTURE:
-1. "Breakfast at ${effectiveHotelData?.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
+1. "Breakfast at ${flightContext.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - 08:30 - 09:30
    - At hotel restaurant
 
@@ -1828,7 +1828,7 @@ ${dayMealPolicy.isFullExplorationDay ? 'FULL EXPLORATION DAY' : dayMealPolicy.da
 This day must be a COMPLETE itinerary from morning to night. Every hour accounted for.
 
 REQUIRED DAY STRUCTURE:
-${dayMealPolicy.requiredMeals.includes('breakfast') ? `1. BREAKFAST (category: "dining") — At the hotel's own restaurant (preferred) or a real café nearby. NEVER at a DIFFERENT hotel's restaurant. Use the hotel name: ${effectiveHotelData?.hotelName || '[your hotel]'}. ~price, walking distance` : ''}
+${dayMealPolicy.requiredMeals.includes('breakfast') ? `1. BREAKFAST (category: "dining") — At the hotel's own restaurant (preferred) or a real café nearby. NEVER at a DIFFERENT hotel's restaurant. Use the hotel name: ${flightContext.hotelName || '[your hotel]'}. ~price, walking distance` : ''}
 2. TRANSIT between every pair of consecutive activities (category: "transport")
    - Include mode (${resolvedTransportModes.length > 0 ? resolvedTransportModes.join('/') : 'walk/taxi/metro/bus'}), duration, cost, route details
    - 10+ minute walks or any paid transit = separate activity entry
