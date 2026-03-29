@@ -71,8 +71,10 @@ export interface RepairDayResult {
 export function repairDay(input: RepairDayInput): RepairDayResult {
   const repairs: RepairAction[] = [];
   const { validationResults, dayNumber, isFirstDay, isLastDay,
-    arrivalTime24, returnDepartureTime24, hotelName, hasHotel,
-    lockedActivities, restaurantPool, usedRestaurants } = input;
+    arrivalTime24, returnDepartureTime24, hotelName, hotelAddress, hasHotel,
+    lockedActivities, restaurantPool, usedRestaurants,
+    isTransitionDay, isMultiCity, isLastDayInCity,
+    resolvedDestination, nextLegTransport, hotelOverride } = input;
 
   // Clone activities array to mutate
   let activities: any[] = [...(input.day.activities || [])];
