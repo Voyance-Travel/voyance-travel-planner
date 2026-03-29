@@ -1166,7 +1166,8 @@ function getActivityCost(
 }
 
 function getActivityType(activity: EditorialActivity): string {
-  return activity.category || activity.type || 'activity';
+  const raw = activity.category || activity.type || 'activity';
+  return typeof raw === 'string' ? raw : String(raw);
 }
 
 function getActivityRating(activity: EditorialActivity): number | null {
@@ -10455,7 +10456,7 @@ function ActivityRow({
                   'airport', 'arrival', 'departure', 'travel', 'transit',
                   'packing', 'rest', 'sleep', 'free time', 'leisure'
                 ];
-                const activityTypeLower = activityType.toLowerCase();
+                const activityTypeLower = (activityType || '').toLowerCase();
                 const titleLower = (activity.title || '').toLowerCase();
                 
                 // Check if this is a non-reviewable activity

@@ -99,7 +99,7 @@ const CATEGORY_TO_BASE_FIELD: Record<string, keyof CostIndex> = {
  * Infer meal type from activity title when category is generic "dining"
  */
 function inferMealTypeFromTitle(title: string): keyof CostIndex | null {
-  const titleLower = title.toLowerCase();
+  const titleLower = (title || '').toLowerCase();
   if (titleLower.includes('breakfast') || titleLower.includes('morning meal')) {
     return 'breakfast_base_usd';
   }
@@ -159,7 +159,7 @@ async function initializeCache(): Promise<void> {
     
     if (data) {
       data.forEach((row: CostIndex) => {
-        const key = `${row.city.toLowerCase()}|${row.country.toLowerCase()}`;
+        const key = `${(row.city || '').toLowerCase()}|${(row.country || '').toLowerCase()}`;
         costIndexCache.set(key, row);
       });
       cacheInitialized = true;
@@ -189,7 +189,7 @@ async function getCostIndex(city?: string, country?: string): Promise<CostIndex>
   // Try city-only match (for city-states like Singapore)
   if (city) {
     for (const [key, value] of costIndexCache.entries()) {
-      if (key.startsWith(`${city.toLowerCase()}|`)) {
+      if (key.startsWith(`${(city || '').toLowerCase()}|`)) {
         return value;
       }
     }
@@ -198,7 +198,7 @@ async function getCostIndex(city?: string, country?: string): Promise<CostIndex>
   // Try country-only match (use first city in that country as proxy)
   if (country) {
     for (const [key, value] of costIndexCache.entries()) {
-      if (key.endsWith(`|${country.toLowerCase()}`)) {
+      if (key.endsWith(`|${(country || '').toLowerCase()}`)) {
         return value;
       }
     }
@@ -266,7 +266,7 @@ export async function estimateCost(params: EstimateParams): Promise<CostEstimate
   }
   
   // Priority 3: Category-based estimation with title inference
-  const normalizedCategory = category.toLowerCase().trim();
+  const normalizedCategory = (category || 'activity').toLowerCase().trim();
   
   // Try to infer meal type from title if category is generic "dining"
   let baseField: keyof CostIndex;
