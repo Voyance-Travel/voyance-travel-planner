@@ -180,7 +180,7 @@ export async function handleGenerateFull(
       
       // PHASE 2 FIX: Use authenticated user ID as the canonical source of truth
       // This fixes missing personalization and hardens security (prevents userId spoofing)
-      const userId = authResult.userId;
+      const userId = userId;
       
       // Security guard: if request body includes userId that differs from auth token, log and reject
       if (params.userId && params.userId !== userId) {
@@ -928,7 +928,7 @@ INSTRUCTIONS: If any event matches the traveler's interests or travel style, WEA
           const gemsResponse = await fetch(`${supabaseUrl}/functions/v1/discover-hidden-gems`, {
             method: 'POST',
             headers: {
-              'Authorization': authHeader,
+              'Authorization': authHeader || '',
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -989,18 +989,18 @@ RULES FOR HIDDEN GEMS:
       // =======================================================================
       let voyancePicksContext = '';
       try {
-        console.log("[Stage 1.93] Fetching Voyance Picks for", destination);
+        console.log("[Stage 1.93] Fetching Voyance Picks for", context.destination);
         const { data: voyancePicks, error: vpError } = await supabase
           .from('voyance_picks')
           .select('*')
           .eq('is_active', true)
-          .ilike('destination', `%${destination.split(',')[0].trim()}%`);
+          .ilike('destination', `%${context.destination.split(',')[0].trim()}%`);
         
         if (vpError) {
           console.warn("[Stage 1.93] DB error:", vpError.message);
         } else if (voyancePicks && voyancePicks.length > 0) {
           const pickLines = voyancePicks.map((p: any, i: number) => 
-            `${i + 1}. **${p.name}** (${p.category}) in ${p.neighborhood || destination}
+            `${i + 1}. **${p.name}** (${p.category}) in ${p.neighborhood || context.destination}
    WHY: ${p.why_essential}
    TIP: ${p.insider_tip || 'No specific tip'}
    BEST TIME: ${p.best_time || 'Any time'}
@@ -1011,7 +1011,7 @@ RULES FOR HIDDEN GEMS:
 ${'='.repeat(70)}
 ⭐ VOYANCE PICKS — FOUNDER-CURATED MUST-INCLUDES (HIGHEST PRIORITY)
 ${'='.repeat(70)}
-These are hand-picked by the Voyance founders as ESSENTIAL experiences for ${destination}. 
+These are hand-picked by the Voyance founders as ESSENTIAL experiences for ${context.destination}. 
 They MUST be included in the itinerary regardless of traveler archetype or budget tier.
 DO NOT SKIP THESE. Schedule them at their optimal time.
 
@@ -1824,7 +1824,7 @@ If the purpose is a specific event, plan at least ONE full day around that event
           let prevDestination_56 = '';
           for (let dIdx = 1; dIdx < aiResult.days.length; dIdx++) {
             const dayCity_56 = context.multiCityDayMap[dIdx];
-            const currentDest_56 = dayCity_56?.destination || '';
+            const currentDest_56 = dayCity_56?.cityName || '';
 
             if (currentDest_56 && currentDest_56 !== prevDestination_56 && prevDestination_56 !== '') {
               const transDay_56 = aiResult.days[dIdx];
