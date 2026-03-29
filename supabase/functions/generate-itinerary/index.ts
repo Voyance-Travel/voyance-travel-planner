@@ -26,6 +26,7 @@ import {
   sanitizeGeneratedDay,
   sanitizeDateFields,
   normalizeDurationString,
+  stripPhantomHotelActivities,
 } from './sanitization.ts';
 
 import {
@@ -2551,7 +2552,16 @@ Generate activities for this day following ALL constraints above.`;
       }
 
       // ==========================================================================
-      // FORWARD-REFERENCE SANITIZATION: Strip hallucinated "tomorrow's X adventure"
+      // PHANTOM HOTEL STRIPPING: Remove fabricated hotel activities when no hotel booked
+      // ==========================================================================
+      {
+        const hasHotel = !!(dayCity?.hotelName || context.hotelData?.hotelName);
+        if (!hasHotel) {
+          stripPhantomHotelActivities(generatedDay, false);
+        }
+      }
+
+
       // from Return to Hotel descriptions that reference non-existent next-day plans
       // ==========================================================================
       {
@@ -10339,6 +10349,14 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
 
         // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
         // This ensures AI knows to skip those time slots, saving money and guaranteeing locks work
+
+        // Strip phantom hotel activities if no hotel is booked
+        {
+          const hasHotel = !!(flightContext as any).hotelName;
+          if (!hasHotel) {
+            stripPhantomHotelActivities(generatedDay, false);
+          }
+        }
 
         // Normalize activities: ensure title exists, add IDs and enhancements
         let normalizedActivities = generatedDay.activities.map((act: { 
