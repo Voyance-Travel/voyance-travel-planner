@@ -261,6 +261,8 @@ async function _handleGenerateTripDayInner(
   }
   if (restaurantPool.length > 0) {
     console.log(`[generate-trip-day] Restaurant pool for "${dayCity}": ${restaurantPool.length} venues (${usedRestaurants.length} already used)`);
+  } else {
+    console.warn(`[generate-trip-day] ⚠️ Restaurant pool EMPTY for "${dayCity}" — meal guard will fall through to verified_venues or generic fallbacks`);
   }
 
   // CAP previousActivities to last 3 days to prevent prompt bloat on day 8+
@@ -763,12 +765,26 @@ async function _handleGenerateTripDayInner(
     try {
       const destQuery = cityInfo?.cityName || destination || '';
       if (destQuery) {
-        const { data: venues } = await supabase
+        // Try exact city match first, then fall back to first word (e.g. "Vienna" from "Vienna, Austria")
+        let { data: venues } = await supabase
           .from('verified_venues')
           .select('name, address, category')
           .ilike('city', `%${destQuery}%`)
           .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
           .limit(30);
+        if ((!venues || venues.length === 0) && destQuery.includes(',')) {
+          const cityOnly = destQuery.split(',')[0].trim();
+          const broader = await supabase
+            .from('verified_venues')
+            .select('name, address, category')
+            .ilike('city', `%${cityOnly}%`)
+            .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+            .limit(30);
+          venues = broader.data;
+          if (venues && venues.length > 0) {
+            console.log(`[generate-trip-day] Broadened verified_venues query to "${cityOnly}" — found ${venues.length} results`);
+          }
+        }
         if (venues && venues.length > 0) {
           for (const v of venues) {
             const nameLower = (v.name || '').toLowerCase();

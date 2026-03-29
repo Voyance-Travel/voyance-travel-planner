@@ -750,9 +750,9 @@ function getDestinationHint(destination: string, mealType: RequiredMeal): { venu
   }
   // Generic but better than "Local Café"
   const generic: Record<RequiredMeal, { venueSuffix: string; description: string }> = {
-    breakfast: { venueSuffix: 'local café', description: 'Morning coffee and a local breakfast at a well-reviewed nearby spot' },
-    lunch: { venueSuffix: 'neighborhood restaurant', description: 'Midday meal at a well-reviewed local spot near your activities' },
-    dinner: { venueSuffix: 'restaurant', description: 'Evening dinner at a popular local restaurant — reservations recommended' },
+    breakfast: { venueSuffix: 'local spot', description: 'Morning coffee and a local breakfast — check recent reviews for top-rated options nearby' },
+    lunch: { venueSuffix: 'local spot', description: 'Midday meal at a well-reviewed local spot — explore the area for great options' },
+    dinner: { venueSuffix: 'local spot', description: 'Evening dinner at a popular local restaurant — reservations recommended' },
   };
   return generic[mealType];
 }
@@ -835,7 +835,7 @@ export function enforceRequiredMealsFinalGuard(
     // TRY 2: Fall back to destination-aware hints (but with better naming)
     if (!venueName) {
       const hint = getDestinationHint(destination, mealType);
-      venueName = `${label} at a ${hint.venueSuffix}`;
+      venueName = `${label} in ${destination}`;
       venueDescription = hint.description;
     }
 
@@ -848,12 +848,12 @@ export function enforceRequiredMealsFinalGuard(
       location: { name: venueName!, address: venueAddress },
       cost: { amount: slot.cost, currency, source: 'meal_guard_fallback' } as any,
       description: venueDescription,
-      tags: ['dining', mealType, 'meal-guard', ...(venue ? [] : ['needs-refinement'])],
+      tags: ['dining', mealType, 'meal-guard'],
       bookingRequired: false,
       transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency }, instructions: 'Short walk from the previous activity' },
       tips: venue
         ? `Recommended by our venue database — confirm hours before visiting.`
-        : `Tap "Find a real restaurant" below to get a personalized ${mealType} recommendation.`,
+        : `Explore local options near your next activity — ask a local or check recent reviews.`,
       needsRefinement: !venue,
     } as StrictActivityMinimal);
   }
