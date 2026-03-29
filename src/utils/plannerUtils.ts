@@ -47,7 +47,7 @@ export const getActivityIconName = (type: string): string => {
     shopping: 'ShoppingBag',
     default: 'MapPin'
   };
-  return icons[type.toLowerCase()] || icons.default;
+  return icons[(type || 'activity').toLowerCase()] || icons.default;
 };
 
 /**
@@ -72,7 +72,7 @@ export const getActivityColor = (category: string): string => {
     break: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300',
     default: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300'
   };
-  return colors[category.toLowerCase()] || colors.default;
+  return colors[(category || 'activity').toLowerCase()] || colors.default;
 };
 
 /**

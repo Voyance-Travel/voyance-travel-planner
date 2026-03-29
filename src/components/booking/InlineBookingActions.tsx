@@ -116,12 +116,12 @@ const HOTEL_AMENITY_KEYWORDS = [
 const ACCOMMODATION_CATEGORIES = ['accommodation', 'hotel', 'lodging', 'resort', 'spa', 'wellness'];
 
 function isDiningActivity(title: string): boolean {
-  const lowerTitle = title.toLowerCase();
+  const lowerTitle = (title || '').toLowerCase();
   return DINING_KEYWORDS.some(keyword => lowerTitle.includes(keyword));
 }
 
 function isHotelAmenityActivity(title: string, category?: string): boolean {
-  const lowerTitle = title.toLowerCase();
+  const lowerTitle = (title || '').toLowerCase();
   const lowerCategory = (category || '').toLowerCase();
   
   // Check if category indicates accommodation/spa
@@ -138,7 +138,7 @@ function isHotelAmenityActivity(title: string, category?: string): boolean {
 }
 
 function isNonBookableActivity(title: string, category?: string): boolean {
-  const lowerTitle = title.toLowerCase();
+  const lowerTitle = (title || '').toLowerCase();
   const lowerCategory = (category || '').toLowerCase();
   
   // Check keywords
