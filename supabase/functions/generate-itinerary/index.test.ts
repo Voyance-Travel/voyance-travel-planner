@@ -170,16 +170,11 @@ Deno.test("generate-trip-day: fake auth → not 500", async () => {
   assertNotEquals(res.status, 500, "generate-trip-day returned 500 — runtime crash!");
 });
 
-Deno.test("generate-full: fake auth → not 500", async () => {
+Deno.test("generate-full (legacy redirect): fake auth → not 500", async () => {
   const res = await postActionWithFakeAuth("generate-full", {
     tripId: "00000000-0000-0000-0000-000000000000",
-    tripData: {
-      destination: "Paris, France",
-      startDate: "2026-06-01",
-      endDate: "2026-06-03",
-    },
   });
-  assertNotEquals(res.status, 500, "generate-full returned 500 — runtime crash!");
+  assertNotEquals(res.status, 500, "generate-full redirect returned 500 — runtime crash!");
 });
 
 // ---------------------------------------------------------------------------
