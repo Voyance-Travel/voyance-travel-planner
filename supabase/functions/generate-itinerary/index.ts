@@ -2068,7 +2068,6 @@ These help the traveler prepare for their trip.
             multiCityPrompt += `\n   Plan checkout from "${prevHotel}" in the morning (by ${checkOutTime}), then check-in at "${dayCity.hotelName}" (from ${checkInTime}), then afternoon/evening activities.`;
             multiCityPrompt += `\n   Include BOTH a checkout activity for "${prevHotel}" AND a check-in activity for "${dayCity.hotelName}".`;
           }
-        }
         
         if (isTransitionDay && dayCity.transitionFrom) {
           // Use the full transition day prompt builder instead of the weak 2-line fallback
