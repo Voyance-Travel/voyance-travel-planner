@@ -415,17 +415,17 @@ ${dayMealPolicy.isFullExplorationDay ? 'FULL EXPLORATION DAY' : dayMealPolicy.da
 This day must be a COMPLETE itinerary from morning to night. Every hour accounted for.
 
 REQUIRED DAY STRUCTURE:
-${dayMealPolicy.requiredMeals.includes('breakfast') ? `1. BREAKFAST (category: "dining") — At the hotel's own restaurant (preferred) or a real café nearby. NEVER at a DIFFERENT hotel's restaurant. Use the hotel name: ${flightContext.hotelName || '[your hotel]'}. ~price, walking distance` : ''}
+${dayMealPolicy.requiredMeals.includes('breakfast') ? (flightContext.hotelName ? `1. BREAKFAST (category: "dining") — At the hotel's own restaurant (preferred) or a real café nearby. NEVER at a DIFFERENT hotel's restaurant. Use the hotel name: ${flightContext.hotelName}. ~price, walking distance` : '1. BREAKFAST (category: "dining") — At a well-reviewed local café or bakery. Do NOT reference any hotel. ~price, walking distance') : ''}
 2. TRANSIT between every pair of consecutive activities (category: "transport")
    - Include mode (${resolvedTransportModes.length > 0 ? resolvedTransportModes.join('/') : 'walk/taxi/metro/bus'}), duration, cost, route details
    - 10+ minute walks or any paid transit = separate activity entry
 3. MORNING ACTIVITIES — At least 1 paid + 1 free activity
 ${dayMealPolicy.requiredMeals.includes('lunch') ? '4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips' : ''}
 5. AFTERNOON ACTIVITIES — At least 1-2 paid + 1 free activity  
-6. HOTEL RETURN (REQUIRED if dinner is far from hotel) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30-60 min. This MUST be a separate activity card, not just a transport entry.
+${flightContext.hotelName ? `6. HOTEL RETURN (REQUIRED if dinner is far from hotel) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30-60 min. This MUST be a separate activity card, not just a transport entry.` : ''}
 ${dayMealPolicy.requiredMeals.includes('dinner') ? '7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips' : ''}
 8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot (at least 1 suggestion). Use category: "dining" for bars, lounges, and cocktail venues. Use category: "activity" for shows, clubs, and entertainment. NEVER use "wellness", "nightlife", or "relaxation" as a category for bars/lounges.
-9. RETURN TO HOTEL (REQUIRED as LAST activity) — "Return to [EXACT Hotel Name]" with category "accommodation". This is the FINAL card of every day. MUST appear after ALL other activities including nightlife. Include transport mode in a preceding transport activity.
+${flightContext.hotelName ? `9. RETURN TO HOTEL (REQUIRED as LAST activity) — "Return to [EXACT Hotel Name]" with category "accommodation". This is the FINAL card of every day. MUST appear after ALL other activities including nightlife. Include transport mode in a preceding transport activity.` : ''}
 10. NEXT MORNING PREVIEW — In the tips of the LAST activity: "Tomorrow: Wake [time]. Breakfast at [place] ([distance], ~[price])."
 
 ${mealRequirementsBlock}
@@ -457,8 +457,7 @@ PRICES ON EVERYTHING:
 PRACTICAL TIPS (in "tips" field of each activity):
 - Booking requirements, queue advice, dress codes, closure days
 - "Book online to skip the line" / "Closed Mondays" / "Best photos at sunset"
-${hotelNameForDay ? `\nHOTEL: ${hotelNameForDay}${hotelNeighborhood ? ` (${hotelNeighborhood})` : ''}` : ''}
-Start and end the day near the hotel when practical.`;
+${hotelNameForDay ? `\nHOTEL: ${hotelNameForDay}${hotelNeighborhood ? ` (${hotelNeighborhood})` : ''}\nStart and end the day near the hotel when practical.` : '\n⚠️ NO HOTEL BOOKED: Do NOT reference any hotel in the itinerary. No hotel check-in, check-out, return to hotel, breakfast at hotel, or taxi to hotel. All meals should be at local restaurants or cafés.'}`;
   }
 
   // ═══════════════════════════════════════════════════════════════════════
