@@ -204,10 +204,6 @@ export async function handleGenerateTripDay(
 
   const cityInfo = dayCityMap?.[dayNumber - 1];
 
-  // Progress: context loaded
-  const contextPct = 5 + Math.round((Math.max(0, dayNumber - 1) / totalDays) * 90);
-  await timer.updateProgress(`context_loaded_day_${dayNumber}`, contextPct);
-
   // Load existing days from itinerary_data (for context)
   const existingData = (tripCheck.itinerary_data as any) || {};
   const existingDays: any[] = Array.isArray(existingData.days) ? existingData.days : [];
@@ -286,8 +282,6 @@ export async function handleGenerateTripDay(
   let dayResult: any = null;
   let lastError: string | null = null;
   const dayGenStart = Date.now();
-
-  await timer.updateProgress(`generating_day_${dayNumber}`, contextPct + 2);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -429,9 +423,6 @@ export async function handleGenerateTripDay(
         }
       }
 
-      timer.addError('all_days_failed', lastError || 'Unknown');
-      await timer.finalize('failed');
-
       return new Response(
         JSON.stringify({ status: 'failed', dayNumber, error: lastError }),
         { headers: jsonHeaders }
@@ -492,9 +483,6 @@ export async function handleGenerateTripDay(
           }
         }
       }
-
-      timer.addError('partial_failure', `${failedDays.length} days failed: ${failedDays.join(', ')}`);
-      await timer.finalize('failed');
 
       return new Response(
         JSON.stringify({ status: 'partial', dayNumber, failedDays, error: lastError }),
@@ -689,20 +677,6 @@ export async function handleGenerateTripDay(
     const d = updatedDays[i];
     if (!d?.activities || !Array.isArray(d.activities)) continue;
     const dn = d.dayNumber || (i + 1);
-
-    // BUG 1 FIX: Do NOT inject meals into days with zero real activities.
-    // These are ungenerated shell days — masking them with placeholder meals hides failures.
-    const LOGISTICS_CATS = new Set(['transport', 'accommodation', 'downtime', 'free_time', 'transit']);
-    const realActCount = d.activities.filter((a: any) => {
-      const cat = (a.category || '').toLowerCase();
-      return !LOGISTICS_CATS.has(cat);
-    }).length;
-    if (realActCount === 0) {
-      console.warn(`[generate-trip-day] ⚠️ Day ${dn} has 0 real activities — skipping meal injection, marking as ungenerated`);
-      (updatedDays[i] as any)._ungenerated = true;
-      continue;
-    }
-
     const policy = deriveMealPolicy({
       dayNumber: dn,
       totalDays,
@@ -923,13 +897,6 @@ export async function handleGenerateTripDay(
         if (name && !newUsedRestaurants.includes(name)) {
           newUsedRestaurants.push(name);
         }
-        // Also track location.name (the actual restaurant name) for cross-day dedup
-        if (act.location?.name) {
-          const locName = act.location.name.trim();
-          if (locName && !newUsedRestaurants.includes(locName)) {
-            newUsedRestaurants.push(locName);
-          }
-        }
       }
     }
 
@@ -1035,10 +1002,6 @@ export async function handleGenerateTripDay(
       } catch (metaErr) {
         console.error('[generate-trip-day] Failed to update chain failure metadata:', metaErr);
       }
-
-      // Finalize timer — chain broke so generation won't continue
-      timer.addError('chain_broken', `Chain to day ${dayNumber + 1} failed after ${maxRetries} attempts`);
-      await timer.finalize('failed');
     }
 
     return new Response(

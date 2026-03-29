@@ -229,5 +229,3 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.enrich-destination]
     verify_jwt = false
-  [functions.cleanup-itinerary]
-    verify_jwt = false

@@ -340,25 +340,8 @@ export default function TripDetail() {
         queryClient.invalidateQueries({ queryKey: ['entitlements', user.id] });
       }
     },
-    onStalled: async () => {
+    onStalled: () => {
       setGenerationStalled(true);
-      // Mark trip as failed so user can cleanly retry on next page load
-      if (tripId) {
-        try {
-          const currentMeta = (tripRef.current?.metadata as Record<string, unknown>) || {};
-          await supabase.from('trips').update({
-            itinerary_status: 'failed',
-            metadata: {
-              ...currentMeta,
-              generation_error: 'Generation timed out or stalled',
-              stalled_at: new Date().toISOString(),
-            },
-          }).eq('id', tripId);
-          console.log('[TripDetail] Marked trip as failed after stall');
-        } catch (e) {
-          console.warn('[TripDetail] Failed to mark trip as failed on stall:', e);
-        }
-      }
     },
   });
 
@@ -2311,39 +2294,7 @@ export default function TripDetail() {
               onActivitySkip={handleActivitySkip}
             />
             </ErrorBoundary>
-          ) : (() => {
-            // BUG 2 FIX: Show persistent incomplete-generation banner when itinerary has ungenerated days
-            const meta = (trip.metadata as Record<string, unknown>) || {};
-            const chainBroken = meta.chain_broken_at_day as number | undefined;
-            const itinData = trip.itinerary_data as { days?: Array<{ _ungenerated?: boolean; activities?: unknown[] }> } | null;
-            const ungeneratedDays = (itinData?.days || []).filter(d => (d as any)._ungenerated || (Array.isArray(d.activities) && d.activities.length === 0));
-            const hasIncompleteItinerary = hasItinerary && (chainBroken || ungeneratedDays.length > 0);
-            return hasIncompleteItinerary ? (
-              <div className="mb-4 p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30">
-                <div className="flex items-start gap-3">
-                  <span className="text-lg">⚠️</span>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-sm">Incomplete Itinerary</h4>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      {chainBroken 
-                        ? `Generation was interrupted at Day ${chainBroken}. Some days may be missing activities.`
-                        : `${ungeneratedDays.length} day(s) have no activities and need to be regenerated.`}
-                    </p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-2"
-                      onClick={handleResumeGeneration}
-                      disabled={resumingGeneration}
-                    >
-                      {resumingGeneration ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Resuming…</> : 'Resume Generation'}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : null;
-          })() ?? null}
-          {isServerGenerating || generationStalled ? (
+          ) : isServerGenerating || generationStalled ? (
             /* Server-side generation in progress or stalled — use GenerationPhases for
                consistent animation + progress display (airplane/globe animation) */
             <div className="space-y-6">
@@ -2354,10 +2305,10 @@ export default function TripDetail() {
                     <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
                   </div>
                   <div className="text-center space-y-3 max-w-md">
-                    <h3 className="text-xl font-serif font-semibold">Generation was interrupted</h3>
+                    <h3 className="text-xl font-serif font-semibold">Reconnecting...</h3>
                     <p className="text-muted-foreground">
-                      Progress stopped at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
-                      You can retry to pick up where it left off.
+                      Generation paused at Day {generationPoller.completedDays} of {generationPoller.totalDays}.
+                      Attempting to resume automatically.
                     </p>
                     {generationPoller.totalDays > 0 && (
                       <div className="w-64 mx-auto">

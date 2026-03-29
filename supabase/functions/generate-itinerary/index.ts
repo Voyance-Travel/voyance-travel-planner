@@ -26,9 +26,6 @@ import {
   sanitizeGeneratedDay,
   sanitizeDateFields,
   normalizeDurationString,
-  enforceHotelPlaceholderOnDay,
-  deduplicateCrossDayVenues,
-  stripPhantomHotelActivities,
 } from './sanitization.ts';
 
 import {
@@ -1553,8 +1550,6 @@ import {
   sanitizeActivityTitles,
   detectMealSlots,
   enforceRequiredMealsFinalGuard,
-  enforceTimingConstraints,
-  enforceChronologicalOrder,
   isChainRestaurant,
   filterChainRestaurants,
   type DayValidationResult,
@@ -2026,13 +2021,6 @@ These help the traveler prepare for their trip.
           multiCityPrompt += `\n   Check-in: ${checkInTime}, Check-out: ${checkOutTime}.`;
           multiCityPrompt += `\n   🚫 CRITICAL: The user has ALREADY SELECTED this hotel. Use "${dayCity.hotelName}" for ALL accommodation references (check-in, return to hotel, freshen up, etc.). Do NOT invent, suggest, or substitute a different hotel.`;
           multiCityPrompt += `\n   ⚠️ Start each day from this hotel area and plan return in the evening.`;
-        } else {
-          // BUG 3 FIX: No hotel booked — explicitly instruct AI to NOT fabricate hotel activities
-          multiCityPrompt += `\n🏨 ACCOMMODATION in ${dayDestination}: The traveler has NOT selected a hotel or accommodation.`;
-          multiCityPrompt += `\n   🚫 Do NOT include any hotel check-in, hotel check-out, or "return to hotel" activities.`;
-          multiCityPrompt += `\n   🚫 Do NOT invent or fabricate hotel names. If you must reference lodging, say "your accommodation".`;
-          multiCityPrompt += `\n   🚫 Do NOT generate activities with category "accommodation".`;
-        }
           
           if (dayCity.isFirstDayInCity && !dayCity.isTransitionDay) {
             // Very first city, first day — arrival logistics
@@ -2068,6 +2056,7 @@ These help the traveler prepare for their trip.
             multiCityPrompt += `\n   Plan checkout from "${prevHotel}" in the morning (by ${checkOutTime}), then check-in at "${dayCity.hotelName}" (from ${checkInTime}), then afternoon/evening activities.`;
             multiCityPrompt += `\n   Include BOTH a checkout activity for "${prevHotel}" AND a check-in activity for "${dayCity.hotelName}".`;
           }
+        }
         
         if (isTransitionDay && dayCity.transitionFrom) {
           // Use the full transition day prompt builder instead of the weak 2-line fallback
@@ -2428,7 +2417,7 @@ Generate activities for this day following ALL constraints above.`;
       let generatedDay: StrictDay;
       if (toolCall?.function?.arguments) {
         // Standard tool call response
-        generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, context.destination) as StrictDay;
+        generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber) as StrictDay;
       } else if (message?.content) {
         // Fallback: AI returned content instead of tool call
         console.log("[Stage 2] AI returned content instead of tool_call, attempting to parse...");
@@ -2436,7 +2425,7 @@ Generate activities for this day following ALL constraints above.`;
           const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
           const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, context.destination) as StrictDay;
+            generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber) as StrictDay;
           } else {
             console.error("[Stage 2] No JSON found in content:", contentStr.substring(0, 500));
             throw new Error("Invalid AI response format - no JSON in content");
@@ -2448,18 +2437,6 @@ Generate activities for this day following ALL constraints above.`;
       } else {
         console.error("[Stage 2] Invalid AI response - no tool_calls or content:", JSON.stringify(data).substring(0, 1000));
         throw new Error("Invalid AI response format");
-      }
-
-      // ==========================================================================
-      // HOTEL NAME ENFORCEMENT: Replace hallucinated hotel brands with "Your Hotel"
-      // when no hotel was selected by the user.
-      // ==========================================================================
-      if (!dayCity?.hotelName || dayCity.hotelName === 'Your Hotel') {
-        const ctxHotel = context.hotelData?.hotelName;
-        if (!ctxHotel || ctxHotel === 'Your Hotel') {
-          generatedDay = enforceHotelPlaceholderOnDay(generatedDay) as StrictDay;
-          console.log(`[Hotel enforcement] Replaced hallucinated hotel brands on day ${dayNumber}`);
-        }
       }
 
       // Normalize the day data
@@ -3169,12 +3146,6 @@ Generate activities for this day following ALL constraints above.`;
         // POST-VALIDATION: Strip keyword-stuffed activity titles
         generatedDay = sanitizeActivityTitles(generatedDay);
 
-        // POST-VALIDATION: Enforce minimum gaps and fix meal-time labels
-        generatedDay.activities = enforceTimingConstraints(generatedDay.activities || []);
-
-        // POST-VALIDATION: Enforce chronological order (fix AM/PM confusion)
-        generatedDay = enforceChronologicalOrder(generatedDay);
-
         // POST-VALIDATION: Strip chain restaurants from dining activities
         {
           const { filtered: chainFiltered, removedChains } = filterChainRestaurants(generatedDay.activities || []);
@@ -3188,65 +3159,41 @@ Generate activities for this day following ALL constraints above.`;
         // MEAL FINAL GUARD — shared helper, single source of truth
         // Runs AFTER all post-processing (dedup, etc.) to guarantee meals
         // ====================================================================
-        // BUG 1 FIX: Check if day has real non-logistics activities before meal injection
-        const LOGISTICS_CHECK_CATS = new Set(['transport', 'accommodation', 'downtime', 'free_time', 'transit']);
-        const realActivityCountForMealGuard = (generatedDay.activities || []).filter((a: any) => {
-          const cat = (a.category || '').toLowerCase();
-          return !LOGISTICS_CHECK_CATS.has(cat);
-        }).length;
-        
-        if (realActivityCountForMealGuard === 0) {
-          console.warn(`[Stage 2] Day ${dayNumber}: 0 real activities — skipping meal guard, marking as ungenerated`);
-          (generatedDay as any)._ungenerated = true;
-        } else {
-          const mealGuardResult = enforceRequiredMealsFinalGuard(
-            generatedDay.activities || [],
-            dayMealPolicy.requiredMeals,
-            dayNumber,
-            context.destination || 'the destination',
-            context.currency || 'USD',
-            dayMealPolicy.dayMode,
-          );
-          if (!mealGuardResult.alreadyCompliant) {
-            // If NOT the last attempt, treat meal guard firing as a retry trigger
-            // instead of silently accepting placeholders
-            if (!isLastAttempt) {
-              const missingList = mealGuardResult.injectedMeals.map(m => m.toUpperCase()).join(', ');
-              console.warn(`[Stage 2] Day ${dayNumber}: Meal guard detected missing [${missingList}] — triggering retry instead of accepting placeholders`);
-              // Add specific meal-missing errors to trigger a focused retry
-              lastValidation = {
-                isValid: false,
-                errors: [
-                  `🚨 MISSING MEALS: Your response is missing ${missingList} dining activities. You MUST include a REAL, NAMED restaurant for each of: ${missingList}. Generic names like "Local Café" or "Breakfast spot" are NOT acceptable. Include the actual restaurant name, category="dining", and the meal type keyword in the title.`
-                ],
-                warnings: [],
-              };
-              lastError = new Error(`Meal guard fired: missing [${missingList}]`);
-              console.log(`[Stage 2] Day ${dayNumber} missing meals [${missingList}], retrying (attempt ${attempt + 1})...`);
-              if (attempt < maxRetries) {
-                await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-              }
-              continue;
+        const mealGuardResult = enforceRequiredMealsFinalGuard(
+          generatedDay.activities || [],
+          dayMealPolicy.requiredMeals,
+          dayNumber,
+          context.destination || 'the destination',
+          context.currency || 'USD',
+          dayMealPolicy.dayMode,
+        );
+        if (!mealGuardResult.alreadyCompliant) {
+          // If NOT the last attempt, treat meal guard firing as a retry trigger
+          // instead of silently accepting placeholders
+          if (!isLastAttempt) {
+            const missingList = mealGuardResult.injectedMeals.map(m => m.toUpperCase()).join(', ');
+            console.warn(`[Stage 2] Day ${dayNumber}: Meal guard detected missing [${missingList}] — triggering retry instead of accepting placeholders`);
+            // Add specific meal-missing errors to trigger a focused retry
+            lastValidation = {
+              isValid: false,
+              errors: [
+                `🚨 MISSING MEALS: Your response is missing ${missingList} dining activities. You MUST include a REAL, NAMED restaurant for each of: ${missingList}. Generic names like "Local Café" or "Breakfast spot" are NOT acceptable. Include the actual restaurant name, category="dining", and the meal type keyword in the title.`
+              ],
+              warnings: [],
+            };
+            lastError = new Error(`Meal guard fired: missing [${missingList}]`);
+            console.log(`[Stage 2] Day ${dayNumber} missing meals [${missingList}], retrying (attempt ${attempt + 1})...`);
+            if (attempt < maxRetries) {
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
             }
-            // Last attempt — accept the guard fallbacks
-            generatedDay.activities = mealGuardResult.activities as any;
-            console.warn(`[Stage 2] Day ${dayNumber}: FINAL ATTEMPT — Meal guard injected [${mealGuardResult.injectedMeals.join(', ')}] (destination-aware fallbacks)`);
-          } else {
-            console.log(`[Stage 2] Day ${dayNumber}: Meal guard passed — all required meals present`);
+            continue;
           }
+          // Last attempt — accept the guard fallbacks
+          generatedDay.activities = mealGuardResult.activities as any;
+          console.warn(`[Stage 2] Day ${dayNumber}: FINAL ATTEMPT — Meal guard injected [${mealGuardResult.injectedMeals.join(', ')}] (destination-aware fallbacks)`);
+        } else {
+          console.log(`[Stage 2] Day ${dayNumber}: Meal guard passed — all required meals present`);
         }
-
-        // BUG 3 FIX: Strip phantom hotel activities when no real hotel is booked
-        {
-          const hasHotel = !!(context.hotelData?.hasHotel) || !!(context.multiCityDayMap?.[dayNumber - 1]?.hotelName);
-          if (!hasHotel) {
-            generatedDay = stripPhantomHotelActivities(generatedDay, false);
-          }
-        }
-
-        // FINAL-PASS SANITIZATION: Run sanitizeGeneratedDay one more time after ALL
-        // post-processing to catch any leak text reintroduced by meal guard, dedup, etc.
-        generatedDay = sanitizeGeneratedDay(generatedDay, dayNumber, context.destination);
 
         // Tag day with multi-city info
         if (context.isMultiCity && dayCity) {
@@ -4330,9 +4277,9 @@ async function enrichItinerary(
     const day = days[dayIndex];
     const enrichedActivities: StrictActivity[] = [];
 
-    // Process activities in batches of 5 with delays for rate limits
-    // (5 activities × 2 API calls each = ~10 concurrent requests per batch)
-    const BATCH_SIZE = 5;
+    // Process activities in batches of 3 with delays for rate limits
+    // (3 activities × 2 API calls each = ~6 concurrent requests per batch)
+    const BATCH_SIZE = 3;
     let budgetExceeded = false;
 
     for (let i = 0; i < day.activities.length; i += BATCH_SIZE) {
@@ -4370,7 +4317,7 @@ async function enrichItinerary(
 
       // Delay between batches to respect API rate limits
       if (i + BATCH_SIZE < day.activities.length) {
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 400));
       }
     }
 
@@ -4987,8 +4934,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-  // === OUTER TRY: guarantees CORS headers even on catastrophic failures ===
   try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
@@ -8554,14 +8499,6 @@ If the purpose is a specific event, plan at least ONE full day around that event
           flightContext = { ...flightContext, context: (flightContext.context || '') + hotelEnforcement };
         }
       }
-
-      // Define effectiveHotelData in generate-day handler scope so departure/breakfast templates can reference it
-      const effectiveHotelData = (resolvedHotelOverride?.name)
-        ? { hasHotel: true, hotelName: resolvedHotelOverride.name, hotelAddress: resolvedHotelOverride.address || '', checkInTime: '15:00', checkOutTime: '11:00' }
-        : (flightContext?.hotelName
-          ? { hasHotel: true, hotelName: flightContext.hotelName, hotelAddress: flightContext.hotelAddress || '', checkInTime: flightContext.hotelCheckIn || '15:00', checkOutTime: flightContext.hotelCheckOut || '11:00' }
-          : { hasHotel: false, hotelName: 'hotel' } as any);
-
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber === totalDays;
       
@@ -10371,7 +10308,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         let generatedDay;
         if (toolCall?.function?.arguments) {
           // Standard tool call response
-          generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, destination);
+          generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber);
         } else if (message?.content) {
           // Fallback: AI returned content instead of tool call
           console.log("[generate-day] AI returned content instead of tool_call, attempting to parse...");
@@ -10380,7 +10317,7 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
             const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-              generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, destination);
+              generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber);
             } else {
               console.error("[generate-day] No JSON found in content:", contentStr.substring(0, 500));
               throw new Error("Invalid AI response format - no JSON in content");
@@ -10398,18 +10335,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
         if (innerTimer) {
           innerTimer.endPhase(`parse_response_day_${dayNumber}`);
           innerTimer.startPhase(`post_processing_day_${dayNumber}`);
-        }
-
-        // ==========================================================================
-        // HOTEL NAME ENFORCEMENT: Replace hallucinated hotel brands with "Your Hotel"
-        // when no hotel was selected by the user (generate-day handler).
-        // ==========================================================================
-        {
-          const effectiveHotel = resolvedHotelOverride?.name || flightContext.hotelName;
-          if (!effectiveHotel || effectiveHotel === 'Your Hotel') {
-            generatedDay = enforceHotelPlaceholderOnDay(generatedDay);
-            console.log(`[Hotel enforcement] Replaced hallucinated hotel brands on day ${dayNumber} (generate-day)`);
-          }
         }
 
         // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
@@ -10565,8 +10490,8 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           const ENRICHMENT_TIME_BUDGET_MS = 25_000;
           const enrichStartedAt = Date.now();
           
-          // Enrich in parallel batches of 5 for speed (timeout protection handles slow calls)
-          const batchSize = 5;
+          // Enrich in parallel batches of 3 to avoid rate limits
+          const batchSize = 3;
           const enrichedActivities: StrictActivity[] = [];
           let enrichmentBudgetExceeded = false;
           
@@ -11174,25 +11099,19 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
                 if (mealRepeatTitles.length > 0) {
                   const poolAvailable = (paramRestaurantPool || []) as any[];
                   const usedSetLocal = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
-                  // Also mark all restaurants in current day as used (both title and location.name)
+                  // Also mark all restaurants in current day as used
                   for (const act of generatedDay.activities) {
                     if ((act.category || '').toLowerCase() === 'dining') {
                       usedSetLocal.add((act.title || '').toLowerCase());
-                      if (act.location?.name) {
-                        usedSetLocal.add(act.location.name.toLowerCase());
-                      }
                     }
                   }
 
                   for (const repeatTitle of mealRepeatTitles) {
                     const repeatLower = repeatTitle.toLowerCase();
-                    // Find the duplicate activity in this day (check both title and location.name)
-                    const dupeIdx = generatedDay.activities.findIndex((act: any) => {
-                      const actTitleLower = (act.title || '').toLowerCase();
-                      const actLocLower = (act.location?.name || '').toLowerCase();
-                      return actTitleLower.includes(repeatLower) || repeatLower.includes(actTitleLower)
-                        || (actLocLower.length > 3 && (actLocLower.includes(repeatLower) || repeatLower.includes(actLocLower)));
-                    });
+                    // Find the duplicate activity in this day
+                    const dupeIdx = generatedDay.activities.findIndex((act: any) =>
+                      (act.title || '').toLowerCase().includes(repeatLower) || repeatLower.includes((act.title || '').toLowerCase())
+                    );
                     if (dupeIdx === -1) continue;
                     const dupeAct = generatedDay.activities[dupeIdx];
                     if (dupeAct.isLocked) continue;
@@ -12266,46 +12185,22 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
             }
           }
 
-          // BUG 1 FIX: Check for real activities before meal injection
-          const GEN_LOGISTICS_CATS = new Set(['transport', 'accommodation', 'downtime', 'free_time', 'transit']);
-          const genRealActCount = (generatedDay.activities || []).filter((a: any) => {
-            const cat = (a.category || '').toLowerCase();
-            return !GEN_LOGISTICS_CATS.has(cat);
-          }).length;
-
-          if (genRealActCount === 0) {
-            console.warn(`[generate-day] ⚠️ Day ${dayNumber} has 0 real activities — skipping meal guard, marking as ungenerated`);
-            (generatedDay as any)._ungenerated = true;
+          const mealGuardResult = enforceRequiredMealsFinalGuard(
+            generatedDay.activities || [],
+            dayMealPolicy.requiredMeals,
+            dayNumber,
+            resolvedDestination || destination || 'the destination',
+            'USD',
+            dayMealPolicy.dayMode,
+            mealFallbackVenues,
+          );
+          if (!mealGuardResult.alreadyCompliant) {
+            generatedDay.activities = mealGuardResult.activities as any;
+            normalizedActivities = generatedDay.activities;
+            console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'REAL POOL venues' : 'destination-aware fallbacks'} before return`);
           } else {
-            const mealGuardResult = enforceRequiredMealsFinalGuard(
-              generatedDay.activities || [],
-              dayMealPolicy.requiredMeals,
-              dayNumber,
-              resolvedDestination || destination || 'the destination',
-              'USD',
-              dayMealPolicy.dayMode,
-              mealFallbackVenues,
-            );
-            if (!mealGuardResult.alreadyCompliant) {
-              generatedDay.activities = mealGuardResult.activities as any;
-              normalizedActivities = generatedDay.activities;
-              console.warn(`[generate-day] 🍽️ MEAL GUARD FIRED: Day ${dayNumber} was missing [${mealGuardResult.injectedMeals.join(', ')}] — injected ${mealFallbackVenues.length > 0 ? 'REAL POOL venues' : 'destination-aware fallbacks'} before return`);
-            } else {
-              console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
-            }
+            console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
           }
-
-          // BUG 3 FIX: Strip phantom hotel activities in generate-day path
-          {
-            const genDayCity = context?.multiCityDayMap?.[dayNumber - 1];
-            const genHasHotel = !!(context?.hotelData?.hasHotel) || !!(genDayCity?.hotelName);
-            if (!genHasHotel) {
-              generatedDay = stripPhantomHotelActivities(generatedDay, false);
-            }
-          }
-
-          // FINAL-PASS SANITIZATION: catch any leak text from post-processing
-          generatedDay = sanitizeGeneratedDay(generatedDay, dayNumber, resolvedDestination || destination);
         }
 
         // End post-processing phase
@@ -12450,12 +12345,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           console.warn('[generate-trip] Could not query trip_cities for diagnostics:', e);
         }
       }
-
-      // ── PERFORMANCE TIMER ──
-      const timer = new GenerationTimer(tripId, supabase);
-      const logId = await timer.init(destination, totalDays, travelers || 1);
-      console.log(`[generate-trip] Timer initialized, logId=${logId}, destination=${destination}, days=${totalDays}`);
-      timer.startPhase('pre_chain_setup');
 
       // Set status to generating + store metadata
       // CRITICAL: Clear itinerary_data.days when starting fresh (not resuming)
@@ -12932,9 +12821,6 @@ Return ONLY the JSON array, no other text.`;
       } catch (poolErr) {
         console.warn('[generate-trip] Restaurant pool generation failed (non-blocking):', poolErr);
       }
-
-      timer.endPhase('pre_chain_setup');
-      await timer.updateProgress('pre_chain_setup', 10);
       
       await supabase.from('trips').update(updatePayload).eq('id', tripId);
 
@@ -12962,11 +12848,10 @@ Return ONLY the JSON array, no other text.`;
         totalDays,
         generationRunId,
         isFirstTrip: isFirstTrip || false,
-        generationLogId: timer.getLogId(),
       });
 
       // Retry loop with exponential backoff for intermittent 403 errors
-      const maxRetries = 5;
+      const maxRetries = 3;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const response = await fetch(generateUrl, {
@@ -12988,7 +12873,7 @@ Return ONLY the JSON array, no other text.`;
           console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} error:`, err);
         }
         if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 3000 * attempt));
+          await new Promise(r => setTimeout(r, 2000 * attempt));
         }
       }
 
@@ -13005,7 +12890,7 @@ Return ONLY the JSON array, no other text.`;
     // The chain continues server-side even if the user closes their browser.
     // ==========================================================================
     if (action === 'generate-trip-day') {
-      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip, generationLogId } = params;
+      const { tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId, isMultiCity, creditsCharged, requestedDays, dayNumber, totalDays, generationRunId, isFirstTrip } = params;
 
       if (!tripId || !dayNumber || !totalDays) {
         return new Response(
@@ -13014,19 +12899,7 @@ Return ONLY the JSON array, no other text.`;
         );
       }
 
-      console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'}, logId: ${generationLogId || 'none'})`);
-
-      // Resume generation timer for progress tracking
-      let innerTimer: GenerationTimer | null = null;
-      if (generationLogId) {
-        try {
-          innerTimer = new GenerationTimer(tripId, supabase);
-          await innerTimer.resume(generationLogId, destination || '', totalDays || 1, travelers || 1);
-        } catch (e) {
-          console.warn('[generate-trip-day] Timer resume failed (non-blocking):', e);
-          innerTimer = null;
-        }
-      }
+      console.log(`[generate-trip-day] Starting day ${dayNumber}/${totalDays} for trip ${tripId} (runId: ${generationRunId || 'none'})`);
 
       // Guard: check trip is still in "generating" state AND run ID matches (user might have cancelled or a new run started)
       const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data').eq('id', tripId).single();
@@ -13121,12 +12994,6 @@ Return ONLY the JSON array, no other text.`;
         }).eq('id', tripId);
       }
 
-      // Update generation timer: context loaded for this day
-      if (innerTimer) {
-        const dayPct = Math.round(10 + ((dayNumber - 1) / totalDays) * 80);
-        await innerTimer.updateProgress(`context_loaded_day_${dayNumber}`, dayPct);
-      }
-
       // ─── PER-CITY STATUS: Mark city as 'generating' on first day ───
       if (isMultiCity && dayCityMap && cityInfo) {
         const prevCityInfo = dayNumber > 1 ? dayCityMap[dayNumber - 2] : null;
@@ -13197,16 +13064,6 @@ Return ONLY the JSON array, no other text.`;
           if (!data.day) throw new Error(`No day data returned for day ${dayNumber}`);
 
           dayResult = data.day;
-
-          // Cross-day venue deduplication enforcement
-          dayResult = deduplicateCrossDayVenues(dayResult, existingDays, dayNumber);
-
-          // Update generation timer: AI generation complete for this day
-          if (innerTimer) {
-            const genPct = Math.round(10 + ((dayNumber - 0.5) / totalDays) * 80);
-            await innerTimer.updateProgress(`generated_day_${dayNumber}`, genPct);
-          }
-
           break; // success
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -13221,12 +13078,6 @@ Return ONLY the JSON array, no other text.`;
       if (!dayResult) {
         // This day failed after all retries — mark as partial/failed
         console.error(`[generate-trip-day] Day ${dayNumber} failed permanently: ${lastError}`);
-
-        // Finalize timer as failed
-        if (innerTimer) {
-          innerTimer.addError(`day_${dayNumber}_generation`, lastError || 'Unknown error');
-          await innerTimer.finalize('failed');
-        }
         
         const { data: failTrip } = await supabase.from('trips').select('metadata, unlocked_day_count').eq('id', tripId).single();
         const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
@@ -13483,12 +13334,6 @@ Return ONLY the JSON array, no other text.`;
 
         console.log(`[generate-trip-day] ✅ Trip ${tripId} generation complete: ${totalDays} days`);
 
-        // Finalize generation timer as completed
-        if (innerTimer) {
-          await innerTimer.updateProgress('completing', 95);
-          await innerTimer.finalize('completed');
-        }
-
         // Trigger next journey leg if applicable
         await triggerNextJourneyLeg(supabase, tripId);
 
@@ -13510,12 +13355,6 @@ Return ONLY the JSON array, no other text.`;
             generation_current_city: nextCityName,
           },
         }).eq('id', tripId);
-
-        // Update generation timer: day saved
-        if (innerTimer) {
-          const savedPct = Math.round(10 + (dayNumber / totalDays) * 80);
-          await innerTimer.updateProgress(`saved_day_${dayNumber}`, savedPct);
-        }
 
         console.log(`[generate-trip-day] Day ${dayNumber}/${totalDays} complete, chaining to day ${dayNumber + 1}`);
 
@@ -13541,11 +13380,10 @@ Return ONLY the JSON array, no other text.`;
           totalDays,
           generationRunId,
           isFirstTrip: isFirstTrip || false,
-          generationLogId,
         });
 
         // Retry loop with exponential backoff for intermittent 403 errors
-        const maxRetries = 5;
+        const maxRetries = 3;
         let chainSuccess = false;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
@@ -13571,7 +13409,7 @@ Return ONLY the JSON array, no other text.`;
             console.error(`[generate-trip-day] Chain attempt ${attempt}/${maxRetries} error:`, err);
           }
           if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, 3000 * attempt));
+            await new Promise(r => setTimeout(r, 2000 * attempt));
           }
         }
         if (!chainSuccess) {
@@ -13629,47 +13467,6 @@ Return ONLY the JSON array, no other text.`;
 
     return new Response(
       JSON.stringify({ success: false, error: "Itinerary generation failed", code: "GENERATE_ERROR" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-  // === END OUTER TRY ===
-  } catch (catastrophicError) {
-    console.error("[generate-itinerary] CATASTROPHIC ERROR:", catastrophicError);
-
-    // Best-effort: try to mark trip as failed
-    try {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-      const emergencySupa = createClient(supabaseUrl, serviceKey);
-
-      try {
-        const bodyClone = req.clone();
-        const body = await bodyClone.json();
-        if (body?.tripId) {
-          await emergencySupa.from('trips').update({
-            itinerary_status: 'failed',
-            metadata: {
-              generation_error: String(catastrophicError),
-              crash_type: 'catastrophic',
-              crashed_at: new Date().toISOString()
-            }
-          }).eq('id', body.tripId);
-          console.log(`[generate-itinerary] Marked trip ${body.tripId} as failed after catastrophic error`);
-        }
-      } catch {
-        // Can't extract tripId — nothing more we can do
-      }
-    } catch {
-      // Can't even create supabase client — just return the error
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Generation encountered an unexpected error. Please try again.",
-        code: "CATASTROPHIC_ERROR"
-      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

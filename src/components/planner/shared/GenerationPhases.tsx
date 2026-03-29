@@ -110,57 +110,6 @@ function useDripFeedDays(generatedDaysList: GeneratedDaySummary[]) {
   return visibleDays;
 }
 
-// ============================================================================
-// Phase name → user-friendly text mapping
-// ============================================================================
-
-const PHASE_DISPLAY_TEXT: Record<string, string> = {
-  init: 'Initializing...',
-  pre_chain_setup: 'Setting up your trip...',
-  initializing: 'Setting up your trip...',
-  loading_preferences: 'Loading your preferences...',
-  prompt_built: 'Preparing your personalized plan...',
-  pre_chain_enrichment: 'Researching your destination...',
-  enrichment_complete: 'Almost there...',
-  post_processing: 'Polishing your itinerary...',
-  venue_enrichment: 'Finding the best venues...',
-  saving: 'Saving your itinerary...',
-  validation: 'Double-checking everything...',
-  finalizing: 'Finishing up...',
-  completing: 'Finishing up...',
-  completed: 'Your itinerary is ready!',
-  done: 'Your itinerary is ready!',
-  'done (retroactive fix)': 'Your itinerary is ready!',
-  'timed_out': 'Generation timed out',
-  'timed_out (retroactive fix)': 'Generation timed out',
-  failed: 'Something went wrong',
-};
-
-function getPhaseDisplayText(phase: string | null | undefined): string {
-  if (!phase) return 'Preparing your trip...';
-  if (PHASE_DISPLAY_TEXT[phase]) return PHASE_DISPLAY_TEXT[phase];
-
-  const dayGen = phase.match(/^generating_day_(\d+)$/);
-  if (dayGen) return `Building Day ${dayGen[1]}...`;
-
-  const ctxDay = phase.match(/^context_loaded_day_(\d+)$/);
-  if (ctxDay) return `Loading context for Day ${ctxDay[1]}...`;
-
-  const venueDay = phase.match(/^venue_lookup_day_(\d+)$/);
-  if (venueDay) return `Finding venues for Day ${venueDay[1]}...`;
-
-  const loadingDay = phase.match(/^loading_day_(\d+)$/);
-  if (loadingDay) return `Loading Day ${loadingDay[1]}...`;
-
-  const savedDay = phase.match(/^saved_day_(\d+)$/);
-  if (savedDay) return `Saving Day ${savedDay[1]}...`;
-
-  console.warn(`[progress] Unknown phase "${phase}"`);
-  return phase.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + '...';
-}
-
-// ============================================================================
-
 /** Rotating status message hook — uses real phase data from generation_logs when available */
 function useRotatingMessage(tripId?: string, isActive?: boolean) {
   const [index, setIndex] = useState(0);
@@ -181,7 +130,12 @@ function useRotatingMessage(tripId?: string, isActive?: boolean) {
           .maybeSingle();
 
         if (data?.current_phase && data.status !== 'completed' && data.status !== 'failed') {
-          setLivePhase(getPhaseDisplayText(data.current_phase));
+          // Format phase name for display
+          const phase = data.current_phase
+            .replace(/_/g, ' ')
+            .replace(/day (\d+)/i, 'Day $1')
+            .replace(/^(\w)/, (c: string) => c.toUpperCase());
+          setLivePhase(phase);
         } else {
           setLivePhase(null);
         }

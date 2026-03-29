@@ -110,36 +110,6 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
 
       const title = activity.title || activity.name || "";
       const subcategory = inferSub(title, category);
-
-      // Check for known free attractions before applying reference costs
-      const FREE_KW = [
-        'crossing', 'gardens', 'park', 'shrine', 'temple', 'plaza',
-        'square', 'bridge', 'waterfront', 'promenade', 'boulevard',
-        'viewpoint', 'lookout', 'market stroll', 'neighborhood walk',
-        'imperial palace', 'east gardens', 'meiji jingu', 'senso-ji',
-        'sensoji', 'fushimi inari', 'central park', 'hyde park',
-        'torii', 'gate', 'passage', 'cemetery', 'memorial',
-        'boardwalk', 'riverbank', 'canal', 'pier', 'harbor walk',
-        'old town', 'district walk', 'fish market', 'tsukiji',
-        'nishiki', 'la boqueria', 'grand bazaar',
-      ];
-      const titleLower = title.toLowerCase();
-      if (FREE_KW.some(kw => titleLower.includes(kw))) {
-        rows.push({
-          trip_id: tripId,
-          activity_id: activity.id,
-          day_number: dayNum,
-          cost_per_person_usd: 0,
-          num_travelers: numTravelers,
-          category,
-          source: 'free_attraction',
-          confidence: 'high',
-          cost_reference_id: null,
-          notes: '[Free attraction detected by keyword]',
-        });
-        continue;
-      }
-
       let costPerPerson = typeof activity.estimatedCost === "number" ? activity.estimatedCost
         : typeof activity.estimated_cost === "number" ? activity.estimated_cost
         : typeof activity.cost === "number" ? activity.cost

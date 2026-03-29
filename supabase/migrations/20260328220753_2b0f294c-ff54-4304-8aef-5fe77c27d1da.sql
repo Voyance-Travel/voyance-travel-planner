@@ -1,1 +1,0 @@
-ALTER TABLE public.generation_logs DISABLE ROW LEVEL SECURITY;

@@ -67,335 +67,88 @@ const META_DISTANCE_COST_RE = /\((?:[^)]*?~\d+(?:\.\d+)?(?:km|mi|m)\b[^)]*?)\)/g
 const INLINE_META_RE = /,?\s*~\d+(?:\.\d+)?(?:km|mi|m)\b,?\s*~?\$?\d+/gi;
 const FORWARD_REF_RE = /\.?\s*(?:rest|recharge|prepare|get ready)\s+for\s+tomorrow'?s?\s+[^.]+(?:adventure|day|exploration|experience|excursion)[^.]*\.?/gi;
 
-// Leaked AI planning text patterns (narrow — kept for backward compat)
-const RESERVATION_URGENCY_RE = /\b[Rr]eservation\s*[Uu]rgency[:\s]+\S+(?:\s*\([^)]*\))?\.?\s*/g;
-const BOOK_CODE_RE = /\bbook_(?:now|soon|week_before)\b(?:\s+via\s+[^.]+)?\.?\s*/gi;
-const NEXT_DAY_PLANNING_RE = /(?:Tomorrow|Next\s+(?:morning|day))[:\s]*[^.]+\.?\s*/gi;
-const REQUIRED_SLOT_RE = /[Tt]he\s+required\s+[''\u2018\u2019][^''\u2018\u2019]+[''\u2018\u2019]\s+(?:interest\s+)?slot\s*[-–—]?\s*/g;
-const TRANSPORT_EMOJI_RE = /🚶\s*\d+\s*min\.?\s*/g;
-const PARENTHETICAL_META_RE = /\((?:Paid\s+activity|Free\s+to\s+explore[^)]*)\)\s*/gi;
-const WALKIN_META_RE = /\bWalk-in\s+OK\b[^.]*\.?\s*/gi;
-
-// ============================================================
-// Broad category-based leaked AI text patterns
-// ============================================================
-// 1. Emoji booking flags: 🔴 Book Now, 🟡 Book 2-4 weeks out, etc.
-const EMOJI_BOOKING_FLAG_RE = /[🔴🟡🟢🔵]\s*(?:Book|Reserve|BOOK|RESERVE)[^.]*\.?\s*/g;
-// 2. Urgency/Reservation prefix sentences
-const URGENCY_PREFIX_RE = /(?:^|\.\s*)\s*(?:Urgency|Reservation\s*urgency|Booking\s*urgency)[:\s]+[^.]+\.?\s*/gi;
-// 3. Raw code field assignments (isVoyancePick: true, book_now, walk_in)
-const RAW_CODE_FIELD_RE = /\b(?:is[A-Z]\w+|book_(?:now|soon|week_before)|walk_in)\s*[:=]\s*\w+\.?\s*/g;
-// 4. All-caps parenthetical meta notes: (TRANSIT INCLUDED IN TIPS), (NOTE: ...)
-const ALL_CAPS_META_RE = /\([A-Z][A-Z\s_]{3,}\)/g;
-// 5. AI self-commentary about profiles/preferences
-const AI_SELF_COMMENTARY_RE = /(?:^|\.\s*)(?:Profile updated|Updated preferences|Based on (?:your|the) profile|Adjusted (?:for|based on)|Per your preferences)[^.]*\.?\s*/gi;
-// 6. Alternative suggestions: "Alternative: Narisawa (...)"
-const ALTERNATIVE_SUGGESTION_RE = /\s*Alternative:\s*[^.]+\.?\s*/g;
-// 7. Standalone boolean field leaks: isVoyancePick: true
-const STANDALONE_BOOL_RE = /\s+(?:is[A-Z]\w+):\s*(?:true|false|null)\.?\s*/g;
-
-// 8. Freestanding booking urgency text (not in parentheses) — handles unicode dashes too
-const BOOKING_URGENCY_TEXT_RE = /\b(?:BOOK|RESERVE|SECURE)\s+\d[\d\-–—]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|BEFORE|OUT|EARLY)?\b/gi;
-
-// 9. AI self-referential commentary about addressing preferences — broadened
-const AI_ADDRESSES_RE = /(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects|is designed for|was chosen for|specifically targets)\s+(?:the|your|their)\s+\w+(?:\s+\w+)?\s+(?:interest|preference|request|need|requirement|specifically|in particular)\b[^.]*\.?/gi;
-
-// 10. Schema field leaks with comma prefix: ,type ,category ,slot etc.
-const COMMA_FIELD_LEAK_RE = /,\s*(?:type|category|slot|isVoyancePick|optionGroup|isOption|tags|bookingRequired|isTransitionDay|dayMode|budgetTier)\b[^,.]*/gi;
-
-// 11. Generic placeholder "the destination" / "the city" instead of actual city name
-const GENERIC_DESTINATION_RE = /\b(?:the destination|the city|this destination|this city)\b/gi;
-
-// 12. Broader self-commentary: "This [verb] the wellness interest specifically"
-const AI_INTEREST_COMMENTARY_RE = /(?:^|\.\s*)(?:This|It|The activity)\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects|specifically targets)\s+[^.]{5,80}(?:interest|preference|specifically|requirement|request)[^.]*\.?\s*/gi;
-
-// 13. "Find a real restaurant" placeholder text from meal guard fallbacks
-const FIND_RESTAURANT_RE = /Tap\s+"Find a real restaurant"[^.]*\.?\s*/gi;
-
-// Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
-const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''\u2018\u2019-]+/gi;
-
-export function sanitizeAITextField(text: string | undefined | null, destination?: string): string {
+export function sanitizeAITextField(text: string | undefined | null): string {
   if (!text || typeof text !== 'string') return '';
-  let result = text
+  return text
     .replace(CJK_ARTIFACTS, '')
     .replace(TEXT_SCHEMA_LEAK, '')
     .replace(SYSTEM_PREFIXES_RE, '')
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
-    .replace(INLINE_ALT_VENUE_RE, '')
     .replace(SLOT_PREFIX_RE, '')
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')
     .replace(INLINE_META_RE, '')
     .replace(FORWARD_REF_RE, '')
-    .replace(RESERVATION_URGENCY_RE, '')
-    .replace(BOOK_CODE_RE, '')
-    .replace(NEXT_DAY_PLANNING_RE, '')
-    .replace(REQUIRED_SLOT_RE, '')
-    .replace(TRANSPORT_EMOJI_RE, '')
-    .replace(PARENTHETICAL_META_RE, '')
-    .replace(WALKIN_META_RE, '')
-    .replace(EMOJI_BOOKING_FLAG_RE, '')
-    .replace(URGENCY_PREFIX_RE, '')
-    .replace(RAW_CODE_FIELD_RE, '')
-    .replace(ALL_CAPS_META_RE, '')
-    .replace(AI_SELF_COMMENTARY_RE, '')
-    .replace(ALTERNATIVE_SUGGESTION_RE, '')
-    .replace(STANDALONE_BOOL_RE, '')
-    .replace(BOOKING_URGENCY_TEXT_RE, '')
-    .replace(AI_ADDRESSES_RE, '')
-    .replace(AI_INTEREST_COMMENTARY_RE, '')
-    .replace(COMMA_FIELD_LEAK_RE, '')
-    .replace(FIND_RESTAURANT_RE, '')
     .replace(/\(\s*\)/g, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
-    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '');
-
-  // Replace generic "the destination" with actual city name
-  if (destination) {
-    result = result.replace(GENERIC_DESTINATION_RE, destination);
-  }
-
-  return result.trim();
+    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '')
+    .trim();
 }
 
 /**
  * Deep-sanitize all user-facing text fields in a generated day object.
  */
-export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: string): any {
+export function sanitizeGeneratedDay(day: any, dayNumber: number): any {
   if (!day || typeof day !== 'object') return day;
 
-  const cleanTitle = sanitizeAITextField(day.title, destination);
-  const cleanTheme = sanitizeAITextField(day.theme, destination);
+  const cleanTitle = sanitizeAITextField(day.title);
+  const cleanTheme = sanitizeAITextField(day.theme);
   day.title = cleanTitle || cleanTheme || `Day ${dayNumber}`;
   day.theme = cleanTheme || cleanTitle || day.title;
 
   if (day.narrative && typeof day.narrative === 'object') {
-    if (day.narrative.theme) day.narrative.theme = sanitizeAITextField(day.narrative.theme, destination) || day.theme;
+    if (day.narrative.theme) day.narrative.theme = sanitizeAITextField(day.narrative.theme) || day.theme;
     if (Array.isArray(day.narrative.highlights)) {
       day.narrative.highlights = day.narrative.highlights
-        .map((h: string) => sanitizeAITextField(h, destination))
+        .map((h: string) => sanitizeAITextField(h))
         .filter((h: string) => h.length > 0);
     }
   }
 
   if (Array.isArray(day.accommodationNotes)) {
     day.accommodationNotes = day.accommodationNotes
-      .map((n: string) => sanitizeAITextField(n, destination))
+      .map((n: string) => sanitizeAITextField(n))
       .filter((n: string) => n.length > 0);
   }
   if (Array.isArray(day.practicalTips)) {
     day.practicalTips = day.practicalTips
-      .map((t: string) => sanitizeAITextField(t, destination))
+      .map((t: string) => sanitizeAITextField(t))
       .filter((t: string) => t.length > 0);
   }
 
   if (Array.isArray(day.activities)) {
     day.activities = day.activities.map((act: any, idx: number) => {
       if (!act || typeof act !== 'object') return act;
-      const cleanActTitle = sanitizeAITextField(act.title, destination);
-      const cleanActName = sanitizeAITextField(act.name, destination);
+      const cleanActTitle = sanitizeAITextField(act.title);
+      const cleanActName = sanitizeAITextField(act.name);
       act.title = cleanActTitle || cleanActName || `Activity ${idx + 1}`;
       act.name = act.title;
-      if (act.description) act.description = sanitizeAITextField(act.description, destination) || undefined;
-      if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips, destination) || undefined;
+      if (act.description) act.description = sanitizeAITextField(act.description) || undefined;
+      if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips) || undefined;
       if (act.location && typeof act.location === 'object') {
-        if (act.location.name) act.location.name = sanitizeAITextField(act.location.name, destination) || act.location.name;
-        if (act.location.address) act.location.address = sanitizeAITextField(act.location.address, destination) || act.location.address;
+        if (act.location.name) act.location.name = sanitizeAITextField(act.location.name) || act.location.name;
+        if (act.location.address) act.location.address = sanitizeAITextField(act.location.address) || act.location.address;
       }
       if (act.transportation && typeof act.transportation === 'object') {
-        if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions, destination) || undefined;
+        if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions) || undefined;
         const method = (act.transportation.method || '').toLowerCase();
         if (method === 'walk' || method === 'walking') {
           act.transportation.estimatedCost = { amount: 0, currency: act.transportation.estimatedCost?.currency || 'USD' };
         }
       }
-      if (act.voyanceInsight) act.voyanceInsight = sanitizeAITextField(act.voyanceInsight, destination) || undefined;
-      if (act.bestTime) act.bestTime = sanitizeAITextField(act.bestTime, destination) || undefined;
+      if (act.voyanceInsight) act.voyanceInsight = sanitizeAITextField(act.voyanceInsight) || undefined;
+      if (act.bestTime) act.bestTime = sanitizeAITextField(act.bestTime) || undefined;
       if (act.personalization && typeof act.personalization === 'object') {
-        if (act.personalization.whyThisFits) act.personalization.whyThisFits = sanitizeAITextField(act.personalization.whyThisFits, destination) || undefined;
+        if (act.personalization.whyThisFits) act.personalization.whyThisFits = sanitizeAITextField(act.personalization.whyThisFits) || undefined;
       }
-
-      // Clear tips if it duplicates description (common AI leak pattern)
-      if (act.description && act.tips) {
-        const descNorm = act.description.trim().toLowerCase();
-        const tipsNorm = act.tips.trim().toLowerCase();
-        if (descNorm === tipsNorm) {
-          act.tips = undefined;
-        } else if (descNorm.length > 10 && tipsNorm.includes(descNorm)) {
-          act.tips = undefined;
-        } else if (tipsNorm.length > 10 && descNorm.includes(tipsNorm)) {
-          act.tips = undefined;
-        }
-      }
-
       return act;
     });
-
-    // === TIME ORDERING ENFORCEMENT ===
-    // Sort activities by startTime and fix overlapping times
-    if (day.activities.length > 1) {
-      day.activities.sort((a: any, b: any) => {
-        const timeA = sanitizationParseTimeToMinutes(a.startTime || a.time || '');
-        const timeB = sanitizationParseTimeToMinutes(b.startTime || b.time || '');
-        return timeA - timeB;
-      });
-
-      // Fix overlapping times: ensure each activity starts after the previous one ends
-      for (let i = 1; i < day.activities.length; i++) {
-        const prev = day.activities[i - 1];
-        const curr = day.activities[i];
-
-        const prevEnd = sanitizationParseTimeToMinutes(prev.endTime || '');
-        const currStart = sanitizationParseTimeToMinutes(curr.startTime || curr.time || '');
-
-        if (prevEnd > 0 && currStart > 0 && currStart < prevEnd) {
-          const newStart = minutesToHHMM(prevEnd + 15);
-          console.log(`[sanitize] Day ${dayNumber}: pushing "${curr.title}" from ${curr.startTime} to ${newStart} (overlap with "${prev.title}")`);
-          curr.startTime = newStart;
-          curr.time = newStart;
-
-          const currEnd = sanitizationParseTimeToMinutes(curr.endTime || '');
-          if (currEnd > 0) {
-            const duration = currEnd - currStart;
-            curr.endTime = minutesToHHMM(prevEnd + 15 + duration);
-          }
-        }
-      }
-    }
   }
 
   return day;
-}
-
-// === Time helpers for sanitization — handles both 12h ("3:15 PM") and 24h ("15:15") ===
-function sanitizationParseTimeToMinutes(time: string): number {
-  if (!time) return 0;
-  const cleaned = time.trim().toLowerCase();
-  // Try 12h format first: "3:15 PM", "11:00 am", "9 pm"
-  const match12 = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
-  if (match12) {
-    let h = parseInt(match12[1], 10);
-    const m = parseInt(match12[2] || '0', 10);
-    if (match12[3] === 'pm' && h !== 12) h += 12;
-    if (match12[3] === 'am' && h === 12) h = 0;
-    return h * 60 + m;
-  }
-  // 24h format: "14:30", "9:00"
-  const match24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
-  if (match24) return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
-  return 0;
-}
-
-function minutesToHHMM(mins: number): string {
-  const h = Math.floor(mins / 60) % 24;
-  const m = mins % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-}
-
-// =============================================================================
-// CROSS-DAY VENUE DEDUPLICATION — Remove sightseeing repeats across days
-// =============================================================================
-const NON_REPEATABLE_CATEGORIES = new Set([
-  'sightseeing', 'attraction', 'museum', 'landmark', 'tour',
-  'entertainment', 'cultural', 'historical', 'nature', 'park',
-  'shopping', 'nightlife',
-]);
-
-/**
- * Remove activities from newDay that duplicate venues from previousDays.
- * Only filters non-meal, non-transport, non-hotel categories.
- */
-// Verb-stripping regex for concept similarity
-const DEDUP_STRIP_VERBS_RE = /\b(guided|visit|explore|discover|tour|walk|stroll|head|go|return|morning|afternoon|evening|a|an|the|to|of|at|in|on|and|with|for)\b/g;
-
-function dedupConceptSimilarity(a: string, b: string): boolean {
-  if (!a || !b || a.length < 4 || b.length < 4) return false;
-  if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
-  // Strip common verbs and check containment
-  const aVenue = a.replace(DEDUP_STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
-  const bVenue = b.replace(DEDUP_STRIP_VERBS_RE, '').replace(/\s+/g, ' ').trim();
-  if (aVenue.length > 4 && bVenue.length > 4 && (aVenue.includes(bVenue) || bVenue.includes(aVenue))) return true;
-  // Word overlap
-  const aWords = new Set(a.split(/\s+/).filter(w => w.length > 3));
-  const bWords = new Set(b.split(/\s+/).filter(w => w.length > 3));
-  if (aWords.size === 0 || bWords.size === 0) return false;
-  const overlap = [...aWords].filter(w => bWords.has(w));
-  return overlap.length / Math.min(aWords.size, bWords.size) > 0.6;
-}
-
-/**
- * Remove activities from newDay that duplicate venues from previousDays.
- * Uses concept-similarity matching (not just exact title) + location.name anchoring.
- */
-export function deduplicateCrossDayVenues(
-  newDay: any,
-  previousDays: any[],
-  dayNumber: number,
-): any {
-  if (!newDay?.activities || !previousDays?.length) return newDay;
-
-  // Build previous venue data with both exact names and normalized concepts
-  const previousVenueNames = new Set<string>();
-  const previousConcepts: string[] = [];
-  for (const prevDay of previousDays) {
-    if (!prevDay?.activities) continue;
-    for (const act of prevDay.activities) {
-      const name = (act.title || act.name || '').toLowerCase().trim();
-      if (name.length > 3) {
-        previousVenueNames.add(name);
-        previousConcepts.push(name);
-      }
-      if (act.location?.name) {
-        const locName = act.location.name.toLowerCase().trim();
-        if (locName.length > 3) {
-          previousVenueNames.add(locName);
-          previousConcepts.push(locName);
-        }
-      }
-    }
-  }
-
-  const before = newDay.activities.length;
-  newDay.activities = newDay.activities.filter((act: any) => {
-    const name = (act.title || act.name || '').toLowerCase().trim();
-    const locationName = (act.location?.name || '').toLowerCase().trim();
-    const category = (act.category || '').toLowerCase();
-
-    // Only dedup non-meal, non-transport activities
-    if (!NON_REPEATABLE_CATEGORIES.has(category)) return true;
-
-    // Exact match
-    if (previousVenueNames.has(name) || (locationName && previousVenueNames.has(locationName))) {
-      console.log(`[dedup] Removing "${name}" from day ${dayNumber} - exact match in previous day`);
-      return false;
-    }
-
-    // Concept similarity (catches "Louvre Museum" vs "Visit the Louvre", etc.)
-    for (const prevConcept of previousConcepts) {
-      if (dedupConceptSimilarity(name, prevConcept)) {
-        console.log(`[dedup] Removing "${name}" from day ${dayNumber} - concept match with "${prevConcept}"`);
-        return false;
-      }
-      if (locationName && dedupConceptSimilarity(locationName, prevConcept)) {
-        console.log(`[dedup] Removing "${name}" from day ${dayNumber} - location concept match with "${prevConcept}"`);
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  const removed = before - newDay.activities.length;
-  if (removed > 0) {
-    console.log(`[dedup] Removed ${removed} duplicate venue(s) from day ${dayNumber}`);
-  }
-
-  return newDay;
 }
 
 // =============================================================================
@@ -438,132 +191,6 @@ export function normalizeDurationString(raw: string | undefined | null): string 
   }
 
   return raw; // Unparseable — pass through
-}
-
-// =============================================================================
-// HOTEL NAME ENFORCEMENT — Replace hallucinated hotel brands with "Your Hotel"
-// =============================================================================
-
-const KNOWN_HOTEL_BRANDS = [
-  'Peninsula', 'Four Seasons', 'Ritz-Carlton', 'Ritz Carlton',
-  'Park Hyatt', 'Aman', 'Mandarin Oriental', 'Conrad',
-  'St\\. Regis', 'St Regis', 'Waldorf Astoria', 'Shangri-La',
-  'InterContinental', 'Andaz', 'W Hotel', 'Edition',
-  'Rosewood', 'Bulgari', 'Six Senses', 'Hoshinoya',
-  'Palace Hotel', 'Imperial Hotel', 'Hotel Okura',
-  'Prince Hotel', 'Cerulean Tower', 'Capitol Hotel',
-  'Hyatt Regency', 'Hilton', 'Marriott', 'Westin',
-  'Grand Hyatt', 'ANA InterContinental', 'JW Marriott',
-  'Fairmont', 'Sofitel', 'Belmond', 'Oberoi',
-  'Raffles', 'Banyan Tree', 'Como', 'One&Only',
-  'Le Meurice', 'Le Bristol', 'Plaza Ath(?:é|e)n(?:é|e)e',
-  'George V', 'Crillon', 'Lutetia', 'Le Royal Monceau',
-];
-
-const HOTEL_BRAND_RE = new RegExp(
-  `(?:The\\s+)?(?:${KNOWN_HOTEL_BRANDS.join('|')})(?:\\s+(?:Hotel|Resort|Spa|Suites|Tower|Palace|Lodge|Residences|Collection))*(?:\\s+[A-Z][a-zA-Z]+)*(?:\\s+(?:at|in|of|by)\\s+[A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)*)?`,
-  'gi'
-);
-
-/**
- * Replaces hallucinated hotel names with "Your Hotel" when no hotel was selected.
- */
-export function enforceHotelPlaceholder(text: string): string {
-  if (!text || typeof text !== 'string') return text;
-  return text.replace(HOTEL_BRAND_RE, 'Your Hotel');
-}
-
-/**
- * Enforces hotel placeholder across an entire generated day object.
- * Only call this when the user has NOT selected a hotel.
- */
-export function enforceHotelPlaceholderOnDay(day: any): any {
-  if (!day || typeof day !== 'object') return day;
-
-  // Day-level text fields
-  if (day.title) day.title = enforceHotelPlaceholder(day.title);
-  if (day.theme) day.theme = enforceHotelPlaceholder(day.theme);
-  if (typeof day.narrative === 'string') {
-    day.narrative = enforceHotelPlaceholder(day.narrative);
-  } else if (day.narrative && typeof day.narrative === 'object') {
-    if (day.narrative.theme) day.narrative.theme = enforceHotelPlaceholder(day.narrative.theme);
-    if (Array.isArray(day.narrative.highlights)) {
-      day.narrative.highlights = day.narrative.highlights.map((h: string) => enforceHotelPlaceholder(h));
-    }
-  }
-  if (Array.isArray(day.accommodationNotes)) {
-    day.accommodationNotes = day.accommodationNotes.map((n: string) => enforceHotelPlaceholder(n));
-  } else if (typeof day.accommodationNotes === 'string') {
-    day.accommodationNotes = enforceHotelPlaceholder(day.accommodationNotes);
-  }
-  if (Array.isArray(day.practicalTips)) {
-    day.practicalTips = day.practicalTips.map((t: string) => enforceHotelPlaceholder(t));
-  } else if (typeof day.practicalTips === 'string') {
-    day.practicalTips = enforceHotelPlaceholder(day.practicalTips);
-  }
-
-  // Activity-level text fields
-  if (Array.isArray(day.activities)) {
-    for (const act of day.activities) {
-      if (!act || typeof act !== 'object') continue;
-      if (act.title) act.title = enforceHotelPlaceholder(act.title);
-      if (act.name) act.name = enforceHotelPlaceholder(act.name);
-      if (act.description) act.description = enforceHotelPlaceholder(act.description);
-      if (typeof act.tips === 'string') act.tips = enforceHotelPlaceholder(act.tips);
-      if (act.voyanceInsight) act.voyanceInsight = enforceHotelPlaceholder(act.voyanceInsight);
-      if (act.bestTime) act.bestTime = enforceHotelPlaceholder(act.bestTime);
-      if (act.location?.name) act.location.name = enforceHotelPlaceholder(act.location.name);
-      if (act.location?.address) act.location.address = enforceHotelPlaceholder(act.location.address);
-      if (act.personalization?.whyThisFits) {
-        act.personalization.whyThisFits = enforceHotelPlaceholder(act.personalization.whyThisFits);
-      }
-      if (act.transportation?.instructions) {
-        act.transportation.instructions = enforceHotelPlaceholder(act.transportation.instructions);
-      }
-      if (act.transit?.description) act.transit.description = enforceHotelPlaceholder(act.transit.description);
-      if (act.transit?.to) act.transit.to = enforceHotelPlaceholder(act.transit.to);
-      if (act.transit?.from) act.transit.from = enforceHotelPlaceholder(act.transit.from);
-    }
-  }
-
-  return day;
-}
-
-// =============================================================================
-// PHANTOM HOTEL STRIPPING — Remove fabricated hotel activities when no hotel booked
-// =============================================================================
-const PHANTOM_HOTEL_PATTERN = /\b(?:hotel|check.?in|check.?out|return to (?:the |your )?(?:hotel|room|suite))\b/i;
-
-/**
- * Strips accommodation activities that reference phantom/fabricated hotels
- * when no real hotel is booked. Keeps activities that just mention "hotel" in passing
- * (e.g. "hotel bar", "rooftop lounge at hotel").
- */
-export function stripPhantomHotelActivities(day: any, hasHotelBooked: boolean): any {
-  if (hasHotelBooked || !day?.activities) return day;
-
-  const before = day.activities.length;
-  day.activities = day.activities.filter((act: any) => {
-    const title = (act.title || act.name || '').toLowerCase();
-    const category = (act.category || '').toLowerCase();
-
-    // Remove explicit accommodation check-in/check-out
-    if (category === 'hotel_checkin' || category === 'hotel_checkout') return false;
-    if (category === 'accommodation' && PHANTOM_HOTEL_PATTERN.test(title)) return false;
-
-    // Remove "Return to Hotel" / "Freshen up at Hotel" / "Check-in at [Hotel Name]"
-    if (/^(?:return to|freshen up at|check.?in at|settle into|arrive at)\s/i.test(title) &&
-        PHANTOM_HOTEL_PATTERN.test(title)) return false;
-
-    return true;
-  });
-
-  const removed = before - day.activities.length;
-  if (removed > 0) {
-    console.log(`[stripPhantomHotel] Removed ${removed} phantom hotel activity(ies) from day`);
-  }
-
-  return day;
 }
 
 export function sanitizeDateFields(obj: any): any {

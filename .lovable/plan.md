@@ -1,63 +1,67 @@
 
 
-## Post-Generation Itinerary Cleanup — Standalone Edge Function
+## Enhance Generation Logging: LLM Model, Token Counts, Categories, Inner Phase Timing
 
-### Approach
-Create a new `cleanup-itinerary` edge function that reads saved itinerary days from the database, applies all text sanitization and structural fixes, and writes cleaned data back. The generation pipeline (`index.ts`) is **not touched**. If cleanup fails, the raw itinerary remains intact.
+The timer infrastructure exists but is only half-wired. The expensive inner work (AI call, parsing, enrichment) inside `index.ts` is not instrumented, and the model/token/category data is never recorded.
+
+---
+
+### What's Missing Today
+
+| Data Point | DB Column Exists? | Currently Logged? |
+|---|---|---|
+| Which LLM model is called | Yes (`model_used`) | No |
+| Token counts (prompt/completion) | Yes (`prompt_token_count`, `completion_token_count`) | No |
+| Per-phase timing inside generate-day | Yes (`phase_timings`) | Only outer `day_N_total`, not inner AI/enrich/parse |
+| Activity categories per day | No | No |
+
+---
 
 ### Changes
 
-**1. New edge function: `supabase/functions/cleanup-itinerary/index.ts`** (~200 lines)
+**1. Wire timer into `index.ts` generate-day action (~line 2200)**
 
-- Accepts `{ tripId }`, loads trip metadata (destination, hotel_selection) and all `itinerary_days` rows
-- For each day's activities, applies text cleaning:
-  - Schema field leaks (`,type`, `,category`, etc.)
-  - Booking urgency (`BOOK 2-4 WEEKS`, emoji flags)
-  - System prefixes (`EDGE_ACTIVITY:`, `SIGNATURE_MEAL:`, etc.)
-  - AI self-commentary ("This addresses the wellness interest")
-  - Generic placeholder replacement ("the destination" → actual city name)
-  - Boolean/code field leaks (`isVoyancePick: true`)
-- Strips phantom hotel activities when no hotel is booked
-- Removes cross-day venue duplicates (attractions only, meals exempt)
-- Sorts activities chronologically by startTime (handles both 12h and 24h)
-- Deduplicates tips === description
-- Cleans day-level text fields (title, theme, narrative)
-- Saves changed days back to `itinerary_days` table
-- Returns `{ success, totalFixes, daysProcessed }`
+Pass `generationLogId` through the `generate-day` request payload from `action-generate-trip-day.ts`. Inside `index.ts`, reconstruct the timer and wrap the key phases:
 
-**2. Register in `supabase/config.toml`**
+- `ai_call_day_N` — the main Gemini 3 Flash call (~line 2201)
+- `parse_response_day_N` — JSON parsing of AI output
+- `venue_enrichment_day_N` — Google Places + GPT-5-nano semantic verification (~line 3720)
+- `cost_estimation_day_N` — pricing logic
+- `bookend_validation` — the post-processing validator
 
-Add `[functions.cleanup-itinerary]` with `verify_jwt = false`.
+This gives the waterfall chart real per-phase bars instead of just one `day_N_total` block.
 
-**3. Wire into poller's onReady — `src/hooks/useGenerationPoller.ts`**
+**2. Record LLM model name**
 
-At the points where the poller sets `status: 'ready'` and calls `onReady()` (lines 166-174, 186-195, 201-210, 219-228), add a fire-and-forget cleanup call:
+After the AI call completes, write `model_used: 'google/gemini-3-flash-preview'` to the generation_logs row. Since venue verification also uses `openai/gpt-5-nano`, track both in a new `models_used` JSONB field (or append to `phase_timings` metadata).
 
-```typescript
-// After onReady fires, trigger background cleanup
-supabase.functions.invoke('cleanup-itinerary', { body: { tripId } })
-  .then(({ data, error }) => {
-    if (error) console.warn('[cleanup] Post-generation cleanup failed (non-fatal):', error);
-    else console.log('[cleanup] Itinerary cleaned:', data);
-  });
+Simpler approach: add the model name to each phase key, e.g. `ai_call_day_1 [gemini-3-flash]`, so it shows in the waterfall naturally.
+
+**3. Record token counts**
+
+The Lovable AI gateway returns `usage.prompt_tokens` and `usage.completion_tokens` in the response. After the AI call, parse these from the response and accumulate them. On `finalize()`, write totals to `prompt_token_count` and `completion_token_count`.
+
+**4. Track categories per day**
+
+Add a `category_breakdown` field to each `day_timings` entry:
+```json
+{ "day": 1, "total_ms": 62000, "ai_ms": 45000, "enrich_ms": 8000, "activities": 8,
+  "categories": { "dining": 3, "activity": 2, "transport": 2, "nightlife": 1 } }
 ```
 
-This will be a small helper function `fireBackgroundCleanup(tripId)` called from each ready-transition branch. The tripId is already available via `tripIdRef`.
+After parsing the AI response, count activities by category and include in `addDayTiming()`.
 
-**4. No manual "Clean Up" button** — keeping it simple. The automatic fire-and-forget on ready is sufficient.
+---
 
-### What's NOT touched
-- `supabase/functions/generate-itinerary/index.ts` — untouched
-- `supabase/functions/generate-itinerary/sanitization.ts` — untouched
-- Existing hooks, components, meal guard — untouched
+### Files Changed
 
-### Files
 | File | Change |
-|------|--------|
-| `supabase/functions/cleanup-itinerary/index.ts` | New file (~200 lines) |
-| `supabase/config.toml` | Add cleanup-itinerary entry |
-| `src/hooks/useGenerationPoller.ts` | Add background cleanup call on ready transitions |
+|---|---|
+| `supabase/functions/generate-itinerary/generation-timer.ts` | Add `addTokenUsage()` method, extend `addDayTiming()` to accept categories, write token totals in `finalize()` |
+| `supabase/functions/generate-itinerary/action-generate-trip-day.ts` | Pass `generationLogId` in the `generate-day` request body; count categories from `dayResult.activities` before calling `addDayTiming()` |
+| `supabase/functions/generate-itinerary/index.ts` | Import timer, reconstruct from logId in generate-day action, wrap AI call / parse / enrichment / cost phases with `startPhase`/`endPhase`, extract token counts from AI response |
 
-### Deploy
-Edge function auto-deploys. Frontend rebuilds with poller change.
+### Migration
+
+None needed — `model_used`, `prompt_token_count`, and `completion_token_count` columns already exist. Category data goes inside the existing `day_timings` JSONB.
 

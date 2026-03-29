@@ -113,8 +113,7 @@ export async function handleGenerateTrip(
 
   // Initialize performance timer
   const totalDaysForTimer = totalDays; // Will be set after calculation
-  const logId = await timer.init(destination, totalDays, travelers || 1);
-  console.log(`[generate-trip] Timer initialized, logId=${logId}, destination=${destination}, days=${totalDays}`);
+  await timer.init(destination, totalDays, travelers || 1);
   timer.startPhase('pre_chain_setup');
 
   // Set status to generating + store metadata
@@ -441,7 +440,6 @@ export async function handleGenerateTrip(
       
       console.log(`[generate-trip] Enrichment context computed with ${Object.keys(enrichmentContext).length} fields`);
       timer.endPhase('pre_chain_enrichment');
-      await timer.updateProgress('enrichment_complete', 8);
     } catch (enrichErr) {
       console.warn('[generate-trip] Enrichment context computation failed (non-blocking):', enrichErr);
       timer.addError('pre_chain_enrichment', String(enrichErr));

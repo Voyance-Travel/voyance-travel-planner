@@ -11,9 +11,6 @@ const AI_QUALIFIER_RE = /\s*\((?:[^)]*?\b(?:alternative|satellite|or\s+high.end|
 // Strip "or High-End Boutique Wellness" style trailing qualifiers (no parens)
 const TRAILING_OR_QUALIFIER_RE = /\s+or\s+(?:high.end|similar|equivalent|comparable)\b[^,.]*/gi;
 
-// Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
-const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''\u2018\u2019-]+/gi;
-
 // Strip "slot: " prefix from descriptions
 const SLOT_PREFIX_RE = /^slot:\s*/i;
 
@@ -78,8 +75,6 @@ export function sanitizeActivityName(name: string | undefined | null): string {
   sanitized = sanitized.replace(AI_QUALIFIER_RE, '').trim();
   // Strip trailing "or High-End Boutique Wellness" without parens
   sanitized = sanitized.replace(TRAILING_OR_QUALIFIER_RE, '').trim();
-  // Strip inline alternative venue references
-  sanitized = sanitized.replace(INLINE_ALT_VENUE_RE, '').trim();
 
   // Also handle case-insensitive matching for robustness
   const lowerName = sanitized.toLowerCase();
@@ -152,52 +147,16 @@ export function sanitizeActivityName(name: string | undefined | null): string {
  */
 const SYSTEM_LABEL_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*:?\s*/gi;
 
-// Leaked AI planning text patterns (mirrored from edge function sanitization)
-const RESERVATION_URGENCY_RE = /\b[Rr]eservation\s*[Uu]rgency[:\s]+\S+(?:\s*\([^)]*\))?\.?\s*/g;
-const BOOK_CODE_RE = /\bbook_(?:now|soon|week_before)\b(?:\s+via\s+[^.]+)?\.?\s*/gi;
-const NEXT_DAY_PLANNING_RE = /(?:Tomorrow|Next\s+(?:morning|day))[:\s]*[^.]+\.?\s*/gi;
-const REQUIRED_SLOT_RE = /[Tt]he\s+required\s+[''\u2018\u2019][^''\u2018\u2019]+[''\u2018\u2019]\s+(?:interest\s+)?slot\s*[-–—]?\s*/g;
-const TRANSPORT_EMOJI_RE = /🚶\s*\d+\s*min\.?\s*/g;
-const PARENTHETICAL_META_RE = /\((?:Paid\s+activity|Free\s+to\s+explore[^)]*)\)\s*/gi;
-const WALKIN_META_RE = /\bWalk-in\s+OK\b[^.]*\.?\s*/gi;
-const FORWARD_REF_RE = /\.?\s*(?:rest|recharge|prepare|get ready)\s+for\s+tomorrow'?s?\s+[^.]+(?:adventure|day|exploration|experience|excursion)[^.]*\.?/gi;
-
-// Broad category-based patterns
-const EMOJI_BOOKING_FLAG_RE = /[🔴🟡🟢🔵]\s*(?:Book|Reserve|BOOK|RESERVE)[^.]*\.?\s*/g;
-const URGENCY_PREFIX_RE = /(?:^|\.\s*)\s*(?:Urgency|Reservation\s*urgency|Booking\s*urgency)[:\s]+[^.]+\.?\s*/gi;
-const RAW_CODE_FIELD_RE = /\b(?:is[A-Z]\w+|book_(?:now|soon|week_before)|walk_in)\s*[:=]\s*\w+\.?\s*/g;
-const ALL_CAPS_META_RE = /\([A-Z][A-Z\s_]{3,}\)/g;
-const AI_SELF_COMMENTARY_RE = /(?:^|\.\s*)(?:Profile updated|Updated preferences|Based on (?:your|the) profile|Adjusted (?:for|based on)|Per your preferences)[^.]*\.?\s*/gi;
-const ALTERNATIVE_SUGGESTION_RE = /\s*Alternative:\s*[^.]+\.?\s*/g;
-const STANDALONE_BOOL_RE = /\s+(?:is[A-Z]\w+):\s*(?:true|false|null)\.?\s*/g;
-
 export function sanitizeActivityText(text: string | undefined | null): string {
   if (!text) return '';
   return text
     .replace(SYSTEM_LABEL_RE, '')
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
-    .replace(INLINE_ALT_VENUE_RE, '')
     .replace(SLOT_PREFIX_RE, '')
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')
     .replace(INLINE_META_RE, '')
-    .replace(FORWARD_REF_RE, '')
-    .replace(RESERVATION_URGENCY_RE, '')
-    .replace(BOOK_CODE_RE, '')
-    .replace(NEXT_DAY_PLANNING_RE, '')
-    .replace(REQUIRED_SLOT_RE, '')
-    .replace(TRANSPORT_EMOJI_RE, '')
-    .replace(PARENTHETICAL_META_RE, '')
-    .replace(WALKIN_META_RE, '')
-    .replace(EMOJI_BOOKING_FLAG_RE, '')
-    .replace(URGENCY_PREFIX_RE, '')
-    .replace(RAW_CODE_FIELD_RE, '')
-    .replace(ALL_CAPS_META_RE, '')
-    .replace(AI_SELF_COMMENTARY_RE, '')
-    .replace(ALTERNATIVE_SUGGESTION_RE, '')
-    .replace(STANDALONE_BOOL_RE, '')
-    .replace(/\(\s*\)/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }

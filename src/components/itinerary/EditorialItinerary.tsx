@@ -1062,28 +1062,11 @@ function getActivityCostInfo(
     'viewpoint', 'lookout', 'market stroll', 'neighborhood walk',
     'imperial palace', 'east gardens', 'meiji jingu', 'senso-ji',
     'sensoji', 'fushimi inari', 'central park', 'hyde park',
-    'torii', 'gate', 'passage', 'cemetery', 'memorial',
-    'boardwalk', 'riverbank', 'canal', 'pier', 'harbor walk',
-    'old town', 'district walk', 'fish market', 'tsukiji',
-    'nishiki', 'la boqueria', 'grand bazaar',
   ];
-  const FREE_DESCRIPTION_INDICATORS = [
-    'free to explore', 'free entry', 'free to visit', 'free admission',
-    'no entrance fee', 'no entry fee', 'free to enter', 'free to walk',
-    'free of charge', 'no cost',
-  ];
-  const descLower = ((activity as any).description || '').toLowerCase();
-  const descIndicatesFree = FREE_DESCRIPTION_INDICATORS.some(ind => descLower.includes(ind));
-  const titleMatchesFreeKeyword = FREE_ATTRACTION_KEYWORDS.some(kw => titleLower.includes(kw));
-  const looksLikelyFree = titleMatchesFreeKeyword &&
-    ['sightseeing', 'explore', 'cultural', 'activity', 'attraction', 'market'].includes(catLower);
+  const looksLikelyFree = FREE_ATTRACTION_KEYWORDS.some(kw => titleLower.includes(kw)) &&
+    ['sightseeing', 'explore', 'cultural', 'activity', 'attraction'].includes(catLower);
   
-  // Description-based free detection takes priority over category guards
-  if (descIndicatesFree) {
-    return { amount: 0, isEstimated: false, confidence: 'high' as const, basis: 'flat' as CostBasis };
-  }
-  // Keyword-matched free attractions take priority over shouldNeverBeFree
-  if (looksLikelyFree) {
+  if (looksLikelyFree && !isNeverFreeCategory(category, title)) {
     return { amount: 0, isEstimated: false, confidence: 'medium' as const, basis: 'flat' as CostBasis };
   }
   

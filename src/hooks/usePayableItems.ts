@@ -215,32 +215,6 @@ export function usePayableItems({
         if (isNonPayable) return;
 
         if (cost <= 0) {
-          // Check for known-free attractions BEFORE the shouldNeverBeFree guard
-          const FREE_ATTRACTION_KW = [
-            'crossing', 'gardens', 'park', 'shrine', 'temple', 'plaza',
-            'square', 'bridge', 'waterfront', 'promenade', 'boulevard',
-            'viewpoint', 'lookout', 'market stroll', 'neighborhood walk',
-            'imperial palace', 'east gardens', 'meiji jingu', 'senso-ji',
-            'sensoji', 'fushimi inari', 'central park', 'hyde park',
-            'torii', 'gate', 'passage', 'cemetery', 'memorial',
-            'boardwalk', 'riverbank', 'canal', 'pier', 'harbor walk',
-            'old town', 'district walk', 'fish market', 'tsukiji',
-            'nishiki', 'la boqueria', 'grand bazaar',
-          ];
-          const FREE_DESC_INDICATORS = [
-            'free to explore', 'free entry', 'free to visit', 'free admission',
-            'no entrance fee', 'no entry fee', 'free to enter', 'free to walk',
-            'free of charge', 'no cost',
-          ];
-          const actDesc = ((activity as any).description || '').toLowerCase();
-          const isFreeAttraction = FREE_ATTRACTION_KW.some(kw => titleLower.includes(kw)) ||
-            FREE_DESC_INDICATORS.some(ind => actDesc.includes(ind));
-
-          if (isFreeAttraction) {
-            // Known free attraction — skip estimation, leave cost at 0
-            return;
-          }
-
           const shouldNeverBeFree = NEVER_FREE_CATEGORIES.some(nfc => catLower.includes(nfc)) ||
             NEVER_FREE_KEYWORDS.some(kw => titleLower.includes(kw));
 

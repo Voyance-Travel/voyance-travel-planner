@@ -9,15 +9,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-/** Fire-and-forget post-generation cleanup */
-function fireBackgroundCleanup(tripId: string) {
-  supabase.functions.invoke('cleanup-itinerary', { body: { tripId } })
-    .then(({ data, error }) => {
-      if (error) console.warn('[cleanup] Post-generation cleanup failed (non-fatal):', error);
-      else console.log('[cleanup] Itinerary cleaned:', data);
-    });
-}
-
 /** Stale threshold: if no heartbeat for 5 minutes, generation is considered dead */
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 
@@ -179,7 +170,6 @@ export function useGenerationPoller({
         if (!onReadyCalledRef.current) {
           onReadyCalledRef.current = true;
           onReadyRef.current?.();
-          fireBackgroundCleanup(tripId);
         }
         return;
       }
@@ -200,7 +190,6 @@ export function useGenerationPoller({
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
             onReadyRef.current?.();
-            fireBackgroundCleanup(tripId);
           }
           return;
         }
@@ -217,7 +206,6 @@ export function useGenerationPoller({
           if (!onReadyCalledRef.current) {
             onReadyCalledRef.current = true;
             onReadyRef.current?.();
-            fireBackgroundCleanup(tripId);
           }
           return;
         }
@@ -236,7 +224,6 @@ export function useGenerationPoller({
             if (!onReadyCalledRef.current) {
               onReadyCalledRef.current = true;
               onReadyRef.current?.();
-              fireBackgroundCleanup(tripId);
             }
             return;
           }

@@ -1,2 +1,0 @@
-UPDATE trips SET itinerary_status = 'failed' WHERE itinerary_status = 'generating' AND updated_at < NOW() - INTERVAL '10 minutes';
-UPDATE generation_logs SET status = 'failed', current_phase = 'timed_out', progress_pct = COALESCE(progress_pct, 10) WHERE status IN ('in_progress', 'started') AND created_at < NOW() - INTERVAL '10 minutes';
