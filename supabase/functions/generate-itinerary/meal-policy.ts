@@ -145,9 +145,9 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
         buildMealText(meals, 'morning arrival'));
     }
 
-    // No arrival time — conservative (assume afternoon arrival)
-    return meal('midday_arrival', ['dinner'], usableHours,
-      'Arrival time unknown — conservatively planning dinner only. Add flight details for a more complete day.');
+    // No arrival time — assume full day available (morning start)
+    return meal('morning_arrival', ['breakfast', 'lunch', 'dinner'], usableHours,
+      'Arrival time unknown — planning a full day with all 3 meals. Add flight details to adjust if arriving later.');
   }
 
   // ── Departure day (last day) ──
@@ -180,9 +180,9 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
         'Late departure — nearly a full day. Include breakfast, lunch, and dinner before airport.');
     }
 
-    // No departure time — use checkout as anchor
-    return meal('midday_departure', ['breakfast'], usableHours,
-      'Departure time unknown — planning breakfast + checkout. Add flight details for better planning.');
+    // No departure time — plan morning + lunch before checkout
+    return meal('midday_departure', ['breakfast', 'lunch'], usableHours,
+      'Departure time unknown — planning breakfast + lunch. Add flight details for better planning.');
   }
 
   // ── Standard mid-trip day ──
