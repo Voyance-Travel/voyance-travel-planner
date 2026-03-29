@@ -40,7 +40,16 @@ export interface RepairDayInput {
 
   // Hotel context for bookend validator
   hotelName?: string;
+  hotelAddress?: string;
   hasHotel: boolean;
+
+  // Multi-city / transition context (pre-resolved by orchestrator)
+  isTransitionDay?: boolean;
+  isMultiCity?: boolean;
+  isLastDayInCity?: boolean;
+  resolvedDestination?: string;
+  nextLegTransport?: string;
+  hotelOverride?: { name?: string; address?: string };
 
   // Locked activities (never remove)
   lockedActivities: StrictActivityMinimal[];
