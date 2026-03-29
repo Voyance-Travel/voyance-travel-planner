@@ -33,15 +33,17 @@ Trip Facts → Day Schema → AI Fill → Validator → Targeted Repair → Save
 
 ---
 
-## Phase 1: Retire Legacy Path
+## ✅ Phase 1: Retire Legacy Path (COMPLETE)
 
 **Goal**: Make `action-generate-full.ts` a thin redirect to the day-chain pipeline.
 
 **Files changed**:
-- `action-generate-full.ts` — gut implementation; delegate to `action-generate-trip.ts` logic
-- `index.ts` — `generate-full` routes through same trip orchestrator
+- `action-generate-full.ts` — gutted 2,962-line implementation; now a ~80-line redirect to `handleGenerateTrip`
+- `index.ts` — simplified `generate-full` dispatch (removed `authHeader` pass)
+- `enrich-manual-trip/index.ts` — changed action from `generate-full` to `generate-trip` with full params
+- `index.test.ts` — updated test for legacy redirect
 
-**Risk**: Low. Day-chain path already handles all trip types.
+**Status**: Deployed. One authoritative generation path (day-chain). Legacy `generate-full` action still works as a redirect.
 
 ---
 
