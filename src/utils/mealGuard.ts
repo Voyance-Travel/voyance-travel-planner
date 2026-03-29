@@ -212,7 +212,7 @@ function buildFallbackActivity(
     tags: ['dining', mealType, 'meal-guard', ...(isGeneric ? ['needs-refinement'] : [])],
     bookingRequired: false,
     tips: isGeneric
-      ? `Tap "Find a real restaurant" below to get a personalized ${mealType} recommendation.`
+      ? `Explore local options — check recent reviews or ask your accommodation for recommendations.`
       : `Added from verified venues — feel free to swap if you prefer somewhere else.`,
     needsRefinement: isGeneric,
   };

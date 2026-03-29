@@ -976,12 +976,25 @@ export async function handleGenerateDay(
         try {
           const destQuery = resolvedDestination || destination || '';
           if (destQuery && supabase) {
-            const { data: venues } = await supabase
+            let { data: venues } = await supabase
               .from('verified_venues')
               .select('name, address, category')
               .ilike('city', `%${destQuery}%`)
               .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
               .limit(30);
+            if ((!venues || venues.length === 0) && destQuery.includes(',')) {
+              const cityOnly = destQuery.split(',')[0].trim();
+              const broader = await supabase
+                .from('verified_venues')
+                .select('name, address, category')
+                .ilike('city', `%${cityOnly}%`)
+                .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+                .limit(30);
+              venues = broader.data;
+              if (venues && venues.length > 0) {
+                console.log(`[generate-day] Broadened verified_venues query to "${cityOnly}" — found ${venues.length} results`);
+              }
+            }
             if (venues && venues.length > 0) {
               for (const v of venues) {
                 const nameLower = (v.name || '').toLowerCase();
