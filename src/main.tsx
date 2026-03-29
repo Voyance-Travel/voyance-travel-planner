@@ -69,7 +69,7 @@ function installGlobalUnsplashGuard() {
 installUnsplashSrcNormalizer();
 installGlobalUnsplashGuard();
 
-// Force any waiting service worker to activate immediately on page load
+// Aggressively clear stale service worker caches and force activation
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(registrations => {
     registrations.forEach(reg => {
@@ -79,6 +79,17 @@ if ('serviceWorker' in navigator) {
       }
     });
   });
+
+  // One-time stale cache purge: clear all workbox precache buckets
+  if ('caches' in window) {
+    caches.keys().then(names => {
+      names.forEach(name => {
+        if (name.includes('workbox-precache') || name.includes('sw-precache')) {
+          caches.delete(name);
+        }
+      });
+    });
+  }
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

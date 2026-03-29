@@ -52,7 +52,7 @@ interface WeatherForecastProps {
 
 const getWeatherIcon = (condition: string, size: 'sm' | 'md' | 'lg' = 'md') => {
   const sizeClass = size === 'sm' ? 'h-5 w-5' : size === 'lg' ? 'h-10 w-10' : 'h-6 w-6';
-  const c = condition.toLowerCase();
+  const c = (condition || '').toLowerCase();
 
   // Keep icons on-brand (design tokens only)
   const iconClass = cn(sizeClass, 'text-primary');
@@ -300,7 +300,7 @@ export function WeatherForecast({ destination, startDate, endDate, tripDays }: W
 
 function getPackingSuggestion(weather: WeatherData): string {
   const avgHigh = weather.forecast.reduce((sum, d) => sum + d.high, 0) / weather.forecast.length;
-  const hasRain = weather.forecast.some(d => d.condition.toLowerCase().includes('rain') || d.precipitation > 40);
+  const hasRain = weather.forecast.some(d => (d.condition || '').toLowerCase().includes('rain') || d.precipitation > 40);
   // Thresholds in Fahrenheit: 50°F = cold, 82°F = hot, 77°F = sunny
   const hasCold = weather.forecast.some(d => d.low < 50);
   const hasHot = weather.forecast.some(d => d.high > 82);
