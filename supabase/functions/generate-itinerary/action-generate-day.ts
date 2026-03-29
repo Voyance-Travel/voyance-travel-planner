@@ -281,6 +281,8 @@ export async function handleGenerateDay(
     try {
       innerTimer = new GenerationTimer(tripId || '', supabase);
       await innerTimer.resume(paramGenerationLogId, destination || '', totalDays || 1, travelers || 1);
+      // Write initial progress so the UI knows this day is actively being worked on
+      await innerTimer.updateProgress(`day_${dayNumber}_context_loading`, 5 + Math.round(((dayNumber - 1) / Math.max(1, totalDays || 1)) * 90));
     } catch (e) {
       console.warn('[generate-day] Timer resume failed (non-blocking):', e);
       innerTimer = null;
@@ -2636,6 +2638,9 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
           innerTimer.addTokenUsage(0, 0, modelUsed);
         }
       } catch (_e) { /* non-blocking */ }
+      // Write progress after AI call completes — this is the longest phase
+      const aiDonePct = 5 + Math.round(((dayNumber - 0.3) / Math.max(1, totalDays || 1)) * 90);
+      await innerTimer.updateProgress(`day_${dayNumber}_ai_complete`, aiDonePct);
       innerTimer.startPhase(`parse_response_day_${dayNumber}`);
     }
 
@@ -4548,9 +4553,11 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
       }
     }
 
-    // End post-processing phase
+    // End post-processing phase and write progress
     if (innerTimer) {
       innerTimer.endPhase(`post_processing_day_${dayNumber}`);
+      const postProcPct = 5 + Math.round((dayNumber / Math.max(1, totalDays || 1)) * 90);
+      await innerTimer.updateProgress(`day_${dayNumber}_post_processing_complete`, postProcPct);
     }
 
     return new Response(
