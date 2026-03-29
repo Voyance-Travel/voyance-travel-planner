@@ -146,8 +146,7 @@ serve(async (req) => {
     // ACTION DISPATCH
     // ====================================================================
     if (action === 'generate-full') {
-      const authHeaderValue = req.headers.get('Authorization') || '';
-      return handleGenerateFull(supabase, authResult.userId, params, authHeaderValue);
+      return handleGenerateFull(supabase, authResult.userId, params);
     }
 
     if (action === 'generate-day' || action === 'regenerate-day') {

@@ -184,9 +184,17 @@ async function runGenerationInBackground(
         "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       },
       body: JSON.stringify({
-        action: "generate-full",
+        action: "generate-trip",
         tripId,
-        smartFinishMode: true, // Pass directly — eliminates DB race condition
+        destination: trip.destination,
+        destinationCountry: (trip as any).destination_country || "",
+        startDate: trip.start_date,
+        endDate: trip.end_date,
+        travelers: (trip as any).travelers || 1,
+        tripType: (trip as any).trip_type || "vacation",
+        budgetTier: (trip as any).budget_tier || "moderate",
+        isMultiCity: (trip as any).is_multi_city || false,
+        creditsCharged: 0,
       }),
     });
 
@@ -414,7 +422,7 @@ serve(async (req) => {
     // --- Load trip ---
     const { data: trip, error: tripError } = await supabase
       .from("trips")
-      .select("id, itinerary_data, destination, user_id, start_date, end_date, metadata, smart_finish_purchased, creation_source, updated_at")
+      .select("id, itinerary_data, destination, destination_country, user_id, start_date, end_date, metadata, smart_finish_purchased, creation_source, updated_at, travelers, trip_type, budget_tier, is_multi_city")
       .eq("id", tripId)
       .single();
 
