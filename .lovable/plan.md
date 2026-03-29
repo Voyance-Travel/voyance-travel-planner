@@ -1,5 +1,47 @@
 
 
+
+## Phase 3: Extract `generate-full` Pipeline
+
+### Status: DONE ✅
+
+### Completed
+
+**Step 1: Extracted shared generation infrastructure into `generation-core.ts`** ✅
+- Moved: `prepareContext`, `generateSingleDayWithRetry`, `generateItineraryAI`, `earlySaveItinerary`, `generateTripOverview`, `triggerNextJourneyLeg`, `finalSaveItinerary`
+- ~2,919 lines of shared infrastructure with all necessary imports
+- All functions exported for use by both `action-generate-full.ts` and potentially `action-generate-day.ts`
+
+**Step 2: Extracted `generate-full` handler into `action-generate-full.ts`** ✅
+- Moved the complete 7-stage pipeline (~2,783 lines) into `handleGenerateFull(supabase, userId, params, authHeader)`
+- Fixed bugs: bare `destination` → `context.destination` (4 occurrences), `dayCity_56?.destination` → `dayCity_56?.cityName`
+- Added `authHeader` parameter to pass auth context for internal edge function calls (hidden gems discovery)
+
+**Step 3: Updated `index.ts` routing** ✅
+- Added import: `import { handleGenerateFull } from './action-generate-full.ts'`
+- Replaced ~2,783-line block with:
+  ```typescript
+  if (action === 'generate-full') {
+    const authHeaderValue = req.headers.get('Authorization') || '';
+    return handleGenerateFull(supabase, authResult.userId, params, authHeaderValue);
+  }
+  ```
+
+### Final Metrics
+
+| File | Before | After |
+|---|---|---|
+| `index.ts` | 6,431 lines | ~743 lines |
+| `generation-core.ts` | — | ~2,919 lines |
+| `action-generate-full.ts` | — | ~2,783 lines |
+
+### Cumulative Metrics (Phase 1 → Phase 3)
+
+| File | Original | Final |
+|---|---|---|
+| `index.ts` | ~12,322 lines | ~743 lines (94% reduction) |
+| Extracted modules | 0 | 4 action files + 2 shared modules |
+
 ## Phase 2: Extract `generate-day` Handler to Action File
 
 ### Status: DONE ✅
@@ -31,11 +73,3 @@
   }
   ```
 - **Result: index.ts reduced from 11,184 → 6,431 lines (-4,753 lines)**
-
-### Final Metrics
-
-| File | Before | After |
-|---|---|---|
-| `index.ts` | 11,184 lines | 6,431 lines |
-| `action-generate-day.ts` | — | 4,579 lines |
-| `generation-types.ts` | 411 lines | 680 lines |
