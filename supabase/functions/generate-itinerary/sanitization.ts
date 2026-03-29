@@ -94,12 +94,24 @@ const ALTERNATIVE_SUGGESTION_RE = /\s*Alternative:\s*[^.]+\.?\s*/g;
 // 7. Standalone boolean field leaks: isVoyancePick: true
 const STANDALONE_BOOL_RE = /\s+(?:is[A-Z]\w+):\s*(?:true|false|null)\.?\s*/g;
 
+// 8. Freestanding booking urgency text (not in parentheses)
+const BOOKING_URGENCY_TEXT_RE = /\b(?:BOOK|RESERVE|SECURE)\s+\d[\d-]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|BEFORE|OUT|EARLY)?\b/gi;
+
+// 9. AI self-referential commentary about addressing preferences
+const AI_ADDRESSES_RE = /(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+\w+\s+(?:interest|preference|request|need|requirement)\b[^.]*\.?/gi;
+
+// 10. Schema field leaks with comma prefix: ,type ,category ,slot etc.
+const COMMA_FIELD_LEAK_RE = /,\s*(?:type|category|slot|isVoyancePick|optionGroup|isOption|tags|bookingRequired)\b[^,.]*/gi;
+
+// 11. Generic placeholder "the destination" / "the city" instead of actual city name
+const GENERIC_DESTINATION_RE = /\b(?:the destination|the city|this destination|this city)\b/gi;
+
 // Matches "… or a/an [description] like/such as the [Venue]" inline alternatives
 const INLINE_ALT_VENUE_RE = /\s+or\s+(?:a|an)\s+[^.]*?(?:like|such\s+as)\s+(?:the\s+)?[A-Z][a-zA-Z\s''\u2018\u2019-]+/gi;
 
-export function sanitizeAITextField(text: string | undefined | null): string {
+export function sanitizeAITextField(text: string | undefined | null, destination?: string): string {
   if (!text || typeof text !== 'string') return '';
-  return text
+  let result = text
     .replace(CJK_ARTIFACTS, '')
     .replace(TEXT_SCHEMA_LEAK, '')
     .replace(SYSTEM_PREFIXES_RE, '')
@@ -125,69 +137,78 @@ export function sanitizeAITextField(text: string | undefined | null): string {
     .replace(AI_SELF_COMMENTARY_RE, '')
     .replace(ALTERNATIVE_SUGGESTION_RE, '')
     .replace(STANDALONE_BOOL_RE, '')
+    .replace(BOOKING_URGENCY_TEXT_RE, '')
+    .replace(AI_ADDRESSES_RE, '')
+    .replace(COMMA_FIELD_LEAK_RE, '')
     .replace(/\(\s*\)/g, '')
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     .replace(/\s{2,}/g, ' ')
-    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '')
-    .trim();
+    .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '');
+
+  // Replace generic "the destination" with actual city name
+  if (destination) {
+    result = result.replace(GENERIC_DESTINATION_RE, destination);
+  }
+
+  return result.trim();
 }
 
 /**
  * Deep-sanitize all user-facing text fields in a generated day object.
  */
-export function sanitizeGeneratedDay(day: any, dayNumber: number): any {
+export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: string): any {
   if (!day || typeof day !== 'object') return day;
 
-  const cleanTitle = sanitizeAITextField(day.title);
-  const cleanTheme = sanitizeAITextField(day.theme);
+  const cleanTitle = sanitizeAITextField(day.title, destination);
+  const cleanTheme = sanitizeAITextField(day.theme, destination);
   day.title = cleanTitle || cleanTheme || `Day ${dayNumber}`;
   day.theme = cleanTheme || cleanTitle || day.title;
 
   if (day.narrative && typeof day.narrative === 'object') {
-    if (day.narrative.theme) day.narrative.theme = sanitizeAITextField(day.narrative.theme) || day.theme;
+    if (day.narrative.theme) day.narrative.theme = sanitizeAITextField(day.narrative.theme, destination) || day.theme;
     if (Array.isArray(day.narrative.highlights)) {
       day.narrative.highlights = day.narrative.highlights
-        .map((h: string) => sanitizeAITextField(h))
+        .map((h: string) => sanitizeAITextField(h, destination))
         .filter((h: string) => h.length > 0);
     }
   }
 
   if (Array.isArray(day.accommodationNotes)) {
     day.accommodationNotes = day.accommodationNotes
-      .map((n: string) => sanitizeAITextField(n))
+      .map((n: string) => sanitizeAITextField(n, destination))
       .filter((n: string) => n.length > 0);
   }
   if (Array.isArray(day.practicalTips)) {
     day.practicalTips = day.practicalTips
-      .map((t: string) => sanitizeAITextField(t))
+      .map((t: string) => sanitizeAITextField(t, destination))
       .filter((t: string) => t.length > 0);
   }
 
   if (Array.isArray(day.activities)) {
     day.activities = day.activities.map((act: any, idx: number) => {
       if (!act || typeof act !== 'object') return act;
-      const cleanActTitle = sanitizeAITextField(act.title);
-      const cleanActName = sanitizeAITextField(act.name);
+      const cleanActTitle = sanitizeAITextField(act.title, destination);
+      const cleanActName = sanitizeAITextField(act.name, destination);
       act.title = cleanActTitle || cleanActName || `Activity ${idx + 1}`;
       act.name = act.title;
-      if (act.description) act.description = sanitizeAITextField(act.description) || undefined;
-      if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips) || undefined;
+      if (act.description) act.description = sanitizeAITextField(act.description, destination) || undefined;
+      if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips, destination) || undefined;
       if (act.location && typeof act.location === 'object') {
-        if (act.location.name) act.location.name = sanitizeAITextField(act.location.name) || act.location.name;
-        if (act.location.address) act.location.address = sanitizeAITextField(act.location.address) || act.location.address;
+        if (act.location.name) act.location.name = sanitizeAITextField(act.location.name, destination) || act.location.name;
+        if (act.location.address) act.location.address = sanitizeAITextField(act.location.address, destination) || act.location.address;
       }
       if (act.transportation && typeof act.transportation === 'object') {
-        if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions) || undefined;
+        if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions, destination) || undefined;
         const method = (act.transportation.method || '').toLowerCase();
         if (method === 'walk' || method === 'walking') {
           act.transportation.estimatedCost = { amount: 0, currency: act.transportation.estimatedCost?.currency || 'USD' };
         }
       }
-      if (act.voyanceInsight) act.voyanceInsight = sanitizeAITextField(act.voyanceInsight) || undefined;
-      if (act.bestTime) act.bestTime = sanitizeAITextField(act.bestTime) || undefined;
+      if (act.voyanceInsight) act.voyanceInsight = sanitizeAITextField(act.voyanceInsight, destination) || undefined;
+      if (act.bestTime) act.bestTime = sanitizeAITextField(act.bestTime, destination) || undefined;
       if (act.personalization && typeof act.personalization === 'object') {
-        if (act.personalization.whyThisFits) act.personalization.whyThisFits = sanitizeAITextField(act.personalization.whyThisFits) || undefined;
+        if (act.personalization.whyThisFits) act.personalization.whyThisFits = sanitizeAITextField(act.personalization.whyThisFits, destination) || undefined;
       }
 
       // Clear tips if it duplicates description (common AI leak pattern)
@@ -205,9 +226,112 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number): any {
 
       return act;
     });
+
+    // === TIME ORDERING ENFORCEMENT ===
+    // Sort activities by startTime and fix overlapping times
+    if (day.activities.length > 1) {
+      day.activities.sort((a: any, b: any) => {
+        const timeA = sanitizationParseTimeToMinutes(a.startTime || a.time || '');
+        const timeB = sanitizationParseTimeToMinutes(b.startTime || b.time || '');
+        return timeA - timeB;
+      });
+
+      // Fix overlapping times: ensure each activity starts after the previous one ends
+      for (let i = 1; i < day.activities.length; i++) {
+        const prev = day.activities[i - 1];
+        const curr = day.activities[i];
+
+        const prevEnd = sanitizationParseTimeToMinutes(prev.endTime || '');
+        const currStart = sanitizationParseTimeToMinutes(curr.startTime || curr.time || '');
+
+        if (prevEnd > 0 && currStart > 0 && currStart < prevEnd) {
+          const newStart = minutesToHHMM(prevEnd + 15);
+          console.log(`[sanitize] Day ${dayNumber}: pushing "${curr.title}" from ${curr.startTime} to ${newStart} (overlap with "${prev.title}")`);
+          curr.startTime = newStart;
+          curr.time = newStart;
+
+          const currEnd = sanitizationParseTimeToMinutes(curr.endTime || '');
+          if (currEnd > 0) {
+            const duration = currEnd - currStart;
+            curr.endTime = minutesToHHMM(prevEnd + 15 + duration);
+          }
+        }
+      }
+    }
   }
 
   return day;
+}
+
+// === Time helpers for sanitization ===
+function sanitizationParseTimeToMinutes(time: string): number {
+  if (!time) return 0;
+  const match = time.match(/(\d{1,2}):(\d{2})/);
+  return match ? parseInt(match[1]) * 60 + parseInt(match[2]) : 0;
+}
+
+function minutesToHHMM(mins: number): string {
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+// =============================================================================
+// CROSS-DAY VENUE DEDUPLICATION — Remove sightseeing repeats across days
+// =============================================================================
+const NON_REPEATABLE_CATEGORIES = new Set([
+  'sightseeing', 'attraction', 'museum', 'landmark', 'tour',
+  'entertainment', 'cultural', 'historical', 'nature', 'park',
+  'shopping', 'nightlife',
+]);
+
+/**
+ * Remove activities from newDay that duplicate venues from previousDays.
+ * Only filters non-meal, non-transport, non-hotel categories.
+ */
+export function deduplicateCrossDayVenues(
+  newDay: any,
+  previousDays: any[],
+  dayNumber: number,
+): any {
+  if (!newDay?.activities || !previousDays?.length) return newDay;
+
+  const previousVenueNames = new Set<string>();
+  for (const prevDay of previousDays) {
+    if (!prevDay?.activities) continue;
+    for (const act of prevDay.activities) {
+      const name = (act.title || act.name || '').toLowerCase().trim();
+      if (name.length > 3) previousVenueNames.add(name);
+      if (act.location?.name) {
+        const locName = act.location.name.toLowerCase().trim();
+        if (locName.length > 3) previousVenueNames.add(locName);
+      }
+    }
+  }
+
+  const before = newDay.activities.length;
+  newDay.activities = newDay.activities.filter((act: any) => {
+    const name = (act.title || act.name || '').toLowerCase().trim();
+    const locationName = (act.location?.name || '').toLowerCase().trim();
+    const category = (act.category || '').toLowerCase();
+
+    // Only dedup non-meal, non-transport activities
+    if (!NON_REPEATABLE_CATEGORIES.has(category)) return true;
+
+    if (previousVenueNames.has(name) || (locationName && previousVenueNames.has(locationName))) {
+      console.log(`[dedup] Removing "${name}" from day ${dayNumber} - already in previous day`);
+      return false;
+    }
+
+    return true;
+  });
+
+  const removed = before - newDay.activities.length;
+  if (removed > 0) {
+    console.log(`[dedup] Removed ${removed} duplicate venue(s) from day ${dayNumber}`);
+  }
+
+  return newDay;
 }
 
 // =============================================================================
@@ -268,6 +392,8 @@ const KNOWN_HOTEL_BRANDS = [
   'Grand Hyatt', 'ANA InterContinental', 'JW Marriott',
   'Fairmont', 'Sofitel', 'Belmond', 'Oberoi',
   'Raffles', 'Banyan Tree', 'Como', 'One&Only',
+  'Le Meurice', 'Le Bristol', 'Plaza Ath(?:é|e)n(?:é|e)e',
+  'George V', 'Crillon', 'Lutetia', 'Le Royal Monceau',
 ];
 
 const HOTEL_BRAND_RE = new RegExp(
