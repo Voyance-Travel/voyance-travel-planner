@@ -72,6 +72,7 @@ import type { LockedActivity } from './pipeline/types.ts';
 import { validateDay, type ValidateDayInput } from './pipeline/validate-day.ts';
 import { repairDay, type RepairDayInput } from './pipeline/repair-day.ts';
 import { compilePrompt } from './pipeline/compile-prompt.ts';
+import { persistDay } from './pipeline/persist-day.ts';
 
 export async function handleGenerateDay(
   supabase: any,
