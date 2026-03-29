@@ -200,7 +200,8 @@ export class GenerationTimer {
         console.log(`[perf] Per-day breakdown:`);
         for (const d of this.dayTimings) {
           const catStr = (d as any).categories ? ` | ${JSON.stringify((d as any).categories)}` : '';
-          console.log(`[perf]   Day ${d.day}: ${(d.total_ms / 1000).toFixed(1)}s total, AI ${(d.ai_ms / 1000).toFixed(1)}s, enrich ${(d.enrich_ms / 1000).toFixed(1)}s, ${d.activities} activities${catStr}`);
+          const modelStr = (d as any).llm?.model ? ` | model=${(d as any).llm.model}` : '';
+          console.log(`[perf]   Day ${d.day}: ${(d.total_ms / 1000).toFixed(1)}s total, AI ${(d.ai_ms / 1000).toFixed(1)}s, enrich ${(d.enrich_ms / 1000).toFixed(1)}s, ${d.activities} activities${catStr}${modelStr}`);
         }
       }
       if (this.totalPromptTokens > 0 || this.totalCompletionTokens > 0) {

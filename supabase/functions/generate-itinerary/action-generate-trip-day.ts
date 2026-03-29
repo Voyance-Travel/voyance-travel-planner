@@ -987,6 +987,7 @@ async function _handleGenerateTripDayInner(
       diag1.meals || undefined, diag1.transport || undefined,
       undefined, diag1.llm || undefined,
     );
+    timer.addTokenUsage(diag1.llm?.promptTokens || 0, diag1.llm?.completionTokens || 0, diag1.llm?.model);
     await timer.finalize(isComplete ? 'completed' : 'failed');
 
     console.log(`[generate-trip-day] ${isComplete ? '✅' : '⚠️'} Trip ${tripId} generation ${isComplete ? 'complete' : 'partial (failed/missing days)'}: ${totalDays} days, status=${finalStatus}`);
@@ -1010,6 +1011,7 @@ async function _handleGenerateTripDayInner(
 
     await triggerNextJourneyLeg(supabase, tripId);
 
+    console.log(`[generate-trip-day] 📤 Returning completion response for trip ${tripId} (day ${dayNumber}/${totalDays}). If client disconnected, data is already saved.`);
     return new Response(
       JSON.stringify({ status: 'complete', dayNumber, totalDays }),
       { headers: jsonHeaders }
@@ -1056,6 +1058,7 @@ async function _handleGenerateTripDayInner(
       diag2.meals || undefined, diag2.transport || undefined,
       undefined, diag2.llm || undefined,
     );
+    timer.addTokenUsage(diag2.llm?.promptTokens || 0, diag2.llm?.completionTokens || 0, diag2.llm?.model);
     const progressPct = 5 + Math.round((dayNumber / totalDays) * 90);
     await timer.updateProgress(`Day ${dayNumber}/${totalDays} complete`, progressPct);
 
@@ -1139,6 +1142,7 @@ async function _handleGenerateTripDayInner(
       }
     }
 
+    console.log(`[generate-trip-day] 📤 Returning chain response for day ${dayNumber}/${totalDays}. Data saved, next day chained. If client disconnected, generation continues server-side.`);
     return new Response(
       JSON.stringify({ status: 'day_complete', dayNumber, totalDays, nextDay: dayNumber + 1 }),
       { headers: jsonHeaders }
