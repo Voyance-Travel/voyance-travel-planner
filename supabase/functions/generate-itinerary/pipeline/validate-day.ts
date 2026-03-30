@@ -6,6 +6,7 @@
  */
 
 import { FAILURE_CODES, type ValidationResult, type FailureCode } from './types.ts';
+import { extractRestaurantVenueName } from '../generation-utils.ts';
 import {
   CHAIN_RESTAURANT_BLOCKLIST,
   isChainRestaurant,
@@ -531,7 +532,18 @@ function conceptSimilarity(a: string, b: string): boolean {
 }
 
 function extractConcept(title: string): string {
-  const conceptPart = normalizeText(title).split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
+  const normalized = normalizeText(title);
+
+  // For dining titles ("Breakfast at X", "Dinner at X"), the concept
+  // is the VENUE (after "at"), not the meal keyword (before "at")
+  const mealAtVenue = normalized.match(
+    /^(?:breakfast|brunch|lunch|dinner|supper)\s+(?:at|@)\s+(.+)/i
+  );
+  if (mealAtVenue && mealAtVenue[1].trim().length > 2) {
+    return mealAtVenue[1].trim();
+  }
+
+  const conceptPart = normalized.split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
   return conceptPart
     .replace(/\b(class|tour|experience|visit|workshop|session|lesson|masterclass)\b/g, '')
     .replace(/\s+/g, ' ')
@@ -546,6 +558,7 @@ function checkDuplicateConcept(
 ): void {
   const previousConcepts = new Set<string>();
   const previousLocations = new Set<string>();
+  const previousDiningVenues = new Set<string>();
 
   for (const prevDay of previousDays) {
     for (const prevAct of prevDay.activities || []) {
@@ -553,6 +566,14 @@ function checkDuplicateConcept(
       if (concept.length > 5) previousConcepts.add(concept);
       const locName = normalizeText(prevAct.location?.name || '');
       if (locName.length > 5) previousLocations.add(locName);
+
+      // Build dining venue set for precise restaurant dedup
+      if ((prevAct.category || '').toLowerCase().includes('dining')) {
+        const venue = extractRestaurantVenueName(prevAct.title || '');
+        if (venue.length > 2) previousDiningVenues.add(venue);
+        const locVenue = extractRestaurantVenueName(prevAct.location?.name || '');
+        if (locVenue.length > 2) previousDiningVenues.add(locVenue);
+      }
     }
   }
 
@@ -569,6 +590,23 @@ function checkDuplicateConcept(
 
     const actConcept = extractConcept(normalizeText(act.title || ''));
     const actLocName = normalizeText(act.location?.name || '');
+
+    // Dining venue dedup — precise identity check using normalized venue names
+    if (cat.includes('dining')) {
+      const venueFromTitle = extractRestaurantVenueName(act.title || '');
+      const venueFromLoc = extractRestaurantVenueName(act.location?.name || '');
+      if ((venueFromTitle.length > 2 && previousDiningVenues.has(venueFromTitle)) ||
+          (venueFromLoc.length > 2 && previousDiningVenues.has(venueFromLoc))) {
+        results.push({
+          code: FAILURE_CODES.DUPLICATE_CONCEPT,
+          severity: 'error',
+          message: `"${act.title}" repeats a restaurant from a previous day`,
+          activityIndex: i,
+          autoRepairable: true,
+        });
+        continue;
+      }
+    }
 
     // Location dedup
     if (actLocName.length > 5 && previousLocations.has(actLocName)) {
