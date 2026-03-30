@@ -90,6 +90,16 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)\b/gi, '')
     // AI self-referential commentary
     .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+\w+\s+(?:interest|preference|request|need|requirement)\b[^.]*\.?/gi, '')
+    // "Since the traveler/user/guest loves/prefers..." reasoning sentences
+    .replace(/(?:^|\.\s*)Since\s+(?:the|this|your)\s+(?:traveler|user|guest|visitor|group)\s+[^.]*\./gi, '')
+    // Parenthetical internal notes: (Note: ... archetype/hard block/constraint ...)
+    .replace(/\s*\([^)]*?\b(?:arche(?:type)?|hard\s+block|soft\s+block|constraint|slot\s+logic|post-process|as per)\b[^)]*?\)/gi, '')
+    // "providing/offering a necessary bridge/transition/balance between..."
+    .replace(/,?\s*providing\s+a\s+(?:necessary|needed|important|useful|natural)\s+(?:bridge|transition|balance|buffer|counterpoint)\s+[^.]*\.?/gi, '')
+    // "This focuses on/ensures/provides/creates..." meta-commentary
+    .replace(/(?:^|\.\s*)This\s+(?:focuses on|ensures|provides|creates|offers|gives|delivers|serves as)\s+[^.]*\.?/gi, '')
+    // Any sentence mentioning internal system terms
+    .replace(/(?:^|\.\s*)[^.]*\b(?:archetype|hard\s+block|soft\s+block|generation\s+rule|as per arche)\b[^.]*\.?/gi, '')
     // Strip "Voyance Pick" / "Hotel Pick" and variant internal labels
     .replace(/\s*(?:Voyance\s+(?:Pick|Recommendation|Choice)|Hotel\s+Pick|Staff\s+Pick)\s*/gi, '')
     // Deduplicate consecutive repeated words: "Pantheon Pantheon" → "Pantheon"

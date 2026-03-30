@@ -153,6 +153,18 @@ export function sanitizeActivityName(name: string | undefined | null): string {
  * no dedup logic, just prefix removal.
  */
 const SYSTEM_LABEL_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*:?\s*/gi;
+
+// Parenthetical internal notes referencing archetypes, hard blocks, constraints
+const INTERNAL_NOTE_RE = /\s*\([^)]*?\b(?:arche(?:type)?|hard\s+block|soft\s+block|constraint|slot\s+logic|post-process|as per)\b[^)]*?\)/gi;
+
+// AI reasoning sentences: "Since the traveler..."
+const AI_REASONING_RE = /(?:^|\.\s*)Since\s+(?:the|this|your)\s+(?:traveler|user|guest|visitor|group)\s+[^.]*\./gi;
+
+// Meta-commentary: "This focuses on / ensures / provides..."
+const META_COMMENTARY_RE = /(?:^|\.\s*)This\s+(?:focuses on|ensures|provides|creates|offers|gives|delivers|serves as)\s+[^.]*\.?/gi;
+
+// Sentences mentioning internal system terms
+const SYSTEM_TERM_RE = /(?:^|\.\s*)[^.]*\b(?:archetype|hard\s+block|soft\s+block|generation\s+rule|as per arche)\b[^.]*\.?/gi;
 const VOYANCE_PICK_RE = /\s*(?:Voyance\s+Pick|Hotel\s+Pick)\s*/gi;
 
 export function sanitizeActivityText(text: string | undefined | null): string {
