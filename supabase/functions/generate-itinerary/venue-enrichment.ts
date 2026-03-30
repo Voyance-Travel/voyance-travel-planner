@@ -788,7 +788,7 @@ export async function enrichItinerary(
       const batch = day.activities.slice(i, i + BATCH_SIZE);
       const enrichedBatch = await Promise.all(
         batch.map((act) =>
-          enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY)
+          enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY, 1, hotelCoordinates)
         )
       );
 
