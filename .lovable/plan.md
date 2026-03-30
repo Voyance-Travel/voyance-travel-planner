@@ -38,3 +38,20 @@ Implemented venue-appropriateness checks and swap logic in repair-day.ts and day
 **`src/components/itinerary/FindMyHotelsDrawer.tsx`** — Passes `startDate`/`endDate` as date params
 **`src/components/itinerary/AddBookingInline.tsx`** — Already passed dates (no change needed)
 **`src/services/supabase/trips.ts`** — `useSaveHotelSelection` passes dates via flexible field access
+
+## ✅ Completed: Wire Up Multi-Hotel Patcher Across All Save Paths
+
+### Changes Made
+
+**`src/pages/TripDetail.tsx`** — `onBookingAdded` handler
+- Single-city split stays (2+ hotels in `trips.hotel_selection`) now use `injectMultiHotelActivities` instead of single-hotel inject
+- After injection, calls `patchItineraryWithMultipleHotels` for multi-hotel trips to fix titles/addresses by date range
+- Multi-city path also collects all hotels for the multi-hotel patcher
+
+**`src/pages/planner/PlannerHotelEnhanced.tsx`** — Multi-city save path
+- Multi-city hotel saves now fetch all city hotels via `getTripCities` and call `patchItineraryWithMultipleHotels`
+- Manual hotel entry fixed: passes trip `startDate`/`endDate` instead of check-in/out times (which were time strings, not dates)
+
+**`src/components/itinerary/FindMyHotelsDrawer.tsx`** — Multi-city save path
+- When `cityId` is set (multi-city), fetches all city hotels and uses `patchItineraryWithMultipleHotels`
+- Single-city path unchanged
