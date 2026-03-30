@@ -558,6 +558,7 @@ function checkDuplicateConcept(
 ): void {
   const previousConcepts = new Set<string>();
   const previousLocations = new Set<string>();
+  const previousDiningVenues = new Set<string>();
 
   for (const prevDay of previousDays) {
     for (const prevAct of prevDay.activities || []) {
@@ -565,6 +566,14 @@ function checkDuplicateConcept(
       if (concept.length > 5) previousConcepts.add(concept);
       const locName = normalizeText(prevAct.location?.name || '');
       if (locName.length > 5) previousLocations.add(locName);
+
+      // Build dining venue set for precise restaurant dedup
+      if ((prevAct.category || '').toLowerCase().includes('dining')) {
+        const venue = extractRestaurantVenueName(prevAct.title || '');
+        if (venue.length > 2) previousDiningVenues.add(venue);
+        const locVenue = extractRestaurantVenueName(prevAct.location?.name || '');
+        if (locVenue.length > 2) previousDiningVenues.add(locVenue);
+      }
     }
   }
 
