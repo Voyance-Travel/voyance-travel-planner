@@ -22,6 +22,7 @@ export interface EnrichDayInput {
   supabaseKey: string;
   googleMapsApiKey: string;
   lovableApiKey: string;
+  hotelCoordinates?: { lat: number; lng: number };
 }
 
 // =============================================================================
