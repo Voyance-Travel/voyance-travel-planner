@@ -9,6 +9,23 @@ import type { StrictActivity, StrictDay, VenueVerification, CachedVenue, Enrichm
 import { normalizeVenueName, haversineDistanceKm } from './generation-utils.ts';
 
 // =============================================================================
+// HOTEL PROXIMITY GUARD — Tight radius for water-bound / car-free destinations
+// =============================================================================
+
+/** Max km from hotel for venues in car-free / water-bound destinations */
+const TIGHT_RADIUS_DESTINATIONS: Record<string, number> = {
+  'venice': 5,      // Island — no cars, no mainland venues
+  'murano': 3,
+  'burano': 3,
+  'santorini': 8,
+  'hydra': 4,
+  'mykonos': 8,
+  'capri': 5,
+  'macau': 6,
+};
+const DEFAULT_HOTEL_RADIUS_KM = 15;
+
+// =============================================================================
 // DESTINATION CENTER CACHE (module-level singleton)
 // =============================================================================
 
