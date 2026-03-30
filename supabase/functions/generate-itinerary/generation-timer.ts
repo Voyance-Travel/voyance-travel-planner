@@ -132,7 +132,14 @@ export class GenerationTimer {
       if (transport) entry.transport = transport;
       if (validation) entry.validation = validation;
       if (llm) entry.llm = llm;
-      this.dayTimings.push(entry);
+      // Upsert by day number to prevent duplicate entries when timer is resumed
+      const existingIdx = this.dayTimings.findIndex(d => d.day === day);
+      if (existingIdx >= 0) {
+        this.dayTimings[existingIdx] = entry;
+        console.log(`[perf-logger] Replaced existing timing for day ${day}`);
+      } else {
+        this.dayTimings.push(entry);
+      }
     } catch (e) {
       // Never break generation
     }
