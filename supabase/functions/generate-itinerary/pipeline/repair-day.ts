@@ -384,39 +384,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
   }
 
-  // --- 7. MISSING_SLOT: bookend validator ---
-  // Always inject hotel bookends — use placeholder if no hotel selected yet.
-  // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
-  if (activities.length > 0) {
-    const effectiveHotelName = hotelName || 'Your Hotel';
-    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber);
-    activities = bookendRepairs.activities;
-    repairs.push(...bookendRepairs.repairs);
-  }
-
-  // --- 8. TITLE_LABEL_LEAK ---
-  if (byCode.has(FAILURE_CODES.TITLE_LABEL_LEAK)) {
-    for (const vr of byCode.get(FAILURE_CODES.TITLE_LABEL_LEAK) || []) {
-      if (vr.activityIndex === undefined) continue;
-      const act = activities[vr.activityIndex];
-      if (!act) continue;
-      const before = act.title;
-      act.title = act.title
-        .replace(/\s*[-–—]?\s*(voyance pick|staff pick|editor'?s? pick|ai pick|top pick|our pick)\s*/gi, '')
-        .trim();
-      if (act.title !== before) {
-        repairs.push({
-          code: FAILURE_CODES.TITLE_LABEL_LEAK,
-          activityIndex: vr.activityIndex,
-          action: 'stripped_label_leak',
-          before,
-          after: act.title,
-        });
-      }
-    }
-  }
-
-  // --- 9. HOTEL CHECK-IN GUARANTEE (Day 1 or transition day) ---
+  // --- 7. HOTEL CHECK-IN GUARANTEE (Day 1 or transition day) — moved before bookends ---
   const needsCheckIn = dayNumber === 1 || isTransitionDay;
   if (needsCheckIn && activities.length > 0) {
     const hasCheckIn = activities.some((a: any) => {
@@ -462,7 +430,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
-  // --- 10. HOTEL CHECKOUT GUARANTEE (last day or last day in city) ---
+  // --- 8. HOTEL CHECKOUT GUARANTEE (last day or last day in city) — moved before bookends ---
   const needsCheckout = isLastDay || (isLastDayInCity && !isTransitionDay);
   if (needsCheckout && activities.length > 0) {
     const hasCheckout = activities.some((a: any) => {
@@ -515,6 +483,39 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
       activities.splice(insertIdx, 0, checkoutActivity);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkout_guarantee' });
+    }
+  }
+
+  // --- 9. MISSING_SLOT: bookend validator (with departure-day guards) ---
+  // Always inject hotel bookends — use placeholder if no hotel selected yet.
+  // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
+  if (activities.length > 0) {
+    const effectiveHotelName = hotelName || 'Your Hotel';
+    const isDepartureDay = isLastDay || (isLastDayInCity && !isTransitionDay);
+    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay);
+    activities = bookendRepairs.activities;
+    repairs.push(...bookendRepairs.repairs);
+  }
+
+  // --- 10. TITLE_LABEL_LEAK ---
+  if (byCode.has(FAILURE_CODES.TITLE_LABEL_LEAK)) {
+    for (const vr of byCode.get(FAILURE_CODES.TITLE_LABEL_LEAK) || []) {
+      if (vr.activityIndex === undefined) continue;
+      const act = activities[vr.activityIndex];
+      if (!act) continue;
+      const before = act.title;
+      act.title = act.title
+        .replace(/\s*[-–—]?\s*(voyance pick|staff pick|editor'?s? pick|ai pick|top pick|our pick)\s*/gi, '')
+        .trim();
+      if (act.title !== before) {
+        repairs.push({
+          code: FAILURE_CODES.TITLE_LABEL_LEAK,
+          activityIndex: vr.activityIndex,
+          action: 'stripped_label_leak',
+          before,
+          after: act.title,
+        });
+      }
     }
   }
 
