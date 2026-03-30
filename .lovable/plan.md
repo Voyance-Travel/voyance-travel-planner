@@ -1,57 +1,53 @@
 
 
-## Fix: Missing Departure Card on Last Day (Single-City Trips)
+## Fix: Strip AI Self-Commentary and Internal Reasoning from Descriptions
 
-### Root Cause
+### Problem
 
-The departure card ("Transfer to Airport" / "Flight Home") is only injected on the last day when **either** the day has `isDepartureDay + departureTo` flags set **or** `flightSelection` contains a parseable return leg.
+The existing self-commentary regex in `sanitization.ts` (line 92) only catches one narrow pattern:
+```
+"This addresses/fulfills/satisfies the X interest/preference..."
+```
 
-For **single-city trips**, `cityInfo` is `null` (line 402 of `itineraryAPI.ts`), so `isDepartureDay` and `departureTo` are **never set** on the day data. This means:
+But the AI leaks many other reasoning patterns:
+- **"Since the traveler..."** — explaining why it chose something
+- **"providing a necessary bridge between..."** — justifying scheduling
+- **"(Note: No spa facilities used as per arche hard block...)"** — parenthetical internal constraint notes
+- **"This focuses on..."** / **"This ensures..."** — meta-commentary about its own output
 
-- `isFinalHomeDeparture` (line 1774 of `EditorialItinerary.tsx`) is always `false`
-- If `flightSelection` exists but has no parseable return leg (e.g., one-way, or unexpected data shape), `hasReturnData` stays `false`
-- The synthetic departure card block at line 1835 never fires → no airport/departure card
+### Fix
 
-The backend `repair-day.ts` does inject a transport card via the "Departure Transport Guarantee" (line 616), but this relies on the AI not already generating a transport-category activity with "transfer to" in the title — which can cause false-positive detection and skip the injection.
+**File: `supabase/functions/generate-itinerary/sanitization.ts` (line 91-92)**
 
-### Fix (Two Changes)
+Add additional regex rules after the existing self-commentary line to catch these categories:
 
-**1. `src/services/itineraryAPI.ts` (line 400–413)**
+1. **"Since the traveler/user/guest..."** sentences — AI explaining its reasoning about traveler preferences
+2. **Parenthetical internal notes** — `(Note: ...)` blocks referencing archetypes, hard blocks, constraints, slot logic
+3. **Bridge/transition justifications** — "providing a necessary bridge/transition/balance between..."
+4. **"This focuses on / ensures / provides / creates..."** meta-commentary about the activity's purpose in the itinerary structure
+5. **Archetype/constraint references** — any mention of "archetype", "hard block", "soft block", "as per arche", "slot", "post-processing"
 
-After the `if (cityInfo)` block, add a fallback for the absolute last day: always set `isDepartureDay = true` and `departureTo = '__home__'` on the final day, even without `cityInfo`.
+New regexes to add (after line 92):
 
 ```typescript
-if (cityInfo) {
-  // ... existing code ...
-}
-// Fallback: ensure the absolute last day always has departure flags
-if (dayNumber === totalDays && !data.day.isDepartureDay) {
-  data.day.isDepartureDay = true;
-  data.day.departureTo = '__home__';
-}
+// "Since the traveler/user/guest loves/prefers/enjoys..." reasoning sentences
+.replace(/(?:^|\.\s*)Since\s+(?:the|this|your)\s+(?:traveler|user|guest|visitor|group)\s+[^.]*\./gi, '')
+// Parenthetical internal notes: (Note: ... archetype/hard block/constraint ...)
+.replace(/\s*\([^)]*?\b(?:arche(?:type)?|hard\s+block|soft\s+block|constraint|slot|post-process|as per)\b[^)]*?\)/gi, '')
+// "providing/offering a necessary bridge/transition/balance between..."
+.replace(/,?\s*providing\s+a\s+(?:necessary|needed|important|useful|natural)\s+(?:bridge|transition|balance|buffer|counterpoint)\s+[^.]*\.?/gi, '')
+// "This focuses on/ensures/provides/creates..." meta-commentary
+.replace(/(?:^|\.\s*)This\s+(?:focuses on|ensures|provides|creates|offers|gives|delivers|serves as)\s+[^.]*\.?/gi, '')
+// Any sentence mentioning internal system terms
+.replace(/(?:^|\.\s*)[^.]*\b(?:archetype|hard\s+block|soft\s+block|generation\s+rule|as per arche)\b[^.]*\.?/gi, '')
 ```
 
-**2. `src/components/itinerary/EditorialItinerary.tsx` (line 1776)**
+### Also apply to frontend sanitizer
 
-Relax the guard so the last day ALWAYS attempts departure card injection, even without explicit flight data. If neither `flightSelection` nor departure metadata provides return data, inject a generic "Departure" placeholder card.
-
-Change the condition from:
-```
-if (isAbsoluteLastDay && !d.isTransitionDay && isLastCity && hasFinalDepartureInfo)
-```
-to:
-```
-if (isAbsoluteLastDay && !d.isTransitionDay && isLastCity)
-```
-
-Then inside the block, after the existing `if (hasReturnData)` section, add an `else` fallback that injects a generic departure card (e.g., "Head to the Airport" at a default time like checkout + 3 hours).
-
----
-
-### Summary
+**File: `src/utils/activityNameSanitizer.ts`** — The `sanitizeActivityText` function should get matching rules for the parenthetical notes pattern (the most visually jarring leak), since it's applied independently of the backend sanitizer.
 
 | File | Change |
 |---|---|
-| `src/services/itineraryAPI.ts` (~line 413) | Always set `isDepartureDay=true` and `departureTo='__home__'` on the last day |
-| `src/components/itinerary/EditorialItinerary.tsx` (~line 1776) | Remove `hasFinalDepartureInfo` guard; add generic departure card fallback when no flight/transport metadata exists |
+| `supabase/functions/generate-itinerary/sanitization.ts` (line 92) | Add 5 new regex rules to strip AI self-commentary patterns |
+| `src/utils/activityNameSanitizer.ts` | Add parenthetical internal-note stripping to `sanitizeActivityText` |
 
