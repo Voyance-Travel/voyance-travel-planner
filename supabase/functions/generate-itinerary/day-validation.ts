@@ -778,7 +778,46 @@ export function enforceRequiredMealsFinalGuard(
   fallbackVenues = cleanFallbackVenues;
 
   const detected = detectMealSlots(activities);
-  const missing = requiredMeals.filter(meal => !detected.includes(meal));
+
+  // PRE-PASS: Deduplicate same-meal activities before injecting missing ones
+  // This prevents the guard from seeing "dinner exists" when there are two dinners
+  // and then NOT injecting the actually-missing lunch
+  const mealActivityMap: Record<RequiredMeal, number[]> = { breakfast: [], lunch: [], dinner: [] };
+  for (let i = 0; i < activities.length; i++) {
+    const title = (activities[i].title || '').toLowerCase();
+    const cat = (activities[i].category || '').toLowerCase();
+    if (!cat.includes('dining') && !cat.includes('food') && !cat.includes('restaurant')) continue;
+    for (const meal of ['breakfast', 'lunch', 'dinner'] as RequiredMeal[]) {
+      if (MEAL_KEYWORDS[meal].some(kw => title.includes(kw))) {
+        mealActivityMap[meal].push(i);
+      }
+    }
+  }
+
+  // Remove extra duplicates of the same meal (keep first, remove rest)
+  const indicesToRemove: number[] = [];
+  for (const [meal, indices] of Object.entries(mealActivityMap)) {
+    if (indices.length > 1) {
+      console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Found ${indices.length} ${meal} activities — keeping first, removing ${indices.length - 1} duplicate(s)`);
+      for (let j = 1; j < indices.length; j++) {
+        indicesToRemove.push(indices[j]);
+      }
+    }
+  }
+
+  // Remove in reverse to preserve indices
+  if (indicesToRemove.length > 0) {
+    const sorted = [...new Set(indicesToRemove)].sort((a, b) => b - a);
+    for (const idx of sorted) {
+      const removed = activities[idx];
+      console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Removing duplicate meal "${removed?.title}"`);
+      activities.splice(idx, 1);
+    }
+  }
+
+  // Re-detect after dedup
+  const detectedAfterDedup = detectMealSlots(activities);
+  const missing = requiredMeals.filter(meal => !detectedAfterDedup.includes(meal));
 
   if (missing.length === 0) {
     return { activities, injectedMeals: [], alreadyCompliant: true };
