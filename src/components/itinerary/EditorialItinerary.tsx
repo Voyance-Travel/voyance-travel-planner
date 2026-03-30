@@ -1773,7 +1773,7 @@ export function EditorialItinerary({
     const isAbsoluteLastDay = dayIndex === rawDays.length - 1;
     const isFinalHomeDeparture = d.isDepartureDay && d.departureTo === '__home__';
     const hasFinalDepartureInfo = flightSelection || isFinalHomeDeparture;
-    if (isAbsoluteLastDay && !d.isTransitionDay && isLastCity && hasFinalDepartureInfo) {
+    if (isAbsoluteLastDay && !d.isTransitionDay && isLastCity) {
       if (!updatedActivities.some(a => (a as any).__syntheticFinalDeparture)) {
         // Resolve return transport details from flightSelection OR isDepartureDay metadata
         let tType = 'flight';
@@ -1832,7 +1832,55 @@ export function EditorialItinerary({
           hasReturnData = true;
         }
 
-        if (hasReturnData) {
+        // Generic fallback: if no return data from flight or departure metadata, inject a generic departure card
+        if (!hasReturnData) {
+          const dn = day.dayNumber;
+          const genericDepartureCard: EditorialActivity = {
+            id: `final-departure-${dn}`,
+            title: 'Transfer to the Airport',
+            name: 'Transfer to the Airport',
+            type: 'inter_city_flight',
+            category: 'inter_city_flight',
+            isLocked: false,
+            startTime: '15:00',
+            endTime: undefined,
+            duration: '~',
+            description: 'Head to the airport for your departure flight home.',
+            location: undefined,
+            __syntheticFinalDeparture: true,
+            __interCityTransport: true,
+            __travelMeta: {
+              from: d.city || '',
+              to: originCity || 'Home',
+              transportName: 'Flight',
+              hubLabel: 'airport',
+              carrier: '',
+              flightNum: '',
+              depTime: '',
+              arrTime: '',
+              dur: '',
+              seatInfo: '',
+              bookingRef: '',
+              price: undefined,
+              currency: 'USD',
+            },
+          } as any;
+
+          // Insert after checkout
+          const checkoutKeywordsGeneric = ['check out', 'checkout', 'check-out'];
+          let genericInsertIdx = updatedActivities.length;
+          for (let i = updatedActivities.length - 1; i >= 0; i--) {
+            const actAtI = updatedActivities[i];
+            const isCheckoutAct = (actAtI as any).__hotelCheckout ||
+              actAtI.id?.startsWith('hotel-checkout') ||
+              checkoutKeywordsGeneric.some(kw => (actAtI.title || '').toLowerCase().includes(kw));
+            if (isCheckoutAct) {
+              genericInsertIdx = i + 1;
+              break;
+            }
+          }
+          updatedActivities.splice(genericInsertIdx, 0, genericDepartureCard);
+        } else if (hasReturnData) {
           const dn = day.dayNumber;
           const transportLabel = tType === 'rideshare' ? 'Rideshare'
             : tType.charAt(0).toUpperCase() + tType.slice(1);

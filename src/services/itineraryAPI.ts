@@ -411,6 +411,11 @@ export async function generateItinerary(
         data.day.departureTransportType = cityInfo.departureTransportType;
         data.day.departureTransportDetails = cityInfo.departureTransportDetails;
       }
+      // Fallback: ensure the absolute last day always has departure flags
+      if (dayNumber === totalDays && !data.day.isDepartureDay) {
+        data.day.isDepartureDay = true;
+        data.day.departureTo = '__home__';
+      }
       days.push(data.day);
       // Track activities for next day to avoid repetition
       data.day.activities?.forEach((a: ItineraryActivity) => {
