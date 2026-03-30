@@ -954,7 +954,7 @@ export function enforceRequiredMealsFinalGuard(
       venueName = venue.name;
       venueAddress = venue.address || destination;
       venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
-      usedVenueNames.add(venue.name.toLowerCase());
+      usedVenueNamesForInjection.add(venue.name.toLowerCase());
       // Remove from fallbackVenues so next meal gets a different one
       const idx = fallbackVenues.indexOf(venue);
       if (idx >= 0) fallbackVenues.splice(idx, 1);
