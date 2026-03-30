@@ -1775,30 +1775,65 @@ export function EditorialItinerary({
     const hasFinalDepartureInfo = flightSelection || isFinalHomeDeparture;
     if (isAbsoluteLastDay && !d.isTransitionDay && isLastCity && hasFinalDepartureInfo) {
       if (!updatedActivities.some(a => (a as any).__syntheticFinalDeparture)) {
-        // Find the return leg: prefer isDestinationDeparture-marked leg, then flightSelection.return, then last leg
-        const allLegs = flightSelection.legs || [];
-        const returnLeg: FlightLegDisplay | undefined =
-          allLegs.find(l => l.isDestinationDeparture) ||
-          flightSelection.return ||
-          (allLegs.length >= 2 ? allLegs[allLegs.length - 1] : undefined);
+        // Resolve return transport details from flightSelection OR isDepartureDay metadata
+        let tType = 'flight';
+        let carrier = '';
+        let flightNum = '';
+        let depTime = '';
+        let arrTime = '';
+        let depAirport = '';
+        let arrAirport = '';
+        let dur = '';
+        let seatInfo = '';
+        let bookingRef = '';
+        let price: number | undefined;
+        let hasReturnData = false;
 
-        if (returnLeg) {
+        if (flightSelection) {
+          const allLegs = flightSelection.legs || [];
+          const returnLeg: FlightLegDisplay | undefined =
+            allLegs.find(l => l.isDestinationDeparture) ||
+            flightSelection.return ||
+            (allLegs.length >= 2 ? allLegs[allLegs.length - 1] : undefined);
+
+          if (returnLeg) {
+            carrier = returnLeg.airline || '';
+            flightNum = returnLeg.flightNumber || '';
+            depTime = returnLeg.departure?.time || '';
+            arrTime = returnLeg.arrival?.time || '';
+            depAirport = returnLeg.departure?.airport || '';
+            arrAirport = returnLeg.arrival?.airport || '';
+            dur = returnLeg.duration || '';
+            seatInfo = returnLeg.cabinClass || returnLeg.seat || '';
+            bookingRef = returnLeg.confirmationCode || '';
+            price = returnLeg.price;
+
+            const explicitMode = (flightSelection as any).transportMode as string | undefined;
+            tType = explicitMode
+              || (flightNum ? 'flight' : (carrier && !(carrier || '').toLowerCase().includes('train') ? 'flight' : 'train'));
+            hasReturnData = true;
+          }
+        }
+
+        // Fallback: build from departure day metadata (non-flight Step 2 selection)
+        if (!hasReturnData && isFinalHomeDeparture) {
+          const dDetails = d.departureTransportDetails || {};
+          tType = d.departureTransportType || 'transfer';
+          carrier = (dDetails.carrier as string) || (dDetails.operator as string) || '';
+          flightNum = (dDetails.flightNumber as string) || '';
+          depTime = (dDetails.departureTime as string) || '';
+          arrTime = (dDetails.arrivalTime as string) || '';
+          depAirport = (dDetails.departureStation as string) || (dDetails.departureAirport as string) || '';
+          arrAirport = (dDetails.arrivalStation as string) || (dDetails.arrivalAirport as string) || '';
+          dur = (dDetails.duration as string) || (dDetails.inTransitDuration as string) || (dDetails.doorToDoorDuration as string) || '';
+          seatInfo = (dDetails.seatClass as string) || (dDetails.seatNumber as string) || '';
+          bookingRef = (dDetails.bookingRef as string) || (dDetails.confirmationNumber as string) || '';
+          price = dDetails.totalCost != null ? (dDetails.totalCost as number) : dDetails.costPerPerson != null ? (dDetails.costPerPerson as number) : undefined;
+          hasReturnData = true;
+        }
+
+        if (hasReturnData) {
           const dn = day.dayNumber;
-          const carrier = returnLeg.airline || '';
-          const flightNum = returnLeg.flightNumber || '';
-          const depTime = returnLeg.departure?.time || '';
-          const arrTime = returnLeg.arrival?.time || '';
-          const depAirport = returnLeg.departure?.airport || '';
-          const arrAirport = returnLeg.arrival?.airport || '';
-          const dur = returnLeg.duration || '';
-          const seatInfo = returnLeg.cabinClass || returnLeg.seat || '';
-          const bookingRef = returnLeg.confirmationCode || '';
-          const price = returnLeg.price;
-
-          // Detect transport type: prefer explicit transportMode, then heuristic
-          const explicitMode = (flightSelection as any).transportMode as string | undefined;
-          const tType: string = explicitMode
-            || (flightNum ? 'flight' : (carrier && !(carrier || '').toLowerCase().includes('train') ? 'flight' : 'train'));
           const transportLabel = tType === 'rideshare' ? 'Rideshare'
             : tType.charAt(0).toUpperCase() + tType.slice(1);
           const terminalWord = tType === 'flight' ? 'airport'
@@ -1806,7 +1841,7 @@ export function EditorialItinerary({
             : tType === 'train' ? 'station'
             : 'terminal';
           // Build a descriptive title: prefer route, fallback to generic
-          const homeCity = arrAirport || '';
+          const homeCity = arrAirport || originCity || '';
           const departCity = depAirport || '';
           const title = homeCity
             ? `${transportLabel} to ${homeCity}`
@@ -1815,7 +1850,12 @@ export function EditorialItinerary({
               : `${transportLabel} home`;
           const cardTime = depTime || '18:00';
 
-          const depInterCityCategory = tType === 'flight' ? 'inter_city_flight' : 'inter_city_train';
+          const depInterCityCategory = tType === 'flight' ? 'inter_city_flight'
+            : tType === 'train' ? 'inter_city_train'
+            : tType === 'bus' ? 'inter_city_bus'
+            : tType === 'ferry' ? 'inter_city_ferry'
+            : tType === 'car' ? 'inter_city_car'
+            : 'inter_city_train';
 
           const departureCard: EditorialActivity = {
             id: `final-departure-${dn}`,
@@ -1835,8 +1875,8 @@ export function EditorialItinerary({
             __syntheticFinalDeparture: true,
             __interCityTransport: true,
             __travelMeta: {
-              from: depAirport,
-              to: arrAirport,
+              from: depAirport || d.city || '',
+              to: arrAirport || originCity || '',
               transportName: transportLabel,
               hubLabel: terminalWord,
               carrier,
