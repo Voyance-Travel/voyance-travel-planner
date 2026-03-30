@@ -69,6 +69,7 @@ import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelV
 import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
 import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
 import { injectHotelActivitiesIntoDays, injectMultiHotelActivities } from '@/utils/injectHotelActivities';
+import { patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
 import { cn } from '@/lib/utils';
 import { JourneyBreadcrumb } from '@/components/trips/JourneyBreadcrumb';
 import { JourneyUpNext } from '@/components/trips/JourneyUpNext';
@@ -3013,6 +3014,9 @@ export default function TripDetail() {
                           if (currentDays.length > 0) {
                             let injectedDays = currentDays;
 
+                            // Collect all hotels for multi-hotel patching
+                            let allHotelsForPatch: Array<{ name: string; address?: string; checkInDate?: string; checkOutDate?: string }> = [];
+
                             // Multi-city: inject from trip_cities hotel selections
                             if (updatedCities.length > 0) {
                               const cityHotels = updatedCities
@@ -3024,6 +3028,12 @@ export default function TripDetail() {
                                 .filter(Boolean);
                               if (cityHotels.length > 0) {
                                 injectedDays = injectMultiHotelActivities(injectedDays as any[], cityHotels) as typeof injectedDays;
+                                allHotelsForPatch = cityHotels.map((h: any) => ({
+                                  name: h.name,
+                                  address: h.address || h.location,
+                                  checkInDate: h.checkInDate || h.checkIn,
+                                  checkOutDate: h.checkOutDate || h.checkOut,
+                                }));
                               }
                             }
 
@@ -3031,9 +3041,25 @@ export default function TripDetail() {
                             const hotelRaw = updatedTrip.hotel_selection as any;
                             if (hotelRaw && updatedCities.length <= 1) {
                               const hotels = normalizeLegacyHotelSelection(hotelRaw, updatedTrip.start_date, updatedTrip.end_date);
-                              if (hotels.length > 0) {
+                              if (hotels.length > 1) {
+                                // Split-stay: use multi-hotel injection
+                                injectedDays = injectMultiHotelActivities(injectedDays as any[], hotels) as typeof injectedDays;
+                                allHotelsForPatch = hotels.map(h => ({
+                                  name: h.name,
+                                  address: h.address,
+                                  checkInDate: h.checkInDate,
+                                  checkOutDate: h.checkOutDate,
+                                }));
+                              } else if (hotels.length === 1) {
                                 injectedDays = injectHotelActivitiesIntoDays(injectedDays as any[], hotels[0]) as typeof injectedDays;
+                                allHotelsForPatch = [{ name: hotels[0].name, address: hotels[0].address, checkInDate: hotels[0].checkInDate, checkOutDate: hotels[0].checkOutDate }];
                               }
+                            }
+
+                            // Patch accommodation activity titles/addresses using date-aware multi-hotel patcher
+                            if (allHotelsForPatch.length > 1) {
+                              patchItineraryWithMultipleHotels(tripId!, allHotelsForPatch)
+                                .catch(err => console.warn('[TripDetail] Multi-hotel patch failed:', err));
                             }
 
                             // Save injected days back if they changed

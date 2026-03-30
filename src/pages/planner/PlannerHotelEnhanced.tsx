@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { syncHotelToLedger } from '@/services/budgetLedgerSync';
-import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
+import { patchItineraryWithHotel, patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBudgetAlerts } from '@/hooks/useBudgetAlerts';
 import { getTripCities, updateCityHotel } from '@/services/tripCitiesService';
@@ -550,11 +550,21 @@ export default function PlannerHotelEnhanced() {
             checkOut: endDate,
             totalPrice: pricePerNight * nights,
           } as any).catch(err => console.warn('[PlannerHotel] Budget sync failed:', err));
-          patchItineraryWithHotel(tripId, {
-            name: hotelSelection.name,
-            address: hotelSelection.address,
-            checkInDate: startDate,
-            checkOutDate: endDate,
+          // Multi-city: fetch all city hotels and use multi-hotel patcher
+          getTripCities(tripId).then(async (cities) => {
+            const allHotels = cities
+              .filter((c: any) => c.hotel_selection)
+              .map((c: any) => {
+                const hs = Array.isArray(c.hotel_selection) ? c.hotel_selection[0] : c.hotel_selection;
+                if (!hs?.name) return null;
+                return { name: hs.name, address: hs.address || hs.location, checkInDate: hs.checkInDate || hs.checkIn, checkOutDate: hs.checkOutDate || hs.checkOut };
+              })
+              .filter(Boolean) as Array<{ name: string; address?: string; checkInDate?: string; checkOutDate?: string }>;
+            if (allHotels.length > 1) {
+              await patchItineraryWithMultipleHotels(tripId, allHotels);
+            } else {
+              await patchItineraryWithHotel(tripId, { name: hotelSelection.name, address: hotelSelection.address, checkInDate: startDate, checkOutDate: endDate });
+            }
           }).catch(err => console.warn('[PlannerHotel] Itinerary patch failed:', err));
           window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
         }
@@ -690,11 +700,14 @@ export default function PlannerHotelEnhanced() {
       if (manualTripId && manualHotel.name) {
         syncHotelToLedger(manualTripId, manualHotel as any)
           .catch(err => console.warn('[PlannerHotel] Manual hotel budget sync failed:', err));
+        // Manual hotel: checkIn/checkOut are times not dates, use trip dates instead
+        const manualCheckInDate = startDate || searchParams.get('startDate') || undefined;
+        const manualCheckOutDate = endDate || searchParams.get('endDate') || undefined;
         patchItineraryWithHotel(manualTripId, {
           name: manualHotel.name,
           address: manualHotel.address,
-          checkInDate: manualHotel.checkIn,
-          checkOutDate: manualHotel.checkOut,
+          checkInDate: manualCheckInDate,
+          checkOutDate: manualCheckOutDate,
         }).catch(err => console.warn('[PlannerHotel] Manual hotel itinerary patch failed:', err));
         window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId: manualTripId } }));
       }

@@ -26,7 +26,8 @@ import { useDNAHotelRecommendations, type DNARecommendedHotel, type IdealHotelPr
 import { CREDIT_COSTS } from '@/config/pricing';
 import { saveHotelSelection } from '@/services/supabase/trips';
 import { syncHotelToLedger, syncMultiCityHotelsToLedger } from '@/services/budgetLedgerSync';
-import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
+import { patchItineraryWithHotel, patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
+import { getTripCities } from '@/services/tripCitiesService';
 
 interface FindMyHotelsDrawerProps {
   tripId: string;
@@ -232,12 +233,25 @@ export function FindMyHotelsDrawer({
 
       // Patch itinerary accommodation activities with hotel name/address
       try {
-        await patchItineraryWithHotel(tripId, {
-          name: hotel.name,
-          address: hotel.address || hotel.neighborhood,
-          checkInDate: startDate,
-          checkOutDate: endDate,
-        });
+        if (cityId) {
+          // Multi-city: fetch all city hotels and use date-aware multi-hotel patcher
+          const allCities = await getTripCities(tripId);
+          const allHotels = allCities
+            .filter((c: any) => c.hotel_selection)
+            .map((c: any) => {
+              const hs = Array.isArray(c.hotel_selection) ? c.hotel_selection[0] : c.hotel_selection;
+              if (!hs?.name) return null;
+              return { name: hs.name, address: hs.address || hs.location, checkInDate: hs.checkInDate || hs.checkIn, checkOutDate: hs.checkOutDate || hs.checkOut };
+            })
+            .filter(Boolean) as Array<{ name: string; address?: string; checkInDate?: string; checkOutDate?: string }>;
+          if (allHotels.length > 1) {
+            await patchItineraryWithMultipleHotels(tripId, allHotels);
+          } else {
+            await patchItineraryWithHotel(tripId, { name: hotel.name, address: hotel.address || hotel.neighborhood, checkInDate: startDate, checkOutDate: endDate });
+          }
+        } else {
+          await patchItineraryWithHotel(tripId, { name: hotel.name, address: hotel.address || hotel.neighborhood, checkInDate: startDate, checkOutDate: endDate });
+        }
       } catch (patchErr) {
         console.warn('[FindMyHotels] Hotel itinerary patch skipped:', patchErr);
       }
