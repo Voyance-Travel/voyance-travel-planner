@@ -65,6 +65,7 @@ import {
 } from '../trip-type-modifiers.ts';
 import {
   getDestinationId,
+  extractRestaurantVenueName,
 } from '../generation-utils.ts';
 import {
   normalizeTo24h,
