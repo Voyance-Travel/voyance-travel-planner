@@ -779,7 +779,55 @@ export function enforceRequiredMealsFinalGuard(
 
   const detected = detectMealSlots(activities);
 
-  // PRE-PASS: Deduplicate same-meal activities before injecting missing ones
+  // PRE-PASS 0: Relabel any meal whose title contradicts its time slot
+  // e.g. "Lunch at X" at 08:30 → "Breakfast at X"
+  const MEAL_LABEL_MAP: Record<string, string[]> = {
+    breakfast: ['breakfast', 'brunch'],
+    lunch: ['lunch'],
+    dinner: ['dinner', 'supper'],
+  };
+  for (const act of activities) {
+    const titleLower = (act.title || '').toLowerCase();
+    const cat = (act.category || '').toLowerCase();
+    if (!cat.includes('dining') && !cat.includes('food') && !cat.includes('restaurant')) continue;
+
+    const startMins = parseTimeToMinutesLocal(act.startTime || '');
+    if (startMins === null) continue;
+
+    // Determine correct meal for this time
+    let correctMeal: string | null = null;
+    if (startMins >= 360 && startMins < 660) correctMeal = 'breakfast';
+    else if (startMins >= 660 && startMins < 900) correctMeal = 'lunch';
+    else if (startMins >= 1020 && startMins < 1380) correctMeal = 'dinner';
+    if (!correctMeal) continue;
+
+    // Find current meal keyword in title
+    let currentMealKey: string | null = null;
+    let currentKeyword: string | null = null;
+    for (const [meal, kws] of Object.entries(MEAL_LABEL_MAP)) {
+      for (const kw of kws) {
+        if (titleLower.includes(kw)) {
+          currentMealKey = meal;
+          currentKeyword = kw;
+          break;
+        }
+      }
+      if (currentMealKey) break;
+    }
+
+    if (currentMealKey && currentMealKey !== correctMeal && currentKeyword) {
+      const correctLabel = correctMeal.charAt(0).toUpperCase() + correctMeal.slice(1);
+      const before = act.title;
+      const regex = new RegExp(`\\b${currentKeyword}\\b`, 'i');
+      act.title = act.title.replace(regex, (match: string) =>
+        match[0] === match[0].toUpperCase() ? correctLabel : correctLabel.toLowerCase()
+      );
+      if ((act as any).name) (act as any).name = act.title;
+      console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Relabeled "${before}" → "${act.title}" (time ${act.startTime})`);
+    }
+  }
+
+  // PRE-PASS 1: Deduplicate same-meal activities before injecting missing ones
   // This prevents the guard from seeing "dinner exists" when there are two dinners
   // and then NOT injecting the actually-missing lunch
   const mealActivityMap: Record<RequiredMeal, number[]> = { breakfast: [], lunch: [], dinner: [] };
