@@ -601,6 +601,36 @@ Return ONLY valid JSON array, no markdown:
     
     // Store generation_context in the update payload
     (updatePayload.metadata as Record<string, unknown>).generation_context = enrichmentContext;
+
+    // =====================================================================
+    // PREFLIGHT CONTEXT AUDIT — Inspect all data paths before chain starts
+    // =====================================================================
+    try {
+      const { runContextAudit } = await import('./context-audit.ts');
+      const restaurantPoolFromPayload = (updatePayload.metadata as Record<string, unknown>).restaurant_pool as Record<string, any[]> | undefined;
+      const auditResult = await runContextAudit(supabase, tripId, userId, {
+        destination,
+        isMultiCity: isMultiCity || false,
+        totalDays,
+        budgetTier: budgetTier || 'moderate',
+        restaurantPool: restaurantPoolFromPayload || undefined,
+      });
+      (updatePayload.metadata as Record<string, unknown>).context_audit = {
+        summary: auditResult.summary,
+        presentCount: auditResult.presentCount,
+        totalFields: auditResult.totalFields,
+        missingRequiredCount: auditResult.missingRequiredCount,
+        missingRecommendedCount: auditResult.missingRecommendedCount,
+        fields: auditResult.fields.filter(f => !f.present).map(f => ({
+          field: f.field,
+          severity: f.severity,
+          notes: f.notes,
+        })),
+        timestamp: auditResult.timestamp,
+      };
+    } catch (auditErr) {
+      console.warn('[generate-trip] Context audit failed (non-blocking):', auditErr);
+    }
   }
   
   await supabase.from('trips').update(updatePayload).eq('id', tripId);
