@@ -1,147 +1,185 @@
 
-What’s going on is not “Gemini can’t find restaurants.” The pipeline is leaking in two specific places, and the logs you pasted match that exactly.
+Yes — there are multiple other data paths that can be null, and the code is currently built to “gracefully continue” when they are. That means the architecture is connected in many places, but not all of those paths are hard-required. The result is exactly what you’re worried about: silent degradation instead of loud failure.
 
-## What I found
+What I found
 
-### 1. We are not actually carrying a restaurant pool into the failing generation path
-For the trip I inspected, `trips.metadata.used_restaurants` is populated, but `trips.metadata.restaurant_pool` is `null`.
+1. Restaurant pool
+- Connected: yes.
+- Runtime risk: high.
+- `action-generate-trip.ts` writes `metadata.restaurant_pool`.
+- `action-generate-trip-day.ts` reads it and passes `restaurantPool` into `generate-day`.
+- But if pool generation fails, it is explicitly treated as non-blocking and day generation continues.
 
-That means:
-- prompt-level “pick from this list” enforcement is not active for chained trip generation
-- `action-generate-trip-day.ts` logs `Restaurant pool EMPTY`
-- then it tries `verified_venues`
-- then `generation-core.ts` still runs its own final meal guard **without any fallback venues passed in**
-- so retries happen, and final-attempt fallback still fires
+2. Hotel data
+- Connected: yes, but fragile.
+- Sources:
+  - `trips.hotel_selection`
+  - `trip_cities.hotel_selection` for multi-city/per-city override
+- `compile-day-facts.ts` and `flight-hotel-context.ts` both read hotel data.
+- Runtime risk: high.
+- In sampled backend rows, many `trip_cities.hotel_selection` values are actually null.
+- If hotel is null, prompts degrade to “no hotel booked” behavior, which affects check-in/check-out/return-to-hotel logic.
 
-This is the biggest issue. The system is refactored, but the authoritative chained trip path is missing the preloaded pool data you expect it to have.
+3. Flight data
+- Connected: partially.
+- Sources:
+  - `trips.flight_selection` is the main structured source
+  - `preferences.arrivalTime/departureTime` is a fallback
+  - `metadata.flightDetails` exists in the model, but the chained `generate-trip-day -> generate-day` request does not pass it through
+- Runtime risk: high.
+- In sampled rows, recent trips had `flight_selection: null`.
+- If null, arrival/departure constraints become weak or absent, which affects airport transfer logic.
 
-### 2. The retry loop is using a meal guard that still has no real venues
-In `generation-core.ts`, the post-validation meal guard calls:
+4. Travel DNA / profile
+- Connected: yes, with fallback chain.
+- Sources:
+  - `travel_dna_profiles`
+  - fallback to `profiles.travel_dna`
+  - `user_preferences`
+- Runtime risk: medium.
+- Code is resilient here, but often falls back to generic/default behavior if the stronger DNA data is incomplete.
+- Sample data shows some users have traits but no canonical archetype.
 
-- `enforceRequiredMealsFinalGuard(...)`
+5. Must-dos / must-haves / constraints
+- Connected: yes.
+- Sources:
+  - `metadata.mustDoActivities`
+  - `metadata.mustHaves`
+  - `metadata.generationRules`
+  - `metadata.userConstraints`
+  - `metadata.preBookedCommitments`
+  - `trip_intents`
+- Runtime risk: medium.
+- These are read inside `compile-prompt.ts`, so the path exists.
+- But they are optional and there is no assertion that they were successfully present when expected.
 
-but does **not** pass `fallbackVenues`.
+6. Group/traveler blending
+- Connected: yes.
+- Sources:
+  - collaborators / members
+  - companion DNA rows
+  - `generation_context.blendedDnaSnapshot`
+- Runtime risk: medium.
+- If companion DNA is missing, group blending silently degrades.
 
-So even if `action-generate-day.ts` has a better guard later, the core retry loop still treats “missing meal” as a retry condition based on a guard that has no venue candidates. That’s why you keep seeing guard/retry behavior repeatedly.
+7. First-time visitor / per-city familiarity
+- Connected: weakly.
+- Source:
+  - `metadata.firstTimePerCity`
+- Runtime risk: medium.
+- Present in generation-core types, but I did not find strong evidence that chained day generation guarantees it is populated.
+- If null, system falls back to generic “first-time visitor” assumptions.
 
-So the current behavior is:
-```text
-AI misses breakfast/lunch/dinner
--> generation-core meal guard sees missing meal
--> no fallback venue list available there
--> triggers retry
--> repeat
--> later another layer injects generic/type fallback
-```
+Most important conclusion
 
-That is why this feels like it keeps “coming back.” The problem exists in the shared core path, not just the outer wrapper.
+The paths are mostly connected in code, but many are not enforced as required inputs. The system still treats missing context as “warn and continue” instead of “stop, context incomplete.”
 
-### 3. The duplicate Day 1 / Day 2 entries in logs are a logging bug, not necessarily day generation running twice
-`GenerationTimer.resume()` reloads existing `day_timings`, and each chained day call appends again with `addDayTiming(...)`.
+That means the likely missing/null list you should care about most is:
 
-So generation logs can look like:
-- day 1
-- day 2
-- day 1 again
-- day 2 again
-- day 3
-- day 4
+- `metadata.restaurant_pool`
+- `trip_cities.hotel_selection`
+- `trips.hotel_selection`
+- `trips.flight_selection`
+- `metadata.flightDetails`
+- `metadata.firstTimePerCity`
+- `metadata.mustHaves`
+- `metadata.userConstraints`
+- `metadata.preBookedCommitments`
+- companion DNA / blended group context
+- parts of `generation_context`
 
-That’s because resumed timer state is accumulating duplicate entries instead of upserting/replacing by `day`.
+Evidence from backend sample
+- Recent `trip_cities.hotel_selection` rows I checked were null.
+- Recent trips included rows where `flight_selection` was null.
+- `user_preferences` often exists but many fields are empty arrays/defaults.
+- `travel_dna_profiles` exists for sampled users, but canonical archetype fields are not always populated.
+- `trip_intents` exists for some trips, but not all.
 
-So yes, the log is misleading you. It makes it look like the engine generated days 1 and 2 twice, but the more likely issue is duplicated timing records, not duplicated saved itinerary days.
+Why this keeps happening
+Because the system currently has two modes:
+- “connected if present”
+- “fallback if absent”
 
-## Why this is still happening after the refactor
+What it does not yet have is a strict “trip context contract” that says:
+- for this generation mode, these fields must exist
+- if any are missing, fail before generation starts
 
-Because the refactor helped isolate ownership, but two cross-cutting pieces were left inconsistent:
+Plan
 
-1. **Restaurant pool lifecycle**
-   - trip-day chain expects `metadata.restaurant_pool`
-   - but the current trip had none stored
-   - so the “pre-verified 12 restaurants” assumption never becomes true in runtime
+1. Add a preflight “context audit” for generation
+- Build one authoritative validator before chained generation starts.
+- It should inspect and log required/optional context for:
+  - restaurant pool
+  - hotel
+  - flight
+  - DNA/profile
+  - must-dos / constraints / commitments
+  - multi-city transport + per-city hotel
+- Output a structured completeness object into metadata/logs.
 
-2. **Meal guard ownership**
-   - the shared core retry loop still owns meal-missing retries
-   - but it does not receive the same fallback venue context as the outer day action
+2. Split context into required vs optional
+- Required for chained generation:
+  - restaurant pool
+  - hotel context if hotel is expected
+  - flight context if trip has flight/departure logistics
+  - per-city hotel on multi-city trips
+- Optional:
+  - trip intents
+  - past learnings
+  - group blending
+  - advanced DNA enrichments
+- Missing required fields should stop generation instead of degrading.
 
-So the architecture is better, but the handoff is incomplete.
+3. Trace every source to every consumer
+- Audit and tighten the handoff from:
+  - trip record / metadata
+  - trip_cities
+  - user preferences / DNA
+  - generation_context
+  - generate-trip-day request body
+  - compile-day-facts / compile-prompt consumers
+- Specifically verify that anything modeled in metadata is either:
+  - consumed in chained generation, or
+  - removed if dead.
 
-## The fix I would implement
+4. Add hard diagnostics for null critical fields
+- Log a single per-run summary like:
+  - `restaurantPoolPresent`
+  - `tripHotelPresent`
+  - `cityHotelCoverage`
+  - `flightSelectionPresent`
+  - `flightDetailsPresent`
+  - `mustDoPresent`
+  - `mustHavesPresent`
+  - `constraintsPresent`
+  - `dnaPresent`
+  - `groupBlendPresent`
+- This makes missing context visible immediately.
 
-### 1. Make restaurant pool generation/storage mandatory before chained day generation
-In `action-generate-trip.ts`:
-- ensure the pre-chain setup creates/fetches a per-city restaurant pool
-- store it in `trips.metadata.restaurant_pool`
-- fail loudly if full-day meal generation is expected and the pool is missing
+5. Fix the highest-risk disconnections first
+- Make restaurant pool mandatory.
+- Make hotel coverage mandatory for hotel-based logistics.
+- Make departure/airport logic require structured flight context instead of relying on weak fallbacks.
+- Decide whether `metadata.flightDetails` is still a real source; if yes, wire it through chained generation; if no, remove it.
 
-This should not be “optional enrichment.” It needs to be a required precondition for trip generation.
+6. Add a “context completeness” test matrix
+- Single-city with hotel + flight
+- Single-city with no flight
+- Multi-city with per-city hotels
+- Multi-city with transport legs
+- Collaborative trip with blending
+- Must-do / pre-booked trip
+- Each scenario should assert which fields are required and that generation refuses to proceed if they’re missing.
 
-### 2. Pass fallback venues into `generation-core.ts`
-Refactor the core day-generation function so it accepts:
-- `restaurantPool`
-- `usedRestaurants`
-- `fallbackVenues`
+Technical details
 
-Then the retry-triggering meal guard inside `generation-core.ts` must use the same real venue candidates as the outer guard.
-
-That removes the current split-brain behavior.
-
-### 3. Stop allowing the core loop to retry on a guard that lacks venue data
-If `requiredMeals.length > 0` and no venue source exists:
-- log a hard diagnostic
-- fail as “missing restaurant pool context”
-- do not keep pretending retries will fix it
-
-That will surface the true issue immediately instead of looping into fallback behavior.
-
-### 4. Deduplicate day timing logs by `day`
-In `GenerationTimer`:
-- replace append-only `addDayTiming(...)`
-- with upsert-by-day behavior
-
-So the admin log reflects one entry per day and stops looking like days 1 and 2 ran twice.
-
-### 5. Tighten diagnostics so you can see the real cause
-Add explicit diagnostics fields per day:
-- `restaurantPoolCount`
-- `verifiedVenueFallbackCount`
-- `coreMealGuardHadFallbacks`
-- `outerMealGuardHadFallbacks`
-- `poolMissing: true/false`
-
-That will make the next failure obvious in one glance.
-
-## Expected result after this fix
-
-For a 4-day Lisbon trip:
-- pre-chain setup stores a real restaurant pool before day generation starts
-- each day gets meal candidates from the same source
-- the core retry loop no longer retries blindly without venues
-- the guard only fires when the AI truly missed a meal despite having candidates
-- logs show Day 1, 2, 3, 4 once each, not duplicated
-- no more “why are we still falling back when we should already have 12 restaurants?”
-
-## Files to update
-
+Key files to inspect/update:
 - `supabase/functions/generate-itinerary/action-generate-trip.ts`
-  - guarantee restaurant pool creation/storage before chain starts
-
 - `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-  - consume guaranteed pool and surface hard diagnostics if missing
+- `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
+- `supabase/functions/generate-itinerary/flight-hotel-context.ts`
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+- likely `generation-core.ts` for context model consistency
 
-- `supabase/functions/generate-itinerary/generation-core.ts`
-  - accept and use fallback venue context in the retrying meal guard
-
-- `supabase/functions/generate-itinerary/generation-timer.ts`
-  - upsert day timings instead of append-only duplicates
-
-- possibly `supabase/functions/generate-itinerary/action-generate-day.ts`
-  - align diagnostics and shared fallback contract with core path
-
-## Bottom line
-
-You’re right to be upset: this is not a “hard AI problem.” The issue is that the refactored system still has one broken contract:
-- restaurant pool is not guaranteed to exist in chained generation
-- and the core meal guard is still running without the same venue context
-
-So yes: this should be a focused fix now, not another broad rewrite.
+What I would implement next
+- A strict preflight context audit plus a required-field contract, so the engine stops pretending it has context when it doesn’t. That will tell us exactly which of hotel, flight, DNA, must-haves, or constraints are still dropping out, instead of discovering them one bug at a time.
