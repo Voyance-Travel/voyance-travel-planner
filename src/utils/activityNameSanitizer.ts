@@ -178,6 +178,10 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(FULFILLS_RE, ' ')
     .replace(META_DISTANCE_COST_RE, '')
     .replace(INLINE_META_RE, '')
+    .replace(INTERNAL_NOTE_RE, '')
+    .replace(AI_REASONING_RE, '')
+    .replace(META_COMMENTARY_RE, '')
+    .replace(SYSTEM_TERM_RE, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
