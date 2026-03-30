@@ -273,35 +273,55 @@ const FABRICATED_HOTEL_RE = /\b(?:Hotel\s+Le\s+\w+|Le\s+Meurice|The\s+Peninsula|
 /**
  * Remove fabricated hotel activities when no hotel is booked.
  * When hasHotel is true, activities are kept as-is.
+ *
+ * IMPORTANT: Generic placeholder activities like "Check-in at Your Hotel",
+ * "Freshen up at Your Hotel", "Return to Your Hotel" are PRESERVED.
+ * These are valid structural cards that get patched with real hotel names
+ * later via patchItineraryWithHotel. Only activities referencing
+ * fabricated specific hotel names (luxury brands the AI hallucinates)
+ * are stripped.
  */
 export function stripPhantomHotelActivities(day: any, hasHotel: boolean): any {
   if (!day || hasHotel || !Array.isArray(day.activities)) return day;
+
+  // Generic placeholder patterns we MUST keep
+  const GENERIC_PLACEHOLDERS = [
+    /\byour hotel\b/i,
+    /\bthe hotel\b/i,
+    /\bhotel check-?in\b/i,
+    /\bcheck-?in\s*&\s*refresh\b/i,
+    /\bfreshen up\b/i,
+    /\breturn to\b/i,
+    /\bsettle in\b/i,
+    /\bback to\b.*\bhotel\b/i,
+    /\bhotel checkout\b/i,
+    /\bcheck-?out\b/i,
+    /\brest\s*(?:&|and)\s*recharge\b/i,
+    /\bwind down\b/i,
+  ];
+
+  const isGenericPlaceholder = (title: string): boolean => {
+    return GENERIC_PLACEHOLDERS.some(re => re.test(title));
+  };
 
   const before = day.activities.length;
   day.activities = day.activities.filter((act: any) => {
     if (!act) return false;
     const title = (act.title || act.name || '');
-    const category = (act.category || '').toLowerCase();
 
-    // Remove by category
-    if (PHANTOM_HOTEL_CATEGORIES.includes(category)) return false;
+    // ALWAYS keep generic placeholder hotel activities — they are structural
+    if (isGenericPlaceholder(title)) return true;
 
-    // Remove by title pattern
-    if (PHANTOM_HOTEL_TITLE_PATTERNS.some(re => re.test(title))) return false;
-
-    // Remove activities referencing fabricated hotel names
-    if (FABRICATED_HOTEL_RE.test(act.title || '') || FABRICATED_HOTEL_RE.test(act.description || '')) return false;
-
-    // Generic catch-all: any activity with "Hotel" in the title when no hotel is booked
-    // and the category is dining, transport, or accommodation
-    const hotelRelatedCategories = ['dining', 'transport', 'transportation', 'transit', 'accommodation'];
-    if (/\bhotel\b/i.test(title) && hotelRelatedCategories.includes(category)) return false;
+    // Only strip activities that reference fabricated specific hotel names
+    if (FABRICATED_HOTEL_RE.test(act.title || '') || FABRICATED_HOTEL_RE.test(act.description || '')) {
+      return false;
+    }
 
     return true;
   });
 
   if (day.activities.length < before) {
-    console.log(`[stripPhantomHotelActivities] Removed ${before - day.activities.length} phantom hotel activities`);
+    console.log(`[stripPhantomHotelActivities] Removed ${before - day.activities.length} fabricated hotel activities (preserved generic placeholders)`);
   }
 
   return day;

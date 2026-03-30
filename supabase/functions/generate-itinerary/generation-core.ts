@@ -1578,10 +1578,9 @@ Generate activities for this day following ALL constraints above.`;
       // PHANTOM HOTEL STRIPPING: Remove fabricated hotel activities when no hotel booked
       // ==========================================================================
       {
+        // Only strip fabricated hotel names; generic placeholders are preserved
         const hasHotel = !!(dayCity?.hotelName || context.hotelData?.hotelName);
-        if (!hasHotel) {
-          stripPhantomHotelActivities(generatedDay, false);
-        }
+        stripPhantomHotelActivities(generatedDay, hasHotel);
       }
 
 

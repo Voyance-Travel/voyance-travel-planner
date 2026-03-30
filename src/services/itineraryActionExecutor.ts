@@ -238,7 +238,7 @@ async function executeRewriteDayAction(
 
   const day = currentDays[dayIndex];
   const keepActivities = preserve_locked
-    ? day.activities.filter(a => (a.isLocked || isProtectedActivity(a)) && !isAccommodationActivity(a)).map(a => a.id).filter(Boolean)
+    ? day.activities.filter(a => a.isLocked || isProtectedActivity(a)).map(a => a.id).filter(Boolean)
     : [];
 
   const { data, error } = await supabase.functions.invoke('generate-itinerary', {
@@ -262,16 +262,11 @@ async function executeRewriteDayAction(
 
   let newActivities = data.day.activities || day.activities;
 
-  // Deduplicate hotel/accommodation: if original day had one, remove ALL AI-generated dupes
-  const originalHotel = day.activities.find(a => isAccommodationActivity(a));
-  if (originalHotel) {
-    // Remove ALL AI-generated accommodation entries (not just the first)
-    newActivities = newActivities.filter((a: Activity) => !isAccommodationActivity(a));
-    // Re-insert the single original hotel
-    newActivities.push(originalHotel);
-    newActivities.sort((a: Activity, b: Activity) =>
-      (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
-    );
+  // Preserve distinct accommodation intents (check-in, freshen-up, return, checkout)
+  // instead of collapsing all hotel cards into one
+  {
+    const { mergeAccommodationActivities } = await import('@/utils/accommodationActivities');
+    newActivities = mergeAccommodationActivities(day.activities, newActivities);
   }
 
   // Budget-down guard: if instructions asked for cheaper, cap costs at original levels
@@ -488,7 +483,7 @@ async function executeRegenerateAction(
 
   const day = currentDays[dayIndex];
   const keepActivities = day.activities
-    .filter(a => (a.isLocked || isProtectedActivity(a) || isMealActivity(a)) && !isAccommodationActivity(a))
+    .filter(a => a.isLocked || isProtectedActivity(a) || isMealActivity(a))
     .map(a => a.id)
     .filter(Boolean);
 

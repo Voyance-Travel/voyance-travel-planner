@@ -23,6 +23,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { format, parseISO } from 'date-fns';
 import { safeFormatDate } from '@/utils/dateUtils';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { mergeAccommodationActivities } from '@/utils/accommodationActivities';
 import type { GeneratedDay, GeneratedActivity, TripOverview } from '@/hooks/useItineraryGeneration';
 
 // =============================================================================
@@ -348,24 +349,12 @@ export function ItineraryEditor({
 
     setRegeneratingDay(day.dayNumber);
     try {
-      // Helper to identify accommodation/hotel activities
-      const isAccommodationLike = (a: any) => {
-        const cat = (a.category || '').toLowerCase();
-        const title = (a.title || a.name || '').toLowerCase();
-        return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
-          || title.includes('hotel check') || title.includes('check-in at')
-          || title.includes('check into');
-      };
+
 
       const sanitizeRegeneratedDay = (newDay: any) => {
-        // Deduplicate accommodation: keep only the original hotel
-        const originalHotel = (day.activities || []).find(isAccommodationLike);
-        if (originalHotel && newDay.activities) {
-          newDay.activities = newDay.activities.filter((a: any) => !isAccommodationLike(a));
-          newDay.activities.push(originalHotel);
-          newDay.activities.sort((a: any, b: any) =>
-            (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
-          );
+        // Preserve distinct accommodation intents (check-in, freshen-up, return, checkout)
+        if (newDay.activities) {
+          newDay.activities = mergeAccommodationActivities(day.activities || [], newDay.activities);
         }
         // Preserve original day title/theme
         newDay.title = day.title;
