@@ -10,6 +10,7 @@
  * 3. CHRONOLOGY (filter pre-arrival, sort)
  * 4. DUPLICATE_CONCEPT (strip trip-wide dupes, swap meals from pool)
  * 5. WEAK_PERSONALIZATION (strip avoid-list violations)
+ * 5a. MEAL_ORDER (relabel meals whose title contradicts their time slot)
  * 5b. MEAL_DUPLICATE (relabel/swap/remove duplicate meals)
  * 6. LOGISTICS_SEQUENCE (departure day reorder — fires for isLastDay OR isLastDayInCity)
  * 7. CHECK-IN GUARANTEE (day 1 / transition day)
