@@ -591,6 +591,23 @@ function checkDuplicateConcept(
     const actConcept = extractConcept(normalizeText(act.title || ''));
     const actLocName = normalizeText(act.location?.name || '');
 
+    // Dining venue dedup — precise identity check using normalized venue names
+    if (cat.includes('dining')) {
+      const venueFromTitle = extractRestaurantVenueName(act.title || '');
+      const venueFromLoc = extractRestaurantVenueName(act.location?.name || '');
+      if ((venueFromTitle.length > 2 && previousDiningVenues.has(venueFromTitle)) ||
+          (venueFromLoc.length > 2 && previousDiningVenues.has(venueFromLoc))) {
+        results.push({
+          code: FAILURE_CODES.DUPLICATE_CONCEPT,
+          severity: 'error',
+          message: `"${act.title}" repeats a restaurant from a previous day`,
+          activityIndex: i,
+          autoRepairable: true,
+        });
+        continue;
+      }
+    }
+
     // Location dedup
     if (actLocName.length > 5 && previousLocations.has(actLocName)) {
       results.push({
