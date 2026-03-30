@@ -11,12 +11,13 @@
  * 4. DUPLICATE_CONCEPT (strip trip-wide dupes, swap meals from pool)
  * 5. WEAK_PERSONALIZATION (strip avoid-list violations)
  * 5b. MEAL_DUPLICATE (relabel/swap/remove duplicate meals)
- * 6. LOGISTICS_SEQUENCE (departure day reorder)
+ * 6. LOGISTICS_SEQUENCE (departure day reorder — fires for isLastDay OR isLastDayInCity)
  * 7. CHECK-IN GUARANTEE (day 1 / transition day)
  * 8. CHECKOUT GUARANTEE (last day / last day in city)
+ * 8b. DEPARTURE TRANSPORT GUARANTEE (inject airport/station transfer if missing)
  * 9. MISSING_SLOT (bookend: inject transits + hotel returns, with departure-day guards)
  * 10. TITLE_LABEL_LEAK (strip label leaks)
- * 11. DEPARTURE SEQUENCE FIX (swap checkout before airport)
+ * 11. DEPARTURE SEQUENCE FIX (swap checkout before transport — fires for all departure days)
  * 12. NON-FLIGHT DEPARTURE (strip airport refs)
  */
 
@@ -42,6 +43,7 @@ export interface RepairDayInput {
   // Flight context for pre-arrival filter and departure sequence
   arrivalTime24?: string;
   returnDepartureTime24?: string;
+  departureAirport?: string;
 
   // Hotel context for bookend validator
   hotelName?: string;
@@ -54,6 +56,7 @@ export interface RepairDayInput {
   isLastDayInCity?: boolean;
   resolvedDestination?: string;
   nextLegTransport?: string;
+  nextLegTransportDetails?: { stationName?: string; departureTime?: string; [key: string]: any };
   hotelOverride?: { name?: string; address?: string };
 
   // Locked activities (never remove)
@@ -76,10 +79,11 @@ export interface RepairDayResult {
 export function repairDay(input: RepairDayInput): RepairDayResult {
   const repairs: RepairAction[] = [];
   const { validationResults, dayNumber, isFirstDay, isLastDay,
-    arrivalTime24, returnDepartureTime24, hotelName, hotelAddress, hasHotel,
+    arrivalTime24, returnDepartureTime24, departureAirport,
+    hotelName, hotelAddress, hasHotel,
     lockedActivities, restaurantPool, usedRestaurants,
     isTransitionDay, isMultiCity, isLastDayInCity,
-    resolvedDestination, nextLegTransport, hotelOverride } = input;
+    resolvedDestination, nextLegTransport, nextLegTransportDetails, hotelOverride } = input;
 
   // Clone activities array to mutate
   let activities: any[] = [...(input.day.activities || [])];
@@ -378,7 +382,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 6. LOGISTICS_SEQUENCE (departure day) ---
-  if (isLastDay && byCode.has(FAILURE_CODES.LOGISTICS_SEQUENCE)) {
+  const isDepartureDayForSequence = isLastDay || (isLastDayInCity && !isTransitionDay);
+  if (isDepartureDayForSequence && byCode.has(FAILURE_CODES.LOGISTICS_SEQUENCE)) {
     const seqRepairs = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
     repairs.push(...seqRepairs);
     // Re-sort after departure fixes
@@ -491,12 +496,127 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 8b. DEPARTURE TRANSPORT GUARANTEE ---
+  // Ensure every departure day has a transport card to the airport/station.
+  const isDepartureDay = isLastDay || (isLastDayInCity && !isTransitionDay);
+  if (isDepartureDay && activities.length > 0) {
+    const hasDepartureTransport = activities.some((a: any) => {
+      const t = (a.title || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      return (cat === 'transport' || cat === 'transit' || cat === 'logistics') && (
+        t.includes('airport') || t.includes('transfer to') || t.includes('head to') ||
+        t.includes('taxi to') || t.includes('station') || t.includes('departure transfer')
+      );
+    });
+
+    if (!hasDepartureTransport) {
+      let transportTitle: string;
+      let transportDesc: string;
+      let transportStartMin: number;
+      let transportDur = 45;
+
+      if (isLastDay && returnDepartureTime24) {
+        // Flight departure: time backward from flight
+        const depMins = parseTimeToMinutes(returnDepartureTime24);
+        const airportName = departureAirport || 'the Airport';
+        transportTitle = `Transfer to ${airportName}`;
+        transportDesc = `Depart for ${airportName} ahead of your flight.`;
+        transportStartMin = depMins !== null ? Math.max(depMins - 180, 7 * 60) : 12 * 60;
+      } else if (isLastDayInCity && nextLegTransport && nextLegTransport !== 'flight') {
+        // Non-flight inter-city departure (train/bus)
+        const stationName = nextLegTransportDetails?.stationName || 'the Station';
+        const legDepTime = nextLegTransportDetails?.departureTime;
+        transportTitle = `Transfer to ${stationName}`;
+        transportDesc = `Head to ${stationName} for your ${nextLegTransport} to the next city.`;
+        transportDur = 30;
+        if (legDepTime) {
+          const legMins = parseTimeToMinutes(legDepTime);
+          transportStartMin = legMins !== null ? Math.max(legMins - 60, 7 * 60) : 12 * 60;
+        } else {
+          transportStartMin = 12 * 60;
+        }
+      } else {
+        // Last day, no flight data — generic
+        transportTitle = 'Departure Transfer';
+        transportDesc = 'Head to the departure point for your onward journey.';
+        // Place after checkout
+        const checkoutAct = activities.find((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return t.includes('checkout') || t.includes('check-out') || t.includes('check out');
+        });
+        const checkoutEnd = checkoutAct ? (parseTimeToMinutes(checkoutAct.endTime) ?? 11 * 60 + 30) : 11 * 60 + 30;
+        transportStartMin = checkoutEnd + 15;
+      }
+
+      const transportCard = {
+        id: `day${dayNumber}-departure-transport-${Date.now()}`,
+        title: transportTitle,
+        name: transportTitle,
+        description: transportDesc,
+        startTime: minutesToHHMM(transportStartMin),
+        endTime: minutesToHHMM(transportStartMin + transportDur),
+        category: 'transport',
+        type: 'transport',
+        location: { name: transportTitle.replace('Transfer to ', ''), address: '' },
+        cost: { amount: 0, currency: 'USD' },
+        bookingRequired: false,
+        isLocked: false,
+        durationMinutes: transportDur,
+        source: 'repair-departure-transport-guarantee',
+      };
+
+      // Insert chronologically
+      let insertIdx = activities.length;
+      for (let i = 0; i < activities.length; i++) {
+        const actStart = parseTimeToMinutes(activities[i].startTime || '') ?? 99999;
+        if (transportStartMin <= actStart) { insertIdx = i; break; }
+      }
+      activities.splice(insertIdx, 0, transportCard);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_departure_transport_guarantee', after: transportTitle });
+    }
+
+    // Also ensure a flight card exists on the last day if we have flight data
+    if (isLastDay && returnDepartureTime24) {
+      const hasFlightCard = activities.some((a: any) => {
+        const t = (a.title || '').toLowerCase();
+        const cat = (a.category || '').toLowerCase();
+        return cat === 'flight' || t.includes('flight departure') || t.includes('departure flight');
+      });
+
+      if (!hasFlightCard) {
+        const depMins = parseTimeToMinutes(returnDepartureTime24) ?? 15 * 60;
+        const flightCard = {
+          id: `day${dayNumber}-flight-departure-${Date.now()}`,
+          title: 'Departure Flight',
+          name: 'Departure Flight',
+          description: 'Board your flight home.',
+          startTime: minutesToHHMM(depMins),
+          endTime: minutesToHHMM(depMins + 120),
+          category: 'flight',
+          type: 'flight',
+          location: { name: departureAirport || 'Airport', address: '' },
+          cost: { amount: 0, currency: 'USD' },
+          bookingRequired: false,
+          isLocked: false,
+          durationMinutes: 120,
+          source: 'repair-flight-guarantee',
+        };
+        activities.push(flightCard);
+        activities.sort((a: any, b: any) => {
+          const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+          return ta - tb;
+        });
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_departure_flight_guarantee' });
+      }
+    }
+  }
+
   // --- 9. MISSING_SLOT: bookend validator (with departure-day guards) ---
   // Always inject hotel bookends — use placeholder if no hotel selected yet.
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
   if (activities.length > 0) {
     const effectiveHotelName = hotelName || 'Your Hotel';
-    const isDepartureDay = isLastDay || (isLastDayInCity && !isTransitionDay);
     const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay);
     activities = bookendRepairs.activities;
     repairs.push(...bookendRepairs.repairs);
@@ -524,40 +644,41 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
-  // --- 11. DEPARTURE SEQUENCE FIX (checkout after airport swap) ---
-  if (isLastDay && activities.length > 1) {
+  // --- 11. DEPARTURE SEQUENCE FIX (checkout after airport/station swap) ---
+  if (isDepartureDay && activities.length > 1) {
     const checkoutIdx = activities.findIndex((a: any) => {
       const t = (a.title || '').toLowerCase();
       return t.includes('checkout') || t.includes('check-out') || t.includes('check out');
     });
-    const airportIdx = activities.findIndex((a: any) => {
+    const transportIdx = activities.findIndex((a: any) => {
       const t = (a.title || '').toLowerCase();
-      return (t.includes('airport') || t.includes('departure transfer')) &&
+      return (t.includes('airport') || t.includes('departure transfer') || t.includes('transfer to') || t.includes('station')) &&
              ((a.category || '').toLowerCase() === 'transport' || t.includes('transfer'));
     });
 
-    if (checkoutIdx !== -1 && airportIdx !== -1 && checkoutIdx > airportIdx) {
+    if (checkoutIdx !== -1 && transportIdx !== -1 && checkoutIdx > transportIdx) {
       const checkoutAct = activities[checkoutIdx];
-      const airportAct = activities[airportIdx];
+      const transportAct = activities[transportIdx];
 
       const checkoutDur = Math.max(5, ((parseTimeToMinutes(checkoutAct.endTime) ?? 0) - (parseTimeToMinutes(checkoutAct.startTime) ?? 0))) || 15;
-      const transferDur = Math.max(10, ((parseTimeToMinutes(airportAct.endTime) ?? 0) - (parseTimeToMinutes(airportAct.startTime) ?? 0))) || 60;
+      const transferDur = Math.max(10, ((parseTimeToMinutes(transportAct.endTime) ?? 0) - (parseTimeToMinutes(transportAct.startTime) ?? 0))) || 60;
 
-      checkoutAct.startTime = airportAct.startTime;
+      checkoutAct.startTime = transportAct.startTime;
       checkoutAct.endTime = addMinutesToHHMM(checkoutAct.startTime, checkoutDur);
-      airportAct.startTime = checkoutAct.endTime;
-      airportAct.endTime = addMinutesToHHMM(airportAct.startTime, transferDur);
+      transportAct.startTime = checkoutAct.endTime;
+      transportAct.endTime = addMinutesToHHMM(transportAct.startTime, transferDur);
 
-      activities[airportIdx] = checkoutAct;
-      activities[checkoutIdx] = airportAct;
+      activities[transportIdx] = checkoutAct;
+      activities[checkoutIdx] = transportAct;
       activities.sort((a: any, b: any) => {
         const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
         const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
         return ta - tb;
       });
-      repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'swapped_checkout_before_airport' });
+      repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'swapped_checkout_before_departure_transport' });
     }
   }
+
 
   // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---
   if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegTransport !== 'flight') {
