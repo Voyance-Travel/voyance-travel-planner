@@ -597,7 +597,7 @@ export async function enrichActivity(
   try {
     const [venueData, photoResult, viatorMatch] = await Promise.race([
       Promise.all([
-        verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY)
+        verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY, hotelCoordinates)
           .catch((e) => {
             console.log(`[Stage 4] Venue verify timeout/error for "${activity.title}":`, e.message);
             return null;
