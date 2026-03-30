@@ -9,6 +9,23 @@ import type { StrictActivity, StrictDay, VenueVerification, CachedVenue, Enrichm
 import { normalizeVenueName, haversineDistanceKm } from './generation-utils.ts';
 
 // =============================================================================
+// HOTEL PROXIMITY GUARD — Tight radius for water-bound / car-free destinations
+// =============================================================================
+
+/** Max km from hotel for venues in car-free / water-bound destinations */
+const TIGHT_RADIUS_DESTINATIONS: Record<string, number> = {
+  'venice': 5,      // Island — no cars, no mainland venues
+  'murano': 3,
+  'burano': 3,
+  'santorini': 8,
+  'hydra': 4,
+  'mykonos': 8,
+  'capri': 5,
+  'macau': 6,
+};
+const DEFAULT_HOTEL_RADIUS_KM = 15;
+
+// =============================================================================
 // DESTINATION CENTER CACHE (module-level singleton)
 // =============================================================================
 
@@ -145,7 +162,8 @@ export async function getDestinationCenter(
 export async function verifyVenueWithGooglePlaces(
   venueName: string,
   destination: string,
-  GOOGLE_MAPS_API_KEY: string | undefined
+  GOOGLE_MAPS_API_KEY: string | undefined,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<VenueVerification | null> {
   if (!GOOGLE_MAPS_API_KEY) {
     console.log('[Stage 4] Google Maps API key not configured, skipping venue verification');
@@ -227,6 +245,25 @@ export async function verifyVenueWithGooglePlaces(
       }
     }
 
+    // Hotel proximity guard — reject venues unreachable from hotel
+    if (hotelCoordinates && place.location) {
+      const destLower = destination.toLowerCase();
+      const tightRadius = Object.entries(TIGHT_RADIUS_DESTINATIONS)
+        .find(([key]) => destLower.includes(key))?.[1];
+      const maxRadius = tightRadius ?? DEFAULT_HOTEL_RADIUS_KM;
+
+      const hotelDistKm = haversineDistanceKm(
+        hotelCoordinates.lat, hotelCoordinates.lng,
+        place.location.latitude, place.location.longitude
+      );
+      if (hotelDistKm > maxRadius) {
+        console.log(
+          `[Stage 4] ❌ REJECTED venue "${venueName}" → ${hotelDistKm.toFixed(1)}km from hotel (max ${maxRadius}km for ${destination})`
+        );
+        return null;
+      }
+    }
+
     const mapPriceLevel = (priceLevel: string): number => {
       const mapping: Record<string, number> = {
         PRICE_LEVEL_FREE: 0,
@@ -276,7 +313,8 @@ export async function verifyVenueWithDualAI(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined
+  LOVABLE_API_KEY: string | undefined,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<VenueVerification | null> {
   const venueName = activity.location?.name || activity.title;
   const category = activity.category || 'sightseeing';
@@ -298,7 +336,7 @@ export async function verifyVenueWithDualAI(
   }
 
   // Step 2: Google Places lookup
-  const googleResult = await verifyVenueWithGooglePlaces(venueName, destination, GOOGLE_MAPS_API_KEY);
+  const googleResult = await verifyVenueWithGooglePlaces(venueName, destination, GOOGLE_MAPS_API_KEY, hotelCoordinates);
 
   if (!googleResult || !googleResult.isValid) {
     return {
@@ -534,7 +572,8 @@ export async function enrichActivity(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined
+  LOVABLE_API_KEY: string | undefined,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<StrictActivity> {
   const enriched = { ...activity };
 
@@ -558,7 +597,7 @@ export async function enrichActivity(
   try {
     const [venueData, photoResult, viatorMatch] = await Promise.race([
       Promise.all([
-        verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY)
+        verifyVenueWithDualAI(activity, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY, hotelCoordinates)
           .catch((e) => {
             console.log(`[Stage 4] Venue verify timeout/error for "${activity.title}":`, e.message);
             return null;
@@ -668,7 +707,8 @@ export async function enrichActivityWithRetry(
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
   LOVABLE_API_KEY: string | undefined,
-  maxRetries: number = 1
+  maxRetries: number = 1,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<{ activity: StrictActivity; success: boolean; retried: boolean }> {
   let retried = false;
 
@@ -680,7 +720,8 @@ export async function enrichActivityWithRetry(
         supabaseUrl,
         supabaseKey,
         GOOGLE_MAPS_API_KEY,
-        LOVABLE_API_KEY
+        LOVABLE_API_KEY,
+        hotelCoordinates
       );
       return { activity: enriched, success: true, retried };
     } catch (error) {
@@ -710,7 +751,8 @@ export async function enrichItinerary(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined
+  LOVABLE_API_KEY: string | undefined,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<{ days: StrictDay[]; stats: EnrichmentStats }> {
   console.log(`[Stage 4] Starting enrichment for ${days.length} days with real photos + dual-AI venue verification`);
 
@@ -746,7 +788,7 @@ export async function enrichItinerary(
       const batch = day.activities.slice(i, i + BATCH_SIZE);
       const enrichedBatch = await Promise.all(
         batch.map((act) =>
-          enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY)
+          enrichActivityWithRetry(act, destination, supabaseUrl, supabaseKey, GOOGLE_MAPS_API_KEY, LOVABLE_API_KEY, 1, hotelCoordinates)
         )
       );
 

@@ -22,6 +22,7 @@ export interface EnrichDayInput {
   supabaseKey: string;
   googleMapsApiKey: string;
   lovableApiKey: string;
+  hotelCoordinates?: { lat: number; lng: number };
 }
 
 // =============================================================================
@@ -35,6 +36,7 @@ async function enrichActivities(
   supabaseKey: string,
   googleMapsApiKey: string,
   lovableApiKey: string,
+  hotelCoordinates?: { lat: number; lng: number },
 ): Promise<any[]> {
   // Only enrich unlocked (newly generated) activities
   const activitiesToEnrich = activities.filter((a: any) => !a.isLocked);
@@ -79,7 +81,8 @@ async function enrichActivities(
             supabaseKey,
             googleMapsApiKey,
             lovableApiKey,
-            1 // maxRetries
+            1, // maxRetries
+            hotelCoordinates
           );
           return result.activity;
         } catch (e) {
@@ -280,6 +283,7 @@ export async function enrichAndValidateHours(input: EnrichDayInput): Promise<any
     input.supabaseKey,
     input.googleMapsApiKey,
     input.lovableApiKey,
+    input.hotelCoordinates,
   );
 
   // Step 2: Opening hours validation (shift/remove activities at closed venues)

@@ -367,6 +367,26 @@ export async function handleGenerateDay(
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY') || '';
 
+    // Resolve hotel coordinates for proximity guard (rejects mainland venues in water-bound cities)
+    let hotelCoordinates: { lat: number; lng: number } | undefined;
+    if (GOOGLE_MAPS_API_KEY) {
+      const hotelName = resolvedHotelOverride?.name || paramHotelName || (flightContext as any)?.hotelName;
+      const hotelAddress = resolvedHotelOverride?.address || (flightContext as any)?.hotelAddress;
+      const hotelQuery = hotelAddress ? `${hotelName} ${hotelAddress}` : (hotelName ? `${hotelName} ${destination}` : null);
+      if (hotelQuery) {
+        try {
+          const { getDestinationCenter } = await import('./venue-enrichment.ts');
+          const coords = await getDestinationCenter(hotelQuery, GOOGLE_MAPS_API_KEY);
+          if (coords) {
+            hotelCoordinates = coords;
+            console.log(`[generate-day] Hotel coordinates resolved: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
+          }
+        } catch (e) {
+          console.warn(`[generate-day] Hotel geocoding failed (non-blocking):`, e);
+        }
+      }
+    }
+
     _diagTimers.enrichStart = Date.now();
     normalizedActivities = await enrichAndValidateHours({
       activities: normalizedActivities,
@@ -376,6 +396,7 @@ export async function handleGenerateDay(
       supabaseKey,
       googleMapsApiKey: GOOGLE_MAPS_API_KEY || '',
       lovableApiKey: LOVABLE_API_KEY,
+      hotelCoordinates,
     });
     _diagTimers.enrichEnd = Date.now();
 
