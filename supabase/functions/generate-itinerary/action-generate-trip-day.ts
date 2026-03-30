@@ -595,8 +595,10 @@ async function _handleGenerateTripDayInner(
     const resolvedDest = cityInfo?.cityName || destination;
     sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest);
     
-    // Only strip fabricated hotel names; generic placeholders are preserved by the updated function
-    const hasHotel = !!(cityInfo?.hotelName);
+    // Broad hotel detection: selected hotel, accommodation notes, or existing accommodation activities
+    const hasHotel = !!(cityInfo?.hotelName) || 
+      !!(tripCheck?.flight_selection as any)?.hotelName ||
+      dayResult.activities?.some((a: any) => (a.category || '').toLowerCase() === 'accommodation');
     stripPhantomHotelActivities(dayResult, hasHotel);
 
     // Forward-ref fix: strip hallucinated tomorrow references from accommodation descriptions
