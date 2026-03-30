@@ -610,8 +610,8 @@ export function useSaveHotelSelection() {
         await patchItineraryWithHotel(tripId, {
           name: hotel.name || '',
           address: hotel.address,
-          checkInDate: hotel.checkInDate || hotel.checkIn,
-          checkOutDate: hotel.checkOutDate || hotel.checkOut,
+          checkInDate: (hotel as any).checkInDate || (hotel as any).checkIn,
+          checkOutDate: (hotel as any).checkOutDate || (hotel as any).checkOut,
         });
       } catch (e) { console.warn('[useSaveHotelSelection] itinerary patch skipped:', e); }
       return trip;

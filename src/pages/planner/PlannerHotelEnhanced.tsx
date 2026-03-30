@@ -693,8 +693,8 @@ export default function PlannerHotelEnhanced() {
         patchItineraryWithHotel(manualTripId, {
           name: manualHotel.name,
           address: manualHotel.address,
-          checkInDate: manualHotel.checkInDate,
-          checkOutDate: manualHotel.checkOutDate,
+          checkInDate: manualHotel.checkIn,
+          checkOutDate: manualHotel.checkOut,
         }).catch(err => console.warn('[PlannerHotel] Manual hotel itinerary patch failed:', err));
         window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId: manualTripId } }));
       }
