@@ -1,30 +1,40 @@
 
 
-## Remaining Gaps in Hotel/Itinerary Integration
+## Remaining Hotel/Itinerary Integration Issues
 
-### Gap 1: AddBookingInline always uses single-hotel patcher
+After reviewing all save paths, there are four issues still present:
 
-**File: `src/components/itinerary/AddBookingInline.tsx` (line 964)**
+### Issue 1: Race condition — patch then overwrite in TripDetail booking-changed handler
 
-When a hotel is added post-generation via the inline booking UI, it always calls `patchItineraryWithHotel` with just the new hotel — even when a `cityId` is present (multi-city path, line 913). This means adding Hotel B for City 2 overwrites Hotel A's cards in City 1.
+**File: `src/pages/TripDetail.tsx` (lines 3060-3072)**
 
-**Fix:** After saving, if `cityId` is set, fetch all city hotels via `getTripCities` and call `patchItineraryWithMultipleHotels`. For single-city, check if `trips.hotel_selection` is an array with multiple entries and use the multi-hotel patcher accordingly.
+`patchItineraryWithMultipleHotels` writes updated titles/addresses to `itinerary_data` in the database (line 3061). Then immediately after, `saveItineraryOptimistic` writes the *injected days* back to the same field (line 3068) — but the injected days were built from the *pre-patch* data. This overwrites the patch.
 
-### Gap 2: useSaveHotelSelection never uses multi-hotel patcher
+**Fix:** Remove the separate `patchItineraryWithMultipleHotels` call. Instead, after injection builds the updated days, run the patch logic *in-memory* on `injectedDays` before saving. Alternatively, await the patch before building the save payload — but the simpler fix is: the injection already sets correct hotel names via `buildCheckInActivity`/`buildCheckOutActivity`, so the patch is redundant here. Remove lines 3059-3063.
 
-**File: `src/services/supabase/trips.ts` (line 610)**
+### Issue 2: Multi-city hotel_selection arrays flattened to first entry only
 
-The `useSaveHotelSelection` hook always calls `patchItineraryWithHotel` with a single hotel. It has no awareness of whether other hotels exist on the trip. If a trip already has Hotel A saved and the user saves Hotel B via this hook, Hotel A's cards get overwritten.
+**File: `src/pages/TripDetail.tsx` (line 3025)**
 
-**Fix:** After saving, fetch the current `trips.hotel_selection` array. If it contains multiple hotels, call `patchItineraryWithMultipleHotels` with all of them instead of patching just the one.
+When building `cityHotels`, each city's `hotel_selection` array is reduced to `hotel_selection[0]`. If a city has a split stay (two hotels in the array), only the first hotel is used for injection. The second hotel's check-in/checkout/drop-bags cards are never created.
 
-### Gap 3: PlannerHotelEnhanced manual entry ignores multi-city
+**Fix:** Flatmap over all entries in each city's `hotel_selection` array instead of taking only `[0]`.
 
-**File: `src/pages/planner/PlannerHotelEnhanced.tsx` (line 706)**
+### Issue 3: Single-city save in PlannerHotelEnhanced ignores existing multi-hotel state
 
-Manual hotel entry always uses the single-hotel patcher, even when `isMultiCity && multiCityCityId` is true (line 683 confirms it saves to `trip_cities`). The multi-city fetch-and-patch logic from the search/selection path (line 554) is missing here.
+**File: `src/pages/planner/PlannerHotelEnhanced.tsx` (line 586)**
 
-**Fix:** Mirror the multi-city logic from line 554: fetch all city hotels and use `patchItineraryWithMultipleHotels` when multiple hotels exist.
+The single-city save path (line 572-593) always calls `patchItineraryWithHotel` with just the newly saved hotel. If the trip's `hotel_selection` already contains multiple hotels (split stay), saving one overwrites the other's cards. The multi-city path (line 554) correctly fetches all city hotels, but the single-city path does not check `trips.hotel_selection` for existing entries.
+
+**Fix:** In the single-city path, after saving, fetch `trips.hotel_selection`. If it contains multiple hotels, use `patchItineraryWithMultipleHotels` with all of them.
+
+### Issue 4: Single-hotel patch never fires from TripDetail booking-changed
+
+**File: `src/pages/TripDetail.tsx` (line 3060)**
+
+The patch only fires when `allHotelsForPatch.length > 1`. For a single-hotel trip, `allHotelsForPatch` has 1 entry, so no patch is called. This means "Freshen up at Your Hotel" and "Return to Your Hotel" cards keep their placeholder names until the page is fully reloaded.
+
+**Fix:** Also call `patchItineraryWithHotel` when `allHotelsForPatch.length === 1`.
 
 ---
 
@@ -32,9 +42,20 @@ Manual hotel entry always uses the single-hotel patcher, even when `isMultiCity 
 
 | File | Change |
 |---|---|
-| `src/components/itinerary/AddBookingInline.tsx` | Import `patchItineraryWithMultipleHotels` and `getTripCities`. After hotel save, if `cityId` exists, fetch all city hotels and use multi-hotel patcher. |
-| `src/services/supabase/trips.ts` | In `useSaveHotelSelection`, after saving, fetch the trip's full `hotel_selection` array. If multiple hotels, call `patchItineraryWithMultipleHotels`. |
-| `src/pages/planner/PlannerHotelEnhanced.tsx` | In the manual entry handler (~line 700), when `isMultiCity && multiCityCityId`, fetch all city hotels and use the multi-hotel patcher instead of single-hotel. |
+| `src/pages/TripDetail.tsx` (line 3025) | Flatmap over all entries in each city's `hotel_selection` array instead of taking `[0]` only. |
+| `src/pages/TripDetail.tsx` (lines 3059-3063) | Remove standalone `patchItineraryWithMultipleHotels` call (it races with `saveItineraryOptimistic`). Instead, after building `injectedDays`, apply patch logic in-memory before saving — or simply rely on the injection which already sets correct hotel names. For single-hotel, add a `patchItineraryWithHotel` call. |
+| `src/pages/planner/PlannerHotelEnhanced.tsx` (line 586) | In single-city path, fetch `trips.hotel_selection` and use multi-hotel patcher if multiple entries exist. |
 
-These are the last three save paths still using the single-hotel patcher in multi-hotel scenarios. After these fixes, every hotel save path will correctly scope patches by date range.
+### Technical Detail
+
+```text
+Race condition in TripDetail:
+
+  T=0  patchItineraryWithMultipleHotels writes DB row  ← sets correct titles
+  T=1  saveItineraryOptimistic writes DB row            ← overwrites with pre-patch data
+  
+  Result: patch is silently lost
+
+Fix: apply title patches to injectedDays in-memory before the single save call
+```
 
