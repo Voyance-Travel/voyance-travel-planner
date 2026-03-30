@@ -141,9 +141,12 @@ export function detectMealSlots(
     const category = (activity.category || '').toLowerCase();
     const isDining = DINING_CATEGORIES.some(c => category.includes(c));
 
+    // Skip structural categories (transport, accommodation, logistics) for title-based meal detection
+    // to prevent transit cards like "Walk to Dinner" from satisfying the meal guard
+    const isStructural = ['transport', 'accommodation', 'logistics'].includes(category);
+
     for (const mealType of Object.keys(MEAL_KEYWORDS) as RequiredMeal[]) {
-      // Title-based keyword match works regardless of category
-      if (MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword))) {
+      if (!isStructural && MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword))) {
         detected.add(mealType);
       } else if (isDining && MEAL_KEYWORDS[mealType].some(keyword => category.includes(keyword))) {
         detected.add(mealType);
