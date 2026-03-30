@@ -262,6 +262,116 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 5b. MEAL_DUPLICATE: remove or relabel duplicate same-meal activities ---
+  if (byCode.has(FAILURE_CODES.MEAL_DUPLICATE)) {
+    const dupeResults = byCode.get(FAILURE_CODES.MEAL_DUPLICATE) || [];
+    const MEAL_KW: Record<string, string[]> = {
+      breakfast: ['breakfast', 'brunch'],
+      lunch: ['lunch'],
+      dinner: ['dinner', 'supper'],
+    };
+
+    // Determine which meal types are present and how many times
+    const mealCounts: Record<string, number[]> = { breakfast: [], lunch: [], dinner: [] };
+    for (let i = 0; i < activities.length; i++) {
+      const title = (activities[i].title || '').toLowerCase();
+      const cat = (activities[i].category || '').toLowerCase();
+      if (!cat.includes('dining') && !cat.includes('food') && !cat.includes('restaurant')) continue;
+      for (const [meal, kws] of Object.entries(MEAL_KW)) {
+        if (kws.some(kw => title.includes(kw))) {
+          mealCounts[meal].push(i);
+        }
+      }
+    }
+
+    // For each duplicate: try relabeling to the correct meal for its time slot, otherwise remove
+    const indicesToRemove: number[] = [];
+    for (const vr of dupeResults) {
+      if (vr.activityIndex === undefined) continue;
+      const act = activities[vr.activityIndex];
+      if (!act || lockedIds.has(act.id)) continue;
+
+      const startMins = parseTimeToMinutes(act.startTime || '12:00');
+      if (startMins === null) { indicesToRemove.push(vr.activityIndex); continue; }
+
+      // Determine what meal this time slot SHOULD be
+      let correctMeal: string | null = null;
+      if (startMins >= 360 && startMins < 660) correctMeal = 'breakfast';
+      else if (startMins >= 660 && startMins < 900) correctMeal = 'lunch';
+      else if (startMins >= 1020 && startMins < 1380) correctMeal = 'dinner';
+
+      // Check current meal label
+      const title = (act.title || '').toLowerCase();
+      let currentMeal: string | null = null;
+      for (const [meal, kws] of Object.entries(MEAL_KW)) {
+        if (kws.some(kw => title.includes(kw))) { currentMeal = meal; break; }
+      }
+
+      if (correctMeal && correctMeal !== currentMeal && mealCounts[correctMeal].length === 0) {
+        // Relabel: this is wrongly labeled for its time slot and the correct meal is missing
+        const before = act.title;
+        const correctLabel = correctMeal.charAt(0).toUpperCase() + correctMeal.slice(1);
+        const currentLabel = currentMeal ? (currentMeal.charAt(0).toUpperCase() + currentMeal.slice(1)) : '';
+        if (currentLabel && act.title) {
+          act.title = act.title.replace(new RegExp(currentLabel, 'i'), correctLabel);
+          if (act.name) act.name = act.title;
+        }
+        mealCounts[correctMeal].push(vr.activityIndex);
+        repairs.push({
+          code: FAILURE_CODES.MEAL_DUPLICATE,
+          activityIndex: vr.activityIndex,
+          action: 'relabeled_meal',
+          before,
+          after: act.title,
+        });
+      } else if (restaurantPool && restaurantPool.length > 0 && correctMeal && mealCounts[correctMeal].length === 0) {
+        // Swap from pool for the correct meal type
+        const normalizeForSwap = (name: string) => name.toLowerCase().replace(/[^\w\s]/g, '').trim();
+        const usedSet = new Set((usedRestaurants || []).map(n => normalizeForSwap(n)));
+        const replacement = restaurantPool.find(r => {
+          if (usedSet.has(normalizeForSwap(r.name))) return false;
+          return r.mealType === correctMeal || r.mealType === 'any';
+        });
+        if (replacement) {
+          const before = act.title;
+          const correctLabel = correctMeal.charAt(0).toUpperCase() + correctMeal.slice(1);
+          act.title = `${correctLabel} at ${replacement.name}`;
+          act.description = `${replacement.cuisine || 'Local cuisine'} in ${replacement.neighborhood || 'the city'}.`;
+          act.location = { name: replacement.name, address: replacement.address || '' };
+          if (act.name) act.name = act.title;
+          usedSet.add(normalizeForSwap(replacement.name));
+          mealCounts[correctMeal].push(vr.activityIndex);
+          repairs.push({
+            code: FAILURE_CODES.MEAL_DUPLICATE,
+            activityIndex: vr.activityIndex,
+            action: 'swapped_duplicate_meal_from_pool',
+            before,
+            after: act.title,
+          });
+          continue;
+        }
+        indicesToRemove.push(vr.activityIndex);
+      } else {
+        // Can't relabel or swap — remove the duplicate
+        indicesToRemove.push(vr.activityIndex);
+      }
+    }
+
+    // Remove duplicates in reverse order
+    for (const idx of [...new Set(indicesToRemove)].sort((a, b) => b - a)) {
+      if (idx < activities.length && !lockedIds.has(activities[idx]?.id)) {
+        const removed = activities[idx];
+        activities.splice(idx, 1);
+        repairs.push({
+          code: FAILURE_CODES.MEAL_DUPLICATE,
+          activityIndex: idx,
+          action: 'removed_duplicate_meal',
+          before: removed?.title,
+        });
+      }
+    }
+  }
+
   // --- 6. LOGISTICS_SEQUENCE (departure day) ---
   if (isLastDay && byCode.has(FAILURE_CODES.LOGISTICS_SEQUENCE)) {
     const seqRepairs = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
