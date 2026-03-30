@@ -81,7 +81,8 @@ async function enrichActivities(
             supabaseKey,
             googleMapsApiKey,
             lovableApiKey,
-            1 // maxRetries
+            1, // maxRetries
+            hotelCoordinates
           );
           return result.activity;
         } catch (e) {
