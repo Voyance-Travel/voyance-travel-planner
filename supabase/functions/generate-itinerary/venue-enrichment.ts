@@ -245,6 +245,25 @@ export async function verifyVenueWithGooglePlaces(
       }
     }
 
+    // Hotel proximity guard — reject venues unreachable from hotel
+    if (hotelCoordinates && place.location) {
+      const destLower = destination.toLowerCase();
+      const tightRadius = Object.entries(TIGHT_RADIUS_DESTINATIONS)
+        .find(([key]) => destLower.includes(key))?.[1];
+      const maxRadius = tightRadius ?? DEFAULT_HOTEL_RADIUS_KM;
+
+      const hotelDistKm = haversineDistanceKm(
+        hotelCoordinates.lat, hotelCoordinates.lng,
+        place.location.latitude, place.location.longitude
+      );
+      if (hotelDistKm > maxRadius) {
+        console.log(
+          `[Stage 4] ❌ REJECTED venue "${venueName}" → ${hotelDistKm.toFixed(1)}km from hotel (max ${maxRadius}km for ${destination})`
+        );
+        return null;
+      }
+    }
+
     const mapPriceLevel = (priceLevel: string): number => {
       const mapping: Record<string, number> = {
         PRICE_LEVEL_FREE: 0,
