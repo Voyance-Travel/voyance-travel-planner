@@ -1,33 +1,36 @@
 
-
-# Fix: Consistent "Your Hotel" Placeholder Across All Paths
+# ✅ COMPLETED: Fix Restaurant Duplication Pipeline
 
 ## Problem
+Restaurants were being duplicated across days due to 3 compounding issues:
+1. Pool sizing capped at 24 venues (insufficient for longer trips)
+2. Prompt only showed 8 venues per meal type
+3. Used-restaurant tracking compared inconsistent string formats
 
-The recent changes correctly use `"Your Hotel"` in the morning arrival, afternoon arrival, Day 1 no-flight, and last-day no-flight paths. But several other paths still use inconsistent fallbacks:
+## Changes Made
 
-1. **Line 54**: `hotelNameDisplay = flightContext.hotelName || ''` — empty string fallback means evening arrival (line 257) renders `location: { name: "", address: "" }` when no hotel is selected
-2. **Line 348**: Transport departure path uses `flightContext.hotelName || 'Hotel'` — should be `'Your Hotel'`
-3. **Line 425**: Flight departure path uses `flightContext.hotelName || ''` — empty string again
-4. **Lines 684, 696**: Late-departure no-flight path uses `flightContext.hotelName || 'hotel'` and `'Hotel'` — should be `'Your Hotel'`
-5. **Evening arrival (lines 242-270)**: Has no `hasHotelData` branch at all — always uses `hotelNameDisplay` which could be empty
+### 1. `generation-utils.ts` — New `extractRestaurantVenueName()` helper
+- Strips meal prefixes ("Breakfast at", "Lunch:", "Dinner - ") before normalizing
+- Single canonical identity function used by all layers
 
-## Changes
+### 2. `action-generate-trip.ts` — Scaled pool sizing
+- Removed `Math.min(mealsNeeded + 6, 24)` hard cap
+- Now calculates per-city: `mealsNeeded + surplus` (surplus = max(12, 60% of meals))
+- Enforces per-meal minimums (min 6 or cityDays+3 per type)
+- Multi-city trips get city-specific day counts
 
-### `compile-day-schema.ts` — 3 targeted fixes
+### 3. `action-generate-trip-day.ts` — Normalized used_restaurants tracking
+- Uses `extractRestaurantVenueName()` when storing used restaurants
+- Also extracts from `location.name` as fallback
+- Dedup check uses normalized comparison instead of raw string match
+- Meal guard fallback filtering also uses normalized names
 
-1. **Line 54**: Change `flightContext.hotelName || ''` to `flightContext.hotelName || 'Your Hotel'`  
-   This fixes the evening arrival path and all other paths that share this variable.
+### 4. `compile-prompt.ts` — Increased prompt exposure + normalized filtering
+- Per-meal limit raised from 8 to dynamic `max(8, min(16, available/4))`
+- Pool filtering uses `extractRestaurantVenueName()` for identity matching
+- Added explicit "do NOT pick same restaurant for multiple meals" rule
 
-2. **Line 348**: Change `flightContext.hotelName || 'Hotel'` to `flightContext.hotelName || 'Your Hotel'`
-
-3. **Line 425**: Change `flightContext.hotelName || ''` to `flightContext.hotelName || 'Your Hotel'`
-
-4. **Lines 684, 696**: Change `flightContext.hotelName || 'hotel'` to `flightContext.hotelName || 'Your Hotel'` and `flightContext.hotelName || 'Hotel'` to `flightContext.hotelName || 'Your Hotel'`
-
-These are single-line string fixes. No logic changes needed — the placeholder is already handled downstream by `patchItineraryWithHotel` and `repair-day.ts`.
-
-### Expected result
-
-Every single path in the schema compiler outputs `"Your Hotel"` when no hotel is selected — morning, afternoon, evening arrivals, transport departures, flight departures, and late-departure days. One consistent name, one consistent patching target.
-
+### 5. `repair-day.ts` — Fixed swap logic
+- `usedSet` now built with inline normalizer (strips meal prefixes + normalizes)
+- Current-day dining tracked by both `location.name` AND title (normalized)
+- Pool swap candidate comparison uses same normalizer
