@@ -532,7 +532,18 @@ function conceptSimilarity(a: string, b: string): boolean {
 }
 
 function extractConcept(title: string): string {
-  const conceptPart = normalizeText(title).split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
+  const normalized = normalizeText(title);
+
+  // For dining titles ("Breakfast at X", "Dinner at X"), the concept
+  // is the VENUE (after "at"), not the meal keyword (before "at")
+  const mealAtVenue = normalized.match(
+    /^(?:breakfast|brunch|lunch|dinner|supper)\s+(?:at|@)\s+(.+)/i
+  );
+  if (mealAtVenue && mealAtVenue[1].trim().length > 2) {
+    return mealAtVenue[1].trim();
+  }
+
+  const conceptPart = normalized.split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
   return conceptPart
     .replace(/\b(class|tour|experience|visit|workshop|session|lesson|masterclass)\b/g, '')
     .replace(/\s+/g, ' ')
