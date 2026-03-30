@@ -1,46 +1,48 @@
 
 
-## Problem: Meal-Time Mismatch (e.g. "Lunch" at breakfast time)
+## Problem: Venue-Meal Mismatch After Relabeling
 
-### Root Cause
-
-The validator (`validate-day.ts`) detects **MEAL_ORDER** errors only for:
-- Breakfast after 14:00
-- Lunch after 17:00
-
-It does **not** catch:
-- Lunch before 11:00 (lunch restaurant at breakfast time — the case you saw)
-- Dinner before 15:00
-- Breakfast-labeled activity in the dinner slot
-
-More critically, **MEAL_ORDER has no repair handler at all** in `repair-day.ts`. The validation fires, marks it as `autoRepairable: true`, but nothing acts on it. The broken meal label passes through untouched.
+The current MEAL_ORDER repair (Step 5a) relabels "Lunch at Nobu" → "Breakfast at Nobu" — but Nobu doesn't serve breakfast. Renaming the label without checking venue suitability produces nonsensical results.
 
 ### What to Change
 
-**File: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`** — `checkMealOrder()`
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — Step 5a MEAL_ORDER block (lines ~275-336)
 
-Expand detection to catch all wrong-direction mismatches:
-- **Lunch before 11:00** → should be breakfast
-- **Dinner before 15:00** → should be lunch  
-- **Breakfast after 14:00** → already caught
-- **Lunch after 17:00** → already caught
+After determining the `correctMeal` for the time slot, before relabeling:
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+1. **Check if the venue is appropriate for the corrected meal type.** Define a set of heuristic keywords that signal a venue is wrong for a given meal:
+   - **Breakfast-incompatible**: "nobu", "steakhouse", "izakaya", "omakase", "fine dining", "cocktail", "bar & grill", "tapas", "sushi" (high-end dinner spots that don't do breakfast)
+   - **Dinner-incompatible**: "bakery", "café", "coffee", "pancake", "diner" (breakfast/brunch spots unlikely to do dinner service)
 
-Add a new repair block (before meal duplicate repair, around step 5a):
+2. **If the venue seems incompatible with the corrected meal**, attempt a **venue swap** from `restaurantPool`:
+   - Filter the pool for venues matching the `correctMeal` mealType (or "any") that haven't been used yet
+   - If a match is found: replace the activity's `title`, `name`, `description`, and `location` fields with the pool venue
+   - If no match: fall back to relabeling only (current behavior) — imperfect but better than removing the meal entirely
 
-**Step 5a: MEAL_ORDER repair**
-- For each `MEAL_ORDER` violation, determine the correct meal label for that time slot using the same ranges as MEAL_DUPLICATE repair (breakfast 6:00–10:59, lunch 11:00–14:59, dinner 17:00–22:59)
-- Relabel the title: replace the wrong meal keyword with the correct one (e.g. "Lunch at Café Roma" at 8:30 → "Breakfast at Café Roma")
-- Update `name` field to match
-- Log the repair
+3. **If the venue seems compatible** (e.g., a generic café being relabeled from lunch to breakfast), just relabel as currently done.
 
-**File: `supabase/functions/generate-itinerary/day-validation.ts`** — `enforceRequiredMealsFinalGuard()`
+**File: `supabase/functions/generate-itinerary/day-validation.ts`** — `enforceRequiredMealsFinalGuard()` pre-pass (lines ~782+)
 
-Before deduplication and injection, add a pass that relabels any meal whose title contradicts its time slot. This catches cases that bypass the pipeline (e.g. chain path, save path).
+Apply the same venue-appropriateness check in the final guard's relabeling pre-pass. The final guard already has access to `fallbackVenues` — use them for swaps when a venue doesn't fit the corrected meal type.
+
+### Technical Details
+
+```text
+Step 5a flow (revised):
+
+  MEAL_ORDER violation detected
+  → Determine correctMeal for time slot
+  → Is venue compatible with correctMeal?
+     YES → Relabel title only (current behavior)
+     NO  → Try swap from restaurantPool (mealType match)
+            Found → Replace title/name/location/description
+            Not found → Relabel only (fallback)
+```
+
+Incompatibility detection uses a keyword blocklist per meal type. This is a heuristic — it won't catch every case, but it handles the obvious ones (Nobu for breakfast, a bakery for dinner).
 
 ### Expected Result
-- A "Lunch at X" scheduled at 8:30 AM gets relabeled to "Breakfast at X"
-- A "Dinner at Y" at 12:00 gets relabeled to "Lunch at Y"  
-- Every meal label matches its actual time slot before the day is saved
+- "Lunch at Nobu" at 8:30 AM → swapped to "Breakfast at [pool breakfast venue]" instead of "Breakfast at Nobu"
+- "Dinner at The Pancake House" at 19:00 → kept as-is (pancake house unlikely but time is correct) or swapped if the label was wrong
+- When no pool venue is available, falls back to relabeling only (existing behavior)
 
