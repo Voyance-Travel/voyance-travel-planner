@@ -1,26 +1,14 @@
 
 
-## Fix: Strip Internal System Language from Meal-Guard Tips
+## ✅ Completed: Strip Internal System Language from Meal-Guard Tips
 
-### Problem
+Fixed in `day-validation.ts` — replaced "Recommended by our venue database" with user-friendly tips.
 
-When the meal-guard injects a missing breakfast or dinner, the `tips` field says:
+## ✅ Completed: Reject Mainland Venues for Water-Bound / Car-Free Destinations
 
-> "Recommended by our venue database — confirm hours before visiting."
+Added hotel-proximity guard to venue enrichment pipeline. Water-bound destinations (Venice, Santorini, Capri, etc.) use a tight 5km radius; normal cities use 15km.
 
-This is internal system language that should never be user-facing.
-
-### Fix
-
-**File: `supabase/functions/generate-itinerary/day-validation.ts` (lines 985-987)**
-
-Replace the two tip strings with natural, user-friendly alternatives:
-
-```typescript
-tips: venue
-  ? `A local favorite — we recommend confirming hours before visiting.`
-  : `Ask a local or check recent reviews to find a great spot nearby.`,
-```
-
-Single line change, no logic changes needed.
-
+### Files Changed
+- `venue-enrichment.ts` — Added `TIGHT_RADIUS_DESTINATIONS` map, hotel proximity check in `verifyVenueWithGooglePlaces`, threaded `hotelCoordinates` through all enrichment functions
+- `pipeline/enrich-day.ts` — Added `hotelCoordinates` to `EnrichDayInput` and threaded through pipeline
+- `action-generate-day.ts` — Geocodes hotel address to coordinates before enrichment call
