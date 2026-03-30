@@ -926,7 +926,7 @@ export function enforceRequiredMealsFinalGuard(
   };
 
   // Track which venue names have been used to avoid duplicates within this guard call
-  const usedVenueNames = new Set<string>(
+  const usedVenueNamesForInjection = new Set<string>(
     activities.map(a => (a.title || '').toLowerCase())
   );
 
