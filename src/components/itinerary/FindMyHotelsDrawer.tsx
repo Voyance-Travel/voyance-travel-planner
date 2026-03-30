@@ -27,6 +27,7 @@ import { CREDIT_COSTS } from '@/config/pricing';
 import { saveHotelSelection } from '@/services/supabase/trips';
 import { syncHotelToLedger, syncMultiCityHotelsToLedger } from '@/services/budgetLedgerSync';
 import { patchItineraryWithHotel, patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
+import { supabase } from '@/integrations/supabase/client';
 import { getTripCities } from '@/services/tripCitiesService';
 
 interface FindMyHotelsDrawerProps {
