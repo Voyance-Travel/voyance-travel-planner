@@ -906,12 +906,8 @@ result += `\nTHESE ARE MULTI-DAY EVENTS the traveler is attending across multipl
 
 ${(() => {
   if (!paramRestaurantPool || !Array.isArray(paramRestaurantPool) || paramRestaurantPool.length === 0) return '';
-  // Import shared normalizer for consistent identity matching
-  const { extractRestaurantVenueName: _extractName } = require('../generation-utils.ts');
-  const normalizeForPool = (n: string) => {
-    try { return _extractName(n); } catch { return (n || '').toLowerCase().trim(); }
-  };
-  const usedNormalized = new Set((paramUsedRestaurants || []).map((n: string) => normalizeForPool(n)));
+  // Use the imported extractRestaurantVenueName for consistent identity matching
+  const usedNormalized = new Set((paramUsedRestaurants || []).map((n: string) => extractRestaurantVenueName(n)));
   const available = paramRestaurantPool.filter((r: any) => !usedNormalized.has(normalizeForPool(r.name || '')));
   if (available.length === 0) return '';
 
