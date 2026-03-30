@@ -373,28 +373,55 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
       try {
         const { data: tripCities } = await supabase
           .from('trip_cities')
-          .select('city_name, hotel_selection')
+          .select('city_name, hotel_selection, arrival_date, departure_date')
           .eq('trip_id', tripId)
           .order('city_order', { ascending: true });
         
         if (tripCities && tripCities.length > 0) {
-          const extractHotel = (hs: any): any | null => {
-            if (Array.isArray(hs) && hs.length > 0) return hs[0];
-            if (hs && typeof hs === 'object' && hs.name) return hs;
-            return null;
+          // Extract ALL hotels per city (not just first) to support split stays
+          const extractAllHotels = (hs: any): any[] => {
+            if (Array.isArray(hs) && hs.length > 0) return hs.filter((h: any) => h?.name);
+            if (hs && typeof hs === 'object' && hs.name) return [hs];
+            return [];
           };
+
           const citiesWithHotels = tripCities
-            .map((c: any) => ({ ...c, _hotel: extractHotel(c.hotel_selection) }))
-            .filter((c: any) => c._hotel?.name);
+            .map((c: any) => ({ ...c, _hotels: extractAllHotels(c.hotel_selection) }))
+            .filter((c: any) => c._hotels.length > 0);
+
           if (citiesWithHotels.length > 0) {
-            hotel = citiesWithHotels[0]._hotel as HotelInfo;
+            // Set primary hotel from first city's first hotel
+            hotel = citiesWithHotels[0]._hotels[0] as HotelInfo;
             hotelName = (hotel as any)?.name || '';
             hotelAddress = (hotel as any)?.address || '';
             console.log(`[FlightHotel] Parsed hotel from trip_cities (${citiesWithHotels[0].city_name}): ${hotel?.name || 'No name'}`);
-            
-            if (citiesWithHotels.length > 1) {
+
+            // Check if ANY city has multiple hotels (split stay within a city)
+            const anyCityHasSplitStay = citiesWithHotels.some((c: any) => c._hotels.length > 1);
+
+            if (anyCityHasSplitStay) {
+              // Build combined split-stay schedule from all cities
+              splitStayHotels = citiesWithHotels.flatMap((c: any) =>
+                c._hotels.map((h: any) => ({
+                  ...h,
+                  checkInDate: h.checkInDate || c.arrival_date || undefined,
+                  checkOutDate: h.checkOutDate || c.departure_date || undefined,
+                }))
+              );
+
+              console.log(`[FlightHotel] Multi-city split stay detected: ${splitStayHotels.length} hotels across ${citiesWithHotels.length} cities`);
+
+              const hotelSchedule = splitStayHotels.map((h: any, i: number) => {
+                const accomType = h.accommodationType || 'hotel';
+                const accomEmoji = accomType === 'airbnb' ? '🏠' : accomType === 'rental' ? '🏡' : accomType === 'hostel' ? '🛏️' : '🏨';
+                return `  ${i + 1}. ${accomEmoji} ${h.name}${h.address ? ` — ${h.address}` : ''}${h.neighborhood ? ` (${h.neighborhood})` : ''}\n     Check-in: ${h.checkInDate || 'trip start'} | Check-out: ${h.checkOutDate || 'trip end'}${h.checkInTime ? ` | Time: ${h.checkInTime}` : ''}`;
+              }).join('\n');
+
+              sections.push(`\n${'='.repeat(40)}\n🏨 SPLIT STAY — MULTIPLE ACCOMMODATIONS\n${'='.repeat(40)}\nThis traveler is doing a SPLIT STAY with ${splitStayHotels.length} different accommodations:\n${hotelSchedule}\n\n⚠️ CRITICAL SPLIT STAY RULES:\n• Each day MUST use the correct hotel based on the date ranges above.\n• On hotel transition days: start from the outgoing hotel, check out, then check in to the new hotel.\n• Activities should be clustered near the hotel that is active for that day.\n• Day 1 of each new hotel should include check-in logistics.\n• The last day at each hotel should include check-out before the transition.`);
+            } else if (citiesWithHotels.length > 1) {
+              // Multiple cities but each has only one hotel — per-city summary
               const hotelSummary = citiesWithHotels.map((c: any) => 
-                `• ${c.city_name}: ${c._hotel.name}${c._hotel.address ? ` (${c._hotel.address})` : ''}`
+                `• ${c.city_name}: ${c._hotels[0].name}${c._hotels[0].address ? ` (${c._hotels[0].address})` : ''}`
               ).join('\n');
               sections.push(`\n${'='.repeat(40)}\n🏨 PER-CITY ACCOMMODATIONS\n${'='.repeat(40)}\n${hotelSummary}\n⚠️ Each city has its own hotel. Use the correct hotel as the daily base for that city's days.`);
             }
