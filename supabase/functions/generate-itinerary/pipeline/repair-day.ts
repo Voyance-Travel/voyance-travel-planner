@@ -381,7 +381,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 6. LOGISTICS_SEQUENCE (departure day) ---
-  if (isLastDay && byCode.has(FAILURE_CODES.LOGISTICS_SEQUENCE)) {
+  const isDepartureDayForSequence = isLastDay || (isLastDayInCity && !isTransitionDay);
+  if (isDepartureDayForSequence && byCode.has(FAILURE_CODES.LOGISTICS_SEQUENCE)) {
     const seqRepairs = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
     repairs.push(...seqRepairs);
     // Re-sort after departure fixes
