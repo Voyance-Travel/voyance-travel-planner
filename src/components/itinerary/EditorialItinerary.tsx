@@ -1880,10 +1880,7 @@ export function EditorialItinerary({
             }
           }
           updatedActivities.splice(genericInsertIdx, 0, genericDepartureCard);
-          hasReturnData = true; // allow dedup logic below to run
-        }
-
-        if (hasReturnData) {
+        } else if (hasReturnData) {
           const dn = day.dayNumber;
           const transportLabel = tType === 'rideshare' ? 'Rideshare'
             : tType.charAt(0).toUpperCase() + tType.slice(1);
