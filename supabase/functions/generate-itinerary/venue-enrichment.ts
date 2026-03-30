@@ -162,7 +162,8 @@ export async function getDestinationCenter(
 export async function verifyVenueWithGooglePlaces(
   venueName: string,
   destination: string,
-  GOOGLE_MAPS_API_KEY: string | undefined
+  GOOGLE_MAPS_API_KEY: string | undefined,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<VenueVerification | null> {
   if (!GOOGLE_MAPS_API_KEY) {
     console.log('[Stage 4] Google Maps API key not configured, skipping venue verification');
