@@ -347,6 +347,7 @@ function checkMealDuplicate(activities: StrictActivityMinimal[], results: Valida
     dinner: ['dinner', 'supper'],
   };
 
+  // Check for back-to-back same-meal duplicates
   for (let i = 1; i < activities.length; i++) {
     const prevTitle = (activities[i - 1].title || '').toLowerCase();
     const currTitle = (activities[i].title || '').toLowerCase();
@@ -361,11 +362,43 @@ function checkMealDuplicate(activities: StrictActivityMinimal[], results: Valida
       if (prevIs && currIs) {
         results.push({
           code: FAILURE_CODES.MEAL_DUPLICATE,
-          severity: 'warning',
+          severity: 'error',
           message: `Back-to-back ${meal} activities: "${activities[i - 1].title}" and "${activities[i].title}"`,
           activityIndex: i,
-          autoRepairable: false,
+          autoRepairable: true,
         });
+      }
+    }
+  }
+
+  // Check for non-adjacent same-meal duplicates (e.g. two dinners at different times)
+  const mealIndices: Record<string, number[]> = { breakfast: [], lunch: [], dinner: [] };
+  for (let i = 0; i < activities.length; i++) {
+    const title = (activities[i].title || '').toLowerCase();
+    const cat = (activities[i].category || '').toLowerCase();
+    if (!cat.includes('dining') && !cat.includes('food') && !cat.includes('restaurant')) continue;
+
+    for (const [meal, keywords] of Object.entries(MEAL_KEYWORDS)) {
+      if (keywords.some(kw => title.includes(kw))) {
+        mealIndices[meal].push(i);
+      }
+    }
+  }
+
+  for (const [meal, indices] of Object.entries(mealIndices)) {
+    if (indices.length > 1) {
+      // Already reported back-to-back above; report non-adjacent duplicates
+      for (let j = 1; j < indices.length; j++) {
+        const alreadyReported = indices[j] - indices[j - 1] === 1; // already caught by back-to-back check
+        if (!alreadyReported) {
+          results.push({
+            code: FAILURE_CODES.MEAL_DUPLICATE,
+            severity: 'error',
+            message: `Duplicate ${meal}: "${activities[indices[0]].title}" and "${activities[indices[j]].title}"`,
+            activityIndex: indices[j],
+            autoRepairable: true,
+          });
+        }
       }
     }
   }

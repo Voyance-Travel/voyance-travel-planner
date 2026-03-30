@@ -664,6 +664,96 @@ async function _handleGenerateTripDayInner(
     console.log(`[generate-trip-day] Post-processing complete for day ${dayNumber}`);
   }
 
+  // ── PIPELINE VALIDATE + REPAIR (same guarantees as single-day path) ──
+  {
+    try {
+      const { validateDay } = await import('./pipeline/validate-day.ts');
+      const { repairDay } = await import('./pipeline/repair-day.ts');
+      const { deriveMealPolicy } = await import('./meal-policy.ts');
+      const { normalizeTo24h } = await import('./flight-hotel-context.ts');
+
+      const flightSel = (tripCheck?.flight_selection as Record<string, any>) || {};
+      const isFirstDay = dayNumber === 1;
+      const isLastDay = dayNumber >= totalDays;
+
+      const arrTime24 = isFirstDay ? (flightSel.arrivalTime24 || flightSel.arrivalTime || flightSel.outbound?.arrivalTime || undefined) : undefined;
+      const depTime24Raw = isLastDay ? (flightSel.returnDepartureTime24 || flightSel.returnDepartureTime || flightSel.return?.departureTime || undefined) : undefined;
+      const depTime24 = depTime24Raw ? normalizeTo24h(depTime24Raw) : undefined;
+
+      const policy = deriveMealPolicy({
+        dayNumber, totalDays, isFirstDay, isLastDay,
+        arrivalTime24: arrTime24, departureTime24: depTime24,
+      });
+
+      const dayMinimal = {
+        dayNumber,
+        date: dayResult.date || '',
+        title: dayResult.title || '',
+        theme: dayResult.theme,
+        activities: (dayResult.activities || []).map((a: any) => ({
+          id: a.id || '', title: a.title || a.name || '',
+          startTime: a.startTime || a.start_time || '', endTime: a.endTime || a.end_time || '',
+          category: a.category || 'activity',
+          location: a.location || { name: '', address: '' },
+          cost: a.cost || { amount: 0, currency: 'USD' },
+          description: a.description || '', tags: a.tags || [],
+          bookingRequired: a.bookingRequired || false,
+          transportation: a.transportation || { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+        })),
+      };
+
+      const validationResults = validateDay({
+        day: dayMinimal,
+        dayNumber, isFirstDay, isLastDay, totalDays,
+        hasHotel: true, // Always true — repair uses "Your Hotel" placeholder
+        hotelName: cityInfo?.hotelName || flightSel.hotelName || undefined,
+        arrivalTime24: arrTime24,
+        returnDepartureTime24: depTime24,
+        requiredMeals: policy.requiredMeals || [],
+        previousDays: existingDays.filter((d: any) => d.dayNumber !== dayNumber).map((d: any) => ({
+          dayNumber: d.dayNumber || 0, date: d.date || '', title: d.title || '',
+          activities: (d.activities || []).map((a: any) => ({
+            id: a.id || '', title: a.title || a.name || '',
+            startTime: a.startTime || '', endTime: a.endTime || '',
+            category: a.category || 'activity',
+            location: a.location || { name: '', address: '' },
+            cost: a.cost || { amount: 0, currency: 'USD' },
+            description: a.description || '', tags: a.tags || [],
+            bookingRequired: false,
+            transportation: { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
+          })),
+        })),
+      });
+
+      const isLastDayInCity = cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false;
+      const isTransition = cityInfo?.isTransitionDay || false;
+
+      const { day: repairedDay, repairs } = repairDay({
+        day: dayMinimal,
+        validationResults,
+        dayNumber, isFirstDay, isLastDay,
+        arrivalTime24: arrTime24,
+        returnDepartureTime24: depTime24,
+        hotelName: cityInfo?.hotelName || flightSel.hotelName || undefined,
+        hotelAddress: cityInfo?.hotelAddress || '',
+        hasHotel: true,
+        lockedActivities: [],
+        isTransitionDay: isTransition,
+        isMultiCity: isMultiCity || false,
+        isLastDayInCity,
+        resolvedDestination: cityInfo?.cityName || destination,
+        hotelOverride: cityInfo?.hotelName ? { name: cityInfo.hotelName, address: cityInfo.hotelAddress || '' } : undefined,
+      });
+
+      if (repairs.length > 0) {
+        console.log(`[generate-trip-day] Pipeline repairs: ${repairs.length} fixes — ${repairs.map(r => r.action).join(', ')}`);
+        dayResult.activities = repairedDay.activities;
+      }
+    } catch (pipelineErr) {
+      console.warn('[generate-trip-day] Pipeline validate/repair failed (non-blocking):', pipelineErr);
+    }
+  }
+
   // Flush stage logger (non-blocking, non-fatal)
   try {
     await stageLogger.flush();
