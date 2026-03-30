@@ -1658,7 +1658,13 @@ export function EditorialItinerary({
         const dur = (details.duration as string) || (details.inTransitDuration as string) || (details.doorToDoorDuration as string) || '';
         const depFrom = (details.departureStation as string) || (details.departureAirport as string) || (d.city as string) || '';
         const transportLabel = tType.charAt(0).toUpperCase() + tType.slice(1);
-        const title = `${transportLabel} to ${to}`;
+        // Use airport/station name for departure, not city name
+        const departureHub = tType === 'flight'
+          ? ((details.departureAirport as string) || 'the Airport')
+          : tType === 'train'
+          ? ((details.departureStation as string) || 'the Station')
+          : to;
+        const title = `${transportLabel} to ${departureHub}`;
         const cardTime = depTime || '18:00';
 
         const descParts = [];
@@ -1738,13 +1744,22 @@ export function EditorialItinerary({
           // Keep all synthetic cards (transport, hotel, etc.)
           if ((act as any).__syntheticTravel || (act as any).__syntheticDeparture ||
               (act as any).__interCityTransport || (act as any).__hotelCheckout ||
+              (act as any).__hotelCheckin ||
               act.id.startsWith('hotel-') || act.id.startsWith('departure-') ||
               act.id.startsWith('travel-')) {
             return true;
           }
+          // Preserve AI-generated check-in/checkout/accommodation cards
+          const tLower = (act.title || '').toLowerCase();
+          const catLower = (act.category || '').toLowerCase();
+          const isAccommodationCard = catLower === 'accommodation' ||
+            tLower.includes('check-in') || tLower.includes('checkin') || tLower.includes('check in') ||
+            tLower.includes('check-out') || tLower.includes('checkout') || tLower.includes('check out');
+          if (isAccommodationCard) return true;
           // No time = keep (safe fallback)
           if (!act.startTime) return true;
           const actMin = parseTimeToMinutes(act.startTime);
+          // Remove activities at or after cutoff (traveler needs to leave)
           return actMin < cutoffMinutes;
         });
       }
@@ -1875,6 +1890,12 @@ export function EditorialItinerary({
             }
             const t = (act.title || '').toLowerCase();
             const desc = (act.description || '').toLowerCase();
+            const catLower = (act.category || '').toLowerCase();
+            // Preserve AI-generated check-in/checkout/accommodation cards
+            const isAccommodationCard = catLower === 'accommodation' ||
+              t.includes('check-in') || t.includes('checkin') || t.includes('check in') ||
+              t.includes('check-out') || t.includes('checkout') || t.includes('check out');
+            if (isAccommodationCard) return true;
             // Preserve AI-generated airport procedure cards (security, check-in, boarding)
             const isAirportProcedure = (t.includes('departure') || t.includes('airport')) &&
               (desc.includes('security') || desc.includes('check-in') || desc.includes('boarding') || desc.includes('check in'));
