@@ -572,7 +572,8 @@ export async function enrichActivity(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined
+  LOVABLE_API_KEY: string | undefined,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<StrictActivity> {
   const enriched = { ...activity };
 
