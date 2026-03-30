@@ -358,14 +358,10 @@ export function ItineraryEditor({
       };
 
       const sanitizeRegeneratedDay = (newDay: any) => {
-        // Deduplicate accommodation: keep only the original hotel
-        const originalHotel = (day.activities || []).find(isAccommodationLike);
-        if (originalHotel && newDay.activities) {
-          newDay.activities = newDay.activities.filter((a: any) => !isAccommodationLike(a));
-          newDay.activities.push(originalHotel);
-          newDay.activities.sort((a: any, b: any) =>
-            (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '')
-          );
+        // Preserve distinct accommodation intents (check-in, freshen-up, return, checkout)
+        if (newDay.activities) {
+          const { mergeAccommodationActivities } = await import('@/utils/accommodationActivities');
+          newDay.activities = mergeAccommodationActivities(day.activities || [], newDay.activities);
         }
         // Preserve original day title/theme
         newDay.title = day.title;

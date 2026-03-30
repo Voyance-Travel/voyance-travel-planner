@@ -61,15 +61,25 @@ export async function patchItineraryWithHotel(
         const title = String(act.title || act.name || '');
         if (!isAccommodationActivity(title, String(act.category || ''))) continue;
 
-        const isCheckout = title.toLowerCase().includes('checkout') || title.toLowerCase().includes('check-out');
+        const lower = title.toLowerCase();
+        const isCheckout = lower.includes('checkout') || lower.includes('check-out') || lower.includes('check out');
+        const isFreshenUp = lower.includes('freshen up');
+        const isReturn = lower.includes('return to') || lower.includes('back to');
+        const isSettleIn = lower.includes('settle in') || lower.includes('settle into');
         
+        // Preserve the activity's intent — only replace the hotel name portion
         if (isCheckout) {
           act.title = `Checkout from ${hotel.name}`;
-          act.name = act.title;
+        } else if (isFreshenUp) {
+          act.title = `Freshen up at ${hotel.name}`;
+        } else if (isReturn) {
+          act.title = `Return to ${hotel.name}`;
+        } else if (isSettleIn) {
+          act.title = `Settle in at ${hotel.name}`;
         } else {
           act.title = `Check-in at ${hotel.name}`;
-          act.name = act.title;
         }
+        act.name = act.title;
 
         if (hotel.address) {
           act.location = { name: hotel.name, address: hotel.address };
