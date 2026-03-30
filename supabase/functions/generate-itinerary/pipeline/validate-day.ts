@@ -32,6 +32,10 @@ const GENERIC_VENUE_PATTERNS = [
   /^dinner spot$/i,
   /^lunch spot$/i,
   /^breakfast spot$/i,
+  // "Breakfast in Lisbon", "Lunch in Rome", "Dinner in Tokyo" — city-name-only placeholders
+  /^(breakfast|brunch|lunch|dinner|supper)\s+in\s+\S/i,
+  // "Breakfast at a local spot" — vague fallback
+  /^(breakfast|brunch|lunch|dinner)\s+at\s+a\s+(local\s+spot|nearby\s+spot|restaurant)/i,
 ];
 
 const LABEL_LEAK_PATTERNS = [
@@ -193,13 +197,15 @@ function checkGenericVenues(activities: StrictActivityMinimal[], results: Valida
   for (let i = 0; i < activities.length; i++) {
     const title = activities[i].title || '';
     if (GENERIC_VENUE_PATTERNS.some(re => re.test(title.trim()))) {
+      // Escalate meal-in-city patterns to error (they should trigger retry/repair)
+      const isMealInCity = /^(breakfast|brunch|lunch|dinner|supper)\s+in\s+\S/i.test(title.trim());
       results.push({
         code: FAILURE_CODES.GENERIC_VENUE,
-        severity: 'warning',
-        message: `"${title}" is a generic placeholder venue name`,
+        severity: isMealInCity ? 'error' : 'warning',
+        message: `"${title}" is a generic placeholder venue name${isMealInCity ? ' — meal cards must use real restaurant names' : ''}`,
         activityIndex: i,
         field: 'title',
-        autoRepairable: false,
+        autoRepairable: isMealInCity,
       });
     }
   }

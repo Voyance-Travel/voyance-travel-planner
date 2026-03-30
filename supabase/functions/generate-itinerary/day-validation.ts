@@ -832,11 +832,13 @@ export function enforceRequiredMealsFinalGuard(
       console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Using REAL venue "${venue.name}" for ${mealType}`);
     }
 
-    // TRY 2: Fall back to destination-aware hints (but with better naming)
+    // TRY 2: Fall back to destination-aware hints — use venue TYPE, never "${Meal} in ${City}"
     if (!venueName) {
       const hint = getDestinationHint(destination, mealType);
-      venueName = `${label} in ${destination}`;
+      // Use the venue type suffix (e.g. "bistro", "trattoria", "izakaya") instead of city name
+      venueName = `${label} at a ${hint.venueSuffix}`;
       venueDescription = hint.description;
+      console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: No real venue for ${mealType} — using type-based fallback "${venueName}" (needs refinement)`);
     }
 
     result.push({
