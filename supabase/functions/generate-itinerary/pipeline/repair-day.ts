@@ -164,11 +164,24 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // --- 4. DUPLICATE_CONCEPT: strip trip-wide duplicates ---
   if (byCode.has(FAILURE_CODES.DUPLICATE_CONCEPT)) {
     const dupeResults = byCode.get(FAILURE_CODES.DUPLICATE_CONCEPT) || [];
-    const usedSet = new Set((usedRestaurants || []).map(n => n.toLowerCase()));
-    // Track current day dining as used
+    // Normalize used restaurant names for reliable matching
+    const normalizeForDedup = (name: string): string => {
+      return name
+        .toLowerCase()
+        .replace(/^(breakfast|brunch|lunch|dinner|supper)\s+at\s+/i, '')
+        .replace(/^(breakfast|brunch|lunch|dinner|supper)\s*[:–—-]\s*/i, '')
+        .replace(/[''`´]/g, "'")
+        .replace(/[^\w\s'-]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+    const usedSet = new Set((usedRestaurants || []).map(n => normalizeForDedup(n)));
+    // Track current day dining by location.name (canonical venue identity)
     for (const act of activities) {
       if ((act.category || '').toLowerCase() === 'dining') {
-        usedSet.add((act.title || '').toLowerCase());
+        const locationName = act.location?.name || '';
+        if (locationName) usedSet.add(normalizeForDedup(locationName));
+        usedSet.add(normalizeForDedup(act.title || ''));
       }
     }
 
@@ -186,8 +199,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const mealType = startHour < 11 ? 'breakfast' : startHour < 15 ? 'lunch' : 'dinner';
 
         const replacement = restaurantPool.find(r => {
-          const rName = (r.name || '').toLowerCase();
-          if (usedSet.has(rName)) return false;
+          const rNameNorm = normalizeForDedup(r.name || '');
+          if (usedSet.has(rNameNorm)) return false;
           return r.mealType === mealType || r.mealType === 'any';
         });
 
@@ -197,7 +210,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           act.description = `${replacement.cuisine || 'Local cuisine'} in ${replacement.neighborhood || 'the city'}. ${replacement.priceRange || '$$'}.`;
           act.location = { name: replacement.name, address: replacement.address || '' };
           act.source = 'pool-dedup-swap';
-          usedSet.add(replacement.name.toLowerCase());
+          usedSet.add(normalizeForDedup(replacement.name));
           repairs.push({
             code: FAILURE_CODES.DUPLICATE_CONCEPT,
             activityIndex: vr.activityIndex,

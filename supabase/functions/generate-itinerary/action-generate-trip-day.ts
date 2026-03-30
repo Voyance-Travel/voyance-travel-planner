@@ -750,11 +750,12 @@ async function _handleGenerateTripDayInner(
 
   // ── BUILD MEAL GUARD FALLBACK VENUES ─────────────────────────────
   // PRIORITY 1: Use the pre-generated restaurant pool (real, curated)
+  const { extractRestaurantVenueName: extractVenue } = await import('./generation-utils.ts');
   let fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
   if (restaurantPool.length > 0) {
-    const usedSet = new Set(usedRestaurants.map(n => n.toLowerCase()));
+    const usedSet = new Set(usedRestaurants.map(n => extractVenue(n)));
     for (const r of restaurantPool) {
-      if (!usedSet.has((r.name || '').toLowerCase())) {
+      if (!usedSet.has(extractVenue(r.name || ''))) {
         fallbackVenues.push({ name: r.name, address: r.address || r.neighborhood || dayCity, mealType: r.mealType || 'any' });
       }
     }
@@ -1037,14 +1038,18 @@ async function _handleGenerateTripDayInner(
   } else {
     // More days remain — save progress and self-chain
     const nextCityName = dayCityMap?.[dayNumber]?.cityName || null;
-    // Track used restaurants from this day's dining activities
+    // Track used restaurants from this day's dining activities (normalized venue names)
+    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
     const newUsedRestaurants = [...usedRestaurants];
     const dayActivities = dayResult?.activities || [];
     for (const act of dayActivities) {
-      if ((act.category || '').toLowerCase() === 'dining' && act.title) {
-        const name = (act.title || '').replace(/^(Breakfast|Lunch|Dinner):\s*/i, '').trim();
-        if (name && !newUsedRestaurants.includes(name)) {
-          newUsedRestaurants.push(name);
+      if ((act.category || '').toLowerCase() === 'dining' && (act.title || act.location?.name)) {
+        // Extract from title first, fall back to location.name
+        const venueFromTitle = act.title ? extractRestaurantVenueName(act.title) : '';
+        const venueFromLocation = act.location?.name ? extractRestaurantVenueName(act.location.name) : '';
+        const venueName = venueFromTitle || venueFromLocation;
+        if (venueName && !newUsedRestaurants.some(u => extractRestaurantVenueName(u) === venueName)) {
+          newUsedRestaurants.push(venueName);
         }
       }
     }

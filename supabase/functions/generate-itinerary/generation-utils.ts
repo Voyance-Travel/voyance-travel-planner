@@ -71,6 +71,37 @@ export function normalizeVenueName(name: string): string {
 }
 
 // =============================================================================
+// RESTAURANT VENUE NAME EXTRACTION
+// =============================================================================
+
+/**
+ * Extract the canonical venue name from an activity title by stripping
+ * meal prefixes. This ensures consistent identity tracking across:
+ *   - used_restaurants storage (action-generate-trip-day.ts)
+ *   - pool filtering (compile-prompt.ts)
+ *   - dedup swap (repair-day.ts)
+ *   - meal guard fallback (action-generate-trip-day.ts)
+ *
+ * Examples:
+ *   "Breakfast at Café Florian"  → "café florian"
+ *   "Lunch: Tonkatsu Maisen"     → "tonkatsu maisen"
+ *   "Dinner - Le Comptoir"       → "le comptoir"
+ *   "Café Florian"               → "café florian"
+ */
+export function extractRestaurantVenueName(title: string): string {
+  let name = title
+    // "Breakfast at X", "Lunch at X", "Dinner at X"
+    .replace(/^(breakfast|brunch|lunch|dinner|supper)\s+at\s+/i, '')
+    // "Breakfast: X", "Lunch: X", "Dinner: X"
+    .replace(/^(breakfast|brunch|lunch|dinner|supper)\s*[:–—-]\s*/i, '')
+    // Bare prefix with no separator (e.g. "Breakfast Café X" — less common, keep conservative)
+    .trim();
+
+  // If stripping didn't change anything, the title IS the venue name
+  return normalizeVenueName(name);
+}
+
+// =============================================================================
 // HAVERSINE DISTANCE (km)
 // =============================================================================
 

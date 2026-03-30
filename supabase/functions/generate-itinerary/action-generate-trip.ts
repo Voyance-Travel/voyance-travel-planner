@@ -507,12 +507,31 @@ export async function handleGenerateTrip(
           
           // Generate pools in parallel for all cities
           const poolPromises = citiesToPool.map(async ({ city, country }) => {
-            const mealsNeeded = totalDays * mealsPerDay;
-            // Request extra to allow for filtering and variety
-            const requestCount = Math.min(mealsNeeded + 6, 24);
+            // Calculate city-specific day count for multi-city trips
+            let cityDays = totalDays;
+            if (isMultiCity) {
+              const { data: cityRow } = await supabase
+                .from('trip_cities')
+                .select('nights, days_total')
+                .eq('trip_id', tripId)
+                .eq('city_name', city)
+                .maybeSingle();
+              if (cityRow) {
+                cityDays = (cityRow as any).days_total || ((cityRow as any).nights || 1) + 1;
+              }
+            }
+            const mealsNeeded = cityDays * mealsPerDay;
+            // Request surplus: meals needed + 12-18 extra to survive filtering,
+            // dedup, and chain-day variety. No hard cap — bigger trips need bigger pools.
+            const surplus = Math.max(12, Math.ceil(mealsNeeded * 0.6));
+            const requestCount = mealsNeeded + surplus;
+            // Enforce per-meal minimums so no type is starved
+            const perMealMin = Math.max(6, cityDays + 3);
+            const perMealRequest = Math.ceil(requestCount / 3);
+            const effectivePerMeal = Math.max(perMealMin, perMealRequest);
             const budgetLabel = budgetTier || enrichmentContext.budgetTier || 'moderate';
             
-            const prompt = `You are a local food expert for ${city}${country ? `, ${country}` : ''}. Generate exactly ${requestCount} REAL restaurant recommendations: ${Math.ceil(requestCount / 3)} for breakfast, ${Math.ceil(requestCount / 3)} for lunch, and ${Math.ceil(requestCount / 3)} for dinner.
+            const prompt = `You are a local food expert for ${city}${country ? `, ${country}` : ''}. Generate exactly ${requestCount} REAL restaurant recommendations: ${effectivePerMeal} for breakfast, ${effectivePerMeal} for lunch, and ${effectivePerMeal} for dinner.
 
 Budget level: ${budgetLabel}
 
