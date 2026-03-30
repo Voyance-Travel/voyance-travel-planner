@@ -25,3 +25,20 @@
 5. **Tightened final meal guard** (`day-validation.ts`)
    - `enforceRequiredMealsFinalGuard()` now deduplicates same-meal activities BEFORE injecting missing ones
    - Prevents "two dinners, no lunch" from passing as compliant
+
+## Completed: Last Day / Checkout Repair Ordering
+
+### What was done
+
+1. **Reordered repair pipeline** in `repair-day.ts`
+   - Check-in guarantee (step 7) and checkout guarantee (step 8) now run BEFORE bookend injection (step 9)
+   - This ensures checkout exists before bookends try to inject conflicting hotel returns
+
+2. **Added departure-day guards to `repairBookends`**
+   - End-of-day "Return to Hotel" is skipped on departure days (last day or last day in city)
+   - Mid-day freshen-up injection is skipped on departure days (traveler has checked out)
+   - Mid-day freshen-up after hotel transport is skipped if it occurs after checkout
+
+3. **Expected departure day sequence**: breakfast → checkout → (optional activity) → airport transport → security → flight
+   - No more "Return to Hotel" after flights
+   - No mid-day hotel returns after checkout
