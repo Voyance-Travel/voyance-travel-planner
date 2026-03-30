@@ -51,7 +51,7 @@ export function compileDaySchema(input: DaySchemaInput): CompiledSchema {
       const settleInEnd = addMinutesToHHMM(hotelCheckIn, 30);
       const earliestSightseeing = addMinutesToHHMM(settleInEnd, 30);
 
-      const hotelNameDisplay = flightContext.hotelName || '';
+      const hotelNameDisplay = flightContext.hotelName || 'Your Hotel';
       const hotelAddressDisplay = flightContext.hotelAddress || '';
 
       console.log(`[compile-day-schema] Day1 arrival at ${arrival24}: morning=${isMorningArrival}, afternoon=${isAfternoonArrival}`);
@@ -345,7 +345,7 @@ Start the day at 10:00 AM.`;
       const depTime = td.departureTime || '10:30';
       const depStation = td.departureStation || `${modeLabel} Station`;
       const carrier = td.carrier ? ` (${td.carrier})` : '';
-      const hotelNameDisplay = flightContext.hotelName || 'Hotel';
+      const hotelNameDisplay = flightContext.hotelName || 'Your Hotel';
 
       const depMins = parseTimeToMinutes(depTime) ?? (10 * 60 + 30);
       const checkoutMins = Math.max(depMins - 90, 7 * 60);
@@ -422,7 +422,7 @@ THE TRAVELER IS LEAVING BY ${modeLabel.toUpperCase()}. Keep it simple.`;
         const airportArrival = addMinutesToHHMM(departure24, -checkInBuffer);
         let latestSightseeing = addMinutesToHHMM(hotelCheckout, -60);
 
-        const hotelNameDisplay = flightContext.hotelName || '';
+        const hotelNameDisplay = flightContext.hotelName || 'Your Hotel';
 
         const isEarlyFlight = departureMins < (12 * 60);
         const isMidDayFlight = departureMins >= (12 * 60) && departureMins < (15 * 60);
@@ -681,7 +681,7 @@ TIMELINE:
 DEPARTURE DAY ACTIVITIES: 2-3 activities (breakfast + 1-2 farewell experiences)
 
 REALISTIC STRUCTURE:
-1. "Breakfast at ${flightContext.hotelName || 'hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
+1. "Breakfast at ${flightContext.hotelName || 'Your Hotel'}" — at the hotel's own restaurant, NEVER at a different hotel
    - 08:30 - 09:30
    - At hotel restaurant
 
@@ -693,7 +693,7 @@ REALISTIC STRUCTURE:
 3. "Hotel Checkout"
    - startTime: "${checkout}", endTime: "11:15"
    - category: "accommodation"
-   - location: { name: "${flightContext.hotelName || 'Hotel'}" }
+   - location: { name: "${flightContext.hotelName || 'Your Hotel'}" }
 
 4. "Farewell [meal type] at [specific restaurant]"
    - 11:15 - 12:15
