@@ -273,12 +273,23 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 5a. MEAL_ORDER: relabel meals whose title contradicts their time slot ---
+  // Enhanced: check venue suitability before relabeling; swap from pool if incompatible
   if (byCode.has(FAILURE_CODES.MEAL_ORDER)) {
     const MEAL_KW_ORDER: Record<string, string[]> = {
       breakfast: ['breakfast', 'brunch'],
       lunch: ['lunch'],
       dinner: ['dinner', 'supper'],
     };
+
+    // Venue keywords that signal incompatibility with a given meal type
+    const VENUE_INCOMPATIBLE: Record<string, string[]> = {
+      breakfast: ['nobu', 'steakhouse', 'izakaya', 'omakase', 'fine dining', 'cocktail', 'bar & grill', 'bar and grill', 'tapas', 'sushi', 'yakitori', 'robata', 'wagyu', 'kaiseki', 'tasting menu', 'wine bar', 'speakeasy', 'gastropub'],
+      lunch: [], // most venues can serve lunch
+      dinner: ['bakery', 'café', 'cafe', 'coffee', 'pancake', 'diner', 'bagel', 'doughnut', 'donut', 'juice bar', 'smoothie', 'açaí', 'acai', 'patisserie', 'pâtisserie', 'croissant'],
+    };
+
+    const normalizeForSwap = (name: string) => name.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    const usedSetOrder = new Set((usedRestaurants || []).map(n => normalizeForSwap(n)));
 
     const orderResults = byCode.get(FAILURE_CODES.MEAL_ORDER) || [];
     for (const vr of orderResults) {
@@ -314,10 +325,50 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
       if (!currentMealKey || currentMealKey === correctMeal) continue;
 
-      // Relabel: replace meal keyword in title
+      // Check venue compatibility with corrected meal type
+      const venueText = [act.title, act.name, (act as any).description, (act as any).location?.name].filter(Boolean).join(' ').toLowerCase();
+      const incompatibleKeywords = VENUE_INCOMPATIBLE[correctMeal] || [];
+      const isVenueIncompatible = incompatibleKeywords.some(kw => venueText.includes(kw));
+
+      if (isVenueIncompatible && restaurantPool && restaurantPool.length > 0) {
+        // Try to swap with a suitable venue from the pool
+        const replacement = restaurantPool.find(r => {
+          if (usedSetOrder.has(normalizeForSwap(r.name))) return false;
+          return r.mealType === correctMeal || r.mealType === 'any';
+        });
+
+        if (replacement) {
+          const before = act.title;
+          const correctLabel = correctMeal.charAt(0).toUpperCase() + correctMeal.slice(1);
+          act.title = `${correctLabel} at ${replacement.name}`;
+          if (act.name) act.name = replacement.name;
+          if ((act as any).description) (act as any).description = `${correctLabel} at ${replacement.name}${replacement.cuisine ? ` — ${replacement.cuisine}` : ''}`;
+          if ((act as any).location) {
+            (act as any).location = {
+              ...(act as any).location,
+              name: replacement.name,
+              ...(replacement.address ? { address: replacement.address } : {}),
+              ...(replacement.neighborhood ? { neighborhood: replacement.neighborhood } : {}),
+            };
+          }
+          usedSetOrder.add(normalizeForSwap(replacement.name));
+
+          console.log(`[Repair] MEAL_ORDER+SWAP: "${before}" → "${act.title}" (venue incompatible with ${correctMeal}, swapped from pool)`);
+          repairs.push({
+            code: FAILURE_CODES.MEAL_ORDER,
+            activityIndex: vr.activityIndex,
+            action: 'swapped_incompatible_venue',
+            before,
+            after: act.title,
+          });
+          continue;
+        }
+        // No pool match — fall through to relabel-only
+      }
+
+      // Relabel: replace meal keyword in title (venue is compatible or no swap available)
       const correctLabel = correctMeal.charAt(0).toUpperCase() + correctMeal.slice(1);
       const before = act.title;
-      // Match the keyword preserving case
       const regex = new RegExp(`\\b${currentKeyword}\\b`, 'i');
       act.title = act.title.replace(regex, (match: string) =>
         match[0] === match[0].toUpperCase() ? correctLabel : correctLabel.toLowerCase()
