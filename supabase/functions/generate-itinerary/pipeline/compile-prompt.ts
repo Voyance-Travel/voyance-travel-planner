@@ -908,7 +908,7 @@ ${(() => {
   if (!paramRestaurantPool || !Array.isArray(paramRestaurantPool) || paramRestaurantPool.length === 0) return '';
   // Use the imported extractRestaurantVenueName for consistent identity matching
   const usedNormalized = new Set((paramUsedRestaurants || []).map((n: string) => extractRestaurantVenueName(n)));
-  const available = paramRestaurantPool.filter((r: any) => !usedNormalized.has(normalizeForPool(r.name || '')));
+  const available = paramRestaurantPool.filter((r: any) => !usedNormalized.has(extractRestaurantVenueName(r.name || '')));
   if (available.length === 0) return '';
 
   // Show larger candidate sets — longer trips need more visible options
