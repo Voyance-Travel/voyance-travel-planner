@@ -1,30 +1,32 @@
 
 
-## Remaining Issues: Backend Hotel Context Flattening
+## Fix: `generate-itinerary` Edge Function Boot Failure
 
-The frontend save/patch paths are now fixed, but the **backend AI prompt builder** (`getFlightHotelContext`) still has the same `hotel_selection[0]` flattening bug. This means the AI generates itinerary content with the wrong hotel context even when the data is correctly stored.
+### Root Cause
 
-### Issue 1: Multi-city hotel context only uses first hotel per city
+The `generate-itinerary` edge function **cannot boot at all** due to a syntax error:
 
-**File: `supabase/functions/generate-itinerary/flight-hotel-context.ts` (line 382)**
+```
+Uncaught SyntaxError: Identifier 'usedVenueNames' has already been declared
+  at day-validation.ts:1078:9
+```
 
-The `extractHotel` helper always returns `hs[0]` from each city's `hotel_selection` array. If a city has a split stay (two hotels), only the first is passed to the AI prompt. The AI then generates all days in that city referencing the wrong hotel for the second half of the stay.
+Two `const usedVenueNames` declarations exist in the same function scope:
+- **Line 798**: Used for the PRE-PASS 0 venue-swap guard
+- **Line 929**: Used for the missing-meal injection logic
 
-**Fix:** When a city has multiple hotels in its `hotel_selection`, include all of them in the prompt context — similar to the split-stay logic already implemented for `trips.hotel_selection` (lines 348-359). Build a per-city split-stay schedule and append it to the AI prompt.
+Since the function never boots, it cannot respond to CORS preflight (OPTIONS) requests, causing the browser error you're seeing.
 
-### Issue 2: Multi-city path doesn't populate `splitStayHotels` array
+### Fix
 
-**File: `supabase/functions/generate-itinerary/flight-hotel-context.ts` (lines 371-406)**
+**File: `supabase/functions/generate-itinerary/day-validation.ts`**
 
-The multi-city fallback (line 371) sets `hotel` and `hotelName` from the first city's first hotel, but never populates `splitStayHotels`. This means the split-stay prompt block (line 359) is never emitted for multi-city trips, even when cities have multiple hotels. The `compile-day-facts.ts` downstream also only sees one `hotelName`, so per-day hotel resolution in the prompt is lost.
+Rename the second `usedVenueNames` (line 929) to `usedVenueNamesForInjection` (or similar), and update its three references on lines ~947, ~957 to use the new name.
 
-**Fix:** After collecting all city hotels, if any city has multiple entries in `hotel_selection`, populate `splitStayHotels` from all cities' hotels (with date ranges from city arrival/departure dates) so the split-stay prompt block fires.
+This is a one-variable rename — no logic changes needed.
 
----
-
-### Implementation Summary
-
-| File | Change |
-|---|---|
-| `supabase/functions/generate-itinerary/flight-hotel-context.ts` (line 381-401) | Update `extractHotel` to return all hotels per city. When any city has multiple hotels, build a combined split-stay schedule and emit the split-stay prompt block. Populate `splitStayHotels` so downstream code resolves the correct hotel per day. |
+### What This Fixes
+- The edge function will boot successfully
+- CORS preflight will respond correctly
+- Itinerary generation will work again from travelwithvoyance.com
 
