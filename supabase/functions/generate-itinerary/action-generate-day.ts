@@ -253,7 +253,11 @@ export async function handleGenerateDay(
 
     // Phantom hotel stripping — only strip fabricated specific hotel names.
     // Generic placeholders ("Your Hotel", "Check-in at hotel") are preserved.
+    // Broad hotel detection: selected hotel, accommodation notes, metadata, or existing accom activities
     const hasHotelForStripping = !!(flightContext as any).hotelName ||
+      !!(flightContext as any).hotelAddress ||
+      !!paramHotelName ||
+      !!(params.hotelOverride?.name) ||
       generatedDay.activities?.some((a: any) => {
         const cat = (a.category || '').toLowerCase();
         return cat === 'accommodation';
@@ -773,8 +777,8 @@ export async function handleGenerateDay(
           isFirstDay,
           isLastDay,
           totalDays,
-          hasHotel: !!(flightContext as any).hotelName,
-          hotelName: (flightContext as any).hotelName || paramHotelName || undefined,
+          hasHotel: !!((flightContext as any).hotelName || paramHotelName || params.hotelOverride?.name),
+          hotelName: (flightContext as any).hotelName || paramHotelName || params.hotelOverride?.name || undefined,
           arrivalTime24: flightContext.arrivalTime24,
           returnDepartureTime24: flightContext.returnDepartureTime24
             || (flightContext.returnDepartureTime ? normalizeTo24h(flightContext.returnDepartureTime) : undefined)
@@ -839,7 +843,7 @@ export async function handleGenerateDay(
           returnDepartureTime24: validationInput.returnDepartureTime24,
           hotelName: resolvedRepairHotelName,
           hotelAddress: resolvedRepairHotelAddr,
-          hasHotel: validationInput.hasHotel,
+          hasHotel: true, // Always treat as having hotel — repair will use "Your Hotel" placeholder if none selected
           lockedActivities: lockedActivities as any[],
           restaurantPool: paramRestaurantPool || undefined,
           usedRestaurants: paramUsedRestaurants || undefined,
