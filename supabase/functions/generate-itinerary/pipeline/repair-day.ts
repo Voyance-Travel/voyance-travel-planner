@@ -651,9 +651,22 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           transportStartMin = 12 * 60;
         }
       } else {
-        // Last day, no flight data — generic
-        transportTitle = 'Departure Transfer';
-        transportDesc = 'Head to the departure point for your onward journey.';
+        // Last day, no flight data — use nextLegTransport if available for correct labeling
+        const fallbackMode = nextLegTransport || 'transfer';
+        const modeLabel = fallbackMode.charAt(0).toUpperCase() + fallbackMode.slice(1);
+        const hubName = fallbackMode === 'flight'
+          ? (nextLegTransportDetails?.departureAirport || nextLegTransportDetails?.stationName || 'the Airport')
+          : fallbackMode === 'train'
+          ? (nextLegTransportDetails?.departureStation || nextLegTransportDetails?.stationName || 'the Station')
+          : fallbackMode === 'ferry'
+          ? (nextLegTransportDetails?.departureStation || 'the Ferry Terminal')
+          : fallbackMode === 'bus'
+          ? (nextLegTransportDetails?.departureStation || 'the Bus Station')
+          : 'the departure point';
+        transportTitle = fallbackMode === 'transfer' ? 'Departure Transfer' : `Transfer to ${hubName}`;
+        transportDesc = fallbackMode === 'transfer'
+          ? 'Head to the departure point for your onward journey.'
+          : `Head to ${hubName} for your ${modeLabel} home.`;
         // Place after checkout
         const checkoutAct = activities.find((a: any) => {
           const t = (a.title || '').toLowerCase();

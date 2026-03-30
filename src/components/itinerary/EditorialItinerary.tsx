@@ -1769,7 +1769,11 @@ export function EditorialItinerary({
     // Multi-city guard: only inject on the last day if it belongs to the final city
     const isLastCity = !allHotels || allHotels.length <= 1 ||
       (d.city && allHotels.length > 0 && (d.city || '').toLowerCase() === (allHotels[allHotels.length - 1]?.cityName || '').toLowerCase());
-    if (dayIndex === rawDays.length - 1 && !d.isDepartureDay && !d.isTransitionDay && isLastCity && flightSelection) {
+    // Fire if: (a) last day + flight booked, OR (b) last day marked isDepartureDay with __home__ target
+    const isAbsoluteLastDay = dayIndex === rawDays.length - 1;
+    const isFinalHomeDeparture = d.isDepartureDay && d.departureTo === '__home__';
+    const hasFinalDepartureInfo = flightSelection || isFinalHomeDeparture;
+    if (isAbsoluteLastDay && !d.isTransitionDay && isLastCity && hasFinalDepartureInfo) {
       if (!updatedActivities.some(a => (a as any).__syntheticFinalDeparture)) {
         // Find the return leg: prefer isDestinationDeparture-marked leg, then flightSelection.return, then last leg
         const allLegs = flightSelection.legs || [];
