@@ -241,6 +241,23 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
 
       if (missing.length > 0) {
         const destination = day.city || day.destination || 'the destination';
+        // Try to load real venue fallbacks from verified_venues for this city
+        let saveFallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
+        try {
+          if (destination && destination !== 'the destination') {
+            const { data: venues } = await supabase
+              .from('verified_venues')
+              .select('name, address, category')
+              .ilike('city', `%${destination.split(',')[0].trim()}%`)
+              .in('category', ['restaurant', 'dining', 'cafe', 'bar', 'food'])
+              .limit(20);
+            if (venues && venues.length > 0) {
+              for (const v of venues) {
+                saveFallbackVenues.push({ name: v.name, address: v.address || destination, mealType: 'any' });
+              }
+            }
+          }
+        } catch (_e) { /* non-blocking */ }
         const result = enforceRequiredMealsFinalGuard(
           day.activities,
           policy.requiredMeals,
@@ -248,6 +265,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           destination,
           'USD',
           policy.dayMode,
+          saveFallbackVenues,
         );
         if (!result.alreadyCompliant) {
           itineraryDays[i] = { ...day, activities: result.activities };
