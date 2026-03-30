@@ -707,7 +707,8 @@ export async function enrichActivityWithRetry(
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
   LOVABLE_API_KEY: string | undefined,
-  maxRetries: number = 1
+  maxRetries: number = 1,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<{ activity: StrictActivity; success: boolean; retried: boolean }> {
   let retried = false;
 
