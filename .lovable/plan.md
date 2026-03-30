@@ -1,40 +1,46 @@
 
 
+## Remaining Hotel/Itinerary Integration Gaps
 
-## ✅ Completed: Venue-Meal Mismatch After Relabeling
-Implemented venue-appropriateness checks and swap logic in repair-day.ts and day-validation.ts.
+### Gap 1: `patchItineraryWithMultipleHotels` is never called
 
-## ✅ Completed: Return Home Card Reflects Step 2 Transport Mode
+The function was created in `hotelItineraryPatch.ts` but no save path uses it. When a multi-city trip saves hotels (from `booking-changed` handler in TripDetail.tsx, or from FindMyHotelsDrawer for multi-city), each hotel still calls `patchItineraryWithHotel` individually — meaning the last hotel overwrites all days. The `booking-changed` handler in TripDetail.tsx (line 3017-3027) uses `injectMultiHotelActivities` for card injection but never calls `patchItineraryWithMultipleHotels` to fix the title/address patches.
 
-### Changes Made
+**Fix:** In the `booking-changed` handler (TripDetail.tsx ~line 3010), after injection, call `patchItineraryWithMultipleHotels` with all city hotels and their date ranges. Similarly, when `FindMyHotelsDrawer` saves a hotel for a multi-city trip, call the multi-hotel patcher with all known hotels instead of the single-hotel version.
 
-**`src/services/itineraryAPI.ts`** — `buildDayCityMap()`
-- Last day of the last city is now marked `isDepartureDay: true` with `departureTo: '__home__'`
-- Picks up transport type/details from the last city's `trip_cities` record
+### Gap 2: Single-city multi-hotel (split stays) only injects first hotel
 
-**`src/components/itinerary/EditorialItinerary.tsx`** — Final departure card
-- Condition expanded: fires when `flightSelection` exists OR when `isDepartureDay` with `__home__` target
-- Non-flight returns (train, ferry, car, bus) now build a proper InterCityTransportCard with correct icon, mode label, and category
-- Falls back to `originCity` prop for the "to" destination when no airport data exists
+TripDetail.tsx line 3032-3036: when `updatedCities.length <= 1`, it calls `injectHotelActivitiesIntoDays` with `hotels[0]` only. If a single-city trip has 2 hotels (split stay via `trips.hotel_selection` array), the second hotel's check-in/checkout cards are never injected.
 
-**`supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — Step 8b
-- Generic fallback now checks `nextLegTransport` to produce mode-specific labels (e.g., "Transfer to the Station" for trains, "Transfer to the Ferry Terminal" for ferries)
+**Fix:** When `hotels.length > 1`, call `injectMultiHotelActivities` instead of `injectHotelActivitiesIntoDays` — same as the multi-city path.
 
-## ✅ Completed: Hotel → Itinerary Date-Aware Patching
+### Gap 3: Multi-city hotel patch in PlannerHotelEnhanced doesn't use multi-hotel patcher
 
-### Changes Made
+Lines 553-558 in PlannerHotelEnhanced.tsx call `patchItineraryWithHotel` for a single hotel even in multi-city mode. If two cities each have a hotel saved, saving city B's hotel patches all days including city A's.
 
-**`src/services/hotelItineraryPatch.ts`** — Date-aware patching
-- `patchItineraryWithHotel` now scopes patches to days within `checkInDate`/`checkOutDate` range
-- New export `patchItineraryWithMultipleHotels` handles batch patching with per-hotel date scoping
-- Backward compatible: omitting dates patches all days as before
+**Fix:** In multi-city mode, after saving the per-city hotel, fetch all city hotels and call `patchItineraryWithMultipleHotels` instead.
 
-**`src/utils/injectHotelActivities.ts`** — Transition-day drop-bags logic
-- `injectMultiHotelActivities` detects transition days (Hotel A checkout + Hotel B check-in same date)
-- Injects "Drop bags at [Hotel B]" card at 12:00 with 30-min duration between checkout and check-in
-- Deterministic IDs (`hotel-dropbags-{id}`) for idempotent re-injection
+### Gap 4: "Freshen up" / "Return to hotel" cards not patched by date-aware logic
 
-**`src/pages/planner/PlannerHotelEnhanced.tsx`** — All 3 save paths now pass `checkInDate`/`checkOutDate`
-**`src/components/itinerary/FindMyHotelsDrawer.tsx`** — Passes `startDate`/`endDate` as date params
-**`src/components/itinerary/AddBookingInline.tsx`** — Already passed dates (no change needed)
-**`src/services/supabase/trips.ts`** — `useSaveHotelSelection` passes dates via flexible field access
+`patchItineraryWithHotel` correctly patches check-in/checkout titles, but it also patches midday "Freshen up at Your Hotel" and "Return to Your Hotel" cards. In a multi-hotel split stay, a Day 3 "Freshen up" should say Hotel B, not Hotel A. The date-aware scoping handles this correctly — but only if `patchItineraryWithMultipleHotels` is actually called (see Gap 1).
+
+This is resolved by fixing Gap 1.
+
+### Gap 5: Manual hotel entry in PlannerHotelEnhanced uses `checkIn`/`checkOut` times, not dates
+
+Lines 693-698: `manualHotel.checkIn` and `manualHotel.checkOut` are set from `data.hotel.checkInTime` / `data.hotel.checkOutTime` — these are times (e.g., "15:00"), not dates. The patch receives times where it expects dates, so date scoping silently fails and patches all days.
+
+**Fix:** Pass the trip's `startDate`/`endDate` as `checkInDate`/`checkOutDate` for manual single-hotel entries.
+
+---
+
+### Implementation Summary
+
+| File | Change |
+|---|---|
+| `src/pages/TripDetail.tsx` (~line 3010) | After injection, call `patchItineraryWithMultipleHotels` for multi-city. For single-city with multiple hotels, use `injectMultiHotelActivities` instead of single-hotel inject. |
+| `src/pages/planner/PlannerHotelEnhanced.tsx` (~line 553, ~line 693) | Multi-city: fetch all city hotels and call `patchItineraryWithMultipleHotels`. Manual entry: pass trip dates, not check-in/out times. |
+| `src/components/itinerary/FindMyHotelsDrawer.tsx` | Multi-city: after saving, fetch all city hotels and call `patchItineraryWithMultipleHotels`. |
+
+These are all wiring fixes — the core logic (`patchItineraryWithMultipleHotels`, `injectMultiHotelActivities`, date-aware scoping) already exists and works correctly. The problem is that the multi-hotel patcher is dead code that nothing calls.
+
