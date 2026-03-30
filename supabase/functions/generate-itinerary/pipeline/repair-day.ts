@@ -921,6 +921,57 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
   }
 
+  // --- 14. DEPARTURE DAY: prune activities after the last departure card ---
+  // The flight/departure-transport card must be the final item on departure days.
+  if (isDepartureDay && activities.length > 1) {
+    const DEPARTURE_ROLES = new Set(['flight', 'airport-transport', 'airport-security']);
+    const classifyDep = (a: any): string => {
+      const t = (a.title || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      if (cat === 'flight' || t.includes('flight departure') || t.includes('departure flight')) return 'flight';
+      if (t.includes('airport departure') || t.includes('airport security') || t.includes('security and boarding') ||
+          t.includes('departure and security')) return 'airport-security';
+      if ((cat === 'transport' || cat === 'transit' || cat === 'logistics') &&
+          (t.includes('airport') || t.includes('transfer to the airport') || t.includes('departure transfer') ||
+           t.includes('head to airport') || t.includes('taxi to airport') ||
+           t.includes('transfer to') && (t.includes('airport') || t.includes('station') || t.includes('terminal')))) return 'airport-transport';
+      // Also catch generic departure cards on last day
+      if ((cat === 'transport' || cat === 'transit') &&
+          (t.includes('departure') || t.includes('heading home'))) return 'airport-transport';
+      return 'other';
+    };
+
+    // Find the index of the last departure-related card
+    let lastDepartureIdx = -1;
+    for (let i = activities.length - 1; i >= 0; i--) {
+      if (DEPARTURE_ROLES.has(classifyDep(activities[i]))) {
+        lastDepartureIdx = i;
+        break;
+      }
+    }
+
+    if (lastDepartureIdx !== -1 && lastDepartureIdx < activities.length - 1) {
+      // There are activities after the last departure card — remove them
+      const trailing = activities.slice(lastDepartureIdx + 1);
+      const toRemove = trailing.filter(a => {
+        const role = classifyDep(a);
+        return !DEPARTURE_ROLES.has(role) && !lockedIds.has(a.id);
+      });
+
+      for (const act of toRemove) {
+        const idx = activities.indexOf(act);
+        if (idx !== -1) {
+          activities.splice(idx, 1);
+          repairs.push({
+            code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+            action: 'pruned_after_departure_card',
+            before: act.title,
+          });
+        }
+      }
+    }
+  }
+
   return {
     day: { ...input.day, activities },
     repairs,
