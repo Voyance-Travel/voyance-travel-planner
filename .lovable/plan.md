@@ -1,65 +1,46 @@
 
-## Completed: Hotel & Meal Logic Fixes
 
-### What was done
+## Problem: Meal-Time Mismatch (e.g. "Lunch" at breakfast time)
 
-1. **Broadened hotel detection** in `action-generate-day.ts` and `action-generate-trip-day.ts`
-   - `hasHotel` now checks: flightContext.hotelName, paramHotelName, hotelOverride, hotelAddress, and existing accommodation activities
-   - Repair pipeline always treats hotel as present (`hasHotel: true`) and uses "Your Hotel" placeholder when none is selected
+### Root Cause
 
-2. **Added validate/repair pipeline to chain path** (`action-generate-trip-day.ts`)
-   - Previously only ran light sanitization before save
-   - Now runs the same full `validateDay()` + `repairDay()` pipeline as single-day path
-   - Guarantees check-in, checkout, freshen-up, and return-to-hotel cards on every path
+The validator (`validate-day.ts`) detects **MEAL_ORDER** errors only for:
+- Breakfast after 14:00
+- Lunch after 17:00
 
-3. **Upgraded MEAL_DUPLICATE to repairable error** (`validate-day.ts`)
-   - Was: `severity: 'warning', autoRepairable: false`
-   - Now: `severity: 'error', autoRepairable: true`
-   - Also detects non-adjacent duplicates (two dinners at different times)
+It does **not** catch:
+- Lunch before 11:00 (lunch restaurant at breakfast time — the case you saw)
+- Dinner before 15:00
+- Breakfast-labeled activity in the dinner slot
 
-4. **Added meal duplicate repair** (`repair-day.ts`)
-   - Relabels wrongly-timed meals (dinner at 12:00 → lunch)
-   - Swaps from restaurant pool if correct meal is missing
-   - Removes unfixable duplicates
+More critically, **MEAL_ORDER has no repair handler at all** in `repair-day.ts`. The validation fires, marks it as `autoRepairable: true`, but nothing acts on it. The broken meal label passes through untouched.
 
-5. **Tightened final meal guard** (`day-validation.ts`)
-   - `enforceRequiredMealsFinalGuard()` now deduplicates same-meal activities BEFORE injecting missing ones
-   - Prevents "two dinners, no lunch" from passing as compliant
+### What to Change
 
-## Completed: Last Day / Checkout Repair Ordering
+**File: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`** — `checkMealOrder()`
 
-### What was done
+Expand detection to catch all wrong-direction mismatches:
+- **Lunch before 11:00** → should be breakfast
+- **Dinner before 15:00** → should be lunch  
+- **Breakfast after 14:00** → already caught
+- **Lunch after 17:00** → already caught
 
-1. **Reordered repair pipeline** in `repair-day.ts`
-   - Check-in guarantee (step 7) and checkout guarantee (step 8) now run BEFORE bookend injection (step 9)
-   - This ensures checkout exists before bookends try to inject conflicting hotel returns
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-2. **Added departure-day guards to `repairBookends`**
-   - End-of-day "Return to Hotel" is skipped on departure days (last day or last day in city)
-   - Mid-day freshen-up injection is skipped on departure days (traveler has checked out)
-   - Mid-day freshen-up after hotel transport is skipped if it occurs after checkout
+Add a new repair block (before meal duplicate repair, around step 5a):
 
-3. **Expected departure day sequence**: breakfast → checkout → (optional activity) → airport transport → security → flight
-   - No more "Return to Hotel" after flights
-    - No mid-day hotel returns after checkout
+**Step 5a: MEAL_ORDER repair**
+- For each `MEAL_ORDER` violation, determine the correct meal label for that time slot using the same ranges as MEAL_DUPLICATE repair (breakfast 6:00–10:59, lunch 11:00–14:59, dinner 17:00–22:59)
+- Relabel the title: replace the wrong meal keyword with the correct one (e.g. "Lunch at Café Roma" at 8:30 → "Breakfast at Café Roma")
+- Update `name` field to match
+- Log the repair
 
-## Completed: Departure Transport Guarantee
+**File: `supabase/functions/generate-itinerary/day-validation.ts`** — `enforceRequiredMealsFinalGuard()`
 
-### What was done
+Before deduplication and injection, add a pass that relabels any meal whose title contradicts its time slot. This catches cases that bypass the pipeline (e.g. chain path, save path).
 
-1. **Added Step 8b: DEPARTURE TRANSPORT GUARANTEE** in `repair-day.ts`
-   - Detects missing transport cards on departure days (last day or last day in city)
-   - Flight departures: injects "Transfer to [Airport]" timed 3 hours before flight
-   - Non-flight inter-city departures: injects "Transfer to [Station]" using nextLegTransportDetails
-   - Generic fallback: injects "Departure Transfer" after checkout when no flight data exists
-   - Also injects missing "Departure Flight" card on last day when flight time is known
+### Expected Result
+- A "Lunch at X" scheduled at 8:30 AM gets relabeled to "Breakfast at X"
+- A "Dinner at Y" at 12:00 gets relabeled to "Lunch at Y"  
+- Every meal label matches its actual time slot before the day is saved
 
-2. **Extended Step 6 (LOGISTICS_SEQUENCE) to fire for mid-trip city departures**
-   - Previously only ran for `isLastDay`; now runs for `isLastDayInCity` too
-
-3. **Extended Step 11 (DEPARTURE SEQUENCE FIX) to all departure days**
-   - Now swaps checkout before transport on both final-day and mid-trip departures
-   - Matches station transfers in addition to airport transfers
-
-4. **Added `departureAirport` and `nextLegTransportDetails` to RepairDayInput**
-   - Enables hub-specific titles like "Transfer to Heathrow Airport" instead of generic labels
