@@ -1,21 +1,53 @@
 
 
-## ✅ Completed: Strip Internal System Language from Meal-Guard Tips
+## Fix: Prevent Transit Cards from Satisfying Meal Detection
 
-Fixed in `day-validation.ts` — replaced "Recommended by our venue database" with user-friendly tips.
+### Problem
 
-## ✅ Completed: Reject Mainland Venues for Water-Bound / Car-Free Destinations
+A transport card titled "Walk to Dinner in San Marco" contains the keyword "dinner" in its title. `detectMealSlots()` in `day-validation.ts` matches meal keywords in titles **regardless of category** (line 146), so it reports dinner as present. The meal guard sees dinner as "detected" and never injects the actual dinner activity — leaving a 2.5-hour evening gap.
 
-Added hotel-proximity guard to venue enrichment pipeline. Water-bound destinations (Venice, Santorini, Capri, etc.) use a tight 5km radius; normal cities use 15km.
+### Root Cause
 
-### Files Changed
-- `venue-enrichment.ts` — Added `TIGHT_RADIUS_DESTINATIONS` map, hotel proximity check in `verifyVenueWithGooglePlaces`, threaded `hotelCoordinates` through all enrichment functions
-- `pipeline/enrich-day.ts` — Added `hotelCoordinates` to `EnrichDayInput` and threaded through pipeline
-- `action-generate-day.ts` — Geocodes hotel address to coordinates before enrichment call
+`detectMealSlots()` line 146:
+```typescript
+if (MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword))) {
+  detected.add(mealType);
+}
+```
 
-## ✅ Completed: TIME_OVERLAP Cascade Repair
+This matches "dinner" in "Walk to **Dinner** in San Marco" even though the activity's category is `transport`, not `dining`.
 
-Added step 13 to `repair-day.ts` — a final-pass overlap resolver that truncates activities before structural items (checkout, departure) and shifts non-structural activities forward. Drops anything pushed past 23:30.
+### Fix
 
-### Files Changed
-- `pipeline/repair-day.ts` — Added TIME_OVERLAP cascade repair as step 13 after all prior injections
+**File: `supabase/functions/generate-itinerary/day-validation.ts` (~line 139-151)**
+
+Add a category guard: skip transport/accommodation/logistics activities from title-based meal keyword matching. Only allow title-based detection for activities that are either dining-category or uncategorized.
+
+```typescript
+for (const activity of activities) {
+  const title = (activity.title || '').toLowerCase();
+  const category = (activity.category || '').toLowerCase();
+  const isDining = DINING_CATEGORIES.some(c => category.includes(c));
+  
+  // Skip non-dining structural categories for title-based meal detection
+  const isStructural = ['transport', 'accommodation', 'logistics'].includes(category);
+
+  for (const mealType of Object.keys(MEAL_KEYWORDS) as RequiredMeal[]) {
+    if (!isStructural && MEAL_KEYWORDS[mealType].some(keyword => title.includes(keyword))) {
+      detected.add(mealType);
+    } else if (isDining && MEAL_KEYWORDS[mealType].some(keyword => category.includes(keyword))) {
+      detected.add(mealType);
+    }
+  }
+  // ... time-based detection unchanged (already gated on isDining)
+}
+```
+
+Single condition change. No other files affected — `detectMealSlots` is used by both `validate-day.ts` and the meal guard in `day-validation.ts`, so this fix propagates to all callers.
+
+### Impact
+
+- Transport cards like "Walk to Dinner" no longer fool the meal detector
+- Meal guard correctly fires and injects actual dinner activity
+- The TIME_OVERLAP cascade (step 13) will handle any resulting time conflicts
+
