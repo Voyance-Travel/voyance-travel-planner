@@ -262,7 +262,9 @@ async function _handleGenerateTripDayInner(
   if (restaurantPool.length > 0) {
     console.log(`[generate-trip-day] Restaurant pool for "${dayCity}": ${restaurantPool.length} venues (${usedRestaurants.length} already used)`);
   } else {
-    console.warn(`[generate-trip-day] ⚠️ Restaurant pool EMPTY for "${dayCity}" — meal guard will fall through to verified_venues or generic fallbacks`);
+    // Log which pool keys exist to help diagnose pool-miss issues
+    const poolKeys = Object.keys(restaurantPoolByCity);
+    console.warn(`[generate-trip-day] ⚠️ Restaurant pool EMPTY for "${dayCity}" — available pool keys: [${poolKeys.join(', ')}] — meal guard will fall through to verified_venues or generic fallbacks`);
   }
 
   // CAP previousActivities to last 3 days to prevent prompt bloat on day 8+
