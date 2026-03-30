@@ -751,7 +751,8 @@ export async function enrichItinerary(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined
+  LOVABLE_API_KEY: string | undefined,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<{ days: StrictDay[]; stats: EnrichmentStats }> {
   console.log(`[Stage 4] Starting enrichment for ${days.length} days with real photos + dual-AI venue verification`);
 
