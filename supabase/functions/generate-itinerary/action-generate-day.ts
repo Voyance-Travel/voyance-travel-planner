@@ -251,8 +251,13 @@ export async function handleGenerateDay(
     // Note: lockedActivities were already loaded BEFORE the AI call (see line ~4452-4565)
     // This ensures AI knows to skip those time slots, saving money and guaranteeing locks work
 
-    // Phantom hotel stripping — also apply as post-processing safety net
-    const hasHotelForStripping = !!(flightContext as any).hotelName;
+    // Phantom hotel stripping — only strip fabricated specific hotel names.
+    // Generic placeholders ("Your Hotel", "Check-in at hotel") are preserved.
+    const hasHotelForStripping = !!(flightContext as any).hotelName ||
+      generatedDay.activities?.some((a: any) => {
+        const cat = (a.category || '').toLowerCase();
+        return cat === 'accommodation';
+      });
     if (!hasHotelForStripping) {
       const { stripPhantomHotelActivities } = await import('./sanitization.ts');
       generatedDay = stripPhantomHotelActivities(generatedDay, false);

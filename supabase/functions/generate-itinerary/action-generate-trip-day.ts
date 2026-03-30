@@ -595,10 +595,9 @@ async function _handleGenerateTripDayInner(
     const resolvedDest = cityInfo?.cityName || destination;
     sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest);
     
+    // Only strip fabricated hotel names; generic placeholders are preserved by the updated function
     const hasHotel = !!(cityInfo?.hotelName);
-    if (!hasHotel) {
-      stripPhantomHotelActivities(dayResult, false);
-    }
+    stripPhantomHotelActivities(dayResult, hasHotel);
 
     // Forward-ref fix: strip hallucinated tomorrow references from accommodation descriptions
     const hotelName = cityInfo?.hotelName || 'your hotel';
