@@ -36,6 +36,7 @@ async function enrichActivities(
   supabaseKey: string,
   googleMapsApiKey: string,
   lovableApiKey: string,
+  hotelCoordinates?: { lat: number; lng: number },
 ): Promise<any[]> {
   // Only enrich unlocked (newly generated) activities
   const activitiesToEnrich = activities.filter((a: any) => !a.isLocked);
