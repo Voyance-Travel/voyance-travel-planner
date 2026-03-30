@@ -336,7 +336,7 @@ export async function verifyVenueWithDualAI(
   }
 
   // Step 2: Google Places lookup
-  const googleResult = await verifyVenueWithGooglePlaces(venueName, destination, GOOGLE_MAPS_API_KEY);
+  const googleResult = await verifyVenueWithGooglePlaces(venueName, destination, GOOGLE_MAPS_API_KEY, hotelCoordinates);
 
   if (!googleResult || !googleResult.isValid) {
     return {
