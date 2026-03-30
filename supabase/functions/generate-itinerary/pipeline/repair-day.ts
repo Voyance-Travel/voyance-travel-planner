@@ -164,11 +164,24 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // --- 4. DUPLICATE_CONCEPT: strip trip-wide duplicates ---
   if (byCode.has(FAILURE_CODES.DUPLICATE_CONCEPT)) {
     const dupeResults = byCode.get(FAILURE_CODES.DUPLICATE_CONCEPT) || [];
-    const usedSet = new Set((usedRestaurants || []).map(n => n.toLowerCase()));
-    // Track current day dining as used
+    // Normalize used restaurant names for reliable matching
+    const normalizeForDedup = (name: string): string => {
+      return name
+        .toLowerCase()
+        .replace(/^(breakfast|brunch|lunch|dinner|supper)\s+at\s+/i, '')
+        .replace(/^(breakfast|brunch|lunch|dinner|supper)\s*[:–—-]\s*/i, '')
+        .replace(/[''`´]/g, "'")
+        .replace(/[^\w\s'-]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+    const usedSet = new Set((usedRestaurants || []).map(n => normalizeForDedup(n)));
+    // Track current day dining by location.name (canonical venue identity)
     for (const act of activities) {
       if ((act.category || '').toLowerCase() === 'dining') {
-        usedSet.add((act.title || '').toLowerCase());
+        const locationName = act.location?.name || '';
+        if (locationName) usedSet.add(normalizeForDedup(locationName));
+        usedSet.add(normalizeForDedup(act.title || ''));
       }
     }
 

@@ -905,14 +905,21 @@ result += `\nTHESE ARE MULTI-DAY EVENTS the traveler is attending across multipl
 
 ${(() => {
   if (!paramRestaurantPool || !Array.isArray(paramRestaurantPool) || paramRestaurantPool.length === 0) return '';
-  const usedSet = new Set((paramUsedRestaurants || []).map((n: string) => n.toLowerCase()));
-  const available = paramRestaurantPool.filter((r: any) => !usedSet.has((r.name || '').toLowerCase()));
+  // Import shared normalizer for consistent identity matching
+  const { extractRestaurantVenueName: _extractName } = require('../generation-utils.ts');
+  const normalizeForPool = (n: string) => {
+    try { return _extractName(n); } catch { return (n || '').toLowerCase().trim(); }
+  };
+  const usedNormalized = new Set((paramUsedRestaurants || []).map((n: string) => normalizeForPool(n)));
+  const available = paramRestaurantPool.filter((r: any) => !usedNormalized.has(normalizeForPool(r.name || '')));
   if (available.length === 0) return '';
 
-  const breakfastSpots = available.filter((r: any) => r.mealType === 'breakfast').slice(0, 8);
-  const lunchSpots = available.filter((r: any) => r.mealType === 'lunch').slice(0, 8);
-  const dinnerSpots = available.filter((r: any) => r.mealType === 'dinner').slice(0, 8);
-  const anySpots = available.filter((r: any) => r.mealType === 'any').slice(0, 6);
+  // Show larger candidate sets — longer trips need more visible options
+  const perMealLimit = Math.max(8, Math.min(16, Math.ceil(available.length / 4)));
+  const breakfastSpots = available.filter((r: any) => r.mealType === 'breakfast').slice(0, perMealLimit);
+  const lunchSpots = available.filter((r: any) => r.mealType === 'lunch').slice(0, perMealLimit);
+  const dinnerSpots = available.filter((r: any) => r.mealType === 'dinner').slice(0, perMealLimit);
+  const anySpots = available.filter((r: any) => r.mealType === 'any').slice(0, Math.ceil(perMealLimit * 0.75));
 
   let poolPrompt = `
 ${'='.repeat(70)}
@@ -921,6 +928,7 @@ ${'='.repeat(70)}
 For ALL meals today, you MUST pick a restaurant from this pre-verified list.
 Do NOT make up restaurant names. Do NOT use generic names like "local restaurant" or "dinner spot".
 Each restaurant below is REAL and highly rated (4.5+ stars).
+CRITICAL: Do NOT pick the same restaurant for multiple meals. Each meal MUST use a DIFFERENT venue.
 
 `;
   if (breakfastSpots.length > 0) {
@@ -944,7 +952,7 @@ poolPrompt += usedList.map((name: string) => `  • ${name}`).join('\n');
 poolPrompt += `\nPick DIFFERENT restaurants — variety is essential. Do NOT repeat any restaurant from this blocklist.\n`;
   }
 
-  console.log(`[compile-prompt] Restaurant pool: ${available.length} available, blocklist: ${(usedList || []).length}`);
+  console.log(`[compile-prompt] Restaurant pool: ${available.length} available (${breakfastSpots.length}B/${lunchSpots.length}L/${dinnerSpots.length}D), blocklist: ${(usedList || []).length}`);
   return poolPrompt;
 })()}
 

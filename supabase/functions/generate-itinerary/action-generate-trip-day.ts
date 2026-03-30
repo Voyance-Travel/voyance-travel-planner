@@ -1037,14 +1037,18 @@ async function _handleGenerateTripDayInner(
   } else {
     // More days remain — save progress and self-chain
     const nextCityName = dayCityMap?.[dayNumber]?.cityName || null;
-    // Track used restaurants from this day's dining activities
+    // Track used restaurants from this day's dining activities (normalized venue names)
+    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
     const newUsedRestaurants = [...usedRestaurants];
     const dayActivities = dayResult?.activities || [];
     for (const act of dayActivities) {
-      if ((act.category || '').toLowerCase() === 'dining' && act.title) {
-        const name = (act.title || '').replace(/^(Breakfast|Lunch|Dinner):\s*/i, '').trim();
-        if (name && !newUsedRestaurants.includes(name)) {
-          newUsedRestaurants.push(name);
+      if ((act.category || '').toLowerCase() === 'dining' && (act.title || act.location?.name)) {
+        // Extract from title first, fall back to location.name
+        const venueFromTitle = act.title ? extractRestaurantVenueName(act.title) : '';
+        const venueFromLocation = act.location?.name ? extractRestaurantVenueName(act.location.name) : '';
+        const venueName = venueFromTitle || venueFromLocation;
+        if (venueName && !newUsedRestaurants.some(u => extractRestaurantVenueName(u) === venueName)) {
+          newUsedRestaurants.push(venueName);
         }
       }
     }
