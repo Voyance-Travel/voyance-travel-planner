@@ -984,13 +984,32 @@ export function AddHotelInline({
           }
         }).catch(err => console.error('[AddHotel] Multi-hotel itinerary patch failed:', err));
       } else {
-        // Single-city: patch with just this hotel
-        patchItineraryWithHotel(tripId, {
-          name: newHotel.name,
-          address: newHotel.address,
-          checkInDate: newHotel.checkInDate,
-          checkOutDate: newHotel.checkOutDate,
-        }).catch(err => console.error('[AddHotel] Itinerary patch failed:', err));
+        // Single-city: check for existing multi-hotel state
+        (async () => {
+          try {
+            const { data: tripData } = await supabase.from('trips').select('hotel_selection').eq('id', tripId).maybeSingle();
+            const existingSel = tripData?.hotel_selection as any;
+            const existingArr = Array.isArray(existingSel) ? existingSel : existingSel ? [existingSel] : [];
+            if (existingArr.length > 1) {
+              const allHotels = existingArr.filter((h: any) => h?.name).map((h: any) => ({
+                name: h.name,
+                address: h.address || h.location,
+                checkInDate: h.checkInDate || h.checkIn,
+                checkOutDate: h.checkOutDate || h.checkOut,
+              }));
+              await patchItineraryWithMultipleHotels(tripId, allHotels);
+            } else {
+              await patchItineraryWithHotel(tripId, {
+                name: newHotel.name,
+                address: newHotel.address,
+                checkInDate: newHotel.checkInDate,
+                checkOutDate: newHotel.checkOutDate,
+              });
+            }
+          } catch (err) {
+            console.error('[AddHotel] Itinerary patch failed:', err);
+          }
+        })();
       }
 
       // Dispatch booking-changed event for financial snapshot refresh

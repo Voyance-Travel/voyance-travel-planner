@@ -554,12 +554,16 @@ export default function PlannerHotelEnhanced() {
           getTripCities(tripId).then(async (cities) => {
             const allHotels = cities
               .filter((c: any) => c.hotel_selection)
-              .map((c: any) => {
-                const hs = Array.isArray(c.hotel_selection) ? c.hotel_selection[0] : c.hotel_selection;
-                if (!hs?.name) return null;
-                return { name: hs.name, address: hs.address || hs.location, checkInDate: hs.checkInDate || hs.checkIn, checkOutDate: hs.checkOutDate || hs.checkOut };
-              })
-              .filter(Boolean) as Array<{ name: string; address?: string; checkInDate?: string; checkOutDate?: string }>;
+              .flatMap((c: any) => {
+                const sel = c.hotel_selection;
+                const arr = Array.isArray(sel) ? sel : [sel];
+                return arr.filter((h: any) => h?.name).map((h: any) => ({
+                  name: h.name,
+                  address: h.address || h.location,
+                  checkInDate: h.checkInDate || h.checkIn,
+                  checkOutDate: h.checkOutDate || h.checkOut,
+                }));
+              });
             if (allHotels.length > 1) {
               await patchItineraryWithMultipleHotels(tripId, allHotels);
             } else {

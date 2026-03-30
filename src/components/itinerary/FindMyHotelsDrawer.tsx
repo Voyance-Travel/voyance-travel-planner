@@ -27,6 +27,7 @@ import { CREDIT_COSTS } from '@/config/pricing';
 import { saveHotelSelection } from '@/services/supabase/trips';
 import { syncHotelToLedger, syncMultiCityHotelsToLedger } from '@/services/budgetLedgerSync';
 import { patchItineraryWithHotel, patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
+import { supabase } from '@/integrations/supabase/client';
 import { getTripCities } from '@/services/tripCitiesService';
 
 interface FindMyHotelsDrawerProps {
@@ -238,19 +239,37 @@ export function FindMyHotelsDrawer({
           const allCities = await getTripCities(tripId);
           const allHotels = allCities
             .filter((c: any) => c.hotel_selection)
-            .map((c: any) => {
-              const hs = Array.isArray(c.hotel_selection) ? c.hotel_selection[0] : c.hotel_selection;
-              if (!hs?.name) return null;
-              return { name: hs.name, address: hs.address || hs.location, checkInDate: hs.checkInDate || hs.checkIn, checkOutDate: hs.checkOutDate || hs.checkOut };
-            })
-            .filter(Boolean) as Array<{ name: string; address?: string; checkInDate?: string; checkOutDate?: string }>;
+            .flatMap((c: any) => {
+              const sel = c.hotel_selection;
+              const arr = Array.isArray(sel) ? sel : [sel];
+              return arr.filter((h: any) => h?.name).map((h: any) => ({
+                name: h.name,
+                address: h.address || h.location,
+                checkInDate: h.checkInDate || h.checkIn,
+                checkOutDate: h.checkOutDate || h.checkOut,
+              }));
+            });
           if (allHotels.length > 1) {
+            await patchItineraryWithMultipleHotels(tripId, allHotels);
+          } else if (allHotels.length === 1) {
+            await patchItineraryWithHotel(tripId, allHotels[0]);
+          }
+        } else {
+          // Single-city: check for existing multi-hotel state
+          const { data: tripData } = await supabase.from('trips').select('hotel_selection').eq('id', tripId).maybeSingle();
+          const existingSel = tripData?.hotel_selection as any;
+          const existingArr = Array.isArray(existingSel) ? existingSel : existingSel ? [existingSel] : [];
+          if (existingArr.length > 1) {
+            const allHotels = existingArr.filter((h: any) => h?.name).map((h: any) => ({
+              name: h.name,
+              address: h.address || h.location,
+              checkInDate: h.checkInDate || h.checkIn,
+              checkOutDate: h.checkOutDate || h.checkOut,
+            }));
             await patchItineraryWithMultipleHotels(tripId, allHotels);
           } else {
             await patchItineraryWithHotel(tripId, { name: hotel.name, address: hotel.address || hotel.neighborhood, checkInDate: startDate, checkOutDate: endDate });
           }
-        } else {
-          await patchItineraryWithHotel(tripId, { name: hotel.name, address: hotel.address || hotel.neighborhood, checkInDate: startDate, checkOutDate: endDate });
         }
       } catch (patchErr) {
         console.warn('[FindMyHotels] Hotel itinerary patch skipped:', patchErr);
