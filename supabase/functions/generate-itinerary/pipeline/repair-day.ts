@@ -42,6 +42,7 @@ export interface RepairDayInput {
   // Flight context for pre-arrival filter and departure sequence
   arrivalTime24?: string;
   returnDepartureTime24?: string;
+  departureAirport?: string;
 
   // Hotel context for bookend validator
   hotelName?: string;
@@ -54,6 +55,7 @@ export interface RepairDayInput {
   isLastDayInCity?: boolean;
   resolvedDestination?: string;
   nextLegTransport?: string;
+  nextLegTransportDetails?: { stationName?: string; departureTime?: string; [key: string]: any };
   hotelOverride?: { name?: string; address?: string };
 
   // Locked activities (never remove)
