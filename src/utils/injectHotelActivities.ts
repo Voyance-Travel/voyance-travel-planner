@@ -409,7 +409,35 @@ export function injectHotelActivitiesIntoDays(
 }
 
 /**
+ * Build a "Drop bags" activity for hotel transition days.
+ */
+function buildDropBagsActivity(hotel: HotelForInjection): EditorialActivity {
+  const photo = hotel.imageUrl || hotel.images?.[0];
+  return {
+    id: `hotel-dropbags-${hotel.id}`,
+    title: `Drop bags at ${hotel.name}`,
+    description: 'Drop off your luggage at the new hotel before check-in time.',
+    startTime: '12:00',
+    duration: '30 min',
+    durationMinutes: 30,
+    category: 'accommodation',
+    type: 'accommodation',
+    location: {
+      name: hotel.name,
+      address: hotel.address || '',
+      ...(hotel.coordinates ? { lat: hotel.coordinates.lat, lng: hotel.coordinates.lng } : {}),
+    },
+    photos: photo ? [{ url: photo }] : undefined,
+    isLocked: false,
+    tags: ['drop-bags', 'structural'],
+    cost: { amount: 0, currency: 'USD' },
+  };
+}
+
+/**
  * Inject hotel activities for multiple hotels (multi-city trips).
+ * Detects transition days (Hotel A checkout + Hotel B check-in) and
+ * injects a "Drop bags" card at 12:00 between checkout and check-in.
  */
 export function injectMultiHotelActivities(
   days: EditorialDay[],
@@ -417,11 +445,17 @@ export function injectMultiHotelActivities(
 ): EditorialDay[] {
   // For multi-city, preserve AI checkouts on all days that are last-in-city
   let updated = stripExistingHotelActivities(days, true);
-  
-  for (const hotelData of hotels) {
-    const hotel = normalizeHotel(hotelData);
-    if (!hotel) continue;
 
+  // Also strip any previously-injected drop-bags cards
+  updated = updated.map(day => ({
+    ...day,
+    activities: day.activities.filter(a => !a.id.startsWith('hotel-dropbags-')),
+  }));
+  
+  // Normalize all hotels first so we can detect transitions
+  const normalizedHotels = hotels.map(h => normalizeHotel(h)).filter((h): h is HotelForInjection => h !== null);
+
+  for (const hotel of normalizedHotels) {
     // Check-in injection
     const checkInDayIdx = findDayIndex(updated, hotel.checkInDate, true);
     const dayHasLateCheckinFlag = updated[checkInDayIdx]?.activities.some(a => isLateCheckin(a));
@@ -451,5 +485,31 @@ export function injectMultiHotelActivities(
       }
     }
   }
+
+  // Detect transition days and inject "Drop bags" cards
+  // A transition day = Hotel A checks out AND Hotel B checks in on the same date
+  if (normalizedHotels.length >= 2) {
+    for (let i = 0; i < normalizedHotels.length - 1; i++) {
+      const hotelA = normalizedHotels[i];
+      const hotelB = normalizedHotels[i + 1];
+      
+      if (!hotelA.checkOutDate || !hotelB.checkInDate) continue;
+      if (hotelA.checkOutDate.slice(0, 10) !== hotelB.checkInDate.slice(0, 10)) continue;
+
+      // Same day — this is a transition day
+      const transitionDayIdx = findDayIndex(updated, hotelB.checkInDate, true);
+      if (transitionDayIdx < 0 || transitionDayIdx >= updated.length) continue;
+
+      const dropBagsCard = buildDropBagsActivity(hotelB);
+      updated = updated.map((day, idx) => {
+        if (idx !== transitionDayIdx) return day;
+        // Only add if not already present
+        if (day.activities.some(a => a.id === dropBagsCard.id)) return day;
+        const withDropBags = insertChronologically(day.activities, dropBagsCard);
+        return { ...day, activities: cascadeFixOverlaps(withDropBags) };
+      });
+    }
+  }
+
   return updated;
 }
