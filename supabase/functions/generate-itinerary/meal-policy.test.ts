@@ -325,3 +325,53 @@ Deno.test('arrival day: guard only requires policy-specified meals', () => {
   assertEquals(result.injectedMeals.includes('breakfast'), false);
   assertEquals(result.injectedMeals.includes('lunch'), false);
 });
+
+// =============================================================================
+// REGRESSION: Guard NEVER produces "Meal in City" placeholder titles
+// =============================================================================
+
+Deno.test('enforceRequiredMealsFinalGuard never produces "Meal in City" titles', () => {
+  const activities = buildDay(['Museum Visit', 'Park Walk']).activities;
+  const destinations = ['Lisbon', 'Paris', 'Tokyo', 'Rome', 'Bangkok', 'Berlin', 'New York'];
+
+  for (const dest of destinations) {
+    const result = enforceRequiredMealsFinalGuard(
+      activities, ['breakfast', 'lunch', 'dinner'], 2, dest, 'USD', 'full_exploration'
+    );
+
+    for (const act of result.activities) {
+      const title = (act.title || '').toLowerCase();
+      const mealInCityPattern = /^(breakfast|lunch|dinner|brunch)\s+in\s+/i;
+      assertEquals(
+        mealInCityPattern.test(act.title || ''),
+        false,
+        `Guard produced forbidden "Meal in City" title: "${act.title}" for ${dest}`
+      );
+    }
+  }
+});
+
+Deno.test('enforceRequiredMealsFinalGuard prefers real venues over type-based fallback', () => {
+  const activities = buildDay(['Museum Visit']).activities;
+  const fallbackVenues = [
+    { name: 'Café da Garagem', address: 'Rua Costa do Castelo', mealType: 'breakfast' },
+    { name: 'Taberna da Rua das Flores', address: 'Rua das Flores 340', mealType: 'lunch' },
+    { name: 'Belcanto', address: 'Rua Serpa Pinto 10A', mealType: 'dinner' },
+  ];
+
+  const result = enforceRequiredMealsFinalGuard(
+    activities, ['breakfast', 'lunch', 'dinner'], 2, 'Lisbon', 'USD', 'full_exploration', fallbackVenues
+  );
+
+  // All injected meals should use real venue names
+  for (const meal of result.injectedMeals) {
+    const mealAct = result.activities.find(a => (a.title || '').toLowerCase().includes(meal));
+    assertEquals(!!mealAct, true, `Missing injected ${meal}`);
+    // Should NOT contain "local spot" or the destination as the venue
+    assertEquals(
+      (mealAct!.title || '').includes('local spot'),
+      false,
+      `${meal} should use real venue, got: "${mealAct!.title}"`
+    );
+  }
+});
