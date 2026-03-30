@@ -159,20 +159,44 @@ function parseTime(timeStr: string): number | null {
   return hours * 60 + mins;
 }
 
+/**
+ * Check for phantom hotel references.
+ * When no hotel is selected, we ALLOW generic placeholder cards
+ * (e.g. "Your Hotel", "Hotel Check-in", "Return to Hotel") but strip
+ * cards that reference a specific fabricated hotel name the AI invented.
+ */
 function checkPhantomHotel(activities: StrictActivityMinimal[], hasHotel: boolean, results: ValidationResult[]): void {
   if (hasHotel) return;
+
+  // Generic hotel titles that are valid placeholders — never strip these
+  const GENERIC_HOTEL_PATTERNS = [
+    'your hotel', 'hotel check-in', 'hotel checkout', 'check-in at your hotel',
+    'checkout from your hotel', 'return to your hotel', 'freshen up at your hotel',
+    'return to hotel', 'freshen up at hotel', 'hotel check-in & refresh',
+    'settle in', 'check-in & refresh', 'checkout & departure', 'checkout',
+    'check-in', 'check in', 'check out', 'check-out',
+  ];
+
   for (let i = 0; i < activities.length; i++) {
     const cat = (activities[i].category || '').toLowerCase();
-    if (cat === 'accommodation') {
-      results.push({
-        code: FAILURE_CODES.PHANTOM_HOTEL,
-        severity: 'error',
-        message: `Activity "${activities[i].title}" is an accommodation card but no hotel is booked`,
-        activityIndex: i,
-        field: 'category',
-        autoRepairable: true,
-      });
-    }
+    if (cat !== 'accommodation') continue;
+
+    const title = (activities[i].title || '').toLowerCase().trim();
+
+    // Allow generic/placeholder accommodation cards
+    const isGeneric = GENERIC_HOTEL_PATTERNS.some(p => title.includes(p)) ||
+      /^(hotel|your hotel|accommodation)\b/i.test(title);
+    if (isGeneric) continue;
+
+    // This is an accommodation card with a specific hotel name the AI fabricated
+    results.push({
+      code: FAILURE_CODES.PHANTOM_HOTEL,
+      severity: 'error',
+      message: `Activity "${activities[i].title}" references a specific hotel but none is booked`,
+      activityIndex: i,
+      field: 'category',
+      autoRepairable: true,
+    });
   }
 }
 
