@@ -944,7 +944,7 @@ export function enforceRequiredMealsFinalGuard(
     // Find matching venue: prefer specific meal type, then 'any'
     const matchingVenues = fallbackVenues.filter(v =>
       (v.mealType === mealType || v.mealType === 'any') &&
-      !usedVenueNames.has(v.name.toLowerCase())
+      !usedVenueNamesForInjection.has(v.name.toLowerCase())
     );
     // Prefer meal-type-specific matches first
     const specificMatch = matchingVenues.find(v => v.mealType === mealType);
