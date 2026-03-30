@@ -1,59 +1,69 @@
 
+Root cause: this is not the new pipeline failing broadly — it is one isolated fallback path still producing placeholders.
 
-# Fix: Ensure Hotel Relaxing & Airport Departure Cards
+What’s happening:
+1. The prompt path is correct when a restaurant pool exists:
+   - `pipeline/compile-prompt.ts` explicitly says “pick from this pre-verified list” and blocks repeats.
+2. But when meals are missing, the final meal guard in `day-validation.ts` injects fallback meals.
+3. That final guard still falls back to generic placeholders like:
+   - `Breakfast in Lisbon`
+   - `Lunch in Lisbon`
+4. That happens whenever `fallbackVenues` is empty or never reaches that guard.
 
-## Problem
-Two types of activity cards are missing from generated itineraries:
-1. **Hotel relaxing card** — When returning to the hotel mid-day (e.g., between afternoon and evening), only a transport entry exists. There's no dedicated accommodation card showing time at the hotel (freshen up, rest, change clothes).
-2. **Airport departure card** — On the last day, the "Departure" card (security, check-in, boarding) may be stripped by frontend dedup logic.
+Why this is still happening after the refactor:
+- The refactor actually did make this easier to diagnose.
+- The problem is now localized to:
+  - restaurant-pool propagation
+  - meal-guard fallback behavior
+  - validator coverage for generic meal titles
+- So yes: this should now be a relatively simple, targeted fix.
 
-## Root Causes
+Evidence from the code:
+- `compile-prompt.ts` uses `paramRestaurantPool` correctly.
+- `action-generate-trip-day.ts` loads `trip.metadata.restaurant_pool`, but logs that it can be empty and then falls through.
+- `generation-core.ts` calls `enforceRequiredMealsFinalGuard(...)` without passing fallback venues at all, so on final retry it can inject destination placeholders.
+- `day-validation.ts` explicitly creates `Breakfast in ${destination}` / `Lunch in ${destination}` when no venue exists.
+- `pipeline/validate-day.ts` flags generic venue names like `local restaurant`, but it does not currently catch `Breakfast in Lisbon` / `Lunch in Lisbon`.
 
-### Hotel Relaxing (Backend)
-In `compile-prompt.ts` line 425, the "HOTEL RETURN" instruction says "REQUIRED **if dinner is far from hotel**" — making it conditional. The AI often skips it. The bookend repair (`repair-day.ts` line 689-696) does inject "Freshen up at [Hotel]" but only when a transport-to-hotel activity exists without a following accommodation card. If the AI skips both the transport AND the accommodation card, nothing catches it.
+Implementation plan:
+1. Remove placeholder meal title generation
+   - In `day-validation.ts`, stop generating `Breakfast in ${destination}` / `Lunch in ${destination}` / `Dinner in ${destination}`.
+   - If no real venue is available, either:
+     - fail hard for retry, or
+     - create a clearly marked unresolved placeholder that the validator rejects.
+2. Pass real fallback venues through every generation path
+   - Update the `generation-core.ts` meal guard call to receive the same restaurant-pool / verified-venue candidates already assembled elsewhere.
+   - Ensure the final-attempt path cannot silently degrade into generic destination meal names.
+3. Make validation reject these placeholders explicitly
+   - Expand `pipeline/validate-day.ts` generic venue detection to catch:
+     - `Breakfast in [city]`
+     - `Lunch in [city]`
+     - `Dinner in [city]`
+     - similar city-name-only meal titles
+   - This forces repair/retry instead of saving bad cards.
+4. Keep repair isolated in the new pipeline
+   - If a meal is missing and a real venue exists in pool/fallbacks, let repair/guard inject `Breakfast at [real place]`.
+   - If not, surface a generation failure instead of fake specificity.
+5. Add regression coverage
+   - Add/update tests around:
+     - empty restaurant pool
+     - pool present but exhausted
+     - final retry path
+     - validator catching `Lunch in Lisbon`
+     - guard preferring real pool venues over generic fallback
 
-**Fix**: Make the hotel return instruction unconditional in the prompt, and strengthen the bookend repair to guarantee a mid-evening hotel return on full exploration days.
+Expected outcome:
+- No more saved activity cards like “Breakfast in Lisbon.”
+- Meals will either:
+  - use a real named restaurant, or
+  - fail/retry visibly instead of sneaking generic placeholders into the itinerary.
 
-### Airport Departure (Frontend)
-In `EditorialItinerary.tsx` lines 1865-1890, when a synthetic departure card is injected, the dedup filter strips AI-generated activities matching hub tokens (`airport`, `station`, etc.) including departure/security cards. The "Departure" card from the AI (with "Check-in, security, and boarding") gets caught by this filter because its title contains "airport" or "departure" keywords.
-
-**Fix**: Preserve AI-generated "Departure" / "Security" cards that have category `transport` and describe airport procedures, rather than stripping all airport-keyword matches.
-
-## Changes
-
-### 1. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` (~line 425)
-Make hotel return mandatory on full exploration days (not conditional on dinner distance):
-
-```typescript
-// Before:
-${flightContext.hotelName ? `6. HOTEL RETURN (REQUIRED if dinner is far from hotel) — ...` : ''}
-
-// After:
-${flightContext.hotelName ? `6. HOTEL RETURN (REQUIRED) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30 min. Every full day MUST include a hotel return between afternoon activities and dinner. This MUST be a separate activity card.` : ''}
-```
-
-### 2. `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (~line 698)
-Strengthen end-of-day hotel return to also guarantee a mid-day return on full exploration days (when day has both lunch and dinner):
-
-After the existing end-of-day hotel return (line 698-706), add a mid-day return check:
-- If the day has both a lunch and dinner activity but NO accommodation card between them, inject "Freshen up at [Hotel]" with a 30-minute slot between the last afternoon activity and dinner.
-
-### 3. `src/components/itinerary/EditorialItinerary.tsx` (~line 1880)
-Preserve AI-generated departure/security cards during dedup. The filter currently removes all activities with "departure" in the title — modify to keep activities with category `transport` that describe airport check-in/security procedures (not transfer/transit activities):
-
-```typescript
-// Add exclusion: keep "Departure" cards that describe airport procedures
-const isAirportProcedure = t.includes('departure') && 
-  (act.description || '').toLowerCase().includes('security') || 
-  (act.description || '').toLowerCase().includes('check-in') || 
-  (act.description || '').toLowerCase().includes('boarding');
-if (isAirportProcedure) return true; // Keep this card
-
-const isDepartureActivity = t.includes('departure from') || ...
-```
-
-## Files to modify
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — make hotel return mandatory
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add mid-day hotel return guarantee
-- `src/components/itinerary/EditorialItinerary.tsx` — preserve airport departure cards in dedup
-
+Technical details:
+- Primary files to update:
+  - `supabase/functions/generate-itinerary/day-validation.ts`
+  - `supabase/functions/generate-itinerary/generation-core.ts`
+  - `supabase/functions/generate-itinerary/pipeline/validate-day.ts`
+  - likely also `supabase/functions/generate-itinerary/action-generate-day.ts` / `action-generate-trip-day.ts` for consistent fallback venue propagation
+- Architectural conclusion:
+  - Yes, the split model did help.
+  - This looks like a focused fix in the meal fallback layer, not a structural rewrite.
