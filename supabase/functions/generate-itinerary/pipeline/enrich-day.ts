@@ -283,6 +283,7 @@ export async function enrichAndValidateHours(input: EnrichDayInput): Promise<any
     input.supabaseKey,
     input.googleMapsApiKey,
     input.lovableApiKey,
+    input.hotelCoordinates,
   );
 
   // Step 2: Opening hours validation (shift/remove activities at closed venues)
