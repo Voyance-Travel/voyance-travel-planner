@@ -127,6 +127,8 @@ export interface GenerationContext {
   perCityDailyBudget?: Record<string, number>;
   // Is first day in city (for multi-city)
   isFirstDayInCity?: boolean;
+  // Pre-generated restaurant pool for meal guard fallbacks
+  restaurantPool?: Array<{ name: string; neighborhood?: string; address?: string; mealType: string; cuisine?: string; priceRange?: string }>;
 }
 
 // =============================================================================
