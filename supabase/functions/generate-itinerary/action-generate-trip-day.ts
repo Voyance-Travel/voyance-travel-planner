@@ -750,11 +750,12 @@ async function _handleGenerateTripDayInner(
 
   // ── BUILD MEAL GUARD FALLBACK VENUES ─────────────────────────────
   // PRIORITY 1: Use the pre-generated restaurant pool (real, curated)
+  const { extractRestaurantVenueName: extractVenue } = await import('./generation-utils.ts');
   let fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
   if (restaurantPool.length > 0) {
-    const usedSet = new Set(usedRestaurants.map(n => n.toLowerCase()));
+    const usedSet = new Set(usedRestaurants.map(n => extractVenue(n)));
     for (const r of restaurantPool) {
-      if (!usedSet.has((r.name || '').toLowerCase())) {
+      if (!usedSet.has(extractVenue(r.name || ''))) {
         fallbackVenues.push({ name: r.name, address: r.address || r.neighborhood || dayCity, mealType: r.mealType || 'any' });
       }
     }
