@@ -11,12 +11,13 @@
  * 4. DUPLICATE_CONCEPT (strip trip-wide dupes, swap meals from pool)
  * 5. WEAK_PERSONALIZATION (strip avoid-list violations)
  * 5b. MEAL_DUPLICATE (relabel/swap/remove duplicate meals)
- * 6. LOGISTICS_SEQUENCE (departure day reorder)
+ * 6. LOGISTICS_SEQUENCE (departure day reorder — fires for isLastDay OR isLastDayInCity)
  * 7. CHECK-IN GUARANTEE (day 1 / transition day)
  * 8. CHECKOUT GUARANTEE (last day / last day in city)
+ * 8b. DEPARTURE TRANSPORT GUARANTEE (inject airport/station transfer if missing)
  * 9. MISSING_SLOT (bookend: inject transits + hotel returns, with departure-day guards)
  * 10. TITLE_LABEL_LEAK (strip label leaks)
- * 11. DEPARTURE SEQUENCE FIX (swap checkout before airport)
+ * 11. DEPARTURE SEQUENCE FIX (swap checkout before transport — fires for all departure days)
  * 12. NON-FLIGHT DEPARTURE (strip airport refs)
  */
 

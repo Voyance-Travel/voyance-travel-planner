@@ -41,4 +41,25 @@
 
 3. **Expected departure day sequence**: breakfast → checkout → (optional activity) → airport transport → security → flight
    - No more "Return to Hotel" after flights
-   - No mid-day hotel returns after checkout
+    - No mid-day hotel returns after checkout
+
+## Completed: Departure Transport Guarantee
+
+### What was done
+
+1. **Added Step 8b: DEPARTURE TRANSPORT GUARANTEE** in `repair-day.ts`
+   - Detects missing transport cards on departure days (last day or last day in city)
+   - Flight departures: injects "Transfer to [Airport]" timed 3 hours before flight
+   - Non-flight inter-city departures: injects "Transfer to [Station]" using nextLegTransportDetails
+   - Generic fallback: injects "Departure Transfer" after checkout when no flight data exists
+   - Also injects missing "Departure Flight" card on last day when flight time is known
+
+2. **Extended Step 6 (LOGISTICS_SEQUENCE) to fire for mid-trip city departures**
+   - Previously only ran for `isLastDay`; now runs for `isLastDayInCity` too
+
+3. **Extended Step 11 (DEPARTURE SEQUENCE FIX) to all departure days**
+   - Now swaps checkout before transport on both final-day and mid-trip departures
+   - Matches station transfers in addition to airport transfers
+
+4. **Added `departureAirport` and `nextLegTransportDetails` to RepairDayInput**
+   - Enables hub-specific titles like "Transfer to Heathrow Airport" instead of generic labels
