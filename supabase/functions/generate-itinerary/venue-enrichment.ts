@@ -720,7 +720,8 @@ export async function enrichActivityWithRetry(
         supabaseUrl,
         supabaseKey,
         GOOGLE_MAPS_API_KEY,
-        LOVABLE_API_KEY
+        LOVABLE_API_KEY,
+        hotelCoordinates
       );
       return { activity: enriched, success: true, retried };
     } catch (error) {
