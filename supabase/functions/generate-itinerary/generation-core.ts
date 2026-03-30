@@ -2223,6 +2223,14 @@ Generate activities for this day following ALL constraints above.`;
           context.destination || 'the destination',
           context.currency || 'USD',
           dayMealPolicy.dayMode,
+          // Pass restaurant pool as fallback venues so the guard uses REAL restaurants
+          (context as any).restaurantPool
+            ? ((context as any).restaurantPool as any[]).map((r: any) => ({
+                name: r.name,
+                address: r.neighborhood || r.address || context.destination || '',
+                mealType: r.mealType || 'any',
+              }))
+            : [],
         );
         if (!mealGuardResult.alreadyCompliant) {
           // If NOT the last attempt, treat meal guard firing as a retry trigger
