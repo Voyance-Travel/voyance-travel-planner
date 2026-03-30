@@ -235,6 +235,8 @@ export function FindMyHotelsDrawer({
         await patchItineraryWithHotel(tripId, {
           name: hotel.name,
           address: hotel.address || hotel.neighborhood,
+          checkInDate: startDate,
+          checkOutDate: endDate,
         });
       } catch (patchErr) {
         console.warn('[FindMyHotels] Hotel itinerary patch skipped:', patchErr);
