@@ -313,7 +313,8 @@ export async function verifyVenueWithDualAI(
   supabaseUrl: string,
   supabaseKey: string,
   GOOGLE_MAPS_API_KEY: string | undefined,
-  LOVABLE_API_KEY: string | undefined
+  LOVABLE_API_KEY: string | undefined,
+  hotelCoordinates?: { lat: number; lng: number }
 ): Promise<VenueVerification | null> {
   const venueName = activity.location?.name || activity.title;
   const category = activity.category || 'sightseeing';
