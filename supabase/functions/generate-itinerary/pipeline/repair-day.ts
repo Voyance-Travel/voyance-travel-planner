@@ -221,6 +221,29 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           act.location = { name: replacement.name, address: replacement.address || '' };
           act.source = 'pool-dedup-swap';
           usedSet.add(normalizeForDedup(replacement.name));
+
+          // Sync preceding transport card to reference the new restaurant
+          const prevIdx = vr.activityIndex - 1;
+          if (prevIdx >= 0) {
+            const prev = activities[prevIdx];
+            if ((prev.category || '').toLowerCase() === 'transport' &&
+                !lockedIds.has(prev.id)) {
+              const oldTitle = prev.title;
+              prev.title = `Travel to ${replacement.name}`;
+              prev.location = { name: replacement.name, address: replacement.address || '' };
+              if (prev.description) {
+                prev.description = prev.description.replace(/to\s+.+\.?$/, `to ${replacement.name}.`);
+              }
+              repairs.push({
+                code: FAILURE_CODES.DUPLICATE_CONCEPT,
+                activityIndex: prevIdx,
+                action: 'synced_transit_after_swap',
+                before: oldTitle,
+                after: prev.title,
+              });
+            }
+          }
+
           repairs.push({
             code: FAILURE_CODES.DUPLICATE_CONCEPT,
             activityIndex: vr.activityIndex,
