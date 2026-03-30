@@ -700,15 +700,37 @@ export default function PlannerHotelEnhanced() {
       if (manualTripId && manualHotel.name) {
         syncHotelToLedger(manualTripId, manualHotel as any)
           .catch(err => console.warn('[PlannerHotel] Manual hotel budget sync failed:', err));
-        // Manual hotel: checkIn/checkOut are times not dates, use trip dates instead
-        const manualCheckInDate = startDate || searchParams.get('startDate') || undefined;
-        const manualCheckOutDate = endDate || searchParams.get('endDate') || undefined;
-        patchItineraryWithHotel(manualTripId, {
-          name: manualHotel.name,
-          address: manualHotel.address,
-          checkInDate: manualCheckInDate,
-          checkOutDate: manualCheckOutDate,
-        }).catch(err => console.warn('[PlannerHotel] Manual hotel itinerary patch failed:', err));
+      // Manual hotel: use multi-hotel patcher for multi-city
+        if (isMultiCity && multiCityCityId) {
+          getTripCities(manualTripId).then(cities => {
+            const allHotels = cities
+              .filter(c => c.hotel_selection)
+              .flatMap(c => {
+                const sel = c.hotel_selection as any;
+                const arr = Array.isArray(sel) ? sel : [sel];
+                return arr.filter((h: any) => h?.name).map((h: any) => ({
+                  name: h.name,
+                  address: h.address,
+                  checkInDate: c.arrival_date || h.checkInDate || h.checkIn,
+                  checkOutDate: c.departure_date || h.checkOutDate || h.checkOut,
+                }));
+              });
+            if (allHotels.length > 1) {
+              return patchItineraryWithMultipleHotels(manualTripId, allHotels);
+            } else if (allHotels.length === 1) {
+              return patchItineraryWithHotel(manualTripId, allHotels[0]);
+            }
+          }).catch(err => console.warn('[PlannerHotel] Manual multi-hotel patch failed:', err));
+        } else {
+          const manualCheckInDate = startDate || searchParams.get('startDate') || undefined;
+          const manualCheckOutDate = endDate || searchParams.get('endDate') || undefined;
+          patchItineraryWithHotel(manualTripId, {
+            name: manualHotel.name,
+            address: manualHotel.address,
+            checkInDate: manualCheckInDate,
+            checkOutDate: manualCheckOutDate,
+          }).catch(err => console.warn('[PlannerHotel] Manual hotel itinerary patch failed:', err));
+        }
         window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId: manualTripId } }));
       }
 

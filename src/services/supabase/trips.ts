@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import type { Json } from '@/integrations/supabase/types';
 import { syncFlightToLedger, syncHotelToLedger } from '@/services/budgetLedgerSync';
 import { patchItineraryWithFlight } from '@/services/flightItineraryPatch';
-import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
+import { patchItineraryWithHotel, patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
 
 // ============================================================================
 // TYPES
@@ -606,13 +606,30 @@ export function useSaveHotelSelection() {
       // Sync hotel price to budget ledger
       await syncHotelToLedger(tripId, hotel);
       // Patch itinerary accommodation activities with hotel name
+      // Check if trip has multiple hotels — if so, use multi-hotel patcher
       try {
-        await patchItineraryWithHotel(tripId, {
-          name: hotel.name || '',
-          address: hotel.address,
-          checkInDate: (hotel as any).checkInDate || (hotel as any).checkIn,
-          checkOutDate: (hotel as any).checkOutDate || (hotel as any).checkOut,
-        });
+        const { data: tripData } = await supabase
+          .from('trips')
+          .select('hotel_selection')
+          .eq('id', tripId)
+          .maybeSingle();
+        const hotelArr = Array.isArray(tripData?.hotel_selection) ? tripData.hotel_selection : [];
+        if (hotelArr.length > 1) {
+          const allHotels = hotelArr.filter((h: any) => h?.name).map((h: any) => ({
+            name: h.name,
+            address: h.address,
+            checkInDate: h.checkInDate || h.checkIn,
+            checkOutDate: h.checkOutDate || h.checkOut,
+          }));
+          await patchItineraryWithMultipleHotels(tripId, allHotels);
+        } else {
+          await patchItineraryWithHotel(tripId, {
+            name: hotel.name || '',
+            address: hotel.address,
+            checkInDate: (hotel as any).checkInDate || (hotel as any).checkIn,
+            checkOutDate: (hotel as any).checkOutDate || (hotel as any).checkOut,
+          });
+        }
       } catch (e) { console.warn('[useSaveHotelSelection] itinerary patch skipped:', e); }
       return trip;
     },
