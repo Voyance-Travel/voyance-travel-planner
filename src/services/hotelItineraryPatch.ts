@@ -13,6 +13,8 @@ const ACCOMMODATION_KEYWORDS = [
   'check-in', 'check in', 'check into',
   'checkout', 'check-out', 'check out',
   'accommodation', 'settle in', 'settle into',
+  'your hotel', 'freshen up',
+  'return to your hotel', 'return to hotel',
 ];
 
 const ACCOMMODATION_CATEGORIES = ['accommodation', 'hotel'];
