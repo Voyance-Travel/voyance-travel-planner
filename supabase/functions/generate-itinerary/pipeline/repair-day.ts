@@ -10,9 +10,14 @@
  * 3. CHRONOLOGY (filter pre-arrival, sort)
  * 4. DUPLICATE_CONCEPT (strip trip-wide dupes, swap meals from pool)
  * 5. WEAK_PERSONALIZATION (strip avoid-list violations)
+ * 5b. MEAL_DUPLICATE (relabel/swap/remove duplicate meals)
  * 6. LOGISTICS_SEQUENCE (departure day reorder)
- * 7. MISSING_SLOT (bookend: inject transits + hotel returns)
- * 8. MEAL_MISSING (final guard — inject fallback meals)
+ * 7. CHECK-IN GUARANTEE (day 1 / transition day)
+ * 8. CHECKOUT GUARANTEE (last day / last day in city)
+ * 9. MISSING_SLOT (bookend: inject transits + hotel returns, with departure-day guards)
+ * 10. TITLE_LABEL_LEAK (strip label leaks)
+ * 11. DEPARTURE SEQUENCE FIX (swap checkout before airport)
+ * 12. NON-FLIGHT DEPARTURE (strip airport refs)
  */
 
 import { FAILURE_CODES, type ValidationResult, type RepairAction, type FailureCode } from './types.ts';
