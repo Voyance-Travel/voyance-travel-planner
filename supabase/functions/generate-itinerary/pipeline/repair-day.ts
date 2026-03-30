@@ -199,8 +199,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const mealType = startHour < 11 ? 'breakfast' : startHour < 15 ? 'lunch' : 'dinner';
 
         const replacement = restaurantPool.find(r => {
-          const rName = (r.name || '').toLowerCase();
-          if (usedSet.has(rName)) return false;
+          const rNameNorm = normalizeForDedup(r.name || '');
+          if (usedSet.has(rNameNorm)) return false;
           return r.mealType === mealType || r.mealType === 'any';
         });
 
@@ -210,7 +210,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           act.description = `${replacement.cuisine || 'Local cuisine'} in ${replacement.neighborhood || 'the city'}. ${replacement.priceRange || '$$'}.`;
           act.location = { name: replacement.name, address: replacement.address || '' };
           act.source = 'pool-dedup-swap';
-          usedSet.add(replacement.name.toLowerCase());
+          usedSet.add(normalizeForDedup(replacement.name));
           repairs.push({
             code: FAILURE_CODES.DUPLICATE_CONCEPT,
             activityIndex: vr.activityIndex,
