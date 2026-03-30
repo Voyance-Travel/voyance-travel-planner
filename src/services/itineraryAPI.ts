@@ -226,6 +226,9 @@ function buildDayCityMap(cities: TripCity[], totalDays: number): Array<{
       const isLastDayOfCity = n === nights - 1;
       const isDeparture = isLastDayOfCity && !!nextCity;
       
+      // Absolute last day of the trip (last night of last city) = final departure day
+      const isAbsoluteLastDay = isLastDayOfCity && !nextCity && city.city_order === cities[cities.length - 1]?.city_order;
+      
       map.push({
         cityName: city.city_name,
         country: city.country || undefined,
@@ -233,10 +236,18 @@ function buildDayCityMap(cities: TripCity[], totalDays: number): Array<{
         transitionFrom: isTransition ? prevCity?.city_name : undefined,
         transitionTo: isTransition ? city.city_name : undefined,
         transitionMode: isTransition ? (city.transport_type || undefined) : undefined,
-        isDepartureDay: isDeparture || undefined,
-        departureTo: isDeparture ? nextCity!.city_name : undefined,
-        departureTransportType: isDeparture ? (nextCity!.transport_type || undefined) : undefined,
-        departureTransportDetails: isDeparture ? (nextCity!.transport_details as Record<string, unknown> || undefined) : undefined,
+        isDepartureDay: isDeparture || isAbsoluteLastDay || undefined,
+        departureTo: isDeparture ? nextCity!.city_name : isAbsoluteLastDay ? '__home__' : undefined,
+        departureTransportType: isDeparture
+          ? (nextCity!.transport_type || undefined)
+          : isAbsoluteLastDay
+            ? (city.transport_type || undefined) // Return transport from first city's record or undefined
+            : undefined,
+        departureTransportDetails: isDeparture
+          ? (nextCity!.transport_details as Record<string, unknown> || undefined)
+          : isAbsoluteLastDay
+            ? (city.transport_details as Record<string, unknown> || undefined)
+            : undefined,
       });
     }
   }
