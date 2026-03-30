@@ -262,8 +262,11 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 7. MISSING_SLOT: bookend validator ---
-  if (hotelName && hasHotel && activities.length > 0) {
-    const bookendRepairs = repairBookends(activities, hotelName, dayNumber);
+  // Always inject hotel bookends — use placeholder if no hotel selected yet.
+  // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
+  if (activities.length > 0) {
+    const effectiveHotelName = hotelName || 'Your Hotel';
+    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber);
     activities = bookendRepairs.activities;
     repairs.push(...bookendRepairs.repairs);
   }
@@ -304,7 +307,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
 
     if (!hasCheckIn) {
-      const hn = hotelName || 'Hotel';
+      const hn = hotelName || 'Your Hotel';
       const ha = hotelAddress || '';
       const firstAct = activities[0];
       const firstStartMin = parseTimeToMinutes(firstAct?.startTime || '15:00') ?? (15 * 60);
@@ -348,7 +351,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
 
     if (!hasCheckout) {
-      const coHotelName = hotelOverride?.name || hotelName || 'Hotel';
+      const coHotelName = hotelOverride?.name || hotelName || 'Your Hotel';
       const coHotelAddr = hotelOverride?.address || hotelAddress || '';
 
       let checkoutStartMin: number;

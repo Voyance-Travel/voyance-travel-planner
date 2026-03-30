@@ -153,20 +153,28 @@ DO NOT plan activities before ${arrival24}. The day starts when the plane lands.
           dayConstraints = `
 THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is a MORNING ARRIVAL - the traveler has likely been traveling overnight.
-⚠️ NO HOTEL BOOKED: Do NOT reference any hotel. No hotel check-in, no hotel breakfast, no return to hotel.
+
+The traveler has NOT selected a specific hotel yet. Use "Your Hotel" as the placeholder name.
+Still include hotel check-in and return-to-hotel activities using "Your Hotel" — these will be updated with the real hotel name once selected.
 
 TRAVELER CONTEXT:
 - The traveler has been on a long flight and may have jet lag
 - They need to clear customs/immigration (estimate: 1 hour)
 
-REQUIRED ACTIVITY SEQUENCE:
+REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry):
 1. "Arrival at ${arrivalAirportDisplay}" 
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
 
+2. "Check-in at Your Hotel"
+   - startTime: "${addMinutesToHHMM(arrival24, 90)}", endTime: "${addMinutesToHHMM(arrival24, 120)}"
+   - category: "accommodation"
+   - description: "Check in and freshen up"
+   - location: { name: "Your Hotel" }
+
 MORNING ARRIVAL GUIDELINES:
-- After arrival, the traveler may want a light breakfast or brunch at a local café
+- After check-in, the traveler may want a light breakfast or brunch near the hotel
 - Start with LOW-ENERGY activities: a café, a leisurely neighborhood walk, or a nearby park
 - Build energy throughout the day - save more intensive sightseeing for afternoon
 - Earliest sightseeing/exploration: ${earliestSightseeing}
@@ -206,17 +214,26 @@ DO NOT plan activities before ${arrival24}. The day starts when the plane lands.
           dayConstraints = `
 THE FLIGHT LANDS AT ${arrival24} (${flightContext.arrivalTime || arrival24}).
 This is an AFTERNOON ARRIVAL.
-⚠️ NO HOTEL BOOKED: Do NOT reference any hotel. No hotel check-in, no return to hotel.
 
-REQUIRED ACTIVITY SEQUENCE:
+The traveler has NOT selected a specific hotel yet. Use "Your Hotel" as the placeholder name.
+Still include hotel check-in and return-to-hotel activities using "Your Hotel" — these will be updated with the real hotel name once selected.
+
+REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity entry):
 1. "Arrival at ${arrivalAirportDisplay}"
    - startTime: "${arrival24}", endTime: "${addMinutesToHHMM(arrival24, 30)}"
    - category: "transport"
    - description: "Clear customs and collect luggage"
 
+2. "Check-in at Your Hotel"
+   - startTime: "${addMinutesToHHMM(arrival24, 60)}", endTime: "${addMinutesToHHMM(arrival24, 90)}"
+   - category: "accommodation"
+   - description: "Check in and freshen up"
+   - location: { name: "Your Hotel" }
+
 AFTERNOON ARRIVAL GUIDELINES:
-- Plan 1-2 light activities in the city
-- End the day with a nice dinner at a local restaurant
+- After check-in, plan 1-2 light activities
+- Focus on the hotel neighborhood - nearby exploration, a café, or a walk
+- End the day with a nice dinner near the hotel
 - Earliest exploration: ${earliestSightseeing}
 - Save major attractions for full days
 
@@ -282,13 +299,14 @@ DAY 1 GUIDELINES:
 
 Start the day at ${luggageDropTime} with the hotel luggage drop.`;
     } else {
-      // No flight, no hotel
-      console.log(`[compile-day-schema] Day1: no flight AND no hotel — morning start`);
+      // No flight, no hotel — still use placeholder hotel for logistics
+      console.log(`[compile-day-schema] Day1: no flight AND no hotel — morning start with placeholder hotel`);
 
       dayConstraints = `
 NO ARRIVAL OR HOTEL INFORMATION PROVIDED
 
 The traveler has not specified flight or hotel details.
+Use "Your Hotel" as a placeholder name for accommodation activities — these will be updated with the real hotel name once selected.
 
 DAY 1 APPROACH:
 - Assume the traveler is available from 10:00 AM
@@ -296,10 +314,17 @@ DAY 1 APPROACH:
 - Plan activities that can be reached from any accommodation
 - Focus on exploration and orientation
 
+REQUIRED FIRST ACTIVITY:
+1. "Check-in at Your Hotel"
+   - startTime: "10:00", endTime: "10:30"
+   - category: "accommodation"
+   - description: "Check in and get settled"
+   - location: { name: "Your Hotel" }
+
 STRUCTURE:
-1. Start at 10:00 AM with a central activity
-2. Plan a full day of activities
-3. End with dinner
+2. After check-in, plan a full day of activities
+3. Include a "Freshen up at Your Hotel" break mid-afternoon
+4. End with dinner
 
 Start the day at 10:00 AM.`;
     }
@@ -687,7 +712,7 @@ REALISTIC STRUCTURE:
 NOTE: Add your flight details to unlock more of the day if departing later.`;
 
       } else {
-        // No flight, no hotel
+        // No flight, no hotel — use placeholder
         const destLowerNoHotel = (destination || '').toLowerCase();
         let genericDepartureHint = 'airport or station';
         if (destLowerNoHotel.includes('venice')) genericDepartureHint = 'Santa Lucia Station or Marco Polo Airport';
@@ -695,12 +720,14 @@ NOTE: Add your flight details to unlock more of the day if departing later.`;
         dayConstraints = `
 === DEPARTURE DAY: NO FLIGHT OR HOTEL INFORMATION ===
 
+Use "Your Hotel" as a placeholder name for accommodation activities — these will be updated with the real hotel name once selected.
+
 ⚠️ Plan a proper farewell morning — don't just stop mid-morning.
 
 TIMELINE:
 - Breakfast: 08:30 - 09:30
 - Final farewell activity: 09:30 - 10:30
-- Checkout: 11:00
+- Checkout from Your Hotel: 11:00
 - Farewell meal or last experience: 11:15 - 12:00
 - Departure Transfer: 12:30
 
@@ -714,9 +741,10 @@ STRUCTURE:
    - 09:30 - 10:30
    - Nearby, flexible, low-stakes
 
-3. "Checkout & Departure Preparation"
+3. "Checkout from Your Hotel"
    - 11:00 - 11:15
    - category: "accommodation"
+   - location: { name: "Your Hotel" }
 
 4. "Farewell [meal] at [specific place]"
    - 11:15 - 12:00
