@@ -271,6 +271,69 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 5a. MEAL_ORDER: relabel meals whose title contradicts their time slot ---
+  if (byCode.has(FAILURE_CODES.MEAL_ORDER)) {
+    const MEAL_KW_ORDER: Record<string, string[]> = {
+      breakfast: ['breakfast', 'brunch'],
+      lunch: ['lunch'],
+      dinner: ['dinner', 'supper'],
+    };
+
+    const orderResults = byCode.get(FAILURE_CODES.MEAL_ORDER) || [];
+    for (const vr of orderResults) {
+      if (vr.activityIndex === undefined) continue;
+      const act = activities[vr.activityIndex];
+      if (!act || lockedIds.has(act.id)) continue;
+
+      const startMins = parseTimeToMinutes(act.startTime || '12:00');
+      if (startMins === null) continue;
+
+      // Determine correct meal for time slot
+      let correctMeal: string | null = null;
+      if (startMins >= 360 && startMins < 660) correctMeal = 'breakfast';
+      else if (startMins >= 660 && startMins < 900) correctMeal = 'lunch';
+      else if (startMins >= 1020 && startMins < 1380) correctMeal = 'dinner';
+      if (!correctMeal) continue;
+
+      // Find current meal label in title
+      const title = (act.title || '');
+      const titleLower = title.toLowerCase();
+      let currentMealKey: string | null = null;
+      let currentKeyword: string | null = null;
+      for (const [meal, kws] of Object.entries(MEAL_KW_ORDER)) {
+        for (const kw of kws) {
+          if (titleLower.includes(kw)) {
+            currentMealKey = meal;
+            currentKeyword = kw;
+            break;
+          }
+        }
+        if (currentMealKey) break;
+      }
+
+      if (!currentMealKey || currentMealKey === correctMeal) continue;
+
+      // Relabel: replace meal keyword in title
+      const correctLabel = correctMeal.charAt(0).toUpperCase() + correctMeal.slice(1);
+      const before = act.title;
+      // Match the keyword preserving case
+      const regex = new RegExp(`\\b${currentKeyword}\\b`, 'i');
+      act.title = act.title.replace(regex, (match: string) =>
+        match[0] === match[0].toUpperCase() ? correctLabel : correctLabel.toLowerCase()
+      );
+      if (act.name) act.name = act.title;
+
+      console.log(`[Repair] MEAL_ORDER: "${before}" → "${act.title}" (time ${act.startTime})`);
+      repairs.push({
+        code: FAILURE_CODES.MEAL_ORDER,
+        activityIndex: vr.activityIndex,
+        action: 'relabeled_meal_for_time',
+        before,
+        after: act.title,
+      });
+    }
+  }
+
   // --- 5b. MEAL_DUPLICATE: remove or relabel duplicate same-meal activities ---
   if (byCode.has(FAILURE_CODES.MEAL_DUPLICATE)) {
     const dupeResults = byCode.get(FAILURE_CODES.MEAL_DUPLICATE) || [];

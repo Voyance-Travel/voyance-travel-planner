@@ -311,12 +311,36 @@ function checkMealOrder(activities: StrictActivityMinimal[], results: Validation
       });
     }
 
+    // Lunch before 11:00 → should be breakfast
+    if (title.includes('lunch') && startMins < 11 * 60) {
+      results.push({
+        code: FAILURE_CODES.MEAL_ORDER,
+        severity: 'error',
+        message: `Lunch "${activities[i].title}" scheduled at ${activities[i].startTime} (before 11:00 — should be breakfast)`,
+        activityIndex: i,
+        field: 'startTime',
+        autoRepairable: true,
+      });
+    }
+
     // Lunch after 17:00
     if (title.includes('lunch') && startMins > 17 * 60) {
       results.push({
         code: FAILURE_CODES.MEAL_ORDER,
         severity: 'error',
         message: `Lunch "${activities[i].title}" scheduled at ${activities[i].startTime} (after 17:00)`,
+        activityIndex: i,
+        field: 'startTime',
+        autoRepairable: true,
+      });
+    }
+
+    // Dinner before 15:00 → should be lunch or breakfast
+    if ((title.includes('dinner') || title.includes('supper')) && startMins < 15 * 60) {
+      results.push({
+        code: FAILURE_CODES.MEAL_ORDER,
+        severity: 'error',
+        message: `Dinner "${activities[i].title}" scheduled at ${activities[i].startTime} (before 15:00 — wrong meal label)`,
         activityIndex: i,
         field: 'startTime',
         autoRepairable: true,
