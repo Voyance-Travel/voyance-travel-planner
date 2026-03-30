@@ -10,9 +10,14 @@
  * 3. CHRONOLOGY (filter pre-arrival, sort)
  * 4. DUPLICATE_CONCEPT (strip trip-wide dupes, swap meals from pool)
  * 5. WEAK_PERSONALIZATION (strip avoid-list violations)
+ * 5b. MEAL_DUPLICATE (relabel/swap/remove duplicate meals)
  * 6. LOGISTICS_SEQUENCE (departure day reorder)
- * 7. MISSING_SLOT (bookend: inject transits + hotel returns)
- * 8. MEAL_MISSING (final guard — inject fallback meals)
+ * 7. CHECK-IN GUARANTEE (day 1 / transition day)
+ * 8. CHECKOUT GUARANTEE (last day / last day in city)
+ * 9. MISSING_SLOT (bookend: inject transits + hotel returns, with departure-day guards)
+ * 10. TITLE_LABEL_LEAK (strip label leaks)
+ * 11. DEPARTURE SEQUENCE FIX (swap checkout before airport)
+ * 12. NON-FLIGHT DEPARTURE (strip airport refs)
  */
 
 import { FAILURE_CODES, type ValidationResult, type RepairAction, type FailureCode } from './types.ts';
@@ -384,39 +389,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
   }
 
-  // --- 7. MISSING_SLOT: bookend validator ---
-  // Always inject hotel bookends — use placeholder if no hotel selected yet.
-  // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
-  if (activities.length > 0) {
-    const effectiveHotelName = hotelName || 'Your Hotel';
-    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber);
-    activities = bookendRepairs.activities;
-    repairs.push(...bookendRepairs.repairs);
-  }
-
-  // --- 8. TITLE_LABEL_LEAK ---
-  if (byCode.has(FAILURE_CODES.TITLE_LABEL_LEAK)) {
-    for (const vr of byCode.get(FAILURE_CODES.TITLE_LABEL_LEAK) || []) {
-      if (vr.activityIndex === undefined) continue;
-      const act = activities[vr.activityIndex];
-      if (!act) continue;
-      const before = act.title;
-      act.title = act.title
-        .replace(/\s*[-–—]?\s*(voyance pick|staff pick|editor'?s? pick|ai pick|top pick|our pick)\s*/gi, '')
-        .trim();
-      if (act.title !== before) {
-        repairs.push({
-          code: FAILURE_CODES.TITLE_LABEL_LEAK,
-          activityIndex: vr.activityIndex,
-          action: 'stripped_label_leak',
-          before,
-          after: act.title,
-        });
-      }
-    }
-  }
-
-  // --- 9. HOTEL CHECK-IN GUARANTEE (Day 1 or transition day) ---
+  // --- 7. HOTEL CHECK-IN GUARANTEE (Day 1 or transition day) — moved before bookends ---
   const needsCheckIn = dayNumber === 1 || isTransitionDay;
   if (needsCheckIn && activities.length > 0) {
     const hasCheckIn = activities.some((a: any) => {
@@ -462,7 +435,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
-  // --- 10. HOTEL CHECKOUT GUARANTEE (last day or last day in city) ---
+  // --- 8. HOTEL CHECKOUT GUARANTEE (last day or last day in city) — moved before bookends ---
   const needsCheckout = isLastDay || (isLastDayInCity && !isTransitionDay);
   if (needsCheckout && activities.length > 0) {
     const hasCheckout = activities.some((a: any) => {
@@ -515,6 +488,39 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
       activities.splice(insertIdx, 0, checkoutActivity);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkout_guarantee' });
+    }
+  }
+
+  // --- 9. MISSING_SLOT: bookend validator (with departure-day guards) ---
+  // Always inject hotel bookends — use placeholder if no hotel selected yet.
+  // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
+  if (activities.length > 0) {
+    const effectiveHotelName = hotelName || 'Your Hotel';
+    const isDepartureDay = isLastDay || (isLastDayInCity && !isTransitionDay);
+    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay);
+    activities = bookendRepairs.activities;
+    repairs.push(...bookendRepairs.repairs);
+  }
+
+  // --- 10. TITLE_LABEL_LEAK ---
+  if (byCode.has(FAILURE_CODES.TITLE_LABEL_LEAK)) {
+    for (const vr of byCode.get(FAILURE_CODES.TITLE_LABEL_LEAK) || []) {
+      if (vr.activityIndex === undefined) continue;
+      const act = activities[vr.activityIndex];
+      if (!act) continue;
+      const before = act.title;
+      act.title = act.title
+        .replace(/\s*[-–—]?\s*(voyance pick|staff pick|editor'?s? pick|ai pick|top pick|our pick)\s*/gi, '')
+        .trim();
+      if (act.title !== before) {
+        repairs.push({
+          code: FAILURE_CODES.TITLE_LABEL_LEAK,
+          activityIndex: vr.activityIndex,
+          action: 'stripped_label_leak',
+          before,
+          after: act.title,
+        });
+      }
     }
   }
 
@@ -770,6 +776,7 @@ function repairBookends(
   activities: any[],
   hotelName: string,
   dayNumber: number,
+  isDepartureDay: boolean,
 ): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
 
@@ -815,39 +822,48 @@ function repairBookends(
   // 1. Mid-day hotel transports without accommodation card
   for (let i = 0; i < activities.length - 1; i++) {
     if (isTransport(activities[i]) && isHotelRelated(activities[i]) && !isAccom(activities[i + 1])) {
+      // Skip if departure day and checkout already exists (traveler has left the hotel)
+      if (isDepartureDay) {
+        const hasCheckout = activities.some((a: any) => (a.title || '').toLowerCase().includes('checkout') || (a.title || '').toLowerCase().includes('check-out'));
+        const checkoutIdx = activities.findIndex((a: any) => (a.title || '').toLowerCase().includes('checkout') || (a.title || '').toLowerCase().includes('check-out'));
+        if (hasCheckout && i >= checkoutIdx) continue;
+      }
       const card = makeAccomCard('Freshen up at', activities[i].endTime || offset(activities[i].startTime || '14:00', 15), 30);
       activities.splice(i + 1, 0, card);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_freshen_up' });
     }
   }
 
-  // 1b. Mid-day hotel return guarantee: if day has both lunch and dinner but no accommodation card between them
-  const lunchIdx = activities.findIndex(a => (a.category === 'dining') && /\b(lunch|midday meal)\b/i.test(a.title || ''));
-  const dinnerIdx = activities.findIndex(a => (a.category === 'dining') && /\b(dinner|evening meal)\b/i.test(a.title || ''));
-  if (lunchIdx >= 0 && dinnerIdx > lunchIdx) {
-    const hasMidDayAccom = activities.slice(lunchIdx + 1, dinnerIdx).some(a => isAccom(a));
-    if (!hasMidDayAccom) {
-      // Find last non-transport activity before dinner to insert after
-      let insertIdx = dinnerIdx;
-      for (let j = dinnerIdx - 1; j > lunchIdx; j--) {
-        if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
+  // 1b. Mid-day hotel return guarantee — SKIP on departure days (traveler checks out and leaves)
+  if (!isDepartureDay) {
+    const lunchIdx = activities.findIndex(a => (a.category === 'dining') && /\b(lunch|midday meal)\b/i.test(a.title || ''));
+    const dinnerIdx = activities.findIndex(a => (a.category === 'dining') && /\b(dinner|evening meal)\b/i.test(a.title || ''));
+    if (lunchIdx >= 0 && dinnerIdx > lunchIdx) {
+      const hasMidDayAccom = activities.slice(lunchIdx + 1, dinnerIdx).some(a => isAccom(a));
+      if (!hasMidDayAccom) {
+        let insertIdx = dinnerIdx;
+        for (let j = dinnerIdx - 1; j > lunchIdx; j--) {
+          if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
+        }
+        const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
+        const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd);
+        const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
+        activities.splice(insertIdx, 0, transportCard, accomCard);
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
       }
-      const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
-      const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd);
-      const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
-      activities.splice(insertIdx, 0, transportCard, accomCard);
-      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
     }
   }
 
-  // 2. End-of-day hotel return
-  const visible = activities.filter(a => !isTransport(a));
-  const last = visible[visible.length - 1];
-  if (last && !isAccom(last)) {
-    const et = last.endTime || '22:00';
-    activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
-    activities.push(makeAccomCard('Return to', offset(et, 20), 15));
-    repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_return' });
+  // 2. End-of-day hotel return — SKIP on departure days (traveler is at the airport/departed)
+  if (!isDepartureDay) {
+    const visible = activities.filter(a => !isTransport(a));
+    const last = visible[visible.length - 1];
+    if (last && !isAccom(last)) {
+      const et = last.endTime || '22:00';
+      activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
+      activities.push(makeAccomCard('Return to', offset(et, 20), 15));
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_return' });
+    }
   }
 
   // 3. Transit gaps between non-adjacent visible activities
