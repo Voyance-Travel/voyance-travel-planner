@@ -28,7 +28,8 @@ import { AirportAutocomplete } from '@/components/common/AirportAutocomplete';
 import { enrichHotel } from '@/services/hotelAPI';
 import { HotelAutocomplete } from '@/components/common/HotelAutocomplete';
 import { syncHotelToLedger, syncFlightToLedger, syncMultiCityHotelsToLedger } from '@/services/budgetLedgerSync';
-import { patchItineraryWithHotel } from '@/services/hotelItineraryPatch';
+import { patchItineraryWithHotel, patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
+import { getTripCities } from '@/services/tripCitiesService';
 import { patchItineraryWithFlight } from '@/services/flightItineraryPatch';
 import { cn } from '@/lib/utils';
 import { FlightImportModal } from './FlightImportModal';
@@ -961,12 +962,36 @@ export function AddHotelInline({
       }
 
       // Cascade hotel info into itinerary accommodation activities
-      patchItineraryWithHotel(tripId, {
-        name: newHotel.name,
-        address: newHotel.address,
-        checkInDate: newHotel.checkInDate,
-        checkOutDate: newHotel.checkOutDate,
-      }).catch(err => console.error('[AddHotel] Itinerary patch failed:', err));
+      if (cityId) {
+        // Multi-city: fetch all city hotels and use date-aware multi-hotel patcher
+        getTripCities(tripId).then(cities => {
+          const allHotels = cities
+            .filter(c => c.hotel_selection)
+            .flatMap(c => {
+              const sel = c.hotel_selection as any;
+              const arr = Array.isArray(sel) ? sel : [sel];
+              return arr.filter((h: any) => h?.name).map((h: any) => ({
+                name: h.name,
+                address: h.address,
+                checkInDate: c.arrival_date || h.checkInDate || h.checkIn,
+                checkOutDate: c.departure_date || h.checkOutDate || h.checkOut,
+              }));
+            });
+          if (allHotels.length > 1) {
+            return patchItineraryWithMultipleHotels(tripId, allHotels);
+          } else if (allHotels.length === 1) {
+            return patchItineraryWithHotel(tripId, allHotels[0]);
+          }
+        }).catch(err => console.error('[AddHotel] Multi-hotel itinerary patch failed:', err));
+      } else {
+        // Single-city: patch with just this hotel
+        patchItineraryWithHotel(tripId, {
+          name: newHotel.name,
+          address: newHotel.address,
+          checkInDate: newHotel.checkInDate,
+          checkOutDate: newHotel.checkOutDate,
+        }).catch(err => console.error('[AddHotel] Itinerary patch failed:', err));
+      }
 
       // Dispatch booking-changed event for financial snapshot refresh
       window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
