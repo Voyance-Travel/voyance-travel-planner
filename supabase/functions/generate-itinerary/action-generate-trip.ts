@@ -475,6 +475,123 @@ export async function handleGenerateTrip(
         } catch {}
       }
       
+      // 13. RESTAURANT POOL — Pre-generate curated restaurant list for all meals
+      // This is the MANDATORY precondition for meal guard compliance in chained generation.
+      // Without this, the meal guard falls through to generic "Meal at a bistro" fallbacks.
+      try {
+        timer.startPhase('restaurant_pool_generation');
+        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+        if (LOVABLE_API_KEY) {
+          // Determine cities to generate pools for
+          const citiesToPool: Array<{ city: string; country: string }> = [];
+          if (isMultiCity) {
+            const { data: tripCities } = await supabase
+              .from('trip_cities')
+              .select('city_name, country')
+              .eq('trip_id', tripId)
+              .order('city_order', { ascending: true });
+            if (tripCities && tripCities.length > 0) {
+              for (const c of tripCities) {
+                if (!citiesToPool.some(x => x.city === c.city_name)) {
+                  citiesToPool.push({ city: c.city_name, country: c.country || destinationCountry || '' });
+                }
+              }
+            }
+          }
+          if (citiesToPool.length === 0) {
+            citiesToPool.push({ city: destination, country: destinationCountry || '' });
+          }
+
+          const restaurantPoolByCity: Record<string, any[]> = {};
+          const mealsPerDay = 3; // breakfast, lunch, dinner
+          
+          // Generate pools in parallel for all cities
+          const poolPromises = citiesToPool.map(async ({ city, country }) => {
+            const mealsNeeded = totalDays * mealsPerDay;
+            // Request extra to allow for filtering and variety
+            const requestCount = Math.min(mealsNeeded + 6, 24);
+            const budgetLabel = budgetTier || enrichmentContext.budgetTier || 'moderate';
+            
+            const prompt = `You are a local food expert for ${city}${country ? `, ${country}` : ''}. Generate exactly ${requestCount} REAL restaurant recommendations: ${Math.ceil(requestCount / 3)} for breakfast, ${Math.ceil(requestCount / 3)} for lunch, and ${Math.ceil(requestCount / 3)} for dinner.
+
+Budget level: ${budgetLabel}
+
+RULES:
+- Every restaurant MUST be a REAL, currently operating establishment in ${city}
+- NO chain restaurants (no Starbucks, McDonald's, etc.)
+- NO generic names like "local café" or "a bistro"  
+- Mix of cuisines appropriate for ${city}
+- Include neighborhood/area for each
+- For breakfast: include cafés, bakeries, brunch spots
+- For lunch: include casual dining, local favorites
+- For dinner: include sit-down restaurants appropriate for the budget level
+
+Return ONLY valid JSON array, no markdown:
+[{"name":"Restaurant Name","neighborhood":"Area Name","mealType":"breakfast|lunch|dinner","cuisine":"cuisine type","priceRange":"$|$$|$$$"}]`;
+
+            try {
+              const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'google/gemini-2.5-flash',
+                  messages: [
+                    { role: 'system', content: 'You are a restaurant recommendation engine. Return ONLY valid JSON arrays. No markdown, no explanation.' },
+                    { role: 'user', content: prompt },
+                  ],
+                  temperature: 0.7,
+                  max_tokens: 4000,
+                }),
+              });
+
+              if (resp.ok) {
+                const data = await resp.json();
+                const content = data.choices?.[0]?.message?.content || '';
+                // Parse JSON from response (strip markdown fences if present)
+                const jsonStr = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                try {
+                  const restaurants = JSON.parse(jsonStr);
+                  if (Array.isArray(restaurants) && restaurants.length > 0) {
+                    // Validate each entry has required fields
+                    const valid = restaurants.filter((r: any) => r.name && typeof r.name === 'string' && r.name.length > 2);
+                    restaurantPoolByCity[city] = valid;
+                    console.log(`[generate-trip] 🍽️ Restaurant pool for "${city}": ${valid.length} venues (${valid.filter((r: any) => r.mealType === 'breakfast').length}B/${valid.filter((r: any) => r.mealType === 'lunch').length}L/${valid.filter((r: any) => r.mealType === 'dinner').length}D)`);
+                  } else {
+                    console.warn(`[generate-trip] Restaurant pool for "${city}": AI returned empty/invalid array`);
+                  }
+                } catch (parseErr) {
+                  console.warn(`[generate-trip] Restaurant pool for "${city}": JSON parse failed:`, parseErr);
+                }
+              } else {
+                const errText = await resp.text().catch(() => '');
+                console.warn(`[generate-trip] Restaurant pool for "${city}": AI call failed ${resp.status}: ${errText.slice(0, 100)}`);
+              }
+            } catch (aiErr) {
+              console.warn(`[generate-trip] Restaurant pool for "${city}": AI call error:`, aiErr);
+            }
+          });
+          
+          await Promise.all(poolPromises);
+          
+          const totalPooled = Object.values(restaurantPoolByCity).reduce((sum, arr) => sum + arr.length, 0);
+          if (totalPooled > 0) {
+            (updatePayload.metadata as Record<string, unknown>).restaurant_pool = restaurantPoolByCity;
+            console.log(`[generate-trip] ✅ Restaurant pool ready: ${totalPooled} venues across ${Object.keys(restaurantPoolByCity).length} city/cities`);
+          } else {
+            console.warn(`[generate-trip] ⚠️ Restaurant pool generation produced 0 venues — meal guard will use verified_venues fallback`);
+          }
+        } else {
+          console.warn('[generate-trip] LOVABLE_API_KEY not available — skipping restaurant pool generation');
+        }
+        timer.endPhase('restaurant_pool_generation');
+      } catch (rpErr) {
+        console.warn('[generate-trip] Restaurant pool generation failed (non-blocking):', rpErr);
+        timer.addError('restaurant_pool_generation', String(rpErr));
+      }
+      
       console.log(`[generate-trip] Enrichment context computed with ${Object.keys(enrichmentContext).length} fields`);
       timer.endPhase('pre_chain_enrichment');
     } catch (enrichErr) {
