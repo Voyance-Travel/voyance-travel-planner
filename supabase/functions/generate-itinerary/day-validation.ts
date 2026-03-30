@@ -780,12 +780,23 @@ export function enforceRequiredMealsFinalGuard(
   const detected = detectMealSlots(activities);
 
   // PRE-PASS 0: Relabel any meal whose title contradicts its time slot
-  // e.g. "Lunch at X" at 08:30 → "Breakfast at X"
+  // Enhanced: check venue suitability; swap from fallbackVenues if incompatible
   const MEAL_LABEL_MAP: Record<string, string[]> = {
     breakfast: ['breakfast', 'brunch'],
     lunch: ['lunch'],
     dinner: ['dinner', 'supper'],
   };
+
+  // Venue keywords that signal incompatibility with a given meal type
+  const VENUE_INCOMPATIBLE_GUARD: Record<string, string[]> = {
+    breakfast: ['nobu', 'steakhouse', 'izakaya', 'omakase', 'fine dining', 'cocktail', 'bar & grill', 'bar and grill', 'tapas', 'sushi', 'yakitori', 'robata', 'wagyu', 'kaiseki', 'tasting menu', 'wine bar', 'speakeasy', 'gastropub'],
+    lunch: [],
+    dinner: ['bakery', 'café', 'cafe', 'coffee', 'pancake', 'diner', 'bagel', 'doughnut', 'donut', 'juice bar', 'smoothie', 'açaí', 'acai', 'patisserie', 'pâtisserie', 'croissant'],
+  };
+
+  const normalizeForGuardSwap = (name: string) => name.toLowerCase().replace(/[^\w\s]/g, '').trim();
+  const usedVenueNames = new Set(activities.map(a => normalizeForGuardSwap(a.title || '')));
+
   for (const act of activities) {
     const titleLower = (act.title || '').toLowerCase();
     const cat = (act.category || '').toLowerCase();
@@ -816,6 +827,37 @@ export function enforceRequiredMealsFinalGuard(
     }
 
     if (currentMealKey && currentMealKey !== correctMeal && currentKeyword) {
+      // Check venue compatibility with the corrected meal type
+      const venueText = [act.title, (act as any).name, (act as any).description, (act as any).location?.name].filter(Boolean).join(' ').toLowerCase();
+      const incompatibleKws = VENUE_INCOMPATIBLE_GUARD[correctMeal] || [];
+      const isVenueIncompatible = incompatibleKws.some(kw => venueText.includes(kw));
+
+      if (isVenueIncompatible && fallbackVenues.length > 0) {
+        // Try to swap with a suitable fallback venue
+        const replacement = fallbackVenues.find(v => {
+          if (usedVenueNames.has(normalizeForGuardSwap(v.name))) return false;
+          const vNameLower = v.name.toLowerCase();
+          // Simple heuristic: for breakfast, prefer venues without dinner-only keywords
+          // For dinner, prefer venues without breakfast-only keywords
+          const wrongKws = VENUE_INCOMPATIBLE_GUARD[correctMeal] || [];
+          return !wrongKws.some(kw => vNameLower.includes(kw));
+        });
+
+        if (replacement) {
+          const before = act.title;
+          const correctLabel = correctMeal.charAt(0).toUpperCase() + correctMeal.slice(1);
+          act.title = `${correctLabel} at ${replacement.name}`;
+          if ((act as any).name) (act as any).name = replacement.name;
+          if ((act as any).location) {
+            (act as any).location = { ...(act as any).location, name: replacement.name };
+          }
+          usedVenueNames.add(normalizeForGuardSwap(replacement.name));
+          console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Swapped incompatible venue "${before}" → "${act.title}" (${correctMeal} slot)`);
+          continue;
+        }
+        // No swap available — fall through to relabel-only
+      }
+
       const correctLabel = correctMeal.charAt(0).toUpperCase() + correctMeal.slice(1);
       const before = act.title;
       const regex = new RegExp(`\\b${currentKeyword}\\b`, 'i');
