@@ -1,36 +1,68 @@
 
-# ✅ COMPLETED: Fix Restaurant Duplication Pipeline
+Fix the hotel issue by addressing the actual remaining breakpoints, not just the schema text.
 
-## Problem
-Restaurants were being duplicated across days due to 3 compounding issues:
-1. Pool sizing capped at 24 venues (insufficient for longer trips)
-2. Prompt only showed 8 venues per meal type
-3. Used-restaurant tracking compared inconsistent string formats
+1. Remove the legacy hotel-stripper that is still deleting hotel placeholders
+- Update `supabase/functions/generate-itinerary/sanitization.ts` so `stripPhantomHotelActivities()` no longer removes generic accommodation cards like:
+  - `Your Hotel`
+  - `Check-in at Your Hotel`
+  - `Freshen up at Your Hotel`
+  - `Return to Your Hotel`
+  - generic checkout/check-in cards
+- Only strip clearly fabricated specific hotel names when no hotel is booked.
+- This same legacy stripper is still being called from:
+  - `action-generate-day.ts`
+  - `action-generate-trip-day.ts`
+  - `generation-core.ts`
+- Right now that safety-net is undoing the newer validator/repair logic.
 
-## Changes Made
+2. Align “has hotel” detection with actual product rules
+- Replace the narrow checks like `!!cityInfo?.hotelName` / `!!flightContext.hotelName` with the broader accommodation-presence logic already used elsewhere:
+  - selected hotel
+  - accommodation notes / parsed metadata
+  - existing accommodation activities already in itinerary
+- This prevents the system from treating “hotel exists but not formally selected” as “no hotel exists”.
 
-### 1. `generation-utils.ts` — New `extractRestaurantVenueName()` helper
-- Strips meal prefixes ("Breakfast at", "Lunch:", "Dinner - ") before normalizing
-- Single canonical identity function used by all layers
+3. Preserve multiple accommodation cards during regeneration
+- Update frontend dedup logic in:
+  - `src/services/itineraryActionExecutor.ts`
+  - `src/components/itinerary/EditorialItinerary.tsx`
+  - `src/components/itinerary/ItineraryEditor.tsx`
+- Current logic keeps only one accommodation card and removes the rest, which wipes out:
+  - midday freshen-up
+  - return-to-hotel
+  - checkout
+- Change this to deduplicate only true duplicates, while preserving the valid hotel sequence for the day.
 
-### 2. `action-generate-trip.ts` — Scaled pool sizing
-- Removed `Math.min(mealsNeeded + 6, 24)` hard cap
-- Now calculates per-city: `mealsNeeded + surplus` (surplus = max(12, 60% of meals))
-- Enforces per-meal minimums (min 6 or cityDays+3 per type)
-- Multi-city trips get city-specific day counts
+4. Standardize hotel patch behavior for placeholder replacement
+- Update `src/services/hotelItineraryPatch.ts` so it does not rename every accommodation card to the same check-in title.
+- Preserve card intent:
+  - check-in stays check-in
+  - checkout stays checkout
+  - freshen-up stays freshen-up
+  - return stays return
+- Only replace the hotel name/location with the real selected hotel.
 
-### 3. `action-generate-trip-day.ts` — Normalized used_restaurants tracking
-- Uses `extractRestaurantVenueName()` when storing used restaurants
-- Also extracts from `location.name` as fallback
-- Dedup check uses normalized comparison instead of raw string match
-- Meal guard fallback filtering also uses normalized names
+5. Verify bookend guarantees still cover all day types
+- Re-check `repair-day.ts` against:
+  - day 1
+  - standard full day
+  - last day
+  - city transition day
+- Ensure the final guaranteed shape is:
+  - arrival/check-in on entry days
+  - freshen-up / return-to-hotel on full days
+  - checkout on departure days
+- Keep `Your Hotel` as the single placeholder when no specific hotel is selected.
 
-### 4. `compile-prompt.ts` — Increased prompt exposure + normalized filtering
-- Per-meal limit raised from 8 to dynamic `max(8, min(16, available/4))`
-- Pool filtering uses `extractRestaurantVenueName()` for identity matching
-- Added explicit "do NOT pick same restaurant for multiple meals" rule
+Expected outcome
+- Hotel always exists as a base in the itinerary, even before selection.
+- Placeholder hotel cards stop getting stripped later in the pipeline.
+- Regeneration/edit flows stop collapsing hotel logic to a single card.
+- Adding a real hotel updates all placeholder hotel cards consistently without turning every one into “Check-in”.
 
-### 5. `repair-day.ts` — Fixed swap logic
-- `usedSet` now built with inline normalizer (strips meal prefixes + normalizes)
-- Current-day dining tracked by both `location.name` AND title (normalized)
-- Pool swap candidate comparison uses same normalizer
+Technical notes
+- The main bug is not just in `compile-day-schema.ts`.
+- The biggest remaining blockers are:
+  1. `stripPhantomHotelActivities()` in `sanitization.ts` still removes all accommodation cards when no hotel exists.
+  2. Frontend regeneration sanitizers only preserve one accommodation card.
+- Those two layers explain why the issue keeps appearing even after previous “fixes.”
