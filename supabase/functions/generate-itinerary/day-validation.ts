@@ -926,7 +926,7 @@ export function enforceRequiredMealsFinalGuard(
   };
 
   // Track which venue names have been used to avoid duplicates within this guard call
-  const usedVenueNames = new Set<string>(
+  const usedVenueNamesForInjection = new Set<string>(
     activities.map(a => (a.title || '').toLowerCase())
   );
 
@@ -944,7 +944,7 @@ export function enforceRequiredMealsFinalGuard(
     // Find matching venue: prefer specific meal type, then 'any'
     const matchingVenues = fallbackVenues.filter(v =>
       (v.mealType === mealType || v.mealType === 'any') &&
-      !usedVenueNames.has(v.name.toLowerCase())
+      !usedVenueNamesForInjection.has(v.name.toLowerCase())
     );
     // Prefer meal-type-specific matches first
     const specificMatch = matchingVenues.find(v => v.mealType === mealType);
@@ -954,7 +954,7 @@ export function enforceRequiredMealsFinalGuard(
       venueName = venue.name;
       venueAddress = venue.address || destination;
       venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
-      usedVenueNames.add(venue.name.toLowerCase());
+      usedVenueNamesForInjection.add(venue.name.toLowerCase());
       // Remove from fallbackVenues so next meal gets a different one
       const idx = fallbackVenues.indexOf(venue);
       if (idx >= 0) fallbackVenues.splice(idx, 1);
