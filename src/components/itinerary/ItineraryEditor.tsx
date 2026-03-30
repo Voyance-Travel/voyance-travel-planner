@@ -361,7 +361,6 @@ export function ItineraryEditor({
       const sanitizeRegeneratedDay = (newDay: any) => {
         // Preserve distinct accommodation intents (check-in, freshen-up, return, checkout)
         if (newDay.activities) {
-          const { mergeAccommodationActivities } = await import('@/utils/accommodationActivities');
           newDay.activities = mergeAccommodationActivities(day.activities || [], newDay.activities);
         }
         // Preserve original day title/theme
