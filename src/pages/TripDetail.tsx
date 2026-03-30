@@ -69,7 +69,7 @@ import { normalizeLegacyHotelSelection, type HotelBooking } from '@/utils/hotelV
 import { parseEditorialDays, parseAssistantDays } from '@/utils/itineraryParser';
 import { normalizeFlightSelection } from '@/utils/normalizeFlightSelection';
 import { injectHotelActivitiesIntoDays, injectMultiHotelActivities } from '@/utils/injectHotelActivities';
-import { patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
+import { patchItineraryWithHotel, patchItineraryWithMultipleHotels } from '@/services/hotelItineraryPatch';
 import { cn } from '@/lib/utils';
 import { JourneyBreadcrumb } from '@/components/trips/JourneyBreadcrumb';
 import { JourneyUpNext } from '@/components/trips/JourneyUpNext';
@@ -3021,9 +3021,9 @@ export default function TripDetail() {
                             if (updatedCities.length > 0) {
                               const cityHotels = updatedCities
                                 .filter((c: any) => c.hotel_selection)
-                                .map((c: any) => {
-                                  const hs = Array.isArray(c.hotel_selection) ? c.hotel_selection[0] : c.hotel_selection;
-                                  return hs;
+                                .flatMap((c: any) => {
+                                  const hs = c.hotel_selection;
+                                  return Array.isArray(hs) ? hs : [hs];
                                 })
                                 .filter(Boolean);
                               if (cityHotels.length > 0) {
@@ -3056,10 +3056,45 @@ export default function TripDetail() {
                               }
                             }
 
-                            // Patch accommodation activity titles/addresses using date-aware multi-hotel patcher
-                            if (allHotelsForPatch.length > 1) {
-                              patchItineraryWithMultipleHotels(tripId!, allHotelsForPatch)
-                                .catch(err => console.warn('[TripDetail] Multi-hotel patch failed:', err));
+                            // Apply accommodation title/address patches in-memory on injectedDays
+                            // (avoids race condition with saveItineraryOptimistic)
+                            if (allHotelsForPatch.length > 0) {
+                              const ACCOM_KEYWORDS = ['check-in', 'check in', 'check into', 'checkout', 'check-out', 'check out', 'accommodation', 'settle in', 'settle into', 'your hotel', 'freshen up', 'return to your hotel', 'return to hotel'];
+                              const ACCOM_CATS = ['accommodation', 'hotel'];
+                              for (const day of injectedDays as any[]) {
+                                const dayDate = day.date as string | undefined;
+                                const matchingHotel = allHotelsForPatch.length === 1
+                                  ? allHotelsForPatch[0]
+                                  : allHotelsForPatch.find(h => {
+                                      if (!h.checkInDate || !h.checkOutDate || !dayDate) return true;
+                                      const d = dayDate.slice(0, 10);
+                                      return d >= h.checkInDate.slice(0, 10) && d <= h.checkOutDate.slice(0, 10);
+                                    });
+                                if (!matchingHotel || !day.activities) continue;
+                                for (const act of day.activities as any[]) {
+                                  const title = String(act.title || act.name || '');
+                                  const lower = title.toLowerCase();
+                                  const cat = String(act.category || '').toLowerCase();
+                                  const isAccom = ACCOM_CATS.includes(cat) || ACCOM_KEYWORDS.some(k => lower.includes(k));
+                                  if (!isAccom) continue;
+                                  if (lower.includes('checkout') || lower.includes('check-out') || lower.includes('check out')) {
+                                    act.title = `Checkout from ${matchingHotel.name}`;
+                                  } else if (lower.includes('freshen up')) {
+                                    act.title = `Freshen up at ${matchingHotel.name}`;
+                                  } else if (lower.includes('return to') || lower.includes('back to')) {
+                                    act.title = `Return to ${matchingHotel.name}`;
+                                  } else if (lower.includes('settle in') || lower.includes('settle into')) {
+                                    act.title = `Settle in at ${matchingHotel.name}`;
+                                  } else {
+                                    act.title = `Check-in at ${matchingHotel.name}`;
+                                  }
+                                  act.name = act.title;
+                                  if (matchingHotel.address) {
+                                    act.location = { name: matchingHotel.name, address: matchingHotel.address };
+                                    act.address = matchingHotel.address;
+                                  }
+                                }
+                              }
                             }
 
                             // Save injected days back if they changed
