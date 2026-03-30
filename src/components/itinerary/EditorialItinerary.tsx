@@ -1773,7 +1773,7 @@ export function EditorialItinerary({
     const isAbsoluteLastDay = dayIndex === rawDays.length - 1;
     const isFinalHomeDeparture = d.isDepartureDay && d.departureTo === '__home__';
     const hasFinalDepartureInfo = flightSelection || isFinalHomeDeparture;
-    if (isAbsoluteLastDay && !d.isTransitionDay && isLastCity && hasFinalDepartureInfo) {
+    if (isAbsoluteLastDay && !d.isTransitionDay && isLastCity) {
       if (!updatedActivities.some(a => (a as any).__syntheticFinalDeparture)) {
         // Resolve return transport details from flightSelection OR isDepartureDay metadata
         let tType = 'flight';
