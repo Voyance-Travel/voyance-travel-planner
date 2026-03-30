@@ -349,14 +349,7 @@ export function ItineraryEditor({
 
     setRegeneratingDay(day.dayNumber);
     try {
-      // Helper to identify accommodation/hotel activities
-      const isAccommodationLike = (a: any) => {
-        const cat = (a.category || '').toLowerCase();
-        const title = (a.title || a.name || '').toLowerCase();
-        return cat === 'accommodation' || cat === 'hotel' || cat === 'stay'
-          || title.includes('hotel check') || title.includes('check-in at')
-          || title.includes('check into');
-      };
+
 
       const sanitizeRegeneratedDay = (newDay: any) => {
         // Preserve distinct accommodation intents (check-in, freshen-up, return, checkout)
