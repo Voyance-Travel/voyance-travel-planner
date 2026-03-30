@@ -583,12 +583,35 @@ export default function PlannerHotelEnhanced() {
             checkOut: endDate,
             totalPrice: pricePerNight * nights,
           } as any).catch(err => console.warn('[PlannerHotel] Budget sync failed:', err));
-          patchItineraryWithHotel(tripId, {
-            name: hotelSelection.name,
-            address: hotelSelection.address,
-            checkInDate: startDate,
-            checkOutDate: endDate,
-          }).catch(err => console.warn('[PlannerHotel] Itinerary patch failed:', err));
+          // Check if trip has multiple hotels (split stay) — use multi-hotel patcher
+          (async () => {
+            try {
+              const { data: tripRow } = await supabase
+                .from('trips')
+                .select('hotel_selection')
+                .eq('id', tripId)
+                .maybeSingle();
+              const existingHotels = tripRow?.hotel_selection;
+              if (Array.isArray(existingHotels) && existingHotels.length > 1) {
+                const allHotels = (existingHotels as any[]).map((h: any) => ({
+                  name: h.name,
+                  address: h.address || h.location,
+                  checkInDate: h.checkInDate || h.checkIn,
+                  checkOutDate: h.checkOutDate || h.checkOut,
+                }));
+                await patchItineraryWithMultipleHotels(tripId, allHotels);
+              } else {
+                await patchItineraryWithHotel(tripId, {
+                  name: hotelSelection.name,
+                  address: hotelSelection.address,
+                  checkInDate: startDate,
+                  checkOutDate: endDate,
+                });
+              }
+            } catch (err) {
+              console.warn('[PlannerHotel] Itinerary patch failed:', err);
+            }
+          })();
           window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
         }
       }
