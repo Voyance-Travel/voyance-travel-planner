@@ -1,103 +1,68 @@
 
 
-## Fix: Cross-Day Restaurant Dedup Fails for Dining Titles
+## Fix: Update Transit Card When Restaurant Is Swapped by Dedup
 
 ### Problem
 
-"Breakfast at Rosa Salva" appears on Days 2, 3, and 4. The dedup system has the data to catch this but two bugs prevent it:
-
-**Bug 1: `extractConcept` discards the venue name for dining titles.**
-`extractConcept` splits on ` at ` and keeps the part BEFORE it — so `"breakfast at rosa salva"` → concept = `"breakfast"`, which gets stripped to nearly nothing. The venue identity `"rosa salva"` is thrown away. Every breakfast activity produces the same empty/generic concept, so `conceptSimilarity` never fires.
-
-**Bug 2: `location.name` dedup requires length > 5.**
-This works when `location.name` is populated, but AI-generated activities don't always include a `location` object, or the name may be set to the full title rather than the canonical venue name. This makes the location-based dedup unreliable for dining.
+When `repair-day.ts` step 4 (DUPLICATE_CONCEPT) swaps a dining activity from the restaurant pool, it updates the dining activity's title and location but **does not update the preceding transport card**. The transport card still references the original restaurant name (e.g., "Travel to A Beccafico") while the dining activity now points to the replacement (e.g., "Dinner at Quadri").
 
 ### Root Cause
 
-`validate-day.ts` line 533-538:
-```typescript
-function extractConcept(title: string): string {
-  const conceptPart = normalizeText(title).split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
-  // ↑ For "Breakfast at Rosa Salva", this returns "breakfast"
-  // "Rosa Salva" is discarded
-  return conceptPart.replace(...)
-}
-```
+`repair-day.ts` lines 217-231: after swapping the restaurant, the code does `continue` without checking if `activities[vr.activityIndex - 1]` is a transport card that references the old venue.
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`**
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (~line 222, after the swap updates the dining activity)
 
-Two changes:
-
-**1. Fix `extractConcept` for dining titles** — when the title matches a `Meal at Venue` pattern, return the venue part (after "at"), not the meal keyword part (before "at"):
+After updating the dining activity's title/location/description, check if the immediately preceding activity is a transport card. If so, update its title and location to reference the new restaurant:
 
 ```typescript
-function extractConcept(title: string): string {
-  const normalized = normalizeText(title);
-  
-  // For dining titles ("Breakfast at X", "Dinner at X"), the concept
-  // is the VENUE (after "at"), not the meal keyword (before "at")
-  const mealAtVenue = normalized.match(
-    /^(?:breakfast|brunch|lunch|dinner|supper)\s+(?:at|@)\s+(.+)/i
-  );
-  if (mealAtVenue && mealAtVenue[1].trim().length > 2) {
-    return mealAtVenue[1].trim();
-  }
+if (replacement) {
+  const before = act.title;
+  act.title = `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} at ${replacement.name}`;
+  act.description = `${replacement.cuisine || 'Local cuisine'} in ${replacement.neighborhood || 'the city'}. ${replacement.priceRange || '$$'}.`;
+  act.location = { name: replacement.name, address: replacement.address || '' };
+  act.source = 'pool-dedup-swap';
+  usedSet.add(normalizeForDedup(replacement.name));
 
-  const conceptPart = normalized.split(/\s+at\s+|\s+with\s+|\s+@\s+|\s+in\s+/i)[0];
-  return conceptPart
-    .replace(/\b(class|tour|experience|visit|workshop|session|lesson|masterclass)\b/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-```
-
-**2. Add explicit dining venue dedup in `checkDuplicateConcept`** — import `extractRestaurantVenueName` from `generation-utils.ts` and build a previous-venue set from all prior dining activities. For each current dining activity, extract its venue name and check against the set:
-
-```typescript
-// Inside checkDuplicateConcept, after building previousConcepts/previousLocations:
-const previousDiningVenues = new Set<string>();
-for (const prevDay of previousDays) {
-  for (const prevAct of prevDay.activities || []) {
-    if ((prevAct.category || '').toLowerCase().includes('dining')) {
-      const venue = extractRestaurantVenueName(prevAct.title || '');
-      if (venue.length > 2) previousDiningVenues.add(venue);
-      const locVenue = extractRestaurantVenueName(prevAct.location?.name || '');
-      if (locVenue.length > 2) previousDiningVenues.add(locVenue);
+  // ── NEW: sync preceding transport card ──
+  const prevIdx = vr.activityIndex - 1;
+  if (prevIdx >= 0) {
+    const prev = activities[prevIdx];
+    if ((prev.category || '').toLowerCase() === 'transport' &&
+        !lockedIds.has(prev.id)) {
+      const oldTitle = prev.title;
+      prev.title = `Travel to ${replacement.name}`;
+      prev.location = { name: replacement.name, address: replacement.address || '' };
+      if (prev.description) {
+        prev.description = prev.description.replace(/to\s+.+\.?$/, `to ${replacement.name}.`);
+      }
+      repairs.push({
+        code: FAILURE_CODES.DUPLICATE_CONCEPT,
+        activityIndex: prevIdx,
+        action: 'synced_transit_after_swap',
+        before: oldTitle,
+        after: prev.title,
+      });
     }
   }
-}
 
-// In the activity loop, before concept similarity check:
-if (cat.includes('dining')) {
-  const venueFromTitle = extractRestaurantVenueName(act.title || '');
-  const venueFromLoc = extractRestaurantVenueName(act.location?.name || '');
-  if ((venueFromTitle.length > 2 && previousDiningVenues.has(venueFromTitle)) ||
-      (venueFromLoc.length > 2 && previousDiningVenues.has(venueFromLoc))) {
-    results.push({
-      code: FAILURE_CODES.DUPLICATE_CONCEPT,
-      severity: 'error',
-      message: `"${act.title}" repeats a restaurant from a previous day`,
-      activityIndex: i,
-      autoRepairable: true,
-    });
-    continue;
-  }
+  repairs.push({
+    code: FAILURE_CODES.DUPLICATE_CONCEPT,
+    activityIndex: vr.activityIndex,
+    action: 'swapped_from_pool',
+    before,
+    after: act.title,
+  });
+  continue;
 }
 ```
 
-This import requires adding `extractRestaurantVenueName` from `../generation-utils.ts` at the top of `validate-day.ts`.
-
-### Why Both Changes?
-
-- Fix 1 makes generic concept similarity work for dining (catches fuzzy matches like "Rosa Salva" vs "Caffè Rosa Salva")
-- Fix 2 adds a precise venue-identity check using the same normalization as the restaurant pool/blocklist system (catches exact repeats even when titles differ, e.g. "Breakfast at Rosa Salva" vs "Morning Coffee at Rosa Salva")
-- Together they ensure the `DUPLICATE_CONCEPT` validation fires, which triggers the existing repair-day pool-swap logic (step 4) to replace the duplicate with a different restaurant
+Single insertion point, no other files affected.
 
 ### Summary
 
 | File | Change |
 |---|---|
-| `validate-day.ts` | Fix `extractConcept` to return venue name for dining titles; add explicit dining venue dedup using `extractRestaurantVenueName` |
+| `repair-day.ts` | After pool-swap of a dining dupe, update the preceding transport card's title and location to match the new restaurant |
 
