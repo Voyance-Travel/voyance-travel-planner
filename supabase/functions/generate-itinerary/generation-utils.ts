@@ -94,10 +94,12 @@ export function extractRestaurantVenueName(title: string): string {
     .replace(/^(breakfast|brunch|lunch|dinner|supper)\s+at\s+/i, '')
     // "Breakfast: X", "Lunch: X", "Dinner: X"
     .replace(/^(breakfast|brunch|lunch|dinner|supper)\s*[:–—-]\s*/i, '')
-    // Bare prefix with no separator (e.g. "Breakfast Café X" — less common, keep conservative)
+    // Strip parentheticals like "(2 Michelin Stars)", "(Kreuzberg)"
+    .replace(/\s*\(.*?\)\s*/g, ' ')
+    // Strip trailing venue-type suffixes
+    .replace(/\s+(?:restaurant|ristorante|trattoria|osteria|brasserie|bistro|café|cafe|bar(?:\s*&\s*grill)?|gastropub|pub|eatery|kitchen|diner|grill|steakhouse|pizzeria|bakery|patisserie|konditorei)$/i, '')
     .trim();
 
-  // If stripping didn't change anything, the title IS the venue name
   return normalizeVenueName(name);
 }
 
