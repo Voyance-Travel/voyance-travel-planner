@@ -1,55 +1,62 @@
 
 
-## Fix: Collapse Back-to-Back Transport Activities
+## Fix: "Your Hotel" Placeholder Not Replaced With Real Hotel Name (Single-City Trips)
 
-### Problem
-Itineraries frequently show consecutive transport cards (e.g., "Walk to metro station" → "Metro to Colosseum") instead of a single transport-to-destination card. This happens because:
+### Root Cause
 
-1. The AI prompt asks for transit between **every pair** of activities, and the AI sometimes generates multi-leg transport as separate cards
-2. The `repairBookends` function (step 3) injects additional transit gap cards
-3. **No existing repair step detects or collapses consecutive transport activities**
+In `action-generate-trip-day.ts` (the per-day generation handler), the hotel name for the repair pipeline is resolved via:
+
+```
+hotelName: cityInfo?.hotelName || flightSel.hotelName || undefined
+```
+
+For **single-city trips**, `cityInfo` is always null (the `dayCityMap` is only built for multi-city). And `flightSel` is `trip.flight_selection` — flight data, which doesn't contain a `hotelName` field. So the repair step always gets `hotelName = undefined`, causing all injected accommodation activities to use `"Your Hotel"`.
+
+Additionally, `tripCheck` (line 167) doesn't even fetch `hotel_selection` from the database — only `flight_selection`.
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
 
-Add a transport consolidation pass inside `repairBookends`, run **before** the transit-gap injection (step 3). This pass scans for consecutive transport activities and merges them into a single card that keeps the final destination:
+Three changes:
 
+1. **Add `hotel_selection` to the tripCheck query** (line 167):
 ```typescript
-// NEW — Collapse consecutive transport cards into one
-const consolidated: any[] = [];
-for (let i = 0; i < activities.length; i++) {
-  if (isTransport(activities[i])) {
-    // Look ahead for consecutive transports
-    let j = i;
-    while (j + 1 < activities.length && isTransport(activities[j + 1])) j++;
-    if (j > i) {
-      // Merge: keep last card's destination/title, first card's startTime, last card's endTime
-      const first = activities[i];
-      const last = activities[j];
-      const merged = {
-        ...last,
-        startTime: first.startTime,
-        description: `Transit to ${last.location?.name || last.title}`,
-      };
-      consolidated.push(merged);
-      repairs.push({ code: FAILURE_CODES.DUPLICATE_TITLE, action: 'collapsed_consecutive_transport', before: `${j - i + 1} transport cards`, after: merged.title });
-      i = j; // skip merged cards
-    } else {
-      consolidated.push(activities[i]);
-    }
-  } else {
-    consolidated.push(activities[i]);
-  }
-}
-activities = consolidated;
+.select('itinerary_status, metadata, itinerary_data, flight_selection, hotel_selection')
 ```
 
-This runs right before the existing step 3 ("Transit gaps between non-adjacent visible activities"), so the gap injector sees a clean list without back-to-back transports.
+2. **Extract hotel name from `hotel_selection`** — add a helper block after `tripCheck` to resolve the hotel name for single-city trips:
+```typescript
+// Resolve hotel name from hotel_selection for single-city trips
+const tripHotelSel = tripCheck?.hotel_selection;
+let tripHotelName: string | undefined;
+let tripHotelAddress: string | undefined;
+if (tripHotelSel) {
+  const hotelObj = Array.isArray(tripHotelSel) && tripHotelSel.length > 0
+    ? tripHotelSel[0]
+    : (typeof tripHotelSel === 'object' ? tripHotelSel : null);
+  if (hotelObj?.name) {
+    tripHotelName = hotelObj.name;
+    tripHotelAddress = hotelObj.address || '';
+  }
+}
+```
+
+3. **Use `tripHotelName` as fallback** in all places where hotel name is resolved for repair (~4 locations):
+```typescript
+// Before:
+hotelName: cityInfo?.hotelName || flightSel.hotelName || undefined,
+
+// After:
+hotelName: cityInfo?.hotelName || tripHotelName || undefined,
+hotelAddress: cityInfo?.hotelAddress || tripHotelAddress || '',
+```
+
+Also update the `hasHotel` detection (line 599) and the forward-ref fix (line 605) similarly.
 
 ### Summary
 
 | File | Change |
 |---|---|
-| `repair-day.ts` | Add transport consolidation pass in `repairBookends` to merge consecutive transport cards into one destination-focused card |
+| `action-generate-trip-day.ts` | Add `hotel_selection` to DB query; extract hotel name; use as fallback in repair inputs for single-city trips |
 
