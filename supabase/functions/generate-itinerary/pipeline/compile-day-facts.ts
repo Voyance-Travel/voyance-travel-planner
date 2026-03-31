@@ -377,10 +377,8 @@ DO NOT create any activity that starts or ends within a locked time slot.`;
       hotelAddress: resolvedHotelOverride.address || flightContext.hotelAddress,
     };
     console.log(`[compile-day-facts] Hotel override: "${resolvedHotelOverride.name}"`);
-    if (resolvedIsMultiCity) {
-      const hotelEnforcement = `\n\n🏨 ACCOMMODATION FOR THIS DAY: "${resolvedHotelOverride.name}"${resolvedHotelOverride.address ? ` — ${resolvedHotelOverride.address}` : ''}.${resolvedHotelOverride.neighborhood ? ` Neighborhood: ${resolvedHotelOverride.neighborhood}.` : ''}\n🚫 CRITICAL: Use "${resolvedHotelOverride.name}" for ALL accommodation references. Do NOT invent or substitute a different hotel name.`;
-      flightContext = { ...flightContext, context: (flightContext.context || '') + hotelEnforcement };
-    }
+    const hotelEnforcement = `\n\n🏨 ACCOMMODATION FOR THIS DAY: "${resolvedHotelOverride.name}"${resolvedHotelOverride.address ? ` — ${resolvedHotelOverride.address}` : ''}.${resolvedHotelOverride.neighborhood ? ` Neighborhood: ${resolvedHotelOverride.neighborhood}.` : ''}\n🚫 CRITICAL: Use "${resolvedHotelOverride.name}" for ALL accommodation references. Do NOT invent or substitute a different hotel name.`;
+    flightContext = { ...flightContext, context: (flightContext.context || '') + hotelEnforcement };
   }
 
   const isFirstDay = dayNumber === 1;
