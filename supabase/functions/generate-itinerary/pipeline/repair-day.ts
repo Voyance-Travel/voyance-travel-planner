@@ -176,16 +176,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   if (byCode.has(FAILURE_CODES.DUPLICATE_CONCEPT)) {
     const dupeResults = byCode.get(FAILURE_CODES.DUPLICATE_CONCEPT) || [];
     // Normalize used restaurant names for reliable matching
-    const normalizeForDedup = (name: string): string => {
-      return name
-        .toLowerCase()
-        .replace(/^(breakfast|brunch|lunch|dinner|supper)\s+at\s+/i, '')
-        .replace(/^(breakfast|brunch|lunch|dinner|supper)\s*[:–—-]\s*/i, '')
-        .replace(/[''`´]/g, "'")
-        .replace(/[^\w\s'-]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    };
+    const normalizeForDedup = extractRestaurantVenueName;
     const usedSet = new Set((usedRestaurants || []).map(n => normalizeForDedup(n)));
     // Track current day dining by location.name (canonical venue identity)
     for (const act of activities) {
