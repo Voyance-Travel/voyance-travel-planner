@@ -1207,6 +1207,39 @@ function repairBookends(
     source: 'bookend-validator',
   });
 
+  // 0. Collapse consecutive transport cards into a single destination-focused card
+  {
+    const consolidated: any[] = [];
+    for (let i = 0; i < activities.length; i++) {
+      if (isTransport(activities[i])) {
+        let j = i;
+        while (j + 1 < activities.length && isTransport(activities[j + 1])) j++;
+        if (j > i) {
+          const first = activities[i];
+          const last = activities[j];
+          const merged = {
+            ...last,
+            startTime: first.startTime || last.startTime,
+            description: `Transit to ${last.location?.name || last.title}`,
+          };
+          consolidated.push(merged);
+          repairs.push({
+            code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+            action: 'collapsed_consecutive_transport',
+            before: `${j - i + 1} transport cards`,
+            after: merged.title,
+          });
+          i = j;
+        } else {
+          consolidated.push(activities[i]);
+        }
+      } else {
+        consolidated.push(activities[i]);
+      }
+    }
+    activities = consolidated;
+  }
+
   // 1. Mid-day hotel transports without accommodation card
   for (let i = 0; i < activities.length - 1; i++) {
     if (isTransport(activities[i]) && isHotelRelated(activities[i]) && !isAccom(activities[i + 1])) {
