@@ -1558,13 +1558,13 @@ function FlightHotelStep({
                                 }, cityArrival)
                               : cityArrival;
                             setEditingHotelCity(dest.city);
-                            setEditingHotelIndex(cityHotels.length); // new entry at end
+                            setEditingHotelIndex(cityHotels.length);
                             setNewHotelDraft({
                               name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
                               checkInDate: latestCheckout, checkOutDate: cityDeparture,
                             });
                             setShowHotelModal(true);
-                          }
+                          }}
                         >
                           {cityHotels.length === 0 ? 'Add Hotel' : 'Add Another'}
                         </Button>
