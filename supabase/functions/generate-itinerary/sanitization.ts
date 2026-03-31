@@ -82,6 +82,10 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(INLINE_META_RE, '')
     .replace(FORWARD_REF_RE, '')
     .replace(TOMORROW_REF_RE, '')
+    // Strip internal day title prefixes: "Short Trip Berlin Day 3:" etc.
+    .replace(/^(?:Short\s+Trip|City\s+Trip|Long\s+Trip|Weekend\s+Trip|Extended\s+Trip)\s+\w+(?:\s+\w+)*\s+Day\s+\d+\s*[:–—-]\s*/i, '')
+    // Strip bare "Day N:" prefix
+    .replace(/^Day\s+\d+\s*[:–—-]\s*/i, '')
     .replace(/\b(?:BOOK|RESERVE|SECURE)\s+\d[\d-]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|BEFORE|OUT|EARLY)?\b/gi, '')
     .replace(/[🔴🟡🟢🔵]\s*(?:Book|Reserve|BOOK|RESERVE)[^.]*\.?\s*/g, '')
     .replace(/\b(?:book_now|book_soon|book_early|reserve_early|reserve_now)\b/gi, '')
@@ -136,6 +140,10 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
   const cleanTheme = sanitizeAITextField(day.theme, destination);
   day.title = cleanTitle || cleanTheme || `Day ${dayNumber}`;
   day.theme = cleanTheme || cleanTitle || day.title;
+
+  if (day.name) {
+    day.name = sanitizeAITextField(day.name, destination);
+  }
 
   if (day.narrative && typeof day.narrative === 'object') {
     if (day.narrative.theme) day.narrative.theme = sanitizeAITextField(day.narrative.theme, destination) || day.theme;
