@@ -753,7 +753,7 @@ async function _handleGenerateTripDayInner(
         isMultiCity: isMultiCity || false,
         isLastDayInCity,
         resolvedDestination: cityInfo?.cityName || destination,
-        hotelOverride: cityInfo?.hotelName ? { name: cityInfo.hotelName, address: cityInfo.hotelAddress || '' } : undefined,
+        hotelOverride: (cityInfo?.hotelName || tripHotelName) ? { name: cityInfo?.hotelName || tripHotelName!, address: cityInfo?.hotelAddress || tripHotelAddress || '' } : undefined,
       });
 
       if (repairs.length > 0) {
