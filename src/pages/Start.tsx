@@ -1763,9 +1763,17 @@ function FlightHotelStep({
                         }
                         setEditingHotelIndex(null); // null = new hotel
                         setEditingHotelCity(null);
+                        // Smart date default: new hotel check-in = latest checkout of existing hotels
+                        const existingForDefault = manualHotelList.length > 0
+                          ? manualHotelList
+                          : (manualHotel.name ? [manualHotel] : []);
+                        const latestCheckout = existingForDefault.reduce((latest: string, h: any) => {
+                          const co = h.checkOutDate || '';
+                          return co > latest ? co : latest;
+                        }, startDate);
                         setNewHotelDraft({
                           name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
-                          checkInDate: startDate, checkOutDate: endDate,
+                          checkInDate: latestCheckout, checkOutDate: endDate,
                         });
                         setShowHotelModal(true);
                       }}
