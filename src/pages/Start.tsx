@@ -1548,10 +1548,23 @@ function FlightHotelStep({
                           size="sm"
                           className="text-xs h-7"
                           onClick={() => {
+                            // Smart date default: new hotel check-in = latest checkout of existing hotels in this city
+                            const cityArrival = dest.arrivalDate || startDate;
+                            const cityDeparture = dest.departureDate || endDate;
+                            const latestCheckout = cityHotels.length > 0
+                              ? cityHotels.reduce((latest: string, h: any) => {
+                                  const co = h.checkOutDate || '';
+                                  return co > latest ? co : latest;
+                                }, cityArrival)
+                              : cityArrival;
                             setEditingHotelCity(dest.city);
                             setEditingHotelIndex(cityHotels.length); // new entry at end
+                            setNewHotelDraft({
+                              name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
+                              checkInDate: latestCheckout, checkOutDate: cityDeparture,
+                            });
                             setShowHotelModal(true);
-                          }}
+                          }
                         >
                           {cityHotels.length === 0 ? 'Add Hotel' : 'Add Another'}
                         </Button>
