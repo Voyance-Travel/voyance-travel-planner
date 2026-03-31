@@ -608,13 +608,12 @@ async function _handleGenerateTripDayInner(
     sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest);
     
     // Broad hotel detection: selected hotel, accommodation notes, or existing accommodation activities
-    const hasHotel = !!(cityInfo?.hotelName) || 
-      !!(tripCheck?.flight_selection as any)?.hotelName ||
+    const hasHotel = !!(cityInfo?.hotelName) || !!tripHotelName ||
       dayResult.activities?.some((a: any) => (a.category || '').toLowerCase() === 'accommodation');
     stripPhantomHotelActivities(dayResult, hasHotel);
 
     // Forward-ref fix: strip hallucinated tomorrow references from accommodation descriptions
-    const hotelName = cityInfo?.hotelName || 'your hotel';
+    const hotelName = cityInfo?.hotelName || tripHotelName || 'your hotel';
     for (const act of (dayResult!.activities || [])) {
       const cat = (act.category || '').toLowerCase();
       const title = (act.title || '').toLowerCase();
