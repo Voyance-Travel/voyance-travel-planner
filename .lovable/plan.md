@@ -1,59 +1,49 @@
 
 
-## Fix: Replace Fabricated Hotel Names with "Your Hotel" Instead of Deleting Activities
+## Fix: Restore Fun Loading Messages During Generation
 
 ### Problem
-When no hotel is booked, the AI fabricates specific hotel names (e.g., "The Pantheon Iconic Rome Hotel") instead of using "Your Hotel". Currently, `stripPhantomHotelActivities` **deletes** matching activities, breaking the day's schedule structure. Also, `FABRICATED_HOTEL_RE` only matches known luxury brands and misses many fabricated names.
+The `useRotatingMessage` hook in `GenerationPhases.tsx` polls `generation_logs.current_phase` for real-time phase data. The phase values stored are internal pipeline names like `day_1_ai_complete`, `day_1_context_loading`, `day_1_post_processing_complete`. The hook does minimal formatting (underscores to spaces, capitalize first letter) and shows these raw phase names to users, **overriding** the fun rotating `STATUS_MESSAGES` like "Finding hidden gems locals love..." and "Mapping the best dining spots...".
+
+### Root Cause
+Line 136-144 in `GenerationPhases.tsx`: when `livePhase` is set (which is almost always during generation), it takes priority over `STATUS_MESSAGES` (line 164: `return livePhase || STATUS_MESSAGES[index]`).
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/sanitization.ts`**
+**File: `src/components/planner/shared/GenerationPhases.tsx`**
 
-Two changes:
+Change `useRotatingMessage` to **not** display raw phase names. Instead, map internal phases to user-friendly messages and keep rotating through the fun messages. The live phase data should only influence *which* fun message to show, not replace them.
 
-**1. Add a broad fabricated-hotel-name regex** that catches any proper-noun hotel pattern, not just known luxury brands:
-
-```typescript
-// Broad pattern: any proper-noun hotel name that isn't "Your Hotel" / "The Hotel"
-const BROAD_HOTEL_NAME_RE = /(?:The\s+)?(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:Hotel|Resort|Inn|Suites?|Lodge|Palace|Boutique\s+Hotel)\b/g;
-```
-
-**2. Change `stripPhantomHotelActivities` from deleting activities to replacing fabricated names with "Your Hotel"**. Instead of filtering out activities, iterate and do in-place replacement on `title`, `name`, `description`, and `location`:
+**Approach**: Create a mapping function that translates internal phase names into friendly messages, and always fall back to the rotating `STATUS_MESSAGES`. Only use the live phase to determine a contextual message when it maps to something meaningful (e.g., "Day 2 complete" → "Day 2 is looking great!").
 
 ```typescript
-export function stripPhantomHotelActivities(day: any, hasHotel: boolean): any {
-  if (!day || hasHotel || !Array.isArray(day.activities)) return day;
-
-  let replacements = 0;
-  for (const act of day.activities) {
-    if (!act) continue;
-    const title = act.title || act.name || '';
-    // Skip already-generic placeholders
-    if (isGenericPlaceholder(title)) continue;
-
-    // Replace fabricated hotel names in all text fields
-    for (const field of ['title', 'name', 'description', 'location']) {
-      if (typeof act[field] === 'string' && (FABRICATED_HOTEL_RE.test(act[field]) || BROAD_HOTEL_NAME_RE.test(act[field]))) {
-        act[field] = act[field]
-          .replace(FABRICATED_HOTEL_RE, 'Your Hotel')
-          .replace(BROAD_HOTEL_NAME_RE, 'Your Hotel');
-        replacements++;
-      }
-    }
-  }
-
-  if (replacements > 0) {
-    console.log(`[stripPhantomHotelActivities] Replaced fabricated hotel names in ${replacements} fields with "Your Hotel"`);
-  }
-  return day;
+function humanizePhase(phase: string, destination?: string): string | null {
+  // "Day N/M complete" → friendly confirmation
+  const completeMatch = phase.match(/day\s+(\d+)(?:\/\d+)?\s+complete/i);
+  if (completeMatch) return `Day ${completeMatch[1]} is looking great!`;
+  
+  // All other internal phases (ai_complete, context_loading, post_processing, etc.)
+  // → return null to fall back to fun rotating messages
+  return null;
 }
 ```
 
-The broad regex is guarded by: (a) only runs when `hasHotel === false`, (b) skips activities already matching generic placeholders, (c) won't match "Your Hotel" or "The Hotel" (no proper-noun word before "Hotel").
+Update line 136-144 to use this mapper instead of raw formatting:
+
+```typescript
+if (data?.current_phase && data.status !== 'completed' && data.status !== 'failed') {
+  const friendly = humanizePhase(data.current_phase, destination);
+  setLivePhase(friendly); // null → will fall back to STATUS_MESSAGES
+} else {
+  setLivePhase(null);
+}
+```
+
+This way internal phases like `day_1_ai_complete` or `day_1_context_loading` no longer leak to the UI. Users see the fun rotating messages ("Finding hidden gems locals love...") with occasional contextual updates ("Day 2 is looking great!") when a day actually completes.
 
 ### Summary
 
 | File | Change |
 |---|---|
-| `sanitization.ts` | Add broad fabricated-hotel regex; change from deleting activities to replacing names with "Your Hotel" |
+| `GenerationPhases.tsx` | Add `humanizePhase` mapper; stop displaying raw internal phase names; restore fun rotating messages as primary display |
 
