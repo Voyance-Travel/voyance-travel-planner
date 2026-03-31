@@ -1,65 +1,59 @@
 
 
-## Fix: Restaurant Repetition Across Days
+## Fix: Replace Fabricated Hotel Names with "Your Hotel" Instead of Deleting Activities
 
 ### Problem
-Same restaurants appear on multiple days because name normalization doesn't handle common variations:
-- "Facil" vs "Facil (2 Michelin Stars)" — parentheticals not stripped
-- "Cocolo Ramen" vs "Cocolo Ramen Restaurant" — trailing type suffixes not stripped
-- "Benedict" appearing on consecutive days — AI ignores blocklist, and post-generation dedup normalization misses the match
-
-### Root Cause Analysis
-Three normalization functions are involved, with inconsistent coverage:
-
-1. **`extractRestaurantVenueName`** (generation-utils.ts) — strips meal prefixes but NOT parentheticals or trailing suffixes like "Restaurant"
-2. **`normalizeForDedup`** (repair-day.ts, local) — strips meal prefixes and punctuation but NOT parentheticals or trailing type suffixes
-3. **`normalizeVenueName`** (generation-utils.ts) — strips punctuation only
-
-None of them strip `(2 Michelin Stars)`, `Restaurant`, `Café`, `Bar & Grill` etc., so "Facil" and "Facil (2 Michelin Stars)" are treated as different venues.
+When no hotel is booked, the AI fabricates specific hotel names (e.g., "The Pantheon Iconic Rome Hotel") instead of using "Your Hotel". Currently, `stripPhantomHotelActivities` **deletes** matching activities, breaking the day's schedule structure. Also, `FABRICATED_HOTEL_RE` only matches known luxury brands and misses many fabricated names.
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/generation-utils.ts`**
+**File: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-Enhance `extractRestaurantVenueName` to strip parentheticals and trailing venue-type suffixes. This is the canonical normalizer used by validate-day, compile-prompt, and the used_restaurants tracker:
+Two changes:
+
+**1. Add a broad fabricated-hotel-name regex** that catches any proper-noun hotel pattern, not just known luxury brands:
 
 ```typescript
-export function extractRestaurantVenueName(title: string): string {
-  let name = title
-    .replace(/^(breakfast|brunch|lunch|dinner|supper)\s+at\s+/i, '')
-    .replace(/^(breakfast|brunch|lunch|dinner|supper)\s*[:–—-]\s*/i, '')
-    // NEW: Strip parentheticals like "(2 Michelin Stars)", "(Kreuzberg)"
-    .replace(/\s*\(.*?\)\s*/g, ' ')
-    // NEW: Strip trailing venue-type suffixes
-    .replace(/\s+(?:restaurant|ristorante|trattoria|osteria|brasserie|bistro|café|cafe|bar(?:\s*&\s*grill)?|gastropub|pub|eatery|kitchen|diner|grill|steakhouse|pizzeria|bakery|patisserie|konditorei)$/i, '')
-    .trim();
+// Broad pattern: any proper-noun hotel name that isn't "Your Hotel" / "The Hotel"
+const BROAD_HOTEL_NAME_RE = /(?:The\s+)?(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:Hotel|Resort|Inn|Suites?|Lodge|Palace|Boutique\s+Hotel)\b/g;
+```
 
-  return normalizeVenueName(name);
+**2. Change `stripPhantomHotelActivities` from deleting activities to replacing fabricated names with "Your Hotel"**. Instead of filtering out activities, iterate and do in-place replacement on `title`, `name`, `description`, and `location`:
+
+```typescript
+export function stripPhantomHotelActivities(day: any, hasHotel: boolean): any {
+  if (!day || hasHotel || !Array.isArray(day.activities)) return day;
+
+  let replacements = 0;
+  for (const act of day.activities) {
+    if (!act) continue;
+    const title = act.title || act.name || '';
+    // Skip already-generic placeholders
+    if (isGenericPlaceholder(title)) continue;
+
+    // Replace fabricated hotel names in all text fields
+    for (const field of ['title', 'name', 'description', 'location']) {
+      if (typeof act[field] === 'string' && (FABRICATED_HOTEL_RE.test(act[field]) || BROAD_HOTEL_NAME_RE.test(act[field]))) {
+        act[field] = act[field]
+          .replace(FABRICATED_HOTEL_RE, 'Your Hotel')
+          .replace(BROAD_HOTEL_NAME_RE, 'Your Hotel');
+        replacements++;
+      }
+    }
+  }
+
+  if (replacements > 0) {
+    console.log(`[stripPhantomHotelActivities] Replaced fabricated hotel names in ${replacements} fields with "Your Hotel"`);
+  }
+  return day;
 }
 ```
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
-
-Replace the local `normalizeForDedup` with the canonical `extractRestaurantVenueName` from generation-utils. This ensures repair-day uses the same normalization as validate-day and compile-prompt. Around line 178:
-
-```typescript
-// BEFORE (local function):
-const normalizeForDedup = (name: string): string => { ... };
-
-// AFTER (use canonical normalizer):
-const normalizeForDedup = extractRestaurantVenueName;
-```
-
-This requires adding `extractRestaurantVenueName` to the existing imports from `../generation-utils.ts` at the top of repair-day.ts.
-
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
-
-The used_restaurants accumulation (lines 1132-1146) already uses `extractRestaurantVenueName` — this will automatically benefit from the enhanced normalization. No changes needed here.
+The broad regex is guarded by: (a) only runs when `hasHotel === false`, (b) skips activities already matching generic placeholders, (c) won't match "Your Hotel" or "The Hotel" (no proper-noun word before "Hotel").
 
 ### Summary
 
 | File | Change |
 |---|---|
-| `generation-utils.ts` | Enhance `extractRestaurantVenueName` to strip parentheticals and trailing venue-type suffixes |
-| `repair-day.ts` | Replace local `normalizeForDedup` with canonical `extractRestaurantVenueName` for consistent matching |
+| `sanitization.ts` | Add broad fabricated-hotel regex; change from deleting activities to replacing names with "Your Hotel" |
 
