@@ -1,49 +1,55 @@
 
 
-## Fix: Restore Fun Loading Messages During Generation
+## Fix: Collapse Back-to-Back Transport Activities
 
 ### Problem
-The `useRotatingMessage` hook in `GenerationPhases.tsx` polls `generation_logs.current_phase` for real-time phase data. The phase values stored are internal pipeline names like `day_1_ai_complete`, `day_1_context_loading`, `day_1_post_processing_complete`. The hook does minimal formatting (underscores to spaces, capitalize first letter) and shows these raw phase names to users, **overriding** the fun rotating `STATUS_MESSAGES` like "Finding hidden gems locals love..." and "Mapping the best dining spots...".
+Itineraries frequently show consecutive transport cards (e.g., "Walk to metro station" → "Metro to Colosseum") instead of a single transport-to-destination card. This happens because:
 
-### Root Cause
-Line 136-144 in `GenerationPhases.tsx`: when `livePhase` is set (which is almost always during generation), it takes priority over `STATUS_MESSAGES` (line 164: `return livePhase || STATUS_MESSAGES[index]`).
+1. The AI prompt asks for transit between **every pair** of activities, and the AI sometimes generates multi-leg transport as separate cards
+2. The `repairBookends` function (step 3) injects additional transit gap cards
+3. **No existing repair step detects or collapses consecutive transport activities**
 
 ### Fix
 
-**File: `src/components/planner/shared/GenerationPhases.tsx`**
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-Change `useRotatingMessage` to **not** display raw phase names. Instead, map internal phases to user-friendly messages and keep rotating through the fun messages. The live phase data should only influence *which* fun message to show, not replace them.
-
-**Approach**: Create a mapping function that translates internal phase names into friendly messages, and always fall back to the rotating `STATUS_MESSAGES`. Only use the live phase to determine a contextual message when it maps to something meaningful (e.g., "Day 2 complete" → "Day 2 is looking great!").
+Add a transport consolidation pass inside `repairBookends`, run **before** the transit-gap injection (step 3). This pass scans for consecutive transport activities and merges them into a single card that keeps the final destination:
 
 ```typescript
-function humanizePhase(phase: string, destination?: string): string | null {
-  // "Day N/M complete" → friendly confirmation
-  const completeMatch = phase.match(/day\s+(\d+)(?:\/\d+)?\s+complete/i);
-  if (completeMatch) return `Day ${completeMatch[1]} is looking great!`;
-  
-  // All other internal phases (ai_complete, context_loading, post_processing, etc.)
-  // → return null to fall back to fun rotating messages
-  return null;
+// NEW — Collapse consecutive transport cards into one
+const consolidated: any[] = [];
+for (let i = 0; i < activities.length; i++) {
+  if (isTransport(activities[i])) {
+    // Look ahead for consecutive transports
+    let j = i;
+    while (j + 1 < activities.length && isTransport(activities[j + 1])) j++;
+    if (j > i) {
+      // Merge: keep last card's destination/title, first card's startTime, last card's endTime
+      const first = activities[i];
+      const last = activities[j];
+      const merged = {
+        ...last,
+        startTime: first.startTime,
+        description: `Transit to ${last.location?.name || last.title}`,
+      };
+      consolidated.push(merged);
+      repairs.push({ code: FAILURE_CODES.DUPLICATE_TITLE, action: 'collapsed_consecutive_transport', before: `${j - i + 1} transport cards`, after: merged.title });
+      i = j; // skip merged cards
+    } else {
+      consolidated.push(activities[i]);
+    }
+  } else {
+    consolidated.push(activities[i]);
+  }
 }
+activities = consolidated;
 ```
 
-Update line 136-144 to use this mapper instead of raw formatting:
-
-```typescript
-if (data?.current_phase && data.status !== 'completed' && data.status !== 'failed') {
-  const friendly = humanizePhase(data.current_phase, destination);
-  setLivePhase(friendly); // null → will fall back to STATUS_MESSAGES
-} else {
-  setLivePhase(null);
-}
-```
-
-This way internal phases like `day_1_ai_complete` or `day_1_context_loading` no longer leak to the UI. Users see the fun rotating messages ("Finding hidden gems locals love...") with occasional contextual updates ("Day 2 is looking great!") when a day actually completes.
+This runs right before the existing step 3 ("Transit gaps between non-adjacent visible activities"), so the gap injector sees a clean list without back-to-back transports.
 
 ### Summary
 
 | File | Change |
 |---|---|
-| `GenerationPhases.tsx` | Add `humanizePhase` mapper; stop displaying raw internal phase names; restore fun rotating messages as primary display |
+| `repair-day.ts` | Add transport consolidation pass in `repairBookends` to merge consecutive transport cards into one destination-focused card |
 
