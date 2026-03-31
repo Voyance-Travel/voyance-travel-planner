@@ -110,6 +110,22 @@ function useDripFeedDays(generatedDaysList: GeneratedDaySummary[]) {
   return visibleDays;
 }
 
+/**
+ * Map internal pipeline phase names to user-friendly messages.
+ * Returns null for phases that should fall back to rotating fun messages.
+ */
+function humanizePhase(phase: string): string | null {
+  // "day_2_complete" or "day 2/5 complete" → friendly confirmation
+  const completeMatch = phase.match(/day\s*_?(\d+)(?:[/_]\d+)?\s*_?complete/i);
+  if (completeMatch) return `Day ${completeMatch[1]} is looking great!`;
+
+  // "all_days_complete" or similar final markers
+  if (/all.*complete/i.test(phase)) return 'Putting the finishing touches...';
+
+  // All other internal phases (ai_complete, context_loading, post_processing, etc.)
+  return null;
+}
+
 /** Rotating status message hook — uses real phase data from generation_logs when available */
 function useRotatingMessage(tripId?: string, isActive?: boolean) {
   const [index, setIndex] = useState(0);
@@ -134,12 +150,8 @@ function useRotatingMessage(tripId?: string, isActive?: boolean) {
           .maybeSingle();
 
         if (data?.current_phase && data.status !== 'completed' && data.status !== 'failed') {
-          // Format phase name for display
-          const phase = data.current_phase
-            .replace(/_/g, ' ')
-            .replace(/day (\d+)/i, 'Day $1')
-            .replace(/^(\w)/, (c: string) => c.toUpperCase());
-          setLivePhase(phase);
+          const friendly = humanizePhase(data.current_phase);
+          setLivePhase(friendly); // null → falls back to rotating STATUS_MESSAGES
         } else {
           setLivePhase(null);
         }
