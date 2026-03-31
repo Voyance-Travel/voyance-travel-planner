@@ -141,6 +141,10 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
   day.title = cleanTitle || cleanTheme || `Day ${dayNumber}`;
   day.theme = cleanTheme || cleanTitle || day.title;
 
+  if (day.name) {
+    day.name = sanitizeAITextField(day.name, destination);
+  }
+
   if (day.narrative && typeof day.narrative === 'object') {
     if (day.narrative.theme) day.narrative.theme = sanitizeAITextField(day.narrative.theme, destination) || day.theme;
     if (Array.isArray(day.narrative.highlights)) {
