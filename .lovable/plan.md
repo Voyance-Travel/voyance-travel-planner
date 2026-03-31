@@ -1,62 +1,57 @@
 
 
-## Fix: "Your Hotel" Placeholder Not Replaced With Real Hotel Name (Single-City Trips)
+## Fix: Single-City Split Stays — Per-Day Hotel Resolution
 
-### Root Cause
+### Problem
+When users add multiple hotels with date ranges for a single-city trip (split stay), the AI and repair pipeline ignore the per-day hotel mapping. Every day uses the first hotel's name because:
 
-In `action-generate-trip-day.ts` (the per-day generation handler), the hotel name for the repair pipeline is resolved via:
+1. **`getFlightHotelContext`** (line 350): Sets `hotelName` to `hotelRaw[0]` for split stays — no per-day resolution
+2. **`compile-day-facts.ts`** (line 67): Per-day hotel resolution only runs inside the `tripCities.length > 1` block (multi-city). Single-city trips skip this entirely, so `resolvedHotelOverride` stays null
+3. **`action-generate-trip-day.ts`**: `tripHotelName` is extracted from `hotel_selection[0]` — always the first hotel. This flows into `repairBookends` and post-processing
 
-```
-hotelName: cityInfo?.hotelName || flightSel.hotelName || undefined
-```
+The AI does receive the split-stay schedule in its prompt context, but without a day-specific enforcement block (`🏨 ACCOMMODATION FOR THIS DAY: "Hotel X"`), it often ignores it or defaults to the first hotel.
 
-For **single-city trips**, `cityInfo` is always null (the `dayCityMap` is only built for multi-city). And `flightSel` is `trip.flight_selection` — flight data, which doesn't contain a `hotelName` field. So the repair step always gets `hotelName = undefined`, causing all injected accommodation activities to use `"Your Hotel"`.
+### Fix (2 files)
 
-Additionally, `tripCheck` (line 167) doesn't even fetch `hotel_selection` from the database — only `flight_selection`.
+**File 1: `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`**
 
-### Fix
+After the multi-city `tripCities` block (after line ~145), add a **single-city split-stay resolver**. When `resolvedHotelOverride` is still null and `tripId` is set:
 
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+- Fetch `hotel_selection` from the trips table
+- If it's an array with 2+ hotels with dates, resolve the correct hotel for the current day using the same date-matching logic already used for multi-city (lines 82-94)
+- Set `resolvedHotelOverride` with the matched hotel
+- This ensures the hotel enforcement prompt block (lines 314-325) fires even for single-city trips — remove the `resolvedIsMultiCity` gate on line 322 so it applies universally
 
-Three changes:
+**File 2: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
 
-1. **Add `hotel_selection` to the tripCheck query** (line 167):
+Update `tripHotelName` / `tripHotelAddress` resolution to be date-aware for split stays:
+
+- When `hotel_selection` is an array with 2+ hotels, resolve the correct hotel for the current `dayNumber` using dates (same logic)
+- This ensures `repairBookends` and forward-ref cleanup use the right hotel name per day
+
+### Technical Detail
+
+The date-matching logic (already proven in compile-day-facts lines 82-94):
 ```typescript
-.select('itinerary_status, metadata, itinerary_data, flight_selection, hotel_selection')
-```
-
-2. **Extract hotel name from `hotel_selection`** — add a helper block after `tripCheck` to resolve the hotel name for single-city trips:
-```typescript
-// Resolve hotel name from hotel_selection for single-city trips
-const tripHotelSel = tripCheck?.hotel_selection;
-let tripHotelName: string | undefined;
-let tripHotelAddress: string | undefined;
-if (tripHotelSel) {
-  const hotelObj = Array.isArray(tripHotelSel) && tripHotelSel.length > 0
-    ? tripHotelSel[0]
-    : (typeof tripHotelSel === 'object' ? tripHotelSel : null);
-  if (hotelObj?.name) {
-    tripHotelName = hotelObj.name;
-    tripHotelAddress = hotelObj.address || '';
-  }
+// Match hotel by date
+const dayDate = /* computed from startDate + dayNumber */;
+const matched = hotelList.find(h => {
+  const cin = h.checkInDate || h.check_in_date;
+  const cout = h.checkOutDate || h.check_out_date;
+  return cin && cout && dayDate >= cin && dayDate < cout;
+});
+// Fallback: distribute nights evenly across hotels
+if (!matched) {
+  const daysPerHotel = Math.max(1, Math.floor(totalDays / hotelList.length));
+  const idx = Math.min(Math.floor((dayNumber - 1) / daysPerHotel), hotelList.length - 1);
+  return hotelList[idx];
 }
 ```
-
-3. **Use `tripHotelName` as fallback** in all places where hotel name is resolved for repair (~4 locations):
-```typescript
-// Before:
-hotelName: cityInfo?.hotelName || flightSel.hotelName || undefined,
-
-// After:
-hotelName: cityInfo?.hotelName || tripHotelName || undefined,
-hotelAddress: cityInfo?.hotelAddress || tripHotelAddress || '',
-```
-
-Also update the `hasHotel` detection (line 599) and the forward-ref fix (line 605) similarly.
 
 ### Summary
 
 | File | Change |
 |---|---|
-| `action-generate-trip-day.ts` | Add `hotel_selection` to DB query; extract hotel name; use as fallback in repair inputs for single-city trips |
+| `compile-day-facts.ts` | Add single-city split-stay hotel resolver; remove multi-city gate on hotel enforcement prompt |
+| `action-generate-trip-day.ts` | Make `tripHotelName` date-aware for split stays so repair pipeline uses correct hotel per day |
 
