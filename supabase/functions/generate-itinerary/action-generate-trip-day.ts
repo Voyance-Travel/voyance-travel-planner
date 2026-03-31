@@ -166,15 +166,40 @@ async function _handleGenerateTripDayInner(
   // Guard: check trip is still in "generating" state AND run ID matches
   const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data, flight_selection, hotel_selection').eq('id', tripId).single();
 
-  // Resolve hotel name from hotel_selection for single-city trips
+  // Resolve hotel name from hotel_selection for single-city trips (date-aware for split stays)
   let tripHotelName: string | undefined;
   let tripHotelAddress: string | undefined;
   if (tripCheck?.hotel_selection) {
     const hs = tripCheck.hotel_selection as any;
-    const hotelObj = Array.isArray(hs) && hs.length > 0 ? hs[0] : (typeof hs === 'object' ? hs : null);
-    if (hotelObj?.name) {
-      tripHotelName = hotelObj.name;
-      tripHotelAddress = hotelObj.address || '';
+    const hotelList: any[] = Array.isArray(hs) ? hs : (typeof hs === 'object' && hs?.name ? [hs] : []);
+
+    if (hotelList.length > 1 && startDate) {
+      // Split stay: resolve per-day hotel by date matching
+      const dayDate = new Date(startDate);
+      dayDate.setDate(dayDate.getDate() + dayNumber - 1);
+      const dayDateStr = dayDate.toISOString().split('T')[0];
+
+      let matched = hotelList.find((h: any) => {
+        const cin = h.checkInDate || h.check_in_date;
+        const cout = h.checkOutDate || h.check_out_date;
+        if (!cin && cout && dayDateStr < cout) return true;
+        return cin && cout && dayDateStr >= cin && dayDateStr < cout;
+      });
+      if (!matched) {
+        // Fallback: distribute nights evenly
+        const daysPerHotel = Math.max(1, Math.floor(totalDays / hotelList.length));
+        const idx = Math.min(Math.floor((dayNumber - 1) / daysPerHotel), hotelList.length - 1);
+        matched = hotelList[idx];
+        console.log(`[generate-trip-day] Split-stay date inference: day ${dayNumber} → hotel[${idx}] "${matched?.name}"`);
+      }
+      if (matched?.name) {
+        tripHotelName = matched.name;
+        tripHotelAddress = matched.address || '';
+        console.log(`[generate-trip-day] Split-stay hotel for day ${dayNumber}: "${tripHotelName}" (date: ${dayDateStr})`);
+      }
+    } else if (hotelList.length === 1 && hotelList[0]?.name) {
+      tripHotelName = hotelList[0].name;
+      tripHotelAddress = hotelList[0].address || '';
     }
   }
   if (!tripCheck || tripCheck.itinerary_status === 'cancelled') {
