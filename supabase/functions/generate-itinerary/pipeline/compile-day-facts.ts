@@ -160,6 +160,64 @@ export async function compileDayFacts(
         }
         console.log(`[compile-day-facts] Transition resolver: day=${dayNumber}, isTransition=${resolvedIsTransitionDay}, from=${resolvedTransitionFrom}, to=${resolvedTransitionTo}, mode=${resolvedTransportMode}`);
       }
+
+      // ═══════════════════════════════════════════════════════════════════
+      // SINGLE-CITY SPLIT-STAY RESOLVER
+      // When resolvedHotelOverride is still null (no trip_cities hotel),
+      // check trips.hotel_selection for split-stay date matching.
+      // ═══════════════════════════════════════════════════════════════════
+      if (!resolvedHotelOverride?.name && tripId) {
+        try {
+          const { data: tripRow } = await supabase
+            .from('trips')
+            .select('hotel_selection')
+            .eq('id', tripId)
+            .single();
+
+          if (tripRow?.hotel_selection) {
+            const rawHotel = tripRow.hotel_selection as any;
+            const hotelList: any[] = Array.isArray(rawHotel) ? rawHotel : (rawHotel && typeof rawHotel === 'object' && rawHotel.name ? [rawHotel] : []);
+
+            if (hotelList.length > 1 && date) {
+              const dateStr = typeof date === 'string' ? date.split('T')[0] : date;
+              let matchedHotel = hotelList.find((h: any) => {
+                const cin = h.checkInDate || h.check_in_date;
+                const cout = h.checkOutDate || h.check_out_date;
+                if (!cin && cout && dateStr < cout) return true;
+                return cin && cout && dateStr >= cin && dateStr < cout;
+              });
+              if (!matchedHotel) {
+                // Fallback: distribute nights evenly
+                const daysPerHotel = Math.max(1, Math.floor(totalDays / hotelList.length));
+                const hotelIndex = Math.min(Math.floor((dayNumber - 1) / daysPerHotel), hotelList.length - 1);
+                matchedHotel = hotelList[hotelIndex];
+                console.log(`[compile-day-facts] Single-city split-stay date inference: day ${dayNumber} → hotel[${hotelIndex}] "${matchedHotel?.name}"`);
+              }
+              if (matchedHotel?.name) {
+                resolvedHotelOverride = {
+                  name: matchedHotel.name,
+                  address: matchedHotel.address,
+                  neighborhood: matchedHotel.neighborhood,
+                  checkIn: matchedHotel.checkIn || matchedHotel.checkInTime || matchedHotel.check_in,
+                  checkOut: matchedHotel.checkOut || matchedHotel.checkOutTime || matchedHotel.check_out,
+                };
+                console.log(`[compile-day-facts] Single-city split-stay hotel resolved: "${matchedHotel.name}" for day ${dayNumber} (date: ${dateStr})`);
+              }
+            } else if (hotelList.length === 1 && hotelList[0]?.name) {
+              resolvedHotelOverride = {
+                name: hotelList[0].name,
+                address: hotelList[0].address,
+                neighborhood: hotelList[0].neighborhood,
+                checkIn: hotelList[0].checkIn || hotelList[0].checkInTime || hotelList[0].check_in,
+                checkOut: hotelList[0].checkOut || hotelList[0].checkOutTime || hotelList[0].check_out,
+              };
+              console.log(`[compile-day-facts] Single hotel resolved: "${hotelList[0].name}" for day ${dayNumber}`);
+            }
+          }
+        } catch (e) {
+          console.warn('[compile-day-facts] Single-city split-stay resolver error (non-blocking):', e);
+        }
+      }
     } catch (e) {
       console.warn('[compile-day-facts] Could not resolve transition context:', e);
     }
