@@ -717,7 +717,7 @@ async function _handleGenerateTripDayInner(
         day: dayMinimal,
         dayNumber, isFirstDay, isLastDay, totalDays,
         hasHotel: true, // Always true — repair uses "Your Hotel" placeholder
-        hotelName: cityInfo?.hotelName || flightSel.hotelName || undefined,
+        hotelName: cityInfo?.hotelName || tripHotelName || undefined,
         arrivalTime24: arrTime24,
         returnDepartureTime24: depTime24,
         requiredMeals: policy.requiredMeals || [],
