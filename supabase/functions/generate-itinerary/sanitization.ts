@@ -292,23 +292,26 @@ const PHANTOM_HOTEL_TITLE_PATTERNS = [
 const PHANTOM_HOTEL_CATEGORIES = ['hotel_checkin', 'hotel_checkout', 'accommodation'];
 
 // Known luxury hotel brand patterns the AI fabricates
-const FABRICATED_HOTEL_RE = /\b(?:Hotel\s+Le\s+\w+|Le\s+Meurice|The\s+Peninsula|Ritz\s+\w+|Four\s+Seasons|Mandarin\s+Oriental|St\.\s*Regis|Park\s+Hyatt|Aman\w*|Rosewood|Waldorf\s+Astoria|W\s+Hotel|Shangri[\s-]La|InterContinental|Sofitel|Fairmont|The\s+Langham|Belmond|Raffles|Oberoi|Taj\s+\w+|Peninsula\s+\w+|Iconic\s+\w+\s+Hotel|The\s+\w+\s+Iconic\b)\b/i;
+const FABRICATED_HOTEL_RE = /\b(?:Hotel\s+Le\s+\w+|Le\s+Meurice|The\s+Peninsula|Ritz\s+\w+|Four\s+Seasons|Mandarin\s+Oriental|St\.\s*Regis|Park\s+Hyatt|Aman\w*|Rosewood|Waldorf\s+Astoria|W\s+Hotel|Shangri[\s-]La|InterContinental|Sofitel|Fairmont|The\s+Langham|Belmond|Raffles|Oberoi|Taj\s+\w+|Peninsula\s+\w+|Iconic\s+\w+\s+Hotel|The\s+\w+\s+Iconic\b)\b/gi;
+
+// Broad pattern: any proper-noun hotel name that isn't "Your Hotel" / "The Hotel"
+// Matches e.g. "The Pantheon Iconic Rome Hotel", "Grand Hotel Europa", "Villa Medici Resort"
+const BROAD_HOTEL_NAME_RE = /(?:The\s+)?(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:Hotel|Resort|Inn|Suites?|Lodge|Palace|Boutique\s+Hotel)\b/g;
 
 /**
- * Remove fabricated hotel activities when no hotel is booked.
+ * Replace fabricated hotel names with "Your Hotel" when no hotel is booked.
  * When hasHotel is true, activities are kept as-is.
  *
  * IMPORTANT: Generic placeholder activities like "Check-in at Your Hotel",
  * "Freshen up at Your Hotel", "Return to Your Hotel" are PRESERVED.
  * These are valid structural cards that get patched with real hotel names
  * later via patchItineraryWithHotel. Only activities referencing
- * fabricated specific hotel names (luxury brands the AI hallucinates)
- * are stripped.
+ * fabricated specific hotel names are replaced with "Your Hotel".
  */
 export function stripPhantomHotelActivities(day: any, hasHotel: boolean): any {
   if (!day || hasHotel || !Array.isArray(day.activities)) return day;
 
-  // Generic placeholder patterns we MUST keep
+  // Generic placeholder patterns we MUST keep untouched
   const GENERIC_PLACEHOLDERS = [
     /\byour hotel\b/i,
     /\bthe hotel\b/i,
@@ -328,26 +331,36 @@ export function stripPhantomHotelActivities(day: any, hasHotel: boolean): any {
     return GENERIC_PLACEHOLDERS.some(re => re.test(title));
   };
 
-  const before = day.activities.length;
-  day.activities = day.activities.filter((act: any) => {
-    if (!act) return false;
-    const title = (act.title || act.name || '');
+  let replacements = 0;
+  for (const act of day.activities) {
+    if (!act) continue;
+    const title = act.title || act.name || '';
+    // Skip already-generic placeholders — they're intended
+    if (isGenericPlaceholder(title)) continue;
 
-    // ALWAYS keep generic placeholder hotel activities — they are structural
-    if (isGenericPlaceholder(title)) return true;
-
-    // Only strip activities that reference fabricated specific hotel names
-    if (FABRICATED_HOTEL_RE.test(act.title || '') || FABRICATED_HOTEL_RE.test(act.description || '')) {
-      return false;
+    // Replace fabricated hotel names in all text fields
+    for (const field of ['title', 'name', 'description', 'location'] as const) {
+      if (typeof act[field] !== 'string') continue;
+      // Reset lastIndex for global regexes
+      FABRICATED_HOTEL_RE.lastIndex = 0;
+      BROAD_HOTEL_NAME_RE.lastIndex = 0;
+      const hasFabricated = FABRICATED_HOTEL_RE.test(act[field]);
+      BROAD_HOTEL_NAME_RE.lastIndex = 0;
+      const hasBroad = BROAD_HOTEL_NAME_RE.test(act[field]);
+      if (hasFabricated || hasBroad) {
+        FABRICATED_HOTEL_RE.lastIndex = 0;
+        BROAD_HOTEL_NAME_RE.lastIndex = 0;
+        act[field] = act[field]
+          .replace(FABRICATED_HOTEL_RE, 'Your Hotel')
+          .replace(BROAD_HOTEL_NAME_RE, 'Your Hotel');
+        replacements++;
+      }
     }
-
-    return true;
-  });
-
-  if (day.activities.length < before) {
-    console.log(`[stripPhantomHotelActivities] Removed ${before - day.activities.length} fabricated hotel activities (preserved generic placeholders)`);
   }
 
+  if (replacements > 0) {
+    console.log(`[stripPhantomHotelActivities] Replaced fabricated hotel names in ${replacements} fields with "Your Hotel"`);
+  }
   return day;
 }
 
