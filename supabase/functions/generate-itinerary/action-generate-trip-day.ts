@@ -164,7 +164,19 @@ async function _handleGenerateTripDayInner(
   timer.startPhase(`day_${dayNumber}_total`);
 
   // Guard: check trip is still in "generating" state AND run ID matches
-  const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data, flight_selection').eq('id', tripId).single();
+  const { data: tripCheck } = await supabase.from('trips').select('itinerary_status, metadata, itinerary_data, flight_selection, hotel_selection').eq('id', tripId).single();
+
+  // Resolve hotel name from hotel_selection for single-city trips
+  let tripHotelName: string | undefined;
+  let tripHotelAddress: string | undefined;
+  if (tripCheck?.hotel_selection) {
+    const hs = tripCheck.hotel_selection as any;
+    const hotelObj = Array.isArray(hs) && hs.length > 0 ? hs[0] : (typeof hs === 'object' ? hs : null);
+    if (hotelObj?.name) {
+      tripHotelName = hotelObj.name;
+      tripHotelAddress = hotelObj.address || '';
+    }
+  }
   if (!tripCheck || tripCheck.itinerary_status === 'cancelled') {
     console.log(`[generate-trip-day] Trip ${tripId} status is ${tripCheck?.itinerary_status}, stopping chain`);
     return new Response(
