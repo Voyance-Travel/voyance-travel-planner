@@ -102,6 +102,12 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/(?:^|\.\s*)[^.]*\b(?:archetype|hard\s+block|soft\s+block|generation\s+rule|as per arche)\b[^.]*\.?/gi, '')
     // Strip "Voyance Pick" / "Hotel Pick" and variant internal labels
     .replace(/\s*(?:Voyance\s+(?:Pick|Recommendation|Choice)|Hotel\s+Pick|Staff\s+Pick)\s*/gi, '')
+    // Strip internal venue database / data-freshness notes
+    .replace(/\s*[-–—]\s*(?:we\s+)?recommend\s+confirming\s+hours\s+before\s+visiting\.?/gi, '')
+    .replace(/\s*[-–—]?\s*confirm\s+hours\s+before\s+visiting\.?/gi, '')
+    .replace(/(?:^|[.]\s*)Recommended\s+by\s+our\s+venue\s+database[^.]*\.?\s*/gi, '')
+    .replace(/(?:^|[.]\s*)(?:A\s+)?local\s+favorite\s*[-–—]\s*we\s+recommend[^.]*\.?\s*/gi, '')
+    .replace(/(?:^|[.]\s*)(?:Sourced|Verified|Confirmed)\s+(?:from|by|via)\s+(?:our|the)\s+(?:venue|restaurant|local)\s+database[^.]*\.?\s*/gi, '')
     // Deduplicate consecutive repeated words: "Pantheon Pantheon" → "Pantheon"
     .replace(/\b(\w{3,})\s+\1\b/gi, '$1')
     // Catch comma-prefixed schema field names at end of text
