@@ -1548,8 +1548,21 @@ function FlightHotelStep({
                           size="sm"
                           className="text-xs h-7"
                           onClick={() => {
+                            // Smart date default: new hotel check-in = latest checkout of existing hotels in this city
+                            const cityArrival = dest.arrivalDate || startDate;
+                            const cityDeparture = dest.departureDate || endDate;
+                            const latestCheckout = cityHotels.length > 0
+                              ? cityHotels.reduce((latest: string, h: any) => {
+                                  const co = h.checkOutDate || '';
+                                  return co > latest ? co : latest;
+                                }, cityArrival)
+                              : cityArrival;
                             setEditingHotelCity(dest.city);
-                            setEditingHotelIndex(cityHotels.length); // new entry at end
+                            setEditingHotelIndex(cityHotels.length);
+                            setNewHotelDraft({
+                              name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
+                              checkInDate: latestCheckout, checkOutDate: cityDeparture,
+                            });
                             setShowHotelModal(true);
                           }}
                         >
@@ -1750,9 +1763,17 @@ function FlightHotelStep({
                         }
                         setEditingHotelIndex(null); // null = new hotel
                         setEditingHotelCity(null);
+                        // Smart date default: new hotel check-in = latest checkout of existing hotels
+                        const existingForDefault = manualHotelList.length > 0
+                          ? manualHotelList
+                          : (manualHotel.name ? [manualHotel] : []);
+                        const latestCheckout = existingForDefault.reduce((latest: string, h: any) => {
+                          const co = h.checkOutDate || '';
+                          return co > latest ? co : latest;
+                        }, startDate);
                         setNewHotelDraft({
                           name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
-                          checkInDate: startDate, checkOutDate: endDate,
+                          checkInDate: latestCheckout, checkOutDate: endDate,
                         });
                         setShowHotelModal(true);
                       }}
