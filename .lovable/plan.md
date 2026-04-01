@@ -1,31 +1,60 @@
 
 
-## Apply Multi-Email Chip Input to Remaining Share Modals
+## Harden Invite Link Flow & Add Diagnostics
 
-The multi-email chip input was implemented in `TripShareModal.tsx`, but two other share modals still use the old single-email pattern:
+### Context
+Backend investigation confirms invite links support multi-use (max_uses=10, tested via direct RPC). The "Link Not Valid" error reported for user 2 cannot be reproduced from the code. This plan adds diagnostics and robustness improvements to surface the root cause.
 
-### Files to update
+### Changes
 
-**1. `src/components/post-trip/ShareTripCard.tsx`**
-- Replace `friendEmail: string` with `friendEmails: string[]` + `emailInput: string`
-- Add `addEmail`, `removeEmail`, `handleEmailKeyDown` helpers (same pattern as TripShareModal)
-- Replace the single `<Input>` with the flex-wrap chip container + inline input
-- Update `sendToFriend` to join all emails in the `mailto:` `to:` field
-- Change label from "Send to a friend" to "Invite friends"
-- Cap at 10 emails
+**1. AcceptInvite.tsx — Better error diagnostics and retry**
+- Log the full RPC response (not just errors) to console for debugging
+- Add a "Try Again" button on the error page that re-fetches invite info (currently errors are terminal)
+- Show the raw reason code more prominently in dev/preview environments
+- Distinguish network errors from actual invalid tokens visually
 
-**2. `src/components/referral/ReferralShareModal.tsx`**
-- Same conversion: `friendEmail` → `friendEmails[]` + `emailInput`
-- Same chip input UI pattern
-- Update `sendEmail` to use `friendEmails.join(',')` in `mailto:`
-- Update label and placeholder
-- Cap at 10 emails
+**2. inviteResolver.ts — Add response logging**
+- Log the full `resolve_or_rotate_invite` response for debugging
+- Include the token prefix in logs for correlation
 
-### No new dependencies
-The chip input is built inline using the same pattern already in TripShareModal (flex-wrap container with badge-style dismiss chips).
+**3. AcceptInvite.tsx — Auto-retry on network errors**
+- If `get_trip_invite_info` fails with a network error (not a business logic error like expired/replaced), auto-retry once after 1 second
+- Only clear the persisted token on confirmed terminal reasons, not on transient failures
+
+**4. TripShareModal — Show remaining uses indicator**
+- After resolving the invite link, show "X spots remaining" based on `maxUses - usesCount` from the invite health response
+- Reassures the owner the link supports multiple people
+
+### Technical Detail
+
+The `InviteHealth` response from `resolveInviteLink` already includes `usesCount` and `maxUses`. Surface this in TripShareModal:
+```tsx
+{inviteHealth && (
+  <p className="text-xs text-muted-foreground">
+    {inviteHealth.maxUses - inviteHealth.usesCount} spots remaining
+  </p>
+)}
+```
+
+For the retry in AcceptInvite:
+```tsx
+const [retryCount, setRetryCount] = useState(0);
+
+const retryFetch = () => {
+  setError(null);
+  setLoading(true);
+  setRetryCount(c => c + 1);
+};
+
+// Add retryCount to the useEffect dependency to trigger re-fetch
+useEffect(() => { ... }, [token, retryCount]);
+```
+
+### Files
 
 | File | Change |
 |---|---|
-| `ShareTripCard.tsx` | Multi-email chip input, group-friendly label |
-| `ReferralShareModal.tsx` | Multi-email chip input, group-friendly label |
+| `src/pages/AcceptInvite.tsx` | Add retry button, better error logging, auto-retry on network errors |
+| `src/services/inviteResolver.ts` | Add response logging |
+| `src/components/sharing/TripShareModal.tsx` | Show remaining spots from invite health |
 
