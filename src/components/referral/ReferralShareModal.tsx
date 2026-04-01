@@ -144,8 +144,32 @@ export function ReferralShareModal({
     );
   };
 
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  const addEmail = (raw: string) => {
+    const email = raw.trim().toLowerCase();
+    if (!email) return;
+    if (!isValidEmail(email)) { toast.error(`"${email}" isn't a valid email`); return; }
+    if (friendEmails.includes(email)) { toast.error('Already added'); return; }
+    if (friendEmails.length >= 10) { toast.error('Max 10 recipients'); return; }
+    setFriendEmails(prev => [...prev, email]);
+    setEmailInput('');
+  };
+
+  const removeEmail = (email: string) => setFriendEmails(prev => prev.filter(e => e !== email));
+
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addEmail(emailInput);
+    } else if (e.key === 'Backspace' && !emailInput && friendEmails.length > 0) {
+      setFriendEmails(prev => prev.slice(0, -1));
+    }
+  };
+
   const sendEmail = () => {
-    if (!friendEmail) return;
+    if (emailInput) addEmail(emailInput);
+    if (friendEmails.length === 0 && !emailInput) return;
     
     const subject = encodeURIComponent(
       destination 
@@ -162,8 +186,9 @@ export function ReferralShareModal({
       `Let me know what you think!`
     );
     
-    window.open(`mailto:${friendEmail}?subject=${subject}&body=${body}`, '_blank');
-    setFriendEmail('');
+    window.open(`mailto:${friendEmails.join(',')}?subject=${subject}&body=${body}`, '_blank');
+    setFriendEmails([]);
+    setEmailInput('');
     toast.success('Opening email...');
   };
 
