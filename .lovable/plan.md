@@ -1,50 +1,46 @@
 
 
-## Fix: Smart Date Defaults for Split-Stay Hotel Entry
+## Enhance Share Modal for Group Sharing
 
 ### Problem
-When adding a second (or third) hotel in a split stay, the check-in/check-out dates default to the full trip range (`startDate` → `endDate`). The user has to manually adjust the dates every time. Instead, the new hotel's check-in should default to the previous hotel's checkout date, and the checkout should default to the trip end date (or the remaining days).
+The "Send to a friend" section in the Trip Share Modal only accepts a single email at a time. Users wanting to invite a group have to send one email at a time. The invite link itself already supports multiple uses (up to `travelers × 3` or 10, whichever is higher), but the UI doesn't surface this well.
 
 ### Fix
 
-**File: `src/pages/Start.tsx`**
+**File: `src/components/sharing/TripShareModal.tsx`**
 
-Two locations need smart date defaults:
+1. **Replace single email input with a multi-email chip input**:
+   - Allow comma or Enter-separated emails
+   - Show each added email as a dismissible chip/tag
+   - Validate each email on entry; reject invalid ones with inline feedback
+   - "Send" button opens a single `mailto:` with all emails in the `to:` field (comma-separated), or sends individually if preferred
 
-**1. Single-city "Add another hotel" button (line ~1753)**
+2. **Update the label and UX**:
+   - Change "Send to a friend" → "Invite friends"
+   - Show a subtle note: "This link works for everyone — share it with your whole group"
+   - Update the bottom note from "Friends can view your full itinerary without logging in" to include group context
 
-Currently:
+3. **Multi-email flow**:
+   - State: `friendEmails: string[]` instead of single `friendEmail: string`
+   - Current text input becomes a chip input: type an email, press Enter/comma to add it as a chip
+   - Each chip has an × to remove
+   - Send button opens `mailto:` with all emails joined by commas
+   - Clear all chips after sending
+   - Cap at ~10 emails to prevent abuse
+
+### Technical Detail
+
+The `mailto:` approach already works with multiple recipients:
 ```typescript
-setNewHotelDraft({
-  name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
-  checkInDate: startDate, checkOutDate: endDate,
-});
+// mailto supports comma-separated recipients
+window.open(`mailto:${friendEmails.join(',')}?subject=${subject}&body=${body}`, '_blank');
 ```
 
-Change to compute the next available check-in date from the existing hotels:
-```typescript
-// Get the latest checkout date from existing hotels
-const existingHotels = manualHotelList.length > 0
-  ? manualHotelList
-  : (manualHotel.name ? [manualHotel] : []);
-const latestCheckout = existingHotels.reduce((latest, h) => {
-  return h.checkOutDate && h.checkOutDate > latest ? h.checkOutDate : latest;
-}, startDate);
-
-setNewHotelDraft({
-  name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00',
-  checkInDate: latestCheckout,
-  checkOutDate: endDate,
-});
-```
-
-**2. Multi-city "Add Another" button (line ~1550)**
-
-Same logic but scoped to the city's hotels and date bounds (`dest.arrivalDate` / `dest.departureDate`). When opening the modal for a new hotel in a city that already has hotels, default check-in to the latest checkout of existing hotels in that city.
+The chip input is built inline (no new dependency) — a flex-wrap container with badge-style chips and an input that grows.
 
 ### Summary
 
 | File | Change |
 |---|---|
-| `Start.tsx` | Smart-default new hotel check-in to previous hotel's checkout for both single-city and multi-city split stays |
+| `TripShareModal.tsx` | Multi-email chip input, group-friendly copy, "invite friends" label |
 
