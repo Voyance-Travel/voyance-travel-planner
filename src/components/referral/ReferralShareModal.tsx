@@ -42,7 +42,8 @@ export function ReferralShareModal({
 }: ReferralShareModalProps) {
   const [referralLink, setReferralLink] = useState('');
   const [copied, setCopied] = useState(false);
-  const [friendEmail, setFriendEmail] = useState('');
+  const [friendEmails, setFriendEmails] = useState<string[]>([]);
+  const [emailInput, setEmailInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [referralCode, setReferralCode] = useState('');
 
