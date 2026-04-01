@@ -46,6 +46,7 @@ export function TripShareModal({
   const [friendEmails, setFriendEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState('');
   const [isCreatingLink, setIsCreatingLink] = useState(false);
+  const [spotsRemaining, setSpotsRemaining] = useState<number | null>(null);
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
