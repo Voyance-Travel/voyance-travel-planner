@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 import { parseLocalDate } from '@/utils/dateUtils';
 import type { TripPhoto } from '@/hooks/useTripPhotos';
 import { useBonusCredits } from '@/hooks/useBonusCredits';
