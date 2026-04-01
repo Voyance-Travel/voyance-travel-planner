@@ -159,7 +159,15 @@ export function TripShareModal({
   };
 
   const sendEmail = async () => {
-    if (!friendEmail) return;
+    // Also add any text in the input before sending
+    if (emailInput.trim()) {
+      const email = emailInput.trim().toLowerCase();
+      if (isValidEmail(email) && !friendEmails.includes(email) && friendEmails.length < 10) {
+        friendEmails.push(email);
+        setEmailInput('');
+      }
+    }
+    if (friendEmails.length === 0) return;
     
     const link = await getOrCreateShareLink();
     const subject = encodeURIComponent(`You should see my ${destination} trip!`);
@@ -171,8 +179,8 @@ export function TripShareModal({
       `Let me know what you think!`
     );
     
-    window.open(`mailto:${friendEmail}?subject=${subject}&body=${body}`, '_blank');
-    setFriendEmail('');
+    window.open(`mailto:${friendEmails.join(',')}?subject=${subject}&body=${body}`, '_blank');
+    setFriendEmails([]);
     toast.success('Opening email...');
   };
 
