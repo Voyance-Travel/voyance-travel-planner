@@ -46,6 +46,7 @@ export function TripShareModal({
   const [friendEmails, setFriendEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState('');
   const [isCreatingLink, setIsCreatingLink] = useState(false);
+  const [spotsRemaining, setSpotsRemaining] = useState<number | null>(null);
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
@@ -100,6 +101,9 @@ export function TripShareModal({
         return '';
       }
       setShareLink(result.link);
+      if (result.maxUses != null && result.usesCount != null) {
+        setSpotsRemaining(result.maxUses - result.usesCount);
+      }
       return result.link;
     } catch (e) {
       console.error('Failed to create share link:', e);
@@ -329,6 +333,9 @@ export function TripShareModal({
             </div>
             <p className="text-xs text-muted-foreground">
               This link works for everyone — share it with your whole group
+              {spotsRemaining != null && (
+                <span className="ml-1">({spotsRemaining} spots remaining)</span>
+              )}
             </p>
           </div>
 
