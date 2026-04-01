@@ -101,6 +101,9 @@ export function TripShareModal({
         return '';
       }
       setShareLink(result.link);
+      if (result.maxUses != null && result.usesCount != null) {
+        setSpotsRemaining(result.maxUses - result.usesCount);
+      }
       return result.link;
     } catch (e) {
       console.error('Failed to create share link:', e);
