@@ -285,29 +285,51 @@ export function TripShareModal({
             </button>
           </div>
 
-          {/* Email a Friend */}
+          {/* Invite Friends */}
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2">
               <Users className="h-4 w-4" />
-              Send to a friend
+              Invite friends
             </label>
             <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="friend@email.com"
-                value={friendEmail}
-                onChange={(e) => setFriendEmail(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendEmail()}
-                className="flex-1"
-              />
+              <div className="flex-1 flex flex-wrap items-center gap-1.5 min-h-[40px] px-3 py-1.5 border border-input rounded-md bg-background focus-within:ring-2 focus-within:ring-ring">
+                {friendEmails.map((email) => (
+                  <span
+                    key={email}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium"
+                  >
+                    {email}
+                    <button
+                      type="button"
+                      onClick={() => removeEmail(email)}
+                      className="hover:text-destructive"
+                      aria-label={`Remove ${email}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  placeholder={friendEmails.length === 0 ? "Add emails, press Enter or comma" : ""}
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  onKeyDown={handleEmailKeyDown}
+                  onBlur={() => emailInput.trim() && addEmail(emailInput)}
+                  className="flex-1 min-w-[120px] py-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+                />
+              </div>
               <Button 
                 onClick={sendEmail}
-                disabled={!friendEmail || !friendEmail.includes('@')}
+                disabled={friendEmails.length === 0 && !emailInput.trim()}
                 size="icon"
               >
                 <Mail className="h-4 w-4" />
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              This link works for everyone — share it with your whole group
+            </p>
           </div>
 
           {/* Preview Mode Note */}
