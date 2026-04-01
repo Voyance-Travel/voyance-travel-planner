@@ -150,6 +150,14 @@ export default function AcceptInvite() {
   // Detect if current user is the trip owner
   const isOwner = !!(user && inviteInfo?.valid && inviteInfo.ownerId === user.id);
 
+  // Retry handler for user-initiated retry
+  const retryFetch = () => {
+    setError(null);
+    setInviteInfo(null);
+    setLoading(true);
+    setRetryCount(c => c + 1);
+  };
+
   // Fetch invite info
   useEffect(() => {
     if (!token) {
@@ -161,7 +169,7 @@ export default function AcceptInvite() {
 
     const fetchInviteInfo = async () => {
       try {
-        logger.info('[invite] Opening invite link', { token: token?.slice(0, 8) });
+        logger.info('[invite] Opening invite link', { token: token?.slice(0, 8), retry: retryCount });
         const { data, error: fetchError } = await supabase.rpc('get_trip_invite_info', {
           p_token: token,
         });
@@ -170,6 +178,16 @@ export default function AcceptInvite() {
 
         if (data) {
           const info = data as unknown as InviteInfo;
+
+          // Full diagnostic logging
+          console.log('[AcceptInvite] get_trip_invite_info response:', {
+            valid: info.valid,
+            reason: info.reason,
+            tripId: info.tripId,
+            tokenPrefix: token?.slice(0, 8),
+            retry: retryCount,
+          });
+
           setInviteInfo(info);
           if (!info.valid) {
             logger.warn('[invite] Invalid invite', { reason: info.reason, token: token?.slice(0, 8) });
@@ -193,7 +211,19 @@ export default function AcceptInvite() {
         }
       } catch (err) {
         logger.error('[invite] Error fetching invite:', err);
-        setError('Unable to load invite details');
+        console.error('[AcceptInvite] Network/RPC error:', err);
+
+        // Auto-retry once on network errors
+        if (!autoRetried.current) {
+          autoRetried.current = true;
+          logger.info('[invite] Auto-retrying after network error...');
+          setTimeout(() => {
+            setRetryCount(c => c + 1);
+          }, 1000);
+          return; // Don't set error yet, let retry happen
+        }
+
+        setError('Unable to load invite details. Check your connection and try again.');
         // Don't clear token on network errors — allow retry
       } finally {
         setLoading(false);
@@ -201,7 +231,7 @@ export default function AcceptInvite() {
     };
 
     fetchInviteInfo();
-  }, [token]);
+  }, [token, retryCount]);
 
   const inviteReturnPath = token ? `/invite/${token}` : null;
 

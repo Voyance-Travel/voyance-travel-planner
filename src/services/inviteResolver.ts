@@ -41,6 +41,17 @@ export async function resolveInviteLink(
 
     const result = data as unknown as InviteHealth;
 
+    // Diagnostic logging for invite resolution
+    console.log('[inviteResolver] resolve_or_rotate_invite response:', {
+      success: result.success,
+      reason: result.reason,
+      tokenPrefix: result.token?.slice(0, 8),
+      usesCount: result.usesCount,
+      maxUses: result.maxUses,
+      expiresAt: result.expiresAt,
+      rotated: result.rotated,
+    });
+
     if (result.success && result.token) {
       return {
         ...result,
