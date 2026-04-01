@@ -27,7 +27,8 @@ interface ShareTripCardProps {
 }
 
 export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: ShareTripCardProps) {
-  const [friendEmail, setFriendEmail] = useState('');
+  const [friendEmails, setFriendEmails] = useState<string[]>([]);
+  const [emailInput, setEmailInput] = useState('');
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
