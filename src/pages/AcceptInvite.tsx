@@ -120,7 +120,9 @@ export default function AcceptInvite() {
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const acceptingRef = useRef(false);
+  const autoRetried = useRef(false);
 
   // Resolve token with fallback: route param → query param → persisted token
   const queryToken = searchParams.get('inviteToken');
