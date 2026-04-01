@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 import { parseLocalDate } from '@/utils/dateUtils';
 import type { TripPhoto } from '@/hooks/useTripPhotos';
 import { useBonusCredits } from '@/hooks/useBonusCredits';
@@ -27,7 +28,8 @@ interface ShareTripCardProps {
 }
 
 export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: ShareTripCardProps) {
-  const [friendEmail, setFriendEmail] = useState('');
+  const [friendEmails, setFriendEmails] = useState<string[]>([]);
+  const [emailInput, setEmailInput] = useState('');
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
@@ -95,8 +97,32 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
     }
   };
 
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  const addEmail = (raw: string) => {
+    const email = raw.trim().toLowerCase();
+    if (!email) return;
+    if (!isValidEmail(email)) { toast.error(`"${email}" isn't a valid email`); return; }
+    if (friendEmails.includes(email)) { toast.error('Already added'); return; }
+    if (friendEmails.length >= 10) { toast.error('Max 10 recipients'); return; }
+    setFriendEmails(prev => [...prev, email]);
+    setEmailInput('');
+  };
+
+  const removeEmail = (email: string) => setFriendEmails(prev => prev.filter(e => e !== email));
+
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addEmail(emailInput);
+    } else if (e.key === 'Backspace' && !emailInput && friendEmails.length > 0) {
+      setFriendEmails(prev => prev.slice(0, -1));
+    }
+  };
+
   const sendToFriend = () => {
-    if (!friendEmail) return;
+    if (emailInput) addEmail(emailInput);
+    if (friendEmails.length === 0 && !emailInput) return;
     
     const subject = encodeURIComponent(`You need to see ${trip.destination}`);
     const body = encodeURIComponent(
@@ -105,8 +131,9 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
       `Planned with Voyance.`
     );
     
-    window.open(`mailto:${friendEmail}?subject=${subject}&body=${body}`);
-    setFriendEmail('');
+    window.open(`mailto:${friendEmails.join(',')}?subject=${subject}&body=${body}`);
+    setFriendEmails([]);
+    setEmailInput('');
     toast.success('Opening email...');
     triggerFirstShareBonus();
   };
@@ -178,12 +205,29 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
             </button>
           </div>
 
-          {/* Send to Friend */}
+          {/* Invite Friends */}
           <div className="space-y-3">
-            <p className="text-sm font-medium flex items-center gap-2"><Users className="w-4 h-4" />Send to a friend</p>
+            <p className="text-sm font-medium flex items-center gap-2"><Users className="w-4 h-4" />Invite friends</p>
+            <p className="text-xs text-muted-foreground">This link works for everyone — share it with your whole group</p>
             <div className="flex gap-2">
-              <Input type="email" placeholder="friend@email.com" value={friendEmail} onChange={(e) => setFriendEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendToFriend()} />
-              <Button onClick={sendToFriend} disabled={!friendEmail}><Mail className="w-4 h-4" /></Button>
+              <div className="flex-1 flex flex-wrap items-center gap-1 min-h-[40px] rounded-md border border-input bg-background px-3 py-1.5 focus-within:ring-2 focus-within:ring-ring">
+                {friendEmails.map(email => (
+                  <Badge key={email} variant="secondary" className="gap-1 text-xs">
+                    {email}
+                    <button type="button" onClick={() => removeEmail(email)} className="ml-0.5 hover:text-destructive">×</button>
+                  </Badge>
+                ))}
+                <input
+                  type="email"
+                  placeholder={friendEmails.length === 0 ? "friend@email.com" : "Add another..."}
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  onKeyDown={handleEmailKeyDown}
+                  onBlur={() => emailInput && addEmail(emailInput)}
+                  className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+              <Button onClick={sendToFriend} disabled={friendEmails.length === 0 && !emailInput}><Mail className="w-4 h-4" /></Button>
             </div>
           </div>
         </div>

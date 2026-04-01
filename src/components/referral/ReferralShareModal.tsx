@@ -42,7 +42,8 @@ export function ReferralShareModal({
 }: ReferralShareModalProps) {
   const [referralLink, setReferralLink] = useState('');
   const [copied, setCopied] = useState(false);
-  const [friendEmail, setFriendEmail] = useState('');
+  const [friendEmails, setFriendEmails] = useState<string[]>([]);
+  const [emailInput, setEmailInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [referralCode, setReferralCode] = useState('');
 
@@ -143,8 +144,32 @@ export function ReferralShareModal({
     );
   };
 
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  const addEmail = (raw: string) => {
+    const email = raw.trim().toLowerCase();
+    if (!email) return;
+    if (!isValidEmail(email)) { toast.error(`"${email}" isn't a valid email`); return; }
+    if (friendEmails.includes(email)) { toast.error('Already added'); return; }
+    if (friendEmails.length >= 10) { toast.error('Max 10 recipients'); return; }
+    setFriendEmails(prev => [...prev, email]);
+    setEmailInput('');
+  };
+
+  const removeEmail = (email: string) => setFriendEmails(prev => prev.filter(e => e !== email));
+
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addEmail(emailInput);
+    } else if (e.key === 'Backspace' && !emailInput && friendEmails.length > 0) {
+      setFriendEmails(prev => prev.slice(0, -1));
+    }
+  };
+
   const sendEmail = () => {
-    if (!friendEmail) return;
+    if (emailInput) addEmail(emailInput);
+    if (friendEmails.length === 0 && !emailInput) return;
     
     const subject = encodeURIComponent(
       destination 
@@ -161,8 +186,9 @@ export function ReferralShareModal({
       `Let me know what you think!`
     );
     
-    window.open(`mailto:${friendEmail}?subject=${subject}&body=${body}`, '_blank');
-    setFriendEmail('');
+    window.open(`mailto:${friendEmails.join(',')}?subject=${subject}&body=${body}`, '_blank');
+    setFriendEmails([]);
+    setEmailInput('');
     toast.success('Opening email...');
   };
 
@@ -261,24 +287,34 @@ export function ReferralShareModal({
             </button>
           </div>
 
-          {/* Email a Friend */}
+          {/* Invite Friends */}
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2">
               <Users className="h-4 w-4" />
-              Invite by email
+              Invite friends
             </label>
+            <p className="text-xs text-muted-foreground">This link works for everyone — share it with your whole group</p>
             <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="friend@email.com"
-                value={friendEmail}
-                onChange={(e) => setFriendEmail(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendEmail()}
-                className="flex-1"
-              />
+              <div className="flex-1 flex flex-wrap items-center gap-1 min-h-[40px] rounded-md border border-input bg-background px-3 py-1.5 focus-within:ring-2 focus-within:ring-ring">
+                {friendEmails.map(email => (
+                  <Badge key={email} variant="secondary" className="gap-1 text-xs">
+                    {email}
+                    <button type="button" onClick={() => removeEmail(email)} className="ml-0.5 hover:text-destructive">×</button>
+                  </Badge>
+                ))}
+                <input
+                  type="email"
+                  placeholder={friendEmails.length === 0 ? "friend@email.com" : "Add another..."}
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  onKeyDown={handleEmailKeyDown}
+                  onBlur={() => emailInput && addEmail(emailInput)}
+                  className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
+              </div>
               <Button 
                 onClick={sendEmail}
-                disabled={!friendEmail || !friendEmail.includes('@')}
+                disabled={friendEmails.length === 0 && !emailInput}
                 size="icon"
               >
                 <Mail className="h-4 w-4" />
