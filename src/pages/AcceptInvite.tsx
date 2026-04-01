@@ -361,9 +361,14 @@ export default function AcceptInvite() {
                     Open Your Trip
                   </Button>
                 ) : (
-                  <Button onClick={() => navigate('/trip/dashboard', { replace: true })}>
-                    Go to Dashboard
-                  </Button>
+                  <>
+                    <Button variant="outline" onClick={retryFetch}>
+                      Try Again
+                    </Button>
+                    <Button onClick={() => navigate('/trip/dashboard', { replace: true })}>
+                      Go to Dashboard
+                    </Button>
+                  </>
                 )}
               </div>
             </CardContent>

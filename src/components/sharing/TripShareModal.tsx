@@ -333,6 +333,9 @@ export function TripShareModal({
             </div>
             <p className="text-xs text-muted-foreground">
               This link works for everyone — share it with your whole group
+              {spotsRemaining != null && (
+                <span className="ml-1">({spotsRemaining} spots remaining)</span>
+              )}
             </p>
           </div>
 
