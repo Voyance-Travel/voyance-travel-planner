@@ -204,12 +204,29 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
             </button>
           </div>
 
-          {/* Send to Friend */}
+          {/* Invite Friends */}
           <div className="space-y-3">
-            <p className="text-sm font-medium flex items-center gap-2"><Users className="w-4 h-4" />Send to a friend</p>
+            <p className="text-sm font-medium flex items-center gap-2"><Users className="w-4 h-4" />Invite friends</p>
+            <p className="text-xs text-muted-foreground">This link works for everyone — share it with your whole group</p>
             <div className="flex gap-2">
-              <Input type="email" placeholder="friend@email.com" value={friendEmail} onChange={(e) => setFriendEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendToFriend()} />
-              <Button onClick={sendToFriend} disabled={!friendEmail}><Mail className="w-4 h-4" /></Button>
+              <div className="flex-1 flex flex-wrap items-center gap-1 min-h-[40px] rounded-md border border-input bg-background px-3 py-1.5 focus-within:ring-2 focus-within:ring-ring">
+                {friendEmails.map(email => (
+                  <Badge key={email} variant="secondary" className="gap-1 text-xs">
+                    {email}
+                    <button type="button" onClick={() => removeEmail(email)} className="ml-0.5 hover:text-destructive">×</button>
+                  </Badge>
+                ))}
+                <input
+                  type="email"
+                  placeholder={friendEmails.length === 0 ? "friend@email.com" : "Add another..."}
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  onKeyDown={handleEmailKeyDown}
+                  onBlur={() => emailInput && addEmail(emailInput)}
+                  className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+              <Button onClick={sendToFriend} disabled={friendEmails.length === 0 && !emailInput}><Mail className="w-4 h-4" /></Button>
             </div>
           </div>
         </div>
