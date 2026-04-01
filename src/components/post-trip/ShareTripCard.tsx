@@ -96,8 +96,32 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
     }
   };
 
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  const addEmail = (raw: string) => {
+    const email = raw.trim().toLowerCase();
+    if (!email) return;
+    if (!isValidEmail(email)) { toast.error(`"${email}" isn't a valid email`); return; }
+    if (friendEmails.includes(email)) { toast.error('Already added'); return; }
+    if (friendEmails.length >= 10) { toast.error('Max 10 recipients'); return; }
+    setFriendEmails(prev => [...prev, email]);
+    setEmailInput('');
+  };
+
+  const removeEmail = (email: string) => setFriendEmails(prev => prev.filter(e => e !== email));
+
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addEmail(emailInput);
+    } else if (e.key === 'Backspace' && !emailInput && friendEmails.length > 0) {
+      setFriendEmails(prev => prev.slice(0, -1));
+    }
+  };
+
   const sendToFriend = () => {
-    if (!friendEmail) return;
+    if (emailInput) addEmail(emailInput);
+    if (friendEmails.length === 0 && !emailInput) return;
     
     const subject = encodeURIComponent(`You need to see ${trip.destination}`);
     const body = encodeURIComponent(
@@ -106,8 +130,9 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
       `Planned with Voyance.`
     );
     
-    window.open(`mailto:${friendEmail}?subject=${subject}&body=${body}`);
-    setFriendEmail('');
+    window.open(`mailto:${friendEmails.join(',')}?subject=${subject}&body=${body}`);
+    setFriendEmails([]);
+    setEmailInput('');
     toast.success('Opening email...');
     triggerFirstShareBonus();
   };
