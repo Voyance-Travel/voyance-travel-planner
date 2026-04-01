@@ -43,8 +43,44 @@ export function TripShareModal({
 }: TripShareModalProps) {
   const [shareLink, setShareLink] = useState(initialShareLink || '');
   const [copied, setCopied] = useState(false);
-  const [friendEmail, setFriendEmail] = useState('');
+  const [friendEmails, setFriendEmails] = useState<string[]>([]);
+  const [emailInput, setEmailInput] = useState('');
   const [isCreatingLink, setIsCreatingLink] = useState(false);
+
+  const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  const addEmail = (raw: string) => {
+    const email = raw.trim().toLowerCase();
+    if (!email) return;
+    if (!isValidEmail(email)) {
+      toast.error(`"${email}" is not a valid email`);
+      return;
+    }
+    if (friendEmails.includes(email)) {
+      toast.error('Email already added');
+      return;
+    }
+    if (friendEmails.length >= 10) {
+      toast.error('Maximum 10 recipients');
+      return;
+    }
+    setFriendEmails(prev => [...prev, email]);
+    setEmailInput('');
+  };
+
+  const removeEmail = (email: string) => {
+    setFriendEmails(prev => prev.filter(e => e !== email));
+  };
+
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addEmail(emailInput);
+    }
+    if (e.key === 'Backspace' && !emailInput && friendEmails.length > 0) {
+      setFriendEmails(prev => prev.slice(0, -1));
+    }
+  };
 
   // Reset share state when tripId changes
   useEffect(() => {
