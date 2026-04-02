@@ -2004,33 +2004,31 @@ function FlightHotelStep({
                   </div>
                 </div>
 
-                {/* Stay Dates — shown for split stays (single-city multi-hotel or multi-city multi-hotel) */}
-                {(isListMode || showMultiCityDates) && (
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                    <div>
-                      <Label className="text-xs">Check-in Date</Label>
-                      <Input
-                        type="date"
-                        value={currentHotel.checkInDate || (isMultiCityEdit ? cityDateMin : startDate)}
-                        min={isMultiCityEdit ? cityDateMin : startDate}
-                        max={isMultiCityEdit ? cityDateMax : endDate}
-                        onChange={(e) => setCurrentHotel({ ...currentHotel, checkInDate: e.target.value })}
-                        className="text-xs h-8"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Check-out Date</Label>
-                      <Input
-                        type="date"
-                        value={currentHotel.checkOutDate || (isMultiCityEdit ? cityDateMax : endDate)}
-                        min={currentHotel.checkInDate || (isMultiCityEdit ? cityDateMin : startDate)}
-                        max={isMultiCityEdit ? cityDateMax : endDate}
-                        onChange={(e) => setCurrentHotel({ ...currentHotel, checkOutDate: e.target.value })}
-                        className="text-xs h-8"
-                      />
-                    </div>
+                {/* Stay Dates */}
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                  <div>
+                    <Label className="text-xs">Check-in Date</Label>
+                    <Input
+                      type="date"
+                      value={currentHotel.checkInDate || (isMultiCityEdit ? cityDateMin : startDate)}
+                      min={isMultiCityEdit ? cityDateMin : startDate}
+                      max={isMultiCityEdit ? cityDateMax : endDate}
+                      onChange={(e) => setCurrentHotel({ ...currentHotel, checkInDate: e.target.value })}
+                      className="text-xs h-8"
+                    />
                   </div>
-                )}
+                  <div>
+                    <Label className="text-xs">Check-out Date</Label>
+                    <Input
+                      type="date"
+                      value={currentHotel.checkOutDate || (isMultiCityEdit ? cityDateMax : endDate)}
+                      min={currentHotel.checkInDate || (isMultiCityEdit ? cityDateMin : startDate)}
+                      max={isMultiCityEdit ? cityDateMax : endDate}
+                      onChange={(e) => setCurrentHotel({ ...currentHotel, checkOutDate: e.target.value })}
+                      className="text-xs h-8"
+                    />
+                  </div>
+                </div>
 
                 {/* Price & Budget Inclusion */}
                 <div className="space-y-3 pt-3 border-t border-border">
