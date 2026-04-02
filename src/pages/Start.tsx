@@ -2208,7 +2208,19 @@ export default function Start() {
   const [manualHotelList, setManualHotelList] = useState<ManualHotelEntry[]>([]);
   const [manualHotels, setManualHotels] = useState<Record<string, ManualHotelEntry[]>>({});
 
-  // Personalization state
+  // Auto-migrate legacy single hotel to list format
+  useEffect(() => {
+    if (manualHotel.name && manualHotelList.length === 0) {
+      setManualHotelList([{
+        ...manualHotel,
+        checkInDate: manualHotel.checkInDate || startDate,
+        checkOutDate: manualHotel.checkOutDate || endDate,
+      }]);
+      setManualHotel({ name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' });
+      setHotelChoice('own');
+    }
+  }, [manualHotel.name]);
+
   const [isFirstTimeVisitor, setIsFirstTimeVisitor] = useState(true);
   const [firstTimePerCity, setFirstTimePerCity] = useState<Record<string, boolean>>({});
    const [mustDoActivities, setMustDoActivities] = useState('');
