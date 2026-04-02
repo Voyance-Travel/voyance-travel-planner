@@ -1250,39 +1250,6 @@ function repairBookends(
     source: 'bookend-validator',
   });
 
-  // 0. Collapse consecutive transport cards into a single destination-focused card
-  {
-    const consolidated: any[] = [];
-    for (let i = 0; i < activities.length; i++) {
-      if (isTransport(activities[i])) {
-        let j = i;
-        while (j + 1 < activities.length && isTransport(activities[j + 1])) j++;
-        if (j > i) {
-          const first = activities[i];
-          const last = activities[j];
-          const merged = {
-            ...last,
-            startTime: first.startTime || last.startTime,
-            description: `Transit to ${last.location?.name || last.title}`,
-          };
-          consolidated.push(merged);
-          repairs.push({
-            code: FAILURE_CODES.LOGISTICS_SEQUENCE,
-            action: 'collapsed_consecutive_transport',
-            before: `${j - i + 1} transport cards`,
-            after: merged.title,
-          });
-          i = j;
-        } else {
-          consolidated.push(activities[i]);
-        }
-      } else {
-        consolidated.push(activities[i]);
-      }
-    }
-    activities = consolidated;
-  }
-
   // 1. Mid-day hotel transports without accommodation card
   for (let i = 0; i < activities.length - 1; i++) {
     if (isTransport(activities[i]) && isHotelRelated(activities[i]) && !isAccom(activities[i + 1])) {
@@ -1330,7 +1297,7 @@ function repairBookends(
     }
   }
 
-  // 3. Transit gaps between non-adjacent visible activities
+  // 3. Transit gaps between non-adjacent visible activities (with guards)
   const rebuilt: any[] = [];
   for (let i = 0; i < activities.length; i++) {
     rebuilt.push(activities[i]);
@@ -1339,12 +1306,72 @@ function repairBookends(
       if (isTransport(curr) || isTransport(next)) continue;
       const cLoc = (curr.location?.name || curr.title || '').toLowerCase();
       const nLoc = (next.location?.name || next.title || '').toLowerCase();
-      if (cLoc && nLoc && cLoc !== nLoc) {
-        rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || ''));
-        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_transit_gap' });
-      }
+      // Guard: skip if same location (e.g. hotel accommodation → hotel freshen-up)
+      if (!cLoc || !nLoc || cLoc === nLoc) continue;
+      // Guard: skip if a transport to nLoc already exists in previous 2 positions
+      const recentTransport = rebuilt.slice(-2).some(
+        a => isTransport(a) && (a.location?.name || '').toLowerCase() === nLoc
+      );
+      if (recentTransport) continue;
+      rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || ''));
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_transit_gap' });
     }
   }
 
-  return { activities: rebuilt, repairs };
+  // 4. Final consolidation — collapse consecutive transports from ALL sources
+  {
+    const consolidated: any[] = [];
+    for (let i = 0; i < rebuilt.length; i++) {
+      if (isTransport(rebuilt[i])) {
+        let j = i;
+        while (j + 1 < rebuilt.length && isTransport(rebuilt[j + 1])) j++;
+        if (j > i) {
+          const first = rebuilt[i];
+          const last = rebuilt[j];
+          const merged = {
+            ...last,
+            startTime: first.startTime || last.startTime,
+            description: `Transit to ${last.location?.name || last.title}`,
+          };
+          consolidated.push(merged);
+          repairs.push({
+            code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+            action: 'collapsed_consecutive_transport',
+            before: `${j - i + 1} transport cards`,
+            after: merged.title,
+          });
+          i = j;
+        } else {
+          consolidated.push(rebuilt[i]);
+        }
+      } else {
+        consolidated.push(rebuilt[i]);
+      }
+    }
+
+    // 4b. Remove orphaned transports where destination matches the immediately next activity's location
+    const deduped: any[] = [];
+    for (let i = 0; i < consolidated.length; i++) {
+      if (isTransport(consolidated[i]) && i + 1 < consolidated.length) {
+        const transportDest = (consolidated[i].location?.name || '').toLowerCase();
+        const nextLoc = (consolidated[i + 1]?.location?.name || '').toLowerCase();
+        // If previous non-transport activity is at the same location as transport destination, skip
+        if (transportDest && nextLoc && deduped.length > 0) {
+          const prevNonTransport = [...deduped].reverse().find(a => !isTransport(a));
+          if (prevNonTransport && (prevNonTransport.location?.name || '').toLowerCase() === transportDest) {
+            repairs.push({
+              code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+              action: 'removed_orphaned_transport',
+              before: consolidated[i].title,
+              after: 'removed (same location)',
+            });
+            continue;
+          }
+        }
+      }
+      deduped.push(consolidated[i]);
+    }
+
+    return { activities: deduped, repairs };
+  }
 }
