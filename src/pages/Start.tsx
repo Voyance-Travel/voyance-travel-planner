@@ -2062,9 +2062,6 @@ function FlightHotelStep({
                         }]);
                       }
                       setHotelChoice('own');
-                    } else {
-                      setManualHotel(currentHotel);
-                      setHotelChoice('own');
                     }
                     setShowHotelModal(false);
                   }}
