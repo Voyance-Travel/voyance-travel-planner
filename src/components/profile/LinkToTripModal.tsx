@@ -204,7 +204,7 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
               <p className="text-xs text-muted-foreground">Start planning a trip to link friends</p>
             </div>
           ) : (
-            <ScrollArea className="h-[200px]">
+            <ScrollArea className="max-h-[240px]">
               <div className="space-y-2 pr-3">
                 {trips.map((trip, index) => (
                   <motion.button
