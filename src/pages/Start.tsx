@@ -1632,8 +1632,7 @@ function FlightHotelStep({
                   onClick={() => {
                     setHotelChoice('own');
                     setEditingHotelCity(null);
-                    setEditingHotelIndex(manualHotelList.length === 0 ? null : manualHotelList.length);
-                    // If no hotels yet, open modal for first hotel
+                    // If no hotels yet, open modal for first hotel (always use list mode)
                     if (manualHotelList.length === 0 && !manualHotel.name) {
                       setEditingHotelIndex(null);
                       setNewHotelDraft({
@@ -1641,6 +1640,8 @@ function FlightHotelStep({
                         checkInDate: startDate, checkOutDate: endDate,
                       });
                       setShowHotelModal(true);
+                    } else {
+                      setEditingHotelIndex(manualHotelList.length);
                     }
                   }}
                   className={cn(
