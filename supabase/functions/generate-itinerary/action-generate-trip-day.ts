@@ -1208,6 +1208,7 @@ async function _handleGenerateTripDayInner(
         generation_total_days: totalDays,
         generation_current_city: nextCityName,
         used_restaurants: newUsedRestaurants,
+        generation_timeout_sentinel: null, // Clear sentinel on success
       },
     }).eq('id', tripId);
 
