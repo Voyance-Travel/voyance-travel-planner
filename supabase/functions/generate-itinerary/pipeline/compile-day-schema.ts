@@ -771,7 +771,7 @@ Add your flight and hotel details for a more complete last day.`;
     if (paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay) {
       dayConstraints += `\n\n🏨 CITY ARRIVAL — CHECK-IN DAY:
 - This is the first day in ${destination}. The traveler needs to check into "${mcHotelName}".
-- REQUIRED: Include a "Hotel Check-in & Refresh" activity (typically 30-60 min).
+- REQUIRED: Include a "Check-in at ${mcHotelName}" activity (typically 30-60 min).
 - Plan afternoon/evening activities after check-in, clustered near the hotel area.
 - Use "${mcHotelName}" for ALL hotel references. Do NOT invent a different hotel.`;
     }
