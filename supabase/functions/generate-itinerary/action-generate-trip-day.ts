@@ -137,13 +137,29 @@ export async function handleGenerateTripDay(
   } catch (fatalErr) {
     console.error(`[generate-trip-day] FATAL error on day ${dayNumber}:`, fatalErr);
     timer.addError(`day_${dayNumber}_fatal`, String(fatalErr));
-    // Only finalize if this is the last day or the error is unrecoverable
-    if (dayNumber >= totalDays) {
-      await timer.finalize('failed');
-    } else {
-      // Update progress with error info but don't finalize — next day may succeed
-      await timer.updateProgress(`day_${dayNumber}_fatal_error`, Math.round((dayNumber / totalDays) * 100));
+
+    // CRITICAL: Update trip status so it doesn't stay stuck at 'generating'
+    try {
+      const { data: currentTripData } = await supabase
+        .from('trips').select('metadata').eq('id', tripId).single();
+      const currentMeta = (currentTripData?.metadata as Record<string, unknown>) || {};
+      await supabase.from('trips').update({
+        itinerary_status: 'failed',
+        metadata: {
+          ...currentMeta,
+          chain_broken_at_day: dayNumber,
+          chain_error: `Fatal error on day ${dayNumber}: ${String(fatalErr).slice(0, 200)}`,
+          generation_completed_days: dayNumber - 1,
+          generation_heartbeat: new Date().toISOString(),
+          generation_timeout_sentinel: null, // Clear sentinel on explicit failure
+        },
+      }).eq('id', tripId);
+      console.log(`[generate-trip-day] Updated trip ${tripId} to 'failed' after fatal error on day ${dayNumber}`);
+    } catch (metaErr) {
+      console.error('[generate-trip-day] Failed to update failure metadata:', metaErr);
     }
+
+    await timer.finalize('failed');
     return new Response(
       JSON.stringify({ error: String(fatalErr), status: 'failed', dayNumber }),
       { status: 500, headers: jsonHeaders }
