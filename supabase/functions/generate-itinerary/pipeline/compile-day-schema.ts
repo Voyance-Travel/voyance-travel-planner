@@ -97,7 +97,7 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - category: "transit"
    - description: "Head to the hotel after the event"
 
-5. "Hotel Check-in"
+5. "Check-in at ${flightContext.hotelName || 'Your Hotel'}"
    - startTime: 30 minutes after transfer starts
    - category: "accommodation"
    - description: "Late check-in after a full day at ${eventName}. Drop bags, freshen up."
