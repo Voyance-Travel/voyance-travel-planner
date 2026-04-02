@@ -181,9 +181,10 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       if (act.description) act.description = sanitizeAITextField(act.description, destination) || undefined;
       if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips, destination) || undefined;
       if (act.location && typeof act.location === 'object') {
-        if (act.location.name) act.location.name = sanitizeAITextField(act.location.name, destination) || act.location.name;
-        if (act.location.address) act.location.address = sanitizeAITextField(act.location.address, destination) || act.location.address;
+        if (act.location.name) act.location.name = sanitizeAddress(sanitizeAITextField(act.location.name, destination) || act.location.name);
+        if (act.location.address) act.location.address = sanitizeAddress(sanitizeAITextField(act.location.address, destination) || act.location.address);
       }
+      if (act.venue_address) act.venue_address = sanitizeAddress(act.venue_address);
       if (act.transportation && typeof act.transportation === 'object') {
         if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions, destination) || undefined;
         const method = (act.transportation.method || '').toLowerCase();
