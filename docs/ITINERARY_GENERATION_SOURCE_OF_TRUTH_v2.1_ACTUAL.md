@@ -308,14 +308,11 @@ await itineraryIncrementalSaveService.saveRawToAllTables(
 4. Shows fake messages: "Creating Day 3 of 8..."
 5. Actually just polling with estimated progress
 
-**Code Evidence** (`useProgressiveItinerary.ts:138-141`):
+**Note (2025-04):** The `useProgressiveItinerary.ts` hook referenced here was removed as dead code.
+Generation is now handled by `TripDetail.tsx` calling the `generate-itinerary` edge function with
+`action: 'generate-trip'`, with progress tracked via `useGenerationPoller.ts`.
 
-```typescript
-// For now, use regular generation with simulated progress
-// until backend implements progressive generation
-```
-
-**User Experience**: Looks progressive, but it's all client-side theater.
+**User Experience**: Progress is tracked via database polling (heartbeat + completed day count).
 
 **Backend Reality**: Opaque job processing, only final result visible.
 

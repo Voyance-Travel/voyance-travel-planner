@@ -340,7 +340,7 @@ await supabase.functions.invoke('generate-itinerary', {
 |------|---------|
 | `src/types/itinerary.ts` | TypeScript types |
 | `src/hooks/useLovableItinerary.ts` | Generation hook |
-| `src/hooks/useProgressiveItinerary.ts` | Progressive loading |
+| `src/hooks/useGenerationPoller.ts` | Generation polling & stall detection |
 | `src/lib/tripStore.ts` | Zustand store |
 | `supabase/functions/generate-itinerary/` | Edge function |
 | `supabase/functions/optimize-itinerary/` | Route optimization |
