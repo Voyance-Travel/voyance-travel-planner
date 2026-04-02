@@ -137,6 +137,22 @@ export function sanitizeAITextField(text: string | undefined | null, destination
 }
 
 /**
+ * Remove duplicated postal-code+city or city-name segments from addresses.
+ */
+function sanitizeAddress(address: string): string {
+  if (!address) return address;
+  let result = address.replace(
+    /(\d{4,5}[-\s]?\d{3}\s+[A-Za-zÀ-ÿ\s]+),\s*\1/g,
+    '$1'
+  );
+  result = result.replace(
+    /\b([A-Za-zÀ-ÿ]{3,}),\s*\1\b/g,
+    '$1'
+  );
+  return result;
+}
+
+/**
  * Deep-sanitize all user-facing text fields in a generated day object.
  */
 export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: string): any {
