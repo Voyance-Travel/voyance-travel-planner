@@ -74,11 +74,13 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
       if (!user) return;
 
       setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
         .from('trips')
         .select('id, name, destination, destination_country, start_date, end_date, status')
         .eq('user_id', user.id)
         .in('status', ['draft', 'planning', 'booked'])
+        .gte('end_date', today)
         .order('start_date', { ascending: true });
 
       if (!error && data) {
@@ -133,7 +135,7 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg font-medium">
             Link to Trip
@@ -202,7 +204,7 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
               <p className="text-xs text-muted-foreground">Start planning a trip to link friends</p>
             </div>
           ) : (
-            <ScrollArea className="h-[200px]">
+            <ScrollArea className="max-h-[240px]">
               <div className="space-y-2 pr-3">
                 {trips.map((trip, index) => (
                   <motion.button
