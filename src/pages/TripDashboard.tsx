@@ -283,7 +283,7 @@ function TripCard({ trip, index = 0, onDelete, isAdmin, onClone }: { trip: Trip;
 
   // Use PastTripCard for completed trips (after all hooks)
   if (displayStatus === 'completed') {
-    return <PastTripCard trip={trip} index={index} />;
+    return <PastTripCard trip={trip} index={index} onDelete={onDelete} />;
   }
 
   const status = statusConfig[displayStatus];

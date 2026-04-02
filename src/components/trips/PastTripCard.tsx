@@ -6,15 +6,22 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
-  Star, Calendar, Users, MapPin, Eye, Edit3, Sparkles, BookOpen,
+  Star, Calendar, Users, MapPin, Eye, Edit3, Sparkles, BookOpen, Trash2,
 } from 'lucide-react';
 import { useGuideFavoritesCount } from '@/hooks/useGuideFavorites';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { useTripHeroImage } from '@/hooks/useTripHeroImage';
 import { useTripReview } from '@/services/tripReviewAPI';
 import { TripReviewModal } from './TripReviewModal';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface PastTripCardProps {
   trip: {
@@ -29,6 +36,7 @@ interface PastTripCardProps {
     metadata: Record<string, any> | null;
   };
   index?: number;
+  onDelete?: (tripId: string) => void;
 }
 
 function formatShortDate(d: string | null) {
@@ -58,9 +66,10 @@ function MiniStars({ rating }: { rating: number }) {
   );
 }
 
-export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
+export function PastTripCard({ trip, index = 0, onDelete }: PastTripCardProps) {
   const navigate = useNavigate();
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { data: review } = useTripReview(trip.id);
   const { data: favCount = 0 } = useGuideFavoritesCount(trip.id);
 
@@ -74,6 +83,20 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
 
   const days = getDayCount(trip.startDate, trip.endDate);
   const hasReview = !!review;
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase.from('trips').delete().eq('id', trip.id);
+      if (error) throw error;
+      toast.success('Trip deleted');
+      onDelete?.(trip.id);
+    } catch (e: any) {
+      toast.error('Failed to delete trip');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <>
@@ -150,7 +173,6 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
           {/* Review summary or prompt */}
           {hasReview ? (
             <div className="space-y-2">
-              {/* Tags */}
               {review.tags && review.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {review.tags.slice(0, 3).map((tag) => (
@@ -165,16 +187,12 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
                   )}
                 </div>
               )}
-
-              {/* Highlight */}
               {review.highlight_label && (
                 <p className="text-xs text-muted-foreground italic">
                   <span className="font-medium text-foreground">{review.highlight_label}:</span>{' '}
                   {review.highlight_text || 'No details'}
                 </p>
               )}
-
-              {/* Snippet */}
               {review.review_text && (
                 <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                   "{review.review_text}"
@@ -223,6 +241,34 @@ export function PastTripCard({ trip, index = 0 }: PastTripCardProps) {
                 <BookOpen className="h-3.5 w-3.5" />
                 Build Guide
               </Button>
+            )}
+            {onDelete && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 w-9 p-0 text-muted-foreground hover:text-destructive"
+                    disabled={isDeleting}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete trip?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete "{trip.name || trip.destination}" and all its data. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </div>
         </div>
