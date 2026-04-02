@@ -599,8 +599,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
       const checkoutActivity = {
         id: `day${dayNumber}-checkout-repair-${Date.now()}`,
-        title: `Hotel Checkout from ${coHotelName}`,
-        name: `Hotel Checkout from ${coHotelName}`,
+        title: `Checkout from ${coHotelName}`,
+        name: `Checkout from ${coHotelName}`,
         description: isLastDay
           ? 'Check out, collect luggage, and prepare for departure.'
           : `Check out from ${coHotelName}. Store luggage if needed before continuing your day.`,

@@ -176,16 +176,16 @@ export async function patchItineraryWithMultipleHotels(
         const isCheckout = lower.includes('checkout') || lower.includes('check-out') || lower.includes('check out');
         const isFreshenUp = lower.includes('freshen up');
         const isReturn = lower.includes('return to') || lower.includes('back to');
-        const isSettleIn = lower.includes('settle in') || lower.includes('settle into');
+        const isLuggage = lower.includes('luggage drop') || lower.includes('drop bags');
 
         if (isCheckout) {
           act.title = `Checkout from ${matchingHotel.name}`;
         } else if (isFreshenUp) {
-          act.title = `Freshen up at ${matchingHotel.name}`;
+          act.title = `Freshen Up at ${matchingHotel.name}`;
         } else if (isReturn) {
           act.title = `Return to ${matchingHotel.name}`;
-        } else if (isSettleIn) {
-          act.title = `Settle in at ${matchingHotel.name}`;
+        } else if (isLuggage) {
+          act.title = `Luggage Drop at ${matchingHotel.name}`;
         } else {
           act.title = `Check-in at ${matchingHotel.name}`;
         }
