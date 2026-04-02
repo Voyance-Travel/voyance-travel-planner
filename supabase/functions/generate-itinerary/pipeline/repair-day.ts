@@ -546,10 +546,11 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const checkInStart = minutesToHHMM(checkInStartMin);
       const checkInEnd = minutesToHHMM(checkInStartMin + 30);
 
+      const hn = hotelName || 'Your Hotel';
       const checkInActivity = {
         id: `day${dayNumber}-checkin-repair-${Date.now()}`,
-        title: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination || 'destination'}`,
-        name: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination || 'destination'}`,
+        title: `Check-in at ${hn}`,
+        name: `Check-in at ${hn}`,
         description: dayNumber === 1
           ? 'Check in, freshen up, and get oriented to the area'
           : `Check in to hotel in ${resolvedDestination || 'destination'}, freshen up after travel`,
@@ -598,8 +599,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
       const checkoutActivity = {
         id: `day${dayNumber}-checkout-repair-${Date.now()}`,
-        title: `Hotel Checkout from ${coHotelName}`,
-        name: `Hotel Checkout from ${coHotelName}`,
+        title: `Checkout from ${coHotelName}`,
+        name: `Checkout from ${coHotelName}`,
         description: isLastDay
           ? 'Check out, collect luggage, and prepare for departure.'
           : `Check out from ${coHotelName}. Store luggage if needed before continuing your day.`,
@@ -763,6 +764,48 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay);
     activities = bookendRepairs.activities;
     repairs.push(...bookendRepairs.repairs);
+  }
+
+  // --- 9b. ACCOMMODATION TITLE NORMALIZATION ---
+  // Standardize all accommodation activity titles to canonical format after all sources
+  // (AI, repair step 7/8, bookends) have contributed.
+  {
+    const hn = hotelName || 'Your Hotel';
+    for (const act of activities) {
+      const cat = (act.category || '').toLowerCase();
+      if (cat !== 'accommodation') continue;
+
+      const t = (act.title || act.name || '').toLowerCase();
+      let canonical: string | null = null;
+
+      if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) {
+        canonical = `Checkout from ${hn}`;
+      } else if (t.includes('freshen up') || t.includes('freshen-up')) {
+        canonical = `Freshen Up at ${hn}`;
+      } else if (t.includes('return to') || t.includes('back to')) {
+        canonical = `Return to ${hn}`;
+      } else if (t.includes('luggage drop') || t.includes('drop bags')) {
+        canonical = `Luggage Drop at ${hn}`;
+      } else if (t.includes('check-in') || t.includes('check in') || t.includes('checkin') || t.includes('settle in') || t.includes('hotel')) {
+        canonical = `Check-in at ${hn}`;
+      }
+
+      if (canonical && act.title !== canonical) {
+        const before = act.title;
+        act.title = canonical;
+        act.name = canonical;
+        // Also ensure location references the resolved hotel
+        if (!act.location?.name || act.location.name === 'Your Hotel') {
+          act.location = { name: hn, address: act.location?.address || '' };
+        }
+        repairs.push({
+          code: FAILURE_CODES.MISSING_SLOT,
+          action: 'normalized_accommodation_title',
+          before,
+          after: canonical,
+        });
+      }
+    }
   }
 
   // --- 10. TITLE_LABEL_LEAK ---

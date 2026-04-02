@@ -97,7 +97,7 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - category: "transit"
    - description: "Head to the hotel after the event"
 
-5. "Hotel Check-in"
+5. "Check-in at ${flightContext.hotelName || 'Your Hotel'}"
    - startTime: 30 minutes after transfer starts
    - category: "accommodation"
    - description: "Late check-in after a full day at ${eventName}. Drop bags, freshen up."
@@ -132,7 +132,7 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - description: "Clear customs and collect luggage"
    - ⚠️ This MUST be its own activity block — do NOT merge with check-in
 
-2. "Hotel Check-in & Refresh"
+2. "Check-in at ${hotelNameDisplay}"
    - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
    - description: "Check in, freshen up, and get oriented to the area"
@@ -194,7 +194,7 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - description: "Clear customs and collect luggage"
    - ⚠️ This MUST be its own activity block — do NOT merge with check-in
 
-2. "Hotel Check-in & Refresh"
+2. "Check-in at ${hotelNameDisplay}"
    - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
    - description: "Check in and freshen up"
@@ -251,7 +251,7 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - category: "transport"
    - ⚠️ This MUST be its own activity block — do NOT merge with check-in
 
-2. "Hotel Check-in"
+2. "Check-in at ${hotelNameDisplay}"
    - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
    - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
@@ -285,7 +285,7 @@ The traveler has a hotel but has NOT provided flight/arrival details.
 Assume they arrive in the morning and head to the hotel first to drop bags.
 
 REQUIRED FIRST ACTIVITY:
-1. "Hotel Check-in & Refresh"
+1. "Check-in at ${flightContext.hotelName}"
    - startTime: "${luggageDropTime}", endTime: "${luggageDropEnd}"
    - category: "accommodation"
    - description: "Head to hotel to drop bags. Most hotels store luggage before official check-in; early check-in is often available on request."
@@ -771,7 +771,7 @@ Add your flight and hotel details for a more complete last day.`;
     if (paramIsFirstDayInCity && !isFirstDay && !paramIsTransitionDay) {
       dayConstraints += `\n\n🏨 CITY ARRIVAL — CHECK-IN DAY:
 - This is the first day in ${destination}. The traveler needs to check into "${mcHotelName}".
-- REQUIRED: Include a "Hotel Check-in & Refresh" activity (typically 30-60 min).
+- REQUIRED: Include a "Check-in at ${mcHotelName}" activity (typically 30-60 min).
 - Plan afternoon/evening activities after check-in, clustered near the hotel area.
 - Use "${mcHotelName}" for ALL hotel references. Do NOT invent a different hotel.`;
     }
