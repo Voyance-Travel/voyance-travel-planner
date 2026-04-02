@@ -240,12 +240,6 @@ function formatDateRange(startDate: string | null, endDate: string | null): stri
 
 // Helper to check if a trip can be deleted
 function canDeleteTrip(trip: Trip): { canDelete: boolean; reason?: string } {
-   const now = new Date();
-   
-   // Check if trip has already happened
-   if (trip.endDate && parseLocalDate(trip.endDate) < now) {
-     return { canDelete: false, reason: 'Past trips cannot be deleted' };
-   }
    
    // Check if trip has a paid reservation
    if (trip.isPaid) {
@@ -289,7 +283,7 @@ function TripCard({ trip, index = 0, onDelete, isAdmin, onClone }: { trip: Trip;
 
   // Use PastTripCard for completed trips (after all hooks)
   if (displayStatus === 'completed') {
-    return <PastTripCard trip={trip} index={index} />;
+    return <PastTripCard trip={trip} index={index} onDelete={onDelete} />;
   }
 
   const status = statusConfig[displayStatus];
@@ -931,7 +925,7 @@ export default function TripDashboard() {
           metadata: row.metadata as Record<string, any> | null,
           hasItineraryData: row.itinerary_status === 'ready' || row.itinerary_status === 'partial',
           itineraryStatus: row.itinerary_status as string | null,
-          isPaid: (row.metadata as Record<string, any>)?.is_paid || row.status === 'booked' || false,
+          isPaid: (row.metadata as Record<string, any>)?.is_paid || false,
           isCollaborator: false,
           collaborators: collabMap.get(row.id) || [],
           journeyId: (row as any).journey_id || null,
