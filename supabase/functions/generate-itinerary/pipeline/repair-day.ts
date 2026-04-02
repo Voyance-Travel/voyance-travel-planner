@@ -766,6 +766,48 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     repairs.push(...bookendRepairs.repairs);
   }
 
+  // --- 9b. ACCOMMODATION TITLE NORMALIZATION ---
+  // Standardize all accommodation activity titles to canonical format after all sources
+  // (AI, repair step 7/8, bookends) have contributed.
+  {
+    const hn = hotelName || 'Your Hotel';
+    for (const act of activities) {
+      const cat = (act.category || '').toLowerCase();
+      if (cat !== 'accommodation') continue;
+
+      const t = (act.title || act.name || '').toLowerCase();
+      let canonical: string | null = null;
+
+      if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) {
+        canonical = `Checkout from ${hn}`;
+      } else if (t.includes('freshen up') || t.includes('freshen-up')) {
+        canonical = `Freshen Up at ${hn}`;
+      } else if (t.includes('return to') || t.includes('back to')) {
+        canonical = `Return to ${hn}`;
+      } else if (t.includes('luggage drop') || t.includes('drop bags')) {
+        canonical = `Luggage Drop at ${hn}`;
+      } else if (t.includes('check-in') || t.includes('check in') || t.includes('checkin') || t.includes('settle in') || t.includes('hotel')) {
+        canonical = `Check-in at ${hn}`;
+      }
+
+      if (canonical && act.title !== canonical) {
+        const before = act.title;
+        act.title = canonical;
+        act.name = canonical;
+        // Also ensure location references the resolved hotel
+        if (!act.location?.name || act.location.name === 'Your Hotel') {
+          act.location = { name: hn, address: act.location?.address || '' };
+        }
+        repairs.push({
+          code: FAILURE_CODES.MISSING_SLOT,
+          action: 'normalized_accommodation_title',
+          before,
+          after: canonical,
+        });
+      }
+    }
+  }
+
   // --- 10. TITLE_LABEL_LEAK ---
   if (byCode.has(FAILURE_CODES.TITLE_LABEL_LEAK)) {
     for (const vr of byCode.get(FAILURE_CODES.TITLE_LABEL_LEAK) || []) {
