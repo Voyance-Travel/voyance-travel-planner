@@ -1676,40 +1676,7 @@ function FlightHotelStep({
               {/* Show entered hotels */}
               {hotelChoice === 'own' && (
                 <div className="space-y-2">
-                  {/* Legacy single hotel (backward compat) */}
-                  {manualHotel.name && manualHotelList.length === 0 && (
-                    <div className="p-3 rounded-lg border border-border bg-card flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Hotel className="h-5 w-5 text-primary" />
-                        <div>
-                          <div className="font-medium text-sm">{manualHotel.name}</div>
-                          {manualHotel.address && (
-                            <div className="text-xs text-muted-foreground">{manualHotel.address}</div>
-                          )}
-                          {manualHotel.pricePerNight && manualHotel.pricePerNight > 0 && (
-                            <div className="text-xs text-muted-foreground">
-                              ${manualHotel.pricePerNight}/night
-                              {manualHotel.includeInBudget && (
-                                <span className="ml-1 text-primary">· In budget</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => { 
-                          // Migrate to list
-                          setManualHotelList([manualHotel]);
-                          setManualHotel({ name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' });
-                          setEditingHotelIndex(0);
-                          setEditingHotelCity(null);
-                          setShowHotelModal(true);
-                        }}>
-                          Edit
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                  {/* Legacy single hotel auto-migration */}
 
                   {/* Multi-hotel list */}
                   {manualHotelList.map((hotel, idx) => (
