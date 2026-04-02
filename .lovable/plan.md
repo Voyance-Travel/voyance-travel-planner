@@ -1,24 +1,38 @@
 
 
-## Remove Dead Code: `useProgressiveItinerary.ts`
+## Replace or Remove `enrich-itinerary` Simulated Data
 
-### Problem
-`useProgressiveItinerary.ts` is dead code. It calls the `generate-itinerary` edge function without an `action` field, which always returns a 400 "Unknown action" error. No component imports or uses this hook — all real generation goes through `TripDetail.tsx` with `action: 'generate-trip'`.
+### Context
+
+The `enrich-itinerary` edge function is called by `useLovableItinerary.ts` after day-by-day generation completes. It returns:
+- **Weather**: Random conditions with destination-based temperature heuristics (not real forecasts)
+- **Walking distances**: Haversine straight-line calculations (the `transit-estimate` edge function already does this better, with Google Routes API support)
+- **Destination photos**: Hardcoded Unsplash photo IDs rotated by destination name hash
+
+Meanwhile, the primary pipeline (`generate-trip-day`) already handles weather context via `weather-backup.ts` and transit via `transit-estimate`. The real enrichment functions (`enrich-attraction`, `lookup-activity-url`, etc.) exist and are called from `enrichmentService.ts` by UI components.
+
+### Recommendation: Remove `enrich-itinerary`
+
+The function provides no real data. Its outputs are either duplicated by the main pipeline or are pure theater. Removing it simplifies the codebase.
 
 ### Changes
 
-**1. Delete `src/hooks/useProgressiveItinerary.ts`**
-- Remove the entire file. It has zero runtime imports across the codebase.
+**1. `supabase/functions/enrich-itinerary/` — Delete**
+- Remove the entire edge function directory
 
-**2. Update documentation references (optional cleanup)**
-- `docs/ITINERARY_LOVABLE.md` — remove the line referencing this file
-- `docs/SOT_PROGRESSIVE_ITINERARY_GENERATION.md` — this doc describes the intended design but references the now-deleted hook; add a note that generation is handled via `useGenerationPoller` + `action: 'generate-trip'`
-- `docs/ITINERARY_GENERATION_SOURCE_OF_TRUTH_v2.1_ACTUAL.md` — update the code evidence reference
+**2. `src/hooks/useLovableItinerary.ts` — Remove enrichment step**
+- Remove the "Step 3: Enrich with weather/distances" block (~lines 450-500) that calls `enrich-itinerary`
+- Adjust progress percentages: generation goes from 10% straight to 90%, then save at 90-100%
+- Remove the `enriching` step from the progress state
+
+**3. `supabase/functions/_shared/cost-tracker.ts` — Remove mapping**
+- Remove the `enrich_itinerary` / `enrich-itinerary` entries from the action-to-category map
+
+### Files
 
 | File | Change |
 |---|---|
-| `src/hooks/useProgressiveItinerary.ts` | **Delete** |
-| `docs/ITINERARY_LOVABLE.md` | Remove reference |
-| `docs/SOT_PROGRESSIVE_ITINERARY_GENERATION.md` | Update to reflect current architecture |
-| `docs/ITINERARY_GENERATION_SOURCE_OF_TRUTH_v2.1_ACTUAL.md` | Update code evidence |
+| `supabase/functions/enrich-itinerary/index.ts` | **Delete** |
+| `src/hooks/useLovableItinerary.ts` | Remove enrichment call block, adjust progress |
+| `supabase/functions/_shared/cost-tracker.ts` | Remove cost category mapping entries |
 
