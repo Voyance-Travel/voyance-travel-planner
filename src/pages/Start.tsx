@@ -1800,7 +1800,7 @@ function FlightHotelStep({
       {/* Manual Hotel Entry Modal — city-aware for multi-city, index-aware for split stays */}
       {(() => {
         // Determine which hotel entry to edit
-        const isListMode = !editingHotelCity && (manualHotelList.length > 0 || editingHotelIndex !== null);
+        const isListMode = !editingHotelCity;
         const isMultiCityEdit = !!editingHotelCity;
         const multiCityHotelsForCity = isMultiCityEdit ? (manualHotels[editingHotelCity!] || []) : [];
         const currentHotel = isMultiCityEdit
