@@ -251,7 +251,7 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - category: "transport"
    - ⚠️ This MUST be its own activity block — do NOT merge with check-in
 
-2. "Hotel Check-in"
+2. "Check-in at ${hotelNameDisplay}"
    - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
    - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
