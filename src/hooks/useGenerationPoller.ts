@@ -275,6 +275,22 @@ export function useGenerationPoller({
           if (referenceTime) {
             const elapsed = Date.now() - new Date(referenceTime).getTime();
             if (elapsed > STALE_THRESHOLD_MS) {
+              // Detect silent timeout: stale heartbeat + no chain_error = platform killed the function
+              if (!meta.chain_error && !meta.chain_broken_at_day) {
+                console.warn(`[useGenerationPoller] Silent timeout detected: heartbeat ${elapsed}ms stale, no chain_error recorded`);
+              }
+              isStalled = true;
+            }
+          }
+        }
+
+        // Method 1b: Timeout sentinel detection — orphaned sentinel means the function was killed mid-AI-call
+        if (!isStalled) {
+          const sentinel = meta.generation_timeout_sentinel as { day: number; started_at: string } | undefined;
+          if (sentinel?.started_at) {
+            const sentinelAge = Date.now() - new Date(sentinel.started_at).getTime();
+            if (sentinelAge > 3 * 60 * 1000) { // 3 minutes — tighter than heartbeat threshold
+              console.warn(`[useGenerationPoller] Orphaned timeout sentinel: day ${sentinel.day}, age ${Math.round(sentinelAge / 1000)}s`);
               isStalled = true;
             }
           }
