@@ -10,6 +10,7 @@
 export class GenerationTimer {
   private tripId: string;
   private logId: string | null = null;
+  private initFailed: boolean = false;
   private startTime: number;
   private phases: Record<string, number> = {};
   private dayTimings: Array<{ day: number; total_ms: number; ai_ms: number; enrich_ms: number; activities: number; categories?: Record<string, number> }> = [];
