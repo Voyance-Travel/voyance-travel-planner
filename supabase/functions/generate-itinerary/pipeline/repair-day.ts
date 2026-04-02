@@ -546,10 +546,11 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const checkInStart = minutesToHHMM(checkInStartMin);
       const checkInEnd = minutesToHHMM(checkInStartMin + 30);
 
+      const hn = hotelName || 'Your Hotel';
       const checkInActivity = {
         id: `day${dayNumber}-checkin-repair-${Date.now()}`,
-        title: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination || 'destination'}`,
-        name: dayNumber === 1 ? 'Hotel Check-in & Refresh' : `Hotel Check-in – ${resolvedDestination || 'destination'}`,
+        title: `Check-in at ${hn}`,
+        name: `Check-in at ${hn}`,
         description: dayNumber === 1
           ? 'Check in, freshen up, and get oriented to the area'
           : `Check in to hotel in ${resolvedDestination || 'destination'}, freshen up after travel`,
