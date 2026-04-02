@@ -285,7 +285,7 @@ The traveler has a hotel but has NOT provided flight/arrival details.
 Assume they arrive in the morning and head to the hotel first to drop bags.
 
 REQUIRED FIRST ACTIVITY:
-1. "Hotel Check-in & Refresh"
+1. "Check-in at ${flightContext.hotelName}"
    - startTime: "${luggageDropTime}", endTime: "${luggageDropEnd}"
    - category: "accommodation"
    - description: "Head to hotel to drop bags. Most hotels store luggage before official check-in; early check-in is often available on request."
