@@ -82,9 +82,7 @@ import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.90.1";
    'nearby-suggestions': 'recommendations',
    
    // Enrichment
-   'enrich_itinerary': 'enrichment',
-   'enrich-itinerary': 'enrichment',
-   'activity_images': 'enrichment',
+    'activity_images': 'enrichment',
    'fetch_reviews': 'enrichment',
    'fetch-reviews': 'enrichment',
    'lookup_activity_url': 'enrichment',

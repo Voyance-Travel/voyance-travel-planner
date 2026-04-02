@@ -22,7 +22,7 @@ export type GenerationStep =
   | 'preparing'
   | 'fetching-trip' 
   | 'generating' 
-  | 'enriching' 
+   
   | 'saving' 
   | 'complete' 
   | 'error';
