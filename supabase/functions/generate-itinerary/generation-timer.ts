@@ -232,23 +232,47 @@ export class GenerationTimer {
         }
       }
 
-      if (!this.logId) return;
+      const finalPayload = {
+        status,
+        total_duration_ms: totalMs,
+        phase_timings: this.phases,
+        day_timings: this.dayTimings,
+        errors: this.errors,
+        current_phase: status === 'completed' ? 'done' : 'failed',
+        progress_pct: status === 'completed' ? 100 : Math.round((this.dayTimings.length / Math.max(1, this.numDays)) * 100),
+        model_used: Array.from(this.modelsUsed).join(', ') || null,
+        prompt_token_count: this.totalPromptTokens || null,
+        completion_token_count: this.totalCompletionTokens || null,
+      };
 
-      await this.supabaseClient
-        .from('generation_logs')
-        .update({
-          status,
-          total_duration_ms: totalMs,
-          phase_timings: this.phases,
-          day_timings: this.dayTimings,
-          errors: this.errors,
-          current_phase: status === 'completed' ? 'done' : 'failed',
-          progress_pct: status === 'completed' ? 100 : Math.round((this.dayTimings.length / Math.max(1, this.numDays)) * 100),
-          model_used: Array.from(this.modelsUsed).join(', ') || null,
-          prompt_token_count: this.totalPromptTokens || null,
-          completion_token_count: this.totalCompletionTokens || null,
-        })
-        .eq('id', this.logId);
+      if (this.logId) {
+        await this.supabaseClient
+          .from('generation_logs')
+          .update(finalPayload)
+          .eq('id', this.logId);
+      } else if (this.initFailed) {
+        // Fallback: init failed earlier, try inserting a summary row now
+        console.warn('[perf-logger] init failed earlier — attempting fallback insert in finalize()');
+        const { error: fallbackErr } = await this.supabaseClient
+          .from('generation_logs')
+          .insert({
+            trip_id: this.tripId,
+            destination: this.destination,
+            num_days: this.numDays,
+            num_guests: this.numGuests,
+            ...finalPayload,
+          });
+        if (fallbackErr) {
+          console.error('[perf-logger] Fallback insert also failed:', JSON.stringify({
+            message: fallbackErr.message,
+            code: fallbackErr.code,
+            details: fallbackErr.details,
+            hint: fallbackErr.hint,
+          }));
+        } else {
+          console.log('[perf-logger] Fallback insert succeeded');
+        }
+      }
     } catch (e) {
       console.error('[perf-logger] Failed to save final log:', e);
     }
