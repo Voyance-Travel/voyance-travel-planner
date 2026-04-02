@@ -58,14 +58,14 @@ TripItineraryPage
 
 ### Service Layer
 
+> **Note (2025-04):** The original `useProgressiveItinerary.ts` hook described below was removed as dead code.
+> All production itinerary generation now goes through `TripDetail.tsx` → edge function `generate-itinerary`
+> with `action: 'generate-trip'`, polled by `useGenerationPoller.ts`.
+
 ```
-services/
-├── api/
-│   └── itineraryAPI.ts          # API client with progressive endpoints
-├── hooks/
-│   └── useProgressiveItinerary.ts # React hook for state management
-└── utils/
-    └── itineraryHelpers.ts       # Utility functions
+hooks/
+├── useGenerationPoller.ts        # Polls trip status, detects stalls, triggers auto-resume
+└── useLovableItinerary.ts        # Legacy generation hook
 ```
 
 ---
