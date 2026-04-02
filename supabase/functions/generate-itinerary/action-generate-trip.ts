@@ -151,6 +151,7 @@ export async function handleGenerateTrip(
   // Initialize performance timer
   const totalDaysForTimer = totalDays; // Will be set after calculation
   await timer.init(destination, totalDays, travelers || 1);
+  console.log(`[generate-trip] Timer logId: ${timer.getLogId() || 'FAILED'}`);
   timer.startPhase('pre_chain_setup');
 
   // Set status to generating + store metadata
