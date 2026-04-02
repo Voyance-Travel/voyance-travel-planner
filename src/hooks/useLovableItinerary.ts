@@ -447,59 +447,7 @@ export function useLovableItinerary(tripId: string | null) {
 
       if (!isMounted.current) return;
 
-      // Step 3: Enrich with weather/distances (80% - 90%)
-      setState(prev => ({
-        ...prev,
-        currentStep: 'enriching',
-        progress: 80,
-        message: 'Adding weather and walking distances...',
-      }));
-
-      try {
-        const { data: enrichResponse } = await supabase.functions.invoke('enrich-itinerary', {
-          body: {
-            tripId,
-            destination: tripDetails.destination,
-            days: generatedDays.map(d => ({
-              dayNumber: d.dayNumber,
-              date: d.date,
-              activities: d.activities.map(a => ({
-                id: a.id,
-                name: a.name,
-                location: a.location,
-                coordinates: a.coordinates,
-              })),
-            })),
-          }
-        });
-
-        if (enrichResponse?.success && enrichResponse?.days) {
-          // Merge enrichment data
-          const enrichedDays = generatedDays.map((day, idx) => {
-            const enrichment = enrichResponse.days[idx];
-            return {
-              ...day,
-              weather: enrichment?.weather,
-              activities: day.activities.map((a, aIdx) => ({
-                ...a,
-                walkingDistance: enrichment?.activities?.[aIdx]?.walkingDistance,
-                walkingTime: enrichment?.activities?.[aIdx]?.walkingTime,
-              })),
-            };
-          });
-
-          // Update state with enriched days
-          const convertedDays = enrichedDays.map(d => convertBackendDay(convertGeneratedToBackendDay(d)));
-          if (isMounted.current) {
-            setState(prev => ({ ...prev, days: convertedDays }));
-          }
-        }
-      } catch (enrichError) {
-        console.warn('[useLovableItinerary] Enrichment failed, continuing:', enrichError);
-        // Non-fatal, continue with unenriched data
-      }
-
-      // Step 4: Save to database (90% - 100%)
+      // Step 3: Save to database (90% - 100%)
       if (!isMounted.current) return;
       setState(prev => ({
         ...prev,
