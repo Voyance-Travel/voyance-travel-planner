@@ -1988,6 +1988,9 @@ export function EditorialItinerary({
               t.includes('check-in') || t.includes('checkin') || t.includes('check in') ||
               t.includes('check-out') || t.includes('checkout') || t.includes('check out');
             if (isAccommodationCard) return true;
+            // Preserve repair-injected local transport to airport/station (distinct from the inter-city flight card)
+            const actSource = (act as any).source || '';
+            if (actSource === 'repair-departure-transport-guarantee' || (act.id && act.id.includes('-departure-transport-'))) return true;
             // Preserve AI-generated airport procedure cards (security, check-in, boarding)
             const isAirportProcedure = (t.includes('departure') || t.includes('airport')) &&
               (desc.includes('security') || desc.includes('check-in') || desc.includes('boarding') || desc.includes('check in'));
