@@ -337,7 +337,7 @@ async function _handleGenerateTripDayInner(
     console.log(`[generate-trip-day] Capped previousActivities to last ${PREV_DAY_WINDOW} days (${previousActivities.length} items). ${olderDayCount} older day(s) excluded from prompt.`);
   }
 
-  // Update heartbeat before generating
+  // Update heartbeat AND timeout sentinel before generating
   {
     const hbMeta = (tripCheck.metadata as Record<string, unknown>) || {};
     await supabase.from('trips').update({
@@ -348,6 +348,7 @@ async function _handleGenerateTripDayInner(
         generation_completed_days: dayNumber - 1,
         generation_total_days: totalDays,
         generation_current_city: cityInfo?.cityName || null,
+        generation_timeout_sentinel: { day: dayNumber, started_at: new Date().toISOString() },
       },
     }).eq('id', tripId);
   }
