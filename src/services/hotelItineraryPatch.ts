@@ -85,17 +85,17 @@ export async function patchItineraryWithHotel(
         const isCheckout = lower.includes('checkout') || lower.includes('check-out') || lower.includes('check out');
         const isFreshenUp = lower.includes('freshen up');
         const isReturn = lower.includes('return to') || lower.includes('back to');
-        const isSettleIn = lower.includes('settle in') || lower.includes('settle into');
+        const isLuggage = lower.includes('luggage drop') || lower.includes('drop bags');
         
-        // Preserve the activity's intent — only replace the hotel name portion
+        // Canonical title set — matches repair-day step 9b normalization
         if (isCheckout) {
           act.title = `Checkout from ${hotel.name}`;
         } else if (isFreshenUp) {
-          act.title = `Freshen up at ${hotel.name}`;
+          act.title = `Freshen Up at ${hotel.name}`;
         } else if (isReturn) {
           act.title = `Return to ${hotel.name}`;
-        } else if (isSettleIn) {
-          act.title = `Settle in at ${hotel.name}`;
+        } else if (isLuggage) {
+          act.title = `Luggage Drop at ${hotel.name}`;
         } else {
           act.title = `Check-in at ${hotel.name}`;
         }
