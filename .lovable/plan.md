@@ -1,23 +1,18 @@
 
 
-## Fix: Duplicate Variable Declaration Crashing `generate-itinerary`
+## Fix: Redeploy `generate-itinerary` Edge Function
 
 ### Problem
-The `generate-itinerary` edge function returns **503** because it fails to boot with:
-> `SyntaxError: Identifier 'hn' has already been declared` at `repair-day.ts:518`
-
-Lines 541 and 549 both declare `const hn = hotelName || 'Your Hotel';` in the same block scope (the `if (!hasCheckIn)` block). The first declaration on line 541 is sufficient; the second on line 549 is a duplicate that was likely introduced during a previous edit.
+The `generate-itinerary` edge function is still failing with `SyntaxError: Identifier 'hn' has already been declared` at boot time. The source code fix from the previous change is correct (no duplicate `const hn` exists in the same scope), but the function was not successfully redeployed — the runtime is still running the old code.
 
 ### Fix
+Redeploy the `generate-itinerary` edge function. No code changes are needed — the source is already correct.
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
-
-Remove line 549 (`const hn = hotelName || 'Your Hotel';`). The identical declaration on line 541 already covers this. No other changes needed.
-
-| File | Change |
+| Action | Detail |
 |---|---|
-| `pipeline/repair-day.ts` | Delete duplicate `const hn` on line 549 |
+| Deploy | `generate-itinerary` edge function |
+| Verify | Check edge function logs for successful boot after deployment |
 
 ### Result
-The edge function will boot successfully and itinerary generation will work again.
+The function will boot without the syntax error and itinerary generation will resume working.
 
