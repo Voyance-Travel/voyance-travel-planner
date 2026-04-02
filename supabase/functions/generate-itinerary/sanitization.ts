@@ -82,6 +82,12 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(INLINE_META_RE, '')
     .replace(FORWARD_REF_RE, '')
     .replace(TOMORROW_REF_RE, '')
+    // Strip archetype/category label suffixes: "Name: The Deep Context Stop"
+    .replace(/\s*[:–—-]\s*(?:The\s+)?(?:Deep\s+Context|Solo\s+Retreat|Cultural\s+Highlight|Group\s+Activity|Wellness|Food|Shopping|Adventure|Family|Romance|Luxury|Budget|Hidden\s+Gem)(?:\s+Stop)?\s*$/gi, '')
+    // Strip label as description prefix: "Solo Retreat: A peaceful..."
+    .replace(/^(?:Solo\s+Retreat|Deep\s+Context|Cultural\s+Highlight|Group\s+Activity|Wellness|Food\s+Stop|Hidden\s+Gem|Adventure|Shopping|Romance|Luxury|Budget)\s*:\s*/gi, '')
+    // Catch remaining "... Stop" suffixed labels at end
+    .replace(/\s*[:–—-]\s*(?:The\s+)?\w+(?:\s+\w+){0,2}\s+Stop\s*$/gi, '')
     // Strip internal day title prefixes: "Short Trip Berlin Day 3:" etc.
     .replace(/^(?:Short\s+Trip|City\s+Trip|Long\s+Trip|Weekend\s+Trip|Extended\s+Trip)\s+\w+(?:\s+\w+)*\s+Day\s+\d+\s*[:–—-]\s*/i, '')
     // Strip bare "Day N:" prefix
