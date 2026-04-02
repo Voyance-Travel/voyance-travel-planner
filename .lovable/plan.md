@@ -1,33 +1,26 @@
 
 
-## Strip Internal Archetype/Category Labels From Titles & Descriptions
+## Fix Duplicated Address Components
 
 ### Problem
-AI-generated activities leak internal template labels like "The Deep Context Stop", "Solo Retreat Stop", etc. into user-visible titles and descriptions. Examples:
-- "Jerónimos Monastery: The Deep Context Stop"
-- "Relaxing at Jardim da Estrela: Solo Retreat Stop"
-- Description prefix: "Solo Retreat: A peaceful, lush park..."
+Address strings contain duplicated city/postal code segments, e.g. `"Praça do Império 1400-206 Lisboa, 1400-206 Lisboa, Portugal"`.
 
 ### Fix
 
 **File: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-Add three new `.replace()` calls to the `sanitizeAITextField` chain (after the existing system prefix stripping around line 76):
+1. **Add `sanitizeAddress` helper** (before `sanitizeGeneratedDay`):
+   - Dedup repeated postal+city segments: `(\d{4,5}[-\s]?\d{3}\s+[A-Za-zÀ-ÿ\s]+),\s*\1` → `$1`
+   - Dedup repeated city names: `\b([A-Za-zÀ-ÿ]{3,}),\s*\1\b` → `$1`
 
-1. **Strip archetype/category label suffixes from titles** — matches patterns like `: The Deep Context Stop`, `- Solo Retreat Stop`, `– Cultural Highlight Stop` at end of string
-2. **Strip label used as description prefix** — matches `Solo Retreat: ...`, `Deep Context: ...` at start of string
-3. **Catch any remaining `... Stop` suffixed labels** — broad pattern for any `: XYZ Stop` at end of string
+2. **Call it in `sanitizeGeneratedDay`** activity loop (~line 183-186) on:
+   - `act.location.address`
+   - `act.location.name` (just in case)
+   - `act.venue_address` if present
 
-```typescript
-// After line 84 (.replace(TOMORROW_REF_RE, '')):
+### Changes
 
-// Strip archetype/category label suffixes: "Name: The Deep Context Stop"
-.replace(/\s*[:–—-]\s*(?:The\s+)?(?:Deep\s+Context|Solo\s+Retreat|Cultural\s+Highlight|Group\s+Activity|Wellness|Food|Shopping|Adventure|Family|Romance|Luxury|Budget|Hidden\s+Gem)(?:\s+Stop)?\s*$/gi, '')
-// Strip label as description prefix: "Solo Retreat: A peaceful..."
-.replace(/^(?:Solo\s+Retreat|Deep\s+Context|Cultural\s+Highlight|Group\s+Activity|Wellness|Food\s+Stop|Hidden\s+Gem|Adventure|Shopping|Romance|Luxury|Budget)\s*:\s*/gi, '')
-// Catch remaining "... Stop" suffixed labels at end
-.replace(/\s*[:–—-]\s*(?:The\s+)?\w+(?:\s+\w+){0,2}\s+Stop\s*$/gi, '')
-```
-
-No new files. No prompt changes. No pipeline changes. The existing `sanitizeGeneratedDay` already calls `sanitizeAITextField` on `act.title`, `act.name`, and `act.description`, so all fields are covered.
+| File | Change |
+|---|---|
+| `sanitization.ts` | Add `sanitizeAddress()` helper; call it on location fields inside the activity loop in `sanitizeGeneratedDay` |
 
