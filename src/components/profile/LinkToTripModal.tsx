@@ -74,11 +74,13 @@ export default function LinkToTripModal({ open, onOpenChange, friend }: LinkToTr
       if (!user) return;
 
       setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
         .from('trips')
         .select('id, name, destination, destination_country, start_date, end_date, status')
         .eq('user_id', user.id)
         .in('status', ['draft', 'planning', 'booked'])
+        .gte('end_date', today)
         .order('start_date', { ascending: true });
 
       if (!error && data) {
