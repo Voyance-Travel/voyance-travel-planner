@@ -57,9 +57,18 @@ export class GenerationTimer {
         this.logId = data.id;
         console.log(`[perf-logger] Log row created: ${data.id}`);
       }
-      if (error) console.error('[perf-logger] Failed to create log row:', error.message);
+      if (error) {
+        this.initFailed = true;
+        console.error('[perf-logger] Failed to create log row:', JSON.stringify({
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        }));
+      }
     } catch (e) {
-      console.error('[perf-logger] Init failed:', e);
+      this.initFailed = true;
+      console.error('[perf-logger] Init failed (exception):', e);
     }
     return this.logId;
   }
