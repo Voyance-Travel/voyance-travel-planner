@@ -132,7 +132,7 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - description: "Clear customs and collect luggage"
    - ⚠️ This MUST be its own activity block — do NOT merge with check-in
 
-2. "Hotel Check-in & Refresh"
+2. "Check-in at ${hotelNameDisplay}"
    - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
    - description: "Check in, freshen up, and get oriented to the area"
