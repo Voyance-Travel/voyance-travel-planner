@@ -137,6 +137,22 @@ export function sanitizeAITextField(text: string | undefined | null, destination
 }
 
 /**
+ * Remove duplicated postal-code+city or city-name segments from addresses.
+ */
+function sanitizeAddress(address: string): string {
+  if (!address) return address;
+  let result = address.replace(
+    /(\d{4,5}[-\s]?\d{3}\s+[A-Za-zÀ-ÿ\s]+),\s*\1/g,
+    '$1'
+  );
+  result = result.replace(
+    /\b([A-Za-zÀ-ÿ]{3,}),\s*\1\b/g,
+    '$1'
+  );
+  return result;
+}
+
+/**
  * Deep-sanitize all user-facing text fields in a generated day object.
  */
 export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: string): any {
@@ -181,9 +197,10 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       if (act.description) act.description = sanitizeAITextField(act.description, destination) || undefined;
       if (typeof act.tips === 'string') act.tips = sanitizeAITextField(act.tips, destination) || undefined;
       if (act.location && typeof act.location === 'object') {
-        if (act.location.name) act.location.name = sanitizeAITextField(act.location.name, destination) || act.location.name;
-        if (act.location.address) act.location.address = sanitizeAITextField(act.location.address, destination) || act.location.address;
+        if (act.location.name) act.location.name = sanitizeAddress(sanitizeAITextField(act.location.name, destination) || act.location.name);
+        if (act.location.address) act.location.address = sanitizeAddress(sanitizeAITextField(act.location.address, destination) || act.location.address);
       }
+      if (act.venue_address) act.venue_address = sanitizeAddress(act.venue_address);
       if (act.transportation && typeof act.transportation === 'object') {
         if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions, destination) || undefined;
         const method = (act.transportation.method || '').toLowerCase();
