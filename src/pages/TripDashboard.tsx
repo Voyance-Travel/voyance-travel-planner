@@ -925,7 +925,7 @@ export default function TripDashboard() {
           metadata: row.metadata as Record<string, any> | null,
           hasItineraryData: row.itinerary_status === 'ready' || row.itinerary_status === 'partial',
           itineraryStatus: row.itinerary_status as string | null,
-          isPaid: (row.metadata as Record<string, any>)?.is_paid || row.status === 'booked' || false,
+          isPaid: (row.metadata as Record<string, any>)?.is_paid || false,
           isCollaborator: false,
           collaborators: collabMap.get(row.id) || [],
           journeyId: (row as any).journey_id || null,
