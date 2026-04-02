@@ -546,7 +546,6 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const checkInStart = minutesToHHMM(checkInStartMin);
       const checkInEnd = minutesToHHMM(checkInStartMin + 30);
 
-      const hn = hotelName || 'Your Hotel';
       const checkInActivity = {
         id: `day${dayNumber}-checkin-repair-${Date.now()}`,
         title: `Check-in at ${hn}`,
