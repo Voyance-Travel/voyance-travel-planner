@@ -240,12 +240,6 @@ function formatDateRange(startDate: string | null, endDate: string | null): stri
 
 // Helper to check if a trip can be deleted
 function canDeleteTrip(trip: Trip): { canDelete: boolean; reason?: string } {
-   const now = new Date();
-   
-   // Check if trip has already happened
-   if (trip.endDate && parseLocalDate(trip.endDate) < now) {
-     return { canDelete: false, reason: 'Past trips cannot be deleted' };
-   }
    
    // Check if trip has a paid reservation
    if (trip.isPaid) {
