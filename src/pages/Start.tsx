@@ -1718,23 +1718,16 @@ function FlightHotelStep({
                   ))}
 
                   {/* Add another hotel button */}
-                  {(manualHotel.name || manualHotelList.length > 0) && (
+                  {manualHotelList.length > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
                       className="w-full"
                       onClick={() => {
-                        // If still using legacy single hotel, migrate first
-                        if (manualHotel.name && manualHotelList.length === 0) {
-                          setManualHotelList([manualHotel]);
-                          setManualHotel({ name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' });
-                        }
                         setEditingHotelIndex(null); // null = new hotel
                         setEditingHotelCity(null);
                         // Smart date default: new hotel check-in = latest checkout of existing hotels
-                        const existingForDefault = manualHotelList.length > 0
-                          ? manualHotelList
-                          : (manualHotel.name ? [manualHotel] : []);
+                        const existingForDefault = manualHotelList;
                         const latestCheckout = existingForDefault.reduce((latest: string, h: any) => {
                           const co = h.checkOutDate || '';
                           return co > latest ? co : latest;
