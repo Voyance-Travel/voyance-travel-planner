@@ -2213,8 +2213,8 @@ export default function Start() {
     if (manualHotel.name && manualHotelList.length === 0) {
       setManualHotelList([{
         ...manualHotel,
-        checkInDate: manualHotel.checkInDate || startDate,
-        checkOutDate: manualHotel.checkOutDate || endDate,
+        checkInDate: manualHotel.checkInDate || (startDate ? format(startDate, 'yyyy-MM-dd') : ''),
+        checkOutDate: manualHotel.checkOutDate || (endDate ? format(endDate, 'yyyy-MM-dd') : ''),
       }]);
       setManualHotel({ name: '', address: '', neighborhood: '', checkInTime: '15:00', checkOutTime: '11:00' });
       setHotelChoice('own');
