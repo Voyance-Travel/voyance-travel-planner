@@ -533,7 +533,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       return cat === 'accommodation' && (
         t.includes('check-in') || t.includes('check in') ||
         t.includes('checkin') || t.includes('settle in') ||
-        t.includes('refresh') || t.includes('hotel')
+        t.includes('luggage drop')
       );
     });
 
