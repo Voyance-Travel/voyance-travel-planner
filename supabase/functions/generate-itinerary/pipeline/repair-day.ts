@@ -61,6 +61,10 @@ export interface RepairDayInput {
   nextLegTransportDetails?: { stationName?: string; departureTime?: string; [key: string]: any };
   hotelOverride?: { name?: string; address?: string };
 
+  // Split-stay context (same city, different hotel)
+  isHotelChange?: boolean;
+  previousHotelName?: string;
+
   // Locked activities (never remove)
   lockedActivities: StrictActivityMinimal[];
 
