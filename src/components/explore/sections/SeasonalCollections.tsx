@@ -28,7 +28,7 @@ const collections = [
     title: 'Autumn',
     subtitle: 'Golden foliage & harvest',
     description: 'New York, Kyoto, Vienna',
-    image: 'https://images.unsplash.com/photo-1476820865390-c52aeebb9891?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1476820865390-c52aeebb9891?w=800&q=80'),
     icon: Leaf,
     gradient: 'from-orange-500/20 to-amber-500/10',
   },
