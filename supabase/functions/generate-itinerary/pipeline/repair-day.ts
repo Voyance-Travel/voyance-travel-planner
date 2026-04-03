@@ -529,8 +529,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
   }
 
-  // --- 7. HOTEL CHECK-IN GUARANTEE (Day 1 or transition day) — moved before bookends ---
-  const needsCheckIn = dayNumber === 1 || isTransitionDay;
+  // --- 7. HOTEL CHECK-IN GUARANTEE (Day 1, transition day, or split-stay hotel change) ---
+  const needsCheckIn = dayNumber === 1 || isTransitionDay || isHotelChange;
   if (needsCheckIn && activities.length > 0) {
     const hasCheckIn = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
