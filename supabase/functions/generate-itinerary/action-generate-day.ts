@@ -828,7 +828,7 @@ export async function handleGenerateDay(
         let resolvedIsHotelChange = false;
         let resolvedPreviousHotelName: string | undefined = undefined;
 
-        if (tripId && (!resolvedRepairHotelName || resolvedRepairHotelName === 'Hotel' || resolvedIsMultiCity)) {
+        if (tripId) {
           try {
             const { data: tripCitiesForHotel } = await supabase
               .from('trip_cities')
