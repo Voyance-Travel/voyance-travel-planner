@@ -818,6 +818,7 @@ async function _handleGenerateTripDayInner(
         hotelOverride: (cityInfo?.hotelName || tripHotelName) ? { name: cityInfo?.hotelName || tripHotelName!, address: cityInfo?.hotelAddress || tripHotelAddress || '' } : undefined,
         isHotelChange: cityInfo?.isHotelChange || false,
         previousHotelName: (cityInfo as any)?.previousHotelName || undefined,
+        hotelCoordinates: tripHotelCoordinates,
       });
 
       if (repairs.length > 0) {
