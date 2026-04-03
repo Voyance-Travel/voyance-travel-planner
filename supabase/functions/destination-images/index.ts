@@ -1514,10 +1514,11 @@ serve(async (req) => {
     if (qSkipCache) params.skipCache = qSkipCache === 'true';
 
     // Then try to parse body (POST)
+    let batchVenues: Array<{ name: string; category?: string }> | undefined;
     if (req.method === "POST") {
       try {
         const body = await req.json();
-        console.log("[Images] Received body:", JSON.stringify(body));
+        console.log("[Images] Received body:", JSON.stringify(body).slice(0, 500));
         if (body.destinationId) params.destinationId = body.destinationId;
         if (body.destination) params.destination = body.destination;
         if (body.imageType) params.imageType = body.imageType;
@@ -1525,12 +1526,66 @@ serve(async (req) => {
         if (body.venueName) params.venueName = body.venueName;
         if (body.category) params.category = body.category;
         if (body.skipCache !== undefined) params.skipCache = body.skipCache;
+        // BATCH MODE: accept array of venues
+        if (Array.isArray(body.venues) && body.venues.length > 0) {
+          batchVenues = body.venues.slice(0, 20); // Max 20 per batch
+        }
       } catch (e) {
         console.log("[Images] Could not parse body:", e);
       }
     }
 
-    console.log("[Images] Parsed params:", JSON.stringify(params));
+    console.log("[Images] Parsed params:", JSON.stringify(params).slice(0, 300));
+
+    // ── BATCH MODE ──────────────────────────────────────────────────────────
+    if (batchVenues && batchVenues.length > 0 && params.destination) {
+      console.log(`[Images] BATCH mode: ${batchVenues.length} venues for ${params.destination}`);
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      const googleApiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+      const tripAdvisorApiKey = Deno.env.get("TRIPADVISOR_API_KEY");
+      const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+
+      const results: Record<string, DestinationImage> = {};
+      let placesCallCount = 0;
+      let photosCallCount = 0;
+
+      // Process sequentially to avoid hammering Google API
+      for (const venue of batchVenues) {
+        try {
+          const image = await fetchImageTiered(
+            supabase,
+            venue.name,
+            params.destination,
+            'activity',
+            venue.category,
+            googleApiKey,
+            tripAdvisorApiKey,
+            lovableApiKey,
+            params.skipCache
+          );
+          results[venue.name] = image;
+          if (image.source === 'google_places') {
+            placesCallCount++;
+            if (image.cacheHit === false) photosCallCount++;
+          }
+        } catch (e) {
+          console.error(`[Images] Batch error for "${venue.name}":`, e);
+          results[venue.name] = getCategoryFallbackImage(venue.category || 'activity', venue.name);
+        }
+      }
+
+      costTracker.recordGooglePlaces(placesCallCount);
+      costTracker.recordGooglePhotos(photosCallCount);
+      await costTracker.save();
+
+      return new Response(
+        JSON.stringify({ success: true, batch: true, images: results }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const destinationId = params.destinationId;
     const destination = params.destination;
