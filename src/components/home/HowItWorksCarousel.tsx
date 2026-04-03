@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { Sparkles, Map, Calendar, Plane, ArrowRight } from 'lucide-react';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 const steps = [
   {
