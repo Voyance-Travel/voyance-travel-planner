@@ -58,7 +58,7 @@ const popularDestinations = [
     id: 'new-york',
     city: 'New York',
     country: 'United States',
-    image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&q=80'),
     trending: true,
   },
   {
