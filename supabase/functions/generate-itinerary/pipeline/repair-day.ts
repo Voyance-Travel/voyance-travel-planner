@@ -1242,6 +1242,7 @@ function repairBookends(
   hotelName: string,
   dayNumber: number,
   isDepartureDay: boolean,
+  isFirstDay: boolean = false,
 ): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
 
