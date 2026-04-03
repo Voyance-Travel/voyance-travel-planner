@@ -203,7 +203,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   const repairs: RepairAction[] = [];
   const { validationResults, dayNumber, isFirstDay, isLastDay,
     arrivalTime24, returnDepartureTime24, departureAirport,
-    hotelName, hotelAddress, hasHotel,
+    hotelName, hotelAddress, hasHotel, hotelCoordinates,
     lockedActivities, restaurantPool, usedRestaurants,
     isTransitionDay, isMultiCity, isLastDayInCity,
     resolvedDestination, nextLegTransport, nextLegTransportDetails, hotelOverride,
