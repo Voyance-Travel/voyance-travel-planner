@@ -29,7 +29,7 @@ import {
   minutesToHHMM,
   addMinutesToHHMM,
 } from '../flight-hotel-context.ts';
-import { extractRestaurantVenueName } from '../generation-utils.ts';
+import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
 
 // =============================================================================
 // INPUT TYPES
@@ -1207,6 +1207,50 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
     if (indicesToRemove.size > 0) {
       activities = activities.filter((_, i) => !indicesToRemove.has(i));
+
+      // --- 9d. POST-DEDUP TRANSIT GAP PASS ---
+      // After accommodation dedup removed cards + their adjacent transports,
+      // scan for adjacent non-transport activities at different locations and
+      // inject a lightweight transport card to prevent "teleportation".
+      const isTransportCat2 = (a: any) => (a.category || '').toLowerCase() === 'transport';
+      const postDedup: any[] = [];
+      for (let i = 0; i < activities.length; i++) {
+        postDedup.push(activities[i]);
+        if (i >= activities.length - 1) continue;
+        const curr = activities[i], next = activities[i + 1];
+        if (isTransportCat2(curr) || isTransportCat2(next)) continue;
+        const cLoc = (curr.location?.name || '').toLowerCase();
+        const nLoc = (next.location?.name || '').toLowerCase();
+        if (!cLoc || !nLoc) continue;
+        if (isSameOrContainedLocation(cLoc, nLoc, hotelName)) continue;
+        // Inject a simple transport card
+        const st = curr.endTime || next.startTime || '12:00';
+        const fromCoords = curr.coordinates || curr.location?.coordinates || null;
+        const toCoords = next.coordinates || next.location?.coordinates || null;
+        let dur = 15, costAmt = 5, method = 'taxi';
+        if (fromCoords?.lat && toCoords?.lat) {
+          const dist = haversineDistanceKm(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng);
+          dur = Math.max(10, Math.min(45, Math.round(dist * 3)));
+          costAmt = Math.round(dist * 2);
+        }
+        const endMin = (parseInt(st.split(':')[0]) || 0) * 60 + (parseInt(st.split(':')[1]) || 0) + dur;
+        const et = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+        postDedup.push({
+          id: `transport-postdedup-${i}-${Date.now()}`,
+          title: `Travel to ${next.location?.name || next.title || 'next venue'}`,
+          description: `From ${curr.location?.name || curr.title || 'previous venue'} to ${next.location?.name || next.title || 'next venue'}`,
+          category: 'transport',
+          startTime: st,
+          endTime: et,
+          durationMinutes: dur,
+          location: { name: next.location?.name || next.title || 'destination', address: next.location?.address || '' },
+          fromLocation: { name: curr.location?.name || curr.title || 'origin', address: curr.location?.address || '' },
+          cost: { amount: costAmt, currency: 'USD' },
+          transportation: { method, duration: `${dur} min` },
+        });
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_post_dedup_transit_gap' });
+      }
+      activities = postDedup;
     }
   }
 
@@ -1608,9 +1652,12 @@ function repairDepartureSequence(
 function isSameOrContainedLocation(aLoc: string, bLoc: string, hotel?: string): boolean {
   if (!aLoc || !bLoc) return false;
   if (aLoc === bLoc) return true;
-  // Substring: "four seasons ritz" ⊂ "varanda restaurant at four seasons ritz"
+  // Substring match — but require the shorter string to be at least 60% of the
+  // longer string's length to avoid false positives like "spa" matching
+  // "spa resort dinner cruise" or "The Grand" matching "The Grand Bazaar Restaurant".
   if (aLoc.length >= 4 && bLoc.length >= 4) {
-    if (aLoc.includes(bLoc) || bLoc.includes(aLoc)) return true;
+    const ratio = Math.min(aLoc.length, bLoc.length) / Math.max(aLoc.length, bLoc.length);
+    if ((aLoc.includes(bLoc) || bLoc.includes(aLoc)) && ratio >= 0.6) return true;
   }
   // Both reference the hotel
   if (hotel) {
@@ -1923,7 +1970,7 @@ function repairBookends(
       if (isAccom(curr) && hotelName && nLoc.includes(hotelName.toLowerCase())) continue;
       // Guard: skip if a transport to nLoc already exists in previous 2 positions
       const recentTransport = rebuilt.slice(-2).some(
-        a => isTransport(a) && (a.location?.name || '').toLowerCase() === nLoc
+        a => isTransport(a) && isSameOrContainedLocation((a.location?.name || '').toLowerCase(), nLoc, hotelName)
       );
       if (recentTransport) continue;
       rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || '', curr, next));
