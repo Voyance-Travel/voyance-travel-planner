@@ -37,7 +37,7 @@ const collections = [
     title: 'Winter',
     subtitle: 'Cozy retreats & adventure',
     description: 'Reykjavik, Singapore, Bali',
-    image: 'https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=800&q=80'),
     icon: Snowflake,
     gradient: 'from-sky-500/20 to-blue-500/10',
   },

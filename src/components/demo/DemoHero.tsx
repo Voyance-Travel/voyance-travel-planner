@@ -52,7 +52,7 @@ export function DemoHero({ onStartTour, onSkipToPlayground }: DemoHeroProps) {
           className="absolute right-[12%] bottom-[25%]"
         >
           <DestinationCard 
-            image="https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400"
+            image={normalizeUnsplashUrl("https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400")}
             name="Bali"
             days={6}
           />
