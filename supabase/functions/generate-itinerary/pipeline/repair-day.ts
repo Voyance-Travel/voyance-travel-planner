@@ -1105,6 +1105,91 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 8c. INTER-CITY JOURNEY CARD ---
+  // On inter-city departure days (not last day of trip), inject the actual journey card
+  // (e.g., "Flight to Rome", "Train to Kyoto") after the station/airport transfer.
+  const nextLegCity = input.nextLegCity;
+  if (isLastDayInCity && !isLastDay && nextLegTransport && nextLegCity) {
+    const hasJourneyCard = activities.some((a: any) => {
+      const t = (a.title || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      const cityLower = nextLegCity.toLowerCase();
+      return (cat === 'flight' || cat === 'transport' || cat === 'intercity_transport') && (
+        t.includes(cityLower) || t.includes('journey to') || t.includes('flight to') || t.includes('train to')
+      );
+    });
+
+    if (!hasJourneyCard) {
+      const modeLabel = nextLegTransport.charAt(0).toUpperCase() + nextLegTransport.slice(1);
+      const isFlightMode = nextLegTransport.toLowerCase().includes('flight') || nextLegTransport.toLowerCase().includes('fly');
+      const journeyCategory = isFlightMode ? 'flight' : 'intercity_transport';
+
+      // Determine timing
+      const defaultDurations: Record<string, number> = { flight: 120, train: 180, bus: 240, ferry: 180 };
+      const journeyDuration = nextLegTransportDetails?.duration
+        ? parseInt(nextLegTransportDetails.duration, 10) || defaultDurations[nextLegTransport] || 120
+        : defaultDurations[nextLegTransport] || 120;
+
+      let journeyStartMins: number;
+      if (nextLegTransportDetails?.departureTime) {
+        journeyStartMins = parseTimeToMinutes(nextLegTransportDetails.departureTime) ?? 13 * 60;
+      } else {
+        // Place after the last transport/transfer card
+        const lastTransfer = [...activities].reverse().find((a: any) => {
+          const cat = (a.category || '').toLowerCase();
+          const t = (a.title || '').toLowerCase();
+          return (cat === 'transport' || cat === 'logistics') && (
+            t.includes('transfer') || t.includes('station') || t.includes('airport')
+          );
+        });
+        const transferEnd = lastTransfer ? (parseTimeToMinutes(lastTransfer.endTime || '') ?? 13 * 60) : 13 * 60;
+        journeyStartMins = transferEnd + 30; // 30 min buffer for boarding
+      }
+
+      const journeyEndMins = journeyStartMins + journeyDuration;
+      const hubName = isFlightMode
+        ? (nextLegTransportDetails?.departureAirport || nextLegTransportDetails?.stationName || 'Airport')
+        : (nextLegTransportDetails?.departureStation || nextLegTransportDetails?.stationName || 'Station');
+
+      const journeyCard = {
+        id: `day${dayNumber}-journey-${nextLegTransport}-${Date.now()}`,
+        title: `${modeLabel} to ${nextLegCity}`,
+        name: `${modeLabel} to ${nextLegCity}`,
+        description: `${modeLabel} from ${hubName} to ${nextLegCity}.${nextLegTransportDetails?.carrier ? ` ${nextLegTransportDetails.carrier}` : ''}`,
+        startTime: minutesToHHMM(journeyStartMins),
+        endTime: minutesToHHMM(journeyEndMins),
+        category: journeyCategory,
+        type: journeyCategory,
+        location: { name: hubName, address: '' },
+        cost: { amount: 0, currency: 'USD' },
+        bookingRequired: false,
+        isLocked: false,
+        durationMinutes: journeyDuration,
+        source: 'repair-intercity-journey',
+        travelMeta: {
+          from: resolvedDestination || '',
+          to: nextLegCity,
+          transportName: modeLabel,
+          hubLabel: hubName,
+          carrier: nextLegTransportDetails?.carrier,
+          depTime: minutesToHHMM(journeyStartMins),
+          arrTime: minutesToHHMM(journeyEndMins),
+          dur: `${Math.floor(journeyDuration / 60)}h${journeyDuration % 60 > 0 ? ` ${journeyDuration % 60}m` : ''}`,
+        },
+      };
+
+      // Insert chronologically
+      let insertIdx = activities.length;
+      for (let i = 0; i < activities.length; i++) {
+        const actStart = parseTimeToMinutes(activities[i].startTime || '') ?? 99999;
+        if (journeyStartMins <= actStart) { insertIdx = i; break; }
+      }
+      activities.splice(insertIdx, 0, journeyCard);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_intercity_journey', after: journeyCard.title });
+      console.log(`[Repair] Injected inter-city journey: "${journeyCard.title}" (${journeyCard.startTime}-${journeyCard.endTime})`);
+    }
+  }
+
   // --- 9. MISSING_SLOT: bookend validator (with departure-day guards) ---
   // Always inject hotel bookends — use placeholder if no hotel selected yet.
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
