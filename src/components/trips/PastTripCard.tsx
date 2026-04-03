@@ -87,8 +87,18 @@ export function PastTripCard({ trip, index = 0, onDelete }: PastTripCardProps) {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const { error } = await supabase.from('trips').delete().eq('id', trip.id);
+      const { data: session } = await supabase.auth.getSession();
+      const userId = session?.session?.user?.id;
+      if (!userId) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('trips')
+        .delete()
+        .eq('id', trip.id)
+        .eq('user_id', userId)
+        .select('id');
       if (error) throw error;
+      if (!data || data.length === 0) throw new Error('Trip could not be deleted');
       toast.success('Trip deleted');
       onDelete?.(trip.id);
     } catch (e: any) {
