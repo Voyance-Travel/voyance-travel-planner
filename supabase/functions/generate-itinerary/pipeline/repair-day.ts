@@ -1768,6 +1768,7 @@ function repairBookends(
   }
 
   // 4. Final consolidation — collapse consecutive transports from ALL sources
+  //    Preserves A→B semantics: from = preceding activity, to = last transport's destination
   {
     const consolidated: any[] = [];
     for (let i = 0; i < rebuilt.length; i++) {
@@ -1777,17 +1778,42 @@ function repairBookends(
         if (j > i) {
           const first = rebuilt[i];
           const last = rebuilt[j];
+          // Determine real "from" — the preceding non-transport activity
+          const prevNonTransport = [...consolidated].reverse().find(a => !isTransport(a));
+          const fromName = prevNonTransport?.location?.name || first.fromLocation?.name || 'previous location';
+          const toName = last.location?.name || last.title?.replace('Travel to ', '') || 'destination';
+
+          // Re-estimate using real endpoints if coordinates available
+          const fromCoords = prevNonTransport ? getActivityCoords(prevNonTransport) : hotelCoordinates || null;
+          const toCoords = getActivityCoords(last) || null;
+          let mergedDur = last.durationMinutes || 15;
+          let mergedCost = last.cost?.amount || 0;
+          let mergedMethod = last.transportation?.method || 'transit';
+          if (fromCoords && toCoords) {
+            const est = estimateTransit(fromCoords, toCoords, resolvedDestination);
+            mergedDur = est.durationMinutes;
+            mergedCost = est.costAmount;
+            mergedMethod = est.method;
+          }
+
           const merged = {
             ...last,
             startTime: first.startTime || last.startTime,
-            description: `Transit to ${last.location?.name || last.title}`,
+            endTime: offset(first.startTime || last.startTime, mergedDur),
+            durationMinutes: mergedDur,
+            title: `Travel to ${toName}`,
+            description: `Transit from ${fromName} to ${toName}.`,
+            location: { name: toName, address: '' },
+            fromLocation: { name: fromName, address: '' },
+            cost: { amount: mergedCost, currency: 'USD' },
+            transportation: { method: mergedMethod, duration: `${mergedDur} min` },
           };
           consolidated.push(merged);
           repairs.push({
             code: FAILURE_CODES.LOGISTICS_SEQUENCE,
             action: 'collapsed_consecutive_transport',
             before: `${j - i + 1} transport cards`,
-            after: merged.title,
+            after: `${merged.title} (from ${fromName})`,
           });
           i = j;
         } else {
@@ -1820,6 +1846,58 @@ function repairBookends(
         }
       }
       deduped.push(consolidated[i]);
+    }
+
+    // 4c. POST-CONSOLIDATION BACK-TO-BACK GUARD — Safety net for any remaining adjacent transports
+    {
+      let merged = true;
+      while (merged) {
+        merged = false;
+        for (let i = 0; i < deduped.length - 1; i++) {
+          if (isTransport(deduped[i]) && isTransport(deduped[i + 1])) {
+            const first = deduped[i];
+            const second = deduped[i + 1];
+            // Find preceding non-transport
+            const prevNonTransport = deduped.slice(0, i).reverse().find(a => !isTransport(a));
+            const fromName = prevNonTransport?.location?.name || first.fromLocation?.name || 'previous location';
+            const toName = second.location?.name || second.title?.replace('Travel to ', '') || 'destination';
+
+            const fromCoords = prevNonTransport ? getActivityCoords(prevNonTransport) : hotelCoordinates || null;
+            const toCoords = getActivityCoords(second) || null;
+            let dur = second.durationMinutes || 15;
+            let cost = second.cost?.amount || 0;
+            let method = second.transportation?.method || 'transit';
+            if (fromCoords && toCoords) {
+              const est = estimateTransit(fromCoords, toCoords, resolvedDestination);
+              dur = est.durationMinutes;
+              cost = est.costAmount;
+              method = est.method;
+            }
+
+            const mergedCard = {
+              ...second,
+              startTime: first.startTime || second.startTime,
+              endTime: offset(first.startTime || second.startTime, dur),
+              durationMinutes: dur,
+              title: `Travel to ${toName}`,
+              description: `Transit from ${fromName} to ${toName}.`,
+              location: { name: toName, address: '' },
+              fromLocation: { name: fromName, address: '' },
+              cost: { amount: cost, currency: 'USD' },
+              transportation: { method, duration: `${dur} min` },
+            };
+            deduped.splice(i, 2, mergedCard);
+            repairs.push({
+              code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+              action: 'merged_back_to_back_transport',
+              before: `${first.title} + ${second.title}`,
+              after: mergedCard.title,
+            });
+            merged = true;
+            break; // restart scan
+          }
+        }
+      }
     }
 
     // =========================================================================
