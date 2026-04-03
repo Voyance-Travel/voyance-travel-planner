@@ -72,7 +72,7 @@ const popularDestinations = [
     id: 'marrakech',
     city: 'Marrakech',
     country: 'Morocco',
-    image: 'https://images.unsplash.com/photo-1518730518541-d0843268c287?w=400&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1518730518541-d0843268c287?w=400&q=80'),
     trending: true,
   },
 ];
