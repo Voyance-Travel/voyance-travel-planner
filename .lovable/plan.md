@@ -1,38 +1,51 @@
 
 
-## Fix: Pass Hotel Change Context to Single-Day Generation Path
+## Fix: Trips Reappearing After Deletion
 
 ### Problem
-When a day is regenerated individually via `action-generate-day.ts`, the repair pipeline never receives `isHotelChange` or `previousHotelName`. This means checkout/check-in activities for split-stay hotel changes are never injected on single-day regeneration — even though the full-trip generation path (`action-generate-trip-day.ts`) handles this correctly.
+When you delete a trip, it disappears from the dashboard but reappears when you navigate away and come back. The deletion is only removing the trip from local (in-memory) state — it may not be actually deleting from the database, or the UI may be re-fetching stale data.
 
-Additionally, the hotel resolution in `action-generate-day.ts` (lines 828-854) always picks `rawHotel[0]` without date-aware matching, so split-stay days get the wrong hotel name.
+### Root Cause
+Two issues working together:
 
-### Changes
+1. **Silent delete failures**: The delete call (`supabase.from('trips').delete().eq('id', trip.id)`) does not verify that a row was actually deleted. Supabase RLS silently returns success with 0 rows affected if the policy blocks the operation. The code assumes success and removes the trip from local state.
 
-**File: `supabase/functions/generate-itinerary/action-generate-day.ts`**
+2. **No cache invalidation**: The dashboard uses manual `useState` for trip data. The `handleTripDelete` callback only does `setTrips(prev => prev.filter(...))`. When the user navigates away and back, the `loadTrips` useEffect re-runs, re-fetching from the database — where the trip still exists.
 
-#### 1. Add date-aware hotel resolution for split-stays
+### Fix
 
-Replace the simple `rawHotel[0]` logic (line 843) with the same date-aware resolution used in `generation-core.ts`:
-- When `hotel_selection` is an array with multiple hotels, match by `checkInDate`/`checkOutDate` against the current day's date
-- Fall back to evenly splitting nights across hotels if dates are missing
+**File: `src/pages/TripDashboard.tsx`**
 
-#### 2. Detect `isHotelChange` and `previousHotelName`
+#### 1. Verify the delete actually removed a row
+Change the delete call to use `.select()` to get the deleted rows back. If no rows are returned, the delete didn't actually happen — show an error instead of a success toast.
 
-After resolving the correct hotel for the current day, also resolve the previous day's hotel:
-- Walk the day→city mapping to find which hotel covered `dayNumber - 1`
-- If the previous day's hotel name differs from the current day's hotel name (same city), set `isHotelChange = true` and `previousHotelName`
+```typescript
+const { data, error } = await supabase
+  .from('trips')
+  .delete()
+  .eq('id', trip.id)
+  .eq('user_id', user.id)  // explicit ownership check
+  .select('id');
 
-#### 3. Pass both fields to `repairInput`
+if (error) throw error;
+if (!data || data.length === 0) {
+  throw new Error('Trip could not be deleted');
+}
+```
 
-Add `isHotelChange` and `previousHotelName` to the `RepairDayInput` object at line 858, matching what `action-generate-trip-day.ts` already does.
+#### 2. Apply the same fix to `PastTripCard`
+**File: `src/components/trips/PastTripCard.tsx`**
 
-### Expected behavior
-- Single-day regeneration on a hotel-change day will now inject:
-  - **Checkout from Previous Hotel** (11:00–11:30)
-  - **Check-in at New Hotel** (15:00–15:30)
-- The correct hotel name is used for each day in a split-stay
+Same pattern — add `.eq('user_id', user.id)` and `.select('id')` to verify the delete succeeded before updating local state.
 
-### Files changed
-- `supabase/functions/generate-itinerary/action-generate-day.ts` — date-aware hotel resolution, hotel change detection, pass to repair input
+#### 3. Pass `user.id` to both components
+Both `TripCard` and `PastTripCard` need access to the current user ID. `TripCard` is an inner component of `TripDashboard` which already has `user` from `useAuth()`. Thread `userId` as a prop to both components (or use `useAuth()` directly inside them).
+
+### Expected Behavior
+- Deleted trips stay deleted — they won't reappear on navigation
+- If a delete fails silently (RLS block, FK constraint), the user sees "Failed to delete trip" instead of a false success
+
+### Files Changed
+- `src/pages/TripDashboard.tsx` — verify delete, add `user_id` filter
+- `src/components/trips/PastTripCard.tsx` — same verification fix
 
