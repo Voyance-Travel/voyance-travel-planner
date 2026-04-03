@@ -1240,6 +1240,26 @@ function repairDepartureSequence(
 }
 
 // =============================================================================
+// FUZZY LOCATION MATCHING — prevents transit between same/contained venues
+// =============================================================================
+
+function isSameOrContainedLocation(aLoc: string, bLoc: string, hotel?: string): boolean {
+  if (!aLoc || !bLoc) return false;
+  if (aLoc === bLoc) return true;
+  // Substring: "four seasons ritz" ⊂ "varanda restaurant at four seasons ritz"
+  if (aLoc.length >= 4 && bLoc.length >= 4) {
+    if (aLoc.includes(bLoc) || bLoc.includes(aLoc)) return true;
+  }
+  // Both reference the hotel
+  if (hotel) {
+    const h = hotel.toLowerCase();
+    if (h.length >= 4 && aLoc.includes(h) && bLoc.includes(h)) return true;
+    if (h.length >= 4 && (aLoc === h || bLoc === h) && (aLoc.includes(h) || bLoc.includes(h))) return true;
+  }
+  return false;
+}
+
+// =============================================================================
 // BOOKEND REPAIR (transport gaps + hotel returns)
 // =============================================================================
 
