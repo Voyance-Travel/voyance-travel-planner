@@ -895,7 +895,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       let canonical: string | null = null;
 
       if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) {
-        canonical = `Checkout from ${hn}`;
+        // On hotel-change days, preserve the previous hotel name on checkout titles
+        if (isHotelChange && previousHotelName) {
+          canonical = `Checkout from ${previousHotelName}`;
+        } else {
+          canonical = `Checkout from ${hn}`;
+        }
       } else if (t.includes('freshen up') || t.includes('freshen-up')) {
         canonical = `Freshen Up at ${hn}`;
       } else if (t.includes('return to') || t.includes('back to')) {
