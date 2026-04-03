@@ -6,6 +6,7 @@ import Head from '@/components/common/Head';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import AuthLayout from '@/components/layout/AuthLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 import { Compass } from 'lucide-react';
 
 export default function SignIn() {
