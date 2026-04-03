@@ -567,6 +567,41 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
       activities.unshift(checkInActivity);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkin_guarantee' });
+
+      // On arrival day, remove any accommodation activities scheduled BEFORE check-in
+      // (e.g. "Return to Hotel", "Freshen Up") — logically impossible before you've arrived
+      if (dayNumber === 1) {
+        const checkInMin = checkInStartMin;
+        const preCheckInAccom = activities.filter((a: any) => {
+          if (a.id === checkInActivity.id) return false;
+          const cat = (a.category || '').toLowerCase();
+          const t = (a.title || '').toLowerCase();
+          if (cat !== 'accommodation') return false;
+          const aMin = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          return aMin < checkInMin;
+        });
+        for (const toRemove of preCheckInAccom) {
+          const idx = activities.indexOf(toRemove);
+          if (idx >= 0) {
+            activities.splice(idx, 1);
+            repairs.push({ code: FAILURE_CODES.CHRONOLOGY, action: 'removed_pre_checkin_accommodation', before: toRemove.title });
+          }
+        }
+
+        // Strip hotel references from meals scheduled before check-in
+        // (e.g. "Breakfast at Hotel" → "Breakfast" — you can't eat at a hotel you haven't arrived at)
+        for (const act of activities) {
+          const t = (act.title || '').toLowerCase();
+          const cat = (act.category || '').toLowerCase();
+          const aMin = parseTimeToMinutes(act.startTime || '') ?? 99999;
+          if (cat === 'dining' && aMin < checkInMin && (t.includes('hotel') || t.includes(hotelName.toLowerCase()))) {
+            const oldTitle = act.title;
+            act.title = act.title.replace(/\s*(at|@)\s*(the\s+)?hotel.*/i, '').replace(new RegExp(`\\s*(at|@)\\s*(the\\s+)?${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'), '');
+            if (act.name) act.name = act.title;
+            repairs.push({ code: FAILURE_CODES.CHRONOLOGY, action: 'stripped_hotel_from_pre_checkin_meal', before: oldTitle, after: act.title });
+          }
+        }
+      }
     }
   }
 
