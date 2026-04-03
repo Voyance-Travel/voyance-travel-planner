@@ -30,7 +30,7 @@ const featuredDestinations = [
     country: 'Japan',
     region: 'Asia',
     description: 'Ancient temples meet seasonal perfection. Meditative gardens, refined kaiseki dining.',
-    image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80'),
     tags: ['Culture', 'Temples', 'Nature'],
     featured: true,
   },
