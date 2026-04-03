@@ -1402,7 +1402,7 @@ function repairBookends(
   // accommodation cards at the start of the day that aren't check-in/checkout.
   // The traveler woke up at the hotel; "Return to Hotel" / "Freshen Up" as the
   // first activity is nonsensical.
-  if (!isFirstDay && !isDepartureDay) {
+  if (!isFirstDay && !isDepartureDay && !isHotelChange) {
     let stripped = true;
     while (stripped) {
       stripped = false;
