@@ -1387,7 +1387,15 @@ function repairBookends(
     if (hasCheckedIn) {
       const visible = activities.filter(a => !isTransport(a));
       const last = visible[visible.length - 1];
-      if (last && !isAccom(last)) {
+      // Harden: only treat as "already has return" if it's BOTH accommodation category
+      // AND its title actually indicates a hotel return (not a mislabeled dinner etc.)
+      const isProperReturn = last && isAccom(last) && isHotelRelated(last);
+      if (last && !isProperReturn) {
+        // If last activity is mislabeled accommodation (wrong category), fix its category
+        if (last && isAccom(last) && !isHotelRelated(last)) {
+          last.category = 'sightseeing';
+          repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'recategorized_mislabeled_accommodation' });
+        }
         const et = last.endTime || '22:00';
         activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
         activities.push(makeAccomCard('Return to', offset(et, 20), 15));
