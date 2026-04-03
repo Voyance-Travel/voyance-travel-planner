@@ -1,43 +1,49 @@
 
-Fix the meal-guard reporting so it stops showing contradictory states like “breakfast, lunch, dinner” and “guard fired (+lunch)” on the same row.
 
-What’s happening
-- In `supabase/functions/generate-itinerary/action-generate-day.ts`, the admin diagnostics are built after the meal guard runs.
-- That means the “found meals” list already includes the injected meal.
-- It also uses a different heuristic than `detectMealSlots(...)`, which is why raw `dining` can appear beside real meal slots.
+## Strip Internal Archetype/Category Labels From Titles & Descriptions
 
-Plan
-1. Make diagnostics use the same detector as the guard
-- Replace the local `foundMeals` logic in `action-generate-day.ts` with `detectMealSlots(...)` from `day-validation.ts`.
-- This makes the logs and the guard share one source of truth.
+### Problem
+AI archetype labels like "Deep Context", "Solo Retreat", "Authentic Encounter" leak into user-visible text in multiple formats: parenthetical `(Deep Context)`, colon-suffix `Jerónimos Monastery: The Deep Context Stop`, ALL-CAPS in descriptions `(DEEP CONTEXT - Historical significance...)`, description prefixes `Solo Retreat: A peaceful...`, and ALL-CAPS words in transit names `DISTRICT`.
 
-2. Capture meals both before and after the guard
-- Record `beforeGuard` just before `enforceRequiredMealsFinalGuard(...)`.
-- Record `afterGuard` after the guard finishes.
-- Keep `guardFired` and `injected` alongside them.
+### Current State
+`sanitization.ts` lines 86-90 already have partial coverage but miss:
+- Parenthetical labels: `(Deep Context)`, `(Solo Retreat)`, `(Authentic Encounter)`
+- ALL-CAPS with explanations: `(DEEP CONTEXT - Historical significance...)`
+- `(SOLO RETREAT moment)` style
+- `The Deep Context Stop` (with "The" prefix) in colon-suffix patterns
+- `Authentic Encounter` in description prefixes
+- ALL-CAPS `DISTRICT` in transit names
 
-3. Stop showing `dining` as if it were a meal slot
-- Remove the current fallback that pushes category names like `dining` into the meal list.
-- If needed, track generic dining cards separately as a count/flag instead of mixing them with breakfast/lunch/dinner.
+### Changes
 
-4. Update the admin log UI
-- In `src/pages/admin/GenerationLogs.tsx`, render meal info as:
-  - Final: breakfast, lunch, dinner
-  - Guard injected: lunch
-  - Before guard: breakfast, dinner
-- This makes it obvious whether lunch existed originally or was added by the repair step.
+**File: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-5. Update supporting types
-- Adjust the meal diagnostics shape in `supabase/functions/generate-itinerary/generation-timer.ts` and the frontend `GenerationLog` type so the new fields are typed consistently.
+Replace lines 86-90 in the `sanitizeAITextField` chain with expanded patterns:
 
-6. Add a regression test
-- Add a focused test for the “missing lunch gets injected” case.
-- Verify the diagnostics report:
-  - `beforeGuard = [breakfast, dinner]`
-  - `afterGuard = [breakfast, lunch, dinner]`
-  - `injected = [lunch]`
-  - no raw `dining` in the displayed meal slots
+```typescript
+// Strip parenthetical archetype labels: "(Deep Context)", "(Solo Retreat)", etc.
+.replace(/\s*\((?:Deep\s+Context|Solo\s+Retreat|Authentic\s+Encounter|Cultural\s+Highlight|Group\s+Activity|Hidden\s+Gem|Family\s+Stop|Romance\s+Stop|Luxury\s+Stop|Budget\s+Stop|Adventure\s+Stop|Wellness\s+Stop)\)\s*/gi, '')
+// Strip ALL-CAPS archetype labels with explanations: "(DEEP CONTEXT - Historical significance...)"
+.replace(/\s*\((?:DEEP\s+CONTEXT|SOLO\s+RETREAT|AUTHENTIC\s+ENCOUNTER|CULTURAL\s+HIGHLIGHT)\s*[-–—]?\s*[^)]*\)\s*/g, '')
+// Strip "(SOLO RETREAT moment)" and similar
+.replace(/\s*\(\s*(?:SOLO\s+RETREAT|DEEP\s+CONTEXT)\s+\w+\s*\)\s*/gi, '')
+// Strip colon-suffix labels: "Name: The Deep Context Stop"
+.replace(/\s*[:–—-]\s*(?:The\s+)?(?:Deep\s+Context|Solo\s+Retreat|Cultural\s+Highlight|Group\s+Activity|Wellness|Food|Shopping|Adventure|Family|Romance|Luxury|Budget|Hidden\s+Gem|Authentic\s+Encounter)(?:\s+Stop)?\s*$/gi, '')
+// Strip label as description prefix: "Solo Retreat: ..." "The Deep Context Stop: ..."
+.replace(/^(?:Solo\s+Retreat|Deep\s+Context|The\s+Deep\s+Context\s+Stop|Cultural\s+Highlight|Group\s+Activity|Authentic\s+Encounter|Wellness|Food\s+Stop|Hidden\s+Gem|Adventure|Shopping|Romance|Luxury|Budget)\s*:\s*/gi, '')
+// Catch remaining "... Stop" suffixed labels at end
+.replace(/\s*[:–—-]\s*(?:The\s+)?\w+(?:\s+\w+){0,2}\s+Stop\s*$/gi, '')
+// Strip ALL-CAPS "DISTRICT" from transit/location names
+.replace(/\s+DISTRICT\b/g, '')
+```
 
-Expected result
-- The guard can still inject missing meals when needed.
-- But the logs will no longer look self-contradictory, and we’ll be able to tell the difference between a real guard fire and a reporting artifact.
+Key additions vs current code:
+1. **New** parenthetical label pattern (line 86 currently doesn't exist)
+2. **New** ALL-CAPS with explanation pattern
+3. **New** `(SOLO RETREAT moment)` pattern
+4. **Updated** colon-suffix pattern adds `Authentic\s+Encounter`
+5. **Updated** description prefix adds `The\s+Deep\s+Context\s+Stop` and `Authentic\s+Encounter`
+6. **New** `DISTRICT` stripping
+
+No new files. No pipeline changes. No prompt changes. Just regex additions in the sanitization chain + redeploy.
+
