@@ -1,34 +1,32 @@
 
 
-## Fix: Missing Transport Cards Between Activities ("Teleportation")
+## Fix: Hotel Change Day — Direct Transit + Earlier Check-in
 
 ### Problem
-Activities frequently appear back-to-back without transport cards between them. The transit gap injection (step 3 in `repairBookends`) has several issues that cause it to skip necessary transport cards:
+On hotel-change days, the repair pipeline injects a Checkout from Hotel A (11:00) and a Check-in at Hotel B (15:00), but:
+1. **No transport card** is injected between checkout and check-in — the traveler "teleports" between hotels
+2. **Check-in is too late** — defaults to 15:00 even though the traveler should go directly to Hotel B after checkout (~30 min travel + arrival)
 
-1. **Post-dedup gaps**: Step 9c (accommodation dedup) removes accommodation cards AND their adjacent transport cards, leaving two venue activities next to each other with no transport. But since 9c runs *after* `repairBookends`, there's no second transit gap pass to fill these new gaps.
-
-2. **Over-aggressive location matching**: `isSameOrContainedLocation` uses substring matching (`aLoc.includes(bLoc)`), which can incorrectly match unrelated locations when one name is a common word substring of another (e.g., "The Grand" matching "The Grand Bazaar Restaurant").
-
-3. **Empty location fallback to title**: When `location.name` is missing, the code falls back to `curr.title` — but activity titles often contain common words that trigger false substring matches, causing the guard to skip transport injection.
+### Root Cause
+The split-stay block (step 7/8 in `repair-day.ts`, lines 649-726) injects checkout and check-in activities but never injects a transport card between them. The main transit gap pass (step 3) runs *before* step 7/8, and the post-dedup pass (9d) only runs if step 9c actually removes something.
 
 ### Fix
 
 **File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-1. **Add a second transit gap pass after step 9c**: After the accommodation dedup removes activities and their transports, run a lightweight transit gap scan on the resulting array. For any two adjacent non-transport activities at different locations, inject a transport card between them. This is a simple loop similar to step 3 in `repairBookends` but operating on the post-dedup activity list.
+In the `isHotelChange` block (lines 649-726), after injecting both checkout and check-in:
 
-2. **Tighten `isSameOrContainedLocation`**: Add a minimum word-overlap check instead of pure substring matching. Two locations should only be considered "same" if they share significant identifying words (not just any substring match). Specifically:
-   - Keep exact match (`aLoc === bLoc`)
-   - For substring matching, require that the shorter string is at least 60% of the longer string's length (to avoid "spa" matching "spa resort dinner cruise")
-   - Keep the hotel cross-reference check as-is
+1. **Inject a transport card** between checkout and check-in: "Travel to {Hotel B}" with `fromLocation: Hotel A` and `location: Hotel B`. Use coordinate-based duration if available, otherwise default 30 min.
 
-3. **Improve `recentTransport` guard**: The check at line 1925-1927 uses exact match on `location.name` — change to use `isSameOrContainedLocation` so it properly catches existing transports even with slight name variations.
+2. **Set check-in time based on checkout + travel**: Instead of `Math.max(15*60, checkoutEnd+30)`, calculate as `checkoutEnd + transportDuration + 15` (15 min buffer for arrival/lobby). This makes the day feel natural — checkout at 11:00, travel 30 min, arrive and check in ~11:45.
 
-### Expected behavior
-- Every pair of activities at different physical locations has a transport card between them
-- No more "teleportation" between venues
-- Same-location activities (e.g., hotel spa after hotel check-in) still correctly skip transport
+3. **Sequence**: Checkout (11:00-11:30) → Travel to Hotel B (11:30-12:00) → Check-in at Hotel B (12:00-12:30)
 
-### Files changed
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — post-dedup transit gap pass + tighten location matching
+### Expected Behavior
+- Hotel change days show: Checkout → Travel to new hotel → Check-in
+- Timing flows naturally from checkout through travel to check-in
+- No "teleportation" gap between hotels
+
+### Files Changed
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add transport injection + adjust check-in timing in split-stay block
 
