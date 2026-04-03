@@ -10,7 +10,7 @@ const collections = [
     title: 'Spring',
     subtitle: 'Cherry blossoms & renewal',
     description: 'Kyoto, Paris, Seoul & more',
-    image: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1522383225653-ed111181a951?w=800&q=80'),
     icon: Flower,
     gradient: 'from-pink-500/20 to-rose-500/10',
   },
