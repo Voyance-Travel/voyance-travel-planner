@@ -1359,12 +1359,12 @@ async function fetchImageTiered(
     }
   }
 
-  // If we have real photo candidates, validate quality and cache
+  // If we have real photo candidates, persist and cache
   if (candidates.length > 0) {
     let bestImage = candidates[0];
     let qualityScore = 0.8; // Default assumed quality
     
-    // If multiple candidates and AI available, rank them
+    // If multiple candidates and AI available, rank them (cheap — just text, no vision)
     if (candidates.length > 1 && lovableApiKey) {
       const ranked = await rankImageCandidates(candidates, cleanName, lovableApiKey);
       if (ranked) {
@@ -1372,54 +1372,10 @@ async function fetchImageTiered(
       }
     }
 
-    // NEW: Quality scoring with Lovable AI Vision
-    // Only score if we have the API key and the image is from an external source
-    if (lovableApiKey && bestImage.source !== 'curated') {
-      const qualityResult = await scoreImageQuality(
-        bestImage.url,
-        {
-          destination,
-          venueName: cleanName,
-          category: effectiveCategory,
-          expectedType: entityType === 'destination' ? 'destination' : 'activity',
-        },
-        lovableApiKey
-      );
-
-      qualityScore = qualityResult.pass ? qualityResult.score : Math.min(qualityResult.score, 0.5);
-
-      // If image fails quality check, try next candidate or fallback
-      if (!qualityResult.pass) {
-        console.log(`[Images] Image failed quality check (${qualityResult.score.toFixed(2)}): ${bestImage.url.slice(0, 60)}`);
-        console.log(`[Images] Issues: ${qualityResult.issues.join(", ")}`);
-        
-        // Try other candidates if available
-        for (let i = 1; i < candidates.length; i++) {
-          const altResult = await scoreImageQuality(
-            candidates[i].url,
-            {
-              destination,
-              venueName: cleanName,
-              category: effectiveCategory,
-            },
-            lovableApiKey
-          );
-          
-          if (altResult.pass) {
-            bestImage = candidates[i];
-            qualityScore = altResult.score;
-            console.log(`[Images] Using alternative candidate with score ${qualityScore.toFixed(2)}`);
-            break;
-          }
-        }
-        
-        // If all candidates fail, use category fallback
-        if (qualityScore < 0.6) {
-          console.log(`[Images] All candidates failed quality check, using category fallback`);
-          return getCategoryFallbackImage(effectiveCategory, venueName);
-        }
-      }
-    }
+    // AI quality scoring REMOVED — it burned AI credits, added latency,
+    // and caused cascade retries with no negative caching.
+    // The match-score filtering (0.55 threshold) + content mismatch detection
+    // is sufficient quality control.
 
     // Persist external image URLs into our own storage when possible.
     const persistentBestImage = await ensurePersistentStorageUrl(
@@ -1431,8 +1387,41 @@ async function fetchImageTiered(
 
     // Cache the result with quality score
     await cacheImage(supabase, entityType, venueName, destination, persistentBestImage, qualityScore);
+
+    // Store in shared venue cache for cross-function reuse
+    if (bestImage.placeId) {
+      cacheVenueResult(cleanName, destination, {
+        placeId: bestImage.placeId,
+        name: cleanName,
+        photoUrl: persistentBestImage.url,
+      }).catch(() => {});
+    }
     
     return persistentBestImage;
+  }
+
+  // ── NEGATIVE CACHE: Remember that this venue has no results ──────────────
+  // Prevents repeated Google API calls for venues that consistently return nothing.
+  try {
+    const normalizedKey = venueName.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
+    const negativeExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(); // 14 days
+
+    await supabase.from("curated_images").upsert({
+      entity_type: entityType,
+      entity_key: normalizedKey,
+      destination: destination,
+      source: 'no_result',
+      image_url: '',
+      alt_text: `No result: ${venueName}`,
+      quality_score: 0,
+      updated_at: new Date().toISOString(),
+      expires_at: negativeExpiresAt,
+    }, {
+      onConflict: 'entity_type,entity_key,destination'
+    });
+    console.log(`[Images] ⛔ Stored negative cache for: "${venueName}" in ${destination} (14-day TTL)`);
+  } catch (negErr) {
+    console.warn('[Images] Failed to write negative cache:', negErr);
   }
 
   // TIER 5: AI Generation (try before category fallback for better quality)
