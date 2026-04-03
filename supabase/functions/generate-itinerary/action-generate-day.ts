@@ -822,94 +822,11 @@ export async function handleGenerateDay(
           console.log(`[pipeline] Day ${dayNumber} validation: all checks passed`);
         }
 
-        // --- Pre-resolve hotel for repair guarantees (date-aware for split-stays) ---
-        let resolvedRepairHotelName = (flightContext as any).hotelName || paramHotelName || undefined;
-        let resolvedRepairHotelAddr = (flightContext as any).hotelAddress || '';
-        let resolvedIsHotelChange = false;
-        let resolvedPreviousHotelName: string | undefined = undefined;
-
-        if (tripId) {
-          try {
-            const { data: tripCitiesForHotel } = await supabase
-              .from('trip_cities')
-              .select('city_name, hotel_selection, city_order, nights, days_total')
-              .eq('trip_id', tripId)
-              .order('city_order', { ascending: true });
-            if (tripCitiesForHotel && tripCitiesForHotel.length > 0) {
-              // Compute the date string for this day number
-              const tripStartDate = preferences?.startDate || date?.split('T')[0];
-
-              // Build a flat day→hotel map (same logic as generation-core.ts)
-              const dayHotelMap: Array<{ hotelName?: string; hotelAddress?: string; cityName: string }> = [];
-              for (const city of tripCitiesForHotel) {
-                const cityNights = (city as any).nights || (city as any).days_total || 1;
-                const rawHotel = city.hotel_selection as any;
-                const hotelList: any[] = Array.isArray(rawHotel) ? rawHotel : (rawHotel ? [rawHotel] : []);
-
-                for (let n = 0; n < cityNights; n++) {
-                  // Date-aware hotel resolution for split-stays
-                  let cityHotel: any = null;
-                  if (hotelList.length > 1 && tripStartDate) {
-                    const dayDateObj = new Date(tripStartDate);
-                    dayDateObj.setDate(dayDateObj.getDate() + dayHotelMap.length);
-                    const dateStr = dayDateObj.toISOString().split('T')[0];
-
-                    // Match by checkInDate/checkOutDate (inclusive start, exclusive end)
-                    cityHotel = hotelList.find((h: any) => {
-                      const cin = h.checkInDate || h.check_in_date;
-                      const cout = h.checkOutDate || h.check_out_date;
-                      return cin && cout && dateStr >= cin && dateStr < cout;
-                    });
-                    // Fallback: evenly split nights across hotels
-                    if (!cityHotel) {
-                      const daysPerHotel = Math.max(1, Math.floor(cityNights / hotelList.length));
-                      const hotelIndex = Math.min(Math.floor(n / daysPerHotel), hotelList.length - 1);
-                      cityHotel = hotelList[hotelIndex];
-                    }
-                  } else {
-                    cityHotel = hotelList[0] || null;
-                  }
-
-                  dayHotelMap.push({
-                    hotelName: cityHotel?.name || undefined,
-                    hotelAddress: cityHotel?.address || undefined,
-                    cityName: city.city_name,
-                  });
-                }
-              }
-
-              // Resolve hotel for current day (dayNumber is 1-based)
-              const currentIdx = dayNumber - 1;
-              if (currentIdx >= 0 && currentIdx < dayHotelMap.length) {
-                const currentEntry = dayHotelMap[currentIdx];
-                if (currentEntry.hotelName && (!resolvedRepairHotelName || resolvedRepairHotelName === 'Hotel')) {
-                  resolvedRepairHotelName = currentEntry.hotelName;
-                }
-                if (currentEntry.hotelAddress) {
-                  resolvedRepairHotelAddr = currentEntry.hotelAddress;
-                }
-
-                // Detect hotel change: compare with previous day's hotel in the same city
-                const prevIdx = currentIdx - 1;
-                if (prevIdx >= 0) {
-                  const prevEntry = dayHotelMap[prevIdx];
-                  if (
-                    prevEntry.cityName === currentEntry.cityName &&
-                    prevEntry.hotelName &&
-                    currentEntry.hotelName &&
-                    prevEntry.hotelName !== currentEntry.hotelName
-                  ) {
-                    resolvedIsHotelChange = true;
-                    resolvedPreviousHotelName = prevEntry.hotelName;
-                    console.log(`[pipeline] Hotel change detected on day ${dayNumber}: "${prevEntry.hotelName}" → "${currentEntry.hotelName}"`);
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            console.warn('[pipeline] Could not resolve hotel for repair:', e);
-          }
-        }
+        // --- Use unified hotel resolution from compile-day-facts (single source of truth) ---
+        const resolvedRepairHotelName = resolvedHotelOverride?.name || (flightContext as any).hotelName || paramHotelName || undefined;
+        const resolvedRepairHotelAddr = resolvedHotelOverride?.address || (flightContext as any).hotelAddress || '';
+        const resolvedIsHotelChange = facts.resolvedIsHotelChange;
+        const resolvedPreviousHotelName = facts.resolvedPreviousHotelName;
 
         // --- REPAIR ---
         const repairInput: RepairDayInput = {

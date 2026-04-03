@@ -619,6 +619,8 @@ RULES:
     flightContext,
     isFirstDay,
     isLastDay,
+    resolvedIsHotelChange,
+    resolvedPreviousHotelName,
     transportPreferencePrompt,
     resolvedTransportModes,
     resolvedPrimaryTransport,
