@@ -61,6 +61,10 @@ export interface RepairDayInput {
   nextLegTransportDetails?: { stationName?: string; departureTime?: string; [key: string]: any };
   hotelOverride?: { name?: string; address?: string };
 
+  // Split-stay context (same city, different hotel)
+  isHotelChange?: boolean;
+  previousHotelName?: string;
+
   // Locked activities (never remove)
   lockedActivities: StrictActivityMinimal[];
 
@@ -85,7 +89,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     hotelName, hotelAddress, hasHotel,
     lockedActivities, restaurantPool, usedRestaurants,
     isTransitionDay, isMultiCity, isLastDayInCity,
-    resolvedDestination, nextLegTransport, nextLegTransportDetails, hotelOverride } = input;
+    resolvedDestination, nextLegTransport, nextLegTransportDetails, hotelOverride,
+    isHotelChange, previousHotelName } = input;
 
   // Clone activities array to mutate
   let activities: any[] = [...(input.day.activities || [])];
@@ -524,8 +529,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
   }
 
-  // --- 7. HOTEL CHECK-IN GUARANTEE (Day 1 or transition day) — moved before bookends ---
-  const needsCheckIn = dayNumber === 1 || isTransitionDay;
+  // --- 7. HOTEL CHECK-IN GUARANTEE (Day 1, transition day, or split-stay hotel change) ---
+  const needsCheckIn = dayNumber === 1 || isTransitionDay || isHotelChange;
   if (needsCheckIn && activities.length > 0) {
     const hasCheckIn = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
@@ -605,8 +610,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
-  // --- 8. HOTEL CHECKOUT GUARANTEE (last day or last day in city) — moved before bookends ---
-  const needsCheckout = isLastDay || (isLastDayInCity && !isTransitionDay);
+  // --- 8. HOTEL CHECKOUT GUARANTEE (last day, last day in city, or split-stay hotel change) ---
+  const needsCheckout = isLastDay || (isLastDayInCity && !isTransitionDay) || isHotelChange;
   if (needsCheckout && activities.length > 0) {
     const hasCheckout = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
@@ -617,8 +622,9 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
 
     if (!hasCheckout) {
-      const coHotelName = hotelOverride?.name || hotelName || 'Your Hotel';
-      const coHotelAddr = hotelOverride?.address || hotelAddress || '';
+      // For split-stay hotel changes, checkout is from the PREVIOUS hotel
+      const coHotelName = isHotelChange && previousHotelName ? previousHotelName : (hotelOverride?.name || hotelName || 'Your Hotel');
+      const coHotelAddr = isHotelChange ? '' : (hotelOverride?.address || hotelAddress || '');
 
       let checkoutStartMin: number;
       const depMins = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
