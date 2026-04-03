@@ -1045,6 +1045,9 @@ export async function handleGenerateDay(
 
       // Chain restaurant filtering is now handled by pipeline/validate-day + repair-day
 
+      // Snapshot meals BEFORE guard for accurate diagnostics
+      mealsBeforeGuard = detectMealSlots(generatedDay.activities || []);
+
       mealGuardResult = enforceRequiredMealsFinalGuard(
         generatedDay.activities || [],
         dayMealPolicy.requiredMeals,
@@ -1061,6 +1064,9 @@ export async function handleGenerateDay(
       } else {
         console.log(`[generate-day] ✓ Meal guard passed — Day ${dayNumber} has all required meals [${dayMealPolicy.requiredMeals.join(', ')}]`);
       }
+
+      // Snapshot meals AFTER guard
+      mealsAfterGuard = detectMealSlots(generatedDay.activities || []);
     }
 
     // End post-processing phase and write progress
