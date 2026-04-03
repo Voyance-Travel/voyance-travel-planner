@@ -1926,7 +1926,7 @@ function repairBookends(
       if (isAccom(curr) && hotelName && nLoc.includes(hotelName.toLowerCase())) continue;
       // Guard: skip if a transport to nLoc already exists in previous 2 positions
       const recentTransport = rebuilt.slice(-2).some(
-        a => isTransport(a) && (a.location?.name || '').toLowerCase() === nLoc
+        a => isTransport(a) && isSameOrContainedLocation((a.location?.name || '').toLowerCase(), nLoc, hotelName)
       );
       if (recentTransport) continue;
       rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || '', curr, next));
