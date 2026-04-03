@@ -876,6 +876,7 @@ export async function handleGenerateDay(
           resolvedDestination: resolvedDestination || destination,
           nextLegTransport: resolvedNextLegTransport,
           hotelOverride: resolvedHotelOverride ? { name: resolvedHotelOverride.name, address: resolvedHotelOverride.address } : undefined,
+          hotelCoordinates: hotelCoordinates,
         };
 
         const { day: repairedDay, repairs } = repairDay(repairInput);
