@@ -19,7 +19,7 @@ const collections = [
     title: 'Summer',
     subtitle: 'Coastal escapes & long days',
     description: 'Santorini, Barcelona, Vancouver',
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80'),
     icon: Sun,
     gradient: 'from-amber-500/20 to-orange-500/10',
   },
