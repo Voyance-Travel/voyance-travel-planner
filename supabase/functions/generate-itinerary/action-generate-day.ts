@@ -981,6 +981,8 @@ export async function handleGenerateDay(
     // use REAL restaurant names instead of generic "dinner spot" text.
     // ====================================================================
     let mealGuardResult: { alreadyCompliant: boolean; activities: any[]; injectedMeals: string[] } | null = null;
+    let mealsBeforeGuard: string[] = [];
+    let mealsAfterGuard: string[] = [];
     if (dayMealPolicy && dayMealPolicy.requiredMeals.length > 0) {
       // Build meal fallback venues from restaurant pool first, then verified_venues
       let mealFallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];

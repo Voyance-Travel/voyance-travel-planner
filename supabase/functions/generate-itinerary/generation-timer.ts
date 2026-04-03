@@ -128,7 +128,7 @@ export class GenerationTimer {
   addDayTiming(
     day: number, totalMs: number, aiMs: number, enrichMs: number, activityCount: number,
     categories?: Record<string, number>,
-    meals?: { required: string[]; found: string[]; guardFired: boolean; injected?: string[] },
+    meals?: { required: string[]; found: string[]; beforeGuard?: string[]; guardFired: boolean; injected?: string[] },
     transport?: { isTransitionDay: boolean; mode?: string | null; hadInterCityTravel?: boolean; fallbackInjected?: boolean },
     validation?: { totalChecks?: number; errors?: number; warnings?: number; repairsApplied?: number },
     llm?: { model: string; promptTokens: number; completionTokens: number },

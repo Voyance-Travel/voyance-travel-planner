@@ -161,7 +161,12 @@ function DayTimingsTable({ dayTimings }: { dayTimings: GenerationLog['day_timing
                       {d.meals.found?.join(', ') || 'none'}
                     </span>
                     {d.meals.guardFired && (
-                      <div className="text-yellow-500 text-[10px]">⚠ guard fired{d.meals.injected?.length ? ` (+${d.meals.injected.join(', ')})` : ''}</div>
+                      <>
+                        <div className="text-yellow-500 text-[10px]">⚠ guard fired{d.meals.injected?.length ? ` (+${d.meals.injected.join(', ')})` : ''}</div>
+                        {d.meals.beforeGuard && (
+                          <div className="text-muted-foreground text-[10px]">before: {d.meals.beforeGuard.join(', ') || 'none'}</div>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : <span className="text-muted-foreground">--</span>}
