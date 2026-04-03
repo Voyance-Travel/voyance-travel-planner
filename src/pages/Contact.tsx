@@ -288,7 +288,7 @@ const Contact = () => {
                 className="rounded-2xl overflow-hidden"
               >
                 <img 
-                  src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&q=80"
+                  src={normalizeUnsplashUrl("https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&q=80")}
                   alt="Travel inspiration"
                   className="w-full h-48 object-cover"
                 />
