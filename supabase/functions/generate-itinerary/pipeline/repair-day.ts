@@ -1300,22 +1300,34 @@ function repairBookends(
     }
   }
 
-  // 1b. Mid-day hotel return guarantee — SKIP on departure days (traveler checks out and leaves)
+  // 1b. Mid-day hotel return guarantee — SKIP on departure days AND on first day before check-in
   if (!isDepartureDay) {
+    // On first day, find the check-in activity to ensure mid-day return only happens AFTER check-in
+    const checkInIdx = isFirstDay
+      ? activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+        })
+      : -1;
+
     const lunchIdx = activities.findIndex(a => (a.category === 'dining') && /\b(lunch|midday meal)\b/i.test(a.title || ''));
     const dinnerIdx = activities.findIndex(a => (a.category === 'dining') && /\b(dinner|evening meal)\b/i.test(a.title || ''));
     if (lunchIdx >= 0 && dinnerIdx > lunchIdx) {
-      const hasMidDayAccom = activities.slice(lunchIdx + 1, dinnerIdx).some(a => isAccom(a));
-      if (!hasMidDayAccom) {
-        let insertIdx = dinnerIdx;
-        for (let j = dinnerIdx - 1; j > lunchIdx; j--) {
-          if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
+      // On first day, skip mid-day hotel return if lunch is before check-in (can't return to a place you haven't been)
+      const skipBecausePreCheckIn = isFirstDay && checkInIdx >= 0 && lunchIdx < checkInIdx;
+      if (!skipBecausePreCheckIn) {
+        const hasMidDayAccom = activities.slice(lunchIdx + 1, dinnerIdx).some(a => isAccom(a));
+        if (!hasMidDayAccom) {
+          let insertIdx = dinnerIdx;
+          for (let j = dinnerIdx - 1; j > lunchIdx; j--) {
+            if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
+          }
+          const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
+          const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd);
+          const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
+          activities.splice(insertIdx, 0, transportCard, accomCard);
+          repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
         }
-        const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
-        const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd);
-        const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
-        activities.splice(insertIdx, 0, transportCard, accomCard);
-        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
       }
     }
   }
