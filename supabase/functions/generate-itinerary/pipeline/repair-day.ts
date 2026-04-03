@@ -687,8 +687,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
-  // --- 8. HOTEL CHECKOUT GUARANTEE (last day, last day in city, or split-stay hotel change) ---
-  const needsCheckout = isLastDay || (isLastDayInCity && !isTransitionDay) || isHotelChange;
+  // --- 8. HOTEL CHECKOUT GUARANTEE (last day, last day in city — NOT hotel change, handled above) ---
+  const needsCheckout = !isHotelChange && (isLastDay || (isLastDayInCity && !isTransitionDay));
   if (needsCheckout && activities.length > 0) {
     const hasCheckout = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
@@ -699,9 +699,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
 
     if (!hasCheckout) {
-      // For split-stay hotel changes, checkout is from the PREVIOUS hotel
-      const coHotelName = isHotelChange && previousHotelName ? previousHotelName : (hotelOverride?.name || hotelName || 'Your Hotel');
-      const coHotelAddr = isHotelChange ? '' : (hotelOverride?.address || hotelAddress || '');
+      const coHotelName = hotelOverride?.name || hotelName || 'Your Hotel';
+      const coHotelAddr = hotelOverride?.address || hotelAddress || '';
 
       let checkoutStartMin: number;
       const depMins = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
