@@ -1,51 +1,36 @@
 
 
-## Fix: Trips Reappearing After Deletion
+## Fix: Deduplicate Back-to-Back Accommodation Cards
 
 ### Problem
-When you delete a trip, it disappears from the dashboard but reappears when you navigate away and come back. The deletion is only removing the trip from local (in-memory) state — it may not be actually deleting from the database, or the UI may be re-fetching stale data.
+After dinner, the repair pipeline can produce two consecutive hotel activities — e.g., "Freshen Up at Hotel" followed by "Return to Hotel" — because:
+1. Step 1 injects "Freshen Up" when it finds a transport-to-hotel without a following accommodation card
+2. Step 2 injects "Return to Hotel" at the end if the last visible non-transport activity isn't accommodation
+3. The AI itself may also generate one of these, leading to duplicates
 
-### Root Cause
-Two issues working together:
-
-1. **Silent delete failures**: The delete call (`supabase.from('trips').delete().eq('id', trip.id)`) does not verify that a row was actually deleted. Supabase RLS silently returns success with 0 rows affected if the policy blocks the operation. The code assumes success and removes the trip from local state.
-
-2. **No cache invalidation**: The dashboard uses manual `useState` for trip data. The `handleTripDelete` callback only does `setTrips(prev => prev.filter(...))`. When the user navigates away and back, the `loadTrips` useEffect re-runs, re-fetching from the database — where the trip still exists.
+These steps don't coordinate — each checks independently, so you end up with redundant hotel cards.
 
 ### Fix
 
-**File: `src/pages/TripDashboard.tsx`**
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-#### 1. Verify the delete actually removed a row
-Change the delete call to use `.select()` to get the deleted rows back. If no rows are returned, the delete didn't actually happen — show an error instead of a success toast.
+Add a **post-bookend deduplication pass** (after step 2, before step 2.5) that:
 
-```typescript
-const { data, error } = await supabase
-  .from('trips')
-  .delete()
-  .eq('id', trip.id)
-  .eq('user_id', user.id)  // explicit ownership check
-  .select('id');
+1. Scans activities for consecutive accommodation cards (ignoring transport cards between them)
+2. When two back-to-back accommodation activities are found (both hotel-related, neither is check-in or checkout):
+   - Keep the **last** one (which is typically "Return to Hotel" — the more meaningful end-of-day anchor)
+   - Remove the earlier one and any transport card leading to it
+3. Special case: if one is "Freshen Up" and the other is "Return to", keep "Return to" since "freshen up" after the last activity of the day is redundant — you're returning for the night, not a mid-day break
 
-if (error) throw error;
-if (!data || data.length === 0) {
-  throw new Error('Trip could not be deleted');
-}
-```
+This ensures only one hotel anchor appears at the end of the day, and mid-day freshen-ups only survive when there are real activities after them.
 
-#### 2. Apply the same fix to `PastTripCard`
-**File: `src/components/trips/PastTripCard.tsx`**
+### Expected behavior
 
-Same pattern — add `.eq('user_id', user.id)` and `.select('id')` to verify the delete succeeded before updating local state.
+| Before | After |
+|---|---|
+| Dinner → Transport → Freshen Up → Transport → Return to Hotel | Dinner → Transport → Return to Hotel |
+| Activity → Transport → Return to Hotel → Freshen Up | Activity → Transport → Return to Hotel |
 
-#### 3. Pass `user.id` to both components
-Both `TripCard` and `PastTripCard` need access to the current user ID. `TripCard` is an inner component of `TripDashboard` which already has `user` from `useAuth()`. Thread `userId` as a prop to both components (or use `useAuth()` directly inside them).
-
-### Expected Behavior
-- Deleted trips stay deleted — they won't reappear on navigation
-- If a delete fails silently (RLS block, FK constraint), the user sees "Failed to delete trip" instead of a false success
-
-### Files Changed
-- `src/pages/TripDashboard.tsx` — verify delete, add `user_id` filter
-- `src/components/trips/PastTripCard.tsx` — same verification fix
+### Files changed
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add back-to-back accommodation dedup pass
 
