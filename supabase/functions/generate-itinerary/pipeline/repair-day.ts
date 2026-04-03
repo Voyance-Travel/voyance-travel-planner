@@ -622,8 +622,9 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
 
     if (!hasCheckout) {
-      const coHotelName = hotelOverride?.name || hotelName || 'Your Hotel';
-      const coHotelAddr = hotelOverride?.address || hotelAddress || '';
+      // For split-stay hotel changes, checkout is from the PREVIOUS hotel
+      const coHotelName = isHotelChange && previousHotelName ? previousHotelName : (hotelOverride?.name || hotelName || 'Your Hotel');
+      const coHotelAddr = isHotelChange ? '' : (hotelOverride?.address || hotelAddress || '');
 
       let checkoutStartMin: number;
       const depMins = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
