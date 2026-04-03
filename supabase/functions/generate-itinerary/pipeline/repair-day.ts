@@ -1531,6 +1531,7 @@ function repairBookends(
       description: `Transit from ${from} to ${to}.`,
       startTime: st, endTime: offset(st, dur), durationMinutes: dur,
       location: { name: to, address: '' },
+      fromLocation: { name: from, address: '' },
       cost: { amount: costAmount, currency: 'USD' }, isLocked: false,
       tags: ['transport'], transportation: { method, duration: `${dur} min` },
       source: 'bookend-validator',
