@@ -309,16 +309,23 @@ function TripCard({ trip, index = 0, onDelete, isAdmin, onClone }: { trip: Trip;
        return;
      }
      
-     setIsDeleting(true);
-     try {
-       const { error } = await supabase
-         .from('trips')
-         .delete()
-         .eq('id', trip.id);
-       
-       if (error) throw error;
-       toast.success('Trip deleted');
-       onDelete?.(trip.id);
+      setIsDeleting(true);
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const userId = session?.session?.user?.id;
+        if (!userId) throw new Error('Not authenticated');
+
+        const { data, error } = await supabase
+          .from('trips')
+          .delete()
+          .eq('id', trip.id)
+          .eq('user_id', userId)
+          .select('id');
+        
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error('Trip could not be deleted');
+        toast.success('Trip deleted');
+        onDelete?.(trip.id);
      } catch (err: any) {
        console.error('Failed to delete trip:', err);
        toast.error('Failed to delete trip');
