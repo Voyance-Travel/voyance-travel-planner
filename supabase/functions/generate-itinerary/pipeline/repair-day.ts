@@ -51,6 +51,7 @@ export interface RepairDayInput {
   hotelName?: string;
   hotelAddress?: string;
   hasHotel: boolean;
+  hotelCoordinates?: { lat: number; lng: number };
 
   // Multi-city / transition context (pre-resolved by orchestrator)
   isTransitionDay?: boolean;
@@ -71,6 +72,122 @@ export interface RepairDayInput {
   // Restaurant pool for meal-swap dedup
   restaurantPool?: Array<{ name: string; address?: string; neighborhood?: string; cuisine?: string; priceRange?: string; mealType: string }>;
   usedRestaurants?: string[];
+}
+
+// =============================================================================
+// CITY-AWARE TRANSIT PRICING
+// =============================================================================
+
+interface CityTransitTier {
+  taxiPerKm: number;
+  transitFlat: number;
+  taxiBase: number;
+}
+
+const TRANSIT_TIERS: Record<string, CityTransitTier> = {
+  expensive: { taxiPerKm: 3.5, transitFlat: 3.5, taxiBase: 5.0 },
+  moderate:  { taxiPerKm: 2.0, transitFlat: 2.0, taxiBase: 3.0 },
+  budget:    { taxiPerKm: 0.8, transitFlat: 0.5, taxiBase: 1.5 },
+  default:   { taxiPerKm: 2.0, transitFlat: 2.0, taxiBase: 3.0 },
+};
+
+const CITY_TO_TIER: Record<string, string> = {
+  // Expensive
+  'new york': 'expensive', 'nyc': 'expensive', 'manhattan': 'expensive',
+  'london': 'expensive', 'tokyo': 'expensive', 'paris': 'expensive',
+  'zurich': 'expensive', 'geneva': 'expensive', 'sydney': 'expensive',
+  'melbourne': 'expensive', 'singapore': 'expensive', 'hong kong': 'expensive',
+  'oslo': 'expensive', 'copenhagen': 'expensive', 'stockholm': 'expensive',
+  'san francisco': 'expensive', 'los angeles': 'expensive', 'chicago': 'expensive',
+  'dublin': 'expensive', 'amsterdam': 'expensive', 'helsinki': 'expensive',
+  'reykjavik': 'expensive', 'monaco': 'expensive', 'doha': 'expensive',
+  'dubai': 'expensive', 'abu dhabi': 'expensive',
+  // Moderate
+  'barcelona': 'moderate', 'madrid': 'moderate', 'rome': 'moderate',
+  'milan': 'moderate', 'florence': 'moderate', 'venice': 'moderate',
+  'berlin': 'moderate', 'munich': 'moderate', 'vienna': 'moderate',
+  'prague': 'moderate', 'athens': 'moderate', 'seoul': 'moderate',
+  'taipei': 'moderate', 'buenos aires': 'moderate', 'santiago': 'moderate',
+  'cape town': 'moderate', 'toronto': 'moderate', 'montreal': 'moderate',
+  'lisbon': 'moderate', 'porto': 'moderate', 'brussels': 'moderate',
+  'warsaw': 'moderate', 'budapest': 'moderate', 'krakow': 'moderate',
+  // Budget
+  'bangkok': 'budget', 'chiang mai': 'budget', 'phuket': 'budget',
+  'hanoi': 'budget', 'ho chi minh city': 'budget', 'saigon': 'budget',
+  'bali': 'budget', 'jakarta': 'budget', 'kuala lumpur': 'budget',
+  'istanbul': 'budget', 'cairo': 'budget', 'marrakech': 'budget',
+  'mexico city': 'budget', 'bogota': 'budget', 'medellin': 'budget',
+  'lima': 'budget', 'cusco': 'budget', 'delhi': 'budget',
+  'mumbai': 'budget', 'goa': 'budget', 'kathmandu': 'budget',
+  'phnom penh': 'budget', 'siem reap': 'budget', 'colombo': 'budget',
+  'tbilisi': 'budget', 'tashkent': 'budget',
+};
+
+export function getCityTier(city?: string): CityTransitTier {
+  if (!city) return TRANSIT_TIERS.default;
+  const lower = city.toLowerCase().trim();
+  // Try exact match first
+  const tierName = CITY_TO_TIER[lower];
+  if (tierName) return TRANSIT_TIERS[tierName];
+  // Try partial match (e.g. "New York City" → "new york")
+  for (const [key, tier] of Object.entries(CITY_TO_TIER)) {
+    if (lower.includes(key) || key.includes(lower)) return TRANSIT_TIERS[tier];
+  }
+  return TRANSIT_TIERS.default;
+}
+
+// =============================================================================
+// HAVERSINE + TRANSIT ESTIMATION
+// =============================================================================
+
+function haversineDistanceMeters(
+  lat1: number, lng1: number, lat2: number, lng2: number
+): number {
+  const R = 6371000;
+  const toRad = (d: number) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+interface TransitEstimateResult {
+  durationMinutes: number;
+  method: string;
+  costAmount: number;
+  distanceMeters: number;
+}
+
+function estimateTransit(
+  fromCoords: { lat: number; lng: number },
+  toCoords: { lat: number; lng: number },
+  city?: string,
+): TransitEstimateResult {
+  const dist = haversineDistanceMeters(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng);
+  const tier = getCityTier(city);
+
+  if (dist <= 1200) {
+    // Walking
+    const dur = Math.max(3, Math.ceil(dist / 80)); // ~5 km/h
+    return { durationMinutes: dur, method: 'walking', costAmount: 0, distanceMeters: dist };
+  } else if (dist <= 8000) {
+    // Transit
+    const dur = Math.max(5, Math.ceil(dist / 500) + 5);
+    return { durationMinutes: dur, method: 'transit', costAmount: Math.round(tier.transitFlat * 100) / 100, distanceMeters: dist };
+  } else {
+    // Taxi
+    const dur = Math.max(5, Math.ceil(dist / 400) + 3);
+    const cost = tier.taxiBase + (dist / 1000) * tier.taxiPerKm;
+    return { durationMinutes: dur, method: 'taxi', costAmount: Math.round(cost * 100) / 100, distanceMeters: dist };
+  }
+}
+
+/** Extract coordinates from an activity (if enriched) */
+function getActivityCoords(act: any): { lat: number; lng: number } | null {
+  const c = act?.location?.coordinates;
+  if (c && typeof c.lat === 'number' && typeof c.lng === 'number') return c;
+  return null;
 }
 
 export interface RepairDayResult {
