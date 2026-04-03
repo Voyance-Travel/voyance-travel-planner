@@ -529,8 +529,87 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
   }
 
-  // --- 7. HOTEL CHECK-IN GUARANTEE (Day 1, transition day, or split-stay hotel change) ---
-  const needsCheckIn = dayNumber === 1 || isTransitionDay || isHotelChange;
+  // --- 7/8 SPLIT-STAY REORDER: On hotel-change days, inject checkout FIRST, then check-in ---
+  // For non-hotel-change days, the original order (7=check-in, 8=checkout) is fine.
+  if (isHotelChange) {
+    // --- 8-first. CHECKOUT from PREVIOUS hotel (morning) ---
+    const hasCheckoutAlready = activities.some((a: any) => {
+      const t = (a.title || a.name || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      return cat === 'accommodation' && (t.includes('check-out') || t.includes('check out') || t.includes('checkout'));
+    });
+    if (!hasCheckoutAlready) {
+      const coHotelName = previousHotelName || 'Your Hotel';
+      const checkoutStartMin = 11 * 60;
+      const checkoutStart = minutesToHHMM(checkoutStartMin);
+      const checkoutEnd = minutesToHHMM(checkoutStartMin + 30);
+      const checkoutActivity = {
+        id: `day${dayNumber}-checkout-repair-${Date.now()}`,
+        title: `Checkout from ${coHotelName}`,
+        name: `Checkout from ${coHotelName}`,
+        description: `Check out from ${coHotelName}. Store luggage if needed before continuing your day.`,
+        startTime: checkoutStart, endTime: checkoutEnd,
+        category: 'accommodation', type: 'accommodation',
+        location: { name: coHotelName, address: '' },
+        cost: { amount: 0, currency: 'USD' },
+        bookingRequired: false, isLocked: false, durationMinutes: 30,
+        source: 'repair-checkout-guarantee',
+      };
+      let insertIdx = activities.length;
+      for (let i = 0; i < activities.length; i++) {
+        const actStart = parseTimeToMinutes(activities[i].startTime || '') ?? 99999;
+        if (checkoutStartMin <= actStart) { insertIdx = i; break; }
+      }
+      activities.splice(insertIdx, 0, checkoutActivity);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkout_guarantee_hotel_change' });
+    }
+
+    // --- 7-second. CHECK-IN at NEW hotel (afternoon, AFTER checkout) ---
+    const hasCheckInAlready = activities.some((a: any) => {
+      const t = (a.title || a.name || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      return cat === 'accommodation' && (
+        t.includes('check-in') || t.includes('check in') || t.includes('checkin') || t.includes('settle in') || t.includes('luggage drop')
+      );
+    });
+    if (!hasCheckInAlready) {
+      const hn = hotelName || 'Your Hotel';
+      const ha = hotelAddress || '';
+      // Find the checkout activity to place check-in after it
+      const checkoutAct = activities.find((a: any) => {
+        const t = (a.title || '').toLowerCase();
+        return t.includes('checkout') || t.includes('check-out') || t.includes('check out');
+      });
+      const checkoutEndMin = checkoutAct ? (parseTimeToMinutes(checkoutAct.endTime) ?? 11 * 60 + 30) : 11 * 60 + 30;
+      // Default to 15:00 or 30 min after checkout, whichever is later
+      const checkInStartMin = Math.max(15 * 60, checkoutEndMin + 30);
+      const checkInStart = minutesToHHMM(checkInStartMin);
+      const checkInEnd = minutesToHHMM(checkInStartMin + 30);
+      const checkInActivity = {
+        id: `day${dayNumber}-checkin-repair-${Date.now()}`,
+        title: `Check-in at ${hn}`,
+        name: `Check-in at ${hn}`,
+        description: `Check in to ${hn}, freshen up after the hotel change.`,
+        startTime: checkInStart, endTime: checkInEnd,
+        category: 'accommodation', type: 'accommodation',
+        location: { name: hn, address: ha },
+        cost: { amount: 0, currency: 'USD' },
+        bookingRequired: false, isLocked: false, durationMinutes: 30,
+        source: 'repair-checkin-guarantee',
+      };
+      // Insert chronologically (after checkout)
+      let insertIdx = activities.length;
+      for (let i = 0; i < activities.length; i++) {
+        const actStart = parseTimeToMinutes(activities[i].startTime || '') ?? 99999;
+        if (checkInStartMin <= actStart) { insertIdx = i; break; }
+      }
+      activities.splice(insertIdx, 0, checkInActivity);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkin_guarantee_hotel_change' });
+    }
+  }
+
+  // --- 7. HOTEL CHECK-IN GUARANTEE (Day 1, transition day — NOT hotel change, handled above) ---
+  const needsCheckIn = !isHotelChange && (dayNumber === 1 || isTransitionDay);
   if (needsCheckIn && activities.length > 0) {
     const hasCheckIn = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
@@ -574,7 +653,6 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkin_guarantee' });
 
       // On arrival day, remove any accommodation activities scheduled BEFORE check-in
-      // (e.g. "Return to Hotel", "Freshen Up") — logically impossible before you've arrived
       if (dayNumber === 1) {
         const checkInMin = checkInStartMin;
         const preCheckInAccom = activities.filter((a: any) => {
@@ -594,7 +672,6 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         }
 
         // Strip hotel references from meals scheduled before check-in
-        // (e.g. "Breakfast at Hotel" → "Breakfast" — you can't eat at a hotel you haven't arrived at)
         for (const act of activities) {
           const t = (act.title || '').toLowerCase();
           const cat = (act.category || '').toLowerCase();
@@ -610,8 +687,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
-  // --- 8. HOTEL CHECKOUT GUARANTEE (last day, last day in city, or split-stay hotel change) ---
-  const needsCheckout = isLastDay || (isLastDayInCity && !isTransitionDay) || isHotelChange;
+  // --- 8. HOTEL CHECKOUT GUARANTEE (last day, last day in city — NOT hotel change, handled above) ---
+  const needsCheckout = !isHotelChange && (isLastDay || (isLastDayInCity && !isTransitionDay));
   if (needsCheckout && activities.length > 0) {
     const hasCheckout = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
@@ -622,9 +699,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
 
     if (!hasCheckout) {
-      // For split-stay hotel changes, checkout is from the PREVIOUS hotel
-      const coHotelName = isHotelChange && previousHotelName ? previousHotelName : (hotelOverride?.name || hotelName || 'Your Hotel');
-      const coHotelAddr = isHotelChange ? '' : (hotelOverride?.address || hotelAddress || '');
+      const coHotelName = hotelOverride?.name || hotelName || 'Your Hotel';
+      const coHotelAddr = hotelOverride?.address || hotelAddress || '';
 
       let checkoutStartMin: number;
       const depMins = returnDepartureTime24 ? (parseTimeToMinutes(returnDepartureTime24) ?? null) : null;
@@ -801,7 +877,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
   if (activities.length > 0) {
     const effectiveHotelName = hotelName || 'Your Hotel';
-    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay);
+    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay, isHotelChange);
     activities = bookendRepairs.activities;
     repairs.push(...bookendRepairs.repairs);
   }
@@ -819,7 +895,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       let canonical: string | null = null;
 
       if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) {
-        canonical = `Checkout from ${hn}`;
+        // On hotel-change days, preserve the previous hotel name on checkout titles
+        if (isHotelChange && previousHotelName) {
+          canonical = `Checkout from ${previousHotelName}`;
+        } else {
+          canonical = `Checkout from ${hn}`;
+        }
       } else if (t.includes('freshen up') || t.includes('freshen-up')) {
         canonical = `Freshen Up at ${hn}`;
       } else if (t.includes('return to') || t.includes('back to')) {
@@ -1269,6 +1350,7 @@ function repairBookends(
   dayNumber: number,
   isDepartureDay: boolean,
   isFirstDay: boolean = false,
+  isHotelChange: boolean = false,
 ): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
 
@@ -1320,7 +1402,7 @@ function repairBookends(
   // accommodation cards at the start of the day that aren't check-in/checkout.
   // The traveler woke up at the hotel; "Return to Hotel" / "Freshen Up" as the
   // first activity is nonsensical.
-  if (!isFirstDay && !isDepartureDay) {
+  if (!isFirstDay && !isDepartureDay && !isHotelChange) {
     let stripped = true;
     while (stripped) {
       stripped = false;
@@ -1350,6 +1432,7 @@ function repairBookends(
   }
 
   // 1. Mid-day hotel transports without accommodation card
+  // On hotel-change days, skip freshen-up injection between checkout and check-in (no hotel available)
   for (let i = 0; i < activities.length - 1; i++) {
     if (isTransport(activities[i]) && isHotelRelated(activities[i]) && !isAccom(activities[i + 1])) {
       // Skip if departure day and checkout already exists (traveler has left the hotel)
@@ -1358,14 +1441,42 @@ function repairBookends(
         const checkoutIdx = activities.findIndex((a: any) => (a.title || '').toLowerCase().includes('checkout') || (a.title || '').toLowerCase().includes('check-out'));
         if (hasCheckout && i >= checkoutIdx) continue;
       }
+      // On hotel-change days, suppress freshen-up between checkout and check-in
+      if (isHotelChange) {
+        const checkoutIdx = activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return (t.includes('checkout') || t.includes('check-out') || t.includes('check out'));
+        });
+        const checkInIdx = activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+        });
+        if (checkoutIdx >= 0 && checkInIdx > checkoutIdx && i >= checkoutIdx && i < checkInIdx) continue;
+      }
       const card = makeAccomCard('Freshen up at', activities[i].endTime || offset(activities[i].startTime || '14:00', 15), 30);
       activities.splice(i + 1, 0, card);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_freshen_up' });
     }
   }
 
-  // 1b. Mid-day hotel return guarantee — SKIP on departure days AND on first day before check-in
+  // 1b. Mid-day hotel return guarantee — SKIP on departure days, first day before check-in, AND hotel-change days between checkout/check-in
   if (!isDepartureDay) {
+    // On hotel-change days, find checkout/check-in window to suppress mid-day returns
+    let hotelChangeCheckoutMin = -1;
+    let hotelChangeCheckInMin = 99999;
+    if (isHotelChange) {
+      const coIdx = activities.findIndex((a: any) => {
+        const t = (a.title || '').toLowerCase();
+        return (t.includes('checkout') || t.includes('check-out') || t.includes('check out'));
+      });
+      const ciIdx = activities.findIndex((a: any) => {
+        const t = (a.title || '').toLowerCase();
+        return (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+      });
+      if (coIdx >= 0) hotelChangeCheckoutMin = parseTimeToMinutes(activities[coIdx].startTime || '') ?? -1;
+      if (ciIdx >= 0) hotelChangeCheckInMin = parseTimeToMinutes(activities[ciIdx].startTime || '') ?? 99999;
+    }
+
     // On first day, find the check-in activity to ensure mid-day return only happens AFTER check-in
     const checkInIdx = isFirstDay
       ? activities.findIndex((a: any) => {
@@ -1377,9 +1488,12 @@ function repairBookends(
     const lunchIdx = activities.findIndex(a => (a.category === 'dining') && /\b(lunch|midday meal)\b/i.test(a.title || ''));
     const dinnerIdx = activities.findIndex(a => (a.category === 'dining') && /\b(dinner|evening meal)\b/i.test(a.title || ''));
     if (lunchIdx >= 0 && dinnerIdx > lunchIdx) {
-      // On first day, skip mid-day hotel return if lunch is before check-in (can't return to a place you haven't been)
+      // On first day, skip mid-day hotel return if lunch is before check-in
       const skipBecausePreCheckIn = isFirstDay && checkInIdx >= 0 && lunchIdx < checkInIdx;
-      if (!skipBecausePreCheckIn) {
+      // On hotel-change days, skip if the mid-day return would fall between checkout and check-in
+      const lunchMin = parseTimeToMinutes(activities[lunchIdx]?.startTime || '') ?? 0;
+      const skipBecauseHotelChange = isHotelChange && lunchMin >= hotelChangeCheckoutMin && lunchMin < hotelChangeCheckInMin;
+      if (!skipBecausePreCheckIn && !skipBecauseHotelChange) {
         const hasMidDayAccom = activities.slice(lunchIdx + 1, dinnerIdx).some(a => isAccom(a));
         if (!hasMidDayAccom) {
           let insertIdx = dinnerIdx;
