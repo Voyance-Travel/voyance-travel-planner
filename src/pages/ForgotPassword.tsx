@@ -6,6 +6,7 @@ import Head from '@/components/common/Head';
 import { ForgotPasswordForm } from '@/components/auth/ForgotPasswordForm';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import AuthLayout from '@/components/layout/AuthLayout';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 export default function ForgotPassword() {
   return (
@@ -25,10 +26,10 @@ export default function ForgotPassword() {
             transition={{ duration: 0.8 }}
           >
             <HeroImageWithFallback
-              src="https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&q=80"
+              src={normalizeUnsplashUrl("https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&q=80")}
               alt="A path through mountains at golden hour"
               fallbackSources={[
-                "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80"
+                normalizeUnsplashUrl("https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80")
               ]}
               overlayGradient="from-black/30 via-black/20 to-black/60"
               className="h-full"

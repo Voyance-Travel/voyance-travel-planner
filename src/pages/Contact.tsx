@@ -20,6 +20,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CONTACT_CONFIG } from "@/config/contact";
+import { normalizeUnsplashUrl } from "@/utils/unsplash";
 
 const contactSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
@@ -90,7 +91,7 @@ const Contact = () => {
       <section className="relative pt-20 pb-32 overflow-hidden">
         <div className="absolute inset-0">
           <img 
-            src="https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=1920&q=80"
+            src={normalizeUnsplashUrl("https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=1920&q=80")}
             alt=""
             className="w-full h-full object-cover"
           />
@@ -288,7 +289,7 @@ const Contact = () => {
                 className="rounded-2xl overflow-hidden"
               >
                 <img 
-                  src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&q=80"
+                  src={normalizeUnsplashUrl("https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&q=80")}
                   alt="Travel inspiration"
                   className="w-full h-48 object-cover"
                 />

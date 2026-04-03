@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { buildRoute } from '@/config/routes';
 import { Skeleton } from '@/components/ui/skeleton';
-
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 import barcelonaThumb from '@/assets/destinations/barcelona.jpg';
 
 // Hardcoded featured destinations with pre-loaded images
@@ -20,7 +20,7 @@ const featuredDestinations = [
     country: 'France',
     region: 'Europe',
     description: 'The city of lights and eternal romance. World-class museums, café culture, Michelin-starred dining.',
-    image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80'),
     tags: ['Culture', 'Romance', 'Food'],
     featured: true,
   },
@@ -30,7 +30,7 @@ const featuredDestinations = [
     country: 'Japan',
     region: 'Asia',
     description: 'Ancient temples meet seasonal perfection. Meditative gardens, refined kaiseki dining.',
-    image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80'),
     tags: ['Culture', 'Temples', 'Nature'],
     featured: true,
   },
@@ -40,7 +40,7 @@ const featuredDestinations = [
     country: 'Greece',
     region: 'Europe',
     description: 'Whitewashed dreams above the Aegean. Sunset views that stop conversation.',
-    image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800&q=80'),
     tags: ['Romance', 'Beach', 'Wine'],
     featured: true,
   },
@@ -51,14 +51,14 @@ const popularDestinations = [
     id: 'bali',
     city: 'Bali',
     country: 'Indonesia',
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400&q=80'),
     trending: true,
   },
   {
     id: 'new-york',
     city: 'New York',
     country: 'United States',
-    image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&q=80'),
     trending: true,
   },
   {
@@ -72,7 +72,7 @@ const popularDestinations = [
     id: 'marrakech',
     city: 'Marrakech',
     country: 'Morocco',
-    image: 'https://images.unsplash.com/photo-1518730518541-d0843268c287?w=400&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1518730518541-d0843268c287?w=400&q=80'),
     trending: true,
   },
 ];

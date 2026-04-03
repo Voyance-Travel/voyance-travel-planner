@@ -6,6 +6,7 @@ import Head from '@/components/common/Head';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import AuthLayout from '@/components/layout/AuthLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 import { Compass } from 'lucide-react';
 
 export default function SignIn() {
@@ -22,11 +23,11 @@ export default function SignIn() {
   }, [isAuthenticated, isLoading, navigate, nextPath]);
 
   const heroImage = {
-    src: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80',
+    src: normalizeUnsplashUrl('https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80'),
     alt: 'Travelers on a boat crossing a pristine alpine lake at sunrise',
     fallbacks: [
-      'https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1920&q=80',
-      'https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1920&q=80',
+      normalizeUnsplashUrl('https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1920&q=80'),
+      normalizeUnsplashUrl('https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1920&q=80'),
     ],
   };
 

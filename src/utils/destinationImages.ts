@@ -481,10 +481,8 @@ const GENERIC_TRAVEL_IMAGES = [
  */
 export function getDestinationImage(destination: string): string {
   const normalized = destination.toLowerCase().trim();
-  // Also try extracting just the city name (before comma or parenthetical)
   const cityOnly = normalized.split(',')[0].replace(/\s*\([^)]*\)\s*$/, '').trim();
   
-  // Check curated images with multiple matching strategies (same as getDestinationImages)
   const match = CURATED_DESTINATION_IMAGES[normalized]
     || CURATED_DESTINATION_IMAGES[normalized.replace(/\s+/g, '-')]
     || CURATED_DESTINATION_IMAGES[normalized.replace(/-/g, ' ')]
@@ -493,12 +491,11 @@ export function getDestinationImage(destination: string): string {
     || CURATED_DESTINATION_IMAGES[cityOnly.replace(/-/g, ' ')];
   
   if (match && match.length > 0) {
-    return match[0];
+    return normalizeUnsplashUrl(match[0]);
   }
   
-  // Return a generic travel image based on destination hash
   const hash = normalized.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-  return GENERIC_TRAVEL_IMAGES[hash % GENERIC_TRAVEL_IMAGES.length];
+  return normalizeUnsplashUrl(GENERIC_TRAVEL_IMAGES[hash % GENERIC_TRAVEL_IMAGES.length]);
 }
 
 /**
@@ -506,10 +503,8 @@ export function getDestinationImage(destination: string): string {
  */
 export function getDestinationImages(destination: string, count = 4): string[] {
   const normalized = destination.toLowerCase().trim();
-  // Also try extracting just the city name (before comma or parenthetical)
   const cityOnly = normalized.split(',')[0].replace(/\s*\([^)]*\)\s*$/, '').trim();
   
-  // Check curated images first with multiple matching strategies
   const images = CURATED_DESTINATION_IMAGES[normalized] 
     || CURATED_DESTINATION_IMAGES[normalized.replace(/\s+/g, '-')]
     || CURATED_DESTINATION_IMAGES[normalized.replace(/-/g, ' ')]
@@ -518,21 +513,17 @@ export function getDestinationImages(destination: string, count = 4): string[] {
     || CURATED_DESTINATION_IMAGES[cityOnly.replace(/-/g, ' ')];
   
   if (images && images.length > 0) {
-    // Return curated images plus some generic fallbacks
     const result = [...images.slice(0, count)];
-    // Add generic fallbacks at the end
     const hash = normalized.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
     result.push(GENERIC_TRAVEL_IMAGES[hash % GENERIC_TRAVEL_IMAGES.length]);
     result.push(GENERIC_TRAVEL_IMAGES[(hash + 1) % GENERIC_TRAVEL_IMAGES.length]);
-    return result;
+    return result.map(url => normalizeUnsplashUrl(url));
   }
   
-  // Non-curated destination — return generic travel images (deterministic order based on destination name)
-  // The API layer (useDestinationImages hook) will also try Google Places for a real image
   const hash = normalized.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
   const result: string[] = [];
   for (let i = 0; i < Math.min(count, GENERIC_TRAVEL_IMAGES.length); i++) {
-    result.push(GENERIC_TRAVEL_IMAGES[(hash + i) % GENERIC_TRAVEL_IMAGES.length]);
+    result.push(normalizeUnsplashUrl(GENERIC_TRAVEL_IMAGES[(hash + i) % GENERIC_TRAVEL_IMAGES.length]));
   }
   return result;
 }

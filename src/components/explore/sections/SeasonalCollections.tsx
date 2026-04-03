@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Snowflake, Sun, Leaf, Flower } from 'lucide-react';
 import { useCallback } from 'react';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 const collections = [
   {
@@ -9,7 +10,7 @@ const collections = [
     title: 'Spring',
     subtitle: 'Cherry blossoms & renewal',
     description: 'Kyoto, Paris, Seoul & more',
-    image: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1522383225653-ed111181a951?w=800&q=80'),
     icon: Flower,
     gradient: 'from-pink-500/20 to-rose-500/10',
   },
@@ -18,7 +19,7 @@ const collections = [
     title: 'Summer',
     subtitle: 'Coastal escapes & long days',
     description: 'Santorini, Barcelona, Vancouver',
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=80'),
     icon: Sun,
     gradient: 'from-amber-500/20 to-orange-500/10',
   },
@@ -27,7 +28,7 @@ const collections = [
     title: 'Autumn',
     subtitle: 'Golden foliage & harvest',
     description: 'New York, Kyoto, Vienna',
-    image: 'https://images.unsplash.com/photo-1476820865390-c52aeebb9891?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1476820865390-c52aeebb9891?w=800&q=80'),
     icon: Leaf,
     gradient: 'from-orange-500/20 to-amber-500/10',
   },
@@ -36,7 +37,7 @@ const collections = [
     title: 'Winter',
     subtitle: 'Cozy retreats & adventure',
     description: 'Reykjavik, Singapore, Bali',
-    image: 'https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22?w=800&q=80'),
     icon: Snowflake,
     gradient: 'from-sky-500/20 to-blue-500/10',
   },

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Sparkles, ArrowRight, MapPin, Calendar, Users } from 'lucide-react';
 import SafeImage from '@/components/SafeImage';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -27,7 +28,7 @@ export function DemoHero({ onStartTour, onSkipToPlayground }: DemoHeroProps) {
           className="absolute right-[8%] top-[18%]"
         >
           <DestinationCard 
-            image="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400"
+            image={normalizeUnsplashUrl("https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400")}
             name="Kyoto"
             days={7}
           />
@@ -39,7 +40,7 @@ export function DemoHero({ onStartTour, onSkipToPlayground }: DemoHeroProps) {
           className="absolute left-[5%] bottom-[22%]"
         >
           <DestinationCard 
-            image="https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=400"
+            image={normalizeUnsplashUrl("https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=400")}
             name="Santorini"
             days={5}
           />
@@ -51,7 +52,7 @@ export function DemoHero({ onStartTour, onSkipToPlayground }: DemoHeroProps) {
           className="absolute right-[12%] bottom-[25%]"
         >
           <DestinationCard 
-            image="https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400"
+            image={normalizeUnsplashUrl("https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400")}
             name="Bali"
             days={6}
           />

@@ -57,12 +57,8 @@ export function normalizeUnsplashUrl(url?: string | null): string {
     return value;
   }
 
-  // Direct Unsplash CDN URLs (images.unsplash.com/photo-*) are valid and
-  // should NOT be rewritten to site-images bucket. These are the curated
-  // destination images that work perfectly from Unsplash CDN.
-  if (/^https:\/\/images\.unsplash\.com\/photo-/i.test(value)) {
-    return value;
-  }
+  // All Unsplash CDN URLs are now rewritten to internal site-images bucket
+  // to eliminate external CDN dependency and prevent slow loading on refresh.
 
   // Only rewrite legacy source.unsplash.com or bare photo-id references
   // to our internal bucket

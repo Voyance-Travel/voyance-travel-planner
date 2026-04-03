@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 interface RotatingCoverPhotoProps {
   customCoverUrl?: string | null;
@@ -16,27 +17,27 @@ interface RotatingCoverPhotoProps {
 // Curated cover photos from stunning destinations
 const COVER_PHOTOS = [
   {
-    url: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1920&q=80',
+    url: normalizeUnsplashUrl('https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=1920&q=80'),
     city: 'Tokyo',
     country: 'Japan',
   },
   {
-    url: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1920&q=80',
+    url: normalizeUnsplashUrl('https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1920&q=80'),
     city: 'Paris',
     country: 'France',
   },
   {
-    url: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1920&q=80',
+    url: normalizeUnsplashUrl('https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1920&q=80'),
     city: 'Bali',
     country: 'Indonesia',
   },
   {
-    url: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=1920&q=80',
+    url: normalizeUnsplashUrl('https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=1920&q=80'),
     city: 'Amalfi Coast',
     country: 'Italy',
   },
   {
-    url: 'https://images.unsplash.com/photo-1506929562872-bb421503ef21?w=1920&q=80',
+    url: normalizeUnsplashUrl('https://images.unsplash.com/photo-1506929562872-bb421503ef21?w=1920&q=80'),
     city: 'Maldives',
     country: 'Indian Ocean',
   },
