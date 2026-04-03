@@ -1240,6 +1240,26 @@ function repairDepartureSequence(
 }
 
 // =============================================================================
+// FUZZY LOCATION MATCHING — prevents transit between same/contained venues
+// =============================================================================
+
+function isSameOrContainedLocation(aLoc: string, bLoc: string, hotel?: string): boolean {
+  if (!aLoc || !bLoc) return false;
+  if (aLoc === bLoc) return true;
+  // Substring: "four seasons ritz" ⊂ "varanda restaurant at four seasons ritz"
+  if (aLoc.length >= 4 && bLoc.length >= 4) {
+    if (aLoc.includes(bLoc) || bLoc.includes(aLoc)) return true;
+  }
+  // Both reference the hotel
+  if (hotel) {
+    const h = hotel.toLowerCase();
+    if (h.length >= 4 && aLoc.includes(h) && bLoc.includes(h)) return true;
+    if (h.length >= 4 && (aLoc === h || bLoc === h) && (aLoc.includes(h) || bLoc.includes(h))) return true;
+  }
+  return false;
+}
+
+// =============================================================================
 // BOOKEND REPAIR (transport gaps + hotel returns)
 // =============================================================================
 
@@ -1413,8 +1433,10 @@ function repairBookends(
       if (isTransport(curr) || isTransport(next)) continue;
       const cLoc = (curr.location?.name || curr.title || '').toLowerCase();
       const nLoc = (next.location?.name || next.title || '').toLowerCase();
-      // Guard: skip if same location (e.g. hotel accommodation → hotel freshen-up)
-      if (!cLoc || !nLoc || cLoc === nLoc) continue;
+      // Guard: skip if same or contained location (fuzzy match)
+      if (!cLoc || !nLoc || isSameOrContainedLocation(cLoc, nLoc, hotelName)) continue;
+      // Guard: skip if current is accommodation and next venue is inside the hotel
+      if (isAccom(curr) && hotelName && nLoc.includes(hotelName.toLowerCase())) continue;
       // Guard: skip if a transport to nLoc already exists in previous 2 positions
       const recentTransport = rebuilt.slice(-2).some(
         a => isTransport(a) && (a.location?.name || '').toLowerCase() === nLoc
@@ -1465,7 +1487,8 @@ function repairBookends(
         // If previous non-transport activity is at the same location as transport destination, skip
         if (transportDest && nextLoc && deduped.length > 0) {
           const prevNonTransport = [...deduped].reverse().find(a => !isTransport(a));
-          if (prevNonTransport && (prevNonTransport.location?.name || '').toLowerCase() === transportDest) {
+          const prevLoc = (prevNonTransport?.location?.name || '').toLowerCase();
+          if (prevNonTransport && isSameOrContainedLocation(prevLoc, transportDest, hotelName)) {
             repairs.push({
               code: FAILURE_CODES.LOGISTICS_SEQUENCE,
               action: 'removed_orphaned_transport',
