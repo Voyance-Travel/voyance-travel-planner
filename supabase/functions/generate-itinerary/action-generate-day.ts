@@ -1077,25 +1077,16 @@ export async function handleGenerateDay(
     }
 
     // ── BUILD DIAGNOSTICS ──
-    const mealCategories = ['dining', 'food', 'restaurant', 'cafe', 'breakfast', 'lunch', 'dinner'];
-    const foundMeals: string[] = [];
-    for (const act of (generatedDay.activities || [])) {
-      const cat = (act.category || '').toLowerCase();
-      const title = (act.title || '').toLowerCase();
-      if (mealCategories.includes(cat) || /\b(breakfast|lunch|dinner|brunch)\b/i.test(title)) {
-        if (/breakfast|brunch/i.test(title)) foundMeals.push('breakfast');
-        else if (/lunch/i.test(title)) foundMeals.push('lunch');
-        else if (/dinner/i.test(title)) foundMeals.push('dinner');
-        else foundMeals.push(cat);
-      }
-    }
+    // Use the canonical detectMealSlots for consistent reporting
+    const finalMeals = mealsAfterGuard.length > 0 ? mealsAfterGuard : detectMealSlots(generatedDay.activities || []);
 
     const _diagnostics = {
       aiCallMs: _diagTimers.aiCallEnd - _diagTimers.aiCallStart,
       enrichMs: _diagTimers.enrichEnd - _diagTimers.enrichStart,
       meals: {
         required: dayMealPolicy?.requiredMeals || [],
-        found: [...new Set(foundMeals)],
+        found: finalMeals,
+        beforeGuard: mealsBeforeGuard,
         guardFired: !!(mealGuardResult && !mealGuardResult.alreadyCompliant),
         injected: mealGuardResult?.injectedMeals || [],
       },
