@@ -934,6 +934,8 @@ export async function handleGenerateDay(
           nextLegTransport: resolvedNextLegTransport,
           hotelOverride: resolvedHotelOverride ? { name: resolvedHotelOverride.name, address: resolvedHotelOverride.address } : undefined,
           hotelCoordinates: hotelCoordinates,
+          isHotelChange: resolvedIsHotelChange,
+          previousHotelName: resolvedPreviousHotelName,
         };
 
         const { day: repairedDay, repairs } = repairDay(repairInput);
