@@ -2,7 +2,7 @@
  * transit-estimate — Lightweight edge function to estimate transit between two locations.
  * Returns walking, transit, and taxi estimates using Google Routes/Directions API.
  * 
- * POST { origin: { lat, lng } | string, destination: { lat, lng } | string }
+ * POST { origin: { lat, lng } | string, destination: { lat, lng } | string, city?: string }
  * Returns { estimates: { walking, transit, taxi } }
  */
 
@@ -23,6 +23,87 @@ interface TransitEstimate {
   estimatedCost: { amount: number; currency: string } | null;
   recommended?: boolean;
 }
+
+// =============================================================================
+// CITY-AWARE TRANSIT PRICING (shared logic with repair-day.ts)
+// =============================================================================
+
+interface CityTransitTier {
+  taxiPerKm: number;
+  transitFlat: number;
+  taxiBase: number;
+}
+
+const TRANSIT_TIERS: Record<string, CityTransitTier> = {
+  expensive: { taxiPerKm: 3.5, transitFlat: 3.5, taxiBase: 5.0 },
+  moderate:  { taxiPerKm: 2.0, transitFlat: 2.0, taxiBase: 3.0 },
+  budget:    { taxiPerKm: 0.8, transitFlat: 0.5, taxiBase: 1.5 },
+  default:   { taxiPerKm: 2.0, transitFlat: 2.0, taxiBase: 3.0 },
+};
+
+const CITY_TO_TIER: Record<string, string> = {
+  // Expensive
+  'new york': 'expensive', 'nyc': 'expensive', 'manhattan': 'expensive',
+  'london': 'expensive', 'tokyo': 'expensive', 'paris': 'expensive',
+  'zurich': 'expensive', 'geneva': 'expensive', 'sydney': 'expensive',
+  'melbourne': 'expensive', 'singapore': 'expensive', 'hong kong': 'expensive',
+  'oslo': 'expensive', 'copenhagen': 'expensive', 'stockholm': 'expensive',
+  'san francisco': 'expensive', 'los angeles': 'expensive', 'chicago': 'expensive',
+  'dublin': 'expensive', 'amsterdam': 'expensive', 'helsinki': 'expensive',
+  'reykjavik': 'expensive', 'monaco': 'expensive', 'doha': 'expensive',
+  'dubai': 'expensive', 'abu dhabi': 'expensive',
+  // Moderate
+  'barcelona': 'moderate', 'madrid': 'moderate', 'rome': 'moderate',
+  'milan': 'moderate', 'florence': 'moderate', 'venice': 'moderate',
+  'berlin': 'moderate', 'munich': 'moderate', 'vienna': 'moderate',
+  'prague': 'moderate', 'athens': 'moderate', 'seoul': 'moderate',
+  'taipei': 'moderate', 'buenos aires': 'moderate', 'santiago': 'moderate',
+  'cape town': 'moderate', 'toronto': 'moderate', 'montreal': 'moderate',
+  'lisbon': 'moderate', 'porto': 'moderate', 'brussels': 'moderate',
+  'warsaw': 'moderate', 'budapest': 'moderate', 'krakow': 'moderate',
+  // Budget
+  'bangkok': 'budget', 'chiang mai': 'budget', 'phuket': 'budget',
+  'hanoi': 'budget', 'ho chi minh city': 'budget', 'saigon': 'budget',
+  'bali': 'budget', 'jakarta': 'budget', 'kuala lumpur': 'budget',
+  'istanbul': 'budget', 'cairo': 'budget', 'marrakech': 'budget',
+  'mexico city': 'budget', 'bogota': 'budget', 'medellin': 'budget',
+  'lima': 'budget', 'cusco': 'budget', 'delhi': 'budget',
+  'mumbai': 'budget', 'goa': 'budget', 'kathmandu': 'budget',
+  'phnom penh': 'budget', 'siem reap': 'budget', 'colombo': 'budget',
+  'tbilisi': 'budget', 'tashkent': 'budget',
+};
+
+function getCityTier(city?: string): CityTransitTier {
+  if (!city) return TRANSIT_TIERS.default;
+  const lower = city.toLowerCase().trim();
+  const tierName = CITY_TO_TIER[lower];
+  if (tierName) return TRANSIT_TIERS[tierName];
+  for (const [key, tier] of Object.entries(CITY_TO_TIER)) {
+    if (lower.includes(key) || key.includes(lower)) return TRANSIT_TIERS[tier];
+  }
+  return TRANSIT_TIERS.default;
+}
+
+function computeCityAwareCost(
+  distMeters: number,
+  travelMode: string,
+  city?: string,
+): { amount: number; currency: string } | null {
+  if (travelMode === 'WALK' || travelMode === 'walking') return null;
+  const tier = getCityTier(city);
+  if (travelMode === 'DRIVE' || travelMode === 'taxi') {
+    const cost = tier.taxiBase + (distMeters / 1000) * tier.taxiPerKm;
+    return { amount: Math.round(cost * 100) / 100, currency: 'USD' };
+  }
+  if (travelMode === 'TRANSIT' || travelMode === 'transit') {
+    return { amount: tier.transitFlat, currency: 'USD' };
+  }
+  return null;
+}
+
+// =============================================================================
+// HELPERS
+// =============================================================================
 
 function toRoutesApiLocation(loc: LocationInput) {
   if (typeof loc === 'string') return { address: loc };
@@ -50,11 +131,10 @@ function haversineDistance(a: LatLng, b: LatLng): number {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
-function heuristicEstimates(distMeters: number): TransitEstimate[] {
+function heuristicEstimates(distMeters: number, city?: string): TransitEstimate[] {
   const walkMinutes = Math.ceil(distMeters / 80); // ~5km/h
-  const transitMinutes = Math.max(5, Math.ceil(distMeters / 500) + 5); // rough metro estimate
-  const taxiMinutes = Math.max(3, Math.ceil(distMeters / 400)); // ~24km/h city driving
-  const taxiCost = Math.max(3, Math.round(distMeters / 1000 * 2));
+  const transitMinutes = Math.max(5, Math.ceil(distMeters / 500) + 5);
+  const taxiMinutes = Math.max(3, Math.ceil(distMeters / 400));
   const distText = metersToText(distMeters);
 
   const results: TransitEstimate[] = [];
@@ -76,7 +156,7 @@ function heuristicEstimates(distMeters: number): TransitEstimate[] {
       durationMinutes: transitMinutes,
       distance: distText,
       distanceMeters: distMeters,
-      estimatedCost: { amount: Math.min(5, Math.max(2, Math.round(distMeters / 5000) + 2)), currency: 'USD' },
+      estimatedCost: computeCityAwareCost(distMeters, 'TRANSIT', city),
       recommended: walkMinutes > 15 && distMeters < 15000,
     });
   }
@@ -88,7 +168,7 @@ function heuristicEstimates(distMeters: number): TransitEstimate[] {
       durationMinutes: taxiMinutes,
       distance: distText,
       distanceMeters: distMeters,
-      estimatedCost: { amount: taxiCost, currency: 'USD' },
+      estimatedCost: computeCityAwareCost(distMeters, 'DRIVE', city),
       recommended: distMeters >= 15000,
     });
   }
@@ -100,7 +180,8 @@ async function fetchGoogleRoute(
   origin: LocationInput,
   destination: LocationInput,
   travelMode: string,
-  apiKey: string
+  apiKey: string,
+  city?: string,
 ): Promise<TransitEstimate | null> {
   try {
     const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
@@ -137,12 +218,7 @@ async function fetchGoogleRoute(
       DRIVE: 'taxi',
     };
 
-    let cost: { amount: number; currency: string } | null = null;
-    if (travelMode === 'DRIVE') {
-      cost = { amount: Math.max(3, Math.round(distMeters / 1000 * 2)), currency: 'USD' };
-    } else if (travelMode === 'TRANSIT') {
-      cost = { amount: Math.min(5, Math.max(2, Math.round(distMeters / 5000) + 2)), currency: 'USD' };
-    }
+    const cost = computeCityAwareCost(distMeters, travelMode, city);
 
     return {
       method: methodMap[travelMode] || travelMode.toLowerCase(),
@@ -164,7 +240,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { origin, destination } = await req.json();
+    const { origin, destination, city } = await req.json();
 
     if (!origin || !destination) {
       return new Response(JSON.stringify({ error: 'origin and destination required' }), {
@@ -184,7 +260,7 @@ Deno.serve(async (req: Request) => {
     if (!apiKey) {
       // No API key — return heuristic estimates based on haversine
       if (fallbackDistance !== null) {
-        return new Response(JSON.stringify({ estimates: heuristicEstimates(fallbackDistance), source: 'heuristic' }), {
+        return new Response(JSON.stringify({ estimates: heuristicEstimates(fallbackDistance, city), source: 'heuristic' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -197,9 +273,9 @@ Deno.serve(async (req: Request) => {
     const shouldFetchTransit = fallbackDistance === null || fallbackDistance > 800;
 
     const promises = [
-      fetchGoogleRoute(origin, destination, 'WALK', apiKey),
-      fetchGoogleRoute(origin, destination, 'DRIVE', apiKey),
-      ...(shouldFetchTransit ? [fetchGoogleRoute(origin, destination, 'TRANSIT', apiKey)] : []),
+      fetchGoogleRoute(origin, destination, 'WALK', apiKey, city),
+      fetchGoogleRoute(origin, destination, 'DRIVE', apiKey, city),
+      ...(shouldFetchTransit ? [fetchGoogleRoute(origin, destination, 'TRANSIT', apiKey, city)] : []),
     ];
 
     const [walkResult, driveResult, transitResult] = await Promise.all(promises);
@@ -223,7 +299,7 @@ Deno.serve(async (req: Request) => {
 
     // Fallback to heuristics if all API calls failed
     if (estimates.length === 0 && fallbackDistance !== null) {
-      return new Response(JSON.stringify({ estimates: heuristicEstimates(fallbackDistance), source: 'heuristic' }), {
+      return new Response(JSON.stringify({ estimates: heuristicEstimates(fallbackDistance, city), source: 'heuristic' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

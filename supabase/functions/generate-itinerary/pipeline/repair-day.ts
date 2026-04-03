@@ -51,6 +51,7 @@ export interface RepairDayInput {
   hotelName?: string;
   hotelAddress?: string;
   hasHotel: boolean;
+  hotelCoordinates?: { lat: number; lng: number };
 
   // Multi-city / transition context (pre-resolved by orchestrator)
   isTransitionDay?: boolean;
@@ -73,6 +74,122 @@ export interface RepairDayInput {
   usedRestaurants?: string[];
 }
 
+// =============================================================================
+// CITY-AWARE TRANSIT PRICING
+// =============================================================================
+
+interface CityTransitTier {
+  taxiPerKm: number;
+  transitFlat: number;
+  taxiBase: number;
+}
+
+const TRANSIT_TIERS: Record<string, CityTransitTier> = {
+  expensive: { taxiPerKm: 3.5, transitFlat: 3.5, taxiBase: 5.0 },
+  moderate:  { taxiPerKm: 2.0, transitFlat: 2.0, taxiBase: 3.0 },
+  budget:    { taxiPerKm: 0.8, transitFlat: 0.5, taxiBase: 1.5 },
+  default:   { taxiPerKm: 2.0, transitFlat: 2.0, taxiBase: 3.0 },
+};
+
+const CITY_TO_TIER: Record<string, string> = {
+  // Expensive
+  'new york': 'expensive', 'nyc': 'expensive', 'manhattan': 'expensive',
+  'london': 'expensive', 'tokyo': 'expensive', 'paris': 'expensive',
+  'zurich': 'expensive', 'geneva': 'expensive', 'sydney': 'expensive',
+  'melbourne': 'expensive', 'singapore': 'expensive', 'hong kong': 'expensive',
+  'oslo': 'expensive', 'copenhagen': 'expensive', 'stockholm': 'expensive',
+  'san francisco': 'expensive', 'los angeles': 'expensive', 'chicago': 'expensive',
+  'dublin': 'expensive', 'amsterdam': 'expensive', 'helsinki': 'expensive',
+  'reykjavik': 'expensive', 'monaco': 'expensive', 'doha': 'expensive',
+  'dubai': 'expensive', 'abu dhabi': 'expensive',
+  // Moderate
+  'barcelona': 'moderate', 'madrid': 'moderate', 'rome': 'moderate',
+  'milan': 'moderate', 'florence': 'moderate', 'venice': 'moderate',
+  'berlin': 'moderate', 'munich': 'moderate', 'vienna': 'moderate',
+  'prague': 'moderate', 'athens': 'moderate', 'seoul': 'moderate',
+  'taipei': 'moderate', 'buenos aires': 'moderate', 'santiago': 'moderate',
+  'cape town': 'moderate', 'toronto': 'moderate', 'montreal': 'moderate',
+  'lisbon': 'moderate', 'porto': 'moderate', 'brussels': 'moderate',
+  'warsaw': 'moderate', 'budapest': 'moderate', 'krakow': 'moderate',
+  // Budget
+  'bangkok': 'budget', 'chiang mai': 'budget', 'phuket': 'budget',
+  'hanoi': 'budget', 'ho chi minh city': 'budget', 'saigon': 'budget',
+  'bali': 'budget', 'jakarta': 'budget', 'kuala lumpur': 'budget',
+  'istanbul': 'budget', 'cairo': 'budget', 'marrakech': 'budget',
+  'mexico city': 'budget', 'bogota': 'budget', 'medellin': 'budget',
+  'lima': 'budget', 'cusco': 'budget', 'delhi': 'budget',
+  'mumbai': 'budget', 'goa': 'budget', 'kathmandu': 'budget',
+  'phnom penh': 'budget', 'siem reap': 'budget', 'colombo': 'budget',
+  'tbilisi': 'budget', 'tashkent': 'budget',
+};
+
+export function getCityTier(city?: string): CityTransitTier {
+  if (!city) return TRANSIT_TIERS.default;
+  const lower = city.toLowerCase().trim();
+  // Try exact match first
+  const tierName = CITY_TO_TIER[lower];
+  if (tierName) return TRANSIT_TIERS[tierName];
+  // Try partial match (e.g. "New York City" → "new york")
+  for (const [key, tier] of Object.entries(CITY_TO_TIER)) {
+    if (lower.includes(key) || key.includes(lower)) return TRANSIT_TIERS[tier];
+  }
+  return TRANSIT_TIERS.default;
+}
+
+// =============================================================================
+// HAVERSINE + TRANSIT ESTIMATION
+// =============================================================================
+
+function haversineDistanceMeters(
+  lat1: number, lng1: number, lat2: number, lng2: number
+): number {
+  const R = 6371000;
+  const toRad = (d: number) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+interface TransitEstimateResult {
+  durationMinutes: number;
+  method: string;
+  costAmount: number;
+  distanceMeters: number;
+}
+
+function estimateTransit(
+  fromCoords: { lat: number; lng: number },
+  toCoords: { lat: number; lng: number },
+  city?: string,
+): TransitEstimateResult {
+  const dist = haversineDistanceMeters(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng);
+  const tier = getCityTier(city);
+
+  if (dist <= 1200) {
+    // Walking
+    const dur = Math.max(3, Math.ceil(dist / 80)); // ~5 km/h
+    return { durationMinutes: dur, method: 'walking', costAmount: 0, distanceMeters: dist };
+  } else if (dist <= 8000) {
+    // Transit
+    const dur = Math.max(5, Math.ceil(dist / 500) + 5);
+    return { durationMinutes: dur, method: 'transit', costAmount: Math.round(tier.transitFlat * 100) / 100, distanceMeters: dist };
+  } else {
+    // Taxi
+    const dur = Math.max(5, Math.ceil(dist / 400) + 3);
+    const cost = tier.taxiBase + (dist / 1000) * tier.taxiPerKm;
+    return { durationMinutes: dur, method: 'taxi', costAmount: Math.round(cost * 100) / 100, distanceMeters: dist };
+  }
+}
+
+/** Extract coordinates from an activity (if enriched) */
+function getActivityCoords(act: any): { lat: number; lng: number } | null {
+  const c = act?.location?.coordinates;
+  if (c && typeof c.lat === 'number' && typeof c.lng === 'number') return c;
+  return null;
+}
+
 export interface RepairDayResult {
   day: StrictDayMinimal;
   repairs: RepairAction[];
@@ -86,7 +203,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   const repairs: RepairAction[] = [];
   const { validationResults, dayNumber, isFirstDay, isLastDay,
     arrivalTime24, returnDepartureTime24, departureAirport,
-    hotelName, hotelAddress, hasHotel,
+    hotelName, hotelAddress, hasHotel, hotelCoordinates,
     lockedActivities, restaurantPool, usedRestaurants,
     isTransitionDay, isMultiCity, isLastDayInCity,
     resolvedDestination, nextLegTransport, nextLegTransportDetails, hotelOverride,
@@ -877,7 +994,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
   if (activities.length > 0) {
     const effectiveHotelName = hotelName || 'Your Hotel';
-    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay, isHotelChange);
+    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay, isHotelChange, hotelCoordinates, resolvedDestination);
     activities = bookendRepairs.activities;
     repairs.push(...bookendRepairs.repairs);
   }
@@ -1351,6 +1468,8 @@ function repairBookends(
   isDepartureDay: boolean,
   isFirstDay: boolean = false,
   isHotelChange: boolean = false,
+  hotelCoordinates?: { lat: number; lng: number },
+  resolvedDestination?: string,
 ): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
 
@@ -1387,16 +1506,36 @@ function repairBookends(
     tags: ['hotel', 'rest'], source: 'bookend-validator',
   });
 
-  const makeTransCard = (from: string, to: string, st: string) => ({
-    id: `transport-gap-${dayNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    title: `Travel to ${to}`, category: 'transport',
-    description: `Transit from ${from} to ${to}.`,
-    startTime: st, endTime: offset(st, 15), durationMinutes: 15,
-    location: { name: to, address: '' },
-    cost: { amount: 0, currency: 'USD' }, isLocked: false,
-    tags: ['transport'], transportation: { method: 'walking', duration: '15 min' },
-    source: 'bookend-validator',
-  });
+  /** Coordinate-aware transit card builder */
+  const makeTransCard = (from: string, to: string, st: string, fromAct?: any, toAct?: any) => {
+    const fromCoords = fromAct ? getActivityCoords(fromAct) : null;
+    const toCoords = toAct ? getActivityCoords(toAct) : null;
+    // Use hotel coords as fallback when going to/from hotel
+    const resolvedFrom = fromCoords || (hotelCoordinates && to.toLowerCase().includes(hotelName.toLowerCase()) ? null : hotelCoordinates) || null;
+    const resolvedTo = toCoords || (hotelCoordinates && (to.toLowerCase().includes(hotelName.toLowerCase()) || to.toLowerCase().includes('hotel')) ? hotelCoordinates : null);
+
+    let dur = 15;
+    let method = 'walking';
+    let costAmount = 0;
+
+    if (resolvedFrom && resolvedTo) {
+      const est = estimateTransit(resolvedFrom, resolvedTo, resolvedDestination);
+      dur = est.durationMinutes;
+      method = est.method;
+      costAmount = est.costAmount;
+    }
+
+    return {
+      id: `transport-gap-${dayNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: `Travel to ${to}`, category: 'transport',
+      description: `Transit from ${from} to ${to}.`,
+      startTime: st, endTime: offset(st, dur), durationMinutes: dur,
+      location: { name: to, address: '' },
+      cost: { amount: costAmount, currency: 'USD' }, isLocked: false,
+      tags: ['transport'], transportation: { method, duration: `${dur} min` },
+      source: 'bookend-validator',
+    };
+  };
 
   // 0. MORNING PHANTOM STRIP — On Day 2+ (non-first, non-departure), remove
   // accommodation cards at the start of the day that aren't check-in/checkout.
@@ -1501,7 +1640,7 @@ function repairBookends(
             if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
           }
           const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
-          const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd);
+          const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd, activities[insertIdx - 1], null);
           const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
           activities.splice(insertIdx, 0, transportCard, accomCard);
           repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
@@ -1531,7 +1670,7 @@ function repairBookends(
           repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'recategorized_mislabeled_accommodation' });
         }
         const et = last.endTime || '22:00';
-        activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
+        activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et, last, null));
         activities.push(makeAccomCard('Return to', offset(et, 20), 15));
         repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_return' });
       }
@@ -1556,7 +1695,7 @@ function repairBookends(
         a => isTransport(a) && (a.location?.name || '').toLowerCase() === nLoc
       );
       if (recentTransport) continue;
-      rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || ''));
+      rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || '', curr, next));
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_transit_gap' });
     }
   }

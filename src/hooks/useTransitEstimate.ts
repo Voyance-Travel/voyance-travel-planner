@@ -34,7 +34,7 @@ export function useTransitEstimate() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchEstimate = useCallback(async (origin: LocationInput, destination: LocationInput) => {
+  const fetchEstimate = useCallback(async (origin: LocationInput, destination: LocationInput, city?: string) => {
     const originInput = toFunctionInput(origin);
     const destInput = toFunctionInput(destination);
 
@@ -49,7 +49,7 @@ export function useTransitEstimate() {
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('transit-estimate', {
-        body: { origin: originInput, destination: destInput },
+        body: { origin: originInput, destination: destInput, city },
       });
 
       if (fnError) throw fnError;

@@ -218,6 +218,26 @@ async function _handleGenerateTripDayInner(
       tripHotelAddress = hotelList[0].address || '';
     }
   }
+
+  // Resolve hotel coordinates for transit estimation in repair pipeline
+  let tripHotelCoordinates: { lat: number; lng: number } | undefined;
+  {
+    const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
+    const resolvedHotelForCoords = tripHotelName || (tripCheck?.hotel_selection as any)?.name;
+    if (GOOGLE_MAPS_API_KEY && resolvedHotelForCoords) {
+      try {
+        const { getDestinationCenter } = await import('./venue-enrichment.ts');
+        const hotelQuery = `${resolvedHotelForCoords}, ${destination}`;
+        const coords = await getDestinationCenter(hotelQuery, GOOGLE_MAPS_API_KEY);
+        if (coords) {
+          tripHotelCoordinates = coords;
+          console.log(`[generate-trip-day] Hotel coordinates resolved: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`);
+        }
+      } catch (e) {
+        console.warn('[generate-trip-day] Hotel coordinate resolution failed (non-blocking):', (e as Error).message);
+      }
+    }
+  }
   if (!tripCheck || tripCheck.itinerary_status === 'cancelled') {
     console.log(`[generate-trip-day] Trip ${tripId} status is ${tripCheck?.itinerary_status}, stopping chain`);
     return new Response(
@@ -798,6 +818,7 @@ async function _handleGenerateTripDayInner(
         hotelOverride: (cityInfo?.hotelName || tripHotelName) ? { name: cityInfo?.hotelName || tripHotelName!, address: cityInfo?.hotelAddress || tripHotelAddress || '' } : undefined,
         isHotelChange: cityInfo?.isHotelChange || false,
         previousHotelName: (cityInfo as any)?.previousHotelName || undefined,
+        hotelCoordinates: tripHotelCoordinates,
       });
 
       if (repairs.length > 0) {
