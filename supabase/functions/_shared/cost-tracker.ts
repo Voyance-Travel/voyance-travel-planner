@@ -362,7 +362,7 @@ export class CostTracker {
       );
       
       const googleCost = 
-        (this.entry.google_places_calls || 0) * 0.017 +
+        (this.entry.google_places_calls || 0) * 0.032 +  // Advanced SKU
         (this.entry.google_geocoding_calls || 0) * 0.005 +
         (this.entry.google_photos_calls || 0) * 0.007 +
         (this.entry.google_routes_calls || 0) * 0.005;
