@@ -1334,13 +1334,21 @@ function repairBookends(
 
   // 2. End-of-day hotel return — SKIP on departure days (traveler is at the airport/departed)
   if (!isDepartureDay) {
-    const visible = activities.filter(a => !isTransport(a));
-    const last = visible[visible.length - 1];
-    if (last && !isAccom(last)) {
-      const et = last.endTime || '22:00';
-      activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
-      activities.push(makeAccomCard('Return to', offset(et, 20), 15));
-      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_return' });
+    // On first day, only inject "Return to Hotel" if check-in has already happened
+    const hasCheckedIn = !isFirstDay || activities.some((a: any) => {
+      const t = (a.title || '').toLowerCase();
+      return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+    });
+
+    if (hasCheckedIn) {
+      const visible = activities.filter(a => !isTransport(a));
+      const last = visible[visible.length - 1];
+      if (last && !isAccom(last)) {
+        const et = last.endTime || '22:00';
+        activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
+        activities.push(makeAccomCard('Return to', offset(et, 20), 15));
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_return' });
+      }
     }
   }
 
