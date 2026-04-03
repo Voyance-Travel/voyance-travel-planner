@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { buildRoute } from '@/config/routes';
 import { Skeleton } from '@/components/ui/skeleton';
-
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 import barcelonaThumb from '@/assets/destinations/barcelona.jpg';
 
 // Hardcoded featured destinations with pre-loaded images
