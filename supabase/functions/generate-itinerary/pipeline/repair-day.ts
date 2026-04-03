@@ -1670,7 +1670,7 @@ function repairBookends(
           repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'recategorized_mislabeled_accommodation' });
         }
         const et = last.endTime || '22:00';
-        activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
+        activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et, last, null));
         activities.push(makeAccomCard('Return to', offset(et, 20), 15));
         repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_return' });
       }
