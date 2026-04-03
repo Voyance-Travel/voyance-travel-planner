@@ -55,6 +55,8 @@ export async function compileDayFacts(
   let resolvedIsLastDayInCity = !!paramIsLastDayInCity;
   let resolvedDestination = destination;
   let resolvedCountry = destinationCountry;
+  let resolvedIsHotelChange = false;
+  let resolvedPreviousHotelName: string | undefined = undefined;
 
   if (tripId && !resolvedIsTransitionDay) {
     try {
