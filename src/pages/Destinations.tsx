@@ -51,7 +51,7 @@ const popularDestinations = [
     id: 'bali',
     city: 'Bali',
     country: 'Indonesia',
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=400&q=80'),
     trending: true,
   },
   {
