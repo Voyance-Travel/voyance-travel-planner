@@ -15,7 +15,7 @@ export default function CinematicHero() {
       {/* Background Image */}
       <div className="absolute inset-0 bg-[#2c3e50]">
         <img
-          src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80"
+          src={normalizeUnsplashUrl('https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1920&q=80')}
           alt="Scenic mountain road at sunset"
           className="w-full h-full object-cover"
           onError={(e) => { const t = e.currentTarget; if (!t.dataset.fallbackApplied) { t.dataset.fallbackApplied = 'true'; t.style.display = 'none'; } }}

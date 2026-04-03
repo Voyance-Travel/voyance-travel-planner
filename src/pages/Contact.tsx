@@ -20,6 +20,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CONTACT_CONFIG } from "@/config/contact";
+import { normalizeUnsplashUrl } from "@/utils/unsplash";
 
 const contactSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
