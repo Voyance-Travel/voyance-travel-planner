@@ -1640,7 +1640,7 @@ function repairBookends(
             if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
           }
           const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
-          const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd);
+          const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd, activities[insertIdx - 1], null);
           const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
           activities.splice(insertIdx, 0, transportCard, accomCard);
           repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
