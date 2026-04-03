@@ -24,7 +24,7 @@ Deno.test('missing lunch: beforeGuard=[breakfast,dinner], afterGuard=[breakfast,
 
   // Run guard
   const result = enforceRequiredMealsFinalGuard(
-    activities,
+    activities as any,
     ['breakfast', 'lunch', 'dinner'],
     2,
     'Rome',
