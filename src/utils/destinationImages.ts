@@ -481,10 +481,8 @@ const GENERIC_TRAVEL_IMAGES = [
  */
 export function getDestinationImage(destination: string): string {
   const normalized = destination.toLowerCase().trim();
-  // Also try extracting just the city name (before comma or parenthetical)
   const cityOnly = normalized.split(',')[0].replace(/\s*\([^)]*\)\s*$/, '').trim();
   
-  // Check curated images with multiple matching strategies (same as getDestinationImages)
   const match = CURATED_DESTINATION_IMAGES[normalized]
     || CURATED_DESTINATION_IMAGES[normalized.replace(/\s+/g, '-')]
     || CURATED_DESTINATION_IMAGES[normalized.replace(/-/g, ' ')]
@@ -493,12 +491,11 @@ export function getDestinationImage(destination: string): string {
     || CURATED_DESTINATION_IMAGES[cityOnly.replace(/-/g, ' ')];
   
   if (match && match.length > 0) {
-    return match[0];
+    return normalizeUnsplashUrl(match[0]);
   }
   
-  // Return a generic travel image based on destination hash
   const hash = normalized.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-  return GENERIC_TRAVEL_IMAGES[hash % GENERIC_TRAVEL_IMAGES.length];
+  return normalizeUnsplashUrl(GENERIC_TRAVEL_IMAGES[hash % GENERIC_TRAVEL_IMAGES.length]);
 }
 
 /**
