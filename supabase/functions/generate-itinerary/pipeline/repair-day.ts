@@ -1046,6 +1046,71 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 9c. BACK-TO-BACK ACCOMMODATION DEDUP ---
+  // After bookends + normalization, scan for consecutive accommodation cards
+  // (ignoring transport between them). If two non-check-in/checkout accom cards
+  // are back-to-back, keep the last one (typically "Return to Hotel") and remove
+  // the earlier one plus its preceding transport.
+  {
+    const isNonStructuralAccom = (act: any): boolean => {
+      const cat = (act.category || '').toLowerCase();
+      if (cat !== 'accommodation') return false;
+      const t = (act.title || '').toLowerCase();
+      // Keep check-in and checkout — those are structural
+      if (t.includes('check-in') || t.includes('checkin') || t.includes('check in')) return false;
+      if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) return false;
+      if (t.includes('luggage drop') || t.includes('drop bags')) return false;
+      return true;
+    };
+
+    const indicesToRemove = new Set<number>();
+    // Build list of non-structural accommodation indices (skipping transport)
+    const accomIndices: number[] = [];
+    for (let i = 0; i < activities.length; i++) {
+      if (isNonStructuralAccom(activities[i])) accomIndices.push(i);
+    }
+
+    for (let k = 0; k < accomIndices.length - 1; k++) {
+      const idxA = accomIndices[k];
+      const idxB = accomIndices[k + 1];
+      // Check that everything between them is transport (or nothing)
+      let onlyTransportBetween = true;
+      for (let m = idxA + 1; m < idxB; m++) {
+        const midCat = (activities[m].category || '').toLowerCase();
+        if (midCat !== 'transport' && midCat !== 'transportation') {
+          onlyTransportBetween = false;
+          break;
+        }
+      }
+      if (!onlyTransportBetween) continue;
+
+      // They're consecutive (ignoring transport). Remove the earlier one.
+      indicesToRemove.add(idxA);
+      // Also remove any transport card directly before the removed accom
+      if (idxA > 0) {
+        const prevCat = (activities[idxA - 1].category || '').toLowerCase();
+        if (prevCat === 'transport' || prevCat === 'transportation') {
+          indicesToRemove.add(idxA - 1);
+        }
+      }
+      // Also remove transport between them (leading to the kept one is fine)
+      for (let m = idxA + 1; m < idxB; m++) {
+        indicesToRemove.add(m);
+      }
+
+      repairs.push({
+        code: FAILURE_CODES.MISSING_SLOT,
+        action: 'dedup_back_to_back_accommodation',
+        before: activities[idxA].title,
+        after: activities[idxB].title,
+      });
+    }
+
+    if (indicesToRemove.size > 0) {
+      activities = activities.filter((_, i) => !indicesToRemove.has(i));
+    }
+  }
+
   // --- 10. TITLE_LABEL_LEAK ---
   if (byCode.has(FAILURE_CODES.TITLE_LABEL_LEAK)) {
     for (const vr of byCode.get(FAILURE_CODES.TITLE_LABEL_LEAK) || []) {
