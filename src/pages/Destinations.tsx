@@ -40,7 +40,7 @@ const featuredDestinations = [
     country: 'Greece',
     region: 'Europe',
     description: 'Whitewashed dreams above the Aegean. Sunset views that stop conversation.',
-    image: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800&q=80'),
     tags: ['Romance', 'Beach', 'Wine'],
     featured: true,
   },
