@@ -1,36 +1,56 @@
 
 
-## Fix Arrival Day Hotel Sequence
+## Fix: Hotel Date Boundary Mismatch in Split-Stay Trips
 
 ### Problem
-On arrival day (Day 1), the itinerary shows an impossible sequence:
-1. 12:00 AM — "Return to Hotel" (you haven't been there yet)
-2. Breakfast at Hotel (you haven't checked in yet)
-3. Check-in at Hotel (should be FIRST)
 
-Two bugs in `repair-day.ts` cause this:
+When you have two hotels (split stay), Hotel 1 checkout is on Day 3 and Hotel 2 check-in is on Day 3. But the itinerary shows Hotel 2 activities starting on Day 2 instead of Day 3.
 
-**Bug 1 — Check-in detection is too broad (line 530-537)**
-The `hasCheckIn` check matches ANY accommodation activity with "hotel" in the title. If the AI generates "Return to Hotel" or "Breakfast at Hotel", the repair thinks check-in already exists and skips injecting it.
+**Root cause: Three different date-matching formulas are used across the codebase, and they disagree on boundary days.**
 
-**Bug 2 — Bookends lack arrival-day awareness (line 1287-1297)**
-The end-of-day "Return to Hotel" injection has `isDepartureDay` guards but NO `isFirstDay` guard. On Day 1, it injects "Return to Hotel" even though the traveler hasn't arrived yet. Same issue with the mid-day hotel return (line 1267-1285).
+The generation pipeline (4 locations) uses:
+```
+dateStr >= checkIn && dateStr < checkOut   (checkout day = NEXT hotel)
+```
+
+But the post-generation patch (`hotelItineraryPatch.ts`) uses:
+```
+dayDate >= checkIn && dayDate <= checkOut   (checkout day = CURRENT hotel)
+```
+
+And `patchItineraryWithMultipleHotels` uses `hotels.find()` which returns the **first match** — so on checkout day (which is also the next hotel's check-in day), whichever hotel is listed first wins.
+
+**Example:** Hotel A: check-in May 1, checkout May 3. Hotel B: check-in May 3, checkout May 5.
+- Generation correctly assigns May 2 → Hotel A, May 3 → Hotel B (using `< checkout`)
+- But `patchItineraryWithMultipleHotels` runs AFTER generation and overwrites May 3 with Hotel A (because `May 3 <= May 3` matches Hotel A first)
+- This also means May 2 gets patched by BOTH hotels since both ranges include it with inclusive bounds
+
+The patch runs every time a hotel is saved, so it **overwrites the correct generation output** with wrong hotel names.
 
 ### Changes
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+**File: `src/services/hotelItineraryPatch.ts`**
 
-1. **Fix check-in detection (step 7, ~line 530-537)**: Tighten `hasCheckIn` to ONLY match activities with explicit check-in keywords (`check-in`, `check in`, `checkin`, `luggage drop`, `settle in`). Remove the broad `t.includes('hotel')` match that causes false positives from "Return to Hotel" or "Breakfast at Hotel".
+1. **Fix `isDayInRange` boundary logic**: Change from inclusive-inclusive (`<=`) to inclusive-exclusive (`<`) on checkout date — matching the generation pipeline's convention. Checkout day belongs to the NEXT hotel, not the current one.
 
-2. **Add arrival-day guard to bookends (step 9, ~line 1267-1297)**:
-   - Pass `isFirstDay` into `repairBookends`
-   - On Day 1, skip injecting "Return to Hotel" at the END of day if the last activity is BEFORE the check-in time (the traveler may still be exploring pre-check-in)
-   - On Day 1, skip injecting mid-day hotel return if it would be placed BEFORE any check-in activity — you can't "return" to a place you haven't been yet
+```typescript
+// Before (wrong):
+return d >= checkInDate && d <= checkOutDate;
 
-3. **Enforce check-in-first ordering on Day 1 (step 7, ~line 568)**: After injecting check-in, remove any accommodation activities (Return to Hotel, Freshen Up) that are scheduled BEFORE the check-in time. These are logically impossible on arrival day.
+// After (correct):  
+return d >= checkInDate && d < checkOutDate;
+```
 
-4. **Strip pre-check-in hotel meals on Day 1**: If "Breakfast at Hotel" appears before check-in, relabel it to just "Breakfast" (remove hotel reference) or move it after check-in. The traveler can eat at a café before checking in, but not at a hotel they haven't arrived at.
+2. **Special-case checkout activities on checkout day**: After fixing the range, checkout day activities (like "Checkout from Hotel A") won't be patched because that day now belongs to Hotel B. Add a targeted pass: on the checkout date specifically, only patch activities whose title contains "checkout" with the departing hotel's name.
+
+3. **Fix `patchItineraryWithMultipleHotels` overlap resolution**: When multiple hotels match a day (shouldn't happen with fixed ranges, but as a safety net), prefer the hotel whose check-in date matches, not just the first in the array.
+
+**File: `supabase/functions/generate-itinerary/generation-core.ts`** (line 429)
+
+4. **Remove `|| context.startDate` fallback on `cin`**: This line defaults missing check-in dates to the trip start, which can cause Hotel 1 to match days it shouldn't when dates are partially missing.
 
 ### Expected Result
-Arrival day sequence becomes: Arrive → Check-in at Hotel → Explore → (optional Freshen Up) → Dinner → Return to Hotel
+- Day 2: All accommodation activities reference Hotel A (correct — you're still staying there)
+- Day 3: Checkout references Hotel A, Check-in references Hotel B
+- Day 4+: All accommodation activities reference Hotel B
 
