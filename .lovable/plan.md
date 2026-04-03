@@ -1,72 +1,91 @@
 
 
-## Fix: Hotel Switch (Split-Stay) Checkout/Check-in Inconsistencies
+## Fix: Accurate Transit Duration & City-Aware Pricing in Generation Pipeline
 
-### Problems Identified
+### Problem
+The repair pipeline injects transit cards with **hardcoded 15-minute duration** and **$0 cost** regardless of actual distance between activities. Meanwhile, the frontend `transit-estimate` edge function uses Google Routes API for accurate durations but has hardcoded pricing formulas that ignore city-specific fares.
 
-There are **5 bugs** causing inconsistent behavior on hotel-change days (`isHotelChange = true`):
-
-#### 1. Morning phantom strip removes checkout on hotel-change days
-The morning phantom strip (line 1323) runs on all non-first, non-departure days. On a hotel-change day, the traveler wakes up at the **previous** hotel, needs to **checkout**, then **check-in** at the new hotel. But the phantom strip sees the checkout as an accommodation card at the start of the day and removes it — it only checks `!isCheckinOrCheckout` but this may not save it if the AI generated a "Return to Hotel" before the checkout.
-
-**Fix**: Pass `isHotelChange` into `repairBookends` and skip the morning phantom strip entirely on hotel-change days. The checkout is legitimate on these days.
-
-#### 2. Check-in injection uses wrong time for hotel-change days
-When `isHotelChange` is true, the check-in is injected via `unshift` at the very start of the day (line 573) with a time of `max(12:00, firstActivity - 45min)`. But on a hotel-change day, checkout happens first (morning), then exploration, then check-in at the NEW hotel mid-afternoon. The check-in should come AFTER the checkout, not before it.
-
-**Fix**: On hotel-change days, insert check-in AFTER the checkout activity rather than at position 0. Use a time ~30min after checkout ends, or default to 15:00 if no checkout found.
-
-#### 3. Checkout and check-in ordering: checkout runs AFTER check-in in pipeline
-Step 7 (check-in guarantee) runs before Step 8 (checkout guarantee). On hotel-change days, this means the check-in is injected first (at position 0), then checkout is inserted chronologically. This creates a fragile ordering where checkout might end up after check-in depending on times.
-
-**Fix**: On hotel-change days, ensure checkout is injected FIRST (swap order for this case), then check-in is placed after it.
-
-#### 4. Title normalization overwrites checkout hotel name
-Step 9b normalizes ALL accommodation titles to use `hotelName` (the NEW hotel). But on hotel-change days, the checkout should reference `previousHotelName`. The normalization at line 822 rewrites `Checkout from Previous Hotel` → `Checkout from New Hotel`.
-
-**Fix**: Pass `previousHotelName` and `isHotelChange` to the normalization step. Skip normalizing checkout titles when `isHotelChange` is true (they already have the correct previous hotel name from Step 8).
-
-#### 5. Bookend "Return to Hotel" injected at end of hotel-change day uses wrong context
-`repairBookends` doesn't know about `isHotelChange`, so the end-of-day "Return to Hotel" card is created correctly (uses `hotelName` = new hotel). But mid-day freshen-up could be incorrectly injected between checkout and check-in, when the traveler has no hotel to go to.
-
-**Fix**: Pass `isHotelChange` context to `repairBookends`. Between checkout and check-in on hotel-change days, suppress mid-day hotel return injection.
+### Approach
+Use **haversine distance** from activity coordinates (available after enrichment) to compute realistic transit durations and costs during generation. No API calls needed — coordinates are already on activities. Add a lightweight city-aware cost multiplier table for taxi/transit pricing.
 
 ### Changes
 
 **File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-#### A. Update `repairBookends` signature to accept `isHotelChange`
+#### 1. Add `hotelCoordinates` to `RepairDayInput`
 
-Add `isHotelChange` and `previousHotelName` parameters.
+Pass the hotel's lat/lng into the repair pipeline so transit cards to/from the hotel can use real distance.
 
-#### B. Skip morning phantom strip on hotel-change days
+#### 2. Add haversine + heuristic transit helper
 
-In step 0 of `repairBookends` (line 1323), add `&& !isHotelChange` to the guard. The traveler needs the morning checkout.
+```text
+function estimateTransit(
+  fromCoords, toCoords, city?
+) → { durationMinutes, method, cost }
+```
 
-#### C. Fix check-in/checkout ordering for hotel-change days (Steps 7 & 8)
+- Compute haversine distance between activity coordinates
+- Walking: `distance / 80` m/min (~5 km/h). Use if ≤ 1.2 km
+- Transit: `distance / 500` m/min + 5 min overhead. Use if 1.2–8 km
+- Taxi: `distance / 400` m/min + 3 min overhead. Use if > 8 km
+- Minimum duration: 5 minutes
+- Cost: apply city-tier multiplier (see below)
 
-Restructure Steps 7 and 8: when `isHotelChange` is true:
-1. Run checkout injection FIRST (from `previousHotelName`, morning time ~10:00-11:00)
-2. Run check-in injection SECOND, placed AFTER the checkout (afternoon time ~15:00)
-3. Do NOT `unshift` check-in — insert it chronologically after checkout
+#### 3. Add city-aware cost multiplier table
 
-#### D. Protect checkout title in normalization (Step 9b)
+```text
+CITY_TRANSIT_TIERS = {
+  // Tier 1: Expensive (NYC, London, Tokyo, Paris, Zurich...)
+  expensive: { taxiPerKm: 3.5, transitFlat: 3.5 },
+  // Tier 2: Moderate (Barcelona, Rome, Berlin, Dubai...)
+  moderate:  { taxiPerKm: 2.0, transitFlat: 2.0 },
+  // Tier 3: Budget (Bangkok, Lisbon, Istanbul, Mexico City...)
+  budget:    { taxiPerKm: 0.8, transitFlat: 0.5 },
+  default:   { taxiPerKm: 2.0, transitFlat: 2.0 },
+}
+```
 
-When `isHotelChange && previousHotelName`, skip the checkout normalization so the previous hotel name is preserved. Only normalize non-checkout accommodation titles to the new hotel name.
+Map ~40 major cities to tiers. Fall back to `default` for unlisted cities.
 
-#### E. Suppress mid-day hotel return between checkout and check-in
+#### 4. Update `makeTransCard` to use coordinate-based estimates
 
-In `repairBookends` step 1b, when `isHotelChange`, skip mid-day freshen-up injection if it would fall between checkout time and check-in time (traveler has no hotel during this window).
+Instead of hardcoded 15 min / $0:
+- Look up coordinates from the preceding and following activities
+- Call `estimateTransit()` with those coordinates and the resolved destination city
+- Set `durationMinutes`, `endTime`, `cost.amount`, and `transportation.method` from the result
+- Fallback to 15 min / $0 if either activity lacks coordinates
 
-### Expected behavior after fix
+#### 5. Pass coordinates context to `repairBookends`
 
-| Sequence | Hotel-change day |
-|---|---|
-| Morning | Breakfast → **Checkout from Previous Hotel** |
-| Mid-day | Exploration (no hotel returns — you have no hotel yet) |
-| Afternoon | **Check-in at New Hotel** → Freshen Up |
-| Evening | Dinner → **Return to New Hotel** |
+Pass `hotelCoordinates` and `resolvedDestination` (city name) so bookend transport cards (Return to Hotel, Travel to venue) also get accurate estimates.
+
+#### 6. Update transit-estimate edge function pricing
+
+Apply the same city-tier multiplier table to the `transit-estimate` edge function so frontend-expanded transit cards show city-aware costs too (currently uses flat `$2/km`).
+
+**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+
+#### 7. Pass `hotelCoordinates` into `repairDay()` call
+
+Add `hotelCoordinates` from the enrichment context to the repair input.
+
+**File: `supabase/functions/transit-estimate/index.ts`**
+
+#### 8. Add city-tier pricing to frontend transit estimates
+
+Accept optional `city` parameter in the request body. Apply city-tier multiplier to taxi and transit cost formulas instead of the flat $2/km.
+
+### Expected results after fix
+
+| Scenario | Before | After |
+|---|---|---|
+| Hotel restaurant (same building) | 15 min, $0 | Skipped (fuzzy match) |
+| Venue 800m away | 15 min, $0 | 10 min walk, $0 |
+| Venue 3km away | 15 min, $0 | 11 min transit, $2 (budget city) |
+| Venue 12km away | 15 min, $0 | 33 min taxi, $10 (moderate city) |
 
 ### Files changed
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — haversine transit estimator, city-tier costs, coordinate-aware `makeTransCard`
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — pass `hotelCoordinates` to repair
+- `supabase/functions/transit-estimate/index.ts` — city-tier pricing for frontend estimates
 
