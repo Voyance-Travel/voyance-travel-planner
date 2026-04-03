@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Sparkles, ArrowRight, MapPin, Calendar, Users } from 'lucide-react';
 import SafeImage from '@/components/SafeImage';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
