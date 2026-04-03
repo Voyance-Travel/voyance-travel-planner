@@ -82,12 +82,20 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(INLINE_META_RE, '')
     .replace(FORWARD_REF_RE, '')
     .replace(TOMORROW_REF_RE, '')
+    // Strip parenthetical archetype labels: "(Deep Context)", "(Solo Retreat)", etc.
+    .replace(/\s*\((?:Deep\s+Context|Solo\s+Retreat|Authentic\s+Encounter|Cultural\s+Highlight|Group\s+Activity|Hidden\s+Gem|Family\s+Stop|Romance\s+Stop|Luxury\s+Stop|Budget\s+Stop|Adventure\s+Stop|Wellness\s+Stop)\)\s*/gi, '')
+    // Strip ALL-CAPS archetype labels with explanations: "(DEEP CONTEXT - Historical significance...)"
+    .replace(/\s*\((?:DEEP\s+CONTEXT|SOLO\s+RETREAT|AUTHENTIC\s+ENCOUNTER|CULTURAL\s+HIGHLIGHT)\s*[-–—]?\s*[^)]*\)\s*/g, '')
+    // Strip "(SOLO RETREAT moment)" and similar
+    .replace(/\s*\(\s*(?:SOLO\s+RETREAT|DEEP\s+CONTEXT)\s+\w+\s*\)\s*/gi, '')
     // Strip archetype/category label suffixes: "Name: The Deep Context Stop"
-    .replace(/\s*[:–—-]\s*(?:The\s+)?(?:Deep\s+Context|Solo\s+Retreat|Cultural\s+Highlight|Group\s+Activity|Wellness|Food|Shopping|Adventure|Family|Romance|Luxury|Budget|Hidden\s+Gem)(?:\s+Stop)?\s*$/gi, '')
+    .replace(/\s*[:–—-]\s*(?:The\s+)?(?:Deep\s+Context|Solo\s+Retreat|Cultural\s+Highlight|Group\s+Activity|Wellness|Food|Shopping|Adventure|Family|Romance|Luxury|Budget|Hidden\s+Gem|Authentic\s+Encounter)(?:\s+Stop)?\s*$/gi, '')
     // Strip label as description prefix: "Solo Retreat: A peaceful..."
-    .replace(/^(?:Solo\s+Retreat|Deep\s+Context|Cultural\s+Highlight|Group\s+Activity|Wellness|Food\s+Stop|Hidden\s+Gem|Adventure|Shopping|Romance|Luxury|Budget)\s*:\s*/gi, '')
+    .replace(/^(?:Solo\s+Retreat|Deep\s+Context|The\s+Deep\s+Context\s+Stop|Cultural\s+Highlight|Group\s+Activity|Authentic\s+Encounter|Wellness|Food\s+Stop|Hidden\s+Gem|Adventure|Shopping|Romance|Luxury|Budget)\s*:\s*/gi, '')
     // Catch remaining "... Stop" suffixed labels at end
     .replace(/\s*[:–—-]\s*(?:The\s+)?\w+(?:\s+\w+){0,2}\s+Stop\s*$/gi, '')
+    // Strip ALL-CAPS "DISTRICT" from transit/location names
+    .replace(/\s+DISTRICT\b/g, '')
     // Strip internal day title prefixes: "Short Trip Berlin Day 3:" etc.
     .replace(/^(?:Short\s+Trip|City\s+Trip|Long\s+Trip|Weekend\s+Trip|Extended\s+Trip)\s+\w+(?:\s+\w+)*\s+Day\s+\d+\s*[:–—-]\s*/i, '')
     // Strip bare "Day N:" prefix
