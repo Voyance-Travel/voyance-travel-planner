@@ -1,52 +1,36 @@
 
 
-## Fix: Move All Static Images to Internal Storage
+## Fix Arrival Day Hotel Sequence
 
 ### Problem
+On arrival day (Day 1), the itinerary shows an impossible sequence:
+1. 12:00 AM — "Return to Hotel" (you haven't been there yet)
+2. Breakfast at Hotel (you haven't checked in yet)
+3. Check-in at Hotel (should be FIRST)
 
-There are **~150+ hardcoded `images.unsplash.com` URLs** scattered across components and pages. These are NOT calling Google Places (so they don't add to the $470 bill), but they cause two real issues:
+Two bugs in `repair-day.ts` cause this:
 
-1. **The "thinking for a minute" delay you see on refresh** — each page load fetches images from Unsplash's external CDN. If their CDN is slow or rate-limits you, images appear delayed.
-2. **The `normalizeUnsplashUrl` function explicitly passes them through** (line 63 of `unsplash.ts`) — it was written to NOT rewrite `images.unsplash.com` URLs to internal storage, so even components that call `normalizeUnsplashUrl` still hit external Unsplash on every page load.
+**Bug 1 — Check-in detection is too broad (line 530-537)**
+The `hasCheckIn` check matches ANY accommodation activity with "hotel" in the title. If the AI generates "Return to Hotel" or "Breakfast at Hotel", the repair thinks check-in already exists and skips injecting it.
 
-You already have a `site-images` storage bucket with hero images in it. The fix is to route ALL static/decorative Unsplash URLs through that same bucket so they load from your own CDN instantly.
+**Bug 2 — Bookends lack arrival-day awareness (line 1287-1297)**
+The end-of-day "Return to Hotel" injection has `isDepartureDay` guards but NO `isFirstDay` guard. On Day 1, it injects "Return to Hotel" even though the traveler hasn't arrived yet. Same issue with the mid-day hotel return (line 1267-1285).
 
-### Files with hardcoded Unsplash URLs (static images that never change)
+### Changes
 
-| File | # of URLs | Usage |
-|---|---|---|
-| `src/utils/destinationImages.ts` | ~80 | Curated destination galleries |
-| `src/pages/Destinations.tsx` | ~15 | Destination cards |
-| `src/pages/About.tsx` | ~4 | "How it works" section |
-| `src/pages/Contact.tsx` | ~2 | Hero + inspiration |
-| `src/pages/SignIn.tsx` | ~3 | Auth hero |
-| `src/pages/ForgotPassword.tsx` | ~2 | Auth hero |
-| `src/pages/GuideDetail.tsx` | ~2 | Fallback covers |
-| `src/components/home/CinematicHero.tsx` | 1 | Homepage hero |
-| `src/components/home/HowItWorksCarousel.tsx` | 4 | Steps carousel |
-| `src/components/profile/SurpriseTripCard.tsx` | 1 | Mystery card |
-| `src/components/profile/RotatingCoverPhoto.tsx` | ~6 | Profile covers |
-| `src/components/explore/SeasonalCollections.tsx` | 4 | Season cards |
-| `src/components/explore/ExploreByStyle.tsx` | 6 | Style cards |
-| `src/components/demo/DemoHero.tsx` | 3 | Demo cards |
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-### Plan
+1. **Fix check-in detection (step 7, ~line 530-537)**: Tighten `hasCheckIn` to ONLY match activities with explicit check-in keywords (`check-in`, `check in`, `checkin`, `luggage drop`, `settle in`). Remove the broad `t.includes('hotel')` match that causes false positives from "Return to Hotel" or "Breakfast at Hotel".
 
-#### Step 1: Fix `normalizeUnsplashUrl` to rewrite ALL Unsplash URLs
-Remove the pass-through on line 63 of `src/utils/unsplash.ts`. All `images.unsplash.com/photo-*` URLs will be rewritten to `site-images` bucket URLs using the existing `toSiteImageUrlFromPhotoId` function.
+2. **Add arrival-day guard to bookends (step 9, ~line 1267-1297)**:
+   - Pass `isFirstDay` into `repairBookends`
+   - On Day 1, skip injecting "Return to Hotel" at the END of day if the last activity is BEFORE the check-in time (the traveler may still be exploring pre-check-in)
+   - On Day 1, skip injecting mid-day hotel return if it would be placed BEFORE any check-in activity — you can't "return" to a place you haven't been yet
 
-#### Step 2: Ensure all static image components use `normalizeUnsplashUrl`
-For files that currently hardcode raw URLs without calling `normalizeUnsplashUrl` (most pages), wrap them through the function. This ensures they resolve to internal storage.
+3. **Enforce check-in-first ordering on Day 1 (step 7, ~line 568)**: After injecting check-in, remove any accommodation activities (Return to Hotel, Freshen Up) that are scheduled BEFORE the check-in time. These are logically impossible on arrival day.
 
-#### Step 3: Bulk-upload missing photos to `site-images` bucket
-Write a one-time script to extract all unique `photo-*` IDs from the codebase, check which ones are missing from the `site-images` bucket, and download them from Unsplash into storage. This is a one-time operation.
+4. **Strip pre-check-in hotel meals on Day 1**: If "Breakfast at Hotel" appears before check-in, relabel it to just "Breakfast" (remove hotel reference) or move it after check-in. The traveler can eat at a café before checking in, but not at a hotel they haven't arrived at.
 
-#### Step 4: Verify no external image calls on static pages
-After changes, static pages (Home, About, Contact, Sign In, Destinations) should load zero external image requests.
-
-### Result
-- All static/decorative images load from your own CDN — instant, no external dependency
-- The "thinking for a minute" delay on refresh goes away
-- Zero risk of Unsplash rate-limiting or URL changes breaking your site
-- No cost impact (Unsplash CDN is free, but internal is faster and more reliable)
+### Expected Result
+Arrival day sequence becomes: Arrive → Check-in at Hotel → Explore → (optional Freshen Up) → Dinner → Return to Hotel
 
