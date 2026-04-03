@@ -28,7 +28,7 @@ interface GenerationLog {
   phase_timings: Record<string, number>;
   day_timings: Array<{
     day: number; total_ms: number; ai_ms: number; enrich_ms: number; activities: number;
-    meals?: { required: string[]; found: string[]; guardFired: boolean; injected?: string[] };
+    meals?: { required: string[]; found: string[]; beforeGuard?: string[]; guardFired: boolean; injected?: string[] };
     transport?: { isTransitionDay: boolean; mode?: string | null; hadInterCityTravel?: boolean; fallbackInjected?: boolean };
     llm?: { model: string; promptTokens: number; completionTokens: number };
   }>;
