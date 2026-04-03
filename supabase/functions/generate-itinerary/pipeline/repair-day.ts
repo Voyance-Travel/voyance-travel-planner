@@ -952,8 +952,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_departure_transport_guarantee', after: transportTitle });
     }
 
-    // Also ensure a flight card exists on the last day if we have flight data
-    if (isLastDay && returnDepartureTime24) {
+    // Also ensure a flight card exists on the last day — even without explicit flight time
+    if (isLastDay) {
       const hasFlightCard = activities.some((a: any) => {
         const t = (a.title || '').toLowerCase();
         const cat = (a.category || '').toLowerCase();
@@ -961,30 +961,48 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       });
 
       if (!hasFlightCard) {
-        const depMins = parseTimeToMinutes(returnDepartureTime24) ?? 15 * 60;
-        const flightCard = {
-          id: `day${dayNumber}-flight-departure-${Date.now()}`,
-          title: 'Departure Flight',
-          name: 'Departure Flight',
-          description: 'Board your flight home.',
-          startTime: minutesToHHMM(depMins),
-          endTime: minutesToHHMM(depMins + 120),
-          category: 'flight',
-          type: 'flight',
-          location: { name: departureAirport || 'Airport', address: '' },
-          cost: { amount: 0, currency: 'USD' },
-          bookingRequired: false,
-          isLocked: false,
-          durationMinutes: 120,
-          source: 'repair-flight-guarantee',
-        };
-        activities.push(flightCard);
-        activities.sort((a: any, b: any) => {
-          const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
-          const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
-          return ta - tb;
+        // Find an airport-bound transport card to confirm this is a flight departure
+        const airportTransport = activities.find((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          const cat = (a.category || '').toLowerCase();
+          if (cat !== 'transport' && cat !== 'logistics') return false;
+          return t.includes('airport') || t.includes('transfer to') && t.includes('airport');
         });
-        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_departure_flight_guarantee' });
+
+        if (airportTransport || returnDepartureTime24) {
+          let depMins: number;
+          if (returnDepartureTime24) {
+            depMins = parseTimeToMinutes(returnDepartureTime24) ?? 15 * 60;
+          } else {
+            // Derive from airport transport end time + 2hr buffer for check-in/security
+            const transportEnd = parseTimeToMinutes(airportTransport?.endTime || '') ?? null;
+            depMins = transportEnd !== null ? transportEnd + 120 : 15 * 60;
+          }
+
+          const flightCard = {
+            id: `day${dayNumber}-flight-departure-${Date.now()}`,
+            title: 'Departure Flight',
+            name: 'Departure Flight',
+            description: 'Board your flight home.',
+            startTime: minutesToHHMM(depMins),
+            endTime: minutesToHHMM(depMins + 120),
+            category: 'flight',
+            type: 'flight',
+            location: { name: departureAirport || 'Airport', address: '' },
+            cost: { amount: 0, currency: 'USD' },
+            bookingRequired: false,
+            isLocked: false,
+            durationMinutes: 120,
+            source: 'repair-flight-guarantee',
+          };
+          activities.push(flightCard);
+          activities.sort((a: any, b: any) => {
+            const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+            const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+            return ta - tb;
+          });
+          repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_departure_flight_guarantee' });
+        }
       }
     }
   }
