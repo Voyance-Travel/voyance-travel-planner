@@ -610,8 +610,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
-  // --- 8. HOTEL CHECKOUT GUARANTEE (last day or last day in city) — moved before bookends ---
-  const needsCheckout = isLastDay || (isLastDayInCity && !isTransitionDay);
+  // --- 8. HOTEL CHECKOUT GUARANTEE (last day, last day in city, or split-stay hotel change) ---
+  const needsCheckout = isLastDay || (isLastDayInCity && !isTransitionDay) || isHotelChange;
   if (needsCheckout && activities.length > 0) {
     const hasCheckout = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
