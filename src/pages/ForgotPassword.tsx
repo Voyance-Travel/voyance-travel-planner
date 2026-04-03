@@ -6,6 +6,7 @@ import Head from '@/components/common/Head';
 import { ForgotPasswordForm } from '@/components/auth/ForgotPasswordForm';
 import HeroImageWithFallback from '@/components/common/HeroImageWithFallback';
 import AuthLayout from '@/components/layout/AuthLayout';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 export default function ForgotPassword() {
   return (
