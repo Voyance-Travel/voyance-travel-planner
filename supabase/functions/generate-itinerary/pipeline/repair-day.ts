@@ -1468,6 +1468,8 @@ function repairBookends(
   isDepartureDay: boolean,
   isFirstDay: boolean = false,
   isHotelChange: boolean = false,
+  hotelCoordinates?: { lat: number; lng: number },
+  resolvedDestination?: string,
 ): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
 
@@ -1504,16 +1506,36 @@ function repairBookends(
     tags: ['hotel', 'rest'], source: 'bookend-validator',
   });
 
-  const makeTransCard = (from: string, to: string, st: string) => ({
-    id: `transport-gap-${dayNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    title: `Travel to ${to}`, category: 'transport',
-    description: `Transit from ${from} to ${to}.`,
-    startTime: st, endTime: offset(st, 15), durationMinutes: 15,
-    location: { name: to, address: '' },
-    cost: { amount: 0, currency: 'USD' }, isLocked: false,
-    tags: ['transport'], transportation: { method: 'walking', duration: '15 min' },
-    source: 'bookend-validator',
-  });
+  /** Coordinate-aware transit card builder */
+  const makeTransCard = (from: string, to: string, st: string, fromAct?: any, toAct?: any) => {
+    const fromCoords = fromAct ? getActivityCoords(fromAct) : null;
+    const toCoords = toAct ? getActivityCoords(toAct) : null;
+    // Use hotel coords as fallback when going to/from hotel
+    const resolvedFrom = fromCoords || (hotelCoordinates && to.toLowerCase().includes(hotelName.toLowerCase()) ? null : hotelCoordinates) || null;
+    const resolvedTo = toCoords || (hotelCoordinates && (to.toLowerCase().includes(hotelName.toLowerCase()) || to.toLowerCase().includes('hotel')) ? hotelCoordinates : null);
+
+    let dur = 15;
+    let method = 'walking';
+    let costAmount = 0;
+
+    if (resolvedFrom && resolvedTo) {
+      const est = estimateTransit(resolvedFrom, resolvedTo, resolvedDestination);
+      dur = est.durationMinutes;
+      method = est.method;
+      costAmount = est.costAmount;
+    }
+
+    return {
+      id: `transport-gap-${dayNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: `Travel to ${to}`, category: 'transport',
+      description: `Transit from ${from} to ${to}.`,
+      startTime: st, endTime: offset(st, dur), durationMinutes: dur,
+      location: { name: to, address: '' },
+      cost: { amount: costAmount, currency: 'USD' }, isLocked: false,
+      tags: ['transport'], transportation: { method, duration: `${dur} min` },
+      source: 'bookend-validator',
+    };
+  };
 
   // 0. MORNING PHANTOM STRIP — On Day 2+ (non-first, non-departure), remove
   // accommodation cards at the start of the day that aren't check-in/checkout.
