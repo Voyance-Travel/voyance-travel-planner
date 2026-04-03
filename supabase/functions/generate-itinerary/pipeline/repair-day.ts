@@ -297,6 +297,72 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     repairs.push({ code: FAILURE_CODES.CHRONOLOGY, action: 'sorted_by_time' });
   }
 
+  // --- 3b. ARRIVAL FLIGHT + AIRPORT TRANSFER (Day 1 only) ---
+  if (isFirstDay && arrivalTime24 && !isHotelChange) {
+    const arrivalAirportName = input.arrivalAirport || 'the Airport';
+    const transferMinutes = input.airportTransferMinutes || 45;
+
+    const hasArrivalFlight = activities.some((a: any) => {
+      const t = (a.title || '').toLowerCase();
+      const cat = (a.category || '').toLowerCase();
+      return (cat === 'flight' || cat === 'transport') && (
+        t.includes('arrival flight') || t.includes('landing') ||
+        (t.includes('arrive') && t.includes('flight'))
+      );
+    });
+
+    if (!hasArrivalFlight) {
+      const arrivalMins = parseTimeToMinutes(arrivalTime24);
+      if (arrivalMins !== null) {
+        const flightEndMins = arrivalMins;
+        const flightStartMins = Math.max(0, arrivalMins - 120);
+        const flightCard = {
+          id: `day${dayNumber}-arrival-flight-${Date.now()}`,
+          title: 'Arrival Flight',
+          name: 'Arrival Flight',
+          description: `Arrive at ${arrivalAirportName}.`,
+          startTime: minutesToHHMM(flightStartMins),
+          endTime: minutesToHHMM(flightEndMins),
+          category: 'flight',
+          type: 'flight',
+          location: { name: arrivalAirportName, address: '' },
+          cost: { amount: 0, currency: 'USD' },
+          bookingRequired: false,
+          isLocked: false,
+          durationMinutes: 120,
+          source: 'repair-arrival-flight',
+        };
+
+        const transferStartMins = flightEndMins + 30;
+        const transferEndMins = transferStartMins + transferMinutes;
+        const transferHotelName = hotelName || 'Your Hotel';
+        const transferCard = {
+          id: `day${dayNumber}-airport-transfer-${Date.now()}`,
+          title: `Transfer to ${transferHotelName}`,
+          name: `Transfer to ${transferHotelName}`,
+          description: `Travel from ${arrivalAirportName} to ${transferHotelName}.`,
+          startTime: minutesToHHMM(transferStartMins),
+          endTime: minutesToHHMM(transferEndMins),
+          category: 'transport',
+          type: 'transport',
+          location: { name: transferHotelName, address: hotelAddress || '' },
+          fromLocation: { name: arrivalAirportName, address: '' },
+          cost: { amount: 0, currency: 'USD' },
+          bookingRequired: false,
+          isLocked: false,
+          durationMinutes: transferMinutes,
+          source: 'repair-airport-transfer',
+        };
+
+        activities.unshift(transferCard);
+        activities.unshift(flightCard);
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_arrival_flight' });
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_airport_transfer' });
+        console.log(`[Repair] Injected arrival flight + airport transfer on Day 1`);
+      }
+    }
+  }
+
   // --- 4. DUPLICATE_CONCEPT: strip trip-wide duplicates ---
   if (byCode.has(FAILURE_CODES.DUPLICATE_CONCEPT)) {
     const dupeResults = byCode.get(FAILURE_CODES.DUPLICATE_CONCEPT) || [];
