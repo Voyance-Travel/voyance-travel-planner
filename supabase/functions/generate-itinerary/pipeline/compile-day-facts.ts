@@ -231,7 +231,7 @@ export async function compileDayFacts(
         try {
           const { data: tripRow } = await supabase
             .from('trips')
-            .select('hotel_selection')
+            .select('hotel_selection, start_date')
             .eq('id', tripId)
             .single();
 
@@ -239,21 +239,41 @@ export async function compileDayFacts(
             const rawHotel = tripRow.hotel_selection as any;
             const hotelList: any[] = Array.isArray(rawHotel) ? rawHotel : (rawHotel && typeof rawHotel === 'object' && rawHotel.name ? [rawHotel] : []);
 
-            if (hotelList.length > 1 && date) {
-              const dateStr = typeof date === 'string' ? date.split('T')[0] : date;
-              let matchedHotel = hotelList.find((h: any) => {
-                const cin = h.checkInDate || h.check_in_date;
-                const cout = h.checkOutDate || h.check_out_date;
-                if (!cin && cout && dateStr < cout) return true;
-                return cin && cout && dateStr >= cin && dateStr < cout;
-              });
-              if (!matchedHotel) {
-                // Fallback: distribute nights evenly
-                const daysPerHotel = Math.max(1, Math.floor(totalDays / hotelList.length));
-                const hotelIndex = Math.min(Math.floor((dayNumber - 1) / daysPerHotel), hotelList.length - 1);
-                matchedHotel = hotelList[hotelIndex];
-                console.log(`[compile-day-facts] Single-city split-stay date inference: day ${dayNumber} → hotel[${hotelIndex}] "${matchedHotel?.name}"`);
+            if (hotelList.length > 1) {
+              // Use trip start_date for correct date anchoring
+              let singleCityStartDate = tripRow.start_date || params.preferences?.startDate;
+              if (!singleCityStartDate && date && dayNumber) {
+                const d = new Date(typeof date === 'string' ? date.split('T')[0] : date);
+                d.setDate(d.getDate() - (dayNumber - 1));
+                singleCityStartDate = d.toISOString().split('T')[0];
               }
+
+              // Build day→hotel map for the entire trip to detect changes
+              const singleCityHotelMap: Array<{ hotelName?: string }> = [];
+              for (let d = 0; d < totalDays; d++) {
+                let dayHotel: any = null;
+                if (singleCityStartDate) {
+                  const dayDateObj = new Date(singleCityStartDate);
+                  dayDateObj.setDate(dayDateObj.getDate() + d);
+                  const dateStr = dayDateObj.toISOString().split('T')[0];
+                  dayHotel = hotelList.find((h: any) => {
+                    const cin = h.checkInDate || h.check_in_date;
+                    const cout = h.checkOutDate || h.check_out_date;
+                    if (!cin && cout && dateStr < cout) return true;
+                    return cin && cout && dateStr >= cin && dateStr < cout;
+                  });
+                }
+                if (!dayHotel) {
+                  const daysPerHotel = Math.max(1, Math.floor(totalDays / hotelList.length));
+                  const hotelIndex = Math.min(Math.floor(d / daysPerHotel), hotelList.length - 1);
+                  dayHotel = hotelList[hotelIndex];
+                }
+                singleCityHotelMap.push({ hotelName: dayHotel?.name || undefined });
+              }
+
+              // Resolve current day's hotel
+              const currentDayHotel = singleCityHotelMap[dayNumber - 1];
+              const matchedHotel = hotelList.find((h: any) => h.name === currentDayHotel?.hotelName);
               if (matchedHotel?.name) {
                 resolvedHotelOverride = {
                   name: matchedHotel.name,
@@ -262,7 +282,21 @@ export async function compileDayFacts(
                   checkIn: matchedHotel.checkIn || matchedHotel.checkInTime || matchedHotel.check_in,
                   checkOut: matchedHotel.checkOut || matchedHotel.checkOutTime || matchedHotel.check_out,
                 };
-                console.log(`[compile-day-facts] Single-city split-stay hotel resolved: "${matchedHotel.name}" for day ${dayNumber} (date: ${dateStr})`);
+                console.log(`[compile-day-facts] Single-city split-stay hotel resolved: "${matchedHotel.name}" for day ${dayNumber}`);
+              }
+
+              // Detect hotel change
+              if (dayNumber > 1) {
+                const prevDayHotel = singleCityHotelMap[dayNumber - 2];
+                if (
+                  prevDayHotel?.hotelName &&
+                  currentDayHotel?.hotelName &&
+                  prevDayHotel.hotelName !== currentDayHotel.hotelName
+                ) {
+                  resolvedIsHotelChange = true;
+                  resolvedPreviousHotelName = prevDayHotel.hotelName;
+                  console.log(`[compile-day-facts] Single-city hotel change on day ${dayNumber}: "${prevDayHotel.hotelName}" → "${currentDayHotel.hotelName}"`);
+                }
               }
             } else if (hotelList.length === 1 && hotelList[0]?.name) {
               resolvedHotelOverride = {
