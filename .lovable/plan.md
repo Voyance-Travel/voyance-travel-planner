@@ -1,49 +1,56 @@
 
 
-## Strip Internal Archetype/Category Labels From Titles & Descriptions
+## Fix: Morning Hotel Phantom & Missing End-of-Night Return
 
 ### Problem
-AI archetype labels like "Deep Context", "Solo Retreat", "Authentic Encounter" leak into user-visible text in multiple formats: parenthetical `(Deep Context)`, colon-suffix `Jerónimos Monastery: The Deep Context Stop`, ALL-CAPS in descriptions `(DEEP CONTEXT - Historical significance...)`, description prefixes `Solo Retreat: A peaceful...`, and ALL-CAPS words in transit names `DISTRICT`.
+Two bookend bugs on non-arrival days (Day 2+):
+1. **Morning phantom**: AI generates "Return to Hotel" or "Freshen Up" as the first activity of the day. The traveler woke up there — this is nonsensical. The repair pipeline has no guard to strip it.
+2. **Missing end-of-night return**: The end-of-day "Return to Hotel" injection exists (line 1342) but may be failing because the AI's last activity has category `accommodation` (e.g. a dinner card mislabeled, or a stale hotel card) which triggers the `isAccom(last)` skip.
 
-### Current State
-`sanitization.ts` lines 86-90 already have partial coverage but miss:
-- Parenthetical labels: `(Deep Context)`, `(Solo Retreat)`, `(Authentic Encounter)`
-- ALL-CAPS with explanations: `(DEEP CONTEXT - Historical significance...)`
-- `(SOLO RETREAT moment)` style
-- `The Deep Context Stop` (with "The" prefix) in colon-suffix patterns
-- `Authentic Encounter` in description prefixes
-- ALL-CAPS `DISTRICT` in transit names
+### Root Cause
+- The `isFirstDay` guard on line 576-600 strips pre-check-in accommodation on Day 1, but there is NO equivalent guard for Day 2+ mornings.
+- The end-of-day injection checks `!isAccom(last)` — if the AI already placed any accommodation-category card at the end (even a phantom one), the injection is skipped.
 
 ### Changes
 
-**File: `supabase/functions/generate-itinerary/sanitization.ts`**
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-Replace lines 86-90 in the `sanitizeAITextField` chain with expanded patterns:
+#### 1. Add morning hotel strip for Day 2+ (new step after bookends, ~line 807)
 
-```typescript
-// Strip parenthetical archetype labels: "(Deep Context)", "(Solo Retreat)", etc.
-.replace(/\s*\((?:Deep\s+Context|Solo\s+Retreat|Authentic\s+Encounter|Cultural\s+Highlight|Group\s+Activity|Hidden\s+Gem|Family\s+Stop|Romance\s+Stop|Luxury\s+Stop|Budget\s+Stop|Adventure\s+Stop|Wellness\s+Stop)\)\s*/gi, '')
-// Strip ALL-CAPS archetype labels with explanations: "(DEEP CONTEXT - Historical significance...)"
-.replace(/\s*\((?:DEEP\s+CONTEXT|SOLO\s+RETREAT|AUTHENTIC\s+ENCOUNTER|CULTURAL\s+HIGHLIGHT)\s*[-–—]?\s*[^)]*\)\s*/g, '')
-// Strip "(SOLO RETREAT moment)" and similar
-.replace(/\s*\(\s*(?:SOLO\s+RETREAT|DEEP\s+CONTEXT)\s+\w+\s*\)\s*/gi, '')
-// Strip colon-suffix labels: "Name: The Deep Context Stop"
-.replace(/\s*[:–—-]\s*(?:The\s+)?(?:Deep\s+Context|Solo\s+Retreat|Cultural\s+Highlight|Group\s+Activity|Wellness|Food|Shopping|Adventure|Family|Romance|Luxury|Budget|Hidden\s+Gem|Authentic\s+Encounter)(?:\s+Stop)?\s*$/gi, '')
-// Strip label as description prefix: "Solo Retreat: ..." "The Deep Context Stop: ..."
-.replace(/^(?:Solo\s+Retreat|Deep\s+Context|The\s+Deep\s+Context\s+Stop|Cultural\s+Highlight|Group\s+Activity|Authentic\s+Encounter|Wellness|Food\s+Stop|Hidden\s+Gem|Adventure|Shopping|Romance|Luxury|Budget)\s*:\s*/gi, '')
-// Catch remaining "... Stop" suffixed labels at end
-.replace(/\s*[:–—-]\s*(?:The\s+)?\w+(?:\s+\w+){0,2}\s+Stop\s*$/gi, '')
-// Strip ALL-CAPS "DISTRICT" from transit/location names
-.replace(/\s+DISTRICT\b/g, '')
+After the bookend repair runs, add a guard: on non-first, non-departure days, if the first non-transport activity is an accommodation card (Return to Hotel, Freshen Up) that appears before breakfast or the first real activity, remove it. The traveler is already at the hotel.
+
+Logic:
+```
+if (!isFirstDay && !isDepartureDay) {
+  // Find first non-transport activity
+  // If it's accommodation (Return to Hotel, Freshen Up) and NOT check-in/checkout,
+  // remove it — traveler woke up here
+}
 ```
 
-Key additions vs current code:
-1. **New** parenthetical label pattern (line 86 currently doesn't exist)
-2. **New** ALL-CAPS with explanation pattern
-3. **New** `(SOLO RETREAT moment)` pattern
-4. **Updated** colon-suffix pattern adds `Authentic\s+Encounter`
-5. **Updated** description prefix adds `The\s+Deep\s+Context\s+Stop` and `Authentic\s+Encounter`
-6. **New** `DISTRICT` stripping
+This should NOT strip:
+- Check-in activities (legitimate on hotel-change days)
+- Checkout activities
+- Breakfast at hotel (category = dining, not accommodation)
 
-No new files. No pipeline changes. No prompt changes. Just regex additions in the sanitization chain + redeploy.
+#### 2. Harden end-of-day injection in `repairBookends` (line 1350-1357)
+
+Change the `last` activity check: instead of just checking `!isAccom(last)`, also check if the last accommodation card is a "Return to Hotel" that was already properly placed. If the last card is a phantom (AI-generated accommodation that isn't a proper return), either strip it or inject after it.
+
+Specifically, refine `isAccom(last)` to also verify the title actually contains "return to" or "hotel" — if the last activity is mislabeled accommodation (e.g. a dinner with wrong category), treat it as non-accommodation and inject the return.
+
+#### 3. Add to repairBookends: strip wake-up phantoms before mid-day logic
+
+Inside `repairBookends`, before the mid-day and end-of-day checks, add a pass that removes "Return to Hotel" / "Freshen Up" activities that appear as the first 1-2 activities of the day on non-first days. This ensures the phantom doesn't interfere with subsequent bookend logic.
+
+### Summary of rules after fix
+
+| Time of day | Day 1 (arrival) | Day 2+ (standard) | Last day (departure) |
+|---|---|---|---|
+| Morning | No hotel activities before check-in | No "Return to Hotel" — you woke up here | Breakfast → Checkout |
+| Mid-day | Freshen Up after check-in (if lunch+dinner exist) | Freshen Up between lunch & dinner | Skip (departing) |
+| End-of-night | Return to Hotel (after check-in) | Return to Hotel (always) | Skip (at airport) |
+
+### Files changed
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add morning phantom strip + harden end-of-day injection
 
