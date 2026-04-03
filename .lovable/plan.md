@@ -1,32 +1,43 @@
 
+Fix the hotel-change resolution so the switch happens on the correct day and uses two different hotels.
 
-## Fix: Hotel Change Day — Direct Transit + Earlier Check-in
+1. Use the real trip start date for split-stay mapping
+- In `supabase/functions/generate-itinerary/action-generate-day.ts`, stop building the hotel day map from the current request’s `date`.
+- Anchor the map to the trip’s actual `start_date`, so day 1/day 2/day 3 align correctly with hotel date ranges.
+- This addresses the “wrong day” issue.
 
-### Problem
-On hotel-change days, the repair pipeline injects a Checkout from Hotel A (11:00) and a Check-in at Hotel B (15:00), but:
-1. **No transport card** is injected between checkout and check-in — the traveler "teleports" between hotels
-2. **Check-in is too late** — defaults to 15:00 even though the traveler should go directly to Hotel B after checkout (~30 min travel + arrival)
+2. Make the resolved hotel authoritative for that day
+- Right now a stale hotel name can survive from earlier context while the address updates to the new hotel.
+- Update the resolution so that when the date-aware lookup finds the hotel for the current day, both the hotel name and address are replaced from that result.
+- This fixes the “checkout and check-in to the same hotel” symptom.
 
-### Root Cause
-The split-stay block (step 7/8 in `repair-day.ts`, lines 649-726) injects checkout and check-in activities but never injects a transport card between them. The main transit gap pass (step 3) runs *before* step 7/8, and the post-dedup pass (9d) only runs if step 9c actually removes something.
+3. Unify hotel-change detection into one source of truth
+- Extend `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts` and `pipeline/types.ts` to return:
+  - `resolvedIsHotelChange`
+  - `resolvedPreviousHotelName`
+- Build these from the same split-stay timeline used to resolve the daily hotel, with fallback to `trips.hotel_selection` if `trip_cities` is missing/incomplete.
+- Then remove the duplicate hotel-change derivation from `action-generate-day.ts`.
 
-### Fix
+4. Feed repair-day the correct outgoing and incoming hotels
+- Pass the unified facts into `repairDay` so its hotel-change block gets:
+  - previous hotel = Hotel A
+  - current hotel = Hotel B
+  - only on the actual swap day
+- Add a small safety tweak in `supabase/functions/generate-itinerary/pipeline/repair-day.ts` so the hotel-change check-in uses the resolved current hotel override if present.
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+Expected result
+- Only on the real hotel-switch day:
+  - breakfast at Hotel A
+  - checkout from Hotel A at 11:00
+  - travel to Hotel B
+  - check-in at Hotel B
+- No same-hotel checkout/check-in pair.
+- No hotel-switch cards on the wrong day.
 
-In the `isHotelChange` block (lines 649-726), after injecting both checkout and check-in:
-
-1. **Inject a transport card** between checkout and check-in: "Travel to {Hotel B}" with `fromLocation: Hotel A` and `location: Hotel B`. Use coordinate-based duration if available, otherwise default 30 min.
-
-2. **Set check-in time based on checkout + travel**: Instead of `Math.max(15*60, checkoutEnd+30)`, calculate as `checkoutEnd + transportDuration + 15` (15 min buffer for arrival/lobby). This makes the day feel natural — checkout at 11:00, travel 30 min, arrive and check in ~11:45.
-
-3. **Sequence**: Checkout (11:00-11:30) → Travel to Hotel B (11:30-12:00) → Check-in at Hotel B (12:00-12:30)
-
-### Expected Behavior
-- Hotel change days show: Checkout → Travel to new hotel → Check-in
-- Timing flows naturally from checkout through travel to check-in
-- No "teleportation" gap between hotels
-
-### Files Changed
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add transport injection + adjust check-in timing in split-stay block
-
+Technical details
+- Files:
+  - `supabase/functions/generate-itinerary/action-generate-day.ts`
+  - `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
+  - `supabase/functions/generate-itinerary/pipeline/types.ts`
+  - `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (small safety update)
+- No database changes required.
