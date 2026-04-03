@@ -36,7 +36,7 @@ export default function SurpriseTripCard({ className }: SurpriseTripCardProps) {
         {/* Background Image with Overlay */}
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80"
+            src={normalizeUnsplashUrl("https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80")}
             alt="Mystery destination"
             className="w-full h-full object-cover transition-transform duration-700"
             style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}

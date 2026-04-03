@@ -23,11 +23,11 @@ export default function SignIn() {
   }, [isAuthenticated, isLoading, navigate, nextPath]);
 
   const heroImage = {
-    src: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80',
+    src: normalizeUnsplashUrl('https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=80'),
     alt: 'Travelers on a boat crossing a pristine alpine lake at sunrise',
     fallbacks: [
-      'https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1920&q=80',
-      'https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1920&q=80',
+      normalizeUnsplashUrl('https://images.unsplash.com/photo-1488085061387-422e29b40080?w=1920&q=80'),
+      normalizeUnsplashUrl('https://images.unsplash.com/photo-1530789253388-582c481c54b0?w=1920&q=80'),
     ],
   };
 

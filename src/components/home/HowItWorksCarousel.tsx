@@ -9,28 +9,28 @@ const steps = [
     icon: Sparkles,
     title: 'Take the Travel Quiz',
     description: 'Answer a few questions about how you like to travel. Early riser or late sleeper? Packed schedule or slow mornings? We learn your style.',
-    image: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800'),
   },
   {
     number: '2',
     icon: Map,
     title: 'AI Crafts Your Customized Itinerary',
     description: 'Our AI crafts a personalized day-by-day plan with hotels, activities, restaurants, and hidden gems matched to your preferences.',
-    image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800'),
   },
   {
     number: '3',
     icon: Calendar,
     title: 'Customize Every Detail',
     description: 'Swap activities, adjust timing, add your own ideas. Lock what you love, regenerate what you don\'t. It\'s your trip.',
-    image: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800'),
   },
   {
     number: '4',
     icon: Plane,
     title: 'Add Your Flight Details',
     description: 'Book your flights anywhere you like, then add your details here. We\'ll sync your itinerary to your arrival and departure times automatically.',
-    image: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800'),
   },
 ];
 
