@@ -1467,7 +1467,8 @@ function repairBookends(
         // If previous non-transport activity is at the same location as transport destination, skip
         if (transportDest && nextLoc && deduped.length > 0) {
           const prevNonTransport = [...deduped].reverse().find(a => !isTransport(a));
-          if (prevNonTransport && (prevNonTransport.location?.name || '').toLowerCase() === transportDest) {
+          const prevLoc = (prevNonTransport?.location?.name || '').toLowerCase();
+          if (prevNonTransport && isSameOrContainedLocation(prevLoc, transportDest, hotelName)) {
             repairs.push({
               code: FAILURE_CODES.LOGISTICS_SEQUENCE,
               action: 'removed_orphaned_transport',
