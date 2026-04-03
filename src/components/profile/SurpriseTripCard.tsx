@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import MysteryGetawayModal from './MysteryGetawayModal';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 interface SurpriseTripCardProps {
   className?: string;
