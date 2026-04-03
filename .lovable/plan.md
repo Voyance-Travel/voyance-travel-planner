@@ -1,34 +1,43 @@
 
+Fix the meal-guard reporting so it stops showing contradictory states like “breakfast, lunch, dinner” and “guard fired (+lunch)” on the same row.
 
-## Fix: Missing Checkout/Check-in on Split-Stay Transition Days
+What’s happening
+- In `supabase/functions/generate-itinerary/action-generate-day.ts`, the admin diagnostics are built after the meal guard runs.
+- That means the “found meals” list already includes the injected meal.
+- It also uses a different heuristic than `detectMealSlots(...)`, which is why raw `dining` can appear beside real meal slots.
 
-### Problem
+Plan
+1. Make diagnostics use the same detector as the guard
+- Replace the local `foundMeals` logic in `action-generate-day.ts` with `detectMealSlots(...)` from `day-validation.ts`.
+- This makes the logs and the guard share one source of truth.
 
-On a split-stay day (same city, different hotel), the itinerary has no "Checkout from Hotel A" and no "Check-in at Hotel B" activities. The traveler just teleports between hotels.
+2. Capture meals both before and after the guard
+- Record `beforeGuard` just before `enforceRequiredMealsFinalGuard(...)`.
+- Record `afterGuard` after the guard finishes.
+- Keep `guardFired` and `injected` alongside them.
 
-**Root cause:** The repair pipeline's check-in and checkout guarantees only fire for specific day types, and split-stay transitions aren't covered:
+3. Stop showing `dining` as if it were a meal slot
+- Remove the current fallback that pushes category names like `dining` into the meal list.
+- If needed, track generic dining cards separately as a count/flag instead of mixing them with breakfast/lunch/dinner.
 
-- **Check-in guarantee** (step 7): fires on `dayNumber === 1 || isTransitionDay` — but `isTransitionDay` means a *city change*, not a hotel change within the same city
-- **Checkout guarantee** (step 8): fires on `isLastDay || isLastDayInCity` — but on a split-stay, you're NOT leaving the city
+4. Update the admin log UI
+- In `src/pages/admin/GenerationLogs.tsx`, render meal info as:
+  - Final: breakfast, lunch, dinner
+  - Guard injected: lunch
+  - Before guard: breakfast, dinner
+- This makes it obvious whether lunch existed originally or was added by the repair step.
 
-Meanwhile, `generation-core.ts` already detects `isHotelChange` and `previousHotelName` and tells the AI about it in the prompt, but **never passes these to `repairDay`**. So even if the AI forgets to include checkout/check-in cards, the repair pipeline can't fix it.
+5. Update supporting types
+- Adjust the meal diagnostics shape in `supabase/functions/generate-itinerary/generation-timer.ts` and the frontend `GenerationLog` type so the new fields are typed consistently.
 
-### Changes
+6. Add a regression test
+- Add a focused test for the “missing lunch gets injected” case.
+- Verify the diagnostics report:
+  - `beforeGuard = [breakfast, dinner]`
+  - `afterGuard = [breakfast, lunch, dinner]`
+  - `injected = [lunch]`
+  - no raw `dining` in the displayed meal slots
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
-
-1. **Add `isHotelChange` and `previousHotelName` to `RepairDayInput`**: Two new optional fields so the repair pipeline knows this is a split-stay transition day.
-
-2. **Extend checkout guarantee (step 8)**: Add `isHotelChange` as a trigger condition. When `isHotelChange` is true, inject "Checkout from {previousHotelName}" at 11:00 AM if no checkout activity exists. Use `previousHotelName` (not the current hotel) for the title/location.
-
-3. **Extend check-in guarantee (step 7)**: Add `isHotelChange` to the `needsCheckIn` condition. When `isHotelChange` is true, inject "Check-in at {hotelName}" (the NEW hotel) at ~12:00 if no check-in exists — placed AFTER the checkout activity.
-
-4. **Order enforcement**: Ensure checkout comes before check-in on hotel-change days. If both are injected, checkout at 11:00, check-in at 12:00.
-
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
-
-5. **Pass `isHotelChange` and `previousHotelName` to `repairDay`**: Extract these from `cityInfo` (already available via `dayCityMap`) and include them in the repair input.
-
-### Expected Result
-Split-stay Day 3: Breakfast → **Checkout from Hotel A (11:00)** → **Check-in at Hotel B (12:00)** → Explore → Dinner → Return to Hotel B
-
+Expected result
+- The guard can still inject missing meals when needed.
+- But the logs will no longer look self-contradictory, and we’ll be able to tell the difference between a real guard fire and a reporting artifact.
