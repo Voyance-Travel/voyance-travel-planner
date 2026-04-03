@@ -89,7 +89,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     hotelName, hotelAddress, hasHotel,
     lockedActivities, restaurantPool, usedRestaurants,
     isTransitionDay, isMultiCity, isLastDayInCity,
-    resolvedDestination, nextLegTransport, nextLegTransportDetails, hotelOverride } = input;
+    resolvedDestination, nextLegTransport, nextLegTransportDetails, hotelOverride,
+    isHotelChange, previousHotelName } = input;
 
   // Clone activities array to mutate
   let activities: any[] = [...(input.day.activities || [])];
