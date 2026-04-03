@@ -68,47 +68,88 @@ export async function compileDayFacts(
 
       if (tripCities && tripCities.length > 1) {
         resolvedIsMultiCity = true;
+
+        // ── Build a full day→hotel map for hotel-change detection ──
+        // We need the trip's actual start date to anchor dates correctly
+        let tripStartDate: string | undefined;
+        if (tripId) {
+          try {
+            const { data: tripRow } = await supabase
+              .from('trips')
+              .select('start_date')
+              .eq('id', tripId)
+              .single();
+            tripStartDate = tripRow?.start_date || undefined;
+          } catch (_e) { /* non-blocking */ }
+        }
+        // Fallbacks: preferences, then request date minus dayNumber offset
+        if (!tripStartDate && params.preferences?.startDate) {
+          tripStartDate = params.preferences.startDate;
+        }
+        if (!tripStartDate && date && dayNumber) {
+          // date is for the current day; compute trip start by subtracting dayNumber-1 days
+          const d = new Date(typeof date === 'string' ? date.split('T')[0] : date);
+          d.setDate(d.getDate() - (dayNumber - 1));
+          tripStartDate = d.toISOString().split('T')[0];
+        }
+
+        type DayHotelEntry = { hotelName?: string; hotelAddress?: string; cityName: string };
+        const dayHotelMap: DayHotelEntry[] = [];
+
         let dayCounter = 0;
         for (const city of tripCities) {
           const cityNights = (city as any).nights || (city as any).days_total || 1;
+          const rawHotel = (city as any).hotel_selection;
+          const hotelList: any[] = Array.isArray(rawHotel) ? rawHotel : (rawHotel ? [rawHotel] : []);
+
           for (let n = 0; n < cityNights; n++) {
             dayCounter++;
+
+            // Date-aware hotel resolution for split-stays
+            let cityHotel: any = null;
+            if (hotelList.length > 1 && tripStartDate) {
+              const dayDateObj = new Date(tripStartDate);
+              dayDateObj.setDate(dayDateObj.getDate() + (dayCounter - 1));
+              const dateStr = dayDateObj.toISOString().split('T')[0];
+
+              cityHotel = hotelList.find((h: any) => {
+                const cin = h.checkInDate || h.check_in_date;
+                const cout = h.checkOutDate || h.check_out_date;
+                if (!cin && cout && dateStr < cout) return true;
+                return cin && cout && dateStr >= cin && dateStr < cout;
+              });
+              if (!cityHotel) {
+                const daysPerHotel = Math.max(1, Math.floor(cityNights / hotelList.length));
+                const hotelIndex = Math.min(Math.floor(n / daysPerHotel), hotelList.length - 1);
+                cityHotel = hotelList[hotelIndex];
+                console.log(`[compile-day-facts] Split-stay date inference: day ${n} of ${cityNights} → hotel[${hotelIndex}] "${cityHotel?.name}"`);
+              }
+            } else {
+              cityHotel = hotelList[0] || null;
+            }
+
+            dayHotelMap.push({
+              hotelName: cityHotel?.name || undefined,
+              hotelAddress: cityHotel?.address || undefined,
+              cityName: city.city_name,
+            });
+
             if (dayCounter === dayNumber) {
               resolvedDestination = city.city_name || destination;
               resolvedCountry = (city as any).country || destinationCountry;
-              // Resolve per-city hotel
-              if (!resolvedHotelOverride?.name && (city as any).hotel_selection) {
-                const rawHotel = (city as any).hotel_selection;
-                const hotelList: any[] = Array.isArray(rawHotel) ? rawHotel : (rawHotel ? [rawHotel] : []);
-                let cityHotel: any = null;
-                if (hotelList.length > 1 && date) {
-                  const dateStr = typeof date === 'string' ? date.split('T')[0] : date;
-                  cityHotel = hotelList.find((h: any) => {
-                    const cin = h.checkInDate || h.check_in_date;
-                    const cout = h.checkOutDate || h.check_out_date;
-                    if (!cin && cout && dateStr < cout) return true;
-                    return cin && cout && dateStr >= cin && dateStr < cout;
-                  });
-                  if (!cityHotel) {
-                    const daysPerHotel = Math.max(1, Math.floor(cityNights / hotelList.length));
-                    const hotelIndex = Math.min(Math.floor(n / daysPerHotel), hotelList.length - 1);
-                    cityHotel = hotelList[hotelIndex];
-                    console.log(`[compile-day-facts] Split-stay date inference: day ${n} of ${cityNights} → hotel[${hotelIndex}] "${cityHotel?.name}"`);
-                  }
-                } else {
-                  cityHotel = hotelList[0] || null;
-                }
-                if (cityHotel?.name) {
-                  resolvedHotelOverride = {
-                    name: cityHotel.name,
-                    address: cityHotel.address,
-                    neighborhood: cityHotel.neighborhood,
-                    checkIn: cityHotel.checkIn || cityHotel.checkInTime || cityHotel.check_in,
-                    checkOut: cityHotel.checkOut || cityHotel.checkOutTime || cityHotel.check_out,
-                  };
-                  console.log(`[compile-day-facts] Per-city hotel: "${cityHotel.name}" for ${resolvedDestination}`);
-                }
+
+              // Set hotel override from date-aware map (authoritative)
+              if (cityHotel?.name) {
+                resolvedHotelOverride = {
+                  name: cityHotel.name,
+                  address: cityHotel.address,
+                  neighborhood: cityHotel.neighborhood,
+                  checkIn: cityHotel.checkIn || cityHotel.checkInTime || cityHotel.check_in,
+                  checkOut: cityHotel.checkOut || cityHotel.checkOutTime || cityHotel.check_out,
+                };
+                console.log(`[compile-day-facts] Per-city hotel: "${cityHotel.name}" for ${resolvedDestination}`);
               }
+
               // Check last day in city → capture next leg transport
               if (n === cityNights - 1) {
                 resolvedIsLastDayInCity = true;
@@ -155,11 +196,29 @@ export async function compileDayFacts(
                   resolvedTransportDetails = td;
                 }
               }
-              break;
+              // Don't break yet — continue building the map for context
             }
           }
           if (dayCounter >= dayNumber) break;
         }
+
+        // ── Hotel-change detection from the day→hotel map ──
+        const currentIdx = dayNumber - 1;
+        if (currentIdx > 0 && currentIdx < dayHotelMap.length) {
+          const currentEntry = dayHotelMap[currentIdx];
+          const prevEntry = dayHotelMap[currentIdx - 1];
+          if (
+            prevEntry.cityName === currentEntry.cityName &&
+            prevEntry.hotelName &&
+            currentEntry.hotelName &&
+            prevEntry.hotelName !== currentEntry.hotelName
+          ) {
+            resolvedIsHotelChange = true;
+            resolvedPreviousHotelName = prevEntry.hotelName;
+            console.log(`[compile-day-facts] Hotel change detected on day ${dayNumber}: "${prevEntry.hotelName}" → "${currentEntry.hotelName}"`);
+          }
+        }
+
         console.log(`[compile-day-facts] Transition resolver: day=${dayNumber}, isTransition=${resolvedIsTransitionDay}, from=${resolvedTransitionFrom}, to=${resolvedTransitionTo}, mode=${resolvedTransportMode}`);
       }
 
