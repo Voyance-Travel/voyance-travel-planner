@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/config/routes';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 export default function CinematicHero() {
   const scrollToFeatures = () => {
