@@ -533,7 +533,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       return cat === 'accommodation' && (
         t.includes('check-in') || t.includes('check in') ||
         t.includes('checkin') || t.includes('settle in') ||
-        t.includes('refresh') || t.includes('hotel')
+        t.includes('luggage drop')
       );
     });
 
@@ -567,6 +567,41 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
       activities.unshift(checkInActivity);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkin_guarantee' });
+
+      // On arrival day, remove any accommodation activities scheduled BEFORE check-in
+      // (e.g. "Return to Hotel", "Freshen Up") — logically impossible before you've arrived
+      if (dayNumber === 1) {
+        const checkInMin = checkInStartMin;
+        const preCheckInAccom = activities.filter((a: any) => {
+          if (a.id === checkInActivity.id) return false;
+          const cat = (a.category || '').toLowerCase();
+          const t = (a.title || '').toLowerCase();
+          if (cat !== 'accommodation') return false;
+          const aMin = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          return aMin < checkInMin;
+        });
+        for (const toRemove of preCheckInAccom) {
+          const idx = activities.indexOf(toRemove);
+          if (idx >= 0) {
+            activities.splice(idx, 1);
+            repairs.push({ code: FAILURE_CODES.CHRONOLOGY, action: 'removed_pre_checkin_accommodation', before: toRemove.title });
+          }
+        }
+
+        // Strip hotel references from meals scheduled before check-in
+        // (e.g. "Breakfast at Hotel" → "Breakfast" — you can't eat at a hotel you haven't arrived at)
+        for (const act of activities) {
+          const t = (act.title || '').toLowerCase();
+          const cat = (act.category || '').toLowerCase();
+          const aMin = parseTimeToMinutes(act.startTime || '') ?? 99999;
+          if (cat === 'dining' && aMin < checkInMin && (t.includes('hotel') || t.includes(hotelName.toLowerCase()))) {
+            const oldTitle = act.title;
+            act.title = act.title.replace(/\s*(at|@)\s*(the\s+)?hotel.*/i, '').replace(new RegExp(`\\s*(at|@)\\s*(the\\s+)?${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'), '');
+            if (act.name) act.name = act.title;
+            repairs.push({ code: FAILURE_CODES.CHRONOLOGY, action: 'stripped_hotel_from_pre_checkin_meal', before: oldTitle, after: act.title });
+          }
+        }
+      }
     }
   }
 
@@ -760,7 +795,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
   if (activities.length > 0) {
     const effectiveHotelName = hotelName || 'Your Hotel';
-    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay);
+    const bookendRepairs = repairBookends(activities, effectiveHotelName, dayNumber, isDepartureDay, isFirstDay);
     activities = bookendRepairs.activities;
     repairs.push(...bookendRepairs.repairs);
   }
@@ -1207,6 +1242,7 @@ function repairBookends(
   hotelName: string,
   dayNumber: number,
   isDepartureDay: boolean,
+  isFirstDay: boolean = false,
 ): { activities: any[]; repairs: RepairAction[] } {
   const repairs: RepairAction[] = [];
 
@@ -1264,35 +1300,55 @@ function repairBookends(
     }
   }
 
-  // 1b. Mid-day hotel return guarantee — SKIP on departure days (traveler checks out and leaves)
+  // 1b. Mid-day hotel return guarantee — SKIP on departure days AND on first day before check-in
   if (!isDepartureDay) {
+    // On first day, find the check-in activity to ensure mid-day return only happens AFTER check-in
+    const checkInIdx = isFirstDay
+      ? activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+        })
+      : -1;
+
     const lunchIdx = activities.findIndex(a => (a.category === 'dining') && /\b(lunch|midday meal)\b/i.test(a.title || ''));
     const dinnerIdx = activities.findIndex(a => (a.category === 'dining') && /\b(dinner|evening meal)\b/i.test(a.title || ''));
     if (lunchIdx >= 0 && dinnerIdx > lunchIdx) {
-      const hasMidDayAccom = activities.slice(lunchIdx + 1, dinnerIdx).some(a => isAccom(a));
-      if (!hasMidDayAccom) {
-        let insertIdx = dinnerIdx;
-        for (let j = dinnerIdx - 1; j > lunchIdx; j--) {
-          if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
+      // On first day, skip mid-day hotel return if lunch is before check-in (can't return to a place you haven't been)
+      const skipBecausePreCheckIn = isFirstDay && checkInIdx >= 0 && lunchIdx < checkInIdx;
+      if (!skipBecausePreCheckIn) {
+        const hasMidDayAccom = activities.slice(lunchIdx + 1, dinnerIdx).some(a => isAccom(a));
+        if (!hasMidDayAccom) {
+          let insertIdx = dinnerIdx;
+          for (let j = dinnerIdx - 1; j > lunchIdx; j--) {
+            if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
+          }
+          const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
+          const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd);
+          const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
+          activities.splice(insertIdx, 0, transportCard, accomCard);
+          repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
         }
-        const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
-        const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd);
-        const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
-        activities.splice(insertIdx, 0, transportCard, accomCard);
-        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
       }
     }
   }
 
   // 2. End-of-day hotel return — SKIP on departure days (traveler is at the airport/departed)
   if (!isDepartureDay) {
-    const visible = activities.filter(a => !isTransport(a));
-    const last = visible[visible.length - 1];
-    if (last && !isAccom(last)) {
-      const et = last.endTime || '22:00';
-      activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
-      activities.push(makeAccomCard('Return to', offset(et, 20), 15));
-      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_return' });
+    // On first day, only inject "Return to Hotel" if check-in has already happened
+    const hasCheckedIn = !isFirstDay || activities.some((a: any) => {
+      const t = (a.title || '').toLowerCase();
+      return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+    });
+
+    if (hasCheckedIn) {
+      const visible = activities.filter(a => !isTransport(a));
+      const last = visible[visible.length - 1];
+      if (last && !isAccom(last)) {
+        const et = last.endTime || '22:00';
+        activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
+        activities.push(makeAccomCard('Return to', offset(et, 20), 15));
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_return' });
+      }
     }
   }
 
