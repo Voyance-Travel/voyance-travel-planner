@@ -1229,7 +1229,6 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const toCoords = next.coordinates || next.location?.coordinates || null;
         let dur = 15, costAmt = 5, method = 'taxi';
         if (fromCoords?.lat && toCoords?.lat) {
-          const { haversineDistanceKm } = await import('../generation-utils.ts');
           const dist = haversineDistanceKm(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng);
           dur = Math.max(10, Math.min(45, Math.round(dist * 3)));
           costAmt = Math.round(dist * 2);
