@@ -1,44 +1,50 @@
 
 
-## Fix: Inject Flight Card on Last Day Even Without Explicit Flight Time
+## Fix: Hotel Change Detection Skipped for Single-City Split-Stay
 
 ### Problem
-On the last day, when no explicit return flight time is stored (`returnDepartureTime24` is empty), the repair pipeline still injects a "Transfer to Airport" card (line 902 fallback branch), but the flight card injection at line 956 is gated by `isLastDay && returnDepartureTime24`. This means the itinerary ends with a transport card going to the airport — and nothing after it. No airport arrival, no flight.
+On hotel change days in a single-city trip, no checkout card for Hotel A and no check-in card for Hotel B are injected. The itinerary just continues as if the same hotel applies all trip.
+
+### Root Cause
+In `action-generate-day.ts` line 831, the hotel resolution block (which also handles hotel-change detection) is gated by:
+
+```typescript
+if (tripId && (!resolvedRepairHotelName || resolvedRepairHotelName === 'Hotel' || resolvedIsMultiCity))
+```
+
+For single-city split-stay trips:
+- `resolvedRepairHotelName` is already set from `flightContext.hotelName` or `paramHotelName` (truthy, not 'Hotel')
+- `resolvedIsMultiCity` is `false`
+
+So the entire block is **skipped**, meaning:
+- `resolvedIsHotelChange` stays `false`
+- `resolvedPreviousHotelName` stays `undefined`
+- The repair pipeline (steps 7/8) never injects checkout/check-in cards
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+**File: `supabase/functions/generate-itinerary/action-generate-day.ts`**
 
-Expand the flight card injection block (line 955-989) to also fire when `isLastDay` and a departure transport card targeting an airport exists, even if `returnDepartureTime24` is missing:
+1. **Always run hotel-change detection**: Change the guard so the block always executes when `tripId` exists and `trip_cities` data is available. The existing hotel name can still be overridden by the date-aware resolver when it finds a better match. At minimum, hotel-change detection must always run.
 
-1. Change the guard from `isLastDay && returnDepartureTime24` to `isLastDay`
-2. When `returnDepartureTime24` is available, use it for exact timing (existing logic)
-3. When `returnDepartureTime24` is missing, derive the flight time from the airport transfer card's end time + a reasonable buffer (e.g., 2 hours for check-in/security), and create a generic "Departure Flight" card
-4. Only inject if there's actually an airport-bound transport card (don't inject flight cards on non-airport departure days like train departures)
+   Change line 831 from:
+   ```typescript
+   if (tripId && (!resolvedRepairHotelName || resolvedRepairHotelName === 'Hotel' || resolvedIsMultiCity)) {
+   ```
+   to:
+   ```typescript
+   if (tripId) {
+   ```
 
-```
-// Pseudocode for the expanded logic:
-if (isLastDay) {
-  const hasFlightCard = activities.some(a => cat === 'flight' || title includes 'flight departure');
-  
-  if (!hasFlightCard) {
-    const airportTransport = activities.find(a => transport to airport);
-    if (airportTransport) {
-      const depMins = returnDepartureTime24 
-        ? parseTimeToMinutes(returnDepartureTime24)
-        : (parseTimeToMinutes(airportTransport.endTime) + 120); // 2hr after arriving at airport
-      
-      // inject flight card at depMins
-    }
-  }
-}
-```
+   Then inside the block, only override `resolvedRepairHotelName` when the resolved hotel is more specific (the existing conditional on lines 885-887 already handles this).
 
-### Expected behavior
-- Last day always shows: ... → Transfer to Airport → Departure Flight
-- With flight data: exact flight time is used
-- Without flight data: flight card placed ~2 hours after airport transfer arrival
+2. **Hotel change detection remains unchanged** — the comparison logic at lines 892-906 is correct, it just never gets to run today for single-city trips with a pre-resolved hotel name.
 
-### Files changed
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — expand flight card guarantee to work without explicit departure time
+### Expected Behavior
+- On hotel-change days: Checkout from Hotel A (morning) + Check-in at Hotel B (afternoon) always appear
+- Non-hotel-change days: no change in behavior
+- Multi-city trips: no change (already worked because `resolvedIsMultiCity` was true)
+
+### Files Changed
+- `supabase/functions/generate-itinerary/action-generate-day.ts` — relax guard to always run hotel-change detection
 
