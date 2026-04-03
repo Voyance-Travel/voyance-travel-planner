@@ -1678,6 +1678,72 @@ function repairBookends(
     }
   }
 
+  // 2.5. TRANSPORT VALIDATION — Validate existing AI-generated transport cards
+  // Ensure each transport correctly bridges the preceding → following non-transport activities
+  for (let i = 0; i < activities.length; i++) {
+    if (!isTransport(activities[i])) continue;
+    const transport = activities[i];
+
+    // Find preceding non-transport activity
+    let prevNonTransport: any = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!isTransport(activities[j])) { prevNonTransport = activities[j]; break; }
+    }
+    // Find following non-transport activity
+    let nextNonTransport: any = null;
+    for (let j = i + 1; j < activities.length; j++) {
+      if (!isTransport(activities[j])) { nextNonTransport = activities[j]; break; }
+    }
+
+    if (!nextNonTransport) continue; // trailing transport — handled by bookend guards
+
+    const transportDest = (transport.location?.name || '').toLowerCase();
+    const nextLoc = (nextNonTransport.location?.name || nextNonTransport.title || '').toLowerCase();
+
+    // Check if transport destination matches the next non-transport activity
+    const destMatchesNext = transportDest && nextLoc && isSameOrContainedLocation(transportDest, nextLoc, hotelName);
+
+    if (!destMatchesNext && nextLoc) {
+      // Rewrite transport to correctly bridge prev → next
+      const fromName = prevNonTransport?.location?.name || prevNonTransport?.title || 'previous location';
+      const toName = nextNonTransport.location?.name || nextNonTransport.title;
+      const oldTitle = transport.title;
+
+      transport.title = `Travel to ${toName}`;
+      transport.description = `Transit from ${fromName} to ${toName}.`;
+      transport.location = { name: toName, address: '' };
+      transport.fromLocation = { name: fromName, address: '' };
+
+      // Re-estimate duration if coordinates available
+      const fromCoords = prevNonTransport ? getActivityCoords(prevNonTransport) : hotelCoordinates || null;
+      const toCoords = getActivityCoords(nextNonTransport) || null;
+      if (fromCoords && toCoords) {
+        const est = estimateTransit(fromCoords, toCoords, resolvedDestination);
+        transport.durationMinutes = est.durationMinutes;
+        transport.endTime = offset(transport.startTime || '', est.durationMinutes);
+        transport.cost = { amount: est.costAmount, currency: 'USD' };
+        if (transport.transportation) {
+          transport.transportation = { method: est.method, duration: `${est.durationMinutes} min` };
+        }
+      }
+
+      repairs.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        action: 'rewritten_transport_to_match_neighbors',
+        before: oldTitle,
+        after: transport.title,
+      });
+    }
+
+    // Also fix the "from" in description if it doesn't match preceding activity
+    if (prevNonTransport) {
+      const fromName = prevNonTransport.location?.name || prevNonTransport.title || '';
+      if (fromName && !transport.fromLocation) {
+        transport.fromLocation = { name: fromName, address: '' };
+      }
+    }
+  }
+
   // 3. Transit gaps between non-adjacent visible activities (with guards)
   const rebuilt: any[] = [];
   for (let i = 0; i < activities.length; i++) {
