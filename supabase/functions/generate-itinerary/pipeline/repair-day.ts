@@ -698,12 +698,41 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         return t.includes('checkout') || t.includes('check-out') || t.includes('check out');
       });
       const checkoutEndMin = checkoutAct ? (parseTimeToMinutes(checkoutAct.endTime) ?? 11 * 60 + 30) : 11 * 60 + 30;
-      // Default to 15:00 or 30 min after checkout, whichever is later
-      const checkInStartMin = Math.max(15 * 60, checkoutEndMin + 30);
+
+      // --- Inject transport card: Travel from Hotel A → Hotel B ---
+      const transportDuration = 30; // default 30 min for inter-hotel travel
+      const transportStartMin = checkoutEndMin;
+      const transportEndMin = transportStartMin + transportDuration;
+      const coHotelNameForTransport = previousHotelName || 'Your Hotel';
+      const transportActivity = {
+        id: `day${dayNumber}-hotel-transfer-${Date.now()}`,
+        title: `Travel to ${hn}`,
+        name: `Travel to ${hn}`,
+        description: `Travel from ${coHotelNameForTransport} to ${hn} with your luggage.`,
+        startTime: minutesToHHMM(transportStartMin),
+        endTime: minutesToHHMM(transportEndMin),
+        category: 'transport', type: 'transport',
+        location: { name: hn, address: ha },
+        fromLocation: { name: coHotelNameForTransport, address: '' },
+        cost: { amount: 0, currency: 'USD' },
+        bookingRequired: false, isLocked: false, durationMinutes: transportDuration,
+        source: 'repair-hotel-transfer',
+      };
+      // Insert transport chronologically
+      let transportIdx = activities.length;
+      for (let i = 0; i < activities.length; i++) {
+        const actStart = parseTimeToMinutes(activities[i].startTime || '') ?? 99999;
+        if (transportStartMin <= actStart) { transportIdx = i; break; }
+      }
+      activities.splice(transportIdx, 0, transportActivity);
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_transfer_transport' });
+
+      // --- Check-in at NEW hotel: arrives right after transport + 15 min buffer ---
+      const checkInStartMin = transportEndMin + 15;
       const checkInStart = minutesToHHMM(checkInStartMin);
       const checkInEnd = minutesToHHMM(checkInStartMin + 30);
       const checkInActivity = {
-        id: `day${dayNumber}-checkin-repair-${Date.now()}`,
+        id: `day${dayNumber}-checkin-repair-${Date.now() + 1}`,
         title: `Check-in at ${hn}`,
         name: `Check-in at ${hn}`,
         description: `Check in to ${hn}, freshen up after the hotel change.`,
@@ -714,7 +743,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         bookingRequired: false, isLocked: false, durationMinutes: 30,
         source: 'repair-checkin-guarantee',
       };
-      // Insert chronologically (after checkout)
+      // Insert check-in chronologically (after transport)
       let insertIdx = activities.length;
       for (let i = 0; i < activities.length; i++) {
         const actStart = parseTimeToMinutes(activities[i].startTime || '') ?? 99999;
