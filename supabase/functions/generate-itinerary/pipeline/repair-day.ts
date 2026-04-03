@@ -1459,8 +1459,24 @@ function repairBookends(
     }
   }
 
-  // 1b. Mid-day hotel return guarantee — SKIP on departure days AND on first day before check-in
+  // 1b. Mid-day hotel return guarantee — SKIP on departure days, first day before check-in, AND hotel-change days between checkout/check-in
   if (!isDepartureDay) {
+    // On hotel-change days, find checkout/check-in window to suppress mid-day returns
+    let hotelChangeCheckoutMin = -1;
+    let hotelChangeCheckInMin = 99999;
+    if (isHotelChange) {
+      const coIdx = activities.findIndex((a: any) => {
+        const t = (a.title || '').toLowerCase();
+        return (t.includes('checkout') || t.includes('check-out') || t.includes('check out'));
+      });
+      const ciIdx = activities.findIndex((a: any) => {
+        const t = (a.title || '').toLowerCase();
+        return (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+      });
+      if (coIdx >= 0) hotelChangeCheckoutMin = parseTimeToMinutes(activities[coIdx].startTime || '') ?? -1;
+      if (ciIdx >= 0) hotelChangeCheckInMin = parseTimeToMinutes(activities[ciIdx].startTime || '') ?? 99999;
+    }
+
     // On first day, find the check-in activity to ensure mid-day return only happens AFTER check-in
     const checkInIdx = isFirstDay
       ? activities.findIndex((a: any) => {
@@ -1472,9 +1488,12 @@ function repairBookends(
     const lunchIdx = activities.findIndex(a => (a.category === 'dining') && /\b(lunch|midday meal)\b/i.test(a.title || ''));
     const dinnerIdx = activities.findIndex(a => (a.category === 'dining') && /\b(dinner|evening meal)\b/i.test(a.title || ''));
     if (lunchIdx >= 0 && dinnerIdx > lunchIdx) {
-      // On first day, skip mid-day hotel return if lunch is before check-in (can't return to a place you haven't been)
+      // On first day, skip mid-day hotel return if lunch is before check-in
       const skipBecausePreCheckIn = isFirstDay && checkInIdx >= 0 && lunchIdx < checkInIdx;
-      if (!skipBecausePreCheckIn) {
+      // On hotel-change days, skip if the mid-day return would fall between checkout and check-in
+      const lunchMin = parseTimeToMinutes(activities[lunchIdx]?.startTime || '') ?? 0;
+      const skipBecauseHotelChange = isHotelChange && lunchMin >= hotelChangeCheckoutMin && lunchMin < hotelChangeCheckInMin;
+      if (!skipBecausePreCheckIn && !skipBecauseHotelChange) {
         const hasMidDayAccom = activities.slice(lunchIdx + 1, dinnerIdx).some(a => isAccom(a));
         if (!hasMidDayAccom) {
           let insertIdx = dinnerIdx;
