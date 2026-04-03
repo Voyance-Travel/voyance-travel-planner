@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Snowflake, Sun, Leaf, Flower } from 'lucide-react';
 import { useCallback } from 'react';
+import { normalizeUnsplashUrl } from '@/utils/unsplash';
 
 const collections = [
   {
