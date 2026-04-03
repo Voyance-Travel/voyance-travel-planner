@@ -1051,6 +1051,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // (ignoring transport between them). If two non-check-in/checkout accom cards
   // are back-to-back, keep the last one (typically "Return to Hotel") and remove
   // the earlier one plus its preceding transport.
+  // Also: remove "Freshen Up" if the next real activity is at the same hotel/location
+  // (e.g., hotel spa) — the freshen-up is redundant when you're staying on-site.
   {
     const isNonStructuralAccom = (act: any): boolean => {
       const cat = (act.category || '').toLowerCase();
@@ -1063,8 +1065,25 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       return true;
     };
 
+    const isFreshenUp = (act: any): boolean => {
+      const t = (act.title || '').toLowerCase();
+      return t.includes('freshen up') || t.includes('freshen-up');
+    };
+
+    const getLocationName = (act: any): string => {
+      const loc = act.location;
+      const name = (loc?.name || loc?.address || '').toLowerCase().trim();
+      return name;
+    };
+
+    const isTransportCat = (act: any): boolean => {
+      const cat = (act.category || '').toLowerCase();
+      return cat === 'transport' || cat === 'transportation';
+    };
+
     const indicesToRemove = new Set<number>();
-    // Build list of non-structural accommodation indices (skipping transport)
+
+    // Part A: Back-to-back accommodation dedup (original logic)
     const accomIndices: number[] = [];
     for (let i = 0; i < activities.length; i++) {
       if (isNonStructuralAccom(activities[i])) accomIndices.push(i);
@@ -1073,27 +1092,19 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     for (let k = 0; k < accomIndices.length - 1; k++) {
       const idxA = accomIndices[k];
       const idxB = accomIndices[k + 1];
-      // Check that everything between them is transport (or nothing)
       let onlyTransportBetween = true;
       for (let m = idxA + 1; m < idxB; m++) {
-        const midCat = (activities[m].category || '').toLowerCase();
-        if (midCat !== 'transport' && midCat !== 'transportation') {
+        if (!isTransportCat(activities[m])) {
           onlyTransportBetween = false;
           break;
         }
       }
       if (!onlyTransportBetween) continue;
 
-      // They're consecutive (ignoring transport). Remove the earlier one.
       indicesToRemove.add(idxA);
-      // Also remove any transport card directly before the removed accom
-      if (idxA > 0) {
-        const prevCat = (activities[idxA - 1].category || '').toLowerCase();
-        if (prevCat === 'transport' || prevCat === 'transportation') {
-          indicesToRemove.add(idxA - 1);
-        }
+      if (idxA > 0 && isTransportCat(activities[idxA - 1])) {
+        indicesToRemove.add(idxA - 1);
       }
-      // Also remove transport between them (leading to the kept one is fine)
       for (let m = idxA + 1; m < idxB; m++) {
         indicesToRemove.add(m);
       }
@@ -1104,6 +1115,76 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         before: activities[idxA].title,
         after: activities[idxB].title,
       });
+    }
+
+    // Part B: "Freshen Up" before same-location activity is redundant
+    // e.g., "Freshen Up at Four Seasons" → "Wellness at Four Seasons Spa"
+    for (let i = 0; i < activities.length; i++) {
+      if (indicesToRemove.has(i)) continue;
+      if (!isNonStructuralAccom(activities[i]) || !isFreshenUp(activities[i])) continue;
+
+      // Find next real (non-transport) activity
+      let nextRealIdx = -1;
+      for (let j = i + 1; j < activities.length; j++) {
+        if (indicesToRemove.has(j)) continue;
+        if (!isTransportCat(activities[j])) {
+          nextRealIdx = j;
+          break;
+        }
+      }
+      if (nextRealIdx < 0) continue;
+
+      const nextAct = activities[nextRealIdx];
+      // Skip if next activity is also accommodation (handled by Part A)
+      if (isNonStructuralAccom(nextAct)) continue;
+
+      // Check if both are at the same hotel/location
+      const freshenLoc = getLocationName(activities[i]);
+      const nextLoc = getLocationName(nextAct);
+      const freshenTitle = (activities[i].title || '').toLowerCase();
+      const nextTitle = (nextAct.title || '').toLowerCase();
+
+      // Extract hotel name from freshen-up title (e.g., "Freshen Up at Four Seasons Ritz")
+      const hotelNameMatch = freshenTitle.match(/freshen\s*up\s+(?:at\s+)?(.+)/i);
+      const hotelName = hotelNameMatch ? hotelNameMatch[1].trim().toLowerCase() : '';
+
+      let sameLocation = false;
+      if (freshenLoc && nextLoc && (freshenLoc.includes(nextLoc) || nextLoc.includes(freshenLoc))) {
+        sameLocation = true;
+      }
+      // Also check if the next activity title/location references the same hotel
+      if (hotelName && (nextTitle.includes(hotelName) || nextLoc.includes(hotelName))) {
+        sameLocation = true;
+      }
+      // Check if next activity location contains the hotel name from freshen-up location
+      if (freshenLoc && nextLoc) {
+        // Extract meaningful words (3+ chars) from hotel location
+        const hotelWords = freshenLoc.split(/\s+/).filter(w => w.length >= 3);
+        const matchCount = hotelWords.filter(w => nextLoc.includes(w) || nextTitle.includes(w)).length;
+        if (hotelWords.length > 0 && matchCount >= Math.ceil(hotelWords.length * 0.5)) {
+          sameLocation = true;
+        }
+      }
+
+      if (sameLocation) {
+        indicesToRemove.add(i);
+        // Remove transport leading to the freshen-up
+        if (i > 0 && isTransportCat(activities[i - 1]) && !indicesToRemove.has(i - 1)) {
+          indicesToRemove.add(i - 1);
+        }
+        // Remove transport between freshen-up and next activity (they're at same place)
+        for (let m = i + 1; m < nextRealIdx; m++) {
+          if (isTransportCat(activities[m])) {
+            indicesToRemove.add(m);
+          }
+        }
+        repairs.push({
+          code: FAILURE_CODES.MISSING_SLOT,
+          action: 'dedup_freshen_up_before_same_location',
+          before: activities[i].title,
+          after: nextAct.title,
+        });
+      }
     }
 
     if (indicesToRemove.size > 0) {
