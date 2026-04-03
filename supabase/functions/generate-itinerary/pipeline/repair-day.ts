@@ -1260,6 +1260,11 @@ function repairBookends(
     const hn = hotelName.toLowerCase();
     return t.includes(hn) || l.includes(hn) || t.includes('hotel') || t.includes('return to') || t.includes('freshen up');
   };
+  const isCheckinOrCheckout = (a: any) => {
+    const t = (a.title || '').toLowerCase();
+    return t.includes('check-in') || t.includes('check in') || t.includes('checkin')
+      || t.includes('checkout') || t.includes('check-out') || t.includes('check out');
+  };
 
   const offset = (ts: string, min: number): string => {
     if (!ts) return '';
@@ -1290,6 +1295,39 @@ function repairBookends(
     tags: ['transport'], transportation: { method: 'walking', duration: '15 min' },
     source: 'bookend-validator',
   });
+
+  // 0. MORNING PHANTOM STRIP — On Day 2+ (non-first, non-departure), remove
+  // accommodation cards at the start of the day that aren't check-in/checkout.
+  // The traveler woke up at the hotel; "Return to Hotel" / "Freshen Up" as the
+  // first activity is nonsensical.
+  if (!isFirstDay && !isDepartureDay) {
+    let stripped = true;
+    while (stripped) {
+      stripped = false;
+      // Find first non-transport activity
+      const firstRealIdx = activities.findIndex(a => !isTransport(a));
+      if (firstRealIdx >= 0) {
+        const first = activities[firstRealIdx];
+        if (isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first)) {
+          // Also remove any transport card immediately before it that goes TO the hotel
+          if (firstRealIdx > 0 && isTransport(activities[firstRealIdx - 1])) {
+            const transportTitle = (activities[firstRealIdx - 1].title || '').toLowerCase();
+            const transportDest = (activities[firstRealIdx - 1].location?.name || '').toLowerCase();
+            if (transportTitle.includes(hotelName.toLowerCase()) || transportDest.includes(hotelName.toLowerCase())
+                || transportTitle.includes('hotel') || transportDest.includes('hotel')) {
+              activities.splice(firstRealIdx - 1, 2);
+            } else {
+              activities.splice(firstRealIdx, 1);
+            }
+          } else {
+            activities.splice(firstRealIdx, 1);
+          }
+          repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'stripped_morning_hotel_phantom' });
+          stripped = true; // Check again in case there are consecutive phantoms
+        }
+      }
+    }
+  }
 
   // 1. Mid-day hotel transports without accommodation card
   for (let i = 0; i < activities.length - 1; i++) {
@@ -1349,7 +1387,15 @@ function repairBookends(
     if (hasCheckedIn) {
       const visible = activities.filter(a => !isTransport(a));
       const last = visible[visible.length - 1];
-      if (last && !isAccom(last)) {
+      // Harden: only treat as "already has return" if it's BOTH accommodation category
+      // AND its title actually indicates a hotel return (not a mislabeled dinner etc.)
+      const isProperReturn = last && isAccom(last) && isHotelRelated(last);
+      if (last && !isProperReturn) {
+        // If last activity is mislabeled accommodation (wrong category), fix its category
+        if (last && isAccom(last) && !isHotelRelated(last)) {
+          last.category = 'sightseeing';
+          repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'recategorized_mislabeled_accommodation' });
+        }
         const et = last.endTime || '22:00';
         activities.push(makeTransCard(last.location?.name || last.title || 'venue', hotelName, et));
         activities.push(makeAccomCard('Return to', offset(et, 20), 15));
