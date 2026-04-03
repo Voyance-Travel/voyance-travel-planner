@@ -20,7 +20,7 @@ const featuredDestinations = [
     country: 'France',
     region: 'Europe',
     description: 'The city of lights and eternal romance. World-class museums, café culture, Michelin-starred dining.',
-    image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80',
+    image: normalizeUnsplashUrl('https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80'),
     tags: ['Culture', 'Romance', 'Food'],
     featured: true,
   },
