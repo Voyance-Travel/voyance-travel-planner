@@ -191,15 +191,48 @@ async function fetchGoogleReviews(
       totalReviews: (place.userRatingCount as number) || 0,
       priceLevel: parsePriceLevel(place.priceLevel as string),
       categories: ((place.types as string[]) || []).slice(0, 5),
-      photos: photos?.slice(0, 5).map(p => 
-        `https://places.googleapis.com/v1/${p.name}/media?maxHeightPx=400&key=${apiKey}`
-      ),
+      photos: [], // will be populated below after caching
       website: place.websiteUri as string | undefined,
       phone: place.nationalPhoneNumber as string | undefined,
       openNow: openingHours?.openNow,
       openingHours: openingHours?.weekdayDescriptions,
       coordinates: location ? { lat: location.latitude, lng: location.longitude } : undefined,
     };
+
+    // Cache photos in our storage bucket to avoid per-render Google charges
+    if (photos && photos.length > 0) {
+      const cachedPhotos: string[] = [];
+      for (const p of photos.slice(0, 5)) {
+        const rawUrl = `https://places.googleapis.com/v1/${p.name}/media?maxHeightPx=400&key=${apiKey}`;
+        try {
+          const entityId = `review-${(place.id || placeName).toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 60)}-${cachedPhotos.length}`;
+          const cached = await getCachedPhotoUrl('activity', entityId, rawUrl, {
+            destination,
+            placeName: displayName?.text || placeName,
+            placeId: place.id,
+          });
+          cachedPhotos.push(cached.url);
+        } catch {
+          // Skip failed photos rather than leak raw URLs
+          console.warn('[Google] Failed to cache review photo, skipping');
+        }
+      }
+      placeDetails.photos = cachedPhotos;
+    }
+
+    // Store in shared venue cache for cross-function reuse
+    if (place.id) {
+      cacheVenueResult(placeName, destination, {
+        placeId: place.id,
+        name: displayName?.text || placeName,
+        photoUrl: placeDetails.photos?.[0],
+        address: placeDetails.address,
+        rating: placeDetails.rating,
+        totalReviews: placeDetails.totalReviews,
+        types: placeDetails.categories,
+        coordinates: placeDetails.coordinates,
+      }).catch(() => {});
+    }
 
     const reviews: Review[] = googleReviews.slice(0, maxReviews).map((r, idx) => ({
       id: `google_${idx}_${Date.now()}`,
