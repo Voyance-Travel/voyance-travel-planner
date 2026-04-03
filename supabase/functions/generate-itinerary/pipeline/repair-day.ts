@@ -1695,7 +1695,7 @@ function repairBookends(
         a => isTransport(a) && (a.location?.name || '').toLowerCase() === nLoc
       );
       if (recentTransport) continue;
-      rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || ''));
+      rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || '', curr, next));
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_transit_gap' });
     }
   }
