@@ -1755,6 +1755,57 @@ function repairBookends(
       deduped.push(consolidated[i]);
     }
 
+    // =========================================================================
+    // 5. FINAL BOOKEND GUARDS — Days must never start or end on transit
+    // =========================================================================
+
+    // 5a. Strip leading transport cards (traveler wakes up at hotel, not mid-transit)
+    if (!isDepartureDay) {
+      while (deduped.length > 0 && isTransport(deduped[0])) {
+        repairs.push({
+          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+          action: 'stripped_leading_transport',
+          before: deduped[0].title,
+          after: 'removed (day cannot start on transit)',
+        });
+        deduped.shift();
+      }
+    }
+
+    // 5b. Strip or cap trailing transport cards (day must end at hotel, not mid-transit)
+    if (!isDepartureDay) {
+      while (deduped.length > 0 && isTransport(deduped[deduped.length - 1])) {
+        const last = deduped[deduped.length - 1];
+        const lastTitle = (last.title || '').toLowerCase();
+        const lastDest = (last.location?.name || '').toLowerCase();
+        const isHotelBound = lastTitle.includes(hotelName.toLowerCase()) || lastDest.includes(hotelName.toLowerCase())
+          || lastTitle.includes('hotel') || lastDest.includes('hotel');
+
+        if (isHotelBound) {
+          // Transport to hotel — append a "Return to Hotel" accommodation card
+          const arrivalTime = last.endTime || offset(last.startTime || '21:00', 15);
+          const returnCard = makeAccomCard('Return to', arrivalTime, 30);
+          deduped.push(returnCard);
+          repairs.push({
+            code: FAILURE_CODES.MISSING_SLOT,
+            action: 'appended_return_to_hotel_after_trailing_transport',
+            before: last.title,
+            after: returnCard.title,
+          });
+          break; // Day now ends on accommodation
+        } else {
+          // Transport to a venue — nonsensical, remove it
+          repairs.push({
+            code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+            action: 'stripped_trailing_transport',
+            before: last.title,
+            after: 'removed (day cannot end on transit to venue)',
+          });
+          deduped.pop();
+        }
+      }
+    }
+
     return { activities: deduped, repairs };
   }
 }
