@@ -46,6 +46,8 @@ export interface RepairDayInput {
   arrivalTime24?: string;
   returnDepartureTime24?: string;
   departureAirport?: string;
+  arrivalAirport?: string;
+  airportTransferMinutes?: number;
 
   // Hotel context for bookend validator
   hotelName?: string;
@@ -59,6 +61,7 @@ export interface RepairDayInput {
   isLastDayInCity?: boolean;
   resolvedDestination?: string;
   nextLegTransport?: string;
+  nextLegCity?: string;
   nextLegTransportDetails?: { stationName?: string; departureTime?: string; [key: string]: any };
   hotelOverride?: { name?: string; address?: string };
 
