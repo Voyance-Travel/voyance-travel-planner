@@ -90,7 +90,7 @@ const Contact = () => {
       <section className="relative pt-20 pb-32 overflow-hidden">
         <div className="absolute inset-0">
           <img 
-            src="https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=1920&q=80"
+            src={normalizeUnsplashUrl("https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=1920&q=80")}
             alt=""
             className="w-full h-full object-cover"
           />
