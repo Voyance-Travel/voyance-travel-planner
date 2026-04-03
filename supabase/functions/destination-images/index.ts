@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { checkVenueCache, cacheVenueResult } from "../_shared/venue-cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -112,6 +113,21 @@ async function checkCuratedCache(
 
     if (error || !data || data.length === 0) {
       return null;
+    }
+
+    // Check for negative cache entry (no_result) — skip API calls entirely
+    const negativeHit = data.find((row: any) => row.source === 'no_result');
+    if (negativeHit) {
+      console.log(`[Images] ⛔ Negative cache hit for "${entityKey}" — skipping API calls`);
+      return {
+        id: `neg-cache-${entityKey}`,
+        url: generateCategoryFallbackDataUrl(category || 'activity', entityKey),
+        alt: `${entityKey} - fallback`,
+        type: entityType === "destination" ? "hero" : "activity",
+        source: "fallback",
+        width: 1200,
+        height: 800,
+      };
     }
 
     // Guardrail: avoid returning airport photos for city-level destination lookups
@@ -1343,12 +1359,12 @@ async function fetchImageTiered(
     }
   }
 
-  // If we have real photo candidates, validate quality and cache
+  // If we have real photo candidates, persist and cache
   if (candidates.length > 0) {
     let bestImage = candidates[0];
     let qualityScore = 0.8; // Default assumed quality
     
-    // If multiple candidates and AI available, rank them
+    // If multiple candidates and AI available, rank them (cheap — just text, no vision)
     if (candidates.length > 1 && lovableApiKey) {
       const ranked = await rankImageCandidates(candidates, cleanName, lovableApiKey);
       if (ranked) {
@@ -1356,54 +1372,10 @@ async function fetchImageTiered(
       }
     }
 
-    // NEW: Quality scoring with Lovable AI Vision
-    // Only score if we have the API key and the image is from an external source
-    if (lovableApiKey && bestImage.source !== 'curated') {
-      const qualityResult = await scoreImageQuality(
-        bestImage.url,
-        {
-          destination,
-          venueName: cleanName,
-          category: effectiveCategory,
-          expectedType: entityType === 'destination' ? 'destination' : 'activity',
-        },
-        lovableApiKey
-      );
-
-      qualityScore = qualityResult.pass ? qualityResult.score : Math.min(qualityResult.score, 0.5);
-
-      // If image fails quality check, try next candidate or fallback
-      if (!qualityResult.pass) {
-        console.log(`[Images] Image failed quality check (${qualityResult.score.toFixed(2)}): ${bestImage.url.slice(0, 60)}`);
-        console.log(`[Images] Issues: ${qualityResult.issues.join(", ")}`);
-        
-        // Try other candidates if available
-        for (let i = 1; i < candidates.length; i++) {
-          const altResult = await scoreImageQuality(
-            candidates[i].url,
-            {
-              destination,
-              venueName: cleanName,
-              category: effectiveCategory,
-            },
-            lovableApiKey
-          );
-          
-          if (altResult.pass) {
-            bestImage = candidates[i];
-            qualityScore = altResult.score;
-            console.log(`[Images] Using alternative candidate with score ${qualityScore.toFixed(2)}`);
-            break;
-          }
-        }
-        
-        // If all candidates fail, use category fallback
-        if (qualityScore < 0.6) {
-          console.log(`[Images] All candidates failed quality check, using category fallback`);
-          return getCategoryFallbackImage(effectiveCategory, venueName);
-        }
-      }
-    }
+    // AI quality scoring REMOVED — it burned AI credits, added latency,
+    // and caused cascade retries with no negative caching.
+    // The match-score filtering (0.55 threshold) + content mismatch detection
+    // is sufficient quality control.
 
     // Persist external image URLs into our own storage when possible.
     const persistentBestImage = await ensurePersistentStorageUrl(
@@ -1415,8 +1387,41 @@ async function fetchImageTiered(
 
     // Cache the result with quality score
     await cacheImage(supabase, entityType, venueName, destination, persistentBestImage, qualityScore);
+
+    // Store in shared venue cache for cross-function reuse
+    if (bestImage.placeId) {
+      cacheVenueResult(cleanName, destination, {
+        placeId: bestImage.placeId,
+        name: cleanName,
+        photoUrl: persistentBestImage.url,
+      }).catch(() => {});
+    }
     
     return persistentBestImage;
+  }
+
+  // ── NEGATIVE CACHE: Remember that this venue has no results ──────────────
+  // Prevents repeated Google API calls for venues that consistently return nothing.
+  try {
+    const normalizedKey = venueName.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
+    const negativeExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(); // 14 days
+
+    await supabase.from("curated_images").upsert({
+      entity_type: entityType,
+      entity_key: normalizedKey,
+      destination: destination,
+      source: 'no_result',
+      image_url: '',
+      alt_text: `No result: ${venueName}`,
+      quality_score: 0,
+      updated_at: new Date().toISOString(),
+      expires_at: negativeExpiresAt,
+    }, {
+      onConflict: 'entity_type,entity_key,destination'
+    });
+    console.log(`[Images] ⛔ Stored negative cache for: "${venueName}" in ${destination} (14-day TTL)`);
+  } catch (negErr) {
+    console.warn('[Images] Failed to write negative cache:', negErr);
   }
 
   // TIER 5: AI Generation (try before category fallback for better quality)
@@ -1509,10 +1514,11 @@ serve(async (req) => {
     if (qSkipCache) params.skipCache = qSkipCache === 'true';
 
     // Then try to parse body (POST)
+    let batchVenues: Array<{ name: string; category?: string }> | undefined;
     if (req.method === "POST") {
       try {
         const body = await req.json();
-        console.log("[Images] Received body:", JSON.stringify(body));
+        console.log("[Images] Received body:", JSON.stringify(body).slice(0, 500));
         if (body.destinationId) params.destinationId = body.destinationId;
         if (body.destination) params.destination = body.destination;
         if (body.imageType) params.imageType = body.imageType;
@@ -1520,12 +1526,66 @@ serve(async (req) => {
         if (body.venueName) params.venueName = body.venueName;
         if (body.category) params.category = body.category;
         if (body.skipCache !== undefined) params.skipCache = body.skipCache;
+        // BATCH MODE: accept array of venues
+        if (Array.isArray(body.venues) && body.venues.length > 0) {
+          batchVenues = body.venues.slice(0, 20); // Max 20 per batch
+        }
       } catch (e) {
         console.log("[Images] Could not parse body:", e);
       }
     }
 
-    console.log("[Images] Parsed params:", JSON.stringify(params));
+    console.log("[Images] Parsed params:", JSON.stringify(params).slice(0, 300));
+
+    // ── BATCH MODE ──────────────────────────────────────────────────────────
+    if (batchVenues && batchVenues.length > 0 && params.destination) {
+      console.log(`[Images] BATCH mode: ${batchVenues.length} venues for ${params.destination}`);
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      const googleApiKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+      const tripAdvisorApiKey = Deno.env.get("TRIPADVISOR_API_KEY");
+      const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+
+      const results: Record<string, DestinationImage> = {};
+      let placesCallCount = 0;
+      let photosCallCount = 0;
+
+      // Process sequentially to avoid hammering Google API
+      for (const venue of batchVenues) {
+        try {
+          const image = await fetchImageTiered(
+            supabase,
+            venue.name,
+            params.destination,
+            'activity',
+            venue.category,
+            googleApiKey,
+            tripAdvisorApiKey,
+            lovableApiKey,
+            params.skipCache
+          );
+          results[venue.name] = image;
+          if (image.source === 'google_places') {
+            placesCallCount++;
+            if (image.cacheHit === false) photosCallCount++;
+          }
+        } catch (e) {
+          console.error(`[Images] Batch error for "${venue.name}":`, e);
+          results[venue.name] = getCategoryFallbackImage(venue.category || 'activity', venue.name);
+        }
+      }
+
+      costTracker.recordGooglePlaces(placesCallCount);
+      costTracker.recordGooglePhotos(photosCallCount);
+      await costTracker.save();
+
+      return new Response(
+        JSON.stringify({ success: true, batch: true, images: results }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const destinationId = params.destinationId;
     const destination = params.destination;

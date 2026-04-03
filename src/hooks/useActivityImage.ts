@@ -1,7 +1,10 @@
 /**
  * Hook for fetching activity photos using tiered real photo sources
- * Priority: Cache → Attractions/Activities DB → Curated DB → Google Places → TripAdvisor → Wikimedia → AI (last resort)
+ * Priority: Cache → Attractions/Activities DB → Curated DB → Edge Function (batch)
  * Falls back to static type-based images when no real photo is available.
+ * 
+ * CLIENT-SIDE BATCHING: Collects requests in a 150ms window and sends them
+ * as a single batch POST to the edge function, reducing invocations by ~80%.
  */
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -141,6 +144,8 @@ async function fetchFromCuratedImages(
       .limit(1);
 
     if (exactData?.[0]?.image_url) {
+      // Skip negative cache entries
+      if (exactData[0].source === 'no_result') return null;
       return { url: exactData[0].image_url, source: `curated_${exactData[0].source || 'db'}` };
     }
 
@@ -155,38 +160,81 @@ async function fetchFromCuratedImages(
 
     if (error || !data?.length) return null;
     if (!data[0].image_url) return null;
+    // Skip negative cache entries
+    if (data[0].source === 'no_result') return null;
     return { url: data[0].image_url, source: `curated_${data[0].source || 'db'}` };
   } catch {
     return null;
   }
 }
 
-async function fetchImageFromBackend(
-  title: string,
-  category: string,
-  destination: string
-): Promise<{ url: string; source: string } | null> {
-  try {
-    const { data, error } = await supabase.functions.invoke('destination-images', {
-      body: {
-        venueName: title,
-        destination: destination,
-        category: category,
-        imageType: 'activity',
-      },
-    });
+// ── BATCH QUEUE: Collect requests and send as single edge function call ──────
+interface BatchQueueItem {
+  title: string;
+  category: string;
+  destination: string;
+  cacheKey: string;
+  resolve: (result: { url: string; source: string } | null) => void;
+}
 
-    if (error) return null;
+const batchQueue: BatchQueueItem[] = [];
+let batchTimer: ReturnType<typeof setTimeout> | null = null;
+const BATCH_DEBOUNCE_MS = 150;
 
-    const image = data?.images?.[0];
-    if (image?.url && image.source !== 'fallback') {
-      return { url: image.url, source: image.source };
+function flushBatchQueue(): void {
+  if (batchQueue.length === 0) return;
+
+  const items = batchQueue.splice(0, 20); // Max 20 per batch
+  const destination = items[0].destination;
+
+  // Group by destination (should typically be the same)
+  const venues = items.map(item => ({
+    name: item.title,
+    category: item.category,
+  }));
+
+  console.log(`[ActivityImage] Flushing batch queue: ${venues.length} venues for ${destination}`);
+
+  supabase.functions.invoke('destination-images', {
+    body: {
+      venues,
+      destination,
+      imageType: 'activity',
+    },
+  }).then(({ data, error }) => {
+    if (error || !data?.images) {
+      // Resolve all with null on error
+      items.forEach(item => item.resolve(null));
+      return;
     }
 
-    return null;
-  } catch {
-    return null;
-  }
+    const images = data.images as Record<string, { url: string; source: string }>;
+
+    items.forEach(item => {
+      const img = images[item.title];
+      if (img?.url && img.source !== 'fallback') {
+        item.resolve({ url: img.url, source: img.source });
+      } else {
+        item.resolve(null);
+      }
+    });
+  }).catch(() => {
+    items.forEach(item => item.resolve(null));
+  });
+}
+
+function enqueueBatchRequest(
+  title: string,
+  category: string,
+  destination: string,
+  cacheKey: string
+): Promise<{ url: string; source: string } | null> {
+  return new Promise((resolve) => {
+    batchQueue.push({ title, category, destination, cacheKey, resolve });
+
+    if (batchTimer) clearTimeout(batchTimer);
+    batchTimer = setTimeout(flushBatchQueue, BATCH_DEBOUNCE_MS);
+  });
 }
 
 export function useActivityImage(
@@ -276,7 +324,7 @@ export function useActivityImage(
     setImageUrl(getCategoryFallback(category, title));
     setLoading(true);
 
-    // Tiered fetch: shared tables → curated_images → edge function
+    // Tiered fetch: shared tables → curated_images → batch edge function
     const fetchPromise = (async (): Promise<{ url: string; source: string } | null> => {
       // 3. Try attractions/activities tables (cross-user shared photos — zero cost)
       const shared = await fetchFromSharedTables(title, destination);
@@ -286,8 +334,8 @@ export function useActivityImage(
       const curated = await fetchFromCuratedImages(title, category || 'activity', destination);
       if (curated) return curated;
 
-      // 5. Fall back to edge function (Google Places, etc.)
-      return fetchImageFromBackend(title, category || 'activity', destination);
+      // 5. Fall back to BATCH edge function (Google Places, etc.)
+      return enqueueBatchRequest(title, category || 'activity', destination, cacheKey);
     })();
 
     pendingRequests.set(cacheKey, fetchPromise);

@@ -129,7 +129,7 @@ export const MODEL_PRICING = {
 // WARNING: At 60 trips × 40-60 calls/trip = 2,400-3,600 calls/period
 // FREE TIER STATUS: UNKNOWN - must check Google Cloud Console billing
 export const GOOGLE_API_PRICING = {
-  places_text_search: { perCall: 0.017, freeTierMonthly: 5000 },
+  places_text_search: { perCall: 0.032, freeTierMonthly: 5000 },  // Google Advanced SKU (was 0.017 — incorrect)
   places_details: { perCall: 0.017, freeTierMonthly: 5000 },
   geocoding: { perCall: 0.005, freeTierMonthly: 10000 },
   photos: { perCall: 0.007, freeTierMonthly: 10000 },
@@ -362,7 +362,7 @@ export class CostTracker {
       );
       
       const googleCost = 
-        (this.entry.google_places_calls || 0) * 0.017 +
+        (this.entry.google_places_calls || 0) * 0.032 +  // Advanced SKU
         (this.entry.google_geocoding_calls || 0) * 0.005 +
         (this.entry.google_photos_calls || 0) * 0.007 +
         (this.entry.google_routes_calls || 0) * 0.005;
