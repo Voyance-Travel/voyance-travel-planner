@@ -29,7 +29,7 @@ import {
   minutesToHHMM,
   addMinutesToHHMM,
 } from '../flight-hotel-context.ts';
-import { extractRestaurantVenueName } from '../generation-utils.ts';
+import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
 
 // =============================================================================
 // INPUT TYPES
