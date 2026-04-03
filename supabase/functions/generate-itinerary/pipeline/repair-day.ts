@@ -1413,8 +1413,10 @@ function repairBookends(
       if (isTransport(curr) || isTransport(next)) continue;
       const cLoc = (curr.location?.name || curr.title || '').toLowerCase();
       const nLoc = (next.location?.name || next.title || '').toLowerCase();
-      // Guard: skip if same location (e.g. hotel accommodation → hotel freshen-up)
-      if (!cLoc || !nLoc || cLoc === nLoc) continue;
+      // Guard: skip if same or contained location (fuzzy match)
+      if (!cLoc || !nLoc || isSameOrContainedLocation(cLoc, nLoc, hotelName)) continue;
+      // Guard: skip if current is accommodation and next venue is inside the hotel
+      if (isAccom(curr) && hotelName && nLoc.includes(hotelName.toLowerCase())) continue;
       // Guard: skip if a transport to nLoc already exists in previous 2 positions
       const recentTransport = rebuilt.slice(-2).some(
         a => isTransport(a) && (a.location?.name || '').toLowerCase() === nLoc
