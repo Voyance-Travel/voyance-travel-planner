@@ -1207,6 +1207,51 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
     if (indicesToRemove.size > 0) {
       activities = activities.filter((_, i) => !indicesToRemove.has(i));
+
+      // --- 9d. POST-DEDUP TRANSIT GAP PASS ---
+      // After accommodation dedup removed cards + their adjacent transports,
+      // scan for adjacent non-transport activities at different locations and
+      // inject a lightweight transport card to prevent "teleportation".
+      const isTransportCat2 = (a: any) => (a.category || '').toLowerCase() === 'transport';
+      const postDedup: any[] = [];
+      for (let i = 0; i < activities.length; i++) {
+        postDedup.push(activities[i]);
+        if (i >= activities.length - 1) continue;
+        const curr = activities[i], next = activities[i + 1];
+        if (isTransportCat2(curr) || isTransportCat2(next)) continue;
+        const cLoc = (curr.location?.name || '').toLowerCase();
+        const nLoc = (next.location?.name || '').toLowerCase();
+        if (!cLoc || !nLoc) continue;
+        if (isSameOrContainedLocation(cLoc, nLoc, hotelName)) continue;
+        // Inject a simple transport card
+        const st = curr.endTime || next.startTime || '12:00';
+        const fromCoords = curr.coordinates || curr.location?.coordinates || null;
+        const toCoords = next.coordinates || next.location?.coordinates || null;
+        let dur = 15, costAmt = 5, method = 'taxi';
+        if (fromCoords?.lat && toCoords?.lat) {
+          const { haversineDistanceKm } = await import('../generation-utils.ts');
+          const dist = haversineDistanceKm(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng);
+          dur = Math.max(10, Math.min(45, Math.round(dist * 3)));
+          costAmt = Math.round(dist * 2);
+        }
+        const endMin = (parseInt(st.split(':')[0]) || 0) * 60 + (parseInt(st.split(':')[1]) || 0) + dur;
+        const et = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+        postDedup.push({
+          id: `transport-postdedup-${i}-${Date.now()}`,
+          title: `Travel to ${next.location?.name || next.title || 'next venue'}`,
+          description: `From ${curr.location?.name || curr.title || 'previous venue'} to ${next.location?.name || next.title || 'next venue'}`,
+          category: 'transport',
+          startTime: st,
+          endTime: et,
+          durationMinutes: dur,
+          location: { name: next.location?.name || next.title || 'destination', address: next.location?.address || '' },
+          fromLocation: { name: curr.location?.name || curr.title || 'origin', address: curr.location?.address || '' },
+          cost: { amount: costAmt, currency: 'USD' },
+          transportation: { method, duration: `${dur} min` },
+        });
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_post_dedup_transit_gap' });
+      }
+      activities = postDedup;
     }
   }
 
