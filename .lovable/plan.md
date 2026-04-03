@@ -1,18 +1,18 @@
+## Google Places API Cost Reduction — Implemented
 
+### Changes Made (April 3, 2026)
 
-## Fix: Redeploy `generate-itinerary` Edge Function
+All 6 cost-reduction measures have been implemented and deployed:
 
-### Problem
-The `generate-itinerary` edge function is still failing with `SyntaxError: Identifier 'hn' has already been declared` at boot time. The source code fix from the previous change is correct (no duplicate `const hn` exists in the same scope), but the function was not successfully redeployed — the runtime is still running the old code.
+| # | Change | File(s) | Status |
+|---|--------|---------|--------|
+| 1 | Fix cost tracker pricing (0.017 → 0.032 for Text Search) | `_shared/cost-tracker.ts` | ✅ Done |
+| 2 | Cache fetch-reviews photos in storage (kill raw URL leak) | `fetch-reviews/index.ts` | ✅ Done |
+| 3 | Add negative caching (14-day TTL for no-result venues) | `destination-images/index.ts` | ✅ Done |
+| 4 | Remove AI quality scoring (eliminate cascade retries) | `destination-images/index.ts` | ✅ Done |
+| 5 | Client-side batch queue (150ms window, max 20/batch) | `useActivityImage.ts` + `destination-images/index.ts` | ✅ Done |
+| 6 | Shared venue cache across edge functions | `_shared/venue-cache.ts` (new) | ✅ Done |
 
-### Fix
-Redeploy the `generate-itinerary` edge function. No code changes are needed — the source is already correct.
-
-| Action | Detail |
-|---|---|
-| Deploy | `generate-itinerary` edge function |
-| Verify | Check edge function logs for successful boot after deployment |
-
-### Result
-The function will boot without the syntax error and itinerary generation will resume working.
-
+### Expected Impact
+- **Before**: ~$470/month Google Places API costs
+- **After**: ~$100-130/month (70-75% reduction)
