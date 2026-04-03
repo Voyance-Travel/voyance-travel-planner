@@ -1432,6 +1432,7 @@ function repairBookends(
   }
 
   // 1. Mid-day hotel transports without accommodation card
+  // On hotel-change days, skip freshen-up injection between checkout and check-in (no hotel available)
   for (let i = 0; i < activities.length - 1; i++) {
     if (isTransport(activities[i]) && isHotelRelated(activities[i]) && !isAccom(activities[i + 1])) {
       // Skip if departure day and checkout already exists (traveler has left the hotel)
@@ -1439,6 +1440,18 @@ function repairBookends(
         const hasCheckout = activities.some((a: any) => (a.title || '').toLowerCase().includes('checkout') || (a.title || '').toLowerCase().includes('check-out'));
         const checkoutIdx = activities.findIndex((a: any) => (a.title || '').toLowerCase().includes('checkout') || (a.title || '').toLowerCase().includes('check-out'));
         if (hasCheckout && i >= checkoutIdx) continue;
+      }
+      // On hotel-change days, suppress freshen-up between checkout and check-in
+      if (isHotelChange) {
+        const checkoutIdx = activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return (t.includes('checkout') || t.includes('check-out') || t.includes('check out'));
+        });
+        const checkInIdx = activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+        });
+        if (checkoutIdx >= 0 && checkInIdx > checkoutIdx && i >= checkoutIdx && i < checkInIdx) continue;
       }
       const card = makeAccomCard('Freshen up at', activities[i].endTime || offset(activities[i].startTime || '14:00', 15), 30);
       activities.splice(i + 1, 0, card);
