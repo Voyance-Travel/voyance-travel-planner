@@ -115,6 +115,21 @@ async function checkCuratedCache(
       return null;
     }
 
+    // Check for negative cache entry (no_result) — skip API calls entirely
+    const negativeHit = data.find((row: any) => row.source === 'no_result');
+    if (negativeHit) {
+      console.log(`[Images] ⛔ Negative cache hit for "${entityKey}" — skipping API calls`);
+      return {
+        id: `neg-cache-${entityKey}`,
+        url: generateCategoryFallbackDataUrl(category || 'activity', entityKey),
+        alt: `${entityKey} - fallback`,
+        type: entityType === "destination" ? "hero" : "activity",
+        source: "fallback",
+        width: 1200,
+        height: 800,
+      };
+    }
+
     // Guardrail: avoid returning airport photos for city-level destination lookups
     // Also apply category mismatch filtering for activity images
     const pick = data.find((row: any) => {
