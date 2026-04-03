@@ -1608,9 +1608,12 @@ function repairDepartureSequence(
 function isSameOrContainedLocation(aLoc: string, bLoc: string, hotel?: string): boolean {
   if (!aLoc || !bLoc) return false;
   if (aLoc === bLoc) return true;
-  // Substring: "four seasons ritz" ⊂ "varanda restaurant at four seasons ritz"
+  // Substring match — but require the shorter string to be at least 60% of the
+  // longer string's length to avoid false positives like "spa" matching
+  // "spa resort dinner cruise" or "The Grand" matching "The Grand Bazaar Restaurant".
   if (aLoc.length >= 4 && bLoc.length >= 4) {
-    if (aLoc.includes(bLoc) || bLoc.includes(aLoc)) return true;
+    const ratio = Math.min(aLoc.length, bLoc.length) / Math.max(aLoc.length, bLoc.length);
+    if ((aLoc.includes(bLoc) || bLoc.includes(aLoc)) && ratio >= 0.6) return true;
   }
   // Both reference the hotel
   if (hotel) {
