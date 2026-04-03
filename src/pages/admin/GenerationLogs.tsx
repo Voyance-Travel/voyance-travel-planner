@@ -28,7 +28,7 @@ interface GenerationLog {
   phase_timings: Record<string, number>;
   day_timings: Array<{
     day: number; total_ms: number; ai_ms: number; enrich_ms: number; activities: number;
-    meals?: { required: string[]; found: string[]; guardFired: boolean; injected?: string[] };
+    meals?: { required: string[]; found: string[]; beforeGuard?: string[]; guardFired: boolean; injected?: string[] };
     transport?: { isTransitionDay: boolean; mode?: string | null; hadInterCityTravel?: boolean; fallbackInjected?: boolean };
     llm?: { model: string; promptTokens: number; completionTokens: number };
   }>;
@@ -161,7 +161,12 @@ function DayTimingsTable({ dayTimings }: { dayTimings: GenerationLog['day_timing
                       {d.meals.found?.join(', ') || 'none'}
                     </span>
                     {d.meals.guardFired && (
-                      <div className="text-yellow-500 text-[10px]">⚠ guard fired{d.meals.injected?.length ? ` (+${d.meals.injected.join(', ')})` : ''}</div>
+                      <>
+                        <div className="text-yellow-500 text-[10px]">⚠ guard fired{d.meals.injected?.length ? ` (+${d.meals.injected.join(', ')})` : ''}</div>
+                        {d.meals.beforeGuard && (
+                          <div className="text-muted-foreground text-[10px]">before: {d.meals.beforeGuard.join(', ') || 'none'}</div>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : <span className="text-muted-foreground">--</span>}
