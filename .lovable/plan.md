@@ -1,36 +1,44 @@
 
 
-## Fix: Deduplicate Back-to-Back Accommodation Cards
+## Fix: Inject Flight Card on Last Day Even Without Explicit Flight Time
 
 ### Problem
-After dinner, the repair pipeline can produce two consecutive hotel activities — e.g., "Freshen Up at Hotel" followed by "Return to Hotel" — because:
-1. Step 1 injects "Freshen Up" when it finds a transport-to-hotel without a following accommodation card
-2. Step 2 injects "Return to Hotel" at the end if the last visible non-transport activity isn't accommodation
-3. The AI itself may also generate one of these, leading to duplicates
-
-These steps don't coordinate — each checks independently, so you end up with redundant hotel cards.
+On the last day, when no explicit return flight time is stored (`returnDepartureTime24` is empty), the repair pipeline still injects a "Transfer to Airport" card (line 902 fallback branch), but the flight card injection at line 956 is gated by `isLastDay && returnDepartureTime24`. This means the itinerary ends with a transport card going to the airport — and nothing after it. No airport arrival, no flight.
 
 ### Fix
 
 **File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-Add a **post-bookend deduplication pass** (after step 2, before step 2.5) that:
+Expand the flight card injection block (line 955-989) to also fire when `isLastDay` and a departure transport card targeting an airport exists, even if `returnDepartureTime24` is missing:
 
-1. Scans activities for consecutive accommodation cards (ignoring transport cards between them)
-2. When two back-to-back accommodation activities are found (both hotel-related, neither is check-in or checkout):
-   - Keep the **last** one (which is typically "Return to Hotel" — the more meaningful end-of-day anchor)
-   - Remove the earlier one and any transport card leading to it
-3. Special case: if one is "Freshen Up" and the other is "Return to", keep "Return to" since "freshen up" after the last activity of the day is redundant — you're returning for the night, not a mid-day break
+1. Change the guard from `isLastDay && returnDepartureTime24` to `isLastDay`
+2. When `returnDepartureTime24` is available, use it for exact timing (existing logic)
+3. When `returnDepartureTime24` is missing, derive the flight time from the airport transfer card's end time + a reasonable buffer (e.g., 2 hours for check-in/security), and create a generic "Departure Flight" card
+4. Only inject if there's actually an airport-bound transport card (don't inject flight cards on non-airport departure days like train departures)
 
-This ensures only one hotel anchor appears at the end of the day, and mid-day freshen-ups only survive when there are real activities after them.
+```
+// Pseudocode for the expanded logic:
+if (isLastDay) {
+  const hasFlightCard = activities.some(a => cat === 'flight' || title includes 'flight departure');
+  
+  if (!hasFlightCard) {
+    const airportTransport = activities.find(a => transport to airport);
+    if (airportTransport) {
+      const depMins = returnDepartureTime24 
+        ? parseTimeToMinutes(returnDepartureTime24)
+        : (parseTimeToMinutes(airportTransport.endTime) + 120); // 2hr after arriving at airport
+      
+      // inject flight card at depMins
+    }
+  }
+}
+```
 
 ### Expected behavior
-
-| Before | After |
-|---|---|
-| Dinner → Transport → Freshen Up → Transport → Return to Hotel | Dinner → Transport → Return to Hotel |
-| Activity → Transport → Return to Hotel → Freshen Up | Activity → Transport → Return to Hotel |
+- Last day always shows: ... → Transfer to Airport → Departure Flight
+- With flight data: exact flight time is used
+- Without flight data: flight card placed ~2 hours after airport transfer arrival
 
 ### Files changed
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add back-to-back accommodation dedup pass
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — expand flight card guarantee to work without explicit departure time
 
