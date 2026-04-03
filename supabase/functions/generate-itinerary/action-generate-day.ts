@@ -59,6 +59,7 @@ import {
   validateGeneratedDay,
   filterChainRestaurants,
   enforceRequiredMealsFinalGuard,
+  detectMealSlots,
   type StrictDayMinimal,
 } from './day-validation.ts';
 import { compileDayFacts } from './pipeline/compile-day-facts.ts';
