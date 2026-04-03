@@ -1,50 +1,34 @@
 
 
-## Fix: Hotel Change Detection Skipped for Single-City Split-Stay
+## Fix: Missing Transport Cards Between Activities ("Teleportation")
 
 ### Problem
-On hotel change days in a single-city trip, no checkout card for Hotel A and no check-in card for Hotel B are injected. The itinerary just continues as if the same hotel applies all trip.
+Activities frequently appear back-to-back without transport cards between them. The transit gap injection (step 3 in `repairBookends`) has several issues that cause it to skip necessary transport cards:
 
-### Root Cause
-In `action-generate-day.ts` line 831, the hotel resolution block (which also handles hotel-change detection) is gated by:
+1. **Post-dedup gaps**: Step 9c (accommodation dedup) removes accommodation cards AND their adjacent transport cards, leaving two venue activities next to each other with no transport. But since 9c runs *after* `repairBookends`, there's no second transit gap pass to fill these new gaps.
 
-```typescript
-if (tripId && (!resolvedRepairHotelName || resolvedRepairHotelName === 'Hotel' || resolvedIsMultiCity))
-```
+2. **Over-aggressive location matching**: `isSameOrContainedLocation` uses substring matching (`aLoc.includes(bLoc)`), which can incorrectly match unrelated locations when one name is a common word substring of another (e.g., "The Grand" matching "The Grand Bazaar Restaurant").
 
-For single-city split-stay trips:
-- `resolvedRepairHotelName` is already set from `flightContext.hotelName` or `paramHotelName` (truthy, not 'Hotel')
-- `resolvedIsMultiCity` is `false`
-
-So the entire block is **skipped**, meaning:
-- `resolvedIsHotelChange` stays `false`
-- `resolvedPreviousHotelName` stays `undefined`
-- The repair pipeline (steps 7/8) never injects checkout/check-in cards
+3. **Empty location fallback to title**: When `location.name` is missing, the code falls back to `curr.title` — but activity titles often contain common words that trigger false substring matches, causing the guard to skip transport injection.
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/action-generate-day.ts`**
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-1. **Always run hotel-change detection**: Change the guard so the block always executes when `tripId` exists and `trip_cities` data is available. The existing hotel name can still be overridden by the date-aware resolver when it finds a better match. At minimum, hotel-change detection must always run.
+1. **Add a second transit gap pass after step 9c**: After the accommodation dedup removes activities and their transports, run a lightweight transit gap scan on the resulting array. For any two adjacent non-transport activities at different locations, inject a transport card between them. This is a simple loop similar to step 3 in `repairBookends` but operating on the post-dedup activity list.
 
-   Change line 831 from:
-   ```typescript
-   if (tripId && (!resolvedRepairHotelName || resolvedRepairHotelName === 'Hotel' || resolvedIsMultiCity)) {
-   ```
-   to:
-   ```typescript
-   if (tripId) {
-   ```
+2. **Tighten `isSameOrContainedLocation`**: Add a minimum word-overlap check instead of pure substring matching. Two locations should only be considered "same" if they share significant identifying words (not just any substring match). Specifically:
+   - Keep exact match (`aLoc === bLoc`)
+   - For substring matching, require that the shorter string is at least 60% of the longer string's length (to avoid "spa" matching "spa resort dinner cruise")
+   - Keep the hotel cross-reference check as-is
 
-   Then inside the block, only override `resolvedRepairHotelName` when the resolved hotel is more specific (the existing conditional on lines 885-887 already handles this).
+3. **Improve `recentTransport` guard**: The check at line 1925-1927 uses exact match on `location.name` — change to use `isSameOrContainedLocation` so it properly catches existing transports even with slight name variations.
 
-2. **Hotel change detection remains unchanged** — the comparison logic at lines 892-906 is correct, it just never gets to run today for single-city trips with a pre-resolved hotel name.
+### Expected behavior
+- Every pair of activities at different physical locations has a transport card between them
+- No more "teleportation" between venues
+- Same-location activities (e.g., hotel spa after hotel check-in) still correctly skip transport
 
-### Expected Behavior
-- On hotel-change days: Checkout from Hotel A (morning) + Check-in at Hotel B (afternoon) always appear
-- Non-hotel-change days: no change in behavior
-- Multi-city trips: no change (already worked because `resolvedIsMultiCity` was true)
-
-### Files Changed
-- `supabase/functions/generate-itinerary/action-generate-day.ts` — relax guard to always run hotel-change detection
+### Files changed
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — post-dedup transit gap pass + tighten location matching
 
