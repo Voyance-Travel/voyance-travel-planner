@@ -202,6 +202,10 @@ export interface CompiledFacts {
   isFirstDay: boolean;
   isLastDay: boolean;
 
+  // Split-stay: hotel changed from previous day within same city
+  resolvedIsHotelChange: boolean;
+  resolvedPreviousHotelName: string | undefined;
+
   // Transport preferences
   transportPreferencePrompt: string;
   resolvedTransportModes: string[];
