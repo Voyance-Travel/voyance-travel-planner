@@ -28,7 +28,7 @@ export function DemoHero({ onStartTour, onSkipToPlayground }: DemoHeroProps) {
           className="absolute right-[8%] top-[18%]"
         >
           <DestinationCard 
-            image="https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400"
+            image={normalizeUnsplashUrl("https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400")}
             name="Kyoto"
             days={7}
           />
