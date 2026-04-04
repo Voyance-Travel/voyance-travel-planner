@@ -902,6 +902,29 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 7b. POST-CHECK-IN DEDUP (relabel duplicate "check-in" titles to "Freshen Up") ---
+  {
+    const checkInRe = /\bcheck[\s-]?in\b/i;
+    const firstCheckInIdx = activities.findIndex((a: any) => {
+      const cat = (a.category || '').toLowerCase();
+      return cat === 'accommodation' && checkInRe.test(a.title || a.name || '');
+    });
+    if (firstCheckInIdx >= 0) {
+      const hn = hotelName || 'Your Hotel';
+      for (let i = firstCheckInIdx + 1; i < activities.length; i++) {
+        const a = activities[i];
+        const t = (a.title || a.name || '');
+        if (checkInRe.test(t)) {
+          const oldTitle = t;
+          a.title = `Freshen Up at ${hn}`;
+          if (a.name) a.name = a.title;
+          a.category = 'accommodation';
+          repairs.push({ code: FAILURE_CODES.MEAL_DUPLICATE, action: 'relabeled_duplicate_checkin_to_freshen_up', before: oldTitle, after: a.title });
+        }
+      }
+    }
+  }
+
   // --- 8. HOTEL CHECKOUT GUARANTEE (last day, last day in city — NOT hotel change, handled above) ---
   const needsCheckout = !isHotelChange && (isLastDay || (isLastDayInCity && !isTransitionDay));
   if (needsCheckout && activities.length > 0) {
