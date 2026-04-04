@@ -2387,6 +2387,7 @@ export async function generateItineraryAI(
 
   const seenConcepts: Array<{ concept: string; dayNum: number }> = [];
   const seenLocations = new Map<string, { dayNum: number }>();
+  const seenDiningVenues = new Map<string, { dayNum: number }>();
   let dedupCount = 0;
   for (const day of days) {
     const indicesToRemove: number[] = [];
