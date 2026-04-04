@@ -22,6 +22,13 @@ function installGlobalUnsplashGuard() {
   const patchImage = (img: HTMLImageElement) => {
     const originalSrc = img.getAttribute("src");
 
+    if (originalSrc && (
+      originalSrc.includes('/storage/v1/object/') ||
+      originalSrc.startsWith('data:')
+    )) {
+      return;
+    }
+
     if (originalSrc) {
       const normalized = normalizeUnsplashUrl(originalSrc);
       if (normalized !== originalSrc) {
