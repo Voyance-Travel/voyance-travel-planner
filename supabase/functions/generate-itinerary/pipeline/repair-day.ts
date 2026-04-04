@@ -719,12 +719,41 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // For non-hotel-change days, the original order (7=check-in, 8=checkout) is fine.
   if (isHotelChange) {
     // --- 8-first. CHECKOUT from PREVIOUS hotel (morning) ---
-    const hasCheckoutAlready = activities.some((a: any) => {
+    // Hotel-name-aware: require checkout to reference the correct (previous) hotel
+    const prevHotelLower = (previousHotelName || '').toLowerCase();
+    const newHotelLower = (hotelName || '').toLowerCase();
+
+    const isCheckoutTitle = (t: string) =>
+      t.includes('check-out') || t.includes('check out') || t.includes('checkout');
+    const isCheckInTitle = (t: string) =>
+      t.includes('check-in') || t.includes('check in') || t.includes('checkin') ||
+      t.includes('settle in') || t.includes('luggage drop');
+
+    const hasCorrectCheckout = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
-      return cat === 'accommodation' && (t.includes('check-out') || t.includes('check out') || t.includes('checkout'));
+      return cat === 'accommodation' && isCheckoutTitle(t) &&
+        (!prevHotelLower || t.includes(prevHotelLower));
     });
-    if (!hasCheckoutAlready) {
+
+    // Remove any wrongly-named checkout before injecting the correct one
+    if (!hasCorrectCheckout) {
+      const wrongCoIdx = activities.findIndex((a: any) => {
+        const t = (a.title || a.name || '').toLowerCase();
+        const cat = (a.category || '').toLowerCase();
+        return cat === 'accommodation' && isCheckoutTitle(t) &&
+          prevHotelLower && !t.includes(prevHotelLower);
+      });
+      if (wrongCoIdx >= 0) {
+        repairs.push({
+          code: FAILURE_CODES.CHRONOLOGY, activityIndex: wrongCoIdx,
+          action: 'removed_wrong_hotel_checkout',
+          before: activities[wrongCoIdx].title,
+          after: `Will inject correct checkout from ${previousHotelName || 'previous hotel'}`,
+        });
+        activities.splice(wrongCoIdx, 1);
+      }
+
       const coHotelName = previousHotelName || 'Your Hotel';
       const checkoutStartMin = 11 * 60;
       const checkoutStart = minutesToHHMM(checkoutStartMin);
@@ -751,14 +780,31 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
 
     // --- 7-second. CHECK-IN at NEW hotel (afternoon, AFTER checkout) ---
-    const hasCheckInAlready = activities.some((a: any) => {
+    const hasCorrectCheckIn = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
-      return cat === 'accommodation' && (
-        t.includes('check-in') || t.includes('check in') || t.includes('checkin') || t.includes('settle in') || t.includes('luggage drop')
-      );
+      return cat === 'accommodation' && isCheckInTitle(t) &&
+        (!newHotelLower || t.includes(newHotelLower));
     });
-    if (!hasCheckInAlready) {
+
+    // Remove any wrongly-named check-in before injecting the correct one
+    if (!hasCorrectCheckIn) {
+      const wrongCiIdx = activities.findIndex((a: any) => {
+        const t = (a.title || a.name || '').toLowerCase();
+        const cat = (a.category || '').toLowerCase();
+        return cat === 'accommodation' && isCheckInTitle(t) &&
+          newHotelLower && !t.includes(newHotelLower);
+      });
+      if (wrongCiIdx >= 0) {
+        repairs.push({
+          code: FAILURE_CODES.CHRONOLOGY, activityIndex: wrongCiIdx,
+          action: 'removed_wrong_hotel_checkin',
+          before: activities[wrongCiIdx].title,
+          after: `Will inject correct check-in at ${hotelName || 'new hotel'}`,
+        });
+        activities.splice(wrongCiIdx, 1);
+      }
+
       const hn = hotelName || 'Your Hotel';
       const ha = hotelAddress || '';
       // Find the checkout activity to place check-in after it
@@ -820,6 +866,60 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
       activities.splice(insertIdx, 0, checkInActivity);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkin_guarantee_hotel_change' });
+    }
+
+    // --- 8b. SPLIT-STAY SEQUENCE ENFORCEMENT ---
+    // Ensure checkout comes before check-in; if inverted, reorder and re-time
+    {
+      const coIdx = activities.findIndex((a: any) =>
+        (a.category || '').toLowerCase() === 'accommodation' && isCheckoutTitle((a.title || a.name || '').toLowerCase()));
+      const ciIdx = activities.findIndex((a: any) =>
+        (a.category || '').toLowerCase() === 'accommodation' && isCheckInTitle((a.title || a.name || '').toLowerCase()));
+
+      if (coIdx >= 0 && ciIdx >= 0 && coIdx > ciIdx) {
+        // Checkout is after check-in — extract checkout, place it before check-in
+        const [checkout] = activities.splice(coIdx, 1);
+        // ciIdx may have shifted if coIdx was before it (but coIdx > ciIdx so no shift)
+        activities.splice(ciIdx, 0, checkout);
+
+        // Re-time the sequence: checkout 11:00, check-in recalculated
+        checkout.startTime = '11:00';
+        checkout.endTime = '11:30';
+
+        // Find check-in (now at ciIdx + 1) and any transport between them
+        const newCiIdx = ciIdx + 1;
+        // Look for transport between checkout and check-in
+        let transportBetween: any = null;
+        for (let t = ciIdx + 1; t < activities.length; t++) {
+          const cat = (activities[t].category || '').toLowerCase();
+          if (cat === 'transport' || cat === 'transportation') {
+            transportBetween = activities[t];
+            break;
+          }
+          if ((activities[t].category || '').toLowerCase() === 'accommodation') break;
+        }
+
+        if (transportBetween) {
+          transportBetween.startTime = '11:30';
+          transportBetween.endTime = '12:00';
+        }
+
+        // Update check-in time
+        const ciAct = activities.find((a: any, idx: number) =>
+          idx > ciIdx && (a.category || '').toLowerCase() === 'accommodation' &&
+          isCheckInTitle((a.title || a.name || '').toLowerCase()));
+        if (ciAct) {
+          ciAct.startTime = '12:15';
+          ciAct.endTime = '12:45';
+        }
+
+        repairs.push({
+          code: FAILURE_CODES.CHRONOLOGY,
+          action: 'reordered_split_stay_sequence',
+          before: 'Check-in was before checkout',
+          after: 'Reordered: Checkout → Transport → Check-in',
+        });
+      }
     }
   }
 
