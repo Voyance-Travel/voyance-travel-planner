@@ -717,9 +717,25 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
   // --- 7/8 SPLIT-STAY REORDER: On hotel-change days, inject checkout FIRST, then check-in ---
   // For non-hotel-change days, the original order (7=check-in, 8=checkout) is fine.
+  // Hotel name normalization helper for robust matching
+  const normalizeHotelCore = (name: string): string => {
+    return name.toLowerCase()
+      .replace(/\b(hotel|resort|suites?|inn|lodge|palace|palácio|boutique|luxury|the|a)\b/gi, '')
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, ' ').trim();
+  };
+
+  const hotelCoreMatch = (title: string, hotelName: string): boolean => {
+    if (!hotelName) return false;
+    const titleNorm = normalizeHotelCore(title);
+    const hotelNorm = normalizeHotelCore(hotelName);
+    if (!hotelNorm || hotelNorm.length < 3) return false;
+    // Check if hotel core name appears in the title, or vice versa
+    return titleNorm.includes(hotelNorm) || hotelNorm.includes(titleNorm);
+  };
+
   if (isHotelChange) {
     // --- 8-first. CHECKOUT from PREVIOUS hotel (morning) ---
-    // Hotel-name-aware: require checkout to reference the correct (previous) hotel
     const prevHotelLower = (previousHotelName || '').toLowerCase();
     const newHotelLower = (hotelName || '').toLowerCase();
 
@@ -733,7 +749,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const t = (a.title || a.name || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
       return cat === 'accommodation' && isCheckoutTitle(t) &&
-        (!prevHotelLower || t.includes(prevHotelLower));
+        (!prevHotelLower || t.includes(prevHotelLower) || hotelCoreMatch(t, previousHotelName || ''));
     });
 
     // Remove any wrongly-named checkout before injecting the correct one
