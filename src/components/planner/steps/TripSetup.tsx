@@ -154,6 +154,7 @@ export default function TripSetup({ formData, updateFormData, onContinue }: Trip
                 <Calendar
                   mode="single"
                   selected={formData.startDate ? parseLocalDate(formData.startDate) : undefined}
+                  defaultMonth={formData.startDate ? parseLocalDate(formData.startDate) : todayDate}
                   onSelect={(date) => {
                     if (date) {
                       const y = date.getFullYear();
