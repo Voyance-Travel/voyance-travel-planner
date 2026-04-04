@@ -219,6 +219,25 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // Detect split-stay hotel change for single-city trips
+  let tripIsHotelChange = false;
+  let tripPreviousHotelName: string | undefined;
+  if (hotelList.length > 1 && dayNumber > 1 && startDate) {
+    const prevDayDate = new Date(startDate);
+    prevDayDate.setDate(prevDayDate.getDate() + dayNumber - 2);
+    const prevDateStr = prevDayDate.toISOString().split('T')[0];
+    const prevHotel = hotelList.find(h => {
+      const cin = h.checkInDate || h.check_in_date;
+      const cout = h.checkOutDate || h.check_out_date;
+      return cin && cout && prevDateStr >= cin && prevDateStr < cout;
+    });
+    if (prevHotel?.name && tripHotelName && prevHotel.name !== tripHotelName) {
+      tripIsHotelChange = true;
+      tripPreviousHotelName = prevHotel.name;
+      console.log(`[generate-trip-day] Split-stay hotel change detected: "${tripPreviousHotelName}" → "${tripHotelName}"`);
+    }
+  }
+
   // Resolve hotel coordinates for transit estimation in repair pipeline
   let tripHotelCoordinates: { lat: number; lng: number } | undefined;
   {
