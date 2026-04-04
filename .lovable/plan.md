@@ -1,52 +1,60 @@
 
 
-## Fix: Checkout Shows Wrong Hotel on Split-Stay Days
+## Fix: Photos Appearing Then Disappearing on Itinerary View
 
 ### Root Cause
 
-`action-generate-trip-day.ts` runs a **second repair pass** after `action-generate-day.ts` already ran the first one. The first pass (via `compile-day-facts.ts`) correctly detects the hotel change and sets the checkout title to "Checkout from Four Seasons Ritz". But the second repair pass in `action-generate-trip-day.ts` always passes `isHotelChange: false` and `previousHotelName: undefined` because it never detects split-stay hotel changes for single-city trips.
+Two issues are causing photos to flash and then vanish:
 
-During the second repair's **title normalization** (Step 11), the checkout title gets overwritten to use the current day's hotel (`hn` = "Palácio Ludovice") instead of the previous hotel.
+**1. `normalizeUnsplashUrl` regex is too broad (primary cause)**
+
+In `src/utils/unsplash.ts`, line 65:
+```js
+if (isUnsplashUrl(value) || /photo-[a-z0-9-]+/i.test(value)) {
+```
+
+This regex matches ANY URL containing `photo-` anywhere in its path, query string, or fragment — including legitimate Supabase storage URLs, Google Places cached photos, and curated image URLs. When matched, the URL gets rewritten to a `site-images` bucket path that doesn't exist → image fails to load → fallback replaces it → photo disappears.
+
+For example, a cached image URL like `.../trip-photos/destinations/photo-ref-abc123.jpg` would match `photo-ref` and get rewritten to `site-images/photo-ref-abc123` which doesn't exist.
+
+**2. Global MutationObserver error handler conflicts with React (secondary cause)**
+
+The `installGlobalUnsplashGuard` in `main.tsx` adds error handlers to ALL `<img>` elements via a MutationObserver. When a React-managed image fails (or when React updates `src` during re-render), the global handler fires BEFORE React's `onError` and replaces the src with `PLACEHOLDER_TRAVEL_SRC`. This races with React's own fallback logic in `EditorialItinerary.tsx` and can cause the image to permanently disappear (via `setThumbnailError(true)`).
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+**File 1: `src/utils/unsplash.ts`** — Tighten the photo-ID regex
 
-After the `tripHotelName` resolution block (line ~220), add hotel change detection for split-stay scenarios:
+Change the `normalizeUnsplashUrl` function so the `photo-` regex only matches when:
+- The input is a bare photo ID (no protocol, no slashes) — e.g., `photo-1234abcd`
+- OR the input is an Unsplash URL (already handled by `isUnsplashUrl`)
 
-1. When `hotelList.length > 1` and `dayNumber > 1`, resolve the **previous day's hotel** using the same date-matching logic
-2. Compare previous day's hotel name to current day's — if different, set `tripIsHotelChange = true` and `tripPreviousHotelName` to the previous hotel
-3. Pass these values to the repair call at lines 819-820 instead of the always-false `cityInfo?.isHotelChange`
+This prevents legitimate HTTP URLs from being incorrectly rewritten. Replace the broad test with a stricter check that the entire string looks like a bare photo ID:
 
-This is ~15 lines of new code in one file. The repair pipeline already handles hotel changes correctly — it just wasn't being told about them.
+```js
+// Before (too broad):
+if (isUnsplashUrl(value) || /photo-[a-z0-9-]+/i.test(value))
 
-### Technical Details
-
+// After (only bare photo IDs, not full URLs):
+if (isUnsplashUrl(value) || (!value.includes('/') && /^photo-[a-z0-9-]+$/i.test(value)))
 ```
-// After tripHotelName is resolved (~line 220):
-let tripIsHotelChange = false;
-let tripPreviousHotelName: string | undefined;
 
-if (hotelList.length > 1 && dayNumber > 1 && startDate) {
-  const prevDayDate = new Date(startDate);
-  prevDayDate.setDate(prevDayDate.getDate() + dayNumber - 2);
-  const prevDateStr = prevDayDate.toISOString().split('T')[0];
-  
-  const prevHotel = hotelList.find(h => {
-    const cin = h.checkInDate; const cout = h.checkOutDate;
-    return cin && cout && prevDateStr >= cin && prevDateStr < cout;
-  });
-  
-  if (prevHotel?.name && tripHotelName && prevHotel.name !== tripHotelName) {
-    tripIsHotelChange = true;
-    tripPreviousHotelName = prevHotel.name;
-  }
+**File 2: `src/main.tsx`** — Skip React-managed images in the global guard
+
+Update `patchImage` to skip images that are inside React's render tree for the itinerary. The simplest approach: skip images whose `src` is already a valid Supabase storage URL or a data URI (these are managed by React components and shouldn't be globally intercepted):
+
+```js
+// In patchImage, before normalizing:
+if (originalSrc && (
+  originalSrc.includes('/storage/v1/object/') ||
+  originalSrc.startsWith('data:')
+)) {
+  return; // React components handle their own error fallbacks
 }
 ```
 
-Then update the repair call:
-```
-isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
-previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
-```
+### Impact
+- Photos from Google Places cache, curated images, and Supabase storage will no longer be incorrectly rewritten
+- React's `onError` handlers will work without interference from the global guard
+- The global guard still protects legacy Unsplash URLs and bare photo IDs
 
