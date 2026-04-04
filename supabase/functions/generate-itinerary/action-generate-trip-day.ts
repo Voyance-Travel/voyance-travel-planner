@@ -185,9 +185,10 @@ async function _handleGenerateTripDayInner(
   // Resolve hotel name from hotel_selection for single-city trips (date-aware for split stays)
   let tripHotelName: string | undefined;
   let tripHotelAddress: string | undefined;
+  let hotelList: any[] = [];
   if (tripCheck?.hotel_selection) {
     const hs = tripCheck.hotel_selection as any;
-    const hotelList: any[] = Array.isArray(hs) ? hs : (typeof hs === 'object' && hs?.name ? [hs] : []);
+    hotelList = Array.isArray(hs) ? hs : (typeof hs === 'object' && hs?.name ? [hs] : []);
 
     if (hotelList.length > 1 && startDate) {
       // Split stay: resolve per-day hotel by date matching
