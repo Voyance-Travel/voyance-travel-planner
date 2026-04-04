@@ -717,9 +717,25 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
   // --- 7/8 SPLIT-STAY REORDER: On hotel-change days, inject checkout FIRST, then check-in ---
   // For non-hotel-change days, the original order (7=check-in, 8=checkout) is fine.
+  // Hotel name normalization helper for robust matching
+  const normalizeHotelCore = (name: string): string => {
+    return name.toLowerCase()
+      .replace(/\b(hotel|resort|suites?|inn|lodge|palace|palácio|boutique|luxury|the|a)\b/gi, '')
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, ' ').trim();
+  };
+
+  const hotelCoreMatch = (title: string, hotelName: string): boolean => {
+    if (!hotelName) return false;
+    const titleNorm = normalizeHotelCore(title);
+    const hotelNorm = normalizeHotelCore(hotelName);
+    if (!hotelNorm || hotelNorm.length < 3) return false;
+    // Check if hotel core name appears in the title, or vice versa
+    return titleNorm.includes(hotelNorm) || hotelNorm.includes(titleNorm);
+  };
+
   if (isHotelChange) {
     // --- 8-first. CHECKOUT from PREVIOUS hotel (morning) ---
-    // Hotel-name-aware: require checkout to reference the correct (previous) hotel
     const prevHotelLower = (previousHotelName || '').toLowerCase();
     const newHotelLower = (hotelName || '').toLowerCase();
 
@@ -733,7 +749,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const t = (a.title || a.name || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
       return cat === 'accommodation' && isCheckoutTitle(t) &&
-        (!prevHotelLower || t.includes(prevHotelLower));
+        (!prevHotelLower || t.includes(prevHotelLower) || hotelCoreMatch(t, previousHotelName || ''));
     });
 
     // Remove any wrongly-named checkout before injecting the correct one
@@ -742,7 +758,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const t = (a.title || a.name || '').toLowerCase();
         const cat = (a.category || '').toLowerCase();
         return cat === 'accommodation' && isCheckoutTitle(t) &&
-          prevHotelLower && !t.includes(prevHotelLower);
+          prevHotelLower && !t.includes(prevHotelLower) && !hotelCoreMatch(t, previousHotelName || '');
       });
       if (wrongCoIdx >= 0) {
         repairs.push({
@@ -784,7 +800,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const t = (a.title || a.name || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
       return cat === 'accommodation' && isCheckInTitle(t) &&
-        (!newHotelLower || t.includes(newHotelLower));
+        (!newHotelLower || t.includes(newHotelLower) || hotelCoreMatch(t, hotelName || ''));
     });
 
     // Remove any wrongly-named check-in before injecting the correct one
@@ -793,7 +809,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const t = (a.title || a.name || '').toLowerCase();
         const cat = (a.category || '').toLowerCase();
         return cat === 'accommodation' && isCheckInTitle(t) &&
-          newHotelLower && !t.includes(newHotelLower);
+          newHotelLower && !t.includes(newHotelLower) && !hotelCoreMatch(t, hotelName || '');
       });
       if (wrongCiIdx >= 0) {
         repairs.push({
@@ -1777,7 +1793,67 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
   }
 
-  // --- 13b. GAP CLOSURE ---
+  // --- 13b. MINIMUM DURATION ENFORCEMENT ---
+  // Ensure dining activities are ≥60min, activities/sightseeing ≥30min, others ≥15min
+  for (let i = 0; i < activities.length; i++) {
+    const act = activities[i];
+    const cat = (act.category || '').toLowerCase();
+    const startMins = parseTimeToMinutes(act.startTime || '');
+    const endMins = parseTimeToMinutes(act.endTime || '');
+    if (startMins === null || endMins === null) continue;
+    const duration = endMins - startMins;
+    if (duration <= 0) continue;
+
+    const minDur = (cat === 'dining' || cat === 'food' || cat === 'restaurant') ? 60
+      : ['activity', 'sightseeing', 'cultural', 'entertainment'].includes(cat) ? 30
+      : 0;
+
+    if (minDur > 0 && duration < minDur && !lockedIds.has(act.id)) {
+      act.endTime = minutesToHHMM(startMins + minDur);
+      act.durationMinutes = minDur;
+      repairs.push({
+        code: FAILURE_CODES.TIME_OVERLAP,
+        activityIndex: i,
+        action: 'enforced_minimum_duration',
+        before: `${act.title} was ${duration}min`,
+        after: `${act.title} now ${minDur}min`,
+      });
+    }
+  }
+
+  // Re-run overlap cascade after duration extensions
+  for (let i = 0; i < activities.length - 1; i++) {
+    const curr = activities[i];
+    const next = activities[i + 1];
+    const currEnd = parseTimeToMinutes(curr.endTime || '');
+    const nextStart = parseTimeToMinutes(next.startTime || '');
+    if (currEnd === null || nextStart === null) continue;
+    if (currEnd > nextStart && !lockedIds.has(next.id)) {
+      const overlapMins = currEnd - nextStart;
+      for (let j = i + 1; j < activities.length; j++) {
+        if (lockedIds.has(activities[j].id)) continue;
+        const s = parseTimeToMinutes(activities[j].startTime || '');
+        const e = parseTimeToMinutes(activities[j].endTime || '');
+        if (s !== null) activities[j].startTime = minutesToHHMM(s + overlapMins);
+        if (e !== null) activities[j].endTime = minutesToHHMM(e + overlapMins);
+      }
+    }
+  }
+
+  // Drop activities pushed past 23:30 after duration enforcement
+  {
+    const cutoff2 = 23 * 60 + 30;
+    activities = activities.filter((act: any) => {
+      const s = parseTimeToMinutes(act.startTime || '');
+      if (s !== null && s > cutoff2) {
+        repairs.push({ code: FAILURE_CODES.TIME_OVERLAP, action: 'dropped_past_midnight_post_duration', before: act.title });
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // --- 13c. GAP CLOSURE ---
   // Detect and close large unexplained gaps between consecutive activities.
   // Shifts later activities earlier so no gap exceeds the threshold.
   {

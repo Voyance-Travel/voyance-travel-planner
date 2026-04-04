@@ -563,7 +563,7 @@ function checkDuplicateConcept(
   for (const prevDay of previousDays) {
     for (const prevAct of prevDay.activities || []) {
       const concept = extractConcept(normalizeText(prevAct.title || ''));
-      if (concept.length > 5) previousConcepts.add(concept);
+      if (concept.length > 3) previousConcepts.add(concept);
       const locName = normalizeText(prevAct.location?.name || '');
       if (locName.length > 5) previousLocations.add(locName);
 
@@ -590,6 +590,23 @@ function checkDuplicateConcept(
 
     const actConcept = extractConcept(normalizeText(act.title || ''));
     const actLocName = normalizeText(act.location?.name || '');
+
+    // Short-name exact match guard (1-2 word venues like "Belcanto", "Skinlife Wellness")
+    const actConceptWords = actConcept.split(/\s+/).filter(Boolean);
+    if (actConceptWords.length <= 2 && actConcept.length >= 4) {
+      const isExactDup = previousConcepts.has(actConcept) ||
+        (cat.includes('dining') && previousDiningVenues.has(actConcept));
+      if (isExactDup) {
+        results.push({
+          code: FAILURE_CODES.DUPLICATE_CONCEPT,
+          severity: 'error',
+          message: `"${act.title}" exactly matches a venue from a previous day`,
+          activityIndex: i,
+          autoRepairable: true,
+        });
+        continue;
+      }
+    }
 
     // Dining venue dedup — precise identity check using normalized venue names
     if (cat.includes('dining')) {
