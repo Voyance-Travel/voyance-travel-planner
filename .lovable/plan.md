@@ -1,52 +1,46 @@
 
 
-## Fix: Missing Transport Card After Hotel Return
+## Fix: Inject Default Arrival Flight When No Flight Data Exists
 
-### Root Cause
+### Problem
+When `flight_selection` is null, `arrivalTime24` is undefined throughout the pipeline. This means:
+- The schema compiler (compile-day-schema.ts line 301-329) tells the AI to start Day 1 at 10:00 AM with just a check-in — no arrival narrative
+- The repair pipeline (repair-day.ts line 301) skips arrival flight + airport transfer injection because `arrivalTime24` is falsy
 
-The `isSameOrContainedLocation` function in `repair-day.ts` (line 2087) has a logic error that causes false-positive "same location" matches whenever **one** of the two locations is the hotel:
-
-```typescript
-// Line 2087 — BUGGY
-if (h.length >= 4 && (aLoc === h || bLoc === h) && (aLoc.includes(h) || bLoc.includes(h))) return true;
-```
-
-The second condition uses `||` (OR) instead of `&&` (AND). When `aLoc === h` (e.g., "palácio ludovice"), the OR condition is automatically true regardless of `bLoc`. This means **any pair where one location is the hotel** is treated as "same location."
-
-**What happens during generation:**
-1. Step 3 (transit gap injection) correctly injects a "Travel to Belcanto" card between "Return to Palácio Ludovice" and "Dinner: Belcanto"
-2. Step 4b (orphaned transport removal) checks if the preceding non-transport activity ("Return to Palácio Ludovice") is at the same location as the transport's destination ("Belcanto")
-3. `isSameOrContainedLocation("palácio ludovice", "belcanto", "Palácio Ludovice")` → the buggy line 2087 returns `true` because `aLoc === h`
-4. The transport card is **incorrectly removed** as "orphaned"
-
-This bug affects ALL departures from the hotel — any transport card leaving the hotel toward a different venue gets stripped.
+Result: Day 1 starts abruptly with hotel check-in at 10:00 AM, with no travel context.
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — line 2087
+**File: `supabase/functions/generate-itinerary/action-generate-day.ts`** — where `arrivalTime24` is assigned to `validationInput` (line ~804)
 
-Remove the buggy second hotel check. It's redundant with line 2086 when corrected (changing OR to AND produces the same condition as line 2086), so the simplest fix is to delete it entirely:
+Add a default morning arrival time (`"09:00"`) when it's Day 1 and no flight data exists. This single change flows through to both validation and repair, which will then inject the "Arrival Flight" + "Airport Transfer" cards automatically.
 
-```text
-Before (lines 2083-2088):
-  // Both reference the hotel
-  if (hotel) {
-    const h = hotel.toLowerCase();
-    if (h.length >= 4 && aLoc.includes(h) && bLoc.includes(h)) return true;
-    if (h.length >= 4 && (aLoc === h || bLoc === h) && (aLoc.includes(h) || bLoc.includes(h))) return true;
-  }
+**File: `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts`** — the no-flight Day 1 branch (lines 301-329)
+
+Update the prompt to include an arrival sequence instead of starting cold at 10:00 AM. Use a default 09:00 arrival time, with "Arrival" + "Transfer to Hotel" + "Check-in" sequence starting at 09:00.
+
+### Specific Changes
+
+**action-generate-day.ts** (~line 804):
+```
+Before:
+  arrivalTime24: flightContext.arrivalTime24,
 
 After:
-  // Both reference the hotel
-  if (hotel) {
-    const h = hotel.toLowerCase();
-    if (h.length >= 4 && aLoc.includes(h) && bLoc.includes(h)) return true;
-  }
+  arrivalTime24: flightContext.arrivalTime24 || (isFirstDay ? '09:00' : undefined),
 ```
 
+**compile-day-schema.ts** (lines 271-329) — the `} else {` no-flight branches:
+
+Update both the "hotel but no flight" and "no hotel, no flight" branches to assume a 09:00 arrival and include Arrival + Transfer + Check-in in the prompt sequence, matching the structure of the flight-data branches.
+
 ### Impact
-- Fixes missing transport cards between hotel and any non-hotel venue (restaurants, attractions, etc.)
-- Line 2086 already correctly handles the "both reference the hotel" case
-- Single line deletion in `repair-day.ts`
-- No behavioral change for legitimate same-location matches
+- Day 1 will always have an Arrival Flight card + Airport Transfer card, even without flight data
+- The arrival card will show generic "Arrival Flight" (no airline/flight number) arriving at 09:00
+- Airport transfer follows, then hotel check-in — creating a complete travel narrative
+- No change when flight data exists (existing `arrivalTime24` takes precedence)
+
+### Files
+- `supabase/functions/generate-itinerary/action-generate-day.ts` — 1-line default
+- `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts` — update no-flight Day 1 prompt branches
 
