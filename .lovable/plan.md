@@ -1,86 +1,138 @@
 
 
-## Fix: Large Gap Detection and Closure in Repair Pipeline
+## Fix: Split-Stay Hotel Name Validation and Sequence Enforcement
 
 ### Problem
 
-The repair pipeline has no step that detects or closes large unexplained gaps between consecutive activities. When the AI generates a "Freshen Up" ending at 20:39 and a "Nightcap" starting at 22:34, that 115-minute gap passes through all 18 repair steps unchallenged — no validator flags it, no repair closes it.
+On hotel-change days, the repair pipeline checks whether checkout and check-in activities *exist* but not whether they reference the *correct* hotels. When the AI generates "Checkout from Palácio Ludovice" instead of "Checkout from Four Seasons Ritz", the pipeline sees "checkout exists" and skips correction. Title normalization (Step 9b) later fixes the hotel name but can't fix the scrambled sequence.
 
-The pipeline handles overlaps (Step 13) and missing transits (Step 9d), but never asks: "Is there dead time here that shouldn't exist?"
+The result: Breakfast at the wrong hotel, checkout from the wrong hotel, and a logically inverted checkout→check-in sequence.
+
+### Root Cause
+
+Three gaps in `repair-day.ts`:
+
+1. **Steps 7/8 (`hasCheckoutAlready` / `hasCheckInAlready`)** — Only check if any checkout/check-in exists, not whether it names the correct hotel (`previousHotelName` for checkout, `hotelName` for check-in).
+
+2. **No sequence enforcement** — Even after injection/normalization, there's no step that verifies the checkout comes before the transport, which comes before the check-in. The AI can place them in any order.
+
+3. **Pre-checkout activities reference wrong hotel** — Breakfast "at Palácio Ludovice" on a morning when the traveler is still at Four Seasons. No step validates that pre-checkout activities reference `previousHotelName`.
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — Add a new step after Step 13 (TIME_OVERLAP CASCADE) and before Step 14 (DEPARTURE DAY PRUNE).
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-**New Step: GAP CLOSURE** — scans consecutive non-transport activity pairs and closes gaps exceeding a threshold by shifting the later activity (and all subsequent) earlier.
+#### Change 1: Hotel-name-aware existence checks (Steps 7/8, ~lines 722-760)
 
-#### Logic
-
-1. Walk consecutive pairs of activities (skipping transport cards, which are just connectors)
-2. For each pair, compute the gap: `nextStart - prevEnd`
-3. Define a max acceptable gap:
-   - Between accommodation → dining/activity: **45 minutes** (realistic freshen-up-to-dinner transition including transport)
-   - Between any other pair: **60 minutes** (allows for unstated transit)
-4. If the gap exceeds the threshold:
-   - Calculate the shift amount: `gap - maxGap` (close the gap down to the threshold, not to zero)
-   - Shift the later activity and all subsequent activities earlier by that amount
-   - Ensure no activity gets shifted before its predecessor's end time
-   - Log a repair action
-
-#### Conceptual code
+Replace the generic checkout/check-in existence checks with hotel-name-aware versions:
 
 ```typescript
-// --- Step 13b. GAP CLOSURE ---
-{
-  for (let i = 0; i < activities.length - 1; i++) {
-    const curr = activities[i];
-    const next = activities[i + 1];
+// Step 8-first: CHECKOUT — must be from previousHotelName
+const prevHotelLower = (previousHotelName || '').toLowerCase();
+const hasCorrectCheckout = activities.some((a: any) => {
+  const t = (a.title || a.name || '').toLowerCase();
+  const cat = (a.category || '').toLowerCase();
+  const isCheckout = cat === 'accommodation' && 
+    (t.includes('check-out') || t.includes('check out') || t.includes('checkout'));
+  // If we know the previous hotel, require it to match
+  return isCheckout && (!prevHotelLower || t.includes(prevHotelLower));
+});
+
+// Step 7-second: CHECK-IN — must be at hotelName (new hotel)
+const newHotelLower = (hotelName || '').toLowerCase();
+const hasCorrectCheckIn = activities.some((a: any) => {
+  const t = (a.title || a.name || '').toLowerCase();
+  const cat = (a.category || '').toLowerCase();
+  const isCheckIn = cat === 'accommodation' && 
+    (t.includes('check-in') || t.includes('check in') || t.includes('checkin') || 
+     t.includes('settle in') || t.includes('luggage drop'));
+  return isCheckIn && (!newHotelLower || t.includes(newHotelLower));
+});
+```
+
+If a checkout exists but names the wrong hotel, **remove it** and inject the correct one. Same for check-in.
+
+#### Change 2: Remove wrong-hotel checkout/check-in before injecting correct ones
+
+Before the injection logic, strip any checkout that names the wrong hotel, and any check-in that names the wrong hotel:
+
+```typescript
+if (!hasCorrectCheckout) {
+  // Remove any wrongly-named checkout
+  const wrongIdx = activities.findIndex((a: any) => {
+    const t = (a.title || a.name || '').toLowerCase();
+    const cat = (a.category || '').toLowerCase();
+    return cat === 'accommodation' && 
+      (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) &&
+      prevHotelLower && !t.includes(prevHotelLower);
+  });
+  if (wrongIdx >= 0) {
+    repairs.push({ code: FAILURE_CODES.CHRONOLOGY, action: 'removed_wrong_hotel_checkout', 
+      before: activities[wrongIdx].title });
+    activities.splice(wrongIdx, 1);
+  }
+  // ... then inject correct checkout (existing injection code)
+}
+```
+
+Same pattern for wrong-hotel check-in.
+
+#### Change 3: Post-injection sequence enforcement (new sub-step after Step 8)
+
+After both checkout and check-in are guaranteed with correct hotel names, enforce the sequence: **Checkout → Transport → Check-in**. If they're out of order, reorder them:
+
+```typescript
+// --- 8b. SPLIT-STAY SEQUENCE ENFORCEMENT ---
+if (isHotelChange) {
+  const coIdx = activities.findIndex(a => 
+    (a.category||'').toLowerCase() === 'accommodation' && 
+    /check.?out/i.test(a.title||''));
+  const ciIdx = activities.findIndex(a => 
+    (a.category||'').toLowerCase() === 'accommodation' && 
+    /check.?in|settle.in|luggage.drop/i.test(a.title||''));
+  
+  if (coIdx >= 0 && ciIdx >= 0 && coIdx > ciIdx) {
+    // Checkout is after check-in — swap them and re-time
+    const checkout = activities.splice(coIdx, 1)[0];
+    const newCoIdx = activities.indexOf(activities[ciIdx]); // ciIdx shifted
+    activities.splice(newCoIdx, 0, checkout);
     
-    // Skip transport pairs — they're connectors, not real gaps
-    if ((curr.category || '').toLowerCase() === 'transport') continue;
-    if ((next.category || '').toLowerCase() === 'transport') continue;
-    
-    const currEnd = parseTimeToMinutes(curr.endTime || '');
-    const nextStart = parseTimeToMinutes(next.startTime || '');
-    if (currEnd === null || nextStart === null) continue;
-    
-    const gap = nextStart - currEnd;
-    
-    // Determine max acceptable gap based on context
-    const currCat = (curr.category || '').toLowerCase();
-    const maxGap = currCat === 'accommodation' ? 45 : 60;
-    
-    if (gap > maxGap) {
-      const shift = gap - maxGap;
-      // Shift this activity and all subsequent earlier
-      for (let j = i + 1; j < activities.length; j++) {
-        const s = parseTimeToMinutes(activities[j].startTime || '');
-        const e = parseTimeToMinutes(activities[j].endTime || '');
-        if (s !== null) activities[j].startTime = minutesToHHMM(s - shift);
-        if (e !== null) activities[j].endTime = minutesToHHMM(e - shift);
-      }
-      repairs.push({
-        code: FAILURE_CODES.TIME_OVERLAP,
-        activityIndex: i + 1,
-        action: 'closed_excessive_gap',
-        before: `${gap}min gap between "${curr.title}" and "${next.title}"`,
-        after: `Closed to ${maxGap}min, shifted ${next.title} and subsequent -${shift}min`,
-      });
-    }
+    // Re-time: checkout at 11:00, transport 11:30, check-in 12:15
+    checkout.startTime = '11:00';
+    checkout.endTime = '11:30';
+    // Find/update transport between them
+    // Update check-in to 12:15
+    repairs.push({ action: 'reordered_split_stay_sequence' });
   }
 }
 ```
 
-#### Safeguards
+#### Change 4: Fix pre-checkout hotel references
 
-- Only shifts activities earlier, never creates new overlaps (the overlap cascade already ran)
-- Preserves transport cards between activities (they shift with everything else)
-- Does not touch locked activities
-- Runs after overlap resolution so it doesn't undo those fixes
-- Keeps a reasonable buffer (45–60 min) rather than jamming activities together
+In the accommodation title normalization (Step 9b, ~line 1230), when `isHotelChange` is true, any accommodation activity *before* the checkout index should use `previousHotelName`, not `hotelName`:
 
-### Impact
-- Eliminates unexplained 2-hour dead gaps like the Freshen Up → Nightcap scenario
-- Single new block in `repair-day.ts`, no other files affected
-- Conservative thresholds prevent over-packing the day
+```typescript
+// In Step 9b, when isHotelChange:
+const checkoutIdx = activities.findIndex(a => /check.?out/i.test(a.title||''));
+
+for (let i = 0; i < activities.length; i++) {
+  const act = activities[i];
+  const cat = (act.category || '').toLowerCase();
+  if (cat !== 'accommodation') continue;
+  
+  // Before checkout → use previousHotelName; after → use hotelName
+  const resolvedHn = (isHotelChange && checkoutIdx >= 0 && i < checkoutIdx) 
+    ? (previousHotelName || 'Your Hotel') 
+    : hn;
+  
+  // ... apply canonical titles using resolvedHn instead of hn
+}
+```
+
+### Summary
+
+All changes are in `supabase/functions/generate-itinerary/pipeline/repair-day.ts`:
+- **Steps 7/8**: Hotel-name-aware existence checks + removal of wrong-hotel activities
+- **New Step 8b**: Sequence enforcement (checkout before check-in)
+- **Step 9b**: Context-aware title normalization (pre-checkout = old hotel, post-checkout = new hotel)
 
