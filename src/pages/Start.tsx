@@ -446,8 +446,20 @@ function TripDetailsStep({
   );
   const [showBudget, setShowBudget] = useState(!!budgetAmount);
 
+  // Ref to skip auto-setting end date when user is actively re-picking dates
+  const skipAutoEndDateRef = React.useRef(false);
+
+  const handleSetEndDate = React.useCallback((d: Date | undefined) => {
+    if (!d) skipAutoEndDateRef.current = true;
+    setEndDate(d);
+  }, [setEndDate]);
+
   // Auto-set end date when start date changes
   useEffect(() => {
+    if (skipAutoEndDateRef.current) {
+      skipAutoEndDateRef.current = false;
+      return;
+    }
     if (startDate && !endDate) {
       setEndDate(addDays(startDate, 5));
     }
@@ -618,7 +630,7 @@ function TripDetailsStep({
           startDate={startDate}
           endDate={endDate}
           setStartDate={setStartDate}
-          setEndDate={setEndDate}
+          setEndDate={handleSetEndDate}
           calendarMonth={calendarMonth}
           setCalendarMonth={setCalendarMonth}
           today={today}
