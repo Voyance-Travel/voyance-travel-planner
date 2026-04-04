@@ -1657,6 +1657,52 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     });
   }
 
+  // --- 13b. GAP CLOSURE ---
+  // Detect and close large unexplained gaps between consecutive activities.
+  // Shifts later activities earlier so no gap exceeds the threshold.
+  {
+    for (let i = 0; i < activities.length - 1; i++) {
+      const curr = activities[i];
+      const next = activities[i + 1];
+
+      // Skip transport cards — they're connectors, not real gaps
+      const currCat = (curr.category || '').toLowerCase();
+      const nextCat = (next.category || '').toLowerCase();
+      if (currCat === 'transport' || currCat === 'transit' || currCat === 'logistics') continue;
+      if (nextCat === 'transport' || nextCat === 'transit' || nextCat === 'logistics') continue;
+
+      // Don't shift locked activities
+      if (lockedIds.has(next.id)) continue;
+
+      const currEnd = parseTimeToMinutes(curr.endTime || '');
+      const nextStart = parseTimeToMinutes(next.startTime || '');
+      if (!currEnd || !nextStart) continue;
+
+      const gap = nextStart - currEnd;
+
+      // Max acceptable gap based on context
+      const maxGap = currCat === 'accommodation' ? 45 : 60;
+
+      if (gap > maxGap) {
+        const shift = gap - maxGap;
+        // Shift next and all subsequent activities earlier
+        for (let j = i + 1; j < activities.length; j++) {
+          const s = parseTimeToMinutes(activities[j].startTime || '');
+          const e = parseTimeToMinutes(activities[j].endTime || '');
+          if (s) activities[j].startTime = minutesToHHMM(s - shift);
+          if (e) activities[j].endTime = minutesToHHMM(e - shift);
+        }
+        repairs.push({
+          code: FAILURE_CODES.TIME_OVERLAP,
+          activityIndex: i + 1,
+          action: 'closed_excessive_gap',
+          before: `${gap}min gap between "${curr.title}" and "${next.title}"`,
+          after: `Closed to ${maxGap}min, shifted ${next.title} and subsequent -${shift}min`,
+        });
+      }
+    }
+  }
+
   // --- 14. DEPARTURE DAY: prune activities after the last departure card ---
   // The flight/departure-transport card must be the final item on departure days.
   if (isDepartureDay && activities.length > 1) {
