@@ -2385,6 +2385,7 @@ export async function generateItineraryAI(
   };
 
   const seenConcepts: Array<{ concept: string; dayNum: number }> = [];
+  const seenLocations = new Map<string, { dayNum: number }>();
   let dedupCount = 0;
   for (const day of days) {
     const indicesToRemove: number[] = [];
@@ -2404,6 +2405,19 @@ export async function generateItineraryAI(
         dedupCount++;
       } else {
         seenConcepts.push({ concept: key, dayNum: day.dayNumber });
+
+        // Location-based dedup: catch same venue with different title phrasing
+        const locName = ((act as any).location?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+        if (locName.length > 5) {
+          const locMatch = seenLocations.get(locName);
+          if (locMatch && locMatch.dayNum !== day.dayNumber) {
+            console.log(`[Stage 2] Cross-batch location dedup: removed "${act.title}" from Day ${day.dayNumber} (same venue "${locName}" on Day ${locMatch.dayNum})`);
+            indicesToRemove.push(i);
+            dedupCount++;
+          } else if (!locMatch) {
+            seenLocations.set(locName, { dayNum: day.dayNumber });
+          }
+        }
       }
     }
     // Remove in reverse order to preserve indices
