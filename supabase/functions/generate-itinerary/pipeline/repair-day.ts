@@ -1564,16 +1564,65 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const overlapMins = prevEnd - currStart;
 
       if (isStructural(curr)) {
-        // Truncate prev to end before structural activity
+        // Truncate prev to end before structural activity — but enforce minimum duration
         const oldEnd = prev.endTime;
-        prev.endTime = minutesToHHMM(currStart);
-        repairs.push({
-          code: FAILURE_CODES.TIME_OVERLAP,
-          activityIndex: i,
-          action: 'truncated_before_structural',
-          before: `${prev.title} end ${oldEnd}`,
-          after: `${prev.title} end ${prev.endTime}`,
-        });
+        const prevStartMins = parseTimeToMinutes(prev.startTime || '');
+        const newEndMins = currStart;
+        const newDuration = prevStartMins !== null ? newEndMins - prevStartMins : 999;
+
+        // Category-based minimum durations (minutes)
+        const prevCat = (prev.category || '').toLowerCase();
+        const minDur = prevCat === 'dining' || prevCat === 'food' || prevCat === 'restaurant' ? 60
+          : ['activity', 'sightseeing', 'cultural', 'entertainment'].includes(prevCat) ? 30
+          : 15;
+
+        if (newDuration < minDur && prevStartMins !== null) {
+          // Try shifting prev earlier to preserve minimum duration
+          const idealStart = newEndMins - minDur;
+          const prevPrev = i > 0 ? activities[i - 1] : null;
+          const prevPrevEnd = prevPrev ? parseTimeToMinutes(prevPrev.endTime || '') : null;
+          const floor = prevPrevEnd !== null ? prevPrevEnd : 0;
+
+          if (idealStart >= floor) {
+            // Shift activity start earlier to preserve minimum duration
+            prev.startTime = minutesToHHMM(idealStart);
+            prev.endTime = minutesToHHMM(newEndMins);
+            repairs.push({
+              code: FAILURE_CODES.TIME_OVERLAP,
+              activityIndex: i,
+              action: 'shifted_earlier_for_min_duration',
+              before: `${prev.title} ${minutesToHHMM(prevStartMins)}-${oldEnd} (would be ${newDuration}min)`,
+              after: `${prev.title} ${prev.startTime}-${prev.endTime} (preserved ${minDur}min min)`,
+            });
+          } else {
+            // Can't shift earlier — push structural card (and all subsequent) forward
+            const shiftAmount = minDur - newDuration;
+            for (let j = i + 1; j < activities.length; j++) {
+              const s = parseTimeToMinutes(activities[j].startTime || '');
+              const e = parseTimeToMinutes(activities[j].endTime || '');
+              if (s !== null) activities[j].startTime = minutesToHHMM(s + shiftAmount);
+              if (e !== null) activities[j].endTime = minutesToHHMM(e + shiftAmount);
+            }
+            prev.endTime = minutesToHHMM(prevStartMins + minDur);
+            repairs.push({
+              code: FAILURE_CODES.TIME_OVERLAP,
+              activityIndex: i,
+              action: 'shifted_structural_for_min_duration',
+              before: `${prev.title} would be ${newDuration}min, structural ${curr.title} at ${minutesToHHMM(currStart)}`,
+              after: `${prev.title} ${prev.startTime}-${prev.endTime}, structural shifted +${shiftAmount}min`,
+            });
+          }
+        } else {
+          // Duration is acceptable — simple truncation
+          prev.endTime = minutesToHHMM(currStart);
+          repairs.push({
+            code: FAILURE_CODES.TIME_OVERLAP,
+            activityIndex: i,
+            action: 'truncated_before_structural',
+            before: `${prev.title} end ${oldEnd}`,
+            after: `${prev.title} end ${prev.endTime}`,
+          });
+        }
       } else {
         // Shift curr (and all subsequent) forward
         for (let j = i + 1; j < activities.length; j++) {
