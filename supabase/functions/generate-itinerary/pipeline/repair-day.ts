@@ -800,7 +800,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       const t = (a.title || a.name || '').toLowerCase();
       const cat = (a.category || '').toLowerCase();
       return cat === 'accommodation' && isCheckInTitle(t) &&
-        (!newHotelLower || t.includes(newHotelLower));
+        (!newHotelLower || t.includes(newHotelLower) || hotelCoreMatch(t, hotelName || ''));
     });
 
     // Remove any wrongly-named check-in before injecting the correct one
@@ -809,7 +809,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const t = (a.title || a.name || '').toLowerCase();
         const cat = (a.category || '').toLowerCase();
         return cat === 'accommodation' && isCheckInTitle(t) &&
-          newHotelLower && !t.includes(newHotelLower);
+          newHotelLower && !t.includes(newHotelLower) && !hotelCoreMatch(t, hotelName || '');
       });
       if (wrongCiIdx >= 0) {
         repairs.push({
