@@ -1,35 +1,72 @@
 
 
-## Fix: Increase Flight Buffer to 3 Hours
+## Fix: Minimum Duration Enforcement to Prevent Time Compression
 
-The user wants a consistent 3-hour (180-minute) buffer before departure flights across the entire system. Currently, different files use different values (120min, 135min, 150min), creating inconsistency.
+### Problem
 
-### Changes Required
+The repair pipeline's TIME_OVERLAP CASCADE (Step 13 in `repair-day.ts`) truncates non-structural activities when they overlap with a structural card (hotel check-in, departure transport, etc.). It sets `prev.endTime = currStart` regardless of how short that makes the activity. This is what compressed Belcanto dinner from a proper 90+ minute slot down to 15 minutes — a structural card was injected right after it, and the cascade blindly truncated.
 
-**1. `supabase/functions/generate-itinerary/prompt-library.ts`** (~line 284)
-- `airportBuffer` base value: `120` → `180` (domestic flights)
-- Already `180` for international — keep as-is
-- This controls the prompt-level "latest end time" calculation
+There is **no minimum duration guard** anywhere in the pipeline.
 
-**2. `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts`** (~line 416)
-- `checkInBuffer` is already `180` — no change needed here ✓
+### Fix
 
-**3. `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (~line 1793)
-- `airportBuffer`: `150` → `180`
-- This controls the departure-day time window enforcement in the repair pipeline
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — Step 13 (TIME_OVERLAP CASCADE), around line 1566
 
-**4. `supabase/functions/generate-itinerary/flight-hotel-context.ts`** (~line 253)
-- `DEPARTURE_BUFFER_MINS` is already `3 * 60` (180) — no change needed ✓
+When truncating a non-structural activity before a structural one, enforce a minimum duration based on category:
 
-**5. `src/services/flightItineraryPatch.ts`** (~lines 150-151)
-- `latestEnd = departMins - 120` → `departMins - 180`
-- `transferStart = departMins - 150` → `departMins - 210`
-- This controls the post-generation flight patch
+1. Define minimum durations by category:
+   - `dining` / meal activities: **60 minutes**
+   - `activity` / `sightseeing`: **30 minutes**
+   - Everything else: **15 minutes**
 
-**6. `src/services/cascadeTransportToItinerary.ts`** (~line 20)
-- `flight.beforeDeparture`: `135` → `180`
-- This controls the cascade transport sync buffer
+2. In the truncation branch (line 1566–1576), after computing the new end time:
+   - Calculate the resulting duration (`newEnd - startTime`)
+   - If it falls below the minimum for that category, **shift the activity's start time earlier** to preserve the minimum duration
+   - If shifting earlier would overlap with the activity *before* it, shift the structural card forward instead (same logic as the non-structural branch)
+   - As a last resort, if neither shift works, keep the truncation but log a repair warning
 
-### Summary
-Four files need updates; two already use 180 minutes. All departure-side flight buffers will be unified to 180 minutes (3 hours).
+### Code Change (conceptual)
+
+```typescript
+// Inside the isStructural(curr) branch, after line 1568:
+const prevStart = parseTimeToMinutes(prev.startTime || '');
+const newEnd = currStart;
+const newDuration = prevStart !== null ? newEnd - prevStart : 0;
+
+// Category-based minimum durations
+const minDur = (prev.category || '').toLowerCase() === 'dining' ? 60
+  : ['activity', 'sightseeing'].includes((prev.category || '').toLowerCase()) ? 30
+  : 15;
+
+if (newDuration < minDur && prevStart !== null) {
+  // Try shifting prev earlier to preserve minimum duration
+  const idealStart = newEnd - minDur;
+  const prevPrev = i > 0 ? activities[i - 1] : null;
+  const prevPrevEnd = prevPrev ? parseTimeToMinutes(prevPrev.endTime || '') : null;
+  const floor = prevPrevEnd !== null ? prevPrevEnd : 0;
+
+  if (idealStart >= floor) {
+    prev.startTime = minutesToHHMM(idealStart);
+    prev.endTime = minutesToHHMM(newEnd);
+    repairs.push({ code: FAILURE_CODES.TIME_OVERLAP, activityIndex: i,
+      action: 'shifted_earlier_for_min_duration', ... });
+  } else {
+    // Can't shift earlier — push structural card forward instead
+    const shiftAmount = minDur - newDuration;
+    for (let j = i + 1; j < activities.length; j++) {
+      // shift all subsequent forward by shiftAmount
+    }
+    repairs.push({ ... action: 'shifted_structural_for_min_duration' ... });
+  }
+} else {
+  // Original truncation is fine
+  prev.endTime = minutesToHHMM(newEnd);
+}
+```
+
+### Impact
+- Dining activities will never be compressed below 60 minutes
+- Sightseeing/activities never below 30 minutes
+- The fix is contained to a single block in `repair-day.ts` Step 13
+- No changes needed to any other pipeline stages
 
