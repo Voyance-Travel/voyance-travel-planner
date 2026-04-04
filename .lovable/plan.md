@@ -1,72 +1,86 @@
 
 
-## Fix: Minimum Duration Enforcement to Prevent Time Compression
+## Fix: Large Gap Detection and Closure in Repair Pipeline
 
 ### Problem
 
-The repair pipeline's TIME_OVERLAP CASCADE (Step 13 in `repair-day.ts`) truncates non-structural activities when they overlap with a structural card (hotel check-in, departure transport, etc.). It sets `prev.endTime = currStart` regardless of how short that makes the activity. This is what compressed Belcanto dinner from a proper 90+ minute slot down to 15 minutes — a structural card was injected right after it, and the cascade blindly truncated.
+The repair pipeline has no step that detects or closes large unexplained gaps between consecutive activities. When the AI generates a "Freshen Up" ending at 20:39 and a "Nightcap" starting at 22:34, that 115-minute gap passes through all 18 repair steps unchallenged — no validator flags it, no repair closes it.
 
-There is **no minimum duration guard** anywhere in the pipeline.
+The pipeline handles overlaps (Step 13) and missing transits (Step 9d), but never asks: "Is there dead time here that shouldn't exist?"
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — Step 13 (TIME_OVERLAP CASCADE), around line 1566
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — Add a new step after Step 13 (TIME_OVERLAP CASCADE) and before Step 14 (DEPARTURE DAY PRUNE).
 
-When truncating a non-structural activity before a structural one, enforce a minimum duration based on category:
+**New Step: GAP CLOSURE** — scans consecutive non-transport activity pairs and closes gaps exceeding a threshold by shifting the later activity (and all subsequent) earlier.
 
-1. Define minimum durations by category:
-   - `dining` / meal activities: **60 minutes**
-   - `activity` / `sightseeing`: **30 minutes**
-   - Everything else: **15 minutes**
+#### Logic
 
-2. In the truncation branch (line 1566–1576), after computing the new end time:
-   - Calculate the resulting duration (`newEnd - startTime`)
-   - If it falls below the minimum for that category, **shift the activity's start time earlier** to preserve the minimum duration
-   - If shifting earlier would overlap with the activity *before* it, shift the structural card forward instead (same logic as the non-structural branch)
-   - As a last resort, if neither shift works, keep the truncation but log a repair warning
+1. Walk consecutive pairs of activities (skipping transport cards, which are just connectors)
+2. For each pair, compute the gap: `nextStart - prevEnd`
+3. Define a max acceptable gap:
+   - Between accommodation → dining/activity: **45 minutes** (realistic freshen-up-to-dinner transition including transport)
+   - Between any other pair: **60 minutes** (allows for unstated transit)
+4. If the gap exceeds the threshold:
+   - Calculate the shift amount: `gap - maxGap` (close the gap down to the threshold, not to zero)
+   - Shift the later activity and all subsequent activities earlier by that amount
+   - Ensure no activity gets shifted before its predecessor's end time
+   - Log a repair action
 
-### Code Change (conceptual)
+#### Conceptual code
 
 ```typescript
-// Inside the isStructural(curr) branch, after line 1568:
-const prevStart = parseTimeToMinutes(prev.startTime || '');
-const newEnd = currStart;
-const newDuration = prevStart !== null ? newEnd - prevStart : 0;
-
-// Category-based minimum durations
-const minDur = (prev.category || '').toLowerCase() === 'dining' ? 60
-  : ['activity', 'sightseeing'].includes((prev.category || '').toLowerCase()) ? 30
-  : 15;
-
-if (newDuration < minDur && prevStart !== null) {
-  // Try shifting prev earlier to preserve minimum duration
-  const idealStart = newEnd - minDur;
-  const prevPrev = i > 0 ? activities[i - 1] : null;
-  const prevPrevEnd = prevPrev ? parseTimeToMinutes(prevPrev.endTime || '') : null;
-  const floor = prevPrevEnd !== null ? prevPrevEnd : 0;
-
-  if (idealStart >= floor) {
-    prev.startTime = minutesToHHMM(idealStart);
-    prev.endTime = minutesToHHMM(newEnd);
-    repairs.push({ code: FAILURE_CODES.TIME_OVERLAP, activityIndex: i,
-      action: 'shifted_earlier_for_min_duration', ... });
-  } else {
-    // Can't shift earlier — push structural card forward instead
-    const shiftAmount = minDur - newDuration;
-    for (let j = i + 1; j < activities.length; j++) {
-      // shift all subsequent forward by shiftAmount
+// --- Step 13b. GAP CLOSURE ---
+{
+  for (let i = 0; i < activities.length - 1; i++) {
+    const curr = activities[i];
+    const next = activities[i + 1];
+    
+    // Skip transport pairs — they're connectors, not real gaps
+    if ((curr.category || '').toLowerCase() === 'transport') continue;
+    if ((next.category || '').toLowerCase() === 'transport') continue;
+    
+    const currEnd = parseTimeToMinutes(curr.endTime || '');
+    const nextStart = parseTimeToMinutes(next.startTime || '');
+    if (currEnd === null || nextStart === null) continue;
+    
+    const gap = nextStart - currEnd;
+    
+    // Determine max acceptable gap based on context
+    const currCat = (curr.category || '').toLowerCase();
+    const maxGap = currCat === 'accommodation' ? 45 : 60;
+    
+    if (gap > maxGap) {
+      const shift = gap - maxGap;
+      // Shift this activity and all subsequent earlier
+      for (let j = i + 1; j < activities.length; j++) {
+        const s = parseTimeToMinutes(activities[j].startTime || '');
+        const e = parseTimeToMinutes(activities[j].endTime || '');
+        if (s !== null) activities[j].startTime = minutesToHHMM(s - shift);
+        if (e !== null) activities[j].endTime = minutesToHHMM(e - shift);
+      }
+      repairs.push({
+        code: FAILURE_CODES.TIME_OVERLAP,
+        activityIndex: i + 1,
+        action: 'closed_excessive_gap',
+        before: `${gap}min gap between "${curr.title}" and "${next.title}"`,
+        after: `Closed to ${maxGap}min, shifted ${next.title} and subsequent -${shift}min`,
+      });
     }
-    repairs.push({ ... action: 'shifted_structural_for_min_duration' ... });
   }
-} else {
-  // Original truncation is fine
-  prev.endTime = minutesToHHMM(newEnd);
 }
 ```
 
+#### Safeguards
+
+- Only shifts activities earlier, never creates new overlaps (the overlap cascade already ran)
+- Preserves transport cards between activities (they shift with everything else)
+- Does not touch locked activities
+- Runs after overlap resolution so it doesn't undo those fixes
+- Keeps a reasonable buffer (45–60 min) rather than jamming activities together
+
 ### Impact
-- Dining activities will never be compressed below 60 minutes
-- Sightseeing/activities never below 30 minutes
-- The fix is contained to a single block in `repair-day.ts` Step 13
-- No changes needed to any other pipeline stages
+- Eliminates unexplained 2-hour dead gaps like the Freshen Up → Nightcap scenario
+- Single new block in `repair-day.ts`, no other files affected
+- Conservative thresholds prevent over-packing the day
 
