@@ -1326,30 +1326,50 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // --- 9b. ACCOMMODATION TITLE NORMALIZATION ---
   // Standardize all accommodation activity titles to canonical format after all sources
   // (AI, repair step 7/8, bookends) have contributed.
+  // On hotel-change days, activities BEFORE the checkout use previousHotelName,
+  // activities AFTER use hotelName (the new hotel).
   {
     const hn = hotelName || 'Your Hotel';
-    for (const act of activities) {
+    const prevHn = previousHotelName || 'Your Hotel';
+
+    // Find checkout index to determine pre/post boundary on hotel-change days
+    const checkoutIdx = isHotelChange
+      ? activities.findIndex((a: any) => {
+          const t = (a.title || a.name || '').toLowerCase();
+          const cat = (a.category || '').toLowerCase();
+          return cat === 'accommodation' &&
+            (t.includes('checkout') || t.includes('check-out') || t.includes('check out'));
+        })
+      : -1;
+
+    for (let i = 0; i < activities.length; i++) {
+      const act = activities[i];
       const cat = (act.category || '').toLowerCase();
       if (cat !== 'accommodation') continue;
+
+      // Resolve which hotel name to use based on position relative to checkout
+      const resolvedHn = (isHotelChange && checkoutIdx >= 0 && i < checkoutIdx)
+        ? prevHn
+        : hn;
 
       const t = (act.title || act.name || '').toLowerCase();
       let canonical: string | null = null;
 
       if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) {
-        // On hotel-change days, preserve the previous hotel name on checkout titles
+        // Checkout always uses previous hotel name on hotel-change days
         if (isHotelChange && previousHotelName) {
           canonical = `Checkout from ${previousHotelName}`;
         } else {
           canonical = `Checkout from ${hn}`;
         }
       } else if (t.includes('freshen up') || t.includes('freshen-up')) {
-        canonical = `Freshen Up at ${hn}`;
+        canonical = `Freshen Up at ${resolvedHn}`;
       } else if (t.includes('return to') || t.includes('back to')) {
-        canonical = `Return to ${hn}`;
+        canonical = `Return to ${resolvedHn}`;
       } else if (t.includes('luggage drop') || t.includes('drop bags')) {
-        canonical = `Luggage Drop at ${hn}`;
+        canonical = `Luggage Drop at ${resolvedHn}`;
       } else if (t.includes('check-in') || t.includes('check in') || t.includes('checkin') || t.includes('settle in') || t.includes('hotel')) {
-        canonical = `Check-in at ${hn}`;
+        canonical = `Check-in at ${resolvedHn}`;
       }
 
       if (canonical && act.title !== canonical) {
@@ -1358,7 +1378,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         act.name = canonical;
         // Also ensure location references the resolved hotel
         if (!act.location?.name || act.location.name === 'Your Hotel') {
-          act.location = { name: hn, address: act.location?.address || '' };
+          act.location = { name: resolvedHn, address: act.location?.address || '' };
         }
         repairs.push({
           code: FAILURE_CODES.MISSING_SLOT,
