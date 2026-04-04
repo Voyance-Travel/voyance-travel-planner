@@ -1790,7 +1790,7 @@ function repairDepartureSequence(
   if (depFlight24 && checkoutItems.length > 0) {
     const depMins = parseTimeToMinutes(depFlight24);
     if (depMins !== null) {
-      const airportBuffer = 150;
+      const airportBuffer = 180;
       const arriveAirportBy = depMins - airportBuffer;
       const transportCard = activities.find(a => classify(a) === 'airport-transport');
       const transportDuration = transportCard?.durationMinutes || 45;

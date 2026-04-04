@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 
 /** Minutes to add after arrival before first activity */
 const TRANSIT_BUFFERS = {
-  flight: { afterArrival: 105, beforeDeparture: 135 }, // 1h customs + 45m transit | 1.5h security + 45m transit
+  flight: { afterArrival: 105, beforeDeparture: 180 }, // 1h customs + 45m transit | 3h before departure
   train:  { afterArrival: 45,  beforeDeparture: 60 },  // 15m disembark + 30m transit | 30m before + 30m transit
   bus:    { afterArrival: 45,  beforeDeparture: 60 },
   ferry:  { afterArrival: 60,  beforeDeparture: 90 },
