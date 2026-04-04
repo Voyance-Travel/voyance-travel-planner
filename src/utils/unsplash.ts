@@ -62,7 +62,7 @@ export function normalizeUnsplashUrl(url?: string | null): string {
 
   // Only rewrite legacy source.unsplash.com or bare photo-id references
   // to our internal bucket
-  if (isUnsplashUrl(value) || /photo-[a-z0-9-]+/i.test(value)) {
+  if (isUnsplashUrl(value) || (!value.includes('/') && /^photo-[a-z0-9-]+$/i.test(value))) {
     const photoId = extractPhotoId(value);
     return toSiteImageUrlFromPhotoId(photoId);
   }
