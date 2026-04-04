@@ -310,34 +310,40 @@ DAY 1 GUIDELINES:
 
 Start the day at ${defaultArrival} with the arrival sequence.`;
     } else {
-      // No flight, no hotel — still use placeholder hotel for logistics
-      console.log(`[compile-day-schema] Day1: no flight AND no hotel — morning start with placeholder hotel`);
+      // No flight, no hotel — assume 09:00 arrival with placeholder hotel
+      console.log(`[compile-day-schema] Day1: no flight AND no hotel — default arrival at 09:00`);
 
       dayConstraints = `
-NO ARRIVAL OR HOTEL INFORMATION PROVIDED
+ARRIVAL DAY — NO FLIGHT OR HOTEL DETAILS PROVIDED
 
 The traveler has not specified flight or hotel details.
 Use "Your Hotel" as a placeholder name for accommodation activities — these will be updated with the real hotel name once selected.
+Assume a morning arrival at approximately 09:00.
 
-DAY 1 APPROACH:
-- Assume the traveler is available from 10:00 AM
-- Start with a central, accessible activity
-- Plan activities that can be reached from any accommodation
-- Focus on exploration and orientation
+REQUIRED OPENING SEQUENCE (in this exact order):
+1. "Arrival"
+   - startTime: "09:00", endTime: "09:15"
+   - category: "travel"
+   - description: "Arrive at destination."
 
-REQUIRED FIRST ACTIVITY:
-1. "Check-in at Your Hotel"
-   - startTime: "10:00", endTime: "10:30"
+2. "Transfer to Your Hotel"
+   - startTime: "09:15", endTime: "09:45"
+   - category: "transport"
+   - description: "Travel from arrival point to hotel."
+   - location: { name: "Your Hotel" }
+
+3. "Check-in at Your Hotel"
+   - startTime: "09:45", endTime: "10:15"
    - category: "accommodation"
-   - description: "Check in and get settled"
+   - description: "Check in and get settled."
    - location: { name: "Your Hotel" }
 
 STRUCTURE:
-2. After check-in, plan a full day of activities
-3. Include a "Freshen up at Your Hotel" break mid-afternoon
-4. End with dinner
+4. After check-in, plan a full day of activities starting from 10:30
+5. Include a "Freshen up at Your Hotel" break mid-afternoon
+6. End with dinner
 
-Start the day at 10:00 AM.`;
+Start the day at 09:00 with the arrival sequence.`;
     }
   } else if (isLastDay || resolvedIsLastDayInCity) {
     // ===== LAST DAY / LAST DAY IN CITY: DEPARTURE LOGIC =====
