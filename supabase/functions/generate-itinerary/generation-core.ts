@@ -26,6 +26,7 @@ import {
   calculateDuration,
   getCategoryIcon,
   normalizeVenueName,
+  extractRestaurantVenueName,
   haversineDistanceKm,
 } from './generation-utils.ts';
 
