@@ -835,8 +835,8 @@ async function _handleGenerateTripDayInner(
         isLastDayInCity,
         resolvedDestination: cityInfo?.cityName || destination,
         hotelOverride: (cityInfo?.hotelName || tripHotelName) ? { name: cityInfo?.hotelName || tripHotelName!, address: cityInfo?.hotelAddress || tripHotelAddress || '' } : undefined,
-        isHotelChange: cityInfo?.isHotelChange || false,
-        previousHotelName: (cityInfo as any)?.previousHotelName || undefined,
+        isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
+        previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
         hotelCoordinates: tripHotelCoordinates,
       });
 
