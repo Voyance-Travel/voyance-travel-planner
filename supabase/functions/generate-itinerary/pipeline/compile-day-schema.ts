@@ -269,64 +269,81 @@ EVENING ARRIVAL GUIDELINES:
 DO NOT plan activities before ${arrival24}.`;
       }
     } else if (hasHotelData) {
-      // No flight, hotel provided
-      const luggageDropTime = '10:00';
-      const luggageDropEnd = addMinutesToHHMM(luggageDropTime, 30);
-      const earliestActivity = addMinutesToHHMM(luggageDropEnd, 15);
+      // No flight, hotel provided — assume 09:00 arrival with transfer
+      const defaultArrival = '09:00';
+      const transferEnd = addMinutesToHHMM(defaultArrival, 45);
+      const checkinEnd = addMinutesToHHMM(transferEnd, 30);
+      const earliestActivity = addMinutesToHHMM(checkinEnd, 15);
 
-      console.log(`[compile-day-schema] Day1: hotel provided, no flight — luggage drop at ${luggageDropTime}`);
+      console.log(`[compile-day-schema] Day1: hotel provided, no flight — default arrival at ${defaultArrival}`);
 
       dayConstraints = `
-HOTEL PROVIDED — LUGGAGE DROP FIRST:
+ARRIVAL DAY — NO FLIGHT DETAILS PROVIDED:
 - Hotel: ${flightContext.hotelName}
 - Address: ${flightContext.hotelAddress || 'Address on file'}
 
-The traveler has a hotel but has NOT provided flight/arrival details.
-Assume they arrive in the morning and head to the hotel first to drop bags.
+The traveler has not provided flight details. Assume a morning arrival at approximately ${defaultArrival}.
 
-REQUIRED FIRST ACTIVITY:
-1. "Check-in at ${flightContext.hotelName}"
-   - startTime: "${luggageDropTime}", endTime: "${luggageDropEnd}"
+REQUIRED OPENING SEQUENCE (in this exact order):
+1. "Arrival" 
+   - startTime: "${defaultArrival}", endTime: "${addMinutesToHHMM(defaultArrival, 15)}"
+   - category: "travel"
+   - description: "Arrive at destination."
+
+2. "Transfer to ${flightContext.hotelName}"
+   - startTime: "${addMinutesToHHMM(defaultArrival, 15)}", endTime: "${transferEnd}"
+   - category: "transport"
+   - description: "Travel from arrival point to hotel."
+   - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
+
+3. "Check-in at ${flightContext.hotelName}"
+   - startTime: "${transferEnd}", endTime: "${checkinEnd}"
    - category: "accommodation"
-   - description: "Head to hotel to drop bags. Most hotels store luggage before official check-in; early check-in is often available on request."
+   - description: "Check in and drop bags. Early check-in often available on request."
    - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
 
 DAY 1 GUIDELINES:
-- After luggage drop (${luggageDropEnd}), plan a full day of activities starting from ${earliestActivity}
+- After check-in (${checkinEnd}), plan a full day of activities starting from ${earliestActivity}
 - Include a "Return to Hotel" activity around 15:00-15:30 for official check-in/freshen up if the day is long enough
 - The traveler is free to explore all day after dropping bags
 - End with dinner
 
-Start the day at ${luggageDropTime} with the hotel luggage drop.`;
+Start the day at ${defaultArrival} with the arrival sequence.`;
     } else {
-      // No flight, no hotel — still use placeholder hotel for logistics
-      console.log(`[compile-day-schema] Day1: no flight AND no hotel — morning start with placeholder hotel`);
+      // No flight, no hotel — assume 09:00 arrival with placeholder hotel
+      console.log(`[compile-day-schema] Day1: no flight AND no hotel — default arrival at 09:00`);
 
       dayConstraints = `
-NO ARRIVAL OR HOTEL INFORMATION PROVIDED
+ARRIVAL DAY — NO FLIGHT OR HOTEL DETAILS PROVIDED
 
 The traveler has not specified flight or hotel details.
 Use "Your Hotel" as a placeholder name for accommodation activities — these will be updated with the real hotel name once selected.
+Assume a morning arrival at approximately 09:00.
 
-DAY 1 APPROACH:
-- Assume the traveler is available from 10:00 AM
-- Start with a central, accessible activity
-- Plan activities that can be reached from any accommodation
-- Focus on exploration and orientation
+REQUIRED OPENING SEQUENCE (in this exact order):
+1. "Arrival"
+   - startTime: "09:00", endTime: "09:15"
+   - category: "travel"
+   - description: "Arrive at destination."
 
-REQUIRED FIRST ACTIVITY:
-1. "Check-in at Your Hotel"
-   - startTime: "10:00", endTime: "10:30"
+2. "Transfer to Your Hotel"
+   - startTime: "09:15", endTime: "09:45"
+   - category: "transport"
+   - description: "Travel from arrival point to hotel."
+   - location: { name: "Your Hotel" }
+
+3. "Check-in at Your Hotel"
+   - startTime: "09:45", endTime: "10:15"
    - category: "accommodation"
-   - description: "Check in and get settled"
+   - description: "Check in and get settled."
    - location: { name: "Your Hotel" }
 
 STRUCTURE:
-2. After check-in, plan a full day of activities
-3. Include a "Freshen up at Your Hotel" break mid-afternoon
-4. End with dinner
+4. After check-in, plan a full day of activities starting from 10:30
+5. Include a "Freshen up at Your Hotel" break mid-afternoon
+6. End with dinner
 
-Start the day at 10:00 AM.`;
+Start the day at 09:00 with the arrival sequence.`;
     }
   } else if (isLastDay || resolvedIsLastDayInCity) {
     // ===== LAST DAY / LAST DAY IN CITY: DEPARTURE LOGIC =====
