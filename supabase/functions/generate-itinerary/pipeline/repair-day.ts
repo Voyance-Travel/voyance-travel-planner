@@ -2084,7 +2084,7 @@ function isSameOrContainedLocation(aLoc: string, bLoc: string, hotel?: string): 
   if (hotel) {
     const h = hotel.toLowerCase();
     if (h.length >= 4 && aLoc.includes(h) && bLoc.includes(h)) return true;
-    if (h.length >= 4 && (aLoc === h || bLoc === h) && (aLoc.includes(h) || bLoc.includes(h))) return true;
+    
   }
   return false;
 }
