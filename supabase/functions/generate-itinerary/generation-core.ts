@@ -2421,6 +2421,25 @@ export async function generateItineraryAI(
           }
         }
       }
+
+      // Dining-specific dedup: use extractRestaurantVenueName to catch "Dinner at X" vs "X Tasting Menu"
+      if (!indicesToRemove.includes(i) && (cat === 'dining' || cat.includes('dining'))) {
+        const venueFromTitle = extractRestaurantVenueName(act.title || '');
+        const venueFromLoc = extractRestaurantVenueName((act as any).location?.name || '');
+
+        for (const venue of [venueFromTitle, venueFromLoc]) {
+          if (venue.length <= 2) continue;
+          const diningMatch = seenDiningVenues.get(venue);
+          if (diningMatch && diningMatch.dayNum !== day.dayNumber) {
+            console.log(`[Stage 2] Cross-batch dining dedup: removed "${act.title}" from Day ${day.dayNumber} (same restaurant "${venue}" on Day ${diningMatch.dayNum})`);
+            indicesToRemove.push(i);
+            dedupCount++;
+            break;
+          } else if (!diningMatch) {
+            seenDiningVenues.set(venue, { dayNum: day.dayNumber });
+          }
+        }
+      }
     }
     // Remove in reverse order to preserve indices
     for (let r = indicesToRemove.length - 1; r >= 0; r--) {
