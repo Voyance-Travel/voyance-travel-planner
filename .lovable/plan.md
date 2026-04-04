@@ -1,57 +1,64 @@
 
 
-## Fix: Dining-Specific Dedup in Post-Batch Pass
+## Fix: Calendar Date Picker "Funny" Behavior on Re-Pick
 
 ### Problem
 
-The post-batch cross-day dedup has two layers: title-based word overlap (60% threshold) and location-name matching. Neither uses `extractRestaurantVenueName`, the purpose-built normalizer that strips meal prefixes like "Dinner at", "Tasting Menu at", etc. 
+When the user picks dates the first time, everything works. But when they re-open the calendar to change dates and pick a new start date that's **after** the current end date, the following race condition occurs:
 
-When "Belcanto" appears as "Dinner at Belcanto" (Day 1) and "Belcanto Tasting Menu Experience" (Day 3), the word-overlap check fails because shared meaningful words ("belcanto") are only 1 out of 4–5 words. The location-name check only works if both activities have identical `location.name` values. But `extractRestaurantVenueName` would normalize both to `"belcanto"` and catch the duplicate.
+1. User picks new start date → `setStartDate(newDate)`, `setEndDate(undefined)` (clears end because old end < new start), `setPicking('end')`
+2. The `useEffect` on line 450 fires immediately because `startDate` exists and `endDate` is now `undefined` → auto-sets `endDate = startDate + 5`
+3. The calendar now shows an auto-filled end date before the user gets to pick one — the popover may close or the range highlights jump unexpectedly
+
+This makes the calendar feel "funny" — the end date auto-fills while the user is still trying to select it.
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/generation-core.ts`** — Post-batch dedup pass (~line 2390)
+**File: `src/pages/Start.tsx`**
 
-Add a **dining-specific venue dedup layer** using `extractRestaurantVenueName`, alongside the existing title-similarity and location-name checks:
+**Change 1: Gate the auto-set effect so it doesn't fire while the popover is open**
 
-1. Track `seenDiningVenues` (a map of normalized venue name → `{ dayNum }`)
-2. For each `dining` category activity, normalize both `title` and `location.name` via `extractRestaurantVenueName`
-3. If either normalized name matches a previously seen venue on a different day, mark for removal
-4. This runs inside the existing activity loop, after the location-name check
+Lift the `open` state out of `DateRangePicker` into `StepOneTripDetails` (or pass a ref), and skip the auto-set `useEffect` when the calendar popover is open:
 
-```typescript
-// Add alongside seenLocations
-const seenDiningVenues = new Map<string, { dayNum: number }>();
+Actually, simpler approach — the `DateRangePicker` is a child component with its own `open` state. The `useEffect` that auto-sets endDate lives in the parent (`StepOneTripDetails`). The cleanest fix:
 
-// Inside the activity loop, after the location-name check, for dining activities:
-if (cat === 'dining' || cat.includes('dining')) {
-  const venueFromTitle = extractRestaurantVenueName(act.title || '');
-  const venueFromLoc = extractRestaurantVenueName((act as any).location?.name || '');
-  
-  for (const venue of [venueFromTitle, venueFromLoc]) {
-    if (venue.length <= 2) continue;
-    const diningMatch = seenDiningVenues.get(venue);
-    if (diningMatch && diningMatch.dayNum !== day.dayNumber) {
-      console.log(`[Stage 2] Cross-batch dining dedup: removed "${act.title}" from Day ${day.dayNumber} (same restaurant "${venue}" on Day ${diningMatch.dayNum})`);
-      indicesToRemove.push(i);
-      dedupCount++;
-      break;
-    } else if (!diningMatch) {
-      seenDiningVenues.set(venue, { dayNum: day.dayNumber });
-    }
-  }
-}
-```
+Add a `skipAutoEndDate` ref in `StepOneTripDetails`. Set it to `true` whenever `setEndDate(undefined)` is called from within the date picker (i.e., when clearing end date due to a new start being after the old end). The `useEffect` checks this ref and skips auto-setting when it's true.
 
-### Why This Fixes the Belcanto Case
+Concretely:
 
-- Day 1: "Dinner at Belcanto" → `extractRestaurantVenueName` → `"belcanto"` → added to `seenDiningVenues`
-- Day 3: "Belcanto Tasting Menu Experience" → `extractRestaurantVenueName` → `"belcanto"` → **match** → removed
+1. **Add a ref** in `StepOneTripDetails` (~line 443):
+   ```typescript
+   const skipAutoEndDateRef = useRef(false);
+   ```
 
-### Technical Details
+2. **Wrap `setEndDate`** passed to `DateRangePicker` to set the ref when clearing:
+   ```typescript
+   const handleSetEndDate = (d: Date | undefined) => {
+     if (!d) skipAutoEndDateRef.current = true;
+     setEndDate(d);
+   };
+   ```
 
-- Import `extractRestaurantVenueName` at the top of `generation-core.ts` (already exported from `generation-utils.ts`)
-- Single block addition inside the existing post-batch dedup loop
-- No changes to other files
-- Complements (not replaces) the existing title-similarity and location-name checks
+3. **Guard the useEffect** (~line 450):
+   ```typescript
+   useEffect(() => {
+     if (skipAutoEndDateRef.current) {
+       skipAutoEndDateRef.current = false;
+       return;
+     }
+     if (startDate && !endDate) {
+       setEndDate(addDays(startDate, 5));
+     }
+   }, [startDate, endDate, setEndDate]);
+   ```
+
+4. **Pass `handleSetEndDate`** instead of `setEndDate` to `DateRangePicker`.
+
+### Why This Works
+
+- First time picking dates: ref is `false`, auto-set fires normally (start picked → end auto-set to +5 days)
+- Re-picking dates: when user picks a new start that clears end, `handleSetEndDate(undefined)` sets ref to `true`. The effect skips. User gets to pick their own end date. On the next real `setEndDate(someDate)` call, the ref stays `false`.
+
+### Files
+- `src/pages/Start.tsx` — 4 small edits in `StepOneTripDetails`
 
