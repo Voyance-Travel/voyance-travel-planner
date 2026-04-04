@@ -758,7 +758,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const t = (a.title || a.name || '').toLowerCase();
         const cat = (a.category || '').toLowerCase();
         return cat === 'accommodation' && isCheckoutTitle(t) &&
-          prevHotelLower && !t.includes(prevHotelLower);
+          prevHotelLower && !t.includes(prevHotelLower) && !hotelCoreMatch(t, previousHotelName || '');
       });
       if (wrongCoIdx >= 0) {
         repairs.push({
