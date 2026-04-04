@@ -1,64 +1,48 @@
 
 
-## Fix: Calendar Date Picker "Funny" Behavior on Re-Pick
+## Fix: `hotelList is not defined` Crashing Itinerary Generation
 
 ### Problem
 
-When the user picks dates the first time, everything works. But when they re-open the calendar to change dates and pick a new start date that's **after** the current end date, the following race condition occurs:
+The edge function `action-generate-trip-day.ts` has a scoping bug. `hotelList` is declared inside an `if (tripCheck?.hotel_selection)` block (line 190), but referenced **outside** that block at line 225. When a trip has no `hotel_selection` (null/undefined), the `if` block is skipped entirely, `hotelList` is never declared, and line 225 throws `ReferenceError: hotelList is not defined`. This crashes every generation attempt — all 3 retries fail with the same error.
 
-1. User picks new start date → `setStartDate(newDate)`, `setEndDate(undefined)` (clears end because old end < new start), `setPicking('end')`
-2. The `useEffect` on line 450 fires immediately because `startDate` exists and `endDate` is now `undefined` → auto-sets `endDate = startDate + 5`
-3. The calendar now shows an auto-filled end date before the user gets to pick one — the popover may close or the range highlights jump unexpectedly
-
-This makes the calendar feel "funny" — the end date auto-fills while the user is still trying to select it.
+The SVG `<circle>` attribute warnings (`cx`/`cy` undefined) are a cosmetic framer-motion issue in `GenerationAnimation.tsx` — they do not cause crashes and are low-priority.
 
 ### Fix
 
-**File: `src/pages/Start.tsx`**
+**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
 
-**Change 1: Gate the auto-set effect so it doesn't fire while the popover is open**
+Move the `hotelList` declaration **outside** the `if (tripCheck?.hotel_selection)` block so it's always in scope, defaulting to an empty array:
 
-Lift the `open` state out of `DateRangePicker` into `StepOneTripDetails` (or pass a ref), and skip the auto-set `useEffect` when the calendar popover is open:
+1. Declare `let hotelList: any[] = [];` before the `if` block (before line 188)
+2. Inside the `if` block, change `const hotelList` to reassign: `hotelList = Array.isArray(hs) ? hs : ...`
 
-Actually, simpler approach — the `DateRangePicker` is a child component with its own `open` state. The `useEffect` that auto-sets endDate lives in the parent (`StepOneTripDetails`). The cleanest fix:
+This ensures the split-stay detection at line 225 safely sees an empty array when there's no hotel selection, instead of crashing.
 
-Add a `skipAutoEndDate` ref in `StepOneTripDetails`. Set it to `true` whenever `setEndDate(undefined)` is called from within the date picker (i.e., when clearing end date due to a new start being after the old end). The `useEffect` checks this ref and skips auto-setting when it's true.
+### Specific Changes
 
-Concretely:
+**Line ~186-190 — Before:**
+```typescript
+let tripHotelName: string | undefined;
+let tripHotelAddress: string | undefined;
+if (tripCheck?.hotel_selection) {
+  const hs = tripCheck.hotel_selection as any;
+  const hotelList: any[] = Array.isArray(hs) ? hs : (typeof hs === 'object' && hs?.name ? [hs] : []);
+```
 
-1. **Add a ref** in `StepOneTripDetails` (~line 443):
-   ```typescript
-   const skipAutoEndDateRef = useRef(false);
-   ```
+**After:**
+```typescript
+let tripHotelName: string | undefined;
+let tripHotelAddress: string | undefined;
+let hotelList: any[] = [];
+if (tripCheck?.hotel_selection) {
+  const hs = tripCheck.hotel_selection as any;
+  hotelList = Array.isArray(hs) ? hs : (typeof hs === 'object' && hs?.name ? [hs] : []);
+```
 
-2. **Wrap `setEndDate`** passed to `DateRangePicker` to set the ref when clearing:
-   ```typescript
-   const handleSetEndDate = (d: Date | undefined) => {
-     if (!d) skipAutoEndDateRef.current = true;
-     setEndDate(d);
-   };
-   ```
-
-3. **Guard the useEffect** (~line 450):
-   ```typescript
-   useEffect(() => {
-     if (skipAutoEndDateRef.current) {
-       skipAutoEndDateRef.current = false;
-       return;
-     }
-     if (startDate && !endDate) {
-       setEndDate(addDays(startDate, 5));
-     }
-   }, [startDate, endDate, setEndDate]);
-   ```
-
-4. **Pass `handleSetEndDate`** instead of `setEndDate` to `DateRangePicker`.
-
-### Why This Works
-
-- First time picking dates: ref is `false`, auto-set fires normally (start picked → end auto-set to +5 days)
-- Re-picking dates: when user picks a new start that clears end, `handleSetEndDate(undefined)` sets ref to `true`. The effect skips. User gets to pick their own end date. On the next real `setEndDate(someDate)` call, the ref stays `false`.
-
-### Files
-- `src/pages/Start.tsx` — 4 small edits in `StepOneTripDetails`
+### Impact
+- Fixes the crash that blocks ALL itinerary generation for trips without hotel selection
+- Single 2-line edit in `action-generate-trip-day.ts`
+- No behavioral change when `hotel_selection` exists (same array is built)
+- The SVG circle warnings are cosmetic and do not need fixing
 
