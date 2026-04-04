@@ -630,7 +630,7 @@ function TripDetailsStep({
           startDate={startDate}
           endDate={endDate}
           setStartDate={setStartDate}
-          setEndDate={setEndDate}
+          setEndDate={handleSetEndDate}
           calendarMonth={calendarMonth}
           setCalendarMonth={setCalendarMonth}
           today={today}
