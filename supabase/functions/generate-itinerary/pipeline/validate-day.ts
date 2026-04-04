@@ -563,7 +563,7 @@ function checkDuplicateConcept(
   for (const prevDay of previousDays) {
     for (const prevAct of prevDay.activities || []) {
       const concept = extractConcept(normalizeText(prevAct.title || ''));
-      if (concept.length > 5) previousConcepts.add(concept);
+      if (concept.length > 3) previousConcepts.add(concept);
       const locName = normalizeText(prevAct.location?.name || '');
       if (locName.length > 5) previousLocations.add(locName);
 
