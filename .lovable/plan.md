@@ -1,48 +1,52 @@
 
 
-## Fix: `hotelList is not defined` Crashing Itinerary Generation
+## Fix: Missing Transport Card After Hotel Return
 
-### Problem
+### Root Cause
 
-The edge function `action-generate-trip-day.ts` has a scoping bug. `hotelList` is declared inside an `if (tripCheck?.hotel_selection)` block (line 190), but referenced **outside** that block at line 225. When a trip has no `hotel_selection` (null/undefined), the `if` block is skipped entirely, `hotelList` is never declared, and line 225 throws `ReferenceError: hotelList is not defined`. This crashes every generation attempt — all 3 retries fail with the same error.
+The `isSameOrContainedLocation` function in `repair-day.ts` (line 2087) has a logic error that causes false-positive "same location" matches whenever **one** of the two locations is the hotel:
 
-The SVG `<circle>` attribute warnings (`cx`/`cy` undefined) are a cosmetic framer-motion issue in `GenerationAnimation.tsx` — they do not cause crashes and are low-priority.
+```typescript
+// Line 2087 — BUGGY
+if (h.length >= 4 && (aLoc === h || bLoc === h) && (aLoc.includes(h) || bLoc.includes(h))) return true;
+```
+
+The second condition uses `||` (OR) instead of `&&` (AND). When `aLoc === h` (e.g., "palácio ludovice"), the OR condition is automatically true regardless of `bLoc`. This means **any pair where one location is the hotel** is treated as "same location."
+
+**What happens during generation:**
+1. Step 3 (transit gap injection) correctly injects a "Travel to Belcanto" card between "Return to Palácio Ludovice" and "Dinner: Belcanto"
+2. Step 4b (orphaned transport removal) checks if the preceding non-transport activity ("Return to Palácio Ludovice") is at the same location as the transport's destination ("Belcanto")
+3. `isSameOrContainedLocation("palácio ludovice", "belcanto", "Palácio Ludovice")` → the buggy line 2087 returns `true` because `aLoc === h`
+4. The transport card is **incorrectly removed** as "orphaned"
+
+This bug affects ALL departures from the hotel — any transport card leaving the hotel toward a different venue gets stripped.
 
 ### Fix
 
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — line 2087
 
-Move the `hotelList` declaration **outside** the `if (tripCheck?.hotel_selection)` block so it's always in scope, defaulting to an empty array:
+Remove the buggy second hotel check. It's redundant with line 2086 when corrected (changing OR to AND produces the same condition as line 2086), so the simplest fix is to delete it entirely:
 
-1. Declare `let hotelList: any[] = [];` before the `if` block (before line 188)
-2. Inside the `if` block, change `const hotelList` to reassign: `hotelList = Array.isArray(hs) ? hs : ...`
+```text
+Before (lines 2083-2088):
+  // Both reference the hotel
+  if (hotel) {
+    const h = hotel.toLowerCase();
+    if (h.length >= 4 && aLoc.includes(h) && bLoc.includes(h)) return true;
+    if (h.length >= 4 && (aLoc === h || bLoc === h) && (aLoc.includes(h) || bLoc.includes(h))) return true;
+  }
 
-This ensures the split-stay detection at line 225 safely sees an empty array when there's no hotel selection, instead of crashing.
-
-### Specific Changes
-
-**Line ~186-190 — Before:**
-```typescript
-let tripHotelName: string | undefined;
-let tripHotelAddress: string | undefined;
-if (tripCheck?.hotel_selection) {
-  const hs = tripCheck.hotel_selection as any;
-  const hotelList: any[] = Array.isArray(hs) ? hs : (typeof hs === 'object' && hs?.name ? [hs] : []);
-```
-
-**After:**
-```typescript
-let tripHotelName: string | undefined;
-let tripHotelAddress: string | undefined;
-let hotelList: any[] = [];
-if (tripCheck?.hotel_selection) {
-  const hs = tripCheck.hotel_selection as any;
-  hotelList = Array.isArray(hs) ? hs : (typeof hs === 'object' && hs?.name ? [hs] : []);
+After:
+  // Both reference the hotel
+  if (hotel) {
+    const h = hotel.toLowerCase();
+    if (h.length >= 4 && aLoc.includes(h) && bLoc.includes(h)) return true;
+  }
 ```
 
 ### Impact
-- Fixes the crash that blocks ALL itinerary generation for trips without hotel selection
-- Single 2-line edit in `action-generate-trip-day.ts`
-- No behavioral change when `hotel_selection` exists (same array is built)
-- The SVG circle warnings are cosmetic and do not need fixing
+- Fixes missing transport cards between hotel and any non-hotel venue (restaurants, attractions, etc.)
+- Line 2086 already correctly handles the "both reference the hotel" case
+- Single line deletion in `repair-day.ts`
+- No behavioral change for legitimate same-location matches
 
