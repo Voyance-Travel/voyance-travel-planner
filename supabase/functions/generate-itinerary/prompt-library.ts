@@ -281,13 +281,7 @@ export function calculateLatestEnd(
     // Calculate required buffer
     let checkoutBuffer = 30;    // Checkout time
     let transferBuffer = 60;    // Hotel to airport
-    let airportBuffer = 120;    // Arrive 2 hours before flight (domestic) or 3 hours (international)
-    
-    // International flight adjustment
-    const isInternational = flight.arrivalAirport !== flight.departureAirport; // Rough heuristic
-    if (isInternational) {
-      airportBuffer = 180;
-    }
+    let airportBuffer = 180;    // Arrive 3 hours before flight (consistent for all flights)
     
     // Anxious planner adjustment
     if (dna.traits.planning >= 5) {

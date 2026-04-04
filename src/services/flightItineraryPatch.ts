@@ -147,8 +147,8 @@ export async function patchItineraryWithFlight(
         const activities = lastDay.activities as Array<Record<string, unknown>> | undefined;
         if (activities?.length) {
           const departMins = timeToMinutes(departNorm);
-          const latestEnd = departMins - 120;
-          const transferStart = departMins - 150;
+          const latestEnd = departMins - 180;
+          const transferStart = departMins - 210;
 
           for (const act of activities) {
             const title = String(act.title || act.name || '');
