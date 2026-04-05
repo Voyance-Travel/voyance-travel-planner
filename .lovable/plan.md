@@ -1,66 +1,40 @@
 
-Fix Phantom Pricing v6 — corrected implementation plan
 
-Root cause
-- This is not primarily a `sanitizeGeneratedDay` failure.
-- I checked trip `09efb45d-e277-4aa7-9b4e-e81168771bed`, and the saved itinerary already has `cost.amount = 0` / `estimatedCost.amount = 0` for the reported free venues (Praça do Comércio, Jardim das Amoreiras, Miradouro-related entries).
-- The visible `~€23` is being reintroduced on the client by fallback estimation in:
-  - `src/components/itinerary/EditorialItinerary.tsx`
-  - `src/hooks/usePayableItems.ts`
-- Why it happens:
-  - generic categories like `activity` / `sightseeing` are treated as “never free”
-  - the current free-venue detection is too narrow and mostly title-only
-  - Portuguese/public-space terms like `praça`, `miradouro`, `jardim`, plus similar free outdoor venue patterns, are not covered well enough before estimation runs
+## Fix "Breakfast at a local spot" Placeholder — Ensure Real Restaurant Names
 
-Implementation
-1. Add a shared free-public-venue detector in an existing pricing file
-- Use `src/lib/cost-estimation.ts` (no new file).
-- Add a helper that checks combined text from title + location name + address + description.
-- Match public/free venue patterns such as:
-  - `praça` / `praca`, `square`, `plaza`
-  - `miradouro`, `viewpoint`, `lookout`
-  - `jardim`, `garden`, `park`
-  - `waterfront`, `riverside`, `promenade`
-  - `walk`, `stroll`, `district`, `neighborhood`
-- Exclude clearly paid cases:
-  - dining / bars
-  - museums / admissions / tickets
-  - spa / wellness
-  - airport / taxi / transfer / rideshare
+### Root Cause
 
-2. Update `src/components/itinerary/EditorialItinerary.tsx`
-- Use the shared helper before the “never free” estimation fallback.
-- Pass combined venue text, not just the title.
-- Result: zero-cost public venues render as `Free`, not `~€…`.
+The problem originates in `day-validation.ts` → `enforceRequiredMealsFinalGuard`. When the meal guard needs to inject a missing meal and no `fallbackVenues` match, it calls `getDestinationHint()` which returns a generic `venueSuffix` like `"local spot"`. The title then becomes `"Breakfast at a local spot"`.
 
-3. Update `src/hooks/usePayableItems.ts`
-- Use the same helper before estimating zero-cost activities.
-- Prevent free parks/plazas/viewpoints/gardens from becoming payable items or inflating payment totals.
+Two issues:
+1. **Lisbon is not in `DESTINATION_MEAL_HINTS`** — so it falls through to the generic `"local spot"` fallback instead of getting a Lisbon-specific venue type (e.g., "pastelaria").
+2. **`validate-day.ts` catches `"Breakfast at a local spot"` as `GENERIC_VENUE`** but `repair-day.ts` has **no handler for `GENERIC_VENUE`** — the validation warning is logged but never acted on. The placeholder survives to the UI.
 
-4. Optional prompt reinforcement
-- Add a short pricing reminder in `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`:
-  - public outdoor spaces are free
-  - do not guess default prices for them
-- This is optional prevention, not the primary fix.
-- I would not implement the proposed “scan all price fields in `sanitizeGeneratedDay` and target €18–28” as the main fix, because the reported venues are already saved as `0` in the itinerary data.
+### Plan
 
-Files to edit
-- `src/lib/cost-estimation.ts`
-- `src/components/itinerary/EditorialItinerary.tsx`
-- `src/hooks/usePayableItems.ts`
-- optional: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+**File 1: `supabase/functions/generate-itinerary/day-validation.ts`**
+- Add `lisbon` to `DESTINATION_MEAL_HINTS` with Lisbon-specific venue types: `pastelaria` for breakfast, `tasca` for lunch, `restaurante` for dinner.
+- Change the generic fallback `venueSuffix` values from `"local spot"` to venue-type descriptions that won't trigger the generic venue detector (e.g., `"neighborhood café"` → actually, the real fix is below).
 
-Verification
-- Reopen trip `09efb45d-e277-4aa7-9b4e-e81168771bed` and confirm:
-  - Praça do Comércio shows `Free`
-  - Jardim das Amoreiras shows `Free`
-  - Miradouro de São Pedro de Alcântara shows `Free`
-- Confirm Budget/Payments do not create payable entries for those free venues.
-- Confirm legitimate priced items still keep prices:
-  - dining
-  - museum/ticketed attractions
-  - wellness/spa
-  - airport transfer / rideshare
+**File 2: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`**
+- Add `"Breakfast at a local spot"` pattern variants to `GENERIC_VENUE_PATTERNS` (already partially covered at line 39, but ensure `"at a local spot"` without meal prefix also matches).
+- Escalate all `GENERIC_VENUE` findings on dining activities to `severity: 'error'` (not just `isMealInCity`), making them `autoRepairable: true`.
 
-Technical note
-- `activity_costs` skips zero-value rows, so the UI must not re-estimate obviously free venues from generic categories after the backend has already zeroed them.
+**File 3: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+- Add a `GENERIC_VENUE` repair handler that:
+  - Checks `fallbackVenues` for an unused real venue matching the meal type
+  - If found, replaces the title and `venue_name` with the real venue
+  - If not found, logs a warning but at minimum replaces `"a local spot"` with a destination-aware venue type from `getDestinationHint`
+
+**File 4: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
+- Add explicit instruction: "Every dining activity MUST include a SPECIFIC, REAL restaurant name. Never use generic placeholders like 'a local spot', 'a nearby café', or 'a local restaurant'. If unsure, use the hotel restaurant or a well-known local chain."
+
+### Files to edit
+- `supabase/functions/generate-itinerary/day-validation.ts` — add Lisbon hints, improve generic fallback
+- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — escalate generic venue on dining to error
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add GENERIC_VENUE repair handler
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — strengthen restaurant naming rules
+
+### Verification
+Generate a 4-day Lisbon trip. Every breakfast, lunch, and dinner should show a specific restaurant name. No "local spot", "the destination", or generic placeholder should appear.
+
