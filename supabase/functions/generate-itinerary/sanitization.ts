@@ -158,6 +158,8 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/\s*[-–—]?\s*[^.]*\b(?:confirm|check|verify)\b[^.]*\b(?:hours|times)\b[^.]*\b(?:visit|before)\b[^.]*\.?\s*/gi, '')
     // Strip sourced/verified from venue database
     .replace(/(?:^|[.]\s*)(?:Recommended|Sourced|Verified|Confirmed)\s+(?:by|from|via)\s+(?:our|the)\s+(?:venue|restaurant|local)\s+database[^.]*\.?\s*/gi, '')
+    // Strip "Popular with locals" and similar database stub phrases when embedded inline
+    .replace(/\s*[-–—]\s*(?:Popular with locals|A local favou?rite|Great for (?:families|groups|couples)|Tourist (?:hotspot|favorite)|Hidden gem|Must[- ]visit|Highly recommended|Local institution)\.?\s*/gi, '')
     // Deduplicate consecutive repeated words: "Pantheon Pantheon" → "Pantheon"
     .replace(/\b(\w{3,})\s+\1\b/gi, '$1')
     // Catch comma-prefixed schema field names at end of text
