@@ -1,40 +1,43 @@
 
 
-## Fix: System Notes Leaking in Restaurant Descriptions
+## Fix: Morning Hotel Phantom Activities on Hotel-Change Days
 
 ### Problem
-The text "A local favorite — we recommend confirming hours before visiting" appears in rendered activity tips. It's hardcoded in `day-validation.ts` (line 989) as a fallback tip for meal-guard entries. The backend `sanitizeAITextField` has regexes to strip it (line 152-155), but the frontend `sanitizeActivityText` does NOT — so if the backend sanitization misses it for any reason, it leaks through.
+On Day 3 (a hotel-change day: Four Seasons Ritz → Palácio Ludovice), two "Return to Hotel" activities appear at 12:07 AM and 12:22 AM at the start of the day. These are nonsensical — the traveler woke up at the hotel, they don't need to "return" at midnight.
 
-### Changes
+**Root cause**: The morning phantom strip in `repairBookends` (line 2333) explicitly skips hotel-change days (`!isHotelChange`). This was likely to preserve legitimate check-in/checkout activities on transition days, but it also lets through phantom "Return to Hotel" activities with midnight timestamps.
 
-**1. Fix at source: `supabase/functions/generate-itinerary/day-validation.ts`** (line 988-990)
+### Fix
 
-Replace the internal-sounding tip with genuinely useful user-facing text:
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (lines 2329-2359)
+
+Modify the morning phantom strip to also run on hotel-change days, but only strip accommodation activities that are clearly phantoms — specifically "Return to" and "Freshen Up" activities with pre-dawn times (before 06:00). Check-in/checkout activities are already excluded by the `!isCheckinOrCheckout` guard.
+
 ```typescript
-// Before:
-tips: venue
-  ? `A local favorite — we recommend confirming hours before visiting.`
-  : `Ask a local or check recent reviews to find a great spot nearby.`,
+// Line 2333: Change from:
+if (!isFirstDay && !isDepartureDay && !isHotelChange) {
 
-// After:
-tips: venue
-  ? `Popular with locals — check opening hours on the day.`
-  : `Ask a local or check recent reviews to find a great spot nearby.`,
+// To:
+if (!isFirstDay && !isDepartureDay) {
 ```
 
-**2. Safety net on frontend: `src/utils/activityNameSanitizer.ts`**
+Then inside the while loop, add an additional guard for hotel-change days: only strip if the activity has a pre-dawn time (before 06:00) to avoid removing legitimate mid-day activities like a new hotel check-in:
 
-Add regexes (before `INTERNAL_NOTE_RE`) to catch any residual system notes that survive backend sanitization:
 ```typescript
-// Add a new regex constant for venue database notes
-const VENUE_DB_NOTE_RE = /\s*[-–—]\s*(?:we\s+)?recommend\s+confirming\s+hours\s+before\s+visiting\.?/gi;
-const LOCAL_FAVORITE_NOTE_RE = /(?:^|[.]\s*)(?:A\s+)?local\s+favorite\s*[-–—]\s*we\s+recommend[^.]*\.?\s*/gi;
-const VENUE_SOURCE_RE = /(?:^|[.]\s*)(?:Recommended|Sourced|Verified|Confirmed)\s+(?:by|from|via)\s+(?:our|the)\s+(?:venue|restaurant|local)\s+database[^.]*\.?\s*/gi;
+if (isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first)) {
+  // On hotel-change days, only strip if the activity is pre-dawn (phantom from AI)
+  if (isHotelChange) {
+    const startMins = parseTimeToMinutes(first.startTime || '08:00');
+    if (startMins !== null && startMins >= 360) continue; // 06:00 — skip, likely legitimate
+  }
+  // ... existing removal logic
+}
 ```
 
-Then apply them in the `sanitizeActivityText` chain.
+This ensures:
+- Normal days: all morning hotel phantoms stripped (unchanged behavior)
+- Hotel-change days: only pre-dawn (00:00-05:59) hotel phantoms stripped; legitimate activities like "Check-in at New Hotel" at 14:00 are preserved
 
 ### Files
-- `supabase/functions/generate-itinerary/day-validation.ts` — change hardcoded tip text (1 line)
-- `src/utils/activityNameSanitizer.ts` — add 3 regexes + apply in sanitize chain
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — modify morning phantom strip condition (~5 lines changed)
 
