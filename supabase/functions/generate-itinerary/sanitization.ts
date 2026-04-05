@@ -150,12 +150,14 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/(?:^|\.\s*)[^.]*\b(?:archetype|hard\s+block|soft\s+block|generation\s+rule|as per arche)\b[^.]*\.?/gi, '')
     // Strip "Voyance Pick" / "Hotel Pick" and variant internal labels
     .replace(/\s*(?:Voyance\s+(?:Pick|Recommendation|Choice)|Hotel\s+Pick|Staff\s+Pick)\s*/gi, '')
-    // Strip internal venue database / data-freshness notes
-    .replace(/\s*[-–—]\s*(?:we\s+)?recommend\s+confirming\s+hours\s+before\s+visiting\.?/gi, '')
-    .replace(/\s*[-–—]?\s*confirm\s+hours\s+before\s+visiting\.?/gi, '')
-    .replace(/(?:^|[.]\s*)Recommended\s+by\s+our\s+venue\s+database[^.]*\.?\s*/gi, '')
-    .replace(/(?:^|[.]\s*)(?:A\s+)?local\s+favorite\s*[-–—]\s*we\s+recommend[^.]*\.?\s*/gi, '')
-    .replace(/(?:^|[.]\s*)(?:Sourced|Verified|Confirmed)\s+(?:from|by|via)\s+(?:our|the)\s+(?:venue|restaurant|local)\s+database[^.]*\.?\s*/gi, '')
+    // Strip ALL variants of "check/confirm/verify hours/opening times" notes
+    .replace(/\s*[-–—]\s*(?:we\s+)?(?:recommend\s+)?(?:check|confirm|verify|confirming|checking|verifying)\s+(?:the\s+)?(?:opening\s+)?(?:hours|times)\b[^.]*\.?\s*/gi, '')
+    // Strip "Popular/A local favorite - check/confirm..." combined sentences
+    .replace(/(?:^|\.\s*)(?:Popular|A local favorite)\s*(?:with locals\s*)?[-–—]\s*(?:check|confirm|we recommend)[^.]*\.?\s*/gi, '')
+    // Strip any sentence containing both confirm/check/verify AND hours/times AND visit/before
+    .replace(/\s*[-–—]?\s*[^.]*\b(?:confirm|check|verify)\b[^.]*\b(?:hours|times)\b[^.]*\b(?:visit|before)\b[^.]*\.?\s*/gi, '')
+    // Strip sourced/verified from venue database
+    .replace(/(?:^|[.]\s*)(?:Recommended|Sourced|Verified|Confirmed)\s+(?:by|from|via)\s+(?:our|the)\s+(?:venue|restaurant|local)\s+database[^.]*\.?\s*/gi, '')
     // Deduplicate consecutive repeated words: "Pantheon Pantheon" → "Pantheon"
     .replace(/\b(\w{3,})\s+\1\b/gi, '$1')
     // Catch comma-prefixed schema field names at end of text

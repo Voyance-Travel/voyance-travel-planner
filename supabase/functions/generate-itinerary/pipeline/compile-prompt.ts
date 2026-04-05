@@ -823,6 +823,9 @@ All text must be clean, correctly spelled English. No garbled characters, no non
 
 TEXT QUALITY — NO META-COMMENTARY:
 Never include parenthetical notes, internal reasoning, scheduling logic, or explanations of why an activity was chosen in any user-visible text field (title, description, tips, voyanceInsight, whyThisFits). All text must read as polished travel copy written for the end user. Do not include "(Note: ...)", "(Scheduled as ...)", "(Adjusted for ...)", "(Reflecting ...)", or any similar meta-commentary.
+
+OPERATIONAL NOTES — NEVER INCLUDE:
+Never include operational notes about checking hours, confirming availability, or verifying opening times in any description text. All descriptions should read as confident, polished travel recommendations.
 `;
 
   // ═══════════════════════════════════════════════════════════════════════
