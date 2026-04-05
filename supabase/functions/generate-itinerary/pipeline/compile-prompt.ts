@@ -826,6 +826,7 @@ Never include parenthetical notes, internal reasoning, scheduling logic, or expl
 
 OPERATIONAL NOTES — NEVER INCLUDE:
 Never include operational notes about checking hours, confirming availability, or verifying opening times in any description text. Never use generic database descriptor phrases like "Popular with locals", "A local favorite", "Hidden gem", "Must-visit", or "Highly recommended" as restaurant or activity descriptions. Every description must be a specific, unique sentence describing what makes this particular venue special. All descriptions should read as confident, polished travel recommendations.
+Never include any Voyance branding, attribution, or "thank you" messages in activity descriptions, titles, or any user-visible text. No text should reference "Voyance" in any way.
 `;
 
   // ═══════════════════════════════════════════════════════════════════════
