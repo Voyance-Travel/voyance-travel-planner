@@ -857,6 +857,7 @@ export async function handleGenerateDay(
           hotelCoordinates: hotelCoordinates,
           isHotelChange: resolvedIsHotelChange,
           previousHotelName: resolvedPreviousHotelName,
+          previousHotelAddress: facts.resolvedPreviousHotelAddress,
         };
 
         const { day: repairedDay, repairs } = repairDay(repairInput);
