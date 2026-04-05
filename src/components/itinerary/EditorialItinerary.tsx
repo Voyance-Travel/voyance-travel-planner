@@ -10400,7 +10400,7 @@ function ActivityRow({
               <VoyancePickCallout tip={sanitizeActivityText(activity.tips)} />
             </div>
           )}
-          {activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+          {sanitizeActivityText(activity.tips) && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
             <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
               {(activity.needsRefinement || activity.tags?.includes('needs-refinement')) && onSwap ? (
                 <button
