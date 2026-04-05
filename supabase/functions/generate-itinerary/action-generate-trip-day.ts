@@ -692,7 +692,7 @@ async function _handleGenerateTripDayInner(
   // ── POST-PROCESSING: sanitize, strip phantoms, fix forward refs, clean generic titles ──
   {
     const resolvedDest = cityInfo?.cityName || destination;
-    sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest);
+    sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest, usedRestaurants);
     
     // Broad hotel detection: selected hotel, accommodation notes, or existing accommodation activities
     const hasHotel = !!(cityInfo?.hotelName) || !!tripHotelName ||
@@ -896,9 +896,13 @@ async function _handleGenerateTripDayInner(
         }
         usedNorm.add(extractRestaurantVenueName(replacementName));
       } else {
-        console.warn(`[generate-trip-day] ⚠️ CROSS-DAY DEDUP: "${act.title}" repeats but no replacement available in pool`);
+        // ZERO-TOLERANCE: No replacement available — remove the repeated dining activity
+        console.warn(`[generate-trip-day] 🚫 CROSS-DAY DEDUP: "${act.title}" repeats with no replacement — REMOVING`);
+        dayResult.activities[i] = null; // Mark for removal
       }
     }
+    // Filter out nulled (removed) activities
+    dayResult.activities = dayResult.activities.filter((a: any) => a !== null);
   }
 
   // Flush stage logger (non-blocking, non-fatal)
@@ -1277,6 +1281,7 @@ async function _handleGenerateTripDayInner(
     // More days remain — save progress and self-chain
     const nextCityName = dayCityMap?.[dayNumber]?.cityName || null;
     // Track used restaurants from this day's dining activities (normalized venue names)
+    // Broadened: extract from title, venue_name, restaurant.name, AND location.name
     const { extractRestaurantVenueName } = await import('./generation-utils.ts');
     const newUsedRestaurants = [...usedRestaurants];
     const dayActivities = dayResult?.activities || [];
@@ -1285,11 +1290,16 @@ async function _handleGenerateTripDayInner(
       const catLow = (act.category || '').toLowerCase();
       const typLow = (act.type || '').toLowerCase();
       const isDining = catLow === 'dining' || typLow === 'dining' || MEAL_RE_EXTRACT.test(act.title || '');
-      if (isDining && (act.title || act.location?.name)) {
-        // Extract from title first, fall back to location.name
-        const venueFromTitle = act.title ? extractRestaurantVenueName(act.title) : '';
-        const venueFromLocation = act.location?.name ? extractRestaurantVenueName(act.location.name) : '';
-        const venueName = venueFromTitle || venueFromLocation;
+      if (!isDining) continue;
+      // Extract from ALL venue-bearing fields
+      const sources = [
+        act.title,
+        act.venue_name,
+        act.restaurant?.name,
+        act.location?.name,
+      ].filter(Boolean);
+      for (const src of sources) {
+        const venueName = extractRestaurantVenueName(src);
         if (venueName && !newUsedRestaurants.some(u => extractRestaurantVenueName(u) === venueName)) {
           newUsedRestaurants.push(venueName);
         }

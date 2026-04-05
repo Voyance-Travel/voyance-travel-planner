@@ -437,25 +437,44 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     }
   }
 
-  // ── Post-generation restaurant repeat detection ──
+  // ── HARD Post-generation restaurant repeat removal ──
   if (usedRestaurants && usedRestaurants.length > 0 && day.activities) {
     const usedNormalized = new Set(usedRestaurants.map(n => extractRestaurantVenueName(n)));
-    for (const act of day.activities) {
-      const isDining = act.category === 'dining' || act.type === 'dining' ||
-        /\b(?:breakfast|brunch|lunch|dinner|supper)\b/i.test(act.title || '');
-      if (!isDining) continue;
+    const DINING_RE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+    const beforeCount = day.activities.length;
+
+    day.activities = day.activities.filter((act: any) => {
+      const isDining = (act.category || '').toLowerCase() === 'dining' ||
+        (act.type || '').toLowerCase() === 'dining' ||
+        DINING_RE.test(act.title || '');
+      if (!isDining) return true;
 
       const venueFromTitle = extractRestaurantVenueName(act.title || '');
-      const venueFromLocation = act.location?.name
-        ? extractRestaurantVenueName(act.location.name)
-        : '';
+      const venueFromVenue = act.venue_name ? extractRestaurantVenueName(act.venue_name) : '';
+      const venueFromRestaurant = act.restaurant?.name ? extractRestaurantVenueName(act.restaurant.name) : '';
+      const venueFromLocation = act.location?.name ? extractRestaurantVenueName(act.location.name) : '';
 
-      const isRepeat = usedNormalized.has(venueFromTitle) ||
-        (venueFromLocation && usedNormalized.has(venueFromLocation));
+      const candidates = [venueFromTitle, venueFromVenue, venueFromRestaurant, venueFromLocation].filter(Boolean);
+
+      const isRepeat = candidates.some(c => {
+        if (usedNormalized.has(c)) return true;
+        // Substring containment fallback for partial matches
+        for (const used of usedNormalized) {
+          if (used.length >= 3 && c.length >= 3 && (c.includes(used) || used.includes(c))) return true;
+        }
+        return false;
+      });
 
       if (isRepeat) {
-        console.warn(`[sanitize] RESTAURANT REPEAT DETECTED: "${act.title}" (normalized: "${venueFromTitle}") was already used on a previous day`);
+        console.warn(`[sanitize] RESTAURANT REPEAT BLOCKED: "${act.title}" (venues: [${candidates.join(', ')}]) was already used on a previous day — REMOVED`);
+        return false; // Hard remove
       }
+      return true;
+    });
+
+    const removed = beforeCount - day.activities.length;
+    if (removed > 0) {
+      console.log(`[sanitize] Hard dedup removed ${removed} repeated dining activit${removed === 1 ? 'y' : 'ies'} from day ${dayNumber}`);
     }
   }
 

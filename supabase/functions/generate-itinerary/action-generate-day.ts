@@ -132,6 +132,8 @@ export async function handleGenerateDay(
     }
   }
 
+  // Debug: log incoming usedRestaurants for cross-day dedup tracing
+  console.log(`[generate-day] Generating day ${dayNumber}/${totalDays}. usedRestaurants (${(paramUsedRestaurants || []).length}):`, JSON.stringify(paramUsedRestaurants || []));
 
 
   // ═══════════════════════════════════════════════════════════════════════
