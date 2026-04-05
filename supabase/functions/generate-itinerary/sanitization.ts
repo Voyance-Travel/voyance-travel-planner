@@ -320,7 +320,7 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         if (tier1FreePatterns.test(allTextFields)) {
           console.log(`[sanitize] Zeroed phantom cost $${act.cost.amount} on free venue: ${act.title}`);
           act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
-        } else if (tier2FreePatterns.test(titleAndVenue)) {
+        } else if (tier2FreePatterns.test(allTextFields)) {
           const descSaysFree = /\bfree\b/i.test(description);
           const isPhantomPrice = act.cost.amount >= 20 && act.cost.amount <= 25;
           if (descSaysFree || isPhantomPrice) {
