@@ -10232,11 +10232,11 @@ function ActivityRow({
         )}
 
         {/* Description */}
-        {activity.description && (
+        {(() => { const d = sanitizeActivityText(activity.description); return d ? (
           <p className="text-base text-muted-foreground leading-relaxed mt-2">
-            {sanitizeActivityText(activity.description)}
+            {d}
           </p>
-        )}
+        ) : null; })()}
 
         {/* Location */}
         {locationText && (
