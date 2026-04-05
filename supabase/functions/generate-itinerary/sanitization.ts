@@ -311,6 +311,45 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
             console.log(`[sanitize] Zeroed tier2 phantom cost $${act.cost.amount} on: ${act.title}`);
             act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
           }
+      }
+      }
+
+      // ---- Dining underpricing floor ----
+      const isDining = /dining|restaurant|breakfast|lunch|dinner|brunch/i.test((act.category || '') + ' ' + (act.title || ''));
+      if (isDining && act.cost && typeof act.cost === 'object' && act.cost.amount > 0) {
+        const combined = ((act.title || '') + ' ' + (act.venue_name || '') + ' ' + (act.description || '') + ' ' + ((act as any).restaurant?.name || '') + ' ' + ((act as any).restaurant?.description || '')).toLowerCase();
+        let floor = 0;
+        let reason = '';
+
+        // Michelin / fine dining indicators
+        if (/michelin\s*3|3[\s-]*star/i.test(combined)) {
+          floor = 180; reason = 'Michelin 3-star';
+        } else if (/michelin\s*2|2[\s-]*star/i.test(combined)) {
+          floor = 120; reason = 'Michelin 2-star';
+        } else if (/michelin\s*1|1[\s-]*star|michelin[\s-]*starred/i.test(combined)) {
+          floor = 80; reason = 'Michelin 1-star';
+        } else if (/tasting menu|fine dining|haute cuisine|degustation|omakase/i.test(combined)) {
+          floor = 80; reason = 'Fine dining / tasting menu';
+        }
+
+        // Known high-end restaurant names
+        if (floor < 60 && /\b(belcanto|alma|feitoria|eleven|loco|ceia|enoteca|sommelier)\b/i.test(combined)) {
+          floor = 60; reason = 'Known high-end restaurant';
+        }
+
+        // Famous seafood
+        if (floor < 40 && /\b(cervejaria|marisqueira|marisquer[ií]a|seafood house)\b/i.test(combined)) {
+          floor = 40; reason = 'Famous seafood restaurant';
+        }
+
+        // Generic dinner floor
+        if (floor < 15 && /dinner/i.test(act.title || '') && act.cost.amount < 15) {
+          floor = 15; reason = 'Dinner at named restaurant';
+        }
+
+        if (floor > 0 && act.cost.amount < floor) {
+          console.warn(`[UNDERPRICED] "${act.title}" at ${act.cost.amount}/pp → corrected to ${floor}/pp (${reason})`);
+          act.cost.amount = floor;
         }
       }
 
