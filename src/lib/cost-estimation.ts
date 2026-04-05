@@ -508,6 +508,90 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
   };
 }
 
+// ============================================================================
+// FREE PUBLIC VENUE DETECTOR
+// ============================================================================
+
+/**
+ * Patterns that indicate a free public venue (parks, plazas, viewpoints, gardens, etc.)
+ * Checked against combined text from title + location + description.
+ */
+const FREE_VENUE_PATTERNS = [
+  // Portuguese
+  /\bpra[çc]a\b/i, /\bmiradouro\b/i, /\bjardim\b/i, /\blargo\b/i, /\bparque\b/i,
+  // Spanish
+  /\bplaza\b/i, /\bmirador\b/i, /\bparque\b/i, /\bjard[ií]n\b/i,
+  // English
+  /\bsquare\b/i, /\bviewpoint\b/i, /\blookout\b/i, /\bgarden(?:s)?\b/i,
+  /\bpark\b/i, /\bwaterfront\b/i, /\briverside\b/i, /\bpromenade\b/i,
+  /\bboardwalk\b/i, /\bpier\b/i, /\bbeach\b/i,
+  /\bneighborhood\s+(?:walk|stroll|explore)\b/i,
+  /\bdistrict\s+(?:walk|stroll|explore)\b/i,
+  /\b(?:walk|stroll)\s+(?:through|around|along)\b/i,
+  // French
+  /\bjardin\b/i, /\bplace\s+\w/i, /\besplanade\b/i,
+  // Italian
+  /\bpiazza\b/i, /\bgiardino\b/i,
+  // Common free venue types
+  /\bpublic\s+(?:square|garden|park|space)\b/i,
+  /\bfree\s+(?:attraction|venue|entry)\b/i,
+];
+
+/**
+ * Patterns that indicate a PAID venue — these override free-venue detection.
+ */
+const PAID_OVERRIDE_PATTERNS = [
+  // Dining / bars
+  /\b(?:breakfast|brunch|lunch|dinner|restaurant|café|cafe|coffee|bar|bistro|tapas|food|cocktail|nightcap)\b/i,
+  // Ticketed attractions
+  /\b(?:museum|monastery|palace|castle|tower|aquarium|zoo|show|concert|theater|theatre|ticket|admission|entrance|gallery)\b/i,
+  // Wellness
+  /\b(?:spa|wellness|massage|treatment|hammam|thermal|sauna)\b/i,
+  // Transport
+  /\b(?:airport|taxi|uber|rideshare|transfer|shuttle|train\s+to|bus\s+to|private\s+car)\b/i,
+  // Tours / experiences
+  /\b(?:guided\s+tour|boat\s+tour|cruise|cooking\s+class|workshop|tasting)\b/i,
+];
+
+/**
+ * Detect whether an activity is a free public venue.
+ * Checks combined text from all available fields.
+ * Returns true for parks, plazas, viewpoints, gardens, etc.
+ * Returns false for dining, ticketed, wellness, and transport activities.
+ */
+export function isLikelyFreePublicVenue(fields: {
+  title?: string;
+  category?: string;
+  type?: string;
+  locationName?: string;
+  address?: string;
+  description?: string;
+}): boolean {
+  const combined = [
+    fields.title,
+    fields.locationName,
+    fields.address,
+    fields.description,
+  ].filter(Boolean).join(' ');
+
+  if (!combined) return false;
+
+  // Check paid overrides first — dining at a praça is still paid
+  if (PAID_OVERRIDE_PATTERNS.some(p => p.test(combined))) return false;
+
+  // Check category — dining/transport/etc categories are never free
+  const cat = (fields.category || fields.type || '').toLowerCase();
+  if (['dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner',
+       'cafe', 'coffee', 'transport', 'transfer', 'taxi', 'tour',
+       'cruise', 'boat', 'spa', 'wellness', 'nightlife', 'bar', 'club',
+       'museum', 'gallery', 'show', 'performance', 'concert'].includes(cat)) {
+    return false;
+  }
+
+  // Check free venue patterns
+  return FREE_VENUE_PATTERNS.some(p => p.test(combined));
+}
+
 /**
  * Pre-warm the cache (call early in app lifecycle)
  */

@@ -77,7 +77,7 @@ import { RefreshDayDiffView } from './RefreshDayDiffView';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
-import { preloadCostIndex, estimateCostSync } from '@/lib/cost-estimation';
+import { preloadCostIndex, estimateCostSync, isLikelyFreePublicVenue } from '@/lib/cost-estimation';
 import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { PaymentsTab } from './PaymentsTab';

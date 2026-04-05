@@ -6,7 +6,7 @@
  */
 
 import { useMemo } from 'react';
-import { estimateCostSync } from '@/lib/cost-estimation';
+import { estimateCostSync, isLikelyFreePublicVenue } from '@/lib/cost-estimation';
 import type { TripPayment } from '@/services/tripPaymentsAPI';
 
 export interface PayableItem {
