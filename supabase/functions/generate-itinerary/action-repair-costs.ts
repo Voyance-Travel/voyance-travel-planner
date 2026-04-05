@@ -116,6 +116,34 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         : (activity.cost && typeof activity.cost === "object") ? (activity.cost.amount || 0)
         : 0;
 
+      // Tier 1 free venue check — don't assign costs to parks, plazas, viewpoints, churches, etc.
+      const tier1FreePatterns = /\b(?:park|garden|jardim|viewpoint|miradouro|miradouros|plaza|praça|praca|square|piazza|platz|church|igreja|basilica|cathedral|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca)\b/i;
+      const allText = [
+        title,
+        activity.description || '',
+        activity.venue_name || '',
+        activity.place_name || '',
+        activity.location || '',
+        activity.address || '',
+      ].join(' ');
+
+      if (tier1FreePatterns.test(allText)) {
+        console.log(`[repair-trip-costs] Tier 1 free venue: "${title}" — forcing $0`);
+        rows.push({
+          trip_id: tripId,
+          activity_id: activity.id,
+          day_number: dayNum,
+          cost_per_person_usd: 0,
+          num_travelers: numTravelers,
+          category,
+          source: 'free_venue',
+          confidence: 'high',
+          cost_reference_id: null,
+          notes: '[Free venue - Tier 1]',
+        });
+        continue;
+      }
+
       let ref: any = null;
       if (subcategory) {
         ref = refMap.get(`${destination}|${category}|${subcategory}`);

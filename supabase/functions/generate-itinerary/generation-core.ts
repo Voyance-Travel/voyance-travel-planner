@@ -3091,6 +3091,32 @@ export async function finalSaveItinerary(
             continue;
           }
 
+          // Check Tier 1 free venues (parks, plazas, viewpoints, churches, etc.)
+          const tier1FreePatterns = /\b(?:park|garden|jardim|viewpoint|miradouro|miradouros|plaza|praça|praca|square|piazza|platz|church|igreja|basilica|cathedral|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca)\b/i;
+          const allActivityText = [
+            (act as any).title || '',
+            (act as any).description || '',
+            (act as any).venue_name || '',
+            (act as any).place_name || '',
+            (act as any).location?.name || '',
+            (act as any).address || '',
+          ].join(' ');
+
+          if (tier1FreePatterns.test(allActivityText)) {
+            console.log(`[Phase 4] Tier 1 free venue detected: "${(act as any).title}" — zeroing cost`);
+            costRows.push({
+              trip_id: tripId,
+              activity_id: act.id,
+              day_number: day.dayNumber || 1,
+              cost_per_person_usd: 0,
+              num_travelers: context.travelers || 1,
+              category: mappedCategory,
+              source: 'free_venue',
+              confidence: 'high',
+            });
+            continue;
+          }
+
           // Look up cost_reference: try city+category+subcategory, then city+category, then global
           const subcategory = inferSubcategory(titleLower, mappedCategory);
           const cityKey = destinationCity.toLowerCase();
