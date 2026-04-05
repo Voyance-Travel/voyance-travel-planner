@@ -896,9 +896,13 @@ async function _handleGenerateTripDayInner(
         }
         usedNorm.add(extractRestaurantVenueName(replacementName));
       } else {
-        console.warn(`[generate-trip-day] ⚠️ CROSS-DAY DEDUP: "${act.title}" repeats but no replacement available in pool`);
+        // ZERO-TOLERANCE: No replacement available — remove the repeated dining activity
+        console.warn(`[generate-trip-day] 🚫 CROSS-DAY DEDUP: "${act.title}" repeats with no replacement — REMOVING`);
+        dayResult.activities[i] = null; // Mark for removal
       }
     }
+    // Filter out nulled (removed) activities
+    dayResult.activities = dayResult.activities.filter((a: any) => a !== null);
   }
 
   // Flush stage logger (non-blocking, non-fatal)
