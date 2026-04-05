@@ -1,42 +1,42 @@
 
 
-## Phantom Pricing v8 — Airport Arrival/Departure Fix
+## Fix Michelin Restaurant Underpricing — Raise Known Fine Dining Floors
 
 ### Root Cause
 
-"Arrival at Lisbon Airport" has "airport" in the title, which matches `PAID_OVERRIDE_PATTERNS` in `src/lib/cost-estimation.ts` (line 553: `/\b(?:airport|taxi|uber|...)\b/i`). This causes `isLikelyFreePublicVenue` to return `false`, so the frontend never zeroes the price.
+`sanitization.ts` lines 350-387 already has a dining price floor system, but it's too weak:
+- Known high-end restaurants (including `eleven`) only get a €60 floor (line 369)
+- Michelin detection requires the AI to explicitly write "michelin" in the description — which it often doesn't
+- Result: Eleven gets floored to €60 at best, but if the AI prices it at €28 and the text doesn't say "michelin", only the €60 known-restaurant floor catches it
 
-The backend `sanitization.ts` also doesn't catch it because "airport" isn't in the `tier1FreePatterns` regex, and arrival/departure activities aren't handled at all.
+The fix is to raise the known restaurant floors to match actual Michelin pricing, and expand the list.
 
-### Fix (2 files)
+### Plan (1 file)
 
-**File 1: `src/lib/cost-estimation.ts`**
+**File: `supabase/functions/generate-itinerary/sanitization.ts`** (lines 368-376)
 
-Add an "always-free activity" check at the top of `isLikelyFreePublicVenue` (before the paid override check). If the title matches arrival/departure/check-in/check-out/freshen-up patterns, return `true` immediately — these activities never cost money regardless of keywords like "airport":
-
-```ts
-const ALWAYS_FREE_ACTIVITY = /\b(?:arrival|departure|check[\s-]?in|check[\s-]?out|return\s+to|freshen\s+up|settle\s+in)\b/i;
-if (ALWAYS_FREE_ACTIVITY.test(fields.title || '')) return true;
-```
-
-This goes right after the `if (!combined) return false;` check and before the paid override check.
-
-**File 2: `supabase/functions/generate-itinerary/sanitization.ts`**
-
-Add a check before the tier1/tier2 free venue logic (around line 304). If the activity title matches arrival/departure patterns, zero out its cost:
+Replace the single "known high-end restaurant" block with tiered known-restaurant floors:
 
 ```ts
-const alwaysFreeActivity = /\b(?:arrival|departure|check[\s-]?in|check[\s-]?out|return\s+to|freshen\s+up|settle\s+in)\b/i;
-if (alwaysFreeActivity.test(act.title || '') && act.cost?.amount > 0) {
-  console.log(`[sanitize] Zeroed cost on always-free activity: ${act.title}`);
-  act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
+// Known Michelin-starred / fine dining — tiered by actual price range
+const knownMichelinHigh = /\b(belcanto|feitoria|fifty\s*seconds)\b/i;
+const knownMichelinMid = /\b(alma|eleven|epur|cura|loco|eneko)\b/i;
+const knownUpscale = /\b(il\s*gallo|ceia|enoteca|sommelier)\b/i;
+
+if (floor < 150 && knownMichelinHigh.test(combined)) {
+  floor = 150; reason = 'Known top-tier Michelin restaurant';
+} else if (floor < 120 && knownMichelinMid.test(combined)) {
+  floor = 120; reason = 'Known Michelin-starred restaurant';
+} else if (floor < 60 && knownUpscale.test(combined)) {
+  floor = 60; reason = 'Known upscale restaurant';
 }
 ```
 
+This replaces lines 368-371 (the single `floor = 60` block). The seafood and generic dinner floors below remain unchanged.
+
 ### Files to edit
-- `src/lib/cost-estimation.ts` — add always-free activity bypass before paid override check
-- `supabase/functions/generate-itinerary/sanitization.ts` — zero cost on arrival/departure activities
+- `supabase/functions/generate-itinerary/sanitization.ts` — upgrade known restaurant floors from flat €60 to tiered €120-150
 
 ### Verification
-Open trip `3263251a`. "Arrival at Lisbon Airport" should show Free. All other free venues should remain Free. Dining and ticketed items should keep their prices.
+Generate a Lisbon trip. Any appearance of Eleven, Alma, Epur should be priced ≥€120/pp. Belcanto, Feitoria should be ≥€150/pp. Check edge function logs for `[UNDERPRICED]` warnings.
 
