@@ -220,7 +220,7 @@ export async function handleGenerateDay(
     let generatedDay;
     if (toolCall?.function?.arguments) {
       // Standard tool call response
-      generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, resolvedDestination);
+      generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(toolCall.function.arguments))), dayNumber, resolvedDestination, paramUsedRestaurants);
     } else if (message?.content) {
       // Fallback: AI returned content instead of tool call
       console.log("[generate-day] AI returned content instead of tool_call, attempting to parse...");
