@@ -2550,7 +2550,7 @@ function repairBookends(
         a => isTransport(a) && isSameOrContainedLocation((a.location?.name || '').toLowerCase(), nLoc, hotelName)
       );
       if (recentTransport) continue;
-      rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || '', curr, next));
+      rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || sanitizeTransitDestination(next.title || ''), curr.endTime || '', curr, next));
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_transit_gap' });
     }
   }
