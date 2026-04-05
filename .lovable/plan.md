@@ -1,75 +1,58 @@
 
 
-## Diagnosis: Phantom Hotel Activities After Sharing/Navigation
+## Strip "Popular with locals" and Similar Database Descriptor Stubs
 
-### Root Cause
+### Problem
+Restaurant descriptions sometimes consist entirely of short database descriptor phrases like "Popular with locals" instead of actual travel copy. These are distinct from the "check hours" notes already handled.
 
-The `onBookingAdded` callback in `TripDetail.tsx` (line 2999) fires on **every** booking-related action — hotel saves, flight saves, transport saves, and even flight order updates. Each time it fires, it:
+### Changes
 
-1. Re-fetches trip data from DB
-2. Runs `injectHotelActivitiesIntoDays` or `injectMultiHotelActivities` which strips and re-injects check-in/checkout activities
-3. Applies in-memory hotel name patches to accommodation activities (including "Return to Hotel")
-4. **Saves the modified itinerary back to DB** (line 3100-3108) via `saveItineraryOptimistic`
+**1. `supabase/functions/generate-itinerary/sanitization.ts`**
 
-The problem: when this runs for a non-hotel event (e.g., flight order update, transport save), the injection logic still executes. If the existing itinerary already has properly placed hotel activities from generation, the strip → re-inject cycle can:
-- Create timing conflicts where `cascadeFixOverlaps` pushes activities to unexpected times
-- Re-inject check-in/checkout cards that duplicate existing AI-generated ones
-- Save these duplicates to DB, making them persist across refreshes
-
-Additionally, the `injectHotelActivitiesIntoDays` function calls `stripExistingHotelActivities` which only strips activities with `category === 'accommodation'` AND specific title keywords. If an AI-generated "Return to Hotel" has `category: 'stay'` or a slightly different title pattern, it won't be stripped — leading to duplicates.
-
-### Fix — Two Parts
-
-**Part 1: Guard hotel injection in `onBookingAdded`** (`src/pages/TripDetail.tsx`)
-
-Add a guard so the hotel injection logic inside `onBookingAdded` only runs when the hotel data has actually changed. Compare the hotel selection before and after the refetch:
+**Part A — Stub description detection in `sanitizeGeneratedDay`** (after the hotel name mismatch fix at line 370, before `return day` at line 372):
 
 ```typescript
-// Before injection, check if hotel data actually changed
-const prevHotelJson = JSON.stringify(trip?.hotel_selection);
-const newHotelJson = JSON.stringify(updatedTrip.hotel_selection);
-const prevCityHotels = JSON.stringify(tripCities.map(c => c.hotel_selection));
-const newCityHotels = JSON.stringify(updatedCities.map(c => c.hotel_selection));
-const hotelChanged = prevHotelJson !== newHotelJson || prevCityHotels !== newCityHotels;
+// Detect and clear stub descriptions that are just database descriptor notes
+const STUB_DESC_RE = /^(?:Popular with locals|A local favou?rite|Great for (?:families|groups|couples)|Tourist (?:hotspot|favorite)|Well[- ]known (?:locally|spot)|Hidden gem|Must[- ]visit|Highly recommended|A must[- ]try|Local institution|Neighborhood favou?rite|A true gem|Worth (?:a|the) visit)\.?$/i;
 
-if (hotelChanged && currentDays.length > 0) {
-  // ... existing injection logic ...
+if (day.activities) {
+  for (const act of day.activities) {
+    const desc = (act.description || '').trim();
+    if (desc.length > 0 && desc.length < 80 && STUB_DESC_RE.test(desc)) {
+      act.description = '';
+    }
+    if (act.restaurant?.description) {
+      const rDesc = act.restaurant.description.trim();
+      if (rDesc.length > 0 && rDesc.length < 80 && STUB_DESC_RE.test(rDesc)) {
+        act.restaurant.description = '';
+      }
+    }
+  }
 }
 ```
 
-This prevents the injection from running when only flights or transport changed.
-
-**Part 2: Strengthen `stripExistingHotelActivities` idempotency** (`src/utils/injectHotelActivities.ts`)
-
-Expand the strip function to also remove activities matching broader accommodation patterns (not just check-in/checkout):
+**Part B — Inline stub stripping in `sanitizeAITextField`** (add to the `.replace()` chain, around line 158-160):
 
 ```typescript
-// Also strip "Return to" and "Freshen up" activities with deterministic IDs
-// to prevent double-injection scenarios
-if (a.id.startsWith('hotel-dropbags-')) return false;
+// Strip "Popular with locals" and similar database stub phrases when embedded inline
+.replace(/\s*[-–—]\s*(?:Popular with locals|A local favou?rite|Great for (?:families|groups|couples)|Tourist (?:hotspot|favorite)|Hidden gem|Must[- ]visit|Highly recommended|Local institution)\.?\s*/gi, '')
 ```
 
-And ensure the injection doesn't add activities when the day already has properly-timed AI-generated equivalents.
+**2. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
 
-**Part 3: Add safety check for midnight activities** (`src/utils/injectHotelActivities.ts`)
+Expand the OPERATIONAL NOTES block (line 827-828) to also forbid generic descriptor phrases:
 
-After `cascadeFixOverlaps`, add a post-check that removes any injected accommodation activity that ended up at 00:00 (midnight spillover):
-
-```typescript
-// Post-injection safety: remove any accommodation activity at 00:00-00:59
-// These are cascade artifacts, not real activities
-updated = updated.map(day => ({
-  ...day,
-  activities: day.activities.filter(a => {
-    if (a.category !== 'accommodation') return true;
-    const hour = parseInt((a.startTime || '06:00').split(':')[0], 10);
-    if (hour === 0 && (a.id.startsWith('hotel-checkin-') || a.id.startsWith('hotel-checkout-'))) return false;
-    return true;
-  }),
-}));
+```
+OPERATIONAL NOTES — NEVER INCLUDE:
+Never include operational notes about checking hours, confirming availability, or verifying opening times in any description text. Never use generic database descriptor phrases like "Popular with locals", "A local favorite", "Hidden gem", "Must-visit", or "Highly recommended" as restaurant or activity descriptions. Every description must be a specific, unique sentence describing what makes this particular venue special. All descriptions should read as confident, polished travel recommendations.
 ```
 
-### Files to Edit
-- `src/pages/TripDetail.tsx` — add hotel-change guard in `onBookingAdded` (~line 3010)
-- `src/utils/injectHotelActivities.ts` — add midnight safety check in both injection functions
+**3. `src/utils/activityNameSanitizer.ts`**
+
+Add matching inline stub stripping to the frontend `sanitizeActivityText` function for client-side defense (same regex as Part B).
+
+### Files
+- `supabase/functions/generate-itinerary/sanitization.ts` — add stub detection + inline stripping
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — expand OPERATIONAL NOTES
+- `src/utils/activityNameSanitizer.ts` — add frontend stub stripping
 
