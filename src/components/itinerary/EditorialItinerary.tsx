@@ -10743,7 +10743,7 @@ function ActivityRow({
                     const locationFallback = !effectiveLocName && !hasAddress
                       ? ((activity as any).distance || (activity as any).walkTime || '')
                       : '';
-                    const showLocation = effectiveLocName || hasAddress || locationFallback;
+                    const showLocation = effectiveLocName || hasAddress || (locationFallback && locationFallback.trim().length > 0);
                     return showLocation ? (
                     <div className={cn(
                       "mt-1.5",
