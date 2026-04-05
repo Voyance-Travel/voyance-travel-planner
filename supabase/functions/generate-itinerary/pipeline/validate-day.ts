@@ -98,7 +98,8 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
 
   const { day, dayNumber, isFirstDay, isLastDay, hasHotel, hotelName,
     arrivalTime24, returnDepartureTime24, requiredMeals, previousDays,
-    avoidList, dietaryRestrictions, mustDoActivities } = input;
+    avoidList, dietaryRestrictions, mustDoActivities,
+    isHotelChange, previousHotelName } = input;
 
   const activities = day.activities || [];
 
@@ -142,6 +143,11 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   // --- WEAK_PERSONALIZATION ---
   if ((avoidList && avoidList.length > 0) || (dietaryRestrictions && dietaryRestrictions.length > 0)) {
     checkPersonalization(activities, avoidList || [], dietaryRestrictions || [], results);
+  }
+
+  // --- PRE-CHECKOUT DINING AT WRONG HOTEL (hotel-change days) ---
+  if (isHotelChange && previousHotelName && hotelName) {
+    checkPreCheckoutDiningHotel(activities, hotelName, previousHotelName, results);
   }
 
   return results;
