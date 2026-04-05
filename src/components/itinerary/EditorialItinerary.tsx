@@ -77,7 +77,7 @@ import { RefreshDayDiffView } from './RefreshDayDiffView';
 import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternativesDrawer';
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
-import { preloadCostIndex, estimateCostSync } from '@/lib/cost-estimation';
+import { preloadCostIndex, estimateCostSync, isLikelyFreePublicVenue } from '@/lib/cost-estimation';
 import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { PaymentsTab } from './PaymentsTab';
@@ -1066,7 +1066,17 @@ function getActivityCostInfo(
   const looksLikelyFree = FREE_ATTRACTION_KEYWORDS.some(kw => titleLower.includes(kw)) &&
     ['sightseeing', 'explore', 'cultural', 'activity', 'attraction'].includes(catLower);
   
-  if (looksLikelyFree && !isNeverFreeCategory(category, title)) {
+  // Also check the shared free-public-venue detector (catches praça, miradouro, jardim, etc.)
+  const isFreePublicVenue = isLikelyFreePublicVenue({
+    title,
+    category,
+    type: activity.type,
+    locationName: activity.location?.name,
+    address: activity.location?.address,
+    description: (activity as any).description,
+  });
+
+  if ((looksLikelyFree || isFreePublicVenue) && !isNeverFreeCategory(category, title)) {
     return { amount: 0, isEstimated: false, confidence: 'medium' as const, basis: 'flat' as CostBasis };
   }
   
