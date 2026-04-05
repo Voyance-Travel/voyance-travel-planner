@@ -2196,7 +2196,14 @@ Generate activities for this day following ALL constraints above.`;
             const beforeCount = generatedDay.activities.length;
             generatedDay.activities = generatedDay.activities.filter(a => {
               const title = (a.title || '').toLowerCase();
-              return !duplicateTitles.some(dt => title.includes(dt) || dt.includes(title));
+              const isDupe = duplicateTitles.some(dt => title.includes(dt) || dt.includes(title));
+              if (!isDupe) return true;
+              // Never strip primary meals — a duplicate restaurant is better than a missing meal
+              if (/\b(?:breakfast|lunch|dinner|brunch)\b/i.test(a.title || '')) {
+                console.warn(`[Stage 2] Keeping duplicate primary meal "${a.title}" — meal > uniqueness`);
+                return true;
+              }
+              return false;
             });
             const removedCount = beforeCount - generatedDay.activities.length;
             if (removedCount > 0) {

@@ -916,9 +916,14 @@ async function _handleGenerateTripDayInner(
         }
         usedNorm.add(extractRestaurantVenueName(replacementName));
       } else {
-        // ZERO-TOLERANCE: No replacement available — remove the repeated dining activity
-        console.warn(`[generate-trip-day] 🚫 CROSS-DAY DEDUP: "${act.title}" repeats with no replacement — REMOVING`);
-        dayResult.activities[i] = null; // Mark for removal
+        // ZERO-TOLERANCE: No replacement available — but NEVER remove primary meals
+        const isPrimaryMeal = /\b(?:breakfast|lunch|dinner|brunch)\b/i.test(act.title || '');
+        if (isPrimaryMeal) {
+          console.warn(`[generate-trip-day] ⚠️ CROSS-DAY DEDUP: "${act.title}" repeats but is PRIMARY MEAL — KEEPING (duplicate > missing meal)`);
+        } else {
+          console.warn(`[generate-trip-day] 🚫 CROSS-DAY DEDUP: "${act.title}" repeats with no replacement — REMOVING`);
+          dayResult.activities[i] = null; // Mark for removal
+        }
       }
     }
     // Filter out nulled (removed) activities
