@@ -1464,9 +1464,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         if (act.location?.address && hotelAddress) {
           const addrLower = (act.location.address || '').toLowerCase();
           const newHotelAddrLower = (hotelAddress || '').toLowerCase();
-          if (newHotelAddrLower && addrLower.includes(newHotelAddrLower)) {
-            // Replace new hotel address with previous hotel address if available
-            act.location.address = previousHotelAddress || previousHotelName;
+          if (newHotelAddrLower && addrLower === newHotelAddrLower) {
+            act.location.address = previousHotelName; // Best we have — replace new hotel's address
           }
         }
 
