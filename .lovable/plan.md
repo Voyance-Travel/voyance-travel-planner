@@ -1,62 +1,30 @@
 
 
-## Trip #10 Audit Fix Plan — 5 Issues
+## Fix Restaurant Repetition — Add Failsafe Cross-Day Dedup + Debug Logging
 
-### Root Cause Assessment
+### Problem
+Fábrica da Nata appeared as breakfast on Days 1-3 of trip #11 despite existing dedup logic. The blocklist propagation via `metadata.used_restaurants` and the per-day cross-day dedup check are implemented but may have gaps: (1) the per-day dedup only fires when `usedRestaurants.length > 0`, so Day 1 restaurants are never checked, (2) if the replacement pool is exhausted, the activity is removed but the meal guard may backfill with the same restaurant, (3) there's no final cross-trip failsafe that checks ALL days at once.
 
-The edge function logs are **completely empty**, strongly suggesting the `generate-itinerary` function was not redeployed after the latest code changes (Prompts 28-29). Many fixes (midnight stripper, Tier 1 free venue in `generation-core.ts`, orphaned article patterns) are already in the code but were not active when trip #10 was generated.
+### Changes
 
-### Issue Breakdown & Actions
+**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
 
-**1. Garbled Text — "Arrival in the of Seven Hills" + "views of the illuminated."**
+1. **Enhanced debug logging** (~line 344): After loading `usedRestaurants` from metadata, add a structured debug log that shows the exact array contents, length, and type — making it easy to verify propagation in logs.
 
-Already fixed in code:
-- Line 188: `"in the of"` → `"in Lisbon, the City of"` ✅
-- Line 197: `"the illuminated."` → dangling adjective catch ✅
+2. **Debug logging for outbound blocklist** (~line 1323): After building `newUsedRestaurants`, log it before saving to metadata so we can trace what's being sent to the next day.
 
-**No code change needed** — just needs redeployment.
+3. **Cross-day failsafe dedup at trip completion** (~line 1229, inside the `dayNumber >= totalDays` branch, BEFORE saving to DB): Walk ALL `updatedDays`, build a cumulative set of normalized restaurant names, and mark duplicates with `_crossDayDuplicate = true`, then filter them out. This catches anything the per-day dedup missed. Log every removal.
 
-**2. Midnight Entry Cascade (Day 1: 12:05 AM, 1:05 AM)**
+4. **Fix the per-day dedup guard** (~line 878): Change `if (usedRestaurants.length > 0 && ...)` to `if (dayResult?.activities?.length > 0)` — the dedup should ALWAYS run, even on Day 1 (to catch within-day duplicates). The `usedNorm` set will simply be empty for Day 1, which is fine.
 
-Already fixed in code at lines 413-446 of `sanitization.ts` — the sequential pre-dawn hotel entry stripper checks `startTime`, `start_time`, and `time` fields.
+**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
 
-**No code change needed** — just needs redeployment.
-
-**3. Phantom Pricing (Praça do Comércio ~€23, Miradouro ~€23)**
-
-Already fixed in code:
-- `generation-core.ts` line 3093-3113: Tier 1 free venue check before `cost_reference` lookup ✅
-- `action-repair-costs.ts` line 118-131: Tier 1 free venue check preventing un-zeroing ✅
-
-**No code change needed** — just needs redeployment.
-
-**4. Empty System Note Container (Fábrica da Nata)**
-
-Already fixed in code — `EditorialItinerary.tsx` uses `sanitizeActivityText()` guards on descriptions (lines 10235, 10379, 10731) and tips (lines 10250, 10403, 10774).
-
-However, there may be a **remaining gap**: the `venueNameForDining` MapPin at line 10682 and the location section at line 10739 don't sanitize through `sanitizeActivityText`. If the "empty container" is actually a location/address field showing an empty pin, we need to add `.trim()` guards there too.
-
-**Action**: Add defensive `.trim().length > 0` checks on `locName` (line 10741) and `address` (line 10656) to ensure empty strings after trimming don't render containers. Also check that `hasAddress` properly rejects whitespace-only strings (line 10657 already does `?.trim()` — looks OK).
-
-**5. Restaurant Repetition (Fábrica da Nata on Days 2 & 3)**
-
-This is a generation-time issue with the cross-day blocklist. The blocklist serialization and propagation through self-chaining calls should prevent this, but may have a gap. This is a separate investigation — not addressed in this prompt cycle.
-
-### Plan
-
-**Step 1: Redeploy `generate-itinerary` edge function**
-This single action activates ALL the dormant fixes for issues 1-3.
-
-**Step 2: Minor UI hardening for empty containers**
-In `EditorialItinerary.tsx`, add a guard on the location section fallback to ensure empty `locationFallback` strings don't render the container. The current code at line 10746 (`showLocation = effectiveLocName || hasAddress || locationFallback`) could show a container if `locationFallback` is a non-empty whitespace string.
+5. **Strengthen the restaurant variety instruction** (~line 999 area): Add an explicit "For breakfast specifically: NEVER repeat the same breakfast venue on consecutive days" rule and a reminder that the destination has hundreds of restaurants.
 
 ### Files to edit
-- `src/components/itinerary/EditorialItinerary.tsx` — minor guard hardening (1-2 lines)
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — debug logging + completion failsafe + fix dedup guard
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — strengthen prompt rules
 
 ### Verification
-After redeployment, generate a new Lisbon trip to confirm:
-- Day titles are clean (no "in the of")
-- Day 1 starts at 8-9 AM (no midnight entries)
-- Praça/Miradouro show $0
-- No empty pin icon containers
+Deploy the edge function, generate a 4-day Lisbon trip. Check edge function logs for "RESTAURANT DEDUP DEBUG" entries. Verify no restaurant appears more than once across all days.
 
