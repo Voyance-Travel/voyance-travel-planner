@@ -229,7 +229,7 @@ export async function handleGenerateDay(
         const contentStr = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
         const jsonMatch = contentStr.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-          generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, resolvedDestination);
+          generatedDay = sanitizeGeneratedDay(sanitizeOptionFields(sanitizeDateFields(JSON.parse(jsonMatch[0]))), dayNumber, resolvedDestination, paramUsedRestaurants);
         } else {
           console.error("[generate-day] No JSON found in content:", contentStr.substring(0, 500));
           throw new Error("Invalid AI response format - no JSON in content");
