@@ -301,6 +301,13 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Rest\s+(?:&|and)\s+Recharge\s+at\s+/i, '$1 to ');
         act.name = act.title;
       }
+      // Always-free activities: arrivals, departures, hotel logistics
+      const alwaysFreeActivity = /\b(?:arrival|departure|check[\s-]?in|check[\s-]?out|return\s+to|freshen\s+up|settle\s+in)\b/i;
+      if (alwaysFreeActivity.test(act.title || '') && act.cost && typeof act.cost === 'object' && act.cost.amount > 0) {
+        console.log(`[sanitize] Zeroed cost on always-free activity: ${act.title}`);
+        act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
+      }
+
       // Zero out pricing for obviously free activity types
       // Tier 1 (high confidence): always free — parks, plazas, churches, viewpoints, districts
       // Tier 2 (lower confidence): free only if description says "free" or price is in phantom €20-25 range

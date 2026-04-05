@@ -578,6 +578,10 @@ export function isLikelyFreePublicVenue(fields: {
 
   if (!combined) return false;
 
+  // Always-free activities: arrivals, departures, hotel logistics — bypass paid overrides
+  const ALWAYS_FREE_ACTIVITY = /\b(?:arrival|departure|check[\s-]?in|check[\s-]?out|return\s+to|freshen\s+up|settle\s+in)\b/i;
+  if (ALWAYS_FREE_ACTIVITY.test(fields.title || '')) return true;
+
   // Check paid overrides first — dining at a praça is still paid
   if (PAID_OVERRIDE_PATTERNS.some(p => p.test(combined))) return false;
 
