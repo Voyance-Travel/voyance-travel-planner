@@ -3,6 +3,8 @@
  * Strips CJK artifacts, schema-leak fragments, and garbled text.
  */
 
+import { extractRestaurantVenueName } from './generation-utils.ts';
+
 // =============================================================================
 // DATE SANITIZATION — Strip non-ASCII chars that leak from CJK locale prompts
 // =============================================================================
