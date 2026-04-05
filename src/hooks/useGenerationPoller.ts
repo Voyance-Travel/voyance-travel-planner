@@ -93,6 +93,8 @@ export function useGenerationPoller({
   const justResumedRef = useRef(false);
   const resumedAtRef = useRef(0);
   const consecutiveErrorsRef = useRef(0);
+  // Dedupe guard: only fire onFailed once per unique error message
+  const lastFailedErrorRef = useRef<string | null>(null);
 
   const poll = useCallback(async () => {
     if (!tripId) return;
@@ -241,7 +243,11 @@ export function useGenerationPoller({
         autoResumeCountRef.current = 0;
         const genError = (meta.generation_error as string) || 'Generation failed';
         setState({ status: 'failed', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
-        onFailedRef.current?.(genError);
+        // Dedupe: only fire onFailed once per unique error message
+        if (lastFailedErrorRef.current !== genError) {
+          lastFailedErrorRef.current = genError;
+          onFailedRef.current?.(genError);
+        }
         return;
       }
 
@@ -407,6 +413,7 @@ export function useGenerationPoller({
       stalledFiredRef.current = false;
       autoResumeCountRef.current = 0;
       onReadyCalledRef.current = false;
+      lastFailedErrorRef.current = null;
       completedDaysHWM.current = 0;
       return;
     }
@@ -505,6 +512,7 @@ export function useGenerationPoller({
     stalledFiredRef.current = false;
     autoResumeCountRef.current = 0;
     onReadyCalledRef.current = false;
+    lastFailedErrorRef.current = null;
     completedDaysHWM.current = 0;
     setState(prev => ({ ...prev, status: 'polling' }));
   }, []);

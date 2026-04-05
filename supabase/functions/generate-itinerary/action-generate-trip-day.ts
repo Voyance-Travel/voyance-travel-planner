@@ -691,13 +691,29 @@ async function _handleGenerateTripDayInner(
 
   // ── POST-PROCESSING: sanitize, strip phantoms, fix forward refs, clean generic titles ──
   {
+    const preSanitizeCount = Array.isArray(dayResult?.activities) ? dayResult.activities.length : 0;
+    console.log(`[generate-trip-day] Day ${dayNumber} pre-sanitize activity count: ${preSanitizeCount}`);
+
     const resolvedDest = cityInfo?.cityName || destination;
     sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest, usedRestaurants);
+
+    const postSanitizeCount = Array.isArray(dayResult?.activities) ? dayResult.activities.length : 0;
+    if (postSanitizeCount < preSanitizeCount) {
+      console.warn(`[generate-trip-day] Day ${dayNumber} lost ${preSanitizeCount - postSanitizeCount} activities during sanitization (${preSanitizeCount} → ${postSanitizeCount})`);
+    }
     
     // Broad hotel detection: selected hotel, accommodation notes, or existing accommodation activities
     const hasHotel = !!(cityInfo?.hotelName) || !!tripHotelName ||
       dayResult.activities?.some((a: any) => (a.category || '').toLowerCase() === 'accommodation');
     stripPhantomHotelActivities(dayResult, hasHotel);
+
+    const postStripCount = Array.isArray(dayResult?.activities) ? dayResult.activities.length : 0;
+    if (postStripCount < postSanitizeCount) {
+      console.warn(`[generate-trip-day] Day ${dayNumber} lost ${postSanitizeCount - postStripCount} activities during hotel phantom strip (${postSanitizeCount} → ${postStripCount})`);
+    }
+    if (postStripCount === 0) {
+      console.error(`[generate-trip-day] ⚠️ Day ${dayNumber} has 0 activities after post-processing! Pre-sanitize had ${preSanitizeCount}.`);
+    }
 
     // Forward-ref fix: strip hallucinated tomorrow references from accommodation descriptions
     const hotelName = cityInfo?.hotelName || tripHotelName || 'your hotel';
