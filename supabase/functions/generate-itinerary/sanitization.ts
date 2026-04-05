@@ -410,26 +410,40 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     });
   }
 
-  // Strip phantom midnight hotel entries at the start of the day
-  // These are spillover from the previous day's late activities
+  // Strip phantom midnight hotel entries sequentially from the start of the day
+  // These are spillover from the previous day or AI hallucinations (e.g. "Return to Hotel" at 12:05 AM on Day 1)
+  // Strategy: walk from the start, removing pre-dawn (00:00-04:59) hotel entries until we hit a real activity
   if (day.activities.length > 0) {
-    const firstMorningIndex = day.activities.findIndex((a: any) => {
-      const hour = parseInt((a.startTime || '06:00').split(':')[0], 10);
-      return hour >= 5;
-    });
-    if (firstMorningIndex > 0) {
-      const midnightActivities = day.activities.slice(0, firstMorningIndex);
-      const allAreHotelEntries = midnightActivities.every((a: any) =>
-        (a.category || '').toLowerCase() === 'accommodation' ||
-        (a.category || '').toLowerCase() === 'stay' ||
-        (a.type || '').toLowerCase() === 'stay' ||
-        /\b(?:return|freshen|check.?in|retire|end.?of.?day|back to|settle|wind down)\b/i.test(a.title || '')
-      );
-      if (allAreHotelEntries) {
-        console.log(`[sanitizeGeneratedDay] Stripped ${firstMorningIndex} pre-dawn hotel phantom(s) from day ${dayNumber}`);
-        day.activities = day.activities.slice(firstMorningIndex);
+    const HOTEL_TITLE_RE = /\b(?:return to|check.?in|check.?out|hotel|freshen up|rest and refresh|retire|settle|wind down|end.?of.?day|back to)\b/i;
+    let stripCount = 0;
+    day.activities = day.activities.filter((activity: any) => {
+      // Once we've found a real activity, keep everything after it
+      if (stripCount === -1) return true;
+
+      const timeStr = activity.startTime || activity.start_time || activity.time || '';
+      const hour = parseInt((timeStr || '12:00').split(':')[0], 10);
+      const isMidnightHour = !isNaN(hour) && hour >= 0 && hour < 5;
+
+      if (!isMidnightHour) {
+        stripCount = -1; // Mark: done stripping
+        return true;
       }
-    }
+
+      const title = (activity.title || activity.name || '').toLowerCase();
+      const cat = (activity.category || '').toLowerCase();
+      const type = (activity.type || '').toLowerCase();
+      const isHotelEntry = HOTEL_TITLE_RE.test(title) || cat === 'accommodation' || cat === 'stay' || type === 'stay';
+
+      if (isHotelEntry) {
+        console.warn(`[sanitizeGeneratedDay] MIDNIGHT ENTRY REMOVED from day ${dayNumber}: "${activity.title}" at ${timeStr}`);
+        stripCount++;
+        return false;
+      }
+
+      // Pre-dawn but NOT hotel-related — stop stripping, keep this and everything after
+      stripCount = -1;
+      return true;
+    });
   }
 
   // Fix hotel name mismatches in "Return to" entries

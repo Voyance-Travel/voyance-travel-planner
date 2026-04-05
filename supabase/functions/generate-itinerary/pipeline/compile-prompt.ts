@@ -896,6 +896,9 @@ CRITICAL TIME ORDERING & MEAL TIMING RULES:
 - Evening activities/nightlife: 7:00 PM – 11:00 PM.
 - Nightcap/late night: 9:00 PM – midnight. NEVER schedule a nightcap before 8:00 PM.
 - Activities must flow logically: morning → midday → afternoon → evening → night.
+- Do NOT include "Return to Hotel" entries at the START of any day.
+- Do NOT include any activities between 12:00 AM and 6:00 AM unless they are specifically planned late-night activities from the CURRENT day.
+- Day 1 should begin with arrival or the first morning activity (typically 8:00-9:00 AM), never with midnight hotel entries.
 
 ${preferenceContext}
 ${tripIntentsContext}
