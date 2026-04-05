@@ -298,13 +298,29 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       const tier2FreePatterns = /\b(?:bridge|fountain|monument|memorial|statue|arch|gate|market|promenade|boardwalk|trail|path|pier|dock|wharf|embankment)\b/i;
 
       if (act.cost && typeof act.cost === 'object' && act.cost.amount > 0 && act.cost.amount <= 30) {
-        const titleAndVenue = (act.title || '') + ' ' + (act.venue_name || '') + ' ' + ((act.location as any)?.name || '');
+        const allTextFields = [
+          act.title || '',
+          (act as any).venue_name || '',
+          act.description || '',
+          (act.location as any)?.name || '',
+          (act as any).address || '',
+          (act as any).place_name || '',
+          typeof (act as any).place === 'string' ? (act as any).place : ((act as any).place?.name || ''),
+          (act as any).venue || '',
+          (act as any).restaurant?.name || '',
+          (act as any).restaurant?.description || '',
+        ].join(' ');
         const description = act.description || '';
 
-        if (tier1FreePatterns.test(titleAndVenue)) {
+        // Debug: log when miradouro is found in any field
+        if (/miradouro/i.test(allTextFields)) {
+          console.log(`[sanitize][debug] Miradouro detected in activity "${act.title}", allText: "${allTextFields.substring(0, 200)}"`);
+        }
+
+        if (tier1FreePatterns.test(allTextFields)) {
           console.log(`[sanitize] Zeroed phantom cost $${act.cost.amount} on free venue: ${act.title}`);
           act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
-        } else if (tier2FreePatterns.test(titleAndVenue)) {
+        } else if (tier2FreePatterns.test(allTextFields)) {
           const descSaysFree = /\bfree\b/i.test(description);
           const isPhantomPrice = act.cost.amount >= 20 && act.cost.amount <= 25;
           if (descSaysFree || isPhantomPrice) {
