@@ -163,6 +163,18 @@ export function sanitizeAITextField(text: string | undefined | null, destination
   // Replace generic "the destination" with actual city name
   if (destination) {
     result = result.replace(/\b(?:the destination|the city|this destination|this city)\b/gi, destination);
+
+    // Fix orphaned articles where city name was dropped
+    // "the's" → "Lisbon's"
+    result = result.replace(/\bthe's\b/gi, destination + "'s");
+    // "in the." / "over the." etc. — orphaned article before period
+    result = result.replace(/\b(in|over|of|around|across|throughout|from)\s+the\.\s*/gi, '$1 ' + destination + '. ');
+    // "of the," / "of the;" — orphaned article before comma/semicolon
+    result = result.replace(/\b(in|over|of|around|across|throughout|from)\s+the([,;]\s)/gi, '$1 ' + destination + '$2');
+    // "of the and" / "of the or" — orphaned article before conjunction
+    result = result.replace(/\b(in|over|of|around|across|throughout|from)\s+the\s+(and|or|but)\b/gi, '$1 ' + destination + ' $2');
+    // "in the" at end of string
+    result = result.replace(/\b(in|over|of|around|across|throughout|from)\s+the$/gi, '$1 ' + destination);
   }
 
   return result.trim();
