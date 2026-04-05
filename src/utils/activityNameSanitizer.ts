@@ -177,6 +177,9 @@ export function sanitizeActivityText(text: string | undefined | null): string {
   return text
     .replace(SYSTEM_LABEL_RE, '')
     .replace(VOYANCE_PICK_RE, '')
+    .replace(VENUE_DB_NOTE_RE, '')
+    .replace(LOCAL_FAVORITE_NOTE_RE, '')
+    .replace(VENUE_SOURCE_RE, '')
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
     .replace(SLOT_PREFIX_RE, '')
