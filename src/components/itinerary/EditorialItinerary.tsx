@@ -1076,7 +1076,7 @@ function getActivityCostInfo(
     description: (activity as any).description,
   });
 
-  if ((looksLikelyFree || isFreePublicVenue) && !isNeverFreeCategory(category, title)) {
+  if (isFreePublicVenue || (looksLikelyFree && !isNeverFreeCategory(category, title))) {
     return { amount: 0, isEstimated: false, confidence: 'medium' as const, basis: 'flat' as CostBasis };
   }
   
