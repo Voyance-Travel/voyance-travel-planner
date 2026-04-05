@@ -692,7 +692,7 @@ async function _handleGenerateTripDayInner(
   // ── POST-PROCESSING: sanitize, strip phantoms, fix forward refs, clean generic titles ──
   {
     const resolvedDest = cityInfo?.cityName || destination;
-    sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest);
+    sanitizeGeneratedDay(dayResult, dayNumber, resolvedDest, usedRestaurants);
     
     // Broad hotel detection: selected hotel, accommodation notes, or existing accommodation activities
     const hasHotel = !!(cityInfo?.hotelName) || !!tripHotelName ||
