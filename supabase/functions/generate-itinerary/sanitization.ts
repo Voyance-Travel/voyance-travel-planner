@@ -96,6 +96,11 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/\s*[:–—-]\s*(?:The\s+)?\w+(?:\s+\w+){0,2}\s+Stop\s*$/gi, '')
     // Strip ALL-CAPS "DISTRICT" from transit/location names
     .replace(/\s+DISTRICT\b/g, '')
+    // Strip truncated orphan archetype fragments at start of descriptions
+    // "A moment." / "An interest." / "A stop." etc.
+    .replace(/^(?:A|An)\s+(?:moment|interest|stop|experience|encounter|retreat|highlight)\.\s*/gi, '')
+    // Strip "This is a stop/moment/experience focusing/centered/based on..." template language
+    .replace(/(?:^|\.\s*)This\s+is\s+a\s+(?:stop|moment|experience)\s+(?:focusing|centered|based)\s+on\s+/gi, '')
     // Strip internal day title prefixes: "Short Trip Berlin Day 3:" etc.
     .replace(/^(?:Short\s+Trip|City\s+Trip|Long\s+Trip|Weekend\s+Trip|Extended\s+Trip)\s+\w+(?:\s+\w+)*\s+Day\s+\d+\s*[:–—-]\s*/i, '')
     // Strip bare "Day N:" prefix
