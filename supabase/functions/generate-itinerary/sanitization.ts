@@ -226,6 +226,20 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       if (act.personalization && typeof act.personalization === 'object') {
         if (act.personalization.whyThisFits) act.personalization.whyThisFits = sanitizeAITextField(act.personalization.whyThisFits, destination) || undefined;
       }
+      // Safety net: clean transport titles that include action verbs
+      if (act.category === 'transport' || act.category === 'transportation') {
+        act.title = act.title
+          .replace(/^Travel\s+to\s+Return\s+to\s+/i, 'Travel to ')
+          .replace(/^Travel\s+to\s+Freshen\s+[Uu]p\s+at\s+/i, 'Travel to ')
+          .replace(/^Travel\s+to\s+Check[\s-]?in\s+at\s+/i, 'Travel to ')
+          .replace(/^Travel\s+to\s+Check[\s-]?out\s+(?:from|at)\s+/i, 'Travel to ')
+          .replace(/^Travel\s+to\s+(?:Breakfast|Lunch|Dinner|Brunch|Nightcap|Supper)\s+at\s+/i, 'Travel to ')
+          .replace(/^Travel\s+to\s+End\s+of\s+Day\s+at\s+/i, 'Travel to ')
+          .replace(/^Travel\s+to\s+Settle\s+(?:in|into)\s+(?:at\s+)?/i, 'Travel to ')
+          .replace(/^Travel\s+to\s+Wind\s+Down\s+at\s+/i, 'Travel to ')
+          .replace(/^Travel\s+to\s+Rest\s+(?:&|and)\s+Recharge\s+at\s+/i, 'Travel to ');
+        act.name = act.title;
+      }
       return act;
     });
   }
