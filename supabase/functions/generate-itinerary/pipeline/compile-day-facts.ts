@@ -214,8 +214,15 @@ export async function compileDayFacts(
             currentEntry.hotelName &&
             prevEntry.hotelName !== currentEntry.hotelName
           ) {
+          if (
+            prevEntry.cityName === currentEntry.cityName &&
+            prevEntry.hotelName &&
+            currentEntry.hotelName &&
+            prevEntry.hotelName !== currentEntry.hotelName
+          ) {
             resolvedIsHotelChange = true;
             resolvedPreviousHotelName = prevEntry.hotelName;
+            resolvedPreviousHotelAddress = prevEntry.hotelAddress;
             console.log(`[compile-day-facts] Hotel change detected on day ${dayNumber}: "${prevEntry.hotelName}" → "${currentEntry.hotelName}"`);
           }
         }
