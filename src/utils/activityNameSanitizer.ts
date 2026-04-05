@@ -154,6 +154,11 @@ export function sanitizeActivityName(name: string | undefined | null): string {
  */
 const SYSTEM_LABEL_RE = /\b(?:EDGE_ACTIVITY|SIGNATURE_MEAL|LINGER_BLOCK|WELLNESS_MOMENT|AUTHENTIC_ENCOUNTER|SOCIAL_EXPERIENCE|SOLO_RETREAT|DEEP_CONTEXT|SPLURGE_EXPERIENCE|VIP_EXPERIENCE|COUPLES_MOMENT|CONNECTIVITY_SPOT|FAMILY_ACTIVITY)\s*:?\s*/gi;
 
+// Strip "we recommend confirming hours before visiting" and similar venue DB notes
+const VENUE_DB_NOTE_RE = /\s*[-–—]\s*(?:we\s+)?recommend\s+confirming\s+hours\s+before\s+visiting\.?/gi;
+const LOCAL_FAVORITE_NOTE_RE = /(?:^|[.]\s*)(?:A\s+)?local\s+favorite\s*[-–—]\s*we\s+recommend[^.]*\.?\s*/gi;
+const VENUE_SOURCE_RE = /(?:^|[.]\s*)(?:Recommended|Sourced|Verified|Confirmed)\s+(?:by|from|via)\s+(?:our|the)\s+(?:venue|restaurant|local)\s+database[^.]*\.?\s*/gi;
+
 // Parenthetical internal notes referencing archetypes, hard blocks, constraints
 const INTERNAL_NOTE_RE = /\s*\([^)]*?\b(?:arche(?:type)?|hard\s+block|soft\s+block|constraint|slot\s+logic|post-process|as per)\b[^)]*?\)/gi;
 
@@ -172,6 +177,9 @@ export function sanitizeActivityText(text: string | undefined | null): string {
   return text
     .replace(SYSTEM_LABEL_RE, '')
     .replace(VOYANCE_PICK_RE, '')
+    .replace(VENUE_DB_NOTE_RE, '')
+    .replace(LOCAL_FAVORITE_NOTE_RE, '')
+    .replace(VENUE_SOURCE_RE, '')
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
     .replace(SLOT_PREFIX_RE, '')
