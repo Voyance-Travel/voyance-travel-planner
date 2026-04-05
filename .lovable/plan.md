@@ -1,26 +1,39 @@
 
 
-## Fix: Strip Quoted Archetype Labels in Prose
+## Fix: Transit Entry Naming — Pattern-Based Sanitization
 
 ### Problem
-Archetype labels like "Solo Retreat" are now appearing wrapped in single/double quotes within prose sentences (e.g., "This is your 'Solo Retreat' moment"), bypassing existing parenthetical/suffix/ALL-CAPS stripping.
+Transit entries like "Travel to Return to Four Seasons Ritz via Taxi" survive cleanup because the existing fix (lines 265-277) only runs when `act.category === 'transport'` or `'transportation'`. If the category field differs, the cleanup is skipped entirely. It also only handles `Travel to ...` prefixes, missing `Taxi to`, `Walk to`, etc.
 
 ### Change
 
-**File: `supabase/functions/generate-itinerary/sanitization.ts`** — in `sanitizeAITextField`, after line 120 (the truncated orphan fragment strip), add two new patterns:
+**File: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-1. **Quoted archetype phrase in context**: Strip `your/a/the 'Label' moment/stop/experience` phrases.
-2. **Full "This is your..." sentence**: Strip entire sentences like "This is your 'Solo Retreat' moment (shared with your partner) away from the steep hills."
+Replace the existing category-gated transport cleanup block (lines 264-277) with a **title-pattern-based** approach that fires on any activity whose title starts with a travel verb, regardless of category:
 
 ```typescript
-// After line 120, add:
+// Replace lines 264-277 with:
 
-// Strip archetype labels in quotes within prose: "your 'Solo Retreat' moment" → ""
-.replace(/\b(?:your|a|an|the|this)\s+['"][A-Za-z\s]+['"]\s+(?:moment|stop|experience|encounter|highlight|retreat)\b\s*/gi, '')
-// Strip full "This is your/a 'Archetype' moment..." sentences
-.replace(/(?:^|\.\s*)This\s+is\s+(?:your|a|an)\s+['"]?(?:Solo\s+Retreat|Deep\s+Context|Authentic\s+Encounter|Cultural\s+Highlight|Hidden\s+Gem|Wellness|Romance|Adventure|Family|Budget|Luxury)['"]?\s+(?:moment|stop|experience|encounter)\b[^.]*\.?\s*/gi, '')
+// Safety net: clean transit titles that include embedded action verbs
+// Use title pattern instead of category to catch all transit entries
+const TRANSIT_TITLE_RE = /^(?:Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+/i;
+if (act.title && TRANSIT_TITLE_RE.test(act.title)) {
+  act.title = act.title
+    .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Return\s+to\s+/i, '$1 to ')
+    .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Freshen\s+[Uu]p\s+at\s+/i, '$1 to ')
+    .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Check[\s-]?in\s+at\s+/i, '$1 to ')
+    .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Check[\s-]?out\s+(?:from|at)\s+/i, '$1 to ')
+    .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+(?:Breakfast|Lunch|Dinner|Brunch|Nightcap|Supper)\s+at\s+/i, '$1 to ')
+    .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+End\s+of\s+Day\s+at\s+/i, '$1 to ')
+    .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Settle\s+(?:in|into)\s+(?:at\s+)?/i, '$1 to ')
+    .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Wind\s+Down\s+at\s+/i, '$1 to ')
+    .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Rest\s+(?:&|and)\s+Recharge\s+at\s+/i, '$1 to ');
+  act.name = act.title;
+}
 ```
 
+This uses capture groups (`$1`) to preserve the original transit verb while stripping the embedded action verb. It matches any title starting with a travel verb, not just `category === 'transport'`.
+
 ### Files
-- `supabase/functions/generate-itinerary/sanitization.ts` — 2 regex lines added after line 120
+- `supabase/functions/generate-itinerary/sanitization.ts` — replace lines 264-277 with pattern-based transit cleanup
 
