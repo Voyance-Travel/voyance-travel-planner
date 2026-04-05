@@ -1,64 +1,48 @@
 
-### What I found
-- The first fix is already present: `compile-prompt.ts` tells the AI to use the previous hotel for breakfast on hotel-change days, and `repair-day.ts` already tries to rewrite pre-checkout dining.
-- The bug is persisting because that safeguard is still too narrow:
-  - the day is still broadly anchored to the new hotel as the active hotel for that date
-  - the repair only fixes obvious cases and does not have the **previous hotel address**
-  - the current repair fallback incorrectly writes `previousHotelName` into `location.address`, so location cleanup is incomplete
+Fix Restaurant Repetition — Hard Post-Generation Deduplication
 
-### Plan
-1. **Carry previous-hotel address through the pipeline**
-   - Extend the compiled facts and repair input to include `previousHotelAddress` alongside `previousHotelName`.
-   - Populate it in `compile-day-facts.ts` for both:
-     - multi-city split stays
-     - single-city split stays
-   - Pass it through `action-generate-day.ts` and the fallback repair call in `action-generate-trip-day.ts`.
+What I found
+- The prompt side is already in place: `compile-prompt.ts` already filters the restaurant pool by `usedRestaurants` and adds strong “do not reuse” instructions.
+- The problem is enforcement:
+  - `sanitizeGeneratedDay()` already checks repeats, but it only logs warnings and does not remove or replace anything.
+  - `action-generate-trip-day.ts` re-sanitizes the final day without passing `usedRestaurants`, so that last pass cannot enforce cross-day dedup at all.
+  - The later chain dedup in `action-generate-trip-day.ts` only swaps from the pool; if no replacement exists, it warns and still keeps the duplicate.
+  - `used_restaurants` is being loaded and passed, but collection is narrow enough that some reused venues can be missed.
 
-2. **Make hotel-change-day instructions explicit**
-   - In `compile-prompt.ts`, add a dedicated hotel-change-day instruction block for normal middle days:
-     - morning starts at the **old** hotel
-     - breakfast and any pre-checkout stop must be at/near the **old** hotel
-     - nothing can happen at the **new** hotel before check-in
-     - only after check-in should activities shift to the new hotel area
-   - Keep the existing breakfast override, but strengthen it into a full required sequence:
-     `Breakfast → Checkout → Transfer → Check-in`.
+Plan
+1. Make `sanitizeGeneratedDay()` a hard dedup guard
+   - Upgrade the existing repeat detector from warning-only to hard removal/neutralization of repeated dining activities.
+   - Check all dining cards using the broader meal regex already used elsewhere.
+   - Compare normalized restaurant names using exact match plus contains fallback, and inspect `venue_name`, `restaurant.name`, `location.name`, and stripped title text.
 
-3. **Strengthen pre-checkout dining repair**
-   - In `repair-day.ts`, inspect all dining activities before checkout on hotel-change days.
-   - Rewrite any activity that points to the new hotel via:
-     - title
-     - generic hotel wording
-     - location name
-     - exact new-hotel address
-   - Use the real previous hotel address when correcting location data.
+2. Pass `usedRestaurants` through every final sanitize path
+   - Update the chain-side `sanitizeGeneratedDay(...)` call in `action-generate-trip-day.ts` to pass `usedRestaurants`.
+   - Add the requested debug log at the start of `action-generate-day.ts` so we can see the incoming `usedRestaurants` payload on every day.
 
-4. **Add a validation guard**
-   - In `validate-day.ts`, add a hotel-change-specific check that flags pre-checkout breakfast/dining tied to the new hotel.
-   - This gives a deterministic safeguard in logs and helps prevent regressions.
+3. Make the chain fallback zero-tolerance
+   - Keep the existing pool-swap logic in `action-generate-trip-day.ts`.
+   - If a repeated restaurant survives and there is no unused replacement in the pool, remove/blank that meal instead of only warning, so duplicates never persist into the saved itinerary.
+   - Let the existing meal guard refill any required missing meal with a different venue afterward.
 
-### Technical details
-- **Files to update**
-  - `supabase/functions/generate-itinerary/pipeline/types.ts`
-  - `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
-  - `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
-  - `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
-  - `supabase/functions/generate-itinerary/pipeline/validate-day.ts`
+4. Broaden `used_restaurants` tracking
+   - When saving restaurants for future days, extract from `venue_name`, `restaurant.name`, `location.name`, and title so the blocklist is complete.
+   - Keep normalization consistent with the dedup check.
+
+Technical details
+- Files to update:
+  - `supabase/functions/generate-itinerary/sanitization.ts`
   - `supabase/functions/generate-itinerary/action-generate-day.ts`
   - `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-- **No changes to**
-  - generation architecture
-  - checkout/check-in banner logic
+  - `supabase/functions/generate-itinerary/generation-utils.ts` only if I centralize the repeat-matching helper instead of duplicating logic
+- No changes to:
+  - self-chaining architecture
+  - generation pipeline structure
   - new files
 
-### Verification
-- Generate a Lisbon trip with a Day 3 split stay.
-- Confirm Day 3 morning flow is:
-  - breakfast at/near **Four Seasons Ritz**
-  - checkout from **Four Seasons Ritz**
-  - transfer
-  - check-in at **Palácio Ludovice**
-- Confirm Day 3 does **not** place breakfast at the new hotel or at a venue/address clearly tied to it before checkout.
-- Regression check:
-  - single-hotel trips still behave normally
-  - post-check-in afternoon/evening still anchor to the new hotel
-  - arrival/departure day behavior remains unchanged
+Verification
+- Generate a 4-day Lisbon trip and list all dining venues across all 4 days: zero repeats.
+- Check logs for:
+  - `Generating day X. usedRestaurants (N): [...]`
+  - `RESTAURANT REPEAT BLOCKED` when the AI tries to reuse a venue
+- Confirm Day 2+ receives a non-empty `usedRestaurants` array unless the prior day truly had no dining venues.
+- Confirm any blocked repeat is either swapped to a new venue or removed and then refilled by the existing meal guard with a different restaurant.
