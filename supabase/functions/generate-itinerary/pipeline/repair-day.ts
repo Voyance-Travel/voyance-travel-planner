@@ -2494,7 +2494,7 @@ function repairBookends(
     if (!destMatchesNext && nextLoc) {
       // Rewrite transport to correctly bridge prev → next
       const fromName = prevNonTransport?.location?.name || prevNonTransport?.title || 'previous location';
-      const toName = nextNonTransport.location?.name || nextNonTransport.title;
+      const toName = nextNonTransport.location?.name || sanitizeTransitDestination(nextNonTransport.title || '');
       const oldTitle = transport.title;
 
       transport.title = `Travel to ${toName}`;
