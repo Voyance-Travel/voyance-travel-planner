@@ -10771,7 +10771,7 @@ function ActivityRow({
               </div>
             )}
             {/* Voyance Insight - Local knowledge — blurred when gated */}
-            {activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+            {sanitizeActivityText(activity.tips) && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
               <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
                 {(activity.needsRefinement || activity.tags?.includes('needs-refinement')) && onSwap ? (
                   <button
