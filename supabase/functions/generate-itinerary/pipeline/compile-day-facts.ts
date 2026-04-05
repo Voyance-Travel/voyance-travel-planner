@@ -303,6 +303,7 @@ export async function compileDayFacts(
                 ) {
                   resolvedIsHotelChange = true;
                   resolvedPreviousHotelName = prevDayHotel.hotelName;
+                  resolvedPreviousHotelAddress = prevDayHotel.hotelAddress;
                   console.log(`[compile-day-facts] Single-city hotel change on day ${dayNumber}: "${prevDayHotel.hotelName}" → "${currentDayHotel.hotelName}"`);
                 }
               }
