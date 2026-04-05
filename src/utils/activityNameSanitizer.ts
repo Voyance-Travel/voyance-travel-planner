@@ -195,6 +195,8 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(AI_REASONING_RE, '')
     .replace(META_COMMENTARY_RE, '')
     .replace(SYSTEM_TERM_RE, '')
+    // Strip "Popular with locals" and similar database stub phrases when embedded inline
+    .replace(/\s*[-–—]\s*(?:Popular with locals|A local favou?rite|Great for (?:families|groups|couples)|Tourist (?:hotspot|favorite)|Hidden gem|Must[- ]visit|Highly recommended|Local institution)\.?\s*/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
