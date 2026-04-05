@@ -1,37 +1,60 @@
 
 
-## Fix: Strip ALL Parenthetical AI Notes From Descriptions
+## Fix: Strip Midnight Hotel Phantoms in sanitizeGeneratedDay
 
 ### Problem
-The AI generates internal reasoning notes in parentheses (e.g., "(Note: Adjusting to user's 'Wellness' interest...)", "(Scheduled as an activity to...)") that leak into user-visible descriptions. Current regex only catches specific keywords like "archetype" and "hard block", missing many variants.
+On hotel-change days, "Return to Hotel" entries at 12:00-12:30 AM appear at the start of Day 3. The `repairBookends` fix in `repair-day.ts` should catch these but depends on `isHotelChange` being set correctly and on category detection (`isAccom`). A simpler safety net is needed earlier in the pipeline.
 
 ### Changes
 
-**1. Broader parenthetical stripping in `sanitization.ts` — `sanitizeAITextField` function (around line 142)**
+**File: `supabase/functions/generate-itinerary/sanitization.ts`** — inside `sanitizeGeneratedDay`, after the chronological re-sort (line ~334) and before `return day` (line 337):
 
-Replace the single narrow parenthetical regex with two broader patterns that catch all AI-indicator parentheticals:
+Add two blocks:
 
+**Block 1: Strip pre-dawn hotel phantoms**
 ```typescript
-// Replace line 142's narrow pattern with:
-
-// Strip parenthetical notes containing AI-indicator language (broad catch-all)
-.replace(/\s*\((?:Note|NB|Scheduled|Adjusted|Adjusting|Selected|Chosen|Added|Included|Placed|Moved|Reason|Context|Rationale|Per|As per|Based on|Due to|Reflecting|To reflect|To match|To align|To satisfy|To address|This is a|This serves|This provides|This fulfills)\b[^)]*\)/gi, '')
-// Strip parenthetical notes referencing user preferences/interests/system terms
-.replace(/\s*\([^)]*(?:user's|user preference|archetype|arche\b|interest\b|hard block|soft block|constraint|slot\s+logic|post-process|as per)\b[^)]*\)/gi, '')
+// Strip phantom midnight hotel entries at the start of the day
+// These are spillover from the previous day's late activities
+if (day.activities.length > 0) {
+  const firstMorningIndex = day.activities.findIndex((a: any) => {
+    const hour = parseInt((a.startTime || '06:00').split(':')[0], 10);
+    return hour >= 5;
+  });
+  if (firstMorningIndex > 0) {
+    const midnightActivities = day.activities.slice(0, firstMorningIndex);
+    const allAreHotelEntries = midnightActivities.every((a: any) =>
+      (a.category || '').toLowerCase() === 'accommodation' ||
+      (a.category || '').toLowerCase() === 'stay' ||
+      (a.type || '').toLowerCase() === 'stay' ||
+      /\b(?:return|freshen|check.?in|retire|end.?of.?day|back to|settle|wind down)\b/i.test(a.title || '')
+    );
+    if (allAreHotelEntries) {
+      console.log(`[sanitizeGeneratedDay] Stripped ${firstMorningIndex} pre-dawn hotel phantom(s) from day ${dayNumber}`);
+      day.activities = day.activities.slice(firstMorningIndex);
+    }
+  }
+}
 ```
 
-The first pattern catches any parenthetical starting with an AI reasoning verb/phrase. The second catches parentheticals mentioning system concepts regardless of opening words. Together they cover the existing narrow pattern plus all reported variants.
-
-**2. Negative instruction in system prompt — `compile-prompt.ts` (after line 822, before the closing backtick)**
-
-Add a new instruction block after "OUTPUT QUALITY":
-
+**Block 2: Fix hotel name mismatches in "Return to" titles**
 ```typescript
-TEXT QUALITY — NO META-COMMENTARY:
-Never include parenthetical notes, internal reasoning, scheduling logic, or explanations of why an activity was chosen in any user-visible text field (title, description, tips, voyanceInsight, whyThisFits). All text must read as polished travel copy written for the end user. Do not include "(Note: ...)", "(Scheduled as ...)", "(Adjusted for ...)", "(Reflecting ...)", or any similar meta-commentary.
+// Fix hotel name mismatches in "Return to" entries
+for (const act of day.activities) {
+  if (/^Return to /i.test(act.title || '') && act.venue_name) {
+    const titleHotel = (act.title || '').replace(/^Return to /i, '').trim();
+    if (titleHotel !== act.venue_name && act.venue_name.length > 0) {
+      act.title = 'Return to ' + act.venue_name;
+      act.name = act.title;
+    }
+  }
+}
 ```
+
+### Why this works
+- Runs in `sanitizeGeneratedDay` which executes on **every** code path (both `action-generate-trip-day.ts` and `action-generate-day.ts`)
+- Doesn't depend on `isHotelChange` flag or category detection — uses simple time + keyword matching
+- Belt-and-suspenders with the existing `repairBookends` fix
 
 ### Files
-- `supabase/functions/generate-itinerary/sanitization.ts` — replace 1 regex with 2 broader ones (~line 142)
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add 3-line instruction block (~line 822)
+- `supabase/functions/generate-itinerary/sanitization.ts` — add ~25 lines before `return day` in `sanitizeGeneratedDay`
 
