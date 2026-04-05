@@ -821,6 +821,8 @@ async function _handleGenerateTripDayInner(
             transportation: { method: '', duration: '', estimatedCost: { amount: 0, currency: 'USD' }, instructions: '' },
           })),
         })),
+        isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
+        previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
       });
 
       const isLastDayInCity = cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false;
