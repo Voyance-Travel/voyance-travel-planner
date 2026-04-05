@@ -519,7 +519,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         }
       }
 
-      // Non-dining or no pool replacement: mark for removal
+      // Non-dining or no pool replacement: mark for removal — BUT protect primary meals
+      const isPrimaryMeal = /\b(?:breakfast|lunch|dinner|brunch)\b/i.test(act.title || '');
+      if (isDining && isPrimaryMeal) {
+        console.warn(`[Repair] Keeping duplicate primary meal "${act.title}" — no pool replacement, but meal > uniqueness`);
+        continue;
+      }
       indicesToRemove.push(vr.activityIndex);
     }
 
