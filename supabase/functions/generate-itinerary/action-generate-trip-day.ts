@@ -1230,6 +1230,51 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── CROSS-DAY RESTAURANT DEDUP FAILSAFE ──
+  // Runs on ALL completions (including last day) to catch any duplicates
+  if (updatedDays.length > 1) {
+    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
+    const MEAL_RE_FAILSAFE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+    const allUsedRestaurants = new Set<string>();
+    let totalRemoved = 0;
+
+    for (let di = 0; di < updatedDays.length; di++) {
+      const day = updatedDays[di];
+      if (!Array.isArray(day.activities)) continue;
+
+      const beforeCount = day.activities.length;
+      day.activities = day.activities.filter((act: any) => {
+        const cat = (act.category || '').toLowerCase();
+        const typ = (act.type || '').toLowerCase();
+        const isDining = cat === 'dining' || typ === 'dining' || MEAL_RE_FAILSAFE.test(act.title || '');
+        if (!isDining) return true;
+
+        const venue = extractRestaurantVenueName(act.title || '') ||
+                      extractRestaurantVenueName(act.venue_name || '') ||
+                      extractRestaurantVenueName(act.restaurant?.name || '') ||
+                      extractRestaurantVenueName(act.location?.name || '');
+        if (!venue) return true;
+
+        if (allUsedRestaurants.has(venue)) {
+          console.warn(`CROSS-DAY DEDUP FAILSAFE: "${act.title}" on Day ${di + 1} — "${venue}" already used. Removing.`);
+          return false;
+        }
+        allUsedRestaurants.add(venue);
+        return true;
+      });
+      const removed = beforeCount - day.activities.length;
+      if (removed > 0) {
+        totalRemoved += removed;
+        console.warn(`CROSS-DAY DEDUP FAILSAFE: Removed ${removed} duplicate restaurant(s) from Day ${di + 1}`);
+      }
+    }
+    if (totalRemoved > 0) {
+      console.log(`CROSS-DAY DEDUP FAILSAFE: Total removed across trip: ${totalRemoved}`);
+      // Update the partialItinerary with cleaned days
+      partialItinerary.days = updatedDays;
+    }
+  }
+
   if (dayNumber >= totalDays) {
     // All days complete — but only mark ready if all days have real activities
     const finalStatus = isComplete ? 'ready' : 'partial';
