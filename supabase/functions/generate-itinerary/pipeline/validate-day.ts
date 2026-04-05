@@ -80,6 +80,10 @@ export interface ValidateDayInput {
 
   /** Must-do activities */
   mustDoActivities?: string[];
+
+  /** Hotel change context */
+  isHotelChange?: boolean;
+  previousHotelName?: string;
 }
 
 // =============================================================================
