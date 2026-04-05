@@ -93,6 +93,8 @@ export function useGenerationPoller({
   const justResumedRef = useRef(false);
   const resumedAtRef = useRef(0);
   const consecutiveErrorsRef = useRef(0);
+  // Dedupe guard: only fire onFailed once per unique error message
+  const lastFailedErrorRef = useRef<string | null>(null);
 
   const poll = useCallback(async () => {
     if (!tripId) return;
