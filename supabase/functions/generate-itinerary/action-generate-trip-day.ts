@@ -223,6 +223,7 @@ async function _handleGenerateTripDayInner(
   // Detect split-stay hotel change for single-city trips
   let tripIsHotelChange = false;
   let tripPreviousHotelName: string | undefined;
+  let tripPreviousHotelAddress: string | undefined;
   if (hotelList.length > 1 && dayNumber > 1 && startDate) {
     const prevDayDate = new Date(startDate);
     prevDayDate.setDate(prevDayDate.getDate() + dayNumber - 2);
@@ -235,6 +236,7 @@ async function _handleGenerateTripDayInner(
     if (prevHotel?.name && tripHotelName && prevHotel.name !== tripHotelName) {
       tripIsHotelChange = true;
       tripPreviousHotelName = prevHotel.name;
+      tripPreviousHotelAddress = prevHotel.address || '';
       console.log(`[generate-trip-day] Split-stay hotel change detected: "${tripPreviousHotelName}" → "${tripHotelName}"`);
     }
   }
