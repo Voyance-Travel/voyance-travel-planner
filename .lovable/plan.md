@@ -1,51 +1,64 @@
 
-## Fix Wrong-Day Arrival Banner on Day 3
-
 ### What I found
-- The wrong banner is coming from `src/components/itinerary/EditorialItinerary.tsx`, not the generation pipeline.
-- `ArrivalGamePlan` is currently rendered in 3 cases:
-  1. Day 1 normal arrival
-  2. Day 2 overnight-flight arrival
-  3. Any later `allHotels[idx > 0]` entry whose `checkInDate` matches the selected day
-- That 3rd case is the bug. In `src/pages/TripDetail.tsx`, single-city split stays are expanded into `allHotels`, so a same-city hotel change on Day 3 looks like a fresh “arrival” and triggers the full arrival card.
+- The first fix is already present: `compile-prompt.ts` tells the AI to use the previous hotel for breakfast on hotel-change days, and `repair-day.ts` already tries to rewrite pre-checkout dining.
+- The bug is persisting because that safeguard is still too narrow:
+  - the day is still broadly anchored to the new hotel as the active hotel for that date
+  - the repair only fixes obvious cases and does not have the **previous hotel address**
+  - the current repair fallback incorrectly writes `previousHotelName` into `location.address`, so location cleanup is incomplete
 
 ### Plan
-1. **Tighten the render condition in `EditorialItinerary.tsx`**
-   - Keep the valid arrival cases:
-     - Day 1 arrival
-     - Day 2 overnight-arrival case
-   - Stop treating any later hotel `checkInDate` as an arrival trigger for the banner.
+1. **Carry previous-hotel address through the pipeline**
+   - Extend the compiled facts and repair input to include `previousHotelAddress` alongside `previousHotelName`.
+   - Populate it in `compile-day-facts.ts` for both:
+     - multi-city split stays
+     - single-city split stays
+   - Pass it through `action-generate-day.ts` and the fallback repair call in `action-generate-trip-day.ts`.
 
-2. **Differentiate real arrival from hotel switch**
-   - For split stays in the same city, do not render `ArrivalGamePlan` on the later hotel’s check-in day.
-   - Leave the existing hotel event cards alone so Day 3 still shows:
-     - `Check out · Four Seasons Ritz`
-     - `Check in · Palácio Ludovice`
+2. **Make hotel-change-day instructions explicit**
+   - In `compile-prompt.ts`, add a dedicated hotel-change-day instruction block for normal middle days:
+     - morning starts at the **old** hotel
+     - breakfast and any pre-checkout stop must be at/near the **old** hotel
+     - nothing can happen at the **new** hotel before check-in
+     - only after check-in should activities shift to the new hotel area
+   - Keep the existing breakfast override, but strengthen it into a full required sequence:
+     `Breakfast → Checkout → Transfer → Check-in`.
 
-3. **Add a defensive guard in the arrival UI**
-   - Replace the implicit `dayNumber !== 1` fallback title/subtitle behavior with an explicit “actual arrival day” check.
-   - This prevents `Arriving in Lisbon — Flight arrival, Day 3` from appearing again if a hotel-switch day ever reaches this component.
+3. **Strengthen pre-checkout dining repair**
+   - In `repair-day.ts`, inspect all dining activities before checkout on hotel-change days.
+   - Rewrite any activity that points to the new hotel via:
+     - title
+     - generic hotel wording
+     - location name
+     - exact new-hotel address
+   - Use the real previous hotel address when correcting location data.
+
+4. **Add a validation guard**
+   - In `validate-day.ts`, add a hotel-change-specific check that flags pre-checkout breakfast/dining tied to the new hotel.
+   - This gives a deterministic safeguard in logs and helps prevent regressions.
 
 ### Technical details
-- **File to edit:** `src/components/itinerary/EditorialItinerary.tsx`
-- **Touchpoints:**
-  - the render branch around the Day 1 / overnight Day 2 / later `allHotels.find(...)` logic
-  - the `ArrivalGamePlan` header logic that currently switches to `Arriving in ${destination}` for later day numbers
-- **No changes to:**
-  - generation pipeline
-  - hotel switch logic
-  - backend/database
+- **Files to update**
+  - `supabase/functions/generate-itinerary/pipeline/types.ts`
+  - `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
+  - `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+  - `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
+  - `supabase/functions/generate-itinerary/pipeline/validate-day.ts`
+  - `supabase/functions/generate-itinerary/action-generate-day.ts`
+  - `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- **No changes to**
+  - generation architecture
+  - checkout/check-in banner logic
   - new files
 
 ### Verification
-- Generate a 4-day Lisbon trip with a Day 3 hotel switch.
-- Confirm:
-  - Day 1 shows the arrival banner.
-  - Day 3 shows only the checkout/check-in banners.
-  - Day 3 does **not** show:
-    - `Arriving in Lisbon`
-    - `Flight arrival, Day 3`
-    - `Add Your Flight`
-    - `Getting to Your Hotel`
+- Generate a Lisbon trip with a Day 3 split stay.
+- Confirm Day 3 morning flow is:
+  - breakfast at/near **Four Seasons Ritz**
+  - checkout from **Four Seasons Ritz**
+  - transfer
+  - check-in at **Palácio Ludovice**
+- Confirm Day 3 does **not** place breakfast at the new hotel or at a venue/address clearly tied to it before checkout.
 - Regression check:
-  - If the trip has an overnight inbound flight, confirm the arrival card still appears on the true arrival day only.
+  - single-hotel trips still behave normally
+  - post-check-in afternoon/evening still anchor to the new hotel
+  - arrival/departure day behavior remains unchanged
