@@ -10376,12 +10376,12 @@ function ActivityRow({
               <span>{activity.duration}</span>
             </div>
           )}
-          {activity.description && !compact && (
+          {(() => { const d = sanitizeActivityText(activity.description); return d && !compact ? (
             <p className={cn(
               "text-xs text-muted-foreground leading-relaxed",
               !canViewPremium && "blur-sm pointer-events-none select-none"
-            )}>{sanitizeActivityText(activity.description)}</p>
-          )}
+            )}>{d}</p>
+          ) : null; })()}
           {(() => {
             const locN = activity.location?.name?.trim();
             const dedupLocName = (locN && locN !== activityTitle) ? locN : '';
