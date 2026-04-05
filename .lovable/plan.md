@@ -1,76 +1,33 @@
 
 
-## Fix: Transit Entry Naming — Strip Action Verbs from Destination Names
+## Fix: Garbled Text Where City Name Is Missing (Orphaned Articles)
 
-### Root Cause
+### Problem
+The AI generates placeholders for the city name that sometimes resolve to just "the" without a following noun. The existing Prompt 9 fix (line 164-166) replaces "the destination" / "the city" but misses standalone orphaned "the" patterns like "the's", "in the.", "of the,", "of the and".
 
-Transit entries are generated in multiple places in `repair-day.ts` using the pattern:
-```
-title: `Travel to ${next.location?.name || next.title || 'next venue'}`
-```
+### Change
 
-When `location.name` is missing or identical to the activity title, the fallback uses the full activity title — which includes action verbs like "Return to", "Freshen Up at", "Breakfast at". This produces malformed names like "Travel to Return to Four Seasons Ritz".
+**File: `supabase/functions/generate-itinerary/sanitization.ts`** — in `sanitizeAITextField`, after the existing "the destination" replacement block (lines 163-166), add orphaned article fixes:
 
-### Fix
-
-**File: `supabase/functions/generate-itinerary/sanitization.ts`**
-
-1. Add a new exported helper `sanitizeTransitDestination(name: string): string` that strips action-verb prefixes from transit destination names:
-   - "Return to X" → "X"
-   - "Freshen Up at X" → "X"
-   - "Check-in at X" / "Check-out from X" → "X"
-   - "Breakfast/Lunch/Dinner/Brunch/Nightcap at X" → "X"
-   - "End of Day at X" → "X"
-
-2. In `sanitizeGeneratedDay`, after the existing activity sanitization loop (~line 204-230), add a pass over transport-category activities to apply this cleanup to their `title` and `name` fields. Specifically, for any activity where `category === 'transport'` and the title starts with "Travel to", extract the destination portion and run it through the sanitizer, then reconstruct.
-
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
-
-3. Import `sanitizeTransitDestination` and apply it at the key transit-name generation points — the fallback expression `next.location?.name || next.title` should become `next.location?.name || sanitizeTransitDestination(next.title || '')`. This covers:
-   - Post-dedup transport injection (~line 1643)
-   - Gap transport injection (~line 2317)
-   - Transport rewrite (~line 2499)
-   - Transport consolidation/merge (~lines 2591, 2669)
-
-### Technical Detail
-
-The `sanitizeTransitDestination` function:
 ```typescript
-export function sanitizeTransitDestination(name: string): string {
-  if (!name) return name;
-  return name
-    .replace(/^Return\s+to\s+/i, '')
-    .replace(/^Freshen\s+[Uu]p\s+at\s+/i, '')
-    .replace(/^Check[\s-]?in\s+at\s+/i, '')
-    .replace(/^Check[\s-]?out\s+(?:from|at)\s+/i, '')
-    .replace(/^(?:Breakfast|Lunch|Dinner|Brunch|Nightcap|Supper)\s+at\s+/i, '')
-    .replace(/^End\s+of\s+Day\s+at\s+/i, '')
-    .replace(/^Settle\s+(?:in|into)\s+(?:at\s+)?/i, '')
-    .replace(/^Wind\s+Down\s+at\s+/i, '')
-    .replace(/^Rest\s+(?:&|and)\s+Recharge\s+at\s+/i, '')
-    .trim();
+// After line 166, add:
+// Fix orphaned articles where city name was dropped
+if (destination) {
+  // "the's" → "Lisbon's"
+  result = result.replace(/\bthe's\b/gi, destination + "'s");
+  // "in the." / "over the." etc. — orphaned article before period
+  result = result.replace(/\b(in|over|of|around|across|throughout|from)\s+the\.\s*/gi, '$1 ' + destination + '. ');
+  // "of the," / "of the;" — orphaned article before comma/semicolon
+  result = result.replace(/\b(in|over|of|around|across|throughout|from)\s+the([,;]\s)/gi, '$1 ' + destination + '$2');
+  // "of the and" / "of the or" — orphaned article before conjunction
+  result = result.replace(/\b(in|over|of|around|across|throughout|from)\s+the\s+(and|or|but)\b/gi, '$1 ' + destination + ' $2');
+  // "in the" at end of string
+  result = result.replace(/\b(in|over|of|around|across|throughout|from)\s+the$/gi, '$1 ' + destination);
 }
 ```
 
-Also apply a final safety net in `sanitizeGeneratedDay` for transport titles:
-```typescript
-// After existing activity loop, clean transport titles
-if (act.category === 'transport' || act.category === 'transportation') {
-  act.title = act.title
-    .replace(/^Travel\s+to\s+Return\s+to\s+/i, 'Travel to ')
-    .replace(/^Travel\s+to\s+Freshen\s+[Uu]p\s+at\s+/i, 'Travel to ')
-    .replace(/^Travel\s+to\s+Check[\s-]?in\s+at\s+/i, 'Travel to ')
-    .replace(/^Travel\s+to\s+Check[\s-]?out\s+(?:from|at)\s+/i, 'Travel to ')
-    .replace(/^Travel\s+to\s+(?:Breakfast|Lunch|Dinner|Brunch|Nightcap)\s+at\s+/i, 'Travel to ')
-    .replace(/^Travel\s+to\s+End\s+of\s+Day\s+at\s+/i, 'Travel to ')
-    .replace(/^Travel\s+to\s+Settle\s+(?:in|into)\s+(?:at\s+)?/i, 'Travel to ')
-    .replace(/^Travel\s+to\s+Wind\s+Down\s+at\s+/i, 'Travel to ')
-    .replace(/^Travel\s+to\s+Rest\s+(?:&|and)\s+Recharge\s+at\s+/i, 'Travel to ');
-  act.name = act.title;
-}
-```
+This goes right after the existing `destination` block so the `if (destination)` guard is already established. Single file, ~8 lines added.
 
 ### Files
-- `supabase/functions/generate-itinerary/sanitization.ts` — add `sanitizeTransitDestination` helper + transport title cleanup in `sanitizeGeneratedDay`
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — apply `sanitizeTransitDestination` at transit name generation points
+- `supabase/functions/generate-itinerary/sanitization.ts` — add orphaned article replacements after line 166
 
