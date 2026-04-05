@@ -1428,7 +1428,11 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     for (let i = 0; i < diningCheckoutIdx; i++) {
       const act = activities[i];
       const cat = (act.category || '').toLowerCase();
-      if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') continue;
+      const titleForMealCheck = (act.title || act.name || '').toLowerCase();
+      // Expanded detection: catch dining/restaurant/food/meal categories AND title-based meal detection
+      const isDiningActivity = cat === 'dining' || cat === 'restaurant' || cat === 'food' || cat === 'meal'
+        || /\b(?:breakfast|brunch)\b/i.test(titleForMealCheck);
+      if (!isDiningActivity) continue;
 
       const title = act.title || act.name || '';
       const titleLower = title.toLowerCase();
@@ -1450,11 +1454,18 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         act.title = newTitle;
         act.name = newTitle;
 
-        // Fix location too
+        // Fix location too — name and address
         if (act.location?.name) {
           const locLower = act.location.name.toLowerCase();
-          if ((newHotelLower && locLower.includes(newHotelLower)) || locLower === 'your hotel') {
+          if ((newHotelLower && locLower.includes(newHotelLower)) || locLower === 'your hotel' || locLower === 'the hotel') {
             act.location.name = previousHotelName;
+          }
+        }
+        if (act.location?.address && hotelAddress) {
+          const addrLower = (act.location.address || '').toLowerCase();
+          const newHotelAddrLower = (hotelAddress || '').toLowerCase();
+          if (newHotelAddrLower && addrLower === newHotelAddrLower) {
+            act.location.address = previousHotelName; // Best we have — replace new hotel's address
           }
         }
 
