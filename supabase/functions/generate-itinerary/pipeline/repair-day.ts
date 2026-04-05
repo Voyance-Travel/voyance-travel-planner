@@ -2540,7 +2540,7 @@ function repairBookends(
       const curr = activities[i], next = activities[i + 1];
       if (isTransport(curr) || isTransport(next)) continue;
       const cLoc = (curr.location?.name || curr.title || '').toLowerCase();
-      const nLoc = (next.location?.name || next.title || '').toLowerCase();
+      const nLoc = (next.location?.name || sanitizeTransitDestination(next.title || '') || '').toLowerCase();
       // Guard: skip if same or contained location (fuzzy match)
       if (!cLoc || !nLoc || isSameOrContainedLocation(cLoc, nLoc, hotelName)) continue;
       // Guard: skip if current is accommodation and next venue is inside the hotel
