@@ -1855,6 +1855,15 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     activities = activities.filter((act: any) => {
       const s = parseTimeToMinutes(act.startTime || '');
       if (s !== null && s > cutoff2) {
+        const cat = (act.category || '').toLowerCase();
+        const title = (act.title || '').toLowerCase();
+        // Exempt end-of-day structural bookend cards (hotel returns)
+        if (cat === 'accommodation' && (title.includes('return to') || title.includes('freshen up') || title.includes('check-in') || title.includes('check in'))) {
+          return true;
+        }
+        if ((cat === 'transport' || cat === 'transportation') && (title.includes('hotel') || (act.location?.name || '').toLowerCase().includes('hotel'))) {
+          return true;
+        }
         repairs.push({ code: FAILURE_CODES.TIME_OVERLAP, action: 'dropped_past_midnight_post_duration', before: act.title });
         return false;
       }
