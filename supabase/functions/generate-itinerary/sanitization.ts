@@ -118,6 +118,10 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     // Strip truncated orphan archetype fragments at start of descriptions
     // "A moment." / "An interest." / "A stop." etc.
     .replace(/^(?:A|An)\s+(?:moment|interest|stop|experience|encounter|retreat|highlight)\.\s*/gi, '')
+    // Strip archetype labels in quotes within prose: "your 'Solo Retreat' moment" → ""
+    .replace(/\b(?:your|a|an|the|this)\s+['"][A-Za-z\s]+['"]\s+(?:moment|stop|experience|encounter|highlight|retreat)\b\s*/gi, '')
+    // Strip full "This is your/a 'Archetype' moment..." sentences
+    .replace(/(?:^|\.\s*)This\s+is\s+(?:your|a|an)\s+['"]?(?:Solo\s+Retreat|Deep\s+Context|Authentic\s+Encounter|Cultural\s+Highlight|Hidden\s+Gem|Wellness|Romance|Adventure|Family|Budget|Luxury)['"]?\s+(?:moment|stop|experience|encounter)\b[^.]*\.?\s*/gi, '')
     // Strip "This is a stop/moment/experience focusing/centered/based on..." template language
     .replace(/(?:^|\.\s*)This\s+is\s+a\s+(?:stop|moment|experience)\s+(?:focusing|centered|based)\s+on\s+/gi, '')
     // Strip internal day title prefixes: "Short Trip Berlin Day 3:" etc.
