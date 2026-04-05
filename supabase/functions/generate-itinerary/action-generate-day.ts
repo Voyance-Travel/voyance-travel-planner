@@ -810,6 +810,8 @@ export async function handleGenerateDay(
           avoidList: pipelineAvoidList,
           dietaryRestrictions: pipelineDietaryRestrictions,
           mustDoActivities: mustDoList,
+          isHotelChange: resolvedIsHotelChange,
+          previousHotelName: resolvedPreviousHotelName,
         };
 
         const validationResults = validateDay(validationInput);
