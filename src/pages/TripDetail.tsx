@@ -3008,10 +3008,17 @@ export default function TripDetail() {
                         const updatedTrip = tripResult.data;
 
                         // --- Inject hotel check-in/check-out activities into itinerary ---
+                        // Guard: only run injection if hotel data actually changed
+                        const prevHotelJson = JSON.stringify(trip?.hotel_selection ?? null);
+                        const newHotelJson = JSON.stringify(updatedTrip.hotel_selection ?? null);
+                        const prevCityHotels = JSON.stringify(tripCities.map((c: any) => c.hotel_selection ?? null));
+                        const newCityHotels = JSON.stringify(updatedCities.map((c: any) => c.hotel_selection ?? null));
+                        const hotelChanged = prevHotelJson !== newHotelJson || prevCityHotels !== newCityHotels;
+
                         try {
                           const itData = updatedTrip.itinerary_data as Record<string, any> | null;
                           const currentDays = parseEditorialDays(itData, updatedTrip.start_date, updatedTrip.end_date);
-                          if (currentDays.length > 0) {
+                          if (hotelChanged && currentDays.length > 0) {
                             let injectedDays = currentDays;
 
                             // Collect all hotels for multi-hotel patching

@@ -405,6 +405,17 @@ export function injectHotelActivitiesIntoDays(
     }
   }
 
+  // Post-injection safety: remove any accommodation activity at 00:00-00:59
+  updated = updated.map(day => ({
+    ...day,
+    activities: day.activities.filter(a => {
+      if (a.category !== 'accommodation') return true;
+      const hour = parseInt((a.startTime || '06:00').split(':')[0], 10);
+      if (hour === 0 && (a.id.startsWith('hotel-checkin-') || a.id.startsWith('hotel-checkout-'))) return false;
+      return true;
+    }),
+  }));
+
   return updated;
 }
 
@@ -485,6 +496,18 @@ export function injectMultiHotelActivities(
       }
     }
   }
+
+  // Post-injection safety: remove any accommodation activity at 00:00-00:59
+  // These are cascade artifacts from timing conflicts, not real activities
+  updated = updated.map(day => ({
+    ...day,
+    activities: day.activities.filter(a => {
+      if (a.category !== 'accommodation') return true;
+      const hour = parseInt((a.startTime || '06:00').split(':')[0], 10);
+      if (hour === 0 && (a.id.startsWith('hotel-checkin-') || a.id.startsWith('hotel-checkout-') || a.id.startsWith('hotel-dropbags-'))) return false;
+      return true;
+    }),
+  }));
 
   // Detect transition days and inject "Drop bags" cards
   // A transition day = Hotel A checks out AND Hotel B checks in on the same date
