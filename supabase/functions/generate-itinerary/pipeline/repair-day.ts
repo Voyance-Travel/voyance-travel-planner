@@ -69,6 +69,7 @@ export interface RepairDayInput {
   // Split-stay context (same city, different hotel)
   isHotelChange?: boolean;
   previousHotelName?: string;
+  previousHotelAddress?: string;
 
   // Locked activities (never remove)
   lockedActivities: StrictActivityMinimal[];

@@ -205,6 +205,7 @@ export interface CompiledFacts {
   // Split-stay: hotel changed from previous day within same city
   resolvedIsHotelChange: boolean;
   resolvedPreviousHotelName: string | undefined;
+  resolvedPreviousHotelAddress: string | undefined;
 
   // Transport preferences
   transportPreferencePrompt: string;
