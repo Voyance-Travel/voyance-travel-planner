@@ -1,35 +1,32 @@
 
 
-## Fix: Breakfast at Wrong Hotel on Hotel-Change Days
+## Fix Garbled Text — Expand Orphaned Preposition Patterns
 
 ### Problem
-On hotel-change days (split-stay), breakfast is generated for the NEW hotel before checkout, but the traveler is still at the OLD hotel. The correct sequence is: Breakfast at old hotel → Checkout → Travel → Check-in at new hotel.
-
-### Root Cause
-The prompt compiler (`compile-prompt.ts`) uses `flightContext.hotelName` (the NEW hotel) for the breakfast instruction. It never checks `resolvedIsHotelChange` or `resolvedPreviousHotelName`, even though both are already computed in `compile-day-facts.ts` and available in `CompiledFacts`.
-
-The repair pipeline (`repair-day.ts` lines 1411-1469) tries to fix pre-checkout dining references but only catches titles that explicitly mention the new hotel name or "your hotel". If the AI generates "Breakfast at [restaurant name]" with the new hotel's location, the repair misses it.
+City names are still being dropped in AI output, creating broken text like "to the of Light" and "of the at this boutique spa". The existing regex fix only covers 7 prepositions (`in|over|of|around|across|throughout|from`) and only detects conjunctions (`and|or|but`) as following words.
 
 ### Changes
 
-**1. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** — Use previous hotel for breakfast on hotel-change days
+**1. `supabase/functions/generate-itinerary/sanitization.ts`** (lines 185-193) — Expand the orphaned-article regex patterns
 
-- Destructure `resolvedIsHotelChange` and `resolvedPreviousHotelName` from `facts`
-- On hotel-change days, override the breakfast hotel name to use `previousHotelName` instead of `flightContext.hotelName`
-- Add an explicit instruction: "You are still at [PREVIOUS HOTEL] in the morning. Breakfast must be at [PREVIOUS HOTEL] or nearby — NOT at [NEW HOTEL], which you haven't checked into yet."
+Replace the current 5 patterns with expanded versions:
 
-**2. `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — Strengthen pre-checkout dining fix (lines 1428-1468)
+- **Preposition list**: Add `to|for|about|into|toward|towards|through|within|near` (total: 16 prepositions)
+- **Pattern 4 following-word list**: Add `at|near|with|by|on|for|where|while|this|that|a|an` (in addition to existing `and|or|but`)
+- All 5 patterns updated with the same expanded preposition set
 
-- Expand the category check to also catch `'meal'` and title-based meal detection (activities with "Breakfast" in the title regardless of category)
-- After fixing titles referencing the new hotel, also fix the `location` object — if a pre-checkout dining activity's `location.address` matches the new hotel's address, replace it with the previous hotel's address
-- For pre-checkout breakfast activities that don't reference ANY hotel, add the previous hotel context to the location if the activity appears to be a hotel breakfast (e.g., title contains "hotel restaurant" or location matches hotel)
+**2. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** (line 828, OUTPUT QUALITY block) — Add city name instruction
+
+Append after the existing OUTPUT QUALITY line:
+```
+Always use the full destination city name in all text. Never write "the" as a placeholder where the city name should go. For example, write "in the heart of Lisbon" not "in the heart of the". Write "A Goodbye to Lisbon" not "A Goodbye to the".
+```
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — breakfast instruction override for hotel-change days
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — broader pre-checkout dining detection
+- `supabase/functions/generate-itinerary/sanitization.ts` — expand preposition and following-word lists in 5 regex patterns
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add city name prompt instruction
 
 ### No changes to
 - No new files
 - No architecture changes
-- No database changes
 
