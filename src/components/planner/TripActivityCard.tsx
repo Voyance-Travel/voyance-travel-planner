@@ -73,7 +73,7 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
           <div className="flex items-start justify-between gap-2">
             <div>
               <h4 className="font-medium text-foreground">{sanitizeActivityName(activity.name)}</h4>
-              {activity.description && (
+              {activity.description?.trim() && (
                 <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
                   {activity.description}
                 </p>

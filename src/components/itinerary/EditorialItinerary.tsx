@@ -10232,11 +10232,11 @@ function ActivityRow({
         )}
 
         {/* Description */}
-        {activity.description && (
+        {(() => { const d = sanitizeActivityText(activity.description); return d ? (
           <p className="text-base text-muted-foreground leading-relaxed mt-2">
-            {sanitizeActivityText(activity.description)}
+            {d}
           </p>
-        )}
+        ) : null; })()}
 
         {/* Location */}
         {locationText && (
@@ -10247,7 +10247,7 @@ function ActivityRow({
         )}
 
         {/* Voyance Tip — always expanded */}
-        {activity.tips && !isCheckIn && (
+        {sanitizeActivityText(activity.tips) && !isCheckIn && (
           <div className="mt-4 pt-3 border-t border-border/30">
             <p className="text-xs font-medium text-primary uppercase tracking-wider mb-1.5">
               Voyance Tip
@@ -10376,12 +10376,12 @@ function ActivityRow({
               <span>{activity.duration}</span>
             </div>
           )}
-          {activity.description && !compact && (
+          {(() => { const d = sanitizeActivityText(activity.description); return d && !compact ? (
             <p className={cn(
               "text-xs text-muted-foreground leading-relaxed",
               !canViewPremium && "blur-sm pointer-events-none select-none"
-            )}>{sanitizeActivityText(activity.description)}</p>
-          )}
+            )}>{d}</p>
+          ) : null; })()}
           {(() => {
             const locN = activity.location?.name?.trim();
             const dedupLocName = (locN && locN !== activityTitle) ? locN : '';
@@ -10400,7 +10400,7 @@ function ActivityRow({
               <VoyancePickCallout tip={sanitizeActivityText(activity.tips)} />
             </div>
           )}
-          {activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+          {sanitizeActivityText(activity.tips) && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
             <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
               {(activity.needsRefinement || activity.tags?.includes('needs-refinement')) && onSwap ? (
                 <button
@@ -10728,12 +10728,12 @@ function ActivityRow({
                     </div>
                   )}
                   {/* Description — hidden in compact mode */}
-                  {activity.description && !compact && (
+                  {(() => { const d = sanitizeActivityText(activity.description); return d && !compact ? (
                     <p className={cn(
                       "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
                       !canViewPremium && "blur-sm pointer-events-none select-none"
-                    )}>{sanitizeActivityText(activity.description)}</p>
-                  )}
+                    )}>{d}</p>
+                  ) : null; })()}
 
                   {/* Location — in compact mode show only location name, no full address */}
                   {(() => {
@@ -10771,7 +10771,7 @@ function ActivityRow({
               </div>
             )}
             {/* Voyance Insight - Local knowledge — blurred when gated */}
-            {activity.tips && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
+            {sanitizeActivityText(activity.tips) && !activity.isVoyancePick && !isDowntime && !isTransport && !isCheckIn && (
               <div className={cn(!canViewPremium && "blur-sm pointer-events-none select-none")}>
                 {(activity.needsRefinement || activity.tags?.includes('needs-refinement')) && onSwap ? (
                   <button
