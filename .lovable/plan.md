@@ -1,78 +1,30 @@
 
 
-## Fix: Breakfast on Hotel-Change Day References Wrong Hotel
+## Fix: Strip Remaining Archetype Orphan Fragments
 
-### Problem
-On a hotel-change day (e.g., Four Seasons → Palácio Ludovice), the AI generates "Breakfast at Palácio Ludovice" even though the traveler wakes up at the Four Seasons and eats breakfast there before checking out. The accommodation title normalization (Step 9b) correctly assigns pre-checkout accommodation cards to the previous hotel, but **breakfast is a `dining` category activity** — it's skipped entirely by the normalization loop (line 1364: `if (cat !== 'accommodation') continue`).
+### What's Already Done
+The `sanitization.ts` file (lines 85-98) already strips parenthetical labels, ALL-CAPS explanations, colon-suffix labels, description prefixes, "... Stop" suffixes, and "DISTRICT". Activity titles and names already pass through `sanitizeAITextField` (lines 201-204).
 
-### Fix
+### What's Missing
+Two patterns confirmed in the bug report are not yet caught:
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — Step 9b (Accommodation Title Normalization, ~line 1342)
+1. **Truncated orphan fragments** at the start of descriptions: "A moment. Wander away..." / "An interest. Visit the Ritz..." / "A stop. Explore the..."
+2. **"This is a stop focusing on..."** prompt template language leaking into descriptions
 
-After the existing accommodation normalization loop, add a **dining normalization pass** for hotel-change days. On hotel-change days, any dining activity that references a hotel name in its title (e.g., "Breakfast at X") and appears before checkout should have its hotel reference updated to the previous hotel name.
+### Change
+
+**File: `supabase/functions/generate-itinerary/sanitization.ts`** — in `sanitizeAITextField`, add two `.replace()` calls after the existing archetype stripping block (after line 98, before line 99):
 
 ```typescript
-// After the accommodation normalization loop (~line 1407), add:
-// --- 9b-ii. DINING HOTEL REFERENCE on hotel-change days ---
-// Breakfast (and other dining) before checkout should reference the previous hotel
-if (isHotelChange && checkoutIdx >= 0 && previousHotelName) {
-  const newHotelLower = (hotelName || '').toLowerCase();
-  const newHotelCore = normalizeHotelCore(hotelName || '');
-
-  for (let i = 0; i < checkoutIdx; i++) {
-    const act = activities[i];
-    const cat = (act.category || '').toLowerCase();
-    if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') continue;
-
-    const title = act.title || act.name || '';
-    const titleLower = title.toLowerCase();
-
-    // Check if this dining activity references the NEW hotel (wrong)
-    const refsNewHotel = titleLower.includes(newHotelLower) ||
-      (newHotelCore && titleLower.includes(newHotelCore));
-    // Or references any generic hotel
-    const refsGenericHotel = titleLower.includes('your hotel') ||
-      titleLower.includes('the hotel');
-
-    if (refsNewHotel || refsGenericHotel) {
-      // Replace hotel reference with previous hotel
-      let newTitle = title;
-      if (refsNewHotel) {
-        // Replace new hotel name with previous hotel name (case-insensitive)
-        newTitle = title.replace(new RegExp(escapeRegExp(hotelName || ''), 'gi'), previousHotelName);
-      } else {
-        newTitle = title.replace(/your hotel|the hotel/gi, previousHotelName);
-      }
-      act.title = newTitle;
-      act.name = newTitle;
-
-      // Fix location too
-      if (act.location?.name) {
-        const locLower = act.location.name.toLowerCase();
-        if (locLower.includes(newHotelLower) || locLower === 'your hotel') {
-          act.location.name = previousHotelName;
-        }
-      }
-
-      repairs.push({
-        code: FAILURE_CODES.MISSING_SLOT,
-        action: 'fixed_pre_checkout_dining_hotel_ref',
-        before: title,
-        after: newTitle,
-      });
-    }
-  }
-}
+// Strip truncated orphan archetype fragments at start of descriptions
+// "A moment." / "An interest." / "A stop." etc.
+.replace(/^(?:A|An)\s+(?:moment|interest|stop|experience|encounter|retreat|highlight)\.\s*/gi, '')
+// Strip "This is a stop/moment/experience focusing/centered/based on..." template language
+.replace(/(?:^|\.\s*)This\s+is\s+a\s+(?:stop|moment|experience)\s+(?:focusing|centered|based)\s+on\s+/gi, '')
 ```
 
-A small `escapeRegExp` helper will be needed (or inline the escape).
-
-### Impact
-- Breakfast on hotel-change days correctly references the departing hotel (e.g., "Breakfast at Four Seasons" instead of "Breakfast at Palácio Ludovice")
-- Other pre-checkout dining that references the hotel is also corrected
-- Post-checkout dining is unaffected (correctly references the new hotel)
-- Single file change, added after existing normalization block
+No other files need changes. The `sanitizeGeneratedDay` function already applies `sanitizeAITextField` to both `act.title` and `act.name` (line 201-204), so no additional wiring is needed.
 
 ### Files
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add pre-checkout dining hotel reference fix in Step 9b
+- `supabase/functions/generate-itinerary/sanitization.ts` — add 2 regex patterns
 
