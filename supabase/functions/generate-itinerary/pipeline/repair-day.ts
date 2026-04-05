@@ -24,6 +24,7 @@
 
 import { FAILURE_CODES, type ValidationResult, type RepairAction, type FailureCode } from './types.ts';
 import type { StrictActivityMinimal, StrictDayMinimal } from '../day-validation.ts';
+import { sanitizeTransitDestination } from '../sanitization.ts';
 import {
   parseTimeToMinutes,
   minutesToHHMM,
@@ -1640,13 +1641,13 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const et = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
         postDedup.push({
           id: `transport-postdedup-${i}-${Date.now()}`,
-          title: `Travel to ${next.location?.name || next.title || 'next venue'}`,
-          description: `From ${curr.location?.name || curr.title || 'previous venue'} to ${next.location?.name || next.title || 'next venue'}`,
+          title: `Travel to ${next.location?.name || sanitizeTransitDestination(next.title || '') || 'next venue'}`,
+          description: `From ${curr.location?.name || curr.title || 'previous venue'} to ${next.location?.name || sanitizeTransitDestination(next.title || '') || 'next venue'}`,
           category: 'transport',
           startTime: st,
           endTime: et,
           durationMinutes: dur,
-          location: { name: next.location?.name || next.title || 'destination', address: next.location?.address || '' },
+          location: { name: next.location?.name || sanitizeTransitDestination(next.title || '') || 'destination', address: next.location?.address || '' },
           fromLocation: { name: curr.location?.name || curr.title || 'origin', address: curr.location?.address || '' },
           cost: { amount: costAmt, currency: 'USD' },
           transportation: { method, duration: `${dur} min` },
@@ -2493,7 +2494,7 @@ function repairBookends(
     if (!destMatchesNext && nextLoc) {
       // Rewrite transport to correctly bridge prev → next
       const fromName = prevNonTransport?.location?.name || prevNonTransport?.title || 'previous location';
-      const toName = nextNonTransport.location?.name || nextNonTransport.title;
+      const toName = nextNonTransport.location?.name || sanitizeTransitDestination(nextNonTransport.title || '');
       const oldTitle = transport.title;
 
       transport.title = `Travel to ${toName}`;
@@ -2539,7 +2540,7 @@ function repairBookends(
       const curr = activities[i], next = activities[i + 1];
       if (isTransport(curr) || isTransport(next)) continue;
       const cLoc = (curr.location?.name || curr.title || '').toLowerCase();
-      const nLoc = (next.location?.name || next.title || '').toLowerCase();
+      const nLoc = (next.location?.name || sanitizeTransitDestination(next.title || '') || '').toLowerCase();
       // Guard: skip if same or contained location (fuzzy match)
       if (!cLoc || !nLoc || isSameOrContainedLocation(cLoc, nLoc, hotelName)) continue;
       // Guard: skip if current is accommodation and next venue is inside the hotel
@@ -2549,7 +2550,7 @@ function repairBookends(
         a => isTransport(a) && isSameOrContainedLocation((a.location?.name || '').toLowerCase(), nLoc, hotelName)
       );
       if (recentTransport) continue;
-      rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || next.title, curr.endTime || '', curr, next));
+      rebuilt.push(makeTransCard(curr.location?.name || curr.title, next.location?.name || sanitizeTransitDestination(next.title || ''), curr.endTime || '', curr, next));
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_transit_gap' });
     }
   }
@@ -2568,7 +2569,7 @@ function repairBookends(
           // Determine real "from" — the preceding non-transport activity
           const prevNonTransport = [...consolidated].reverse().find(a => !isTransport(a));
           const fromName = prevNonTransport?.location?.name || first.fromLocation?.name || 'previous location';
-          const toName = last.location?.name || last.title?.replace('Travel to ', '') || 'destination';
+          const toName = last.location?.name || sanitizeTransitDestination(last.title?.replace('Travel to ', '') || '') || 'destination';
 
           // Re-estimate using real endpoints if coordinates available
           const fromCoords = prevNonTransport ? getActivityCoords(prevNonTransport) : hotelCoordinates || null;
@@ -2647,7 +2648,7 @@ function repairBookends(
             // Find preceding non-transport
             const prevNonTransport = deduped.slice(0, i).reverse().find(a => !isTransport(a));
             const fromName = prevNonTransport?.location?.name || first.fromLocation?.name || 'previous location';
-            const toName = second.location?.name || second.title?.replace('Travel to ', '') || 'destination';
+            const toName = second.location?.name || sanitizeTransitDestination(second.title?.replace('Travel to ', '') || '') || 'destination';
 
             const fromCoords = prevNonTransport ? getActivityCoords(prevNonTransport) : hotelCoordinates || null;
             const toCoords = getActivityCoords(second) || null;
