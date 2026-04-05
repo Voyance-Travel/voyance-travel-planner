@@ -1,67 +1,59 @@
 
+## Fix Restaurant Repetition — Fábrica da Nata 3× in One Trip
 
-## Validate Restaurant Location Matches Trip City
+### What I found
+- The code already has multiple anti-repeat layers:
+  - `action-generate-trip-day.ts` loads and persists `metadata.used_restaurants`
+  - `compile-prompt.ts` already filters the restaurant pool and prints an “already used” blocklist
+  - `validate-day.ts` flags repeated dining venues across previous days
+  - `repair-day.ts` swaps repeated restaurants from the pool when possible
+  - `action-generate-trip-day.ts` also has a post-generation cross-day dedup pass
+- Since repeats are still happening, the likely gap is **matching consistency**, not missing architecture. The current normalization is lowercase-based but not accent-insensitive, so variants like `Fábrica da Nata` vs `Fabrica da Nata` can slip past the blocklist, validator, repair swap, and `used_restaurants` dedup.
+- Prompt edits should follow the current extracted architecture: implement them in `pipeline/compile-prompt.ts` rather than re-building prompt logic inside `action-generate-day.ts`.
 
-### Problem
-Restaurants from wrong cities/regions (e.g., Ocean Restaurant in Algarve) appearing in destination itineraries (e.g., Lisbon).
+### Plan
+1. **Harden canonical restaurant matching at the source**
+   - Update `supabase/functions/generate-itinerary/generation-utils.ts` so restaurant name normalization is accent-insensitive and more stable.
+   - Keep using `extractRestaurantVenueName()` as the single shared matcher so existing prompt filtering, validation, repair, and `used_restaurants` tracking all get stronger automatically.
 
-### Changes
+2. **Add the explicit hard blocklist text the AI can’t miss**
+   - In `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`, add a short plain-text blocklist built directly from `paramUsedRestaurants`.
+   - Keep the existing pool blocklist, but add an extra high-visibility instruction near the end of the prompt:
+     - do not use any listed restaurants
+     - never repeat a restaurant across days
+     - breakfast/lunch/dinner must all be different venues
 
-**1. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** — Append to OPERATIONAL NOTES block (line 829):
+3. **Add a soft post-generation repeat detector in sanitization**
+   - Extend `supabase/functions/generate-itinerary/sanitization.ts` so `sanitizeGeneratedDay()` accepts an optional `usedRestaurants` array.
+   - Use the actual current schema (`title`, `location.name`, dining category / meal-title heuristics), not a new `venue_name` field.
+   - Log a clear warning when a dining activity matches a previously used restaurant after canonical normalization.
 
-```
-CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located within the trip destination city or its immediate metro area. Do not suggest restaurants from other cities or regions, even if they are famous. For example, for a Lisbon trip, only suggest restaurants actually located in the Lisbon metropolitan area — not restaurants in the Algarve, Porto, or other regions.
-```
+4. **Wire the sanitizer only where the blocklist already exists**
+   - Pass `paramUsedRestaurants` into `sanitizeGeneratedDay()` inside `supabase/functions/generate-itinerary/action-generate-day.ts`.
+   - Keep the new parameter optional so other callers like `generation-core.ts` remain compatible without broader refactors.
 
-**2. `supabase/functions/generate-itinerary/sanitization.ts`** — Add city-mismatch detection in `sanitizeGeneratedDay`, before `return day` (line 396). This is a defensive warning log + cost removal for obvious geographic mismatches:
+5. **Rely on the existing hard guards once matching is fixed**
+   - With stronger normalization, the current systems in:
+     - `compile-prompt.ts`
+     - `validate-day.ts`
+     - `repair-day.ts`
+     - `action-generate-trip-day.ts`
+     should correctly recognize accent/case variants and stop repeats much more aggressively without changing self-chaining or restaurant-pool generation.
 
-```typescript
-// Warn/flag restaurants with addresses clearly outside the destination
-if (destination && day.activities) {
-  const dest = destination.toLowerCase().trim();
-  // Map of country → list of major cities for cross-checking
-  const cityGroups: Record<string, string[]> = {
-    portugal: ['lisbon', 'lisboa', 'porto', 'faro', 'algarve', 'coimbra', 'braga', 'funchal', 'sintra', 'cascais', 'estoril', 'albufeira', 'alporchinhos', 'portimão', 'portimao'],
-    italy: ['rome', 'roma', 'milan', 'milano', 'florence', 'firenze', 'venice', 'venezia', 'naples', 'napoli', 'turin', 'torino', 'bologna', 'palermo'],
-    spain: ['madrid', 'barcelona', 'seville', 'sevilla', 'valencia', 'malaga', 'bilbao', 'granada'],
-    france: ['paris', 'lyon', 'marseille', 'nice', 'bordeaux', 'toulouse', 'strasbourg'],
-    germany: ['berlin', 'munich', 'münchen', 'hamburg', 'frankfurt', 'cologne', 'köln', 'düsseldorf'],
-    uk: ['london', 'edinburgh', 'manchester', 'birmingham', 'glasgow', 'liverpool'],
-    japan: ['tokyo', 'kyoto', 'osaka', 'hiroshima', 'yokohama', 'nara', 'fukuoka', 'sapporo'],
-  };
+### Technical details
+- **Files to edit**
+  - `supabase/functions/generate-itinerary/generation-utils.ts`
+  - `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+  - `supabase/functions/generate-itinerary/sanitization.ts`
+  - `supabase/functions/generate-itinerary/action-generate-day.ts`
+- **No changes**
+  - no new files
+  - no self-chaining architecture changes
+  - no restaurant pool generation changes
+  - no database changes
 
-  // Find which group the destination belongs to
-  let otherCities: string[] = [];
-  for (const cities of Object.values(cityGroups)) {
-    if (cities.some(c => dest.includes(c) || c.includes(dest))) {
-      otherCities = cities.filter(c => !dest.includes(c) && !c.includes(dest));
-      break;
-    }
-  }
-
-  if (otherCities.length > 0) {
-    for (const act of day.activities) {
-      const address = ((act.address || act.location?.address || '') as string).toLowerCase();
-      if (!address) continue;
-
-      const mentionsOther = otherCities.some(c => address.includes(c));
-      const mentionsDest = address.includes(dest) ||
-        (dest === 'lisbon' && address.includes('lisboa')) ||
-        (dest === 'lisboa' && address.includes('lisbon'));
-
-      if (mentionsOther && !mentionsDest) {
-        console.warn(`[sanitize] Restaurant "${act.title}" address mentions another city: ${address}`);
-        // Zero out cost to prevent inflating day total
-        if (act.cost && typeof act.cost === 'object') {
-          act.cost = { amount: 0, currency: act.cost.currency || 'EUR' };
-        }
-      }
-    }
-  }
-}
-```
-
-### Files
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add geographic rule to prompt
-- `supabase/functions/generate-itinerary/sanitization.ts` — add city-mismatch detection
-
+### Verification
+- Generate a 4-day Lisbon trip and list all dining venues across all 4 days.
+- Confirm **zero repeated canonical restaurant names**, including accent variants like `Fábrica` / `Fabrica`.
+- Specifically confirm `Fábrica da Nata` appears at most once.
+- If the AI still attempts a repeat, the logs should show the repeat warning and the existing validation/repair flow should catch it before persistence.
