@@ -341,9 +341,13 @@ async function _handleGenerateTripDayInner(
   const tripMeta = (tripCheck.metadata as Record<string, unknown>) || {};
   const restaurantPoolByCity: Record<string, any[]> = (tripMeta.restaurant_pool as any) || {};
   const usedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
-  if (usedRestaurants.length > 0) {
-    console.log(`[generate-trip-day] 🍽️ Restaurant blocklist (${usedRestaurants.length}): ${usedRestaurants.join(', ')}`);
-  }
+  // === RESTAURANT DEDUP DEBUG ===
+  console.log('=== RESTAURANT DEDUP DEBUG ===');
+  console.log(`Day number: ${dayNumber}`);
+  console.log(`usedRestaurants received (${usedRestaurants.length}):`, JSON.stringify(usedRestaurants));
+  console.log(`Type: ${typeof tripMeta.used_restaurants}, IsArray: ${Array.isArray(tripMeta.used_restaurants)}`);
+  const allRestaurantParams = Object.keys(tripMeta).filter(k => /restaurant|used|block|previous|dining/i.test(k));
+  console.log('All restaurant-related metadata keys:', JSON.stringify(allRestaurantParams.map(k => ({ key: k, count: Array.isArray(tripMeta[k]) ? (tripMeta[k] as any[]).length : 'N/A' }))));
   
   // Get the pool for this day's city
   const dayCity = cityInfo?.cityName || destination || '';
