@@ -80,6 +80,10 @@ export interface ValidateDayInput {
 
   /** Must-do activities */
   mustDoActivities?: string[];
+
+  /** Hotel change context */
+  isHotelChange?: boolean;
+  previousHotelName?: string;
 }
 
 // =============================================================================
@@ -94,7 +98,8 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
 
   const { day, dayNumber, isFirstDay, isLastDay, hasHotel, hotelName,
     arrivalTime24, returnDepartureTime24, requiredMeals, previousDays,
-    avoidList, dietaryRestrictions, mustDoActivities } = input;
+    avoidList, dietaryRestrictions, mustDoActivities,
+    isHotelChange, previousHotelName } = input;
 
   const activities = day.activities || [];
 
@@ -138,6 +143,11 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   // --- WEAK_PERSONALIZATION ---
   if ((avoidList && avoidList.length > 0) || (dietaryRestrictions && dietaryRestrictions.length > 0)) {
     checkPersonalization(activities, avoidList || [], dietaryRestrictions || [], results);
+  }
+
+  // --- PRE-CHECKOUT DINING AT WRONG HOTEL (hotel-change days) ---
+  if (isHotelChange && previousHotelName && hotelName) {
+    checkPreCheckoutDiningHotel(activities, hotelName, previousHotelName, results);
   }
 
   return results;
@@ -698,6 +708,56 @@ function checkPersonalization(
           });
         }
       }
+    }
+  }
+}
+
+// =============================================================================
+// PRE-CHECKOUT DINING AT WRONG HOTEL (hotel-change days)
+// =============================================================================
+
+function checkPreCheckoutDiningHotel(
+  activities: StrictActivityMinimal[],
+  newHotelName: string,
+  previousHotelName: string,
+  results: ValidationResult[],
+): void {
+  // Find checkout index
+  const checkoutIdx = activities.findIndex((a) => {
+    const t = (a.title || '').toLowerCase();
+    const c = (a.category || '').toLowerCase();
+    return c === 'accommodation' &&
+      (t.includes('checkout') || t.includes('check-out') || t.includes('check out'));
+  });
+  if (checkoutIdx < 0) return;
+
+  const newHotelLower = newHotelName.toLowerCase();
+  // Extract core name (e.g. "Palácio Ludovice" from "Hotel Palácio Ludovice")
+  const newHotelCore = newHotelLower.replace(/^(hotel|the)\s+/i, '').trim();
+
+  for (let i = 0; i < checkoutIdx; i++) {
+    const act = activities[i];
+    const cat = (act.category || '').toLowerCase();
+    const titleLower = (act.title || '').toLowerCase();
+    const isDining = cat === 'dining' || cat === 'restaurant' || cat === 'food' || cat === 'meal'
+      || /\b(?:breakfast|brunch)\b/i.test(titleLower);
+    if (!isDining) continue;
+
+    const locName = (act.location?.name || '').toLowerCase();
+    const refsNewHotel = titleLower.includes(newHotelLower) ||
+      (newHotelCore.length >= 3 && titleLower.includes(newHotelCore)) ||
+      locName.includes(newHotelLower) ||
+      (newHotelCore.length >= 3 && locName.includes(newHotelCore));
+
+    if (refsNewHotel) {
+      results.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        severity: 'error',
+        message: `Pre-checkout dining "${act.title}" references the new hotel "${newHotelName}" — should reference "${previousHotelName}"`,
+        activityIndex: i,
+        field: 'title',
+        autoRepairable: true,
+      });
     }
   }
 }

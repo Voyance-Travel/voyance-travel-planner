@@ -810,6 +810,8 @@ export async function handleGenerateDay(
           avoidList: pipelineAvoidList,
           dietaryRestrictions: pipelineDietaryRestrictions,
           mustDoActivities: mustDoList,
+          isHotelChange: resolvedIsHotelChange,
+          previousHotelName: resolvedPreviousHotelName,
         };
 
         const validationResults = validateDay(validationInput);
@@ -857,6 +859,7 @@ export async function handleGenerateDay(
           hotelCoordinates: hotelCoordinates,
           isHotelChange: resolvedIsHotelChange,
           previousHotelName: resolvedPreviousHotelName,
+          previousHotelAddress: facts.resolvedPreviousHotelAddress,
         };
 
         const { day: repairedDay, repairs } = repairDay(repairInput);

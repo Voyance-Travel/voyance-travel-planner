@@ -69,6 +69,7 @@ export interface RepairDayInput {
   // Split-stay context (same city, different hotel)
   isHotelChange?: boolean;
   previousHotelName?: string;
+  previousHotelAddress?: string;
 
   // Locked activities (never remove)
   lockedActivities: StrictActivityMinimal[];
@@ -1421,6 +1422,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   if (isHotelChange && diningCheckoutIdx >= 0 && previousHotelName) {
     const newHotelLower = (hotelName || '').toLowerCase();
     const newHotelCore = normalizeHotelCore(hotelName || '');
+    const newHotelAddrLower = (hotelAddress || '').toLowerCase();
+    const prevHotelAddr = input.previousHotelAddress || '';
 
     // Helper to escape special regex characters
     const escRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1443,30 +1446,43 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       // Or references any generic hotel
       const refsGenericHotel = titleLower.includes('your hotel') ||
         titleLower.includes('the hotel');
+      // Check location name/address for new hotel references
+      const locName = (act.location?.name || '').toLowerCase();
+      const locAddr = (act.location?.address || '').toLowerCase();
+      const locRefsNewHotel = (newHotelLower && (locName.includes(newHotelLower) || locAddr.includes(newHotelLower))) ||
+        (newHotelCore && newHotelCore.length >= 3 && (locName.includes(newHotelCore) || locAddr.includes(newHotelCore))) ||
+        (newHotelAddrLower && newHotelAddrLower.length > 5 && locAddr === newHotelAddrLower);
 
-      if (refsNewHotel || refsGenericHotel) {
+      if (refsNewHotel || refsGenericHotel || locRefsNewHotel) {
         let newTitle = title;
         if (refsNewHotel && hotelName) {
           newTitle = title.replace(new RegExp(escRegExp(hotelName), 'gi'), previousHotelName);
-        } else {
+        } else if (refsGenericHotel) {
           newTitle = title.replace(/your hotel|the hotel/gi, previousHotelName);
         }
         act.title = newTitle;
         act.name = newTitle;
 
-        // Fix location too — name and address
+        // Fix location — use actual previous hotel address when available
         if (act.location?.name) {
-          const locLower = act.location.name.toLowerCase();
-          if ((newHotelLower && locLower.includes(newHotelLower)) || locLower === 'your hotel' || locLower === 'the hotel') {
+          const ln = act.location.name.toLowerCase();
+          if ((newHotelLower && ln.includes(newHotelLower)) ||
+              (newHotelCore && newHotelCore.length >= 3 && ln.includes(newHotelCore)) ||
+              ln === 'your hotel' || ln === 'the hotel') {
             act.location.name = previousHotelName;
           }
         }
-        if (act.location?.address && hotelAddress) {
+        // Use real previous hotel address instead of falling back to name
+        if (act.location?.address) {
           const addrLower = (act.location.address || '').toLowerCase();
-          const newHotelAddrLower = (hotelAddress || '').toLowerCase();
-          if (newHotelAddrLower && addrLower === newHotelAddrLower) {
-            act.location.address = previousHotelName; // Best we have — replace new hotel's address
+          if ((newHotelAddrLower && addrLower === newHotelAddrLower) ||
+              (newHotelLower && addrLower.includes(newHotelLower))) {
+            act.location.address = prevHotelAddr || previousHotelName;
           }
+        } else if (prevHotelAddr) {
+          // No address set — fill with previous hotel address
+          if (!act.location) act.location = { name: previousHotelName, address: prevHotelAddr };
+          else act.location.address = prevHotelAddr;
         }
 
         repairs.push({

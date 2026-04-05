@@ -57,6 +57,7 @@ export async function compileDayFacts(
   let resolvedCountry = destinationCountry;
   let resolvedIsHotelChange = false;
   let resolvedPreviousHotelName: string | undefined = undefined;
+  let resolvedPreviousHotelAddress: string | undefined = undefined;
 
   if (tripId && !resolvedIsTransitionDay) {
     try {
@@ -215,6 +216,7 @@ export async function compileDayFacts(
           ) {
             resolvedIsHotelChange = true;
             resolvedPreviousHotelName = prevEntry.hotelName;
+            resolvedPreviousHotelAddress = prevEntry.hotelAddress;
             console.log(`[compile-day-facts] Hotel change detected on day ${dayNumber}: "${prevEntry.hotelName}" → "${currentEntry.hotelName}"`);
           }
         }
@@ -249,7 +251,7 @@ export async function compileDayFacts(
               }
 
               // Build day→hotel map for the entire trip to detect changes
-              const singleCityHotelMap: Array<{ hotelName?: string }> = [];
+              const singleCityHotelMap: Array<{ hotelName?: string; hotelAddress?: string }> = [];
               for (let d = 0; d < totalDays; d++) {
                 let dayHotel: any = null;
                 if (singleCityStartDate) {
@@ -268,7 +270,7 @@ export async function compileDayFacts(
                   const hotelIndex = Math.min(Math.floor(d / daysPerHotel), hotelList.length - 1);
                   dayHotel = hotelList[hotelIndex];
                 }
-                singleCityHotelMap.push({ hotelName: dayHotel?.name || undefined });
+                singleCityHotelMap.push({ hotelName: dayHotel?.name || undefined, hotelAddress: dayHotel?.address || undefined });
               }
 
               // Resolve current day's hotel
@@ -295,6 +297,7 @@ export async function compileDayFacts(
                 ) {
                   resolvedIsHotelChange = true;
                   resolvedPreviousHotelName = prevDayHotel.hotelName;
+                  resolvedPreviousHotelAddress = prevDayHotel.hotelAddress;
                   console.log(`[compile-day-facts] Single-city hotel change on day ${dayNumber}: "${prevDayHotel.hotelName}" → "${currentDayHotel.hotelName}"`);
                 }
               }
@@ -621,6 +624,7 @@ RULES:
     isLastDay,
     resolvedIsHotelChange,
     resolvedPreviousHotelName,
+    resolvedPreviousHotelAddress,
     transportPreferencePrompt,
     resolvedTransportModes,
     resolvedPrimaryTransport,
