@@ -630,6 +630,7 @@ RULES:
     isLastDay,
     resolvedIsHotelChange,
     resolvedPreviousHotelName,
+    resolvedPreviousHotelAddress,
     transportPreferencePrompt,
     resolvedTransportModes,
     resolvedPrimaryTransport,
