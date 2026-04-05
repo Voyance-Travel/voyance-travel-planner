@@ -1454,11 +1454,19 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         act.title = newTitle;
         act.name = newTitle;
 
-        // Fix location too
+        // Fix location too — name and address
         if (act.location?.name) {
           const locLower = act.location.name.toLowerCase();
-          if ((newHotelLower && locLower.includes(newHotelLower)) || locLower === 'your hotel') {
+          if ((newHotelLower && locLower.includes(newHotelLower)) || locLower === 'your hotel' || locLower === 'the hotel') {
             act.location.name = previousHotelName;
+          }
+        }
+        if (act.location?.address && hotelAddress) {
+          const addrLower = (act.location.address || '').toLowerCase();
+          const newHotelAddrLower = (hotelAddress || '').toLowerCase();
+          if (newHotelAddrLower && addrLower.includes(newHotelAddrLower)) {
+            // Replace new hotel address with previous hotel address if available
+            act.location.address = previousHotelAddress || previousHotelName;
           }
         }
 
