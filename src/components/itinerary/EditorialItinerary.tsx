@@ -6033,10 +6033,16 @@ export function EditorialItinerary({
                   }
                   
                   // For multi-city: show game plan on each city's check-in day
+                  // But NOT for same-city hotel switches (split stays)
                   if (allHotels && allHotels.length > 1 && dayDate) {
-                    const arrivingCity = allHotels.find((ch, idx) => 
-                      idx > 0 && ch.checkInDate && dayDate === ch.checkInDate
-                    );
+                    const arrivingCity = allHotels.find((ch, idx) => {
+                      if (idx === 0 || !ch.checkInDate || dayDate !== ch.checkInDate) return false;
+                      // Skip same-city hotel switches — only trigger for actual new-city arrivals
+                      const prevCity = allHotels[idx - 1]?.cityName?.toLowerCase().trim();
+                      const thisCity = ch.cityName?.toLowerCase().trim();
+                      if (prevCity && thisCity && prevCity === thisCity) return false;
+                      return true;
+                    });
                     if (arrivingCity) {
                       const legs = flightSelection?.legs;
                       const arrivalLeg = legs?.find(l => {
