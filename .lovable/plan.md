@@ -1,40 +1,53 @@
 
 
-## Fix "Breakfast at a local spot" Placeholder — Ensure Real Restaurant Names
+## Fix Phantom Pricing v7 — Trust Free Venue Detector Over NEVER_FREE_CATEGORIES
 
 ### Root Cause
 
-The problem originates in `day-validation.ts` → `enforceRequiredMealsFinalGuard`. When the meal guard needs to inject a missing meal and no `fallbackVenues` match, it calls `getDestinationHint()` which returns a generic `venueSuffix` like `"local spot"`. The title then becomes `"Breakfast at a local spot"`.
+"Explore the Chiado District" shows ~€23 because of two issues:
 
-Two issues:
-1. **Lisbon is not in `DESTINATION_MEAL_HINTS`** — so it falls through to the generic `"local spot"` fallback instead of getting a Lisbon-specific venue type (e.g., "pastelaria").
-2. **`validate-day.ts` catches `"Breakfast at a local spot"` as `GENERIC_VENUE`** but `repair-day.ts` has **no handler for `GENERIC_VENUE`** — the validation warning is logged but never acted on. The placeholder survives to the UI.
+1. **`isLikelyFreePublicVenue` doesn't match it** — the `FREE_VENUE_PATTERNS` regex `/\bdistrict\s+(?:walk|stroll|explore)\b/i` requires "district walk" (word order: district first), but the title is "Explore the Chiado **District**" (explore first). There's no pattern for `explore.*district`.
 
-### Plan
+2. **Even if it did match, `isNeverFreeCategory` vetoes it** — at line 1079 of `EditorialItinerary.tsx`:
+   ```
+   if ((looksLikelyFree || isFreePublicVenue) && !isNeverFreeCategory(category, title))
+   ```
+   The activity's category is likely `activity` or `sightseeing`, both in `NEVER_FREE_CATEGORIES`. So `isNeverFreeCategory` returns `true`, blocking the free detection even when the shared helper says it's free.
 
-**File 1: `supabase/functions/generate-itinerary/day-validation.ts`**
-- Add `lisbon` to `DESTINATION_MEAL_HINTS` with Lisbon-specific venue types: `pastelaria` for breakfast, `tasca` for lunch, `restaurante` for dinner.
-- Change the generic fallback `venueSuffix` values from `"local spot"` to venue-type descriptions that won't trigger the generic venue detector (e.g., `"neighborhood café"` → actually, the real fix is below).
+### Fix (3 changes across 2 files)
 
-**File 2: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`**
-- Add `"Breakfast at a local spot"` pattern variants to `GENERIC_VENUE_PATTERNS` (already partially covered at line 39, but ensure `"at a local spot"` without meal prefix also matches).
-- Escalate all `GENERIC_VENUE` findings on dining activities to `severity: 'error'` (not just `isMealInCity`), making them `autoRepairable: true`.
+**File 1: `src/lib/cost-estimation.ts`**
 
-**File 3: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
-- Add a `GENERIC_VENUE` repair handler that:
-  - Checks `fallbackVenues` for an unused real venue matching the meal type
-  - If found, replaces the title and `venue_name` with the real venue
-  - If not found, logs a warning but at minimum replaces `"a local spot"` with a destination-aware venue type from `getDestinationHint`
+Add patterns to `FREE_VENUE_PATTERNS` for "explore" + area:
+- `/\bexplore\b.*\b(?:district|neighborhood|neighbourhood|quarter|old\s+town|area)\b/i`
+- `/\bstroll\b.*\b(?:district|neighborhood|neighbourhood|quarter)\b/i`
 
-**File 4: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
-- Add explicit instruction: "Every dining activity MUST include a SPECIFIC, REAL restaurant name. Never use generic placeholders like 'a local spot', 'a nearby café', or 'a local restaurant'. If unsure, use the hotel restaurant or a well-known local chain."
+This catches "Explore the Chiado District", "Explore the Gothic Quarter", etc.
+
+**File 2: `src/components/itinerary/EditorialItinerary.tsx`**
+
+Change the logic at line 1079: when `isLikelyFreePublicVenue` returns `true`, **trust it** — don't let `isNeverFreeCategory` override. The shared helper already excludes dining, transport, ticketed, and wellness categories internally, so double-checking is redundant and causes misses.
+
+Change from:
+```ts
+if ((looksLikelyFree || isFreePublicVenue) && !isNeverFreeCategory(category, title)) {
+```
+To:
+```ts
+if (isFreePublicVenue || (looksLikelyFree && !isNeverFreeCategory(category, title))) {
+```
+
+This means: `isLikelyFreePublicVenue` is authoritative (it has its own paid-override checks). The older `looksLikelyFree` heuristic still respects `isNeverFreeCategory`.
+
+**File 3: `src/hooks/usePayableItems.ts`**
+
+Apply the same priority change — if `isLikelyFreePublicVenue` says free, skip the item regardless of category.
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/day-validation.ts` — add Lisbon hints, improve generic fallback
-- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — escalate generic venue on dining to error
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add GENERIC_VENUE repair handler
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — strengthen restaurant naming rules
+- `src/lib/cost-estimation.ts` — add explore+district pattern
+- `src/components/itinerary/EditorialItinerary.tsx` — trust `isLikelyFreePublicVenue` over `NEVER_FREE_CATEGORIES`
+- `src/hooks/usePayableItems.ts` — same trust fix
 
 ### Verification
-Generate a 4-day Lisbon trip. Every breakfast, lunch, and dinner should show a specific restaurant name. No "local spot", "the destination", or generic placeholder should appear.
+Open trip `5d720e7c`. "Explore the Chiado District" should show Free. All other free venues (Sunset Stroll, Viewpoint walks, Park strolls) should remain Free. Dining/ticketed items should keep their prices.
 
