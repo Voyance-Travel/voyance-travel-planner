@@ -2648,7 +2648,7 @@ function repairBookends(
             // Find preceding non-transport
             const prevNonTransport = deduped.slice(0, i).reverse().find(a => !isTransport(a));
             const fromName = prevNonTransport?.location?.name || first.fromLocation?.name || 'previous location';
-            const toName = second.location?.name || second.title?.replace('Travel to ', '') || 'destination';
+            const toName = second.location?.name || sanitizeTransitDestination(second.title?.replace('Travel to ', '') || '') || 'destination';
 
             const fromCoords = prevNonTransport ? getActivityCoords(prevNonTransport) : hotelCoordinates || null;
             const toCoords = getActivityCoords(second) || null;
