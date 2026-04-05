@@ -183,12 +183,22 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     // Fix orphaned articles where city name was dropped
     // "the's" → "Lisbon's"
     result = result.replace(/\bthe's\b/gi, destination + "'s");
-    // "in the." / "to the." etc. — orphaned article before period
-    result = result.replace(/\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the\.\s*/gi, '$1 ' + destination + '. ');
+
+    // "in the of [Noun]" title pattern → "in Lisbon, the City of [Noun]"
+    result = result.replace(/\bin the of\b/gi, 'in ' + destination + ', the City of');
+
+    // "in the." / "to the." / "of the!" / "of the?" — orphaned article before sentence-end punctuation
+    result = result.replace(/\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the([.!?])\s*/gi, '$1 ' + destination + '$2 ');
+
     // "of the," / "to the;" — orphaned article before comma/semicolon
     result = result.replace(/\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the([,;]\s)/gi, '$1 ' + destination + '$2');
-    // "to the of" / "of the at" / "of the and" — orphaned article before following word
-    result = result.replace(/\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the\s+(and|or|but|at|near|with|by|on|for|where|while|this|that|a|an)\b/gi, '$1 ' + destination + ' $2');
+
+    // "the [adjective]." — dangling adjective before period (e.g. "the illuminated.")
+    result = result.replace(/\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the\s+(\w+(?:ed|ful|ous|ic|al|ive|ant|ent))\.\s*/gi, '$1 ' + destination + "'s $2 landscape. ");
+
+    // "to the of" / "of the at" / "of the and" — orphaned article before following preposition/connector
+    result = result.replace(/\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the\s+(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near|and|or|but|at|with|by|on|where|while|this|that|a|an)\b/gi, '$1 ' + destination + ' $2');
+
     // "in the" at end of string
     result = result.replace(/\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the$/gi, '$1 ' + destination);
   }
