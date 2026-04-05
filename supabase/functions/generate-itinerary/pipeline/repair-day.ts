@@ -1406,6 +1406,59 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 9b-ii. DINING HOTEL REFERENCE on hotel-change days ---
+  // Breakfast (and other dining) before checkout should reference the previous hotel,
+  // not the new hotel the traveler hasn't arrived at yet.
+  if (isHotelChange && checkoutIdx >= 0 && previousHotelName) {
+    const newHotelLower = (hotelName || '').toLowerCase();
+    const newHotelCore = normalizeHotelCore(hotelName || '');
+
+    // Helper to escape special regex characters
+    const escRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    for (let i = 0; i < checkoutIdx; i++) {
+      const act = activities[i];
+      const cat = (act.category || '').toLowerCase();
+      if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') continue;
+
+      const title = act.title || act.name || '';
+      const titleLower = title.toLowerCase();
+
+      // Check if this dining activity references the NEW hotel (wrong)
+      const refsNewHotel = (newHotelLower && titleLower.includes(newHotelLower)) ||
+        (newHotelCore && newHotelCore.length >= 3 && titleLower.includes(newHotelCore));
+      // Or references any generic hotel
+      const refsGenericHotel = titleLower.includes('your hotel') ||
+        titleLower.includes('the hotel');
+
+      if (refsNewHotel || refsGenericHotel) {
+        let newTitle = title;
+        if (refsNewHotel && hotelName) {
+          newTitle = title.replace(new RegExp(escRegExp(hotelName), 'gi'), previousHotelName);
+        } else {
+          newTitle = title.replace(/your hotel|the hotel/gi, previousHotelName);
+        }
+        act.title = newTitle;
+        act.name = newTitle;
+
+        // Fix location too
+        if (act.location?.name) {
+          const locLower = act.location.name.toLowerCase();
+          if ((newHotelLower && locLower.includes(newHotelLower)) || locLower === 'your hotel') {
+            act.location.name = previousHotelName;
+          }
+        }
+
+        repairs.push({
+          code: FAILURE_CODES.MISSING_SLOT,
+          action: 'fixed_pre_checkout_dining_hotel_ref',
+          before: title,
+          after: newTitle,
+        });
+      }
+    }
+  }
+
   // --- 9c. BACK-TO-BACK ACCOMMODATION DEDUP ---
   // After bookends + normalization, scan for consecutive accommodation cards
   // (ignoring transport between them). If two non-check-in/checkout accom cards
