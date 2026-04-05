@@ -160,7 +160,8 @@ const LOCAL_FAVORITE_NOTE_RE = /(?:^|[.]\s*)(?:A\s+)?local\s+favorite\s*[-–—
 const VENUE_SOURCE_RE = /(?:^|[.]\s*)(?:Recommended|Sourced|Verified|Confirmed)\s+(?:by|from|via)\s+(?:our|the)\s+(?:venue|restaurant|local)\s+database[^.]*\.?\s*/gi;
 
 // Parenthetical internal notes referencing archetypes, hard blocks, constraints
-const INTERNAL_NOTE_RE = /\s*\([^)]*?\b(?:arche(?:type)?|hard\s+block|soft\s+block|constraint|slot\s+logic|post-process|as per)\b[^)]*?\)/gi;
+const INTERNAL_NOTE_RE = /\s*\((?:Note|NB|Scheduled|Adjusted|Adjusting|Selected|Chosen|Added|Included|Placed|Moved|Reason|Context|Rationale|Per|As per|Based on|Due to|Reflecting|To reflect|To match|To align|To satisfy|To address|This is a|This serves|This provides|This fulfills)\b[^)]*\)/gi;
+const USER_PREF_NOTE_RE = /\s*\([^)]*(?:user's|user preference|archetype|arche\b|interest\b|hard block|soft block|constraint|slot\s+logic|post-process|as per)\b[^)]*\)/gi;
 
 // AI reasoning sentences: "Since the traveler..."
 const AI_REASONING_RE = /(?:^|\.\s*)Since\s+(?:the|this|your)\s+(?:traveler|user|guest|visitor|group)\s+[^.]*\./gi;
