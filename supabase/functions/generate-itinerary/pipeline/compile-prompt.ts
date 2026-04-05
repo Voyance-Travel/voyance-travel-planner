@@ -820,6 +820,9 @@ Archetype influences 30-40% of activities. The rest must be universally enjoyabl
 
 OUTPUT QUALITY:
 All text must be clean, correctly spelled English. No garbled characters, no non-Latin script, no leaked schema field names.
+
+TEXT QUALITY — NO META-COMMENTARY:
+Never include parenthetical notes, internal reasoning, scheduling logic, or explanations of why an activity was chosen in any user-visible text field (title, description, tips, voyanceInsight, whyThisFits). All text must read as polished travel copy written for the end user. Do not include "(Note: ...)", "(Scheduled as ...)", "(Adjusted for ...)", "(Reflecting ...)", or any similar meta-commentary.
 `;
 
   // ═══════════════════════════════════════════════════════════════════════
