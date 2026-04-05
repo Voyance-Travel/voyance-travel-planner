@@ -1,77 +1,42 @@
 
 
-## Fix Cross-Day Dedup Regression — Never Remove Primary Meals Without Replacement
+## Phantom Pricing v8 — Airport Arrival/Departure Fix
 
 ### Root Cause
 
-There are two locations where dining activities get removed without checking if they're primary meals (breakfast/lunch/dinner):
+"Arrival at Lisbon Airport" has "airport" in the title, which matches `PAID_OVERRIDE_PATTERNS` in `src/lib/cost-estimation.ts` (line 553: `/\b(?:airport|taxi|uber|...)\b/i`). This causes `isLikelyFreePublicVenue` to return `false`, so the frontend never zeroes the price.
 
-1. **`action-generate-trip-day.ts` lines 918-925**: The "ZERO-TOLERANCE" path — when a cross-day duplicate restaurant has no pool replacement, it nulls the activity and filters it out. No check for whether it's a primary meal. No meal guard runs after this point.
+The backend `sanitization.ts` also doesn't catch it because "airport" isn't in the `tier1FreePatterns` regex, and arrival/departure activities aren't handled at all.
 
-2. **`generation-core.ts` lines 2196-2205**: The last-attempt trip-wide duplicate strip — removes activities by title match without checking if they're primary meals. The meal guard at line 2232 runs after this, so it *should* catch gaps, but only on the last attempt.
+### Fix (2 files)
 
-3. **`repair-day.ts` lines 522-523**: When a dining dupe has no pool replacement, it marks it for removal. This is less likely the culprit since the meal guard runs after repair, but it's still unsafe.
+**File 1: `src/lib/cost-estimation.ts`**
 
-The most likely cause of the Day 2 missing dinner is location #1 (`action-generate-trip-day.ts`), because it runs **after** all pipeline guards and there's no subsequent meal check.
-
-### Plan (3 files)
-
-**File 1: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`** (lines 918-922)
-
-Change the ZERO-TOLERANCE removal to protect primary meals. When no pool replacement exists:
-- If the activity is a primary meal (`/\b(?:breakfast|lunch|dinner|brunch)\b/i` in title), **keep it** and log a warning instead of removing
-- If it's non-essential dining (cocktails, nightcap, snacks), remove as before
+Add an "always-free activity" check at the top of `isLikelyFreePublicVenue` (before the paid override check). If the title matches arrival/departure/check-in/check-out/freshen-up patterns, return `true` immediately — these activities never cost money regardless of keywords like "airport":
 
 ```ts
-// Replace lines 918-922
-} else {
-  const isPrimaryMeal = /\b(?:breakfast|lunch|dinner|brunch)\b/i.test(act.title || '');
-  if (isPrimaryMeal) {
-    console.warn(`[generate-trip-day] ⚠️ CROSS-DAY DEDUP: "${act.title}" repeats but is PRIMARY MEAL — KEEPING (duplicate > missing meal)`);
-  } else {
-    console.warn(`[generate-trip-day] 🚫 CROSS-DAY DEDUP: "${act.title}" repeats with no replacement — REMOVING`);
-    dayResult.activities[i] = null;
-  }
-}
+const ALWAYS_FREE_ACTIVITY = /\b(?:arrival|departure|check[\s-]?in|check[\s-]?out|return\s+to|freshen\s+up|settle\s+in)\b/i;
+if (ALWAYS_FREE_ACTIVITY.test(fields.title || '')) return true;
 ```
 
-**File 2: `supabase/functions/generate-itinerary/generation-core.ts`** (lines 2196-2205)
+This goes right after the `if (!combined) return false;` check and before the paid override check.
 
-Add primary meal protection to the last-attempt duplicate strip:
+**File 2: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-```ts
-generatedDay.activities = generatedDay.activities.filter(a => {
-  const title = (a.title || '').toLowerCase();
-  const isDupe = duplicateTitles.some(dt => title.includes(dt) || dt.includes(title));
-  if (!isDupe) return true;
-  // Never strip primary meals
-  if (/\b(?:breakfast|lunch|dinner|brunch)\b/i.test(a.title || '')) {
-    console.warn(`[Stage 2] Keeping duplicate primary meal "${a.title}" — meal > uniqueness`);
-    return true;
-  }
-  return false;
-});
-```
-
-**File 3: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (lines 520-523)
-
-Add the same primary meal guard:
+Add a check before the tier1/tier2 free venue logic (around line 304). If the activity title matches arrival/departure patterns, zero out its cost:
 
 ```ts
-// Non-dining or no pool replacement: mark for removal — BUT protect primary meals
-const isPrimaryMeal = /\b(?:breakfast|lunch|dinner|brunch)\b/i.test(act.title || '');
-if (isDining && isPrimaryMeal) {
-  console.warn(`[Repair] Keeping duplicate primary meal "${act.title}" — no pool replacement, but meal > uniqueness`);
-  continue;
+const alwaysFreeActivity = /\b(?:arrival|departure|check[\s-]?in|check[\s-]?out|return\s+to|freshen\s+up|settle\s+in)\b/i;
+if (alwaysFreeActivity.test(act.title || '') && act.cost?.amount > 0) {
+  console.log(`[sanitize] Zeroed cost on always-free activity: ${act.title}`);
+  act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
 }
-indicesToRemove.push(vr.activityIndex);
 ```
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — protect primary meals from zero-tolerance removal
-- `supabase/functions/generate-itinerary/generation-core.ts` — protect primary meals from last-attempt duplicate strip
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — protect primary meals from repair duplicate removal
+- `src/lib/cost-estimation.ts` — add always-free activity bypass before paid override check
+- `supabase/functions/generate-itinerary/sanitization.ts` — zero cost on arrival/departure activities
 
 ### Verification
-Generate a 4-day Lisbon trip. Every full day should have breakfast, lunch, and dinner. Check edge function logs for "KEEPING" warnings to confirm the guard fires when needed.
+Open trip `3263251a`. "Arrival at Lisbon Airport" should show Free. All other free venues should remain Free. Dining and ticketed items should keep their prices.
 
