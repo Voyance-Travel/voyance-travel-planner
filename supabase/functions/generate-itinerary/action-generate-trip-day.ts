@@ -1275,8 +1275,12 @@ async function _handleGenerateTripDayInner(
     const { extractRestaurantVenueName } = await import('./generation-utils.ts');
     const newUsedRestaurants = [...usedRestaurants];
     const dayActivities = dayResult?.activities || [];
+    const MEAL_RE_EXTRACT = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
     for (const act of dayActivities) {
-      if ((act.category || '').toLowerCase() === 'dining' && (act.title || act.location?.name)) {
+      const catLow = (act.category || '').toLowerCase();
+      const typLow = (act.type || '').toLowerCase();
+      const isDining = catLow === 'dining' || typLow === 'dining' || MEAL_RE_EXTRACT.test(act.title || '');
+      if (isDining && (act.title || act.location?.name)) {
         // Extract from title first, fall back to location.name
         const venueFromTitle = act.title ? extractRestaurantVenueName(act.title) : '';
         const venueFromLocation = act.location?.name ? extractRestaurantVenueName(act.location.name) : '';
