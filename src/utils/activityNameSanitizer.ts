@@ -183,6 +183,7 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(VENUE_DB_NOTE_RE, '')
     .replace(LOCAL_FAVORITE_NOTE_RE, '')
     .replace(VENUE_SOURCE_RE, '')
+    .replace(HOURS_VISIT_COMBO_RE, '')
     .replace(AI_QUALIFIER_RE, '')
     .replace(TRAILING_OR_QUALIFIER_RE, '')
     .replace(SLOT_PREFIX_RE, '')
