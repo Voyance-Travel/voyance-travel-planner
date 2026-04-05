@@ -2330,7 +2330,7 @@ function repairBookends(
   // accommodation cards at the start of the day that aren't check-in/checkout.
   // The traveler woke up at the hotel; "Return to Hotel" / "Freshen Up" as the
   // first activity is nonsensical.
-  if (!isFirstDay && !isDepartureDay && !isHotelChange) {
+  if (!isFirstDay && !isDepartureDay) {
     let stripped = true;
     while (stripped) {
       stripped = false;
@@ -2339,6 +2339,12 @@ function repairBookends(
       if (firstRealIdx >= 0) {
         const first = activities[firstRealIdx];
         if (isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first)) {
+          // On hotel-change days, only strip pre-dawn phantoms (before 06:00)
+          // to preserve legitimate mid-day check-in/checkout activities
+          if (isHotelChange) {
+            const startMins = parseTimeToMinutes(first.startTime || '08:00');
+            if (startMins !== null && startMins >= 360) break; // 06:00+ — likely legitimate, stop stripping
+          }
           // Also remove any transport card immediately before it that goes TO the hotel
           if (firstRealIdx > 0 && isTransport(activities[firstRealIdx - 1])) {
             const transportTitle = (activities[firstRealIdx - 1].title || '').toLowerCase();
