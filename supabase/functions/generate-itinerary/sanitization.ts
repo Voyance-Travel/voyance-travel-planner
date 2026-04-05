@@ -393,6 +393,47 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     }
   }
 
+  // ── City-mismatch detection: flag restaurants with addresses outside destination ──
+  if (destination && day.activities) {
+    const dest = destination.toLowerCase().trim();
+    const cityGroups: Record<string, string[]> = {
+      portugal: ['lisbon', 'lisboa', 'porto', 'faro', 'algarve', 'coimbra', 'braga', 'funchal', 'sintra', 'cascais', 'estoril', 'albufeira', 'alporchinhos', 'portimão', 'portimao'],
+      italy: ['rome', 'roma', 'milan', 'milano', 'florence', 'firenze', 'venice', 'venezia', 'naples', 'napoli', 'turin', 'torino', 'bologna', 'palermo'],
+      spain: ['madrid', 'barcelona', 'seville', 'sevilla', 'valencia', 'malaga', 'bilbao', 'granada'],
+      france: ['paris', 'lyon', 'marseille', 'nice', 'bordeaux', 'toulouse', 'strasbourg'],
+      germany: ['berlin', 'munich', 'münchen', 'hamburg', 'frankfurt', 'cologne', 'köln', 'düsseldorf'],
+      uk: ['london', 'edinburgh', 'manchester', 'birmingham', 'glasgow', 'liverpool'],
+      japan: ['tokyo', 'kyoto', 'osaka', 'hiroshima', 'yokohama', 'nara', 'fukuoka', 'sapporo'],
+    };
+
+    let otherCities: string[] = [];
+    for (const cities of Object.values(cityGroups)) {
+      if (cities.some(c => dest.includes(c) || c.includes(dest))) {
+        otherCities = cities.filter(c => !dest.includes(c) && !c.includes(dest));
+        break;
+      }
+    }
+
+    if (otherCities.length > 0) {
+      for (const act of day.activities) {
+        const address = ((act.address || (act.location as any)?.address || '') as string).toLowerCase();
+        if (!address) continue;
+
+        const mentionsOther = otherCities.some(c => address.includes(c));
+        const mentionsDest = address.includes(dest) ||
+          (dest === 'lisbon' && address.includes('lisboa')) ||
+          (dest === 'lisboa' && address.includes('lisbon'));
+
+        if (mentionsOther && !mentionsDest) {
+          console.warn(`[sanitize] Restaurant "${act.title}" address mentions another city: ${address}`);
+          if (act.cost && typeof act.cost === 'object') {
+            (act.cost as any).amount = 0;
+          }
+        }
+      }
+    }
+  }
+
   return day;
 }
 
