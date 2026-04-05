@@ -1,52 +1,36 @@
 
 
-## Hide Empty System Note / Description Containers
+## Fix Midnight Entry Cascade on Day 1
 
 ### Problem
-After sanitization strips stub text like "Popular with locals", the UI still renders empty containers (gray box with pin icon, empty tip sections) because the render guard checks the *raw* field value (`activity.description && ...`) which is truthy, but `sanitizeActivityText()` returns `''`.
+Day 1 starts with phantom midnight entries (12:05 AM "Return to Hotel", 1:05 AM "Check-in") that cascade the entire timeline into early morning hours. The existing midnight stripper at sanitization.ts lines 413-433 has gaps: it only strips if ALL pre-dawn entries are hotel-typed, and doesn't check alternate time field names (`time`, `start_time`).
 
-### Fix
+### Changes
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
+**File: `supabase/functions/generate-itinerary/sanitization.ts`** (~lines 413-433)
 
-Add a `hasContent` helper (or inline the check) that tests the *sanitized* value, not the raw field. Apply to all description/tips render guards:
+Replace the existing midnight phantom stripper with the broader approach from the prompt:
 
-1. **Line ~10235** — Full-width activity card description:
-   Change `{activity.description && (` → `{sanitizeActivityText(activity.description) && (`
+- Check `activity.time`, `activity.start_time`, AND `activity.startTime` for the hour
+- Strip pre-dawn (00:00–04:59) hotel-related entries sequentially from the start of the day — stop at the first non-hotel or non-midnight entry
+- Use a wider title regex: `return to|check.?in|check.?out|hotel|freshen up|rest and refresh|retire|settle|wind down|end.?of.?day|back to`
+- Also match `category === 'accommodation'` or `category/type === 'stay'`
+- Log each removal for diagnostics
 
-2. **Line ~10379** — Compact card description:
-   Change `{activity.description && !compact && (` → `{sanitizeActivityText(activity.description) && !compact && (`
+**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** (~line 898, after the existing timing rules)
 
-3. **Line ~10731** — Default card description:
-   Change `{activity.description && !compact && (` → `{sanitizeActivityText(activity.description) && !compact && (`
+Add after the "Activities must flow logically" line:
 
-4. **Lines ~10250, ~10403, ~10774** — Voyance Tips sections:
-   Change `{activity.tips && !isCheckIn && (` and `{activity.tips && !activity.isVoyancePick && ...` → add `sanitizeActivityText(activity.tips) &&` guard
-
-5. **Lines ~10227-10231** — Venue name for dining (MapPin + text):
-   Add `.trim()` check: `venueNameForDining && venueNameForDining.trim() !== '' && ...`
-
-6. **Lines ~10242-10246** — Location text:
-   Already uses `locationText &&` — add `.trim().length > 0` guard
-
-**File: `src/components/planner/TripActivityCard.tsx`** (line ~82-85)
-Change `{activity.description && (` → check after trim
-
-**File: `src/components/itinerary/LiveActivityCard.tsx`** (line ~169-172)
-Change `{activity.description && (` → check after trim
-
-**Optional optimization**: To avoid calling `sanitizeActivityText` twice (once for guard, once for render), extract to a local variable at the top of the render block:
-```typescript
-const sanitizedDesc = sanitizeActivityText(activity.description);
-const sanitizedTips = sanitizeActivityText(activity.tips);
 ```
-Then use `{sanitizedDesc && (` for the guard and `{sanitizedDesc}` for the content.
+- Do NOT include "Return to Hotel" entries at the START of any day.
+- Do NOT include any activities between 12:00 AM and 6:00 AM unless they are specifically planned late-night activities from the CURRENT day.
+- Day 1 should begin with arrival or the first morning activity (typically 8:00-9:00 AM), never with midnight hotel entries.
+```
 
 ### Files to edit
-- `src/components/itinerary/EditorialItinerary.tsx` — ~6 render guards
-- `src/components/planner/TripActivityCard.tsx` — 1 render guard
-- `src/components/itinerary/LiveActivityCard.tsx` — 1 render guard
+- `supabase/functions/generate-itinerary/sanitization.ts` — strengthen midnight phantom stripper
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add timing rules to prompt
 
 ### Verification
-Generate a Lisbon trip. No empty gray boxes or lone pin icons should appear without text content.
+Generate a 4-day Lisbon trip. Day 1 should start around 8:00–9:00 AM. No day should have phantom midnight hotel entries at the start.
 
