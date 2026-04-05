@@ -2569,7 +2569,7 @@ function repairBookends(
           // Determine real "from" — the preceding non-transport activity
           const prevNonTransport = [...consolidated].reverse().find(a => !isTransport(a));
           const fromName = prevNonTransport?.location?.name || first.fromLocation?.name || 'previous location';
-          const toName = last.location?.name || last.title?.replace('Travel to ', '') || 'destination';
+          const toName = last.location?.name || sanitizeTransitDestination(last.title?.replace('Travel to ', '') || '') || 'destination';
 
           // Re-estimate using real endpoints if coordinates available
           const fromCoords = prevNonTransport ? getActivityCoords(prevNonTransport) : hotelCoordinates || null;
