@@ -215,6 +215,14 @@ export function usePayableItems({
         if (isNonPayable) return;
 
         if (cost <= 0) {
+          // Check if this is a free public venue BEFORE applying never-free estimation
+          const isFreeVenue = isLikelyFreePublicVenue({
+            title: activity.title || activity.name,
+            category: activity.category || activity.type,
+            type: activity.type,
+          });
+          if (isFreeVenue) return; // Skip — free public venues are not payable
+
           const shouldNeverBeFree = NEVER_FREE_CATEGORIES.some(nfc => catLower.includes(nfc)) ||
             NEVER_FREE_KEYWORDS.some(kw => titleLower.includes(kw));
 
