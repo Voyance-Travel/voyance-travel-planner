@@ -464,6 +464,14 @@ PRICES ON EVERYTHING:
 PRACTICAL TIPS (in "tips" field of each activity):
 - Booking requirements, queue advice, dress codes, closure days
 - "Book online to skip the line" / "Closed Mondays" / "Best photos at sunset"
+
+RESTAURANT UNIQUENESS — ABSOLUTE REQUIREMENT:
+- EVERY restaurant across the ENTIRE trip must be UNIQUE. No restaurant name may appear on more than one day.
+- This includes breakfast, lunch, dinner, cocktails, and nightcaps.
+- You are given a list of already-used restaurants. You MUST NOT use ANY restaurant from that list.
+- Even if an already-used restaurant seems like a perfect fit, choose a DIFFERENT one instead.
+- For breakfast: every city has dozens of breakfast spots. NEVER repeat a breakfast venue.
+- CHECK your output: if any restaurant name matches one in the used list, REPLACE it before responding.
 ${hotelNameForDay ? `\nHOTEL: ${hotelNameForDay}${hotelNeighborhood ? ` (${hotelNeighborhood})` : ''}\nStart and end the day near the hotel when practical.${facts.resolvedIsHotelChange && facts.resolvedPreviousHotelName ? `\n\n${'='.repeat(70)}\n🏨 HOTEL CHANGE DAY — MANDATORY SEQUENCE\n${'='.repeat(70)}\nToday the traveler switches from "${facts.resolvedPreviousHotelName}" to "${hotelNameForDay}".\nThe REQUIRED chronological order is:\n  1. Wake up at ${facts.resolvedPreviousHotelName}\n  2. Breakfast at/near ${facts.resolvedPreviousHotelName}${facts.resolvedPreviousHotelAddress ? ` (${facts.resolvedPreviousHotelAddress})` : ''}\n  3. Checkout from ${facts.resolvedPreviousHotelName} (category: "accommodation")\n  4. Transport/transfer to ${hotelNameForDay}\n  5. Check-in at ${hotelNameForDay} (category: "accommodation")\n  6. Afternoon/evening activities near ${hotelNameForDay}\n  7. Return to ${hotelNameForDay}\n\n🚫 NOTHING at or near ${hotelNameForDay} may appear BEFORE the check-in activity.\n   Morning activities MUST be geographically near ${facts.resolvedPreviousHotelName}.\n   The new hotel (${hotelNameForDay}) is only the "active" hotel AFTER check-in.\n${'='.repeat(70)}` : ''}` : '\n⚠️ NO HOTEL BOOKED: Do NOT reference any hotel in the itinerary. No hotel check-in, check-out, return to hotel, breakfast at hotel, or taxi to hotel. All meals should be at local restaurants or cafés.'}`;
   }
 
