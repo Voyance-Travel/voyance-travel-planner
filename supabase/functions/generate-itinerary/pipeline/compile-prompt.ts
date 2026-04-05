@@ -794,7 +794,17 @@ General Requirements:
   • Train/Commuter Rail: Use realistic ticket price for the specific route
   • Taxi/Rideshare: Estimate based on distance and city rates (typically $10-40 depending on distance)
   • Ferry: Use the actual fare for the specific route
-  • The title MUST include the mode: "Travel to [place] via [mode]" (e.g., "Travel to US Open via 7 Train", "Taxi to hotel")
+   • The title MUST include the mode: "Travel to [place] via [mode]" (e.g., "Travel to US Open via 7 Train", "Taxi to hotel")
+- RESTAURANT PRICING — USE REALISTIC PRICES:
+  • Michelin 3-star / destination restaurants: minimum €180/pp
+  • Michelin 2-star restaurants: minimum €120/pp
+  • Michelin 1-star / high-end tasting menus: minimum €80/pp
+  • Well-known fine dining (non-starred): minimum €60/pp
+  • Famous seafood restaurants (e.g., cervejaria, marisqueira): minimum €40/pp
+  • Mid-range sit-down restaurants: €20-50/pp
+  • Casual dining and cafés: €10-30/pp
+  • Fast casual, bakeries, pastéis: €5-15/pp
+  When in doubt, price HIGHER. Underpricing makes the itinerary unreliable. Use the actual price a real diner would pay at that specific restaurant.
 - Include meals as specified by the day's meal policy (see timing instructions above) — each a real named restaurant with price
 - Each lunch and dinner recommendation should include 1 ALTERNATIVE option in its "tips" field
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
