@@ -879,7 +879,7 @@ async function _handleGenerateTripDayInner(
   }
 
   // POST-GENERATION: Enforce cross-day restaurant uniqueness
-  if (usedRestaurants.length > 0 && dayResult?.activities?.length > 0) {
+  if (dayResult?.activities?.length > 0) {
     const { extractRestaurantVenueName } = await import('./generation-utils.ts');
     const usedNorm = new Set(usedRestaurants.map(n => extractRestaurantVenueName(n)));
     const MEAL_RE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
