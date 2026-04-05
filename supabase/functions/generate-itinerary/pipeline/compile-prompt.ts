@@ -808,6 +808,14 @@ General Requirements:
 - Include meals as specified by the day's meal policy (see timing instructions above) — each a real named restaurant with price
 - Each lunch and dinner recommendation should include 1 ALTERNATIVE option in its "tips" field
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
+
+RESTAURANT NAMING RULES — CRITICAL:
+- Every dining activity MUST include a SPECIFIC, REAL restaurant name. Never use generic placeholders like "a local spot", "a nearby café", "a local restaurant", "the destination", or similar vague descriptions.
+- The title MUST contain the actual restaurant name (e.g., "Breakfast at Pastéis de Belém", "Dinner at Cervejaria Ramiro"), NOT a description like "Breakfast at a local spot".
+- The location.name field MUST be the restaurant's actual name — NEVER "the destination", "a local spot", or any generic placeholder.
+- If you cannot think of another unique restaurant for a meal, use the hotel restaurant or a well-known local chain café — NEVER fall back to a generic placeholder.
+- For Lisbon, consider: Pastéis de Belém, Café A Brasileira, Copenhagen Coffee Lab, Dear Breakfast, Heim Café, Nicolau Lisboa, Fábrica Coffee Roasters, Landeau Chocolate, Time Out Market vendors.
+- Parks, gardens, plazas, squares, viewpoints, miradouros, riverside walks, and neighborhood strolls are FREE (€0). Do NOT assign any price to these.
 - Every activity MUST have a "title" field (the display name)
 - All times MUST be in 24-hour HH:MM format
 - ACTIVITY COUNT: This includes meals, transit, and evening activities. Fill the day completely.

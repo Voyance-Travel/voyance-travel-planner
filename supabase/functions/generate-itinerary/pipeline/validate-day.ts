@@ -231,16 +231,34 @@ function checkChainRestaurants(activities: StrictActivityMinimal[], results: Val
 function checkGenericVenues(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
   for (let i = 0; i < activities.length; i++) {
     const title = activities[i].title || '';
+    const cat = (activities[i].category || '').toLowerCase();
+    const isDining = cat.includes('dining') || cat.includes('restaurant') || cat.includes('food');
+
+    // Also check venue/location name for placeholder patterns
+    const locationName = ((activities[i] as any).location?.name || '').trim().toLowerCase();
+    const hasPlaceholderLocation = locationName === 'the destination' || locationName === '' ||
+      /^(a |the )?(local |nearby )?(spot|place|restaurant|caf[eé]|cafe|eatery|bistro|establishment)/i.test(locationName);
+
     if (GENERIC_VENUE_PATTERNS.some(re => re.test(title.trim()))) {
-      // Escalate meal-in-city patterns to error (they should trigger retry/repair)
-      const isMealInCity = /^(breakfast|brunch|lunch|dinner|supper)\s+in\s+\S/i.test(title.trim());
+      // Escalate ALL dining generic venues to error (they should trigger repair)
+      const shouldEscalate = isDining || /^(breakfast|brunch|lunch|dinner|supper)\s+(in|at)\s+/i.test(title.trim());
       results.push({
         code: FAILURE_CODES.GENERIC_VENUE,
-        severity: isMealInCity ? 'error' : 'warning',
-        message: `"${title}" is a generic placeholder venue name${isMealInCity ? ' — meal cards must use real restaurant names' : ''}`,
+        severity: shouldEscalate ? 'error' : 'warning',
+        message: `"${title}" is a generic placeholder venue name${shouldEscalate ? ' — meal cards must use real restaurant names' : ''}`,
         activityIndex: i,
         field: 'title',
-        autoRepairable: isMealInCity,
+        autoRepairable: true,
+      });
+    } else if (isDining && hasPlaceholderLocation) {
+      // Dining activity with a valid-looking title but placeholder location name
+      results.push({
+        code: FAILURE_CODES.GENERIC_VENUE,
+        severity: 'error',
+        message: `Dining activity "${title}" has placeholder location "${locationName || '(empty)'}" — must use a real venue name`,
+        activityIndex: i,
+        field: 'location',
+        autoRepairable: true,
       });
     }
   }
