@@ -1409,7 +1409,15 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // --- 9b-ii. DINING HOTEL REFERENCE on hotel-change days ---
   // Breakfast (and other dining) before checkout should reference the previous hotel,
   // not the new hotel the traveler hasn't arrived at yet.
-  if (isHotelChange && checkoutIdx >= 0 && previousHotelName) {
+  const diningCheckoutIdx = isHotelChange
+    ? activities.findIndex((a: any) => {
+        const t = (a.title || a.name || '').toLowerCase();
+        const c = (a.category || '').toLowerCase();
+        return c === 'accommodation' &&
+          (t.includes('checkout') || t.includes('check-out') || t.includes('check out'));
+      })
+    : -1;
+  if (isHotelChange && diningCheckoutIdx >= 0 && previousHotelName) {
     const newHotelLower = (hotelName || '').toLowerCase();
     const newHotelCore = normalizeHotelCore(hotelName || '');
 
