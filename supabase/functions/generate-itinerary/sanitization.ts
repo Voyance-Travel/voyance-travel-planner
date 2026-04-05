@@ -365,9 +365,17 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           floor = 80; reason = 'Fine dining / tasting menu';
         }
 
-        // Known high-end restaurant names
-        if (floor < 60 && /\b(belcanto|alma|feitoria|eleven|loco|ceia|enoteca|sommelier)\b/i.test(combined)) {
-          floor = 60; reason = 'Known high-end restaurant';
+        // Known Michelin-starred / fine dining — tiered by actual price range
+        const knownMichelinHigh = /\b(belcanto|feitoria|fifty\s*seconds)\b/i;
+        const knownMichelinMid = /\b(alma|eleven|epur|cura|loco|eneko)\b/i;
+        const knownUpscale = /\b(il\s*gallo|ceia|enoteca|sommelier)\b/i;
+
+        if (floor < 150 && knownMichelinHigh.test(combined)) {
+          floor = 150; reason = 'Known top-tier Michelin restaurant';
+        } else if (floor < 120 && knownMichelinMid.test(combined)) {
+          floor = 120; reason = 'Known Michelin-starred restaurant';
+        } else if (floor < 60 && knownUpscale.test(combined)) {
+          floor = 60; reason = 'Known upscale restaurant';
         }
 
         // Famous seafood
