@@ -1,51 +1,78 @@
 
 
-## Fix: End-of-Day Hotel Return Card Dropped by 23:30 Cutoff
+## Fix: Breakfast on Hotel-Change Day References Wrong Hotel
 
-### Root Cause
-
-The repair pipeline has two "past 23:30" cutoff filters (lines 1780-1793 and 1843-1854) that drop any activity whose `startTime` exceeds 23:30. When dinner runs late (e.g., 8:45 PM → 11:15 PM as in the screenshot), the bookend-injected "Return to Hotel" card starts at ~11:35 PM, which exceeds the cutoff and gets silently dropped. The preceding transport card ("Travel to Hotel") starts at 11:15 PM, just under the cutoff, so it survives — leaving the day ending with a transport card but no accommodation card.
-
-This affects all days (not just post-hotel-switch) where dinner ends late, but it's most visible after a hotel switch because the new hotel context makes it obvious.
+### Problem
+On a hotel-change day (e.g., Four Seasons → Palácio Ludovice), the AI generates "Breakfast at Palácio Ludovice" even though the traveler wakes up at the Four Seasons and eats breakfast there before checking out. The accommodation title normalization (Step 9b) correctly assigns pre-checkout accommodation cards to the previous hotel, but **breakfast is a `dining` category activity** — it's skipped entirely by the normalization loop (line 1364: `if (cat !== 'accommodation') continue`).
 
 ### Fix
 
-Exempt end-of-day "Return to Hotel" accommodation cards from the 23:30 cutoff. These are structural bookend cards that should always be preserved — a traveler always returns to their hotel at the end of the day, regardless of how late dinner runs.
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — Step 9b (Accommodation Title Normalization, ~line 1342)
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
-
-At both cutoff filters (~line 1782 and ~line 1846), add an exemption for accommodation-category activities that are hotel returns (contain "return to" in title or are the last accommodation card). Specifically:
+After the existing accommodation normalization loop, add a **dining normalization pass** for hotel-change days. On hotel-change days, any dining activity that references a hotel name in its title (e.g., "Breakfast at X") and appears before checkout should have its hotel reference updated to the previous hotel name.
 
 ```typescript
-// In both 23:30 cutoff filters, exempt structural end-of-day cards:
-activities = activities.filter((act: any) => {
-  const s = parseTimeToMinutes(act.startTime || '');
-  if (s !== null && s > cutoff) {
+// After the accommodation normalization loop (~line 1407), add:
+// --- 9b-ii. DINING HOTEL REFERENCE on hotel-change days ---
+// Breakfast (and other dining) before checkout should reference the previous hotel
+if (isHotelChange && checkoutIdx >= 0 && previousHotelName) {
+  const newHotelLower = (hotelName || '').toLowerCase();
+  const newHotelCore = normalizeHotelCore(hotelName || '');
+
+  for (let i = 0; i < checkoutIdx; i++) {
+    const act = activities[i];
     const cat = (act.category || '').toLowerCase();
-    const title = (act.title || '').toLowerCase();
-    // Exempt end-of-day hotel returns and their transport
-    if (cat === 'accommodation' && (title.includes('return to') || title.includes('freshen up'))) {
-      return true; // Keep structural bookend
-    }
-    if (cat === 'transport' || cat === 'transportation') {
-      // Keep transport to hotel at end of day
-      if (title.includes('hotel') || (act.location?.name || '').toLowerCase().includes('hotel')) {
-        return true;
+    if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') continue;
+
+    const title = act.title || act.name || '';
+    const titleLower = title.toLowerCase();
+
+    // Check if this dining activity references the NEW hotel (wrong)
+    const refsNewHotel = titleLower.includes(newHotelLower) ||
+      (newHotelCore && titleLower.includes(newHotelCore));
+    // Or references any generic hotel
+    const refsGenericHotel = titleLower.includes('your hotel') ||
+      titleLower.includes('the hotel');
+
+    if (refsNewHotel || refsGenericHotel) {
+      // Replace hotel reference with previous hotel
+      let newTitle = title;
+      if (refsNewHotel) {
+        // Replace new hotel name with previous hotel name (case-insensitive)
+        newTitle = title.replace(new RegExp(escapeRegExp(hotelName || ''), 'gi'), previousHotelName);
+      } else {
+        newTitle = title.replace(/your hotel|the hotel/gi, previousHotelName);
       }
+      act.title = newTitle;
+      act.name = newTitle;
+
+      // Fix location too
+      if (act.location?.name) {
+        const locLower = act.location.name.toLowerCase();
+        if (locLower.includes(newHotelLower) || locLower === 'your hotel') {
+          act.location.name = previousHotelName;
+        }
+      }
+
+      repairs.push({
+        code: FAILURE_CODES.MISSING_SLOT,
+        action: 'fixed_pre_checkout_dining_hotel_ref',
+        before: title,
+        after: newTitle,
+      });
     }
-    // ... existing drop logic
-    return false;
   }
-  return true;
-});
+}
 ```
 
+A small `escapeRegExp` helper will be needed (or inline the escape).
+
 ### Impact
-- End-of-day "Return to Hotel" cards preserved even when dinner runs past 11 PM
-- Transport-to-hotel cards also preserved (they're the bridge)
-- Non-structural activities (sightseeing, dining) past 23:30 still correctly dropped
-- Single file change, two filter blocks updated
+- Breakfast on hotel-change days correctly references the departing hotel (e.g., "Breakfast at Four Seasons" instead of "Breakfast at Palácio Ludovice")
+- Other pre-checkout dining that references the hotel is also corrected
+- Post-checkout dining is unaffected (correctly references the new hotel)
+- Single file change, added after existing normalization block
 
 ### Files
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — exempt bookend cards from 23:30 cutoff
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add pre-checkout dining hotel reference fix in Step 9b
 
