@@ -1,42 +1,36 @@
 
 
-## Fix Michelin Restaurant Underpricing — Raise Known Fine Dining Floors
+## Fix Breakfast Restaurant Repetition — Strengthen AI Prompt for Unique Restaurants
 
-### Root Cause
+### Analysis
 
-`sanitization.ts` lines 350-387 already has a dining price floor system, but it's too weak:
-- Known high-end restaurants (including `eleven`) only get a €60 floor (line 369)
-- Michelin detection requires the AI to explicitly write "michelin" in the description — which it often doesn't
-- Result: Eleven gets floored to €60 at best, but if the AI prices it at €28 and the text doesn't say "michelin", only the €60 known-restaurant floor catches it
+The codebase already has:
+1. **Debug logging** at line 347 of `action-generate-trip-day.ts` — already logs `usedRestaurants received (N): [...]`
+2. **Three blocklist sections** in `compile-prompt.ts` (lines 983-1004) — pool-based blocklist, variety rule, and hard blocklist
 
-The fix is to raise the known restaurant floors to match actual Michelin pricing, and expand the list.
+Despite this, the AI still repeats restaurants. The fix is to add a stronger, more prominent "RESTAURANT UNIQUENESS" instruction block higher up in the prompt (in the system-level instructions near the timing/structure section) rather than only at the bottom with the pool data. Instructions closer to the top of the prompt carry more weight.
 
 ### Plan (1 file)
 
-**File: `supabase/functions/generate-itinerary/sanitization.ts`** (lines 368-376)
+**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
 
-Replace the single "known high-end restaurant" block with tiered known-restaurant floors:
+Add a prominent RESTAURANT UNIQUENESS block inside `timingInstructions` (around line 465, after the PRACTICAL TIPS section and before the hotel line). This places it in the structural rules section where the AI pays the most attention, not buried at the bottom with data:
 
 ```ts
-// Known Michelin-starred / fine dining — tiered by actual price range
-const knownMichelinHigh = /\b(belcanto|feitoria|fifty\s*seconds)\b/i;
-const knownMichelinMid = /\b(alma|eleven|epur|cura|loco|eneko)\b/i;
-const knownUpscale = /\b(il\s*gallo|ceia|enoteca|sommelier)\b/i;
-
-if (floor < 150 && knownMichelinHigh.test(combined)) {
-  floor = 150; reason = 'Known top-tier Michelin restaurant';
-} else if (floor < 120 && knownMichelinMid.test(combined)) {
-  floor = 120; reason = 'Known Michelin-starred restaurant';
-} else if (floor < 60 && knownUpscale.test(combined)) {
-  floor = 60; reason = 'Known upscale restaurant';
-}
+RESTAURANT UNIQUENESS — ABSOLUTE REQUIREMENT:
+- EVERY restaurant across the ENTIRE trip must be UNIQUE. No restaurant name may appear on more than one day.
+- This includes breakfast, lunch, dinner, cocktails, and nightcaps.
+- You are given a list of already-used restaurants. You MUST NOT use ANY restaurant from that list.
+- Even if an already-used restaurant seems like a perfect fit, choose a DIFFERENT one instead.
+- For breakfast: every city has dozens of breakfast spots. NEVER repeat a breakfast venue.
+- CHECK your output: if any restaurant name matches one in the used list, REPLACE it before responding.
 ```
 
-This replaces lines 368-371 (the single `floor = 60` block). The seafood and generic dinner floors below remain unchanged.
+This goes right after the "PRACTICAL TIPS" block (line 466) and before the hotel instructions. It reinforces the existing blocklist data with a structural rule the AI is more likely to respect.
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/sanitization.ts` — upgrade known restaurant floors from flat €60 to tiered €120-150
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add prominent RESTAURANT UNIQUENESS instruction block in the timing/structure section
 
 ### Verification
-Generate a Lisbon trip. Any appearance of Eleven, Alma, Epur should be priced ≥€120/pp. Belcanto, Feitoria should be ≥€150/pp. Check edge function logs for `[UNDERPRICED]` warnings.
+Generate a 4-day Lisbon trip. Check that every breakfast, lunch, and dinner uses a different restaurant. Check logs for the existing "usedRestaurants received" debug output to confirm blocklist is passed correctly.
 
