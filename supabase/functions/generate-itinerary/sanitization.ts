@@ -381,16 +381,42 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
   // Detect and clear stub descriptions that are just database descriptor notes
   const STUB_DESC_RE = /^(?:Popular with locals|A local favou?rite|Great for (?:families|groups|couples)|Tourist (?:hotspot|favorite)|Well[- ]known (?:locally|spot)|Hidden gem|Must[- ]visit|Highly recommended|A must[- ]try|Local institution|Neighborhood favou?rite|A true gem|Worth (?:a|the) visit)\.?$/i;
 
+  // Inline regex for stripping stub phrases embedded in longer text
+  const STUB_INLINE_RE = /\s*[-–—]?\s*(?:Popular with locals|A local favou?rite|Great for (?:families|groups|couples)|Tourist (?:hotspot|favorite)|Well[- ]known (?:locally|spot)|Hidden gem|Must[- ]visit|Highly recommended|A must[- ]try|Local institution|Neighborhood favou?rite|A true gem|Worth (?:a|the) visit)\.?\s*/gi;
+
+  /** Strip stub text from a string: clear if entire value is stub, else strip inline */
+  function stripStubField(val: string | undefined | null): string {
+    if (!val) return '';
+    const trimmed = val.trim();
+    if (trimmed.length > 0 && trimmed.length < 80 && STUB_DESC_RE.test(trimmed)) return '';
+    return val.replace(STUB_INLINE_RE, ' ').replace(/\s{2,}/g, ' ').trim();
+  }
+
   if (day.activities) {
     for (const act of day.activities) {
-      const desc = (act.description || '').trim();
-      if (desc.length > 0 && desc.length < 80 && STUB_DESC_RE.test(desc)) {
-        act.description = '';
+      // Debug: log which field contains the stub text
+      const actJson = JSON.stringify(act);
+      if (/popular with locals/i.test(actJson)) {
+        console.warn(`[STUB_DEBUG] "Popular with locals" found in activity "${act.title}". Keys with match:`,
+          Object.keys(act).filter(k => typeof (act as any)[k] === 'string' && /popular with locals/i.test((act as any)[k])));
       }
-      if (act.restaurant?.description) {
-        const rDesc = act.restaurant.description.trim();
-        if (rDesc.length > 0 && rDesc.length < 80 && STUB_DESC_RE.test(rDesc)) {
-          act.restaurant.description = '';
+
+      // Walk all top-level string properties
+      for (const key of Object.keys(act)) {
+        if (typeof (act as any)[key] === 'string') {
+          (act as any)[key] = stripStubField((act as any)[key]);
+        }
+      }
+
+      // Walk nested objects: restaurant, venue, place
+      for (const nestedKey of ['restaurant', 'venue', 'place']) {
+        const nested = (act as any)[nestedKey];
+        if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+          for (const key of Object.keys(nested)) {
+            if (typeof nested[key] === 'string') {
+              nested[key] = stripStubField(nested[key]);
+            }
+          }
         }
       }
     }

@@ -986,7 +986,7 @@ export function enforceRequiredMealsFinalGuard(
       bookingRequired: false,
       transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency }, instructions: 'Short walk from the previous activity' },
       tips: venue
-        ? `Popular with locals — check opening hours on the day.`
+        ? `Check opening hours before heading over — some spots close for afternoon breaks.`
         : `Ask a local or check recent reviews to find a great spot nearby.`,
       needsRefinement: !venue,
     } as StrictActivityMinimal);
