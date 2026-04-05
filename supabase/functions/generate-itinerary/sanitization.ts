@@ -371,6 +371,24 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     }
   }
 
+  // Detect and clear stub descriptions that are just database descriptor notes
+  const STUB_DESC_RE = /^(?:Popular with locals|A local favou?rite|Great for (?:families|groups|couples)|Tourist (?:hotspot|favorite)|Well[- ]known (?:locally|spot)|Hidden gem|Must[- ]visit|Highly recommended|A must[- ]try|Local institution|Neighborhood favou?rite|A true gem|Worth (?:a|the) visit)\.?$/i;
+
+  if (day.activities) {
+    for (const act of day.activities) {
+      const desc = (act.description || '').trim();
+      if (desc.length > 0 && desc.length < 80 && STUB_DESC_RE.test(desc)) {
+        act.description = '';
+      }
+      if (act.restaurant?.description) {
+        const rDesc = act.restaurant.description.trim();
+        if (rDesc.length > 0 && rDesc.length < 80 && STUB_DESC_RE.test(rDesc)) {
+          act.restaurant.description = '';
+        }
+      }
+    }
+  }
+
   return day;
 }
 
