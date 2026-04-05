@@ -3,6 +3,8 @@
  * Strips CJK artifacts, schema-leak fragments, and garbled text.
  */
 
+import { extractRestaurantVenueName } from './generation-utils.ts';
+
 // =============================================================================
 // DATE SANITIZATION — Strip non-ASCII chars that leak from CJK locale prompts
 // =============================================================================
@@ -212,8 +214,9 @@ function sanitizeAddress(address: string): string {
 
 /**
  * Deep-sanitize all user-facing text fields in a generated day object.
+ * @param usedRestaurants - Optional list of restaurant names used on previous days for repeat detection.
  */
-export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: string): any {
+export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: string, usedRestaurants?: string[]): any {
   if (!day || typeof day !== 'object') return day;
 
   const cleanTitle = sanitizeAITextField(day.title, destination);
@@ -430,6 +433,28 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
             (act.cost as any).amount = 0;
           }
         }
+      }
+    }
+  }
+
+  // ── Post-generation restaurant repeat detection ──
+  if (usedRestaurants && usedRestaurants.length > 0 && day.activities) {
+    const usedNormalized = new Set(usedRestaurants.map(n => extractRestaurantVenueName(n)));
+    for (const act of day.activities) {
+      const isDining = act.category === 'dining' || act.type === 'dining' ||
+        /\b(?:breakfast|brunch|lunch|dinner|supper)\b/i.test(act.title || '');
+      if (!isDining) continue;
+
+      const venueFromTitle = extractRestaurantVenueName(act.title || '');
+      const venueFromLocation = act.location?.name
+        ? extractRestaurantVenueName(act.location.name)
+        : '';
+
+      const isRepeat = usedNormalized.has(venueFromTitle) ||
+        (venueFromLocation && usedNormalized.has(venueFromLocation));
+
+      if (isRepeat) {
+        console.warn(`[sanitize] RESTAURANT REPEAT DETECTED: "${act.title}" (normalized: "${venueFromTitle}") was already used on a previous day`);
       }
     }
   }

@@ -969,6 +969,12 @@ ${(() => {
   return `⛔ RESTAURANT VARIETY RULE — DO NOT USE THESE (already used on previous days):\n${usedList.map((name: string) => `  • ${name}`).join('\n')}\nPick DIFFERENT restaurants for every meal. Variety is essential.\n`;
 })()}
 
+${(() => {
+  const usedList = paramUsedRestaurants || [];
+  if (usedList.length === 0) return '';
+  return `🚫 HARD RESTAURANT BLOCKLIST — ZERO TOLERANCE:\nThese restaurants were ALREADY used on previous days. Do NOT use ANY of them again, not even under a slightly different name:\n${usedList.join(', ')}\nEvery breakfast, lunch, and dinner MUST be at a DIFFERENT restaurant than all previous days. No exceptions.`;
+})()}
+
 CRITICAL REMINDERS:
 1. ${isFullDay ? `This is a FULL DAY: ${dayMealPolicy?.requiredMeals?.join(' + ') ?? 'breakfast + lunch + dinner'} + 3 paid activities + 2 free activities + transit between all stops + evening activity + next morning preview. Fill EVERY hour.` : dayMealPolicy && !isFirstDay && !isLastDay ? `This is a ${dayMealPolicy.dayMode.replace(/_/g, ' ')} day. Required meals: ${dayMealPolicy.requiredMeals.length > 0 ? dayMealPolicy.requiredMeals.join(', ') : 'none'}. Do NOT add extra meals beyond what the meal policy specifies.` : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.
@@ -976,6 +982,7 @@ CRITICAL REMINDERS:
 4. ${primaryArchetype === 'flexible_wanderer' || primaryArchetype === 'slow_traveler' || (traitScores.pace || 0) <= -3 ? 'Include at least one 2+ hour UNSCHEDULED block labeled "Free time to explore [neighborhood]"' : 'Follow the pacing guidelines for this archetype'}
 5. ${isFullDay ? 'TRANSIT: Include a transport entry (category: "transport") between EVERY pair of consecutive activities. Include mode, duration, and REALISTIC cost per mode (subway ~$2-5, taxi ~$15-40, walking = $0). Do NOT use a flat cost for all transit.' : ''}
 6. ${isFullDay ? 'PRICES: Every meal, every ticket, every taxi must have a price. estimatedCost.amount = 0 for free activities. No blanks.' : ''}
+7. NEVER repeat a restaurant across different days. Each day MUST use completely different restaurants for every meal. Variety is essential — travelers do not want to eat at the same place twice.
 
 ${'='.repeat(70)}
 🧠 VOYANCE INTELLIGENCE FIELDS — MANDATORY FOR EVERY ACTIVITY
