@@ -53,6 +53,25 @@ export function sanitizeOptionFields(obj: any): any {
   return obj;
 }
 
+/**
+ * Strip action-verb prefixes from transit destination names.
+ * E.g. "Return to Four Seasons" → "Four Seasons"
+ */
+export function sanitizeTransitDestination(name: string): string {
+  if (!name) return name;
+  return name
+    .replace(/^Return\s+to\s+/i, '')
+    .replace(/^Freshen\s+[Uu]p\s+at\s+/i, '')
+    .replace(/^Check[\s-]?in\s+at\s+/i, '')
+    .replace(/^Check[\s-]?out\s+(?:from|at)\s+/i, '')
+    .replace(/^(?:Breakfast|Lunch|Dinner|Brunch|Nightcap|Supper)\s+at\s+/i, '')
+    .replace(/^End\s+of\s+Day\s+at\s+/i, '')
+    .replace(/^Settle\s+(?:in|into)\s+(?:at\s+)?/i, '')
+    .replace(/^Wind\s+Down\s+at\s+/i, '')
+    .replace(/^Rest\s+(?:&|and)\s+Recharge\s+at\s+/i, '')
+    .trim();
+}
+
 // =============================================================================
 // DEEP TEXT SANITIZATION — Strip CJK artifacts & schema-leak fragments
 // =============================================================================

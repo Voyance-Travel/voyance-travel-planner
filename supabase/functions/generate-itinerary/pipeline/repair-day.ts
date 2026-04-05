@@ -24,6 +24,7 @@
 
 import { FAILURE_CODES, type ValidationResult, type RepairAction, type FailureCode } from './types.ts';
 import type { StrictActivityMinimal, StrictDayMinimal } from '../day-validation.ts';
+import { sanitizeTransitDestination } from '../sanitization.ts';
 import {
   parseTimeToMinutes,
   minutesToHHMM,
