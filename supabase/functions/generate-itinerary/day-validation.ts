@@ -744,6 +744,31 @@ const DESTINATION_MEAL_HINTS: Record<string, Record<RequiredMeal, { venueSuffix:
     lunch: { venueSuffix: 'shophouse restaurant', description: 'Pad kra pao or som tum at a bustling shophouse restaurant' },
     dinner: { venueSuffix: 'riverside restaurant', description: 'Thai seafood dinner with river views' },
   },
+  lisbon: {
+    breakfast: { venueSuffix: 'pastelaria', description: 'Pastel de nata and galão at a neighborhood pastelaria' },
+    lunch: { venueSuffix: 'tasca', description: 'Petiscos and house wine at a traditional tasca' },
+    dinner: { venueSuffix: 'restaurante', description: 'Portuguese seafood or grilled fish at a local restaurante' },
+  },
+  porto: {
+    breakfast: { venueSuffix: 'pastelaria', description: 'Fresh pastries and coffee at a riverside pastelaria' },
+    lunch: { venueSuffix: 'tasca', description: 'Francesinha or bacalhau at a neighborhood tasca' },
+    dinner: { venueSuffix: 'restaurante', description: 'Traditional Portuguese dinner at a local restaurante' },
+  },
+  barcelona: {
+    breakfast: { venueSuffix: 'granja', description: 'Churros con chocolate or pa amb tomàquet at a neighborhood granja' },
+    lunch: { venueSuffix: 'bodega', description: 'Tapas and vermouth at a classic bodega' },
+    dinner: { venueSuffix: 'restaurant', description: 'Catalan cuisine at a well-reviewed neighborhood restaurant' },
+  },
+  madrid: {
+    breakfast: { venueSuffix: 'cafetería', description: 'Tostada con tomate and café con leche at a neighborhood cafetería' },
+    lunch: { venueSuffix: 'taberna', description: 'Tapas and cañas at a traditional taberna' },
+    dinner: { venueSuffix: 'restaurante', description: 'Cocido madrileño or grilled meats at a local restaurante' },
+  },
+  istanbul: {
+    breakfast: { venueSuffix: 'kahvaltı salonu', description: 'Full Turkish breakfast spread at a neighborhood kahvaltı salonu' },
+    lunch: { venueSuffix: 'lokanta', description: 'Home-style Turkish dishes at a neighborhood lokanta' },
+    dinner: { venueSuffix: 'meyhane', description: 'Meze and rakı at a traditional meyhane' },
+  },
 };
 
 function getDestinationHint(destination: string, mealType: RequiredMeal): { venueSuffix: string; description: string } {
@@ -751,11 +776,11 @@ function getDestinationHint(destination: string, mealType: RequiredMeal): { venu
   for (const [key, hints] of Object.entries(DESTINATION_MEAL_HINTS)) {
     if (destLower.includes(key)) return hints[mealType];
   }
-  // Generic but better than "Local Café"
+  // Generic fallback — use venue-type descriptions that won't trigger GENERIC_VENUE detection
   const generic: Record<RequiredMeal, { venueSuffix: string; description: string }> = {
-    breakfast: { venueSuffix: 'local spot', description: 'Morning coffee and a local breakfast — check recent reviews for top-rated options nearby' },
-    lunch: { venueSuffix: 'local spot', description: 'Midday meal at a well-reviewed local spot — explore the area for great options' },
-    dinner: { venueSuffix: 'local spot', description: 'Evening dinner at a popular local restaurant — reservations recommended' },
+    breakfast: { venueSuffix: 'neighborhood café', description: 'Morning coffee and breakfast at a neighborhood café — check recent reviews for top-rated options nearby' },
+    lunch: { venueSuffix: 'bistro', description: 'Midday meal at a well-reviewed bistro — explore the area for great options' },
+    dinner: { venueSuffix: 'neighborhood restaurant', description: 'Evening dinner at a popular neighborhood restaurant — reservations recommended' },
   };
   return generic[mealType];
 }

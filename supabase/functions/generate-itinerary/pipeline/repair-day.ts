@@ -266,6 +266,85 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 2b. GENERIC_VENUE: replace placeholder dining venues with real ones ---
+  if (byCode.has(FAILURE_CODES.GENERIC_VENUE)) {
+    const genericResults = byCode.get(FAILURE_CODES.GENERIC_VENUE) || [];
+    const normalizeForDedup = extractRestaurantVenueName;
+    const usedSet = new Set((usedRestaurants || []).map(n => normalizeForDedup(n)));
+    // Also track current day dining venues
+    for (const act of activities) {
+      if ((act.category || '').toLowerCase() === 'dining') {
+        const locName = act.location?.name || '';
+        if (locName) usedSet.add(normalizeForDedup(locName));
+        usedSet.add(normalizeForDedup(act.title || ''));
+      }
+    }
+
+    for (const vr of genericResults) {
+      if (vr.activityIndex === undefined) continue;
+      const act = activities[vr.activityIndex];
+      if (!act || lockedIds.has(act.id)) continue;
+
+      const isDining = (act.category || '').toLowerCase().includes('dining') ||
+        /\b(breakfast|brunch|lunch|dinner)\b/i.test(act.title || '');
+      if (!isDining) continue;
+
+      // Detect meal type from title or time
+      const titleLower = (act.title || '').toLowerCase();
+      const startHour = parseInt((act.startTime || '12:00').split(':')[0], 10);
+      const mealType = titleLower.includes('breakfast') || titleLower.includes('brunch') ? 'breakfast'
+        : titleLower.includes('lunch') ? 'lunch'
+        : titleLower.includes('dinner') || titleLower.includes('supper') ? 'dinner'
+        : startHour < 11 ? 'breakfast' : startHour < 15 ? 'lunch' : 'dinner';
+
+      // Try to find a real replacement from the restaurant pool
+      let replaced = false;
+      if (restaurantPool && restaurantPool.length > 0) {
+        const replacement = restaurantPool.find(r => {
+          const rNameNorm = normalizeForDedup(r.name || '');
+          if (usedSet.has(rNameNorm)) return false;
+          return r.mealType === mealType || r.mealType === 'any';
+        });
+
+        if (replacement) {
+          const before = act.title;
+          const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+          act.title = `${mealLabel} at ${replacement.name}`;
+          act.location = { name: replacement.name, address: replacement.address || '' };
+          act.description = `${replacement.cuisine || 'Local cuisine'} in ${replacement.neighborhood || 'the city'}.`;
+          act.source = 'generic-venue-repair';
+          usedSet.add(normalizeForDedup(replacement.name));
+          replaced = true;
+          repairs.push({
+            code: FAILURE_CODES.GENERIC_VENUE,
+            activityIndex: vr.activityIndex,
+            action: 'replaced_generic_with_pool_venue',
+            before,
+            after: act.title,
+          });
+          console.log(`[Repair] GENERIC_VENUE: Replaced "${before}" → "${act.title}"`);
+        }
+      }
+
+      if (!replaced) {
+        // No pool venue available — at minimum clean up "the destination" location
+        const locName = (act.location?.name || '').toLowerCase();
+        if (locName === 'the destination' || locName === '') {
+          const before = act.location?.name;
+          act.location = { ...act.location, name: act.title || 'Restaurant' };
+          repairs.push({
+            code: FAILURE_CODES.GENERIC_VENUE,
+            activityIndex: vr.activityIndex,
+            action: 'cleaned_placeholder_location',
+            before,
+            after: act.location.name,
+          });
+          console.warn(`[Repair] GENERIC_VENUE: No pool replacement for "${act.title}" — cleaned placeholder location`);
+        }
+      }
+    }
+  }
+
   // --- 3. CHRONOLOGY: filter pre-arrival activities on first day ---
   if (isFirstDay && arrivalTime24) {
     const arrivalMins = parseTimeToMinutes(arrivalTime24);
