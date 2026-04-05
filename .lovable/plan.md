@@ -1,36 +1,75 @@
 
 
-## Fix: Broadly Strip Hours/Opening Notes From All Text Fields
+## Diagnosis: Phantom Hotel Activities After Sharing/Navigation
 
-### Problem
-Venue-database notes like "check opening hours on the day" and "confirm hours before visiting" keep appearing in new variants that bypass existing narrow regex patterns.
+### Root Cause
 
-### Changes
+The `onBookingAdded` callback in `TripDetail.tsx` (line 2999) fires on **every** booking-related action — hotel saves, flight saves, transport saves, and even flight order updates. Each time it fires, it:
 
-**1. `supabase/functions/generate-itinerary/sanitization.ts`** — Replace lines 154-158 (the narrow venue-database patterns) with broader catch-all patterns:
+1. Re-fetches trip data from DB
+2. Runs `injectHotelActivitiesIntoDays` or `injectMultiHotelActivities` which strips and re-injects check-in/checkout activities
+3. Applies in-memory hotel name patches to accommodation activities (including "Return to Hotel")
+4. **Saves the modified itinerary back to DB** (line 3100-3108) via `saveItineraryOptimistic`
+
+The problem: when this runs for a non-hotel event (e.g., flight order update, transport save), the injection logic still executes. If the existing itinerary already has properly placed hotel activities from generation, the strip → re-inject cycle can:
+- Create timing conflicts where `cascadeFixOverlaps` pushes activities to unexpected times
+- Re-inject check-in/checkout cards that duplicate existing AI-generated ones
+- Save these duplicates to DB, making them persist across refreshes
+
+Additionally, the `injectHotelActivitiesIntoDays` function calls `stripExistingHotelActivities` which only strips activities with `category === 'accommodation'` AND specific title keywords. If an AI-generated "Return to Hotel" has `category: 'stay'` or a slightly different title pattern, it won't be stripped — leading to duplicates.
+
+### Fix — Two Parts
+
+**Part 1: Guard hotel injection in `onBookingAdded`** (`src/pages/TripDetail.tsx`)
+
+Add a guard so the hotel injection logic inside `onBookingAdded` only runs when the hotel data has actually changed. Compare the hotel selection before and after the refetch:
 
 ```typescript
-// Strip ALL variants of "check/confirm/verify hours/opening times" notes
-.replace(/\s*[-–—]\s*(?:we\s+)?(?:recommend\s+)?(?:check|confirm|verify|confirming|checking|verifying)\s+(?:the\s+)?(?:opening\s+)?(?:hours|times)\b[^.]*\.?\s*/gi, '')
-// Strip "Popular/A local favorite - check/confirm..." combined sentences
-.replace(/(?:^|\.\s*)(?:Popular|A local favorite)\s*(?:with locals\s*)?[-–—]\s*(?:check|confirm|we recommend)[^.]*\.?\s*/gi, '')
-// Strip any sentence containing both confirm/check/verify AND hours/times AND visit/before
-.replace(/\s*[-–—]?\s*[^.]*\b(?:confirm|check|verify)\b[^.]*\b(?:hours|times)\b[^.]*\b(?:visit|before)\b[^.]*\.?\s*/gi, '')
-// Keep existing: sourced/verified from venue database
-.replace(/(?:^|[.]\s*)(?:Recommended|Sourced|Verified|Confirmed)\s+(?:by|from|via)\s+(?:our|the)\s+(?:venue|restaurant|local)\s+database[^.]*\.?\s*/gi, '')
+// Before injection, check if hotel data actually changed
+const prevHotelJson = JSON.stringify(trip?.hotel_selection);
+const newHotelJson = JSON.stringify(updatedTrip.hotel_selection);
+const prevCityHotels = JSON.stringify(tripCities.map(c => c.hotel_selection));
+const newCityHotels = JSON.stringify(updatedCities.map(c => c.hotel_selection));
+const hotelChanged = prevHotelJson !== newHotelJson || prevCityHotels !== newCityHotels;
+
+if (hotelChanged && currentDays.length > 0) {
+  // ... existing injection logic ...
+}
 ```
 
-**2. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** — After line 825 (the META-COMMENTARY block), add:
+This prevents the injection from running when only flights or transport changed.
+
+**Part 2: Strengthen `stripExistingHotelActivities` idempotency** (`src/utils/injectHotelActivities.ts`)
+
+Expand the strip function to also remove activities matching broader accommodation patterns (not just check-in/checkout):
 
 ```typescript
-OPERATIONAL NOTES — NEVER INCLUDE:
-Never include operational notes about checking hours, confirming availability, or verifying opening times in any description text. All descriptions should read as confident, polished travel recommendations.
+// Also strip "Return to" and "Freshen up" activities with deterministic IDs
+// to prevent double-injection scenarios
+if (a.id.startsWith('hotel-dropbags-')) return false;
 ```
 
-**3. `src/utils/activityNameSanitizer.ts`** — Update the frontend `VENUE_DB_NOTE_RE` and `LOCAL_FAVORITE_NOTE_RE` patterns to match the same broader patterns for client-side defense.
+And ensure the injection doesn't add activities when the day already has properly-timed AI-generated equivalents.
 
-### Files
-- `supabase/functions/generate-itinerary/sanitization.ts` — replace lines 154-158 with broader patterns
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add 2-line instruction after line 825
-- `src/utils/activityNameSanitizer.ts` — broaden `VENUE_DB_NOTE_RE` and `LOCAL_FAVORITE_NOTE_RE`
+**Part 3: Add safety check for midnight activities** (`src/utils/injectHotelActivities.ts`)
+
+After `cascadeFixOverlaps`, add a post-check that removes any injected accommodation activity that ended up at 00:00 (midnight spillover):
+
+```typescript
+// Post-injection safety: remove any accommodation activity at 00:00-00:59
+// These are cascade artifacts, not real activities
+updated = updated.map(day => ({
+  ...day,
+  activities: day.activities.filter(a => {
+    if (a.category !== 'accommodation') return true;
+    const hour = parseInt((a.startTime || '06:00').split(':')[0], 10);
+    if (hour === 0 && (a.id.startsWith('hotel-checkin-') || a.id.startsWith('hotel-checkout-'))) return false;
+    return true;
+  }),
+}));
+```
+
+### Files to Edit
+- `src/pages/TripDetail.tsx` — add hotel-change guard in `onBookingAdded` (~line 3010)
+- `src/utils/injectHotelActivities.ts` — add midnight safety check in both injection functions
 
