@@ -385,6 +385,12 @@ FAILURE TO FOLLOW THESE TIMING RULES IS UNACCEPTABLE.`;
     const hotelNameForDay = flightContext.hotelName || '';
     const hotelNeighborhood = flightContext.hotelAddress || '';
 
+    // On hotel-change days, breakfast should reference the PREVIOUS hotel
+    // (the traveler hasn't checked out yet in the morning)
+    const breakfastHotelName = (facts.resolvedIsHotelChange && facts.resolvedPreviousHotelName)
+      ? facts.resolvedPreviousHotelName
+      : flightContext.hotelName;
+
     const dayMealInput: MealPolicyInput = {
       dayNumber,
       totalDays,
