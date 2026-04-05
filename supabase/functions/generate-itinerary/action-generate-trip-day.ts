@@ -339,6 +339,9 @@ async function _handleGenerateTripDayInner(
   const tripMeta = (tripCheck.metadata as Record<string, unknown>) || {};
   const restaurantPoolByCity: Record<string, any[]> = (tripMeta.restaurant_pool as any) || {};
   const usedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
+  if (usedRestaurants.length > 0) {
+    console.log(`[generate-trip-day] 🍽️ Restaurant blocklist (${usedRestaurants.length}): ${usedRestaurants.join(', ')}`);
+  }
   
   // Get the pool for this day's city
   const dayCity = cityInfo?.cityName || destination || '';
@@ -850,6 +853,49 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // POST-GENERATION: Enforce cross-day restaurant uniqueness
+  if (usedRestaurants.length > 0 && dayResult?.activities?.length > 0) {
+    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
+    const usedNorm = new Set(usedRestaurants.map(n => extractRestaurantVenueName(n)));
+    const MEAL_RE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+
+    for (let i = 0; i < dayResult.activities.length; i++) {
+      const act = dayResult.activities[i];
+      const cat = (act.category || '').toLowerCase();
+      const typ = (act.type || '').toLowerCase();
+      const isDining = cat === 'dining' || typ === 'dining' || MEAL_RE.test(act.title || '');
+      if (!isDining) continue;
+
+      const venue = extractRestaurantVenueName(act.title || '') || extractRestaurantVenueName(act.location?.name || '');
+      if (!venue || !usedNorm.has(venue)) continue;
+
+      // Find a replacement from the pool that hasn't been used
+      const replacement = restaurantPool.find(r => {
+        const rNorm = extractRestaurantVenueName(r.name || r.title || '');
+        return rNorm && !usedNorm.has(rNorm);
+      });
+
+      if (replacement) {
+        const replacementName = replacement.name || replacement.title;
+        console.warn(`[generate-trip-day] 🔄 CROSS-DAY DEDUP: Replaced "${act.title}" with "${replacementName}"`);
+        // Preserve meal prefix if present
+        const mealMatch = (act.title || '').match(/^(Breakfast|Brunch|Lunch|Dinner|Supper|Cocktails|Nightcap)\s+(?:at|:)\s+/i);
+        act.title = mealMatch ? `${mealMatch[1]} at ${replacementName}` : replacementName;
+        act.name = act.title;
+        if (act.location) {
+          act.location.name = replacementName;
+          if (replacement.address) act.location.address = replacement.address;
+        }
+        if (replacement.coordinates) {
+          act.location = { ...act.location, lat: replacement.coordinates.lat, lng: replacement.coordinates.lng };
+        }
+        usedNorm.add(extractRestaurantVenueName(replacementName));
+      } else {
+        console.warn(`[generate-trip-day] ⚠️ CROSS-DAY DEDUP: "${act.title}" repeats but no replacement available in pool`);
+      }
+    }
+  }
+
   // Flush stage logger (non-blocking, non-fatal)
   try {
     await stageLogger.flush();
@@ -1229,8 +1275,12 @@ async function _handleGenerateTripDayInner(
     const { extractRestaurantVenueName } = await import('./generation-utils.ts');
     const newUsedRestaurants = [...usedRestaurants];
     const dayActivities = dayResult?.activities || [];
+    const MEAL_RE_EXTRACT = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
     for (const act of dayActivities) {
-      if ((act.category || '').toLowerCase() === 'dining' && (act.title || act.location?.name)) {
+      const catLow = (act.category || '').toLowerCase();
+      const typLow = (act.type || '').toLowerCase();
+      const isDining = catLow === 'dining' || typLow === 'dining' || MEAL_RE_EXTRACT.test(act.title || '');
+      if (isDining && (act.title || act.location?.name)) {
         // Extract from title first, fall back to location.name
         const venueFromTitle = act.title ? extractRestaurantVenueName(act.title) : '';
         const venueFromLocation = act.location?.name ? extractRestaurantVenueName(act.location.name) : '';
