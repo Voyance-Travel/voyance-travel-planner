@@ -212,8 +212,9 @@ function sanitizeAddress(address: string): string {
 
 /**
  * Deep-sanitize all user-facing text fields in a generated day object.
+ * @param usedRestaurants - Optional list of restaurant names used on previous days for repeat detection.
  */
-export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: string): any {
+export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: string, usedRestaurants?: string[]): any {
   if (!day || typeof day !== 'object') return day;
 
   const cleanTitle = sanitizeAITextField(day.title, destination);

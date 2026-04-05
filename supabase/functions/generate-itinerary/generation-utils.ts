@@ -63,6 +63,8 @@ export function getCategoryIcon(category: string): string {
 
 export function normalizeVenueName(name: string): string {
   return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // strip diacritics (é→e, ã→a, ü→u)
     .toLowerCase()
     .replace(/[''`´]/g, "'")
     .replace(/[^\w\s'-]/g, '')
