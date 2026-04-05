@@ -10247,7 +10247,7 @@ function ActivityRow({
         )}
 
         {/* Voyance Tip — always expanded */}
-        {activity.tips && !isCheckIn && (
+        {sanitizeActivityText(activity.tips) && !isCheckIn && (
           <div className="mt-4 pt-3 border-t border-border/30">
             <p className="text-xs font-medium text-primary uppercase tracking-wider mb-1.5">
               Voyance Tip
