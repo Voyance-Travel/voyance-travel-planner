@@ -1424,7 +1424,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     // Helper to escape special regex characters
     const escRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-    for (let i = 0; i < checkoutIdx; i++) {
+    for (let i = 0; i < diningCheckoutIdx; i++) {
       const act = activities[i];
       const cat = (act.category || '').toLowerCase();
       if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') continue;
