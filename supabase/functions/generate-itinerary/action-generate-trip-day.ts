@@ -1325,6 +1325,9 @@ async function _handleGenerateTripDayInner(
         }
       }
     }
+    // === SENDING TO NEXT DAY ===
+    console.log('=== SENDING TO NEXT DAY ===');
+    console.log(`Sending usedRestaurants (${newUsedRestaurants.length}):`, JSON.stringify(newUsedRestaurants));
 
     await supabase.from('trips').update({
       itinerary_data: partialItinerary,
