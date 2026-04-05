@@ -1428,7 +1428,11 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     for (let i = 0; i < diningCheckoutIdx; i++) {
       const act = activities[i];
       const cat = (act.category || '').toLowerCase();
-      if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') continue;
+      const titleForMealCheck = (act.title || act.name || '').toLowerCase();
+      // Expanded detection: catch dining/restaurant/food/meal categories AND title-based meal detection
+      const isDiningActivity = cat === 'dining' || cat === 'restaurant' || cat === 'food' || cat === 'meal'
+        || /\b(?:breakfast|brunch)\b/i.test(titleForMealCheck);
+      if (!isDiningActivity) continue;
 
       const title = act.title || act.name || '';
       const titleLower = title.toLowerCase();
