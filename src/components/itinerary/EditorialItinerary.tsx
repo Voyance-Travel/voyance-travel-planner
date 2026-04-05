@@ -10728,12 +10728,12 @@ function ActivityRow({
                     </div>
                   )}
                   {/* Description — hidden in compact mode */}
-                  {activity.description && !compact && (
+                  {(() => { const d = sanitizeActivityText(activity.description); return d && !compact ? (
                     <p className={cn(
                       "text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2 leading-relaxed",
                       !canViewPremium && "blur-sm pointer-events-none select-none"
-                    )}>{sanitizeActivityText(activity.description)}</p>
-                  )}
+                    )}>{d}</p>
+                  ) : null; })()}
 
                   {/* Location — in compact mode show only location name, no full address */}
                   {(() => {
