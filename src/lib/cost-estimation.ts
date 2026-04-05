@@ -527,6 +527,8 @@ const FREE_VENUE_PATTERNS = [
   /\bboardwalk\b/i, /\bpier\b/i, /\bbeach\b/i,
   /\bneighborhood\s+(?:walk|stroll|explore)\b/i,
   /\bdistrict\s+(?:walk|stroll|explore)\b/i,
+  /\bexplore\b.*\b(?:district|neighborhood|neighbourhood|quarter|old\s+town|area)\b/i,
+  /\bstroll\b.*\b(?:district|neighborhood|neighbourhood|quarter)\b/i,
   /\b(?:walk|stroll)\s+(?:through|around|along)\b/i,
   // French
   /\bjardin\b/i, /\bplace\s+\w/i, /\besplanade\b/i,
