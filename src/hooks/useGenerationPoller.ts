@@ -243,7 +243,11 @@ export function useGenerationPoller({
         autoResumeCountRef.current = 0;
         const genError = (meta.generation_error as string) || 'Generation failed';
         setState({ status: 'failed', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
-        onFailedRef.current?.(genError);
+        // Dedupe: only fire onFailed once per unique error message
+        if (lastFailedErrorRef.current !== genError) {
+          lastFailedErrorRef.current = genError;
+          onFailedRef.current?.(genError);
+        }
         return;
       }
 
