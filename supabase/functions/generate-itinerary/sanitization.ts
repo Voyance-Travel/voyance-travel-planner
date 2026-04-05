@@ -266,6 +266,7 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       const TRANSIT_TITLE_RE = /^(?:Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+/i;
       if (act.title && TRANSIT_TITLE_RE.test(act.title)) {
         act.title = act.title
+          .replace(/^Travel\s+to\s+(Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry|Uber)\s+to\s+/i, '$1 to ')
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Return\s+to\s+/i, '$1 to ')
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Freshen\s+[Uu]p\s+at\s+/i, '$1 to ')
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Check[\s-]?in\s+at\s+/i, '$1 to ')
