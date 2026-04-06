@@ -825,6 +825,13 @@ RESTAURANT NAMING RULES — CRITICAL:
 - For Lisbon, consider: Pastéis de Belém, Café A Brasileira, Copenhagen Coffee Lab, Dear Breakfast, Heim Café, Nicolau Lisboa, Fábrica Coffee Roasters, Landeau Chocolate, Time Out Market vendors.
 - Parks, gardens, plazas, squares, viewpoints, miradouros, riverside walks, and neighborhood strolls are FREE (€0). Do NOT assign any price to these.
 
+VENUE NAME RULES:
+- venue_name must be a real place name, not a descriptive phrase.
+- NEVER substitute proper nouns with English adjectives (Alphabetical, Sequential, Historical, Geographical, Chronological).
+- BAD venue_name: "Alphabetical Heritage District Walk" — "Alphabetical" is not a place.
+- GOOD venue_name: "Alfama District" or "Alfama Heritage Walk"
+- venue_name should match the location referenced in the activity title.
+
 HOTEL ADDRESS RULE — CRITICAL:
 - ALL hotel-related activities (Check-in, Checkout, Freshen Up, Return to Hotel, Luggage Drop) MUST use the EXACT hotel address provided in the day constraints or hotel context. Do NOT invent, approximate, or vary the street number.
 - On hotel-change days, pre-checkout activities use the PREVIOUS hotel's address; post-checkin activities use the NEW hotel's address.
