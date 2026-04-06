@@ -20,7 +20,84 @@ export const ALWAYS_FREE_VENUE_PATTERNS = /\b(?:park|garden|jardim|viewpoint|mir
 export const TIER2_FREE_VENUE_PATTERNS = /\b(?:bridge|fountain|monument|memorial|statue|arch|gate|market|promenade|boardwalk|trail|path|pier|dock|wharf|embankment)\b/i;
 
 /** Paid-experience exclusion — don't force-free if any of these match */
-const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|aquarium|zoo|monastery|mosteiro)\b/i;
+const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|aquarium|zoo|monastery|mosteiro|colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena\s+floor)\b/i;
+
+// =============================================================================
+// KNOWN TICKETED ATTRACTIONS — minimum admission prices (EUR/USD) by venue
+// =============================================================================
+
+/** Known ticketed attractions that should NEVER be Free. Maps lowercase venue substring → min price per person. */
+export const KNOWN_TICKETED_ATTRACTIONS: Record<string, number> = {
+  // Rome
+  'colosseum arena floor': 24,
+  'colosseum arena': 24,
+  'colosseum': 16,
+  'coliseum': 16,
+  'vatican museums': 17,
+  'vatican museum': 17,
+  'sistine chapel': 17,
+  'borghese gallery': 13,
+  'galleria borghese': 13,
+  "castel sant'angelo": 10,
+  'castel sant angelo': 10,
+  "st peter's dome": 8,
+  'st peters dome': 8,
+  'palatine hill': 16,
+  'roman forum': 16,
+  // Berlin
+  'pergamon museum': 12,
+  'neues museum': 12,
+  'berlin tv tower': 22,
+  'fernsehturm': 22,
+  'jewish museum berlin': 8,
+  'charlottenburg palace': 12,
+  // Lisbon
+  'jerónimos monastery': 10,
+  'jeronimos monastery': 10,
+  'belém tower': 8,
+  'belem tower': 8,
+  'torre de belém': 8,
+  'torre de belem': 8,
+  // Paris
+  'louvre': 17,
+  'musée du louvre': 17,
+  'eiffel tower': 11,
+  'tour eiffel': 11,
+  'versailles': 18,
+  'palace of versailles': 18,
+  "musée d'orsay": 14,
+  'musee d orsay': 14,
+  'arc de triomphe': 13,
+  'sainte-chapelle': 11,
+  'sainte chapelle': 11,
+  // Barcelona
+  'sagrada familia': 26,
+  'la sagrada familia': 26,
+  'park güell': 10,
+  'park guell': 10,
+  'casa batlló': 35,
+  'casa batllo': 35,
+  'casa milà': 25,
+  'casa mila': 25,
+  'la pedrera': 25,
+  // London
+  'tower of london': 29,
+  'westminster abbey': 25,
+  "st paul's cathedral": 21,
+  'st pauls cathedral': 21,
+  'kew gardens': 15,
+  // Amsterdam
+  'rijksmuseum': 22,
+  'van gogh museum': 20,
+  'anne frank house': 16,
+  // Prague
+  'prague castle': 14,
+  'st vitus cathedral': 14,
+  // Vienna
+  'schönbrunn palace': 22,
+  'schonbrunn palace': 22,
+  'belvedere palace': 16,
+};
 
 // =============================================================================
 // MICHELIN / FINE DINING PRICE FLOOR CONSTANTS — shared with action-repair-costs
