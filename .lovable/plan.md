@@ -1,52 +1,54 @@
 
 
-## Fix Venue Type Pricing — Street Food at €65, Bar Nightcaps at €143
+## Remaining Fixes from Cross-City Audit
 
-### Root Cause
+Most bug classes from this audit (1-4, 6-7) are already addressed by Prompts 45-51 which have been implemented. Three gaps remain:
 
-The Michelin price floor only raises prices; there's no corresponding **price ceiling** for casual venues and bar/cocktail activities. The AI assigns restaurant-tier prices to all DINING activities regardless of venue type. No post-generation cap exists for bars, nightcaps, or street food.
+### Already Fixed (no action needed)
+- **Bug 1** (Michelin underpricing): `KNOWN_FINE_DINING_STARS` already has Paris, Berlin, Rome restaurants
+- **Bug 2** (Time generation): Midnight activity stripping + prompt rules exist
+- **Bug 3** (Ticketed attractions Free): `KNOWN_TICKETED_ATTRACTIONS` + `enforceTicketedAttractionPricing` exist
+- **Bug 4** (Breakfast repeats): Hotel breakfast limited to arrival/departure days + city fallbacks exist
+- **Bug 6** (Casual venue overpricing): `enforceBarNightcapPriceCap` + `enforceCasualVenuePriceCap` exist
+- **Bug 7** (Arrival sequencing): Prompt rules about Day 1 exist
 
-### Changes
+### Remaining Gaps — 3 Changes
 
-#### 1. Add venue-type price caps to `sanitization.ts`
+#### 1. Add known-free viewpoint patterns to `sanitization.ts`
 
-Add two new exported functions after `enforceTicketedAttractionPricing`:
+Bug 5: "Eiffel Tower Evening Sparkle Viewing" charged €60 when it's a free activity (watching from Trocadéro/Champ de Mars). The `ALWAYS_FREE_VENUE_PATTERNS` don't catch this because "Eiffel Tower" isn't a free-venue keyword.
 
-**`enforceBarNightcapPriceCap(activity, logPrefix)`**
-- Detect bar/nightcap activities via title keywords: `nightcap`, `cocktail`, `aperitif`, `drinks at`, `bar` (excluding `barbecue`, `barista`, `bar restaurant`)
-- Skip if activity matches any `KNOWN_FINE_DINING_STARS` key (a hotel bar at a Michelin restaurant should not be capped)
-- If price > 50, cap at 35 and log `BAR PRICING CAP`
-- Uses existing `resolvePrice` pattern and `writePriceToAllFields`
+Add a `KNOWN_FREE_VIEWPOINTS` list with entries like:
+- `eiffel tower.*sparkle`, `eiffel tower.*illumination`, `eiffel tower.*viewing` (watching from outside)
+- `colosseum.*view` (external viewpoint, not entry)
+- `acropolis.*view` (viewing from Philopappos Hill)
 
-**`enforceCasualVenuePriceCap(activity, logPrefix)`**
-- `KNOWN_CASUAL_VENUES` map: `Record<string, number>` — ~10 entries (trapizzino: 15, bao: 20, five guys: 20, shake shack: 20, currywurst: 12, döner: 12, etc.)
-- Check title and venue_name against keys; if price exceeds the max, cap it and log `CASUAL VENUE CAP`
+In `checkAndApplyFreeVenue`, after the main pattern check, also check against these viewpoint patterns. Only match if the activity description/title suggests watching from outside (contains "from", "stroll", "viewing", "watch") and does NOT contain "ticket", "entry", "climb", "ascend", "summit".
 
-#### 2. Call caps in the final guard loops
+#### 2. Add Paris, Berlin, Rome, London to `FALLBACK_RESTAURANTS` in `repair-day.ts`
 
-In both `action-generate-trip-day.ts` (~line 1658) and `action-generate-day.ts` (~line 1076), call the two new cap functions **before** `enforceMichelinPriceFloor` (so Michelin floor still wins for starred restaurants):
+Bug 8: "Lunch at a bistro" with venue "the destination" appears because `FALLBACK_RESTAURANTS` only has Lisbon, Porto, and Barcelona. When the generic venue repair fires for Paris, it finds no fallback and keeps the placeholder.
 
-```
-enforceBarNightcapPriceCap(act)
-enforceCasualVenuePriceCap(act)
-enforceTicketedAttractionPricing(act)
-enforceMichelinPriceFloor(act)  // last — always wins
-```
+Add 3-5 entries per meal type for each city:
+- **Paris**: breakfast (Café de Flore, Carette, Du Pain et des Idées), lunch (Le Comptoir, Chez Janou, Bouillon Chartier), dinner (Le Petit Cler, Chez l'Ami Jean, Le Baratin)
+- **Berlin**: breakfast (The Barn, House of Small Wonder, Brammibal's), lunch (Curry 36, Monsieur Vuong, Katz Orange), dinner (Nobelhart & Schmutzig, Pauly Saal, Ora)
+- **Rome**: breakfast (Roscioli Caffè, Sciascia Caffè, Barnum Café), lunch (Da Enzo al 29, Armando al Pantheon, Trattoria Da Teo), dinner (Roscioli, Pierluigi, Felice a Testaccio)
+- **London**: breakfast (The Wolseley, Dishoom, Buns from Home), lunch (Padella, Barrafina, Brasserie Zédel), dinner (St. John, The Palomar, Quo Vadis)
 
-#### 3. Add venue-type pricing guidance to prompt (`compile-prompt.ts`)
+#### 3. Add city-name validation to day titles in `validate-day.ts`
 
-After the "TICKETED ATTRACTION PRICING" block, add a "VENUE TYPE PRICING" section covering:
-- Street food / casual quick-service: €5-15/pp
-- Bar / cocktail / nightcap: €15-35/pp, never above €50
-- Casual restaurants: €15-45/pp
-- Upscale non-starred: €45-120/pp
+Bug 9: Berlin Day 3 titled "Palatial Goodbyes and Viennese Charm" — wrong city reference.
+
+Add a `WRONG_CITY_RE` check in `validateDayTitle` (or as a new validation):
+- Build a set of city demonyms that should NOT appear for the current destination (e.g., if destination is Berlin, flag "Viennese", "Parisian", "Roman")
+- If a day title contains a wrong-city demonym, flag it as a warning
+- In repair, strip the offending phrase or replace with the correct demonym
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `sanitization.ts` | Add `KNOWN_CASUAL_VENUES`, `enforceBarNightcapPriceCap()`, `enforceCasualVenuePriceCap()` |
-| `action-generate-trip-day.ts` | Call both cap functions in final guard loop before Michelin floor |
-| `action-generate-day.ts` | Same — call both cap functions before Michelin floor |
-| `compile-prompt.ts` | Add venue-type pricing guidelines after ticketed attraction section |
+| `sanitization.ts` | Add `KNOWN_FREE_VIEWPOINTS` patterns and check in `checkAndApplyFreeVenue` |
+| `pipeline/repair-day.ts` | Add Paris, Berlin, Rome, London to `FALLBACK_RESTAURANTS` |
+| `pipeline/validate-day.ts` | Add wrong-city demonym check for day titles |
 
