@@ -71,6 +71,9 @@ export interface RepairDayInput {
   previousHotelName?: string;
   previousHotelAddress?: string;
 
+  // Dawn guard: earliest allowed activity time for this day (HH:MM 24h)
+  earliestStart?: string;
+
   // Locked activities (never remove)
   lockedActivities: StrictActivityMinimal[];
 
