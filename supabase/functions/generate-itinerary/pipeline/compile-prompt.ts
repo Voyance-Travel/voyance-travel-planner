@@ -955,6 +955,13 @@ CRITICAL TIME ORDERING & MEAL TIMING RULES:
 - Do NOT include any activities between 12:00 AM and 6:00 AM unless they are specifically planned late-night activities from the CURRENT day.
 - Day 1 should begin with arrival or the first morning activity (typically 8:00-9:00 AM), never with midnight hotel entries.
 
+TICKETED ATTRACTION PRICING:
+- Enclosed monuments, museums, and archaeological sites that charge admission should NEVER be Free/€0.
+- If an attraction says "Booking Required", it almost certainly has an entry fee.
+- Examples: Colosseum (€16-35), Vatican Museums (€17), Louvre (€17), Sagrada Familia (€26), Tower of London (€29), Eiffel Tower (€11+).
+- Public VIEWPOINTS of attractions can be Free (e.g., "Views of the Colosseum from outside"), but entering the site is NOT Free.
+- Parks, piazzas, fountains, viewpoints, and public gardens remain Free.
+
 ${preferenceContext}
 ${tripIntentsContext}
 ${mustDoPrompt}

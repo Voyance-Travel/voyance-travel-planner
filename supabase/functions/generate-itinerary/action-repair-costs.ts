@@ -148,6 +148,25 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         continue;
       }
 
+      // Tier 1b: Known ticketed attraction override — restore min price if zeroed
+      const titleLower = title.toLowerCase();
+      const venueNameLower2 = (activity.venue_name || '').toLowerCase();
+      const sortedTicketedKeys = Object.keys(KNOWN_TICKETED_ATTRACTIONS).sort((a, b) => b.length - a.length);
+      let ticketedMatch: { key: string; minPrice: number } | null = null;
+      for (const key of sortedTicketedKeys) {
+        if (titleLower.includes(key) || venueNameLower2.includes(key)) {
+          ticketedMatch = { key, minPrice: KNOWN_TICKETED_ATTRACTIONS[key] };
+          break;
+        }
+      }
+      if (ticketedMatch && costPerPerson < ticketedMatch.minPrice) {
+        console.warn(`[repair-trip-costs] TICKETED ATTRACTION FIX: "${title}" at $${costPerPerson} → raised to $${ticketedMatch.minPrice} (${ticketedMatch.key})`);
+        costPerPerson = ticketedMatch.minPrice;
+        source = 'ticketed_attraction_floor';
+        wasCorrected = true;
+        corrected++;
+      }
+
       let ref: any = null;
       if (subcategory) {
         ref = refMap.get(`${destination}|${category}|${subcategory}`);
