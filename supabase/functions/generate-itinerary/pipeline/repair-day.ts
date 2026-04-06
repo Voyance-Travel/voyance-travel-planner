@@ -831,6 +831,42 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 5a-post. NIGHTCAP SEQUENCING: move nightcap/cocktail before dinner to after dinner ---
+  {
+    const NIGHTCAP_KW = /\b(nightcap|after[- ]dinner|evening cocktail|digestif)\b/i;
+    let dinnerIdx = -1;
+    let nightcapIdx = -1;
+
+    for (let i = 0; i < activities.length; i++) {
+      const title = (activities[i].title || '').toLowerCase();
+      const cat = (activities[i].category || '').toLowerCase();
+      if (title.includes('dinner') && (cat.includes('dining') || cat.includes('food') || cat.includes('restaurant'))) {
+        dinnerIdx = i;
+      }
+      if (NIGHTCAP_KW.test(activities[i].title || '')) {
+        nightcapIdx = i;
+      }
+    }
+
+    if (nightcapIdx >= 0 && dinnerIdx >= 0 && nightcapIdx < dinnerIdx && !lockedIds.has(activities[nightcapIdx].id)) {
+      console.log(`[Repair] NIGHTCAP_SWAP: "${activities[nightcapIdx].title}" (idx ${nightcapIdx}) before dinner (idx ${dinnerIdx}) — moving after dinner`);
+      const [nightcap] = activities.splice(nightcapIdx, 1);
+      // dinnerIdx shifted left by 1 after splice
+      const newDinnerIdx = activities.findIndex((a: any) => {
+        const t = (a.title || '').toLowerCase();
+        const c = (a.category || '').toLowerCase();
+        return t.includes('dinner') && (c.includes('dining') || c.includes('food') || c.includes('restaurant'));
+      });
+      activities.splice(newDinnerIdx + 1, 0, nightcap);
+      repairs.push({
+        code: FAILURE_CODES.MEAL_ORDER,
+        action: 'nightcap_moved_after_dinner',
+        before: `index ${nightcapIdx}`,
+        after: `index ${newDinnerIdx + 1}`,
+      });
+    }
+  }
+
   // --- 5b. MEAL_DUPLICATE: remove or relabel duplicate same-meal activities ---
   if (byCode.has(FAILURE_CODES.MEAL_DUPLICATE)) {
     const dupeResults = byCode.get(FAILURE_CODES.MEAL_DUPLICATE) || [];

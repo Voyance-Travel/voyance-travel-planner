@@ -299,15 +299,21 @@ export async function handleGenerateDay(
         normalizedLocation = { name: act.location, address: act.location };
       }
       
+      // Normalize times: ensure 24h format (AI may return "1:20 PM" or ambiguous "1:20")
+      const normalizedStartTime = act.startTime ? (normalizeTo24h(act.startTime) || act.startTime) : undefined;
+      const normalizedEndTime = act.endTime ? (normalizeTo24h(act.endTime) || act.endTime) : undefined;
+
       const normalized = {
         ...act,
         id: act.id || `day${dayNumber}-act${idx + 1}-${Date.now()}`,
         title: normalizedTitle,
         name: normalizedTitle, // Keep both for compatibility
+        startTime: normalizedStartTime,
+        endTime: normalizedEndTime,
         cost: normalizedCost,
         costBasis: costBasis, // per_person | flat | per_room
         location: normalizedLocation,
-        durationMinutes: act.startTime && act.endTime ? calculateDuration(act.startTime, act.endTime) : 60,
+        durationMinutes: normalizedStartTime && normalizedEndTime ? calculateDuration(normalizedStartTime, normalizedEndTime) : 60,
         categoryIcon: getCategoryIcon(act.category || 'activity'),
         isLocked: false, // New activities are unlocked by default
       };
