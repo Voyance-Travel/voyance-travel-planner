@@ -354,13 +354,31 @@ async function _handleGenerateTripDayInner(
   // Get the pool for this day's city
   const dayCity = cityInfo?.cityName || destination || '';
   let restaurantPool: any[] = restaurantPoolByCity[dayCity] || [];
-  // Also try partial match if exact city not found
+  // Also try partial match if exact city not found (including city aliases)
   if (restaurantPool.length === 0 && dayCity) {
+    const dayCityLower = dayCity.toLowerCase();
+    const POOL_CITY_ALIASES: Record<string, string[]> = {
+      'lisbon': ['lisboa', 'lisbonne', 'lissabon'],
+      'porto': ['oporto'],
+      'barcelona': ['barcelone', 'barcellona'],
+    };
     for (const [poolCity, pool] of Object.entries(restaurantPoolByCity)) {
-      if (poolCity.toLowerCase().includes(dayCity.toLowerCase()) || dayCity.toLowerCase().includes(poolCity.toLowerCase())) {
+      const poolCityLower = poolCity.toLowerCase();
+      if (poolCityLower.includes(dayCityLower) || dayCityLower.includes(poolCityLower)) {
         restaurantPool = pool;
         break;
       }
+      // Check aliases: if poolCity matches an alias of dayCityLower or vice versa
+      for (const [canonical, aliases] of Object.entries(POOL_CITY_ALIASES)) {
+        const allForms = [canonical, ...aliases];
+        const poolMatches = allForms.some(f => poolCityLower.includes(f));
+        const dayMatches = allForms.some(f => dayCityLower.includes(f));
+        if (poolMatches && dayMatches) {
+          restaurantPool = pool;
+          break;
+        }
+      }
+      if (restaurantPool.length > 0) break;
     }
   }
   if (restaurantPool.length > 0) {
