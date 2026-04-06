@@ -35,6 +35,7 @@ import {
   sanitizeOptionFields,
   sanitizeDateFields,
   normalizeDurationString,
+  ALWAYS_FREE_VENUE_PATTERNS,
 } from './sanitization.ts';
 
 import {
@@ -3099,8 +3100,7 @@ export async function finalSaveItinerary(
             continue;
           }
 
-          // Check Tier 1 free venues (parks, plazas, viewpoints, churches, etc.)
-          const tier1FreePatterns = /\b(?:park|garden|jardim|viewpoint|miradouro|miradouros|plaza|praça|praca|square|piazza|platz|church|igreja|basilica|cathedral|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca)\b/i;
+          // Check Tier 1 free venues — uses shared ALWAYS_FREE_VENUE_PATTERNS
           const allActivityText = [
             (act as any).title || '',
             (act as any).description || '',
@@ -3108,10 +3108,14 @@ export async function finalSaveItinerary(
             (act as any).place_name || '',
             (act as any).location?.name || '',
             (act as any).address || '',
+            (act as any).restaurant?.name || '',
           ].join(' ');
 
-          if (tier1FreePatterns.test(allActivityText)) {
-            console.log(`[Phase 4] Tier 1 free venue detected: "${(act as any).title}" — zeroing cost`);
+          const isPaidExp = (act as any).booking_required ||
+            /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico)\b/i.test(allActivityText);
+
+          if (ALWAYS_FREE_VENUE_PATTERNS.test(allActivityText) && !isPaidExp) {
+            console.log(`[Phase 4] FREE VENUE CHECK: "${(act as any).title}" — zeroing cost`);
             costRows.push({
               trip_id: tripId,
               activity_id: act.id,

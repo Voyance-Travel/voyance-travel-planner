@@ -1632,6 +1632,23 @@ async function _handleGenerateTripDayInner(
       console.error('[generate-trip-day] Post-completion table sync error (non-fatal):', syncErr);
     }
 
+    // ── RUN CANONICAL PRICING REPAIR as the LAST pricing step ──
+    // This ensures free-venue overrides are applied to the activity_costs table
+    // AFTER all generation and sync steps, preventing phantom pricing.
+    try {
+      const { handleRepairTripCosts } = await import('./action-repair-costs.ts');
+      const repairCtx = { supabase, userId, params: { tripId } };
+      const repairResult = await handleRepairTripCosts(repairCtx);
+      const repairBody = await repairResult.json().catch(() => null);
+      if (repairBody && !repairBody.success) {
+        console.error('[generate-trip-day] Post-completion cost repair failed:', repairBody);
+      } else {
+        console.log(`[generate-trip-day] Post-completion cost repair OK: ${repairBody?.repaired || 0} rows, ${repairBody?.corrected || 0} corrected`);
+      }
+    } catch (repairErr) {
+      console.error('[generate-trip-day] Post-completion cost repair error (non-fatal):', repairErr);
+    }
+
     await triggerNextJourneyLeg(supabase, tripId);
 
     console.log(`[generate-trip-day] 📤 Returning completion response for trip ${tripId} (day ${dayNumber}/${totalDays}). If client disconnected, data is already saved.`);
