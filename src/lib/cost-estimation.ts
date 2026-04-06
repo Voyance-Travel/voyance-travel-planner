@@ -568,12 +568,18 @@ export function isLikelyFreePublicVenue(fields: {
   locationName?: string;
   address?: string;
   description?: string;
+  venueName?: string;
+  restaurantName?: string;
+  placeName?: string;
 }): boolean {
   const combined = [
     fields.title,
     fields.locationName,
     fields.address,
     fields.description,
+    fields.venueName,
+    fields.restaurantName,
+    fields.placeName,
   ].filter(Boolean).join(' ');
 
   if (!combined) return false;

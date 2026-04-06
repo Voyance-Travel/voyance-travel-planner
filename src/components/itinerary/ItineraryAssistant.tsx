@@ -460,12 +460,27 @@ export function ItineraryAssistant({
             }> = [];
             const allActivityIds: string[] = [];
 
+            const { isLikelyFreePublicVenue: isFreeVenue } = await import('@/lib/cost-estimation');
             for (const day of sortedDays) {
               for (const act of day.activities) {
                 if (act.id) allActivityIds.push(act.id);
                 const costPerPerson = resolvePerPersonForDb(act.cost as any, travelers || 1);
 
                 if (costPerPerson >= 0) {
+                  // Guard: skip positive rows for free public venues
+                  if (costPerPerson > 0 && isFreeVenue({
+                    title: act.title || act.name,
+                    category: String(act.category || ''),
+                    type: String(act.type || ''),
+                    venueName: (act as any).venue_name,
+                    restaurantName: (act as any).restaurant?.name,
+                    placeName: (act as any).place_name,
+                    locationName: (act as any).location?.name,
+                    description: (act as any).description,
+                  })) {
+                    console.log(`[ItineraryAssistant] Skipping free venue: "${act.title || act.name}"`);
+                    continue;
+                  }
                   activitiesForCostTable.push({
                     id: act.id,
                     dayNumber: day.dayNumber,
