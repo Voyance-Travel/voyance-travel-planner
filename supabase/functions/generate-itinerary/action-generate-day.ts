@@ -34,6 +34,8 @@ import {
   normalizeDurationString,
   stripPhantomHotelActivities,
   enforceMichelinPriceFloor,
+  enforceBarNightcapPriceCap,
+  enforceCasualVenuePriceCap,
 } from './sanitization.ts';
 import {
   EXCHANGE_RATES_TO_USD,
@@ -1075,6 +1077,8 @@ export async function handleGenerateDay(
     // Must run LAST so no other pricing step can overwrite the corrected price
     if (Array.isArray(generatedDay.activities)) {
       for (const act of generatedDay.activities) {
+        enforceBarNightcapPriceCap(act, 'GENERATE_DAY_FINAL');
+        enforceCasualVenuePriceCap(act, 'GENERATE_DAY_FINAL');
         enforceMichelinPriceFloor(act, 'GENERATE_DAY_FINAL');
       }
     }

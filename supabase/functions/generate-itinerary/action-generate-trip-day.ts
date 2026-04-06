@@ -11,7 +11,7 @@ import { corsHeaders } from './action-types.ts';
 import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
-import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing } from './sanitization.ts';
+import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
@@ -1656,6 +1656,8 @@ async function _handleGenerateTripDayInner(
   for (const day of updatedDays) {
     if (Array.isArray(day.activities)) {
       for (const act of day.activities) {
+        enforceBarNightcapPriceCap(act, 'TRIP_DAY_FINAL');
+        enforceCasualVenuePriceCap(act, 'TRIP_DAY_FINAL');
         enforceTicketedAttractionPricing(act, 'TRIP_DAY_FINAL');
         enforceMichelinPriceFloor(act, 'TRIP_DAY_FINAL');
       }

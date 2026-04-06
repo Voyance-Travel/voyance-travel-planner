@@ -575,6 +575,98 @@ export function enforceTicketedAttractionPricing(activity: Record<string, any>, 
 }
 
 // =============================================================================
+// BAR / NIGHTCAP PRICE CAP
+// =============================================================================
+
+const BAR_KEYWORDS = /\b(nightcap|cocktail|aperitif|drinks?\s+at|wine\s+bar|rooftop\s+bar|hotel\s+bar|speakeasy)\b/i;
+const BAR_TITLE_BAR = /\bbar\b/i;
+const BAR_EXCLUDE = /\b(barbecue|barista|bar\s+restaurant|sushi\s+bar)\b/i;
+const MAX_BAR_PRICE = 50;
+const DEFAULT_BAR_PRICE = 35;
+
+/**
+ * Cap bar/nightcap activities to a sensible price ceiling.
+ * Skips activities that match KNOWN_FINE_DINING_STARS (e.g. a hotel with a Michelin restaurant).
+ */
+export function enforceBarNightcapPriceCap(activity: Record<string, any>, logPrefix = 'SANITIZE'): boolean {
+  const title = (activity.title || activity.name || '').toLowerCase();
+  const venueName = (activity.venue_name || activity.restaurant?.name || '').toLowerCase();
+  const combined = `${title} ${venueName}`;
+
+  const isBarActivity =
+    BAR_KEYWORDS.test(combined) ||
+    (BAR_TITLE_BAR.test(combined) && !BAR_EXCLUDE.test(combined));
+
+  if (!isBarActivity) return false;
+
+  // Don't cap if venue is a known Michelin restaurant
+  for (const key of Object.keys(KNOWN_FINE_DINING_STARS)) {
+    if (title.includes(key) || venueName.includes(key)) return false;
+  }
+
+  const currentPrice = resolveActivityPrice(activity);
+  if (currentPrice <= MAX_BAR_PRICE) return false;
+
+  console.warn(`BAR PRICING CAP [${logPrefix}]: "${activity.title}" was €${currentPrice}/pp → capped at €${DEFAULT_BAR_PRICE}/pp (bar/cocktail activity)`);
+  writePriceToAllFields(activity, DEFAULT_BAR_PRICE);
+  return true;
+}
+
+// =============================================================================
+// CASUAL / STREET FOOD VENUE PRICE CAP
+// =============================================================================
+
+/** Known casual/street food venues — max price per person in EUR */
+const KNOWN_CASUAL_VENUES: Record<string, number> = {
+  'trapizzino': 15,
+  'bao': 20,
+  'five guys': 20,
+  'shake shack': 20,
+  'good bank': 20,
+  'cocolo ramen': 25,
+  'currywurst': 12,
+  'döner': 12,
+  'doner': 12,
+  'kebab': 15,
+  'pizza al taglio': 12,
+  'supplizio': 15,
+};
+
+/**
+ * Cap known casual / street-food venues that the AI over-prices.
+ */
+export function enforceCasualVenuePriceCap(activity: Record<string, any>, logPrefix = 'SANITIZE'): boolean {
+  const title = (activity.title || activity.name || '').toLowerCase();
+  const venueName = (activity.venue_name || activity.restaurant?.name || '').toLowerCase();
+
+  for (const [key, maxPrice] of Object.entries(KNOWN_CASUAL_VENUES)) {
+    if (title.includes(key) || venueName.includes(key)) {
+      const currentPrice = resolveActivityPrice(activity);
+      if (currentPrice > maxPrice) {
+        console.warn(`CASUAL VENUE CAP [${logPrefix}]: "${activity.title}" was €${currentPrice}/pp → capped at €${maxPrice}/pp (casual/street food)`);
+        writePriceToAllFields(activity, maxPrice);
+        return true;
+      }
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Resolve the effective price from all supported field shapes */
+function resolveActivityPrice(activity: Record<string, any>): number {
+  if (activity.cost && typeof activity.cost === 'object' && typeof activity.cost.amount === 'number') return activity.cost.amount;
+  if (typeof activity.cost === 'number') return activity.cost;
+  if (activity.estimatedCost && typeof activity.estimatedCost === 'object' && typeof activity.estimatedCost.amount === 'number') return activity.estimatedCost.amount;
+  if (typeof activity.estimatedCost === 'number') return activity.estimatedCost;
+  if (typeof activity.estimated_cost === 'number') return activity.estimated_cost;
+  if (typeof activity.price_per_person === 'number') return activity.price_per_person;
+  if (typeof activity.estimated_price_per_person === 'number') return activity.estimated_price_per_person;
+  if (typeof activity.price === 'number') return activity.price;
+  return 0;
+}
+
+// =============================================================================
 // DATE SANITIZATION — Strip non-ASCII chars that leak from CJK locale prompts
 // =============================================================================
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
