@@ -2551,7 +2551,14 @@ function repairBookends(
   // accommodation cards at the start of the day that aren't check-in/checkout.
   // The traveler woke up at the hotel; "Return to Hotel" / "Freshen Up" as the
   // first activity is nonsensical.
-  if (!isFirstDay && !isDepartureDay) {
+  if (!isDepartureDay) {
+    // On Day 1, find the check-in index so we only strip phantoms BEFORE check-in
+    const day1CheckInIdx = isFirstDay
+      ? activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+        })
+      : -1;
     let stripped = true;
     while (stripped) {
       stripped = false;
