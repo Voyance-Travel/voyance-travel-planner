@@ -22,6 +22,22 @@ export const TIER2_FREE_VENUE_PATTERNS = /\b(?:bridge|fountain|monument|memorial
 /** Paid-experience exclusion — don't force-free if any of these match */
 const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|aquarium|zoo|monastery|mosteiro)\b/i;
 
+// =============================================================================
+// MICHELIN / FINE DINING PRICE FLOOR CONSTANTS — shared with action-repair-costs
+// =============================================================================
+
+/** Known top-tier Michelin (2-star+) restaurants — floor €180/pp */
+export const KNOWN_MICHELIN_HIGH = /\b(belcanto|feitoria|fifty\s*seconds|fortaleza\s*do\s*guincho)\b/i;
+
+/** Known Michelin 1-star restaurants — floor €120/pp */
+export const KNOWN_MICHELIN_MID = /\b(alma|eleven|epur|cura|loco|eneko|100\s*maneiras|cem\s*maneiras|casa\s*da\s*comida|pedro\s*lemos|antiqvvm|largo\s*do\s*pa[çc]o|euskalduna|casa\s*de\s*ch[áa]\s*da\s*boa\s*nova|boa\s*nova)\b/i;
+
+/** Known upscale restaurants — floor €60/pp */
+export const KNOWN_UPSCALE = /\b(il\s*gallo|ceia|enoteca|sommelier|mini\s*bar|sacramento|solar\s*dos\s*presuntos|the\s*yeatman|yeatman)\b/i;
+
+/** Per-tier Michelin price floors (EUR/pp) */
+export const MICHELIN_FLOOR = { high: 180, mid: 120, upscale: 60 } as const;
+
 /**
  * Check whether an activity should be forced free.
  * Returns true if the activity matched a free-venue pattern and was zeroed.
