@@ -855,6 +855,12 @@ All text must be clean, correctly spelled English. No garbled characters, no non
 Always use the full destination city name in all text. Never write "the" as a placeholder where the city name should go. For example, write "in the heart of Lisbon" not "in the heart of the". Write "A Goodbye to Lisbon" not "A Goodbye to the".
 CRITICAL: Always use the ACTUAL city name in descriptions. Never use placeholder text like "the city" or generic references. Write "Lisbon" (or whatever the destination is) every time you reference the destination city. Do not use "the" as a substitute for the city name.
 
+DAY TITLE RULES:
+- Day titles must be complete, grammatically correct phrases under 60 characters.
+- Every article (the, a, an) must be followed by a noun or adjective+noun, never directly by a preposition.
+- BAD: "Arrival in Lisbon, the of Seven Hills" — GOOD: "Arrival in Lisbon, the City of Seven Hills"
+- BAD: "A Journey to of Discovery" — GOOD: "A Journey of Royal Discovery"
+
 TEXT QUALITY — NO META-COMMENTARY:
 Never include parenthetical notes, internal reasoning, scheduling logic, or explanations of why an activity was chosen in any user-visible text field (title, description, tips, voyanceInsight, whyThisFits). All text must read as polished travel copy written for the end user. Do not include "(Note: ...)", "(Scheduled as ...)", "(Adjusted for ...)", "(Reflecting ...)", or any similar meta-commentary.
 
