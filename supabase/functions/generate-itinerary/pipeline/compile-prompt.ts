@@ -121,6 +121,7 @@ export async function compilePrompt(
     isFirstDayInCity: paramIsFirstDayInCity,
     restaurantPool: paramRestaurantPool,
     usedRestaurants: paramUsedRestaurants,
+    usedVenues: paramUsedVenues,
     hotelOverride: paramHotelOverride,
   } = params;
 
@@ -1042,6 +1043,23 @@ result += `\nTHESE ARE MULTI-DAY EVENTS the traveler is attending across multipl
   }
   return result;
 })()}
+
+${(() => {
+  if (!paramUsedVenues || !Array.isArray(paramUsedVenues) || paramUsedVenues.length === 0) return '';
+  const unique = [...new Set(paramUsedVenues)];
+  const MAX_VENUE_LIST = 50;
+  const capped = unique.slice(-MAX_VENUE_LIST);
+  return `
+VENUE DEDUP — DO NOT REVISIT THESE LOCATIONS:
+The following venues/locations have already been scheduled on previous days.
+Do NOT include any of them again, even under a different activity title or slight name variation:
+${capped.join(', ')}
+
+This applies to ALL activity types — museums, landmarks, parks, attractions, and restaurants.
+If you need a museum, choose a DIFFERENT museum. If you need a landmark, choose a DIFFERENT one.
+"Louvre Museum" and "Louvre Museum Exploration" are the SAME venue — do NOT repeat.`;
+})()}
+
 
 ${(() => {
   if (!paramRestaurantPool || !Array.isArray(paramRestaurantPool) || paramRestaurantPool.length === 0) return '';

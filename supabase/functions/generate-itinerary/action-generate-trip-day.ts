@@ -406,6 +406,21 @@ async function _handleGenerateTripDayInner(
     console.log(`[generate-trip-day] Capped previousActivities to last ${PREV_DAY_WINDOW} days (${previousActivities.length} items). ${olderDayCount} older day(s) excluded from prompt.`);
   }
 
+  // Build usedVenues from ALL previous days' location.name fields (not capped)
+  // This prevents cross-day attraction/museum duplicates like "Louvre Museum" on Day 2 AND Day 4
+  const usedVenues: string[] = [];
+  for (const day of existingDays) {
+    for (const act of (day?.activities || [])) {
+      const cat = (act.category || '').toUpperCase();
+      if (['STAY', 'TRANSPORT', 'TRAVEL', 'LOGISTICS'].includes(cat)) continue;
+      const locName = (act.location?.name || '').trim();
+      if (locName && locName.length > 3) usedVenues.push(locName);
+    }
+  }
+  if (usedVenues.length > 0) {
+    console.log(`[generate-trip-day] usedVenues (${usedVenues.length}): ${usedVenues.slice(0, 10).join(', ')}${usedVenues.length > 10 ? '...' : ''}`);
+  }
+
   // Update heartbeat AND timeout sentinel before generating
   {
     const hbMeta = (tripCheck.metadata as Record<string, unknown>) || {};
@@ -493,6 +508,7 @@ async function _handleGenerateTripDayInner(
             isLastDayInCity: cityInfo ? (dayNumber === totalDays || (dayCityMap![dayNumber] && dayCityMap![dayNumber].cityName !== cityInfo.cityName)) : false,
             restaurantPool: restaurantPool.length > 0 ? restaurantPool : undefined,
             usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
+            usedVenues: usedVenues.length > 0 ? usedVenues : undefined,
             generationLogId: generationLogId || timer.getLogId(),
           }),
         });
