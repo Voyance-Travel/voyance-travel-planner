@@ -1065,6 +1065,14 @@ export async function handleGenerateDay(
       await innerTimer.updateProgress(`day_${dayNumber}_post_processing_complete`, postProcPct);
     }
 
+    // ── FINAL MICHELIN PRICE FLOOR GUARD ──
+    // Must run LAST so no other pricing step can overwrite the corrected price
+    if (Array.isArray(generatedDay.activities)) {
+      for (const act of generatedDay.activities) {
+        enforceMichelinPriceFloor(act, 'GENERATE_DAY_FINAL');
+      }
+    }
+
     // ── BUILD DIAGNOSTICS ──
     // Use the canonical detectMealSlots for consistent reporting
     const finalMeals = mealsAfterGuard.length > 0 ? mealsAfterGuard : detectMealSlots(generatedDay.activities || []);
