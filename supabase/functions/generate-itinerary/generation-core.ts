@@ -35,6 +35,7 @@ import {
   sanitizeOptionFields,
   sanitizeDateFields,
   normalizeDurationString,
+  ALWAYS_FREE_VENUE_PATTERNS,
 } from './sanitization.ts';
 
 import {
