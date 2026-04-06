@@ -1,36 +1,37 @@
 
 
-## Fix Breakfast Restaurant Repetition — Strengthen AI Prompt for Unique Restaurants
+## Fix "Lunch at a bistro" Placeholder — Expand Generic Venue Detection
 
-### Analysis
+### Root Cause
 
-The codebase already has:
-1. **Debug logging** at line 347 of `action-generate-trip-day.ts` — already logs `usedRestaurants received (N): [...]`
-2. **Three blocklist sections** in `compile-prompt.ts` (lines 983-1004) — pool-based blocklist, variety rule, and hard blocklist
+The existing `GENERIC_VENUE_PATTERNS` in `validate-day.ts` (line 39) only catches `at a local spot|nearby spot|restaurant` but misses `at a bistro`, `at a café`, `at a nice place`, etc. The title "Lunch at a bistro" slips through validation, so `repair-day.ts` never fires its GENERIC_VENUE replacement logic.
 
-Despite this, the AI still repeats restaurants. The fix is to add a stronger, more prominent "RESTAURANT UNIQUENESS" instruction block higher up in the prompt (in the system-level instructions near the timing/structure section) rather than only at the bottom with the pool data. Instructions closer to the top of the prompt carry more weight.
+The validate+repair pipeline already handles this bug category — it just needs wider pattern coverage.
 
-### Plan (1 file)
+### Plan (2 files)
 
-**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
+**File 1: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`**
 
-Add a prominent RESTAURANT UNIQUENESS block inside `timingInstructions` (around line 465, after the PRACTICAL TIPS section and before the hotel line). This places it in the structural rules section where the AI pays the most attention, not buried at the bottom with data:
+Expand `GENERIC_VENUE_PATTERNS` (line 39) to catch more generic meal titles:
 
-```ts
-RESTAURANT UNIQUENESS — ABSOLUTE REQUIREMENT:
-- EVERY restaurant across the ENTIRE trip must be UNIQUE. No restaurant name may appear on more than one day.
-- This includes breakfast, lunch, dinner, cocktails, and nightcaps.
-- You are given a list of already-used restaurants. You MUST NOT use ANY restaurant from that list.
-- Even if an already-used restaurant seems like a perfect fit, choose a DIFFERENT one instead.
-- For breakfast: every city has dozens of breakfast spots. NEVER repeat a breakfast venue.
-- CHECK your output: if any restaurant name matches one in the used list, REPLACE it before responding.
+```
+// Current (line 39):
+/^(breakfast|brunch|lunch|dinner)\s+at\s+a\s+(local\s+spot|nearby\s+spot|restaurant)/i,
+
+// Replace with broader pattern:
+/^(breakfast|brunch|lunch|dinner|supper|meal)\s+at\s+(a|an|the)\s+/i,
 ```
 
-This goes right after the "PRACTICAL TIPS" block (line 466) and before the hotel instructions. It reinforces the existing blocklist data with a structural rule the AI is more likely to respect.
+This catches "Lunch at a bistro", "Dinner at a café", "Breakfast at a nice place", etc. — any meal title using an article instead of a proper noun is a placeholder.
+
+**File 2: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
+
+Add "a bistro" and "a nice place" to the BANNED phrases in the existing RESTAURANT NAMING RULES section (~line 821) to reduce AI generation of these placeholders in the first place.
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add prominent RESTAURANT UNIQUENESS instruction block in the timing/structure section
+- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — broaden generic venue regex to catch all "Meal at a [descriptor]" patterns
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add more banned placeholder phrases to prompt
 
 ### Verification
-Generate a 4-day Lisbon trip. Check that every breakfast, lunch, and dinner uses a different restaurant. Check logs for the existing "usedRestaurants received" debug output to confirm blocklist is passed correctly.
+Generate a 4-day Lisbon trip. Every dining activity should have a real restaurant name. Check edge function logs for GENERIC_VENUE repair entries to confirm the detection fires if the AI still generates placeholders.
 
