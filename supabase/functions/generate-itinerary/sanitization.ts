@@ -341,7 +341,10 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           console.log(`[sanitize][debug] Miradouro detected in activity "${act.title}", allText: "${allTextFields.substring(0, 200)}"`);
         }
 
-        if (tier1FreePatterns.test(allTextFields)) {
+        const isPaidExperience = (act as any).booking_required ||
+          /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico)\b/i.test(allTextFields);
+
+        if (tier1FreePatterns.test(allTextFields) && !isPaidExperience) {
           console.log(`[sanitize] Zeroed phantom cost $${act.cost.amount} on free venue: ${act.title}`);
           act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
         } else if (tier2FreePatterns.test(allTextFields)) {
