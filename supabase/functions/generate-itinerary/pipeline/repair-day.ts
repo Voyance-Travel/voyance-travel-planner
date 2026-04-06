@@ -327,19 +327,46 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
 
       if (!replaced) {
-        // No pool venue available — at minimum clean up "the destination" location
-        const locName = (act.location?.name || '').toLowerCase();
-        if (locName === 'the destination' || locName === '') {
-          const before = act.location?.name;
-          act.location = { ...act.location, name: act.title || 'Restaurant' };
+        // Try city-aware fallback restaurants when pool is exhausted
+        const cityKey = (resolvedDestination || '').toLowerCase().trim();
+        const fallbackList = FALLBACK_RESTAURANTS[cityKey]?.[mealType] || FALLBACK_RESTAURANTS[cityKey]?.['any'] || [];
+        const fallbackVenue = fallbackList.find((f: any) => !usedSet.has(normalizeForDedup(f.name)));
+
+        if (fallbackVenue) {
+          const before = act.title;
+          const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+          act.title = `${mealLabel} at ${fallbackVenue.name}`;
+          act.location = { name: fallbackVenue.name, address: fallbackVenue.address || '' };
+          act.description = `Local dining in ${fallbackVenue.neighborhood || 'the city center'}.`;
+          act.source = 'generic-venue-fallback';
+          usedSet.add(normalizeForDedup(fallbackVenue.name));
           repairs.push({
             code: FAILURE_CODES.GENERIC_VENUE,
             activityIndex: vr.activityIndex,
-            action: 'cleaned_placeholder_location',
+            action: 'replaced_generic_with_fallback_venue',
             before,
-            after: act.location.name,
+            after: act.title,
           });
-          console.warn(`[Repair] GENERIC_VENUE: No pool replacement for "${act.title}" — cleaned placeholder location`);
+          console.log(`[Repair] GENERIC_VENUE: Fallback replaced "${before}" → "${act.title}"`);
+        } else {
+          // Last resort: clean up location and strip generic article from title
+          const before = act.title;
+          const locName = (act.location?.name || '').toLowerCase();
+          if (locName === 'the destination' || locName === '' || locName === 'a restaurant' || locName === 'local restaurant') {
+            act.location = { ...act.location, name: act.title || 'Restaurant' };
+          }
+          // Strip generic article pattern from title: "Lunch at a bistro" → "Lunch"
+          act.title = (act.title || '').replace(/\s+at\s+(a|an|the)\s+.+$/i, '').trim();
+          if (act.title !== before) {
+            repairs.push({
+              code: FAILURE_CODES.GENERIC_VENUE,
+              activityIndex: vr.activityIndex,
+              action: 'stripped_generic_article_from_title',
+              before,
+              after: act.title,
+            });
+          }
+          console.warn(`[Repair] GENERIC_VENUE: No pool/fallback for "${before}" — stripped to "${act.title}"`);
         }
       }
     }
