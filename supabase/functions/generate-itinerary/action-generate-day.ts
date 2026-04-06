@@ -33,6 +33,7 @@ import {
   sanitizeDateFields,
   normalizeDurationString,
   stripPhantomHotelActivities,
+  enforceMichelinPriceFloor,
 } from './sanitization.ts';
 import {
   EXCHANGE_RATES_TO_USD,
