@@ -34,6 +34,8 @@ import {
   normalizeDurationString,
   stripPhantomHotelActivities,
   enforceMichelinPriceFloor,
+  enforceBarNightcapPriceCap,
+  enforceCasualVenuePriceCap,
 } from './sanitization.ts';
 import {
   EXCHANGE_RATES_TO_USD,
