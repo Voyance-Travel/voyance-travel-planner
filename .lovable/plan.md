@@ -1,61 +1,63 @@
 
 
-## Fix Placeholder Meals and Restore Michelin Dining to Luxury Trips
+## Eliminate Placeholder Meals — Complete Fix
 
-### Analysis
+### Root Cause Analysis
 
-The validation layer (`validate-day.ts`) already catches generic titles like "Lunch at a bistro" and locations like "the destination", and the repair layer (`repair-day.ts`) already has Paris/Berlin/Rome/London fallback restaurants. However, two gaps remain:
+The validate → repair pipeline for placeholder meals exists and is well-structured, but has **two critical gaps**:
 
-1. **Placeholder detection gaps**: The validator doesn't catch when `location.name` is just the city name (e.g., `"Paris"`) or when descriptions contain `"get a restaurant recommendation"`. These slip through validation, so repair never fires.
+1. **`destination` not passed to `validateDay`**: Both callers (`action-generate-trip-day.ts` line 843 and `action-generate-day.ts` line 825) omit the `destination` field. This means `checkGenericVenues` can never detect city-name-as-venue (e.g., venue="Paris") because `destLower` is always empty.
 
-2. **No Michelin inclusion guidance**: The prompt tells the AI how to *price* Michelin restaurants but never tells it to *include* them. After pricing enforcement was added, the AI learned to avoid Michelin venues entirely rather than price them correctly.
+2. **Prompt restaurant hints are Lisbon-only**: Line 851 of `compile-prompt.ts` only lists Lisbon restaurants. Paris, Berlin, Rome, London trips get no examples, making the AI more likely to fall back to placeholders.
+
+3. **Fallback list is thin**: Paris has only 4 breakfast, 4 lunch, 4 dinner fallbacks. A 5-day trip needs 5 breakfasts and 5 lunches — if the pool is exhausted and 1+ slot hits the fallback, it runs out.
 
 ### Changes
 
-#### 1. Expand placeholder detection in `validate-day.ts` (~line 247)
+#### 1. Pass `destination` to `validateDay` in both callers
 
-In `checkGenericVenues`, expand `hasPlaceholderLocation` to also catch:
-- Location name matching the destination city name (case-insensitive) — e.g., `"paris"`, `"rome"`, `"berlin"`
-- Description containing `"get a restaurant recommendation"` or `"ask for recommendations"`
+**`action-generate-trip-day.ts` (~line 843)**: Add `destination: cityInfo?.cityName || destination,` to the `validateDay` call.
 
-This requires passing the destination city into the validator. Add `destination?: string` to `ValidateDayInput` (it's already there from the demonym fix) and thread it into `checkGenericVenues`.
+**`action-generate-day.ts` (~line 825)**: Add `destination: destination || resolvedDestination,` to the `validationInput` object (need to check which variable holds the city name in that file).
 
-```typescript
-// Add to hasPlaceholderLocation check:
-const destLower = (destination || '').toLowerCase().trim();
-const isCityNameOnly = destLower && locationName === destLower;
-const hasPlaceholderDescription = description.includes('get a restaurant recommendation') || 
-  description.includes('ask for recommendations');
+This is the most important fix — it unlocks the city-name-as-venue detection that's already coded.
 
-const hasPlaceholderLocation = locationName === 'the destination' || locationName === '' ||
-  isCityNameOnly || hasPlaceholderDescription ||
-  /^(a |the )?(local |nearby )?(spot|place|restaurant|...)/i.test(locationName);
+#### 2. Expand prompt restaurant hints per city (`compile-prompt.ts` ~line 851)
+
+Replace the Lisbon-only line with city-aware hints. For the destination city, inject 8-10 real restaurant names per meal type (breakfast, lunch, dinner). Use the restaurants already in `FALLBACK_RESTAURANTS` plus extras from the user's prompt. This gives the AI concrete options instead of falling back to "at a bistro."
+
+Format:
+```
+For ${city}, use REAL restaurants like:
+- BREAKFAST: Café de Flore, Angelina, Stohrer, Du Pain et des Idées, Claus, Ladurée, Carette, Holybelly
+- LUNCH: Le Comptoir du Relais, Bouillon Chartier, Chez Janou, Les Philosophes, Pink Mamma
+- DINNER: Sacré Fleur, Le Train Bleu, Brasserie Lipp, Le Relais de l'Entrecôte, Drouant
 ```
 
-#### 2. Add Michelin inclusion guidance to prompt (`compile-prompt.ts` ~line 832)
+#### 3. Expand Paris fallback restaurants in `repair-day.ts`
 
-After the existing Michelin pricing rules, add inclusion guidance that scales with trip length:
+Add 4-6 more entries per meal type for Paris (and a few extras for other cities) to ensure a 5-day trip can't exhaust the fallback pool. Currently Paris has 4 per meal type; expand to 8-10 per type.
 
-```
-MICHELIN DINING INCLUSION (for cities with Michelin restaurants):
-- Trips of 3+ days: include AT LEAST 1 Michelin-starred dinner
-- Trips of 5+ days: include 2-3 Michelin-starred dinners
-- It is BETTER to include a correctly-priced Michelin restaurant than to avoid all Michelin restaurants
-- Do NOT remove Michelin restaurants to avoid pricing issues — price them correctly instead
-- Michelin dinners add prestige and variety to a luxury itinerary
-```
+Additional Paris restaurants to add:
+- Breakfast: Angelina, Stohrer, Ladurée, Holybelly, Boot Café, Ob-La-Di
+- Lunch: Les Philosophes, Pink Mamma, Robert et Louise, Bofinger
+- Dinner: Le Train Bleu, Brasserie Lipp, Le Relais de l'Entrecôte, Drouant, Le Voltaire, Chez Georges
 
-This block should be conditional — only injected when the trip is 3+ days. The `totalDays` variable is already available in scope.
+#### 4. Strengthen prompt anti-placeholder language (`compile-prompt.ts`)
 
-#### 3. Add Michelin inclusion logging in `action-generate-trip-day.ts`
-
-After the final guard loop where Michelin price floors are enforced, add a diagnostic log that checks whether any dinner activity matches a `KNOWN_FINE_DINING_STARS` key. If none match on a 3+ day trip, log a warning: `MICHELIN INCLUSION: No Michelin restaurants on a N-day trip`. This is observability only — no mutation.
+Add explicit "NEVER generate" examples at the top of the dining rules, including the exact patterns seen in the regression:
+- "Breakfast at a neighborhood café"
+- "Lunch at a bistro"  
+- "Dinner at a brasserie"
+- "Breakfast at a boulangerie-café"
+- Any venue named "the destination" or just the city name
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `pipeline/validate-day.ts` | Expand `checkGenericVenues` to catch city-name-as-location and placeholder descriptions; thread `destination` param |
-| `pipeline/compile-prompt.ts` | Add Michelin inclusion guidance block after pricing rules (conditional on 3+ day trips) |
-| `action-generate-trip-day.ts` | Add post-guard Michelin inclusion diagnostic log |
+| `action-generate-trip-day.ts` | Add `destination` to `validateDay` call (~line 843) |
+| `action-generate-day.ts` | Add `destination` to `validationInput` object (~line 825) |
+| `pipeline/compile-prompt.ts` | Expand restaurant hints per city; strengthen anti-placeholder language |
+| `pipeline/repair-day.ts` | Expand Paris fallback restaurants from 4→8-10 per meal type |
 
