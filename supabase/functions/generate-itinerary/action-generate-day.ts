@@ -794,6 +794,12 @@ export async function handleGenerateDay(
         const pipelineDietaryRestrictions = profile?.dietaryRestrictions || [];
         const mustDoList = (paramMustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
 
+        // --- Use unified hotel resolution from compile-day-facts (single source of truth) ---
+        const resolvedRepairHotelName = resolvedHotelOverride?.name || (flightContext as any).hotelName || paramHotelName || undefined;
+        const resolvedRepairHotelAddr = resolvedHotelOverride?.address || (flightContext as any).hotelAddress || '';
+        const resolvedIsHotelChange = facts.resolvedIsHotelChange;
+        const resolvedPreviousHotelName = facts.resolvedPreviousHotelName;
+
         // --- VALIDATE ---
         const validationInput: ValidateDayInput = {
           day: currentDayMinimal,
@@ -825,12 +831,6 @@ export async function handleGenerateDay(
         } else {
           console.log(`[pipeline] Day ${dayNumber} validation: all checks passed`);
         }
-
-        // --- Use unified hotel resolution from compile-day-facts (single source of truth) ---
-        const resolvedRepairHotelName = resolvedHotelOverride?.name || (flightContext as any).hotelName || paramHotelName || undefined;
-        const resolvedRepairHotelAddr = resolvedHotelOverride?.address || (flightContext as any).hotelAddress || '';
-        const resolvedIsHotelChange = facts.resolvedIsHotelChange;
-        const resolvedPreviousHotelName = facts.resolvedPreviousHotelName;
 
         // --- REPAIR ---
         const repairInput: RepairDayInput = {
