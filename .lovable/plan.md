@@ -1,71 +1,33 @@
 
 
-## Fix Cross-Day Restaurant Repetition (Time Out Market Lisboa on Day 1 and Day 4)
+## Expand Michelin Price Floor to Multi-City
 
-### Root Cause
+### What's wrong
+The `KNOWN_FINE_DINING_STARS` map in `sanitization.ts` only contains Lisbon restaurants. The enforcement helper works correctly but has nothing to match against for Berlin, Paris, Rome, etc. Result: 8 Michelin restaurants priced as low as €11/pp.
 
-The cross-day restaurant deduplication uses `extractRestaurantVenueName()` which produces an exact normalized string. If the AI generates "Time Out Market Lisboa" on Day 1 but "Time Out Market" on Day 4 (or vice versa), the normalized keys differ ("time out market lisboa" vs "time out market") and the dedup misses the match.
+### Changes
 
-The existing architecture has THREE dedup layers, all using exact string matching:
-1. **Prompt blocklist** (compile-prompt.ts) — tells AI not to reuse restaurants
-2. **Per-day dedup** (action-generate-trip-day.ts ~line 901) — checks against `usedRestaurants` from metadata
-3. **Failsafe sweep** (action-generate-trip-day.ts ~line 1375) — re-scans all days post-assembly
+#### 1. Expand `KNOWN_FINE_DINING_STARS` in `sanitization.ts` (lines 46–72)
+Replace the Lisbon-only map with the full multi-city version covering Lisbon, Berlin, Paris, Rome, Barcelona, London, Amsterdam, Vienna, Madrid, Milan, Copenhagen, Munich, and Istanbul — approximately 120 entries total. Keep all existing Lisbon entries, add the rest.
 
-All three use `extractRestaurantVenueName()` with exact `Set.has()` comparisons, so name variations slip through.
+#### 2. Update prompt examples in `compile-prompt.ts` (lines 816–821)
+Extend the "SPECIFIC EXAMPLES" section to include non-Lisbon restaurants:
+- Guy Savoy (Paris, 3-star): minimum €250/pp
+- Facil (Berlin, 2-star): minimum €180/pp
+- Horváth (Berlin, 1-star): minimum €120/pp
 
-### Plan
+Change the general instruction to say "ALL CITIES" to make it clear this isn't Lisbon-specific.
 
-#### 1. Add fuzzy venue matching to `generation-utils.ts`
-
-Add a `venueNamesMatch(a, b)` function that returns true if:
-- Exact match (current behavior), OR
-- One name contains the other (substring match for cases like "Time Out Market" vs "Time Out Market Lisboa"), OR
-- Word-overlap ≥ 80% (catches minor word additions/removals)
-
-```typescript
-export function venueNamesMatch(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
-  const wordsA = new Set(a.split(/\s+/));
-  const wordsB = new Set(b.split(/\s+/));
-  const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
-  const smaller = Math.min(wordsA.size, wordsB.size);
-  return smaller > 0 && intersection / smaller >= 0.8;
-}
-```
-
-#### 2. Replace `Set.has()` with fuzzy matching in the failsafe sweep
-
-In `action-generate-trip-day.ts` at the failsafe dedup (~line 1486), replace:
-```typescript
-if (allUsedRestaurants.has(venue)) {
-```
-with a helper that checks if `venue` fuzzy-matches any entry in `allUsedRestaurants`.
-
-Similarly update:
-- The per-day dedup at ~line 915
-- The `usedRestaurants` extraction at ~line 1692 (to avoid adding near-duplicates)
-- The `usedSet` checks in repair-day.ts
-
-#### 3. Add `venue_name` and `location.name` to the per-day dedup check
-
-At line 914, the per-day dedup only checks `act.title` and `act.location?.name`. Update it to also check `act.venue_name` and `act.restaurant?.name`, matching the failsafe sweep's broader field coverage.
-
-#### 4. No new files, no prompt changes needed
-
-The prompt blocklist is already comprehensive. The issue is the post-generation matching, not the prompt.
+#### 3. No other changes needed
+- The `enforceMichelinPriceFloor` helper already runs as the final pricing step in `action-generate-day.ts` and `action-generate-trip-day.ts`
+- The `action-repair-costs.ts` already imports and iterates `KNOWN_FINE_DINING_STARS`
+- The matching logic (substring, stripped title, venue name) is city-agnostic
+- `deduplicateEveningFineDining` is untouched
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `generation-utils.ts` | Add `venueNamesMatch()` fuzzy comparison function |
-| `action-generate-trip-day.ts` | Use fuzzy matching in per-day dedup (~line 915), failsafe sweep (~line 1486), and restaurant extraction (~line 1692) |
-
-### Verification
-
-- Generate a 4-day Lisbon trip — no restaurant should appear on more than one day
-- Check console for "CROSS-DAY DEDUP" logs
-- Specifically verify Time Out Market Lisboa doesn't repeat
+| `sanitization.ts` | Replace lines 46–72 with expanded ~120-entry multi-city map |
+| `compile-prompt.ts` | Add Berlin/Paris/Barcelona examples to lines 816–821, label rules as "ALL CITIES" |
 
