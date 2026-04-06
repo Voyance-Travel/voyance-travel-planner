@@ -192,6 +192,9 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     result = result.replace(/\bthe's\b/gi, destination + "'s");
 
     // "in the of [Noun]" title pattern → "in Lisbon, the City of [Noun]"
+    // ", the of [Noun]" → ", the City of [Noun]" (comma-prefixed variant)
+    result = result.replace(/,\s*the\s+of\b/gi, ', the City of');
+    // "in the of [Noun]" → "in Lisbon, the City of [Noun]"
     result = result.replace(/\bin the of\b/gi, 'in ' + destination + ', the City of');
 
     // "in the." / "to the." / "of the!" / "of the?" — orphaned article before sentence-end punctuation
