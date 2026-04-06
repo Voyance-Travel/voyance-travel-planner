@@ -843,6 +843,7 @@ async function _handleGenerateTripDayInner(
       const validationResults = validateDay({
         day: dayMinimal,
         dayNumber, isFirstDay, isLastDay, totalDays,
+        destination: cityInfo?.cityName || destination,
         hasHotel: true, // Always true — repair uses "Your Hotel" placeholder
         hotelName: cityInfo?.hotelName || tripHotelName || undefined,
         arrivalTime24: arrTime24,
