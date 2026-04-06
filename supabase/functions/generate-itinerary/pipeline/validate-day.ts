@@ -36,7 +36,7 @@ const GENERIC_VENUE_PATTERNS = [
   // "Breakfast in Lisbon", "Lunch in Rome", "Dinner in Tokyo" — city-name-only placeholders
   /^(breakfast|brunch|lunch|dinner|supper)\s+in\s+\S/i,
   // "Breakfast at a local spot" — vague fallback
-  /^(breakfast|brunch|lunch|dinner)\s+at\s+a\s+(local\s+spot|nearby\s+spot|restaurant)/i,
+  /^(breakfast|brunch|lunch|dinner|supper|meal)\s+at\s+(a|an|the)\s+/i,
 ];
 
 const LABEL_LEAK_PATTERNS = [
