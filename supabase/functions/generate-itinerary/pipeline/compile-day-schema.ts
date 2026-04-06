@@ -402,7 +402,7 @@ REQUIRED SEQUENCE:
 2. "Hotel Checkout"
    - startTime: "${calculatedCheckout}", endTime: "${addMinutesToHHMM(calculatedCheckout, 15)}"
    - category: "accommodation"
-   - location: { name: "${hotelNameDisplay}" }
+   - location: { name: "${hotelNameDisplay}", address: "${flightContext.hotelAddress || ''}" }
 
 3. "Transfer to ${depStation}"
    - startTime: "${leaveForStation}", endTime: "${addMinutesToHHMM(depTime, -10)}"
