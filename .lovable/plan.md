@@ -1,63 +1,66 @@
 
 
-## Eliminate Placeholder Meals — Complete Fix
+## Extend Cross-Day Dedup to Cover Attractions & Museums
 
-### Root Cause Analysis
+### Current State
 
-The validate → repair pipeline for placeholder meals exists and is well-structured, but has **two critical gaps**:
+The validation and repair layers already handle cross-day attraction dedup — `validateDay` flags "TRIP-WIDE DUPLICATE" for non-dining repeats, and `repairDay` removes them. However, two gaps allow duplicates like "Louvre Museum" (Day 2) / "Louvre Museum Exploration" (Day 4) to slip through:
 
-1. **`destination` not passed to `validateDay`**: Both callers (`action-generate-trip-day.ts` line 843 and `action-generate-day.ts` line 825) omit the `destination` field. This means `checkGenericVenues` can never detect city-name-as-venue (e.g., venue="Paris") because `destLower` is always empty.
+1. **Prompt-level prevention is weak for attractions**: `previousActivities` only sends activity titles from the last 3 days. The AI doesn't receive venue/location names separately, so "Louvre Museum" as a title and "Louvre Museum Exploration" look different enough to the AI.
 
-2. **Prompt restaurant hints are Lisbon-only**: Line 851 of `compile-prompt.ts` only lists Lisbon restaurants. Paris, Berlin, Rome, London trips get no examples, making the AI more likely to fall back to placeholders.
-
-3. **Fallback list is thin**: Paris has only 4 breakfast, 4 lunch, 4 dinner fallbacks. A 5-day trip needs 5 breakfasts and 5 lunches — if the pool is exhausted and 1+ slot hits the fallback, it runs out.
+2. **Removed duplicates aren't replaced**: When repair strips a duplicate attraction, the day just loses an activity — no replacement is injected. This can leave a gap in the schedule.
 
 ### Changes
 
-#### 1. Pass `destination` to `validateDay` in both callers
+#### 1. Build and pass `usedVenues` list alongside `usedRestaurants` in `action-generate-trip-day.ts` (~line 392)
 
-**`action-generate-trip-day.ts` (~line 843)**: Add `destination: cityInfo?.cityName || destination,` to the `validateDay` call.
+After building `previousActivities` from titles, also build a `usedVenues` list from `location.name` fields of all non-logistical activities across ALL previous days (not capped to 3 days like titles):
 
-**`action-generate-day.ts` (~line 825)**: Add `destination: destination || resolvedDestination,` to the `validationInput` object (need to check which variable holds the city name in that file).
-
-This is the most important fix — it unlocks the city-name-as-venue detection that's already coded.
-
-#### 2. Expand prompt restaurant hints per city (`compile-prompt.ts` ~line 851)
-
-Replace the Lisbon-only line with city-aware hints. For the destination city, inject 8-10 real restaurant names per meal type (breakfast, lunch, dinner). Use the restaurants already in `FALLBACK_RESTAURANTS` plus extras from the user's prompt. This gives the AI concrete options instead of falling back to "at a bistro."
-
-Format:
-```
-For ${city}, use REAL restaurants like:
-- BREAKFAST: Café de Flore, Angelina, Stohrer, Du Pain et des Idées, Claus, Ladurée, Carette, Holybelly
-- LUNCH: Le Comptoir du Relais, Bouillon Chartier, Chez Janou, Les Philosophes, Pink Mamma
-- DINNER: Sacré Fleur, Le Train Bleu, Brasserie Lipp, Le Relais de l'Entrecôte, Drouant
+```typescript
+const usedVenues: string[] = [];
+for (const day of existingDays) {
+  for (const act of (day?.activities || [])) {
+    const cat = (act.category || '').toUpperCase();
+    if (['STAY', 'TRANSPORT', 'TRAVEL', 'LOGISTICS'].includes(cat)) continue;
+    const locName = (act.location?.name || '').trim();
+    if (locName && locName.length > 3) usedVenues.push(locName);
+  }
+}
 ```
 
-#### 3. Expand Paris fallback restaurants in `repair-day.ts`
+Pass `usedVenues` to the `compilePrompt` call alongside `usedRestaurants`.
 
-Add 4-6 more entries per meal type for Paris (and a few extras for other cities) to ensure a 5-day trip can't exhaust the fallback pool. Currently Paris has 4 per meal type; expand to 8-10 per type.
+#### 2. Add venue blocklist to prompt in `compile-prompt.ts` (~line 1035)
 
-Additional Paris restaurants to add:
-- Breakfast: Angelina, Stohrer, Ladurée, Holybelly, Boot Café, Ob-La-Di
-- Lunch: Les Philosophes, Pink Mamma, Robert et Louise, Bofinger
-- Dinner: Le Train Bleu, Brasserie Lipp, Le Relais de l'Entrecôte, Drouant, Le Voltaire, Chez Georges
+After the existing "Avoid repeating these specific venues/activities" block, add a dedicated venue blocklist:
 
-#### 4. Strengthen prompt anti-placeholder language (`compile-prompt.ts`)
+```
+VENUE DEDUP — DO NOT REVISIT THESE LOCATIONS:
+The following venues/locations have already been scheduled on previous days. 
+Do NOT include any of them again, even under a different activity title:
+${usedVenues.join(', ')}
 
-Add explicit "NEVER generate" examples at the top of the dining rules, including the exact patterns seen in the regression:
-- "Breakfast at a neighborhood café"
-- "Lunch at a bistro"  
-- "Dinner at a brasserie"
-- "Breakfast at a boulangerie-café"
-- Any venue named "the destination" or just the city name
+This applies to ALL activity types — museums, landmarks, parks, attractions, and restaurants.
+If you need a museum, choose a DIFFERENT museum. If you need a landmark, choose a DIFFERENT one.
+```
+
+This is separate from the restaurant blocklist and covers ALL venue types.
+
+#### 3. Add `usedVenues` param to `CompilePromptParams` type
+
+Add `usedVenues?: string[]` to the params interface so it flows through cleanly.
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `action-generate-trip-day.ts` | Add `destination` to `validateDay` call (~line 843) |
-| `action-generate-day.ts` | Add `destination` to `validationInput` object (~line 825) |
-| `pipeline/compile-prompt.ts` | Expand restaurant hints per city; strengthen anti-placeholder language |
-| `pipeline/repair-day.ts` | Expand Paris fallback restaurants from 4→8-10 per meal type |
+| `action-generate-trip-day.ts` | Build `usedVenues` from all previous days' `location.name` fields; pass to `compilePrompt` |
+| `pipeline/compile-prompt.ts` | Add `usedVenues` param; inject venue blocklist into prompt after the activity avoid list |
+
+### What we're NOT changing
+
+- The validation layer (already catches dupes correctly)
+- The repair layer (already removes non-dining dupes)
+- Restaurant dedup (untouched, this extends it)
+- Hotel/transport/logistics activities (excluded from venue tracking)
 
