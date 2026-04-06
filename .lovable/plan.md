@@ -1,37 +1,34 @@
 
 
-## Fix Missing Meal When Cross-Day Dedup Strips a Restaurant + Orphaned Travel Routing
+## Fix Garbled Text Suffix in Activity Titles
 
 ### Problem
+AI appends nonsensical hyphenated suffixes to activity titles (e.g., "Chiado Evening Ambiance Walk maternal-retreat"). These are internal archetype/mood tags leaking into output.
 
-Two dedup passes exist in `action-generate-trip-day.ts`:
-1. **Post-generation dedup** (lines 883-932): Has primary meal protection (keeps duplicates rather than removing meals) and attempts pool replacement — but when pool is exhausted, primary meals are kept as duplicates.
-2. **Failsafe dedup** (lines 1274-1317): Runs on trip completion but has NO primary meal protection and NO replacement logic — it blindly removes all duplicates, causing missing meals and orphaned travel routing.
+### Plan (2 files)
 
-### Plan (1 file)
+**File 1: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+In `sanitizeAITextField`, add garbled suffix regex cleanup before the final whitespace/punctuation cleanup (before line 170). Three patterns:
 
-**Change 1: Import and define FALLBACK_RESTAURANTS map** (~line 15)
-- Import the `FallbackVenue` type and reuse the same city-keyed fallback map already in `repair-day.ts` (Lisbon, Porto, Barcelona with breakfast/lunch/dinner lists). Define it as a local constant or import it.
+1. Known hyphenated wellness/mood tags: `maternal-retreat`, `self-care`, `mind-body`, etc.
+2. General pattern: any trailing hyphenated word ending in `-retreat`, `-journey`, `-quest`, `-path`, `-vibe`, `-flow`, `-soul`, `-self`, `-mind`, `-mode`, etc.
+3. Category/tag leakage: trailing `category-xxx`, `type-xxx`, `mode-xxx` patterns.
 
-**Change 2: Rewrite the failsafe dedup block** (lines 1274-1317)
-- Instead of `return false` (removing), attempt replacement:
-  1. Detect meal type from title
-  2. Look up fallback from `FALLBACK_RESTAURANTS[cityKey][mealType]`
-  3. Find one not in `allUsedRestaurants`
-  4. Rewrite `act.title`, `act.location.name`, `act.venue_name`, `act.restaurant.name`
-  5. If no fallback available AND it's a primary meal, KEEP the duplicate (log warning)
-  6. Only remove if it's NOT a primary meal and no fallback exists
+Add these as `.replace()` calls in the existing chain, with `console.warn` logging when a match is found.
 
-**Change 3: Add orphaned travel routing cleanup** (after the failsafe dedup, ~line 1317)
-- For each day, build a set of current activity venue names
-- Filter `day.travelRouting` to remove entries whose destination doesn't match any current activity and isn't a hotel/airport/known landmark
-- Log each orphaned route removal
+**File 2: `supabase/functions/generate-itinerary/generation-core.ts`**
+
+After rule 14 (NO KEYWORD STUFFING, line 676), add a new rule:
+
+```
+'17. **NO TAG SUFFIXES IN TITLES**: Activity titles must NOT end with hyphenated mood/category tags. WRONG: "Evening Walk maternal-retreat", "Museum Visit culture-deep-dive". RIGHT: "Evening Walk through Chiado", "National Museum of Ancient Art".'
+```
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — rewrite failsafe dedup with replacement fallback + add orphaned travel routing cleanup
+- `supabase/functions/generate-itinerary/sanitization.ts` — add garbled suffix regex patterns to `sanitizeAITextField`
+- `supabase/functions/generate-itinerary/generation-core.ts` — add rule 17 forbidding tag suffixes in titles
 
 ### Verification
-Generate a 4-day Lisbon trip. All days should have complete meals. No orphaned travel routing. No placeholder names. Check logs for `DEDUP REPLACEMENT` and `ORPHANED ROUTE CLEANUP` entries.
+Generate a 4-day Lisbon trip. All activity titles should be clean natural language with no hyphenated tag suffixes.
 
