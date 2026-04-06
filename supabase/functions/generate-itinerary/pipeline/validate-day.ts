@@ -153,6 +153,11 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
     checkPreCheckoutDiningHotel(activities, hotelName, previousHotelName, results);
   }
 
+  // --- WRONG CITY DEMONYM IN DAY TITLE ---
+  if (destination) {
+    checkWrongCityDemonym(day, destination, results);
+  }
+
   return results;
 }
 
