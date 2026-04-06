@@ -178,7 +178,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       if (wasCorrected) corrected++;
 
       // ── Michelin / fine dining floor enforcement ──
-      // Ensures activity_costs table respects the same minimums as the JSONB data
+      // Uses the shared KNOWN_FINE_DINING_STARS map for explicit star lookups
       const combinedText = [
         title,
         activity.description || '',
@@ -186,23 +186,45 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         activity.place_name || '',
         (activity as any).restaurant?.name || '',
         (activity as any).restaurant?.description || '',
-      ].join(' ');
+      ].join(' ').toLowerCase();
+
+      // Strip meal prefix for matching: "Dinner at Eleven Restaurant" → "eleven restaurant"
+      const strippedTitle = title.toLowerCase().replace(/^(breakfast|lunch|dinner|brunch|meal)\s*(at|:|-|–)\s*/i, '').trim();
+      const venueNameLower = (activity.venue_name || (activity as any).restaurant?.name || '').toLowerCase();
 
       let michelinFloor = 0;
       let michelinReason = '';
 
-      // Check star-count indicators in text
-      if (/michelin\s*3|3[\s-]*star/i.test(combinedText)) {
-        michelinFloor = 250; michelinReason = 'Michelin 3-star';
-      } else if (/michelin\s*2|2[\s-]*star/i.test(combinedText)) {
-        michelinFloor = MICHELIN_FLOOR.high; michelinReason = 'Michelin 2-star';
-      } else if (/michelin\s*1|1[\s-]*star|michelin[\s-]*starred/i.test(combinedText)) {
-        michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Michelin 1-star';
-      } else if (/tasting menu|fine dining|haute cuisine|degustation|omakase/i.test(combinedText)) {
-        michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Fine dining / tasting menu';
+      // Strategy 1: Explicit star map lookup
+      for (const [key, stars] of Object.entries(KNOWN_FINE_DINING_STARS)) {
+        if (
+          title.toLowerCase().includes(key) ||
+          strippedTitle.includes(key) ||
+          venueNameLower.includes(key)
+        ) {
+          const starFloor = FINE_DINING_MIN_PRICE_BY_STARS[stars] || FINE_DINING_MIN_PRICE_DEFAULT;
+          if (starFloor > michelinFloor) {
+            michelinFloor = starFloor;
+            michelinReason = `Known ${stars}-star Michelin restaurant (${key})`;
+          }
+          break;
+        }
       }
 
-      // Known restaurant name overrides
+      // Strategy 2: Keyword-based star detection
+      if (michelinFloor === 0) {
+        if (/michelin\s*3|3[\s-]*star/i.test(combinedText)) {
+          michelinFloor = 250; michelinReason = 'Michelin 3-star';
+        } else if (/michelin\s*2|2[\s-]*star/i.test(combinedText)) {
+          michelinFloor = MICHELIN_FLOOR.high; michelinReason = 'Michelin 2-star';
+        } else if (/michelin\s*1|1[\s-]*star|michelin[\s-]*starred/i.test(combinedText)) {
+          michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Michelin 1-star';
+        } else if (/tasting menu|fine dining|haute cuisine|degustation|omakase/i.test(combinedText)) {
+          michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Fine dining / tasting menu';
+        }
+      }
+
+      // Strategy 3: Regex bucket fallback
       if (michelinFloor < MICHELIN_FLOOR.high && KNOWN_MICHELIN_HIGH.test(combinedText)) {
         michelinFloor = MICHELIN_FLOOR.high; michelinReason = 'Known top-tier Michelin restaurant';
       } else if (michelinFloor < MICHELIN_FLOOR.mid && KNOWN_MICHELIN_MID.test(combinedText)) {
