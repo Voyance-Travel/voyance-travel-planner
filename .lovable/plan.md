@@ -1,62 +1,51 @@
 
 
-## Ensure Every Full Day Has Dinner (Not Just Cocktails)
+## Raise Michelin Price Floor in repair-costs + Preserve Fine Dining Dedup
 
 ### Root Cause
 
-`detectMealSlots()` in `day-validation.ts` (line 163) treats **any** dining-category activity between 17:00–22:00 as dinner via time-based detection. A cocktail bar like "Cocktails at Pavilhão Chinês" at 8:56 PM with category `dining` satisfies the dinner check, so the meal guard never fires and no dinner is injected.
+The sanitization floor logic in `sanitization.ts` (lines 595–639) correctly sets Belcanto to €180. However, `action-repair-costs.ts` runs AFTER sanitization and writes to the `activity_costs` table using generic `cost_reference` lookups. It has NO Michelin floor logic. The UI's Payments tab reads from `activity_costs`, so the sanitized floor gets overwritten with the reference table's generic dining value (~€166 or whatever the reference says).
 
 ### Plan
 
-#### 1. Fix `detectMealSlots` in `day-validation.ts`
+#### 1. Add Michelin floor enforcement to `action-repair-costs.ts`
 
-Add a drinks-only exclusion to the time-based dinner detection (line 156–165). Before counting a dining activity as dinner by time alone, check that its title doesn't match a cocktail/bar/drinks pattern:
+After the cost-reference lookup (around line 176), before pushing to `rows`, add the same Michelin-aware floor logic:
+
+- Define `knownMichelinHigh` / `knownMichelinMid` / `knownUpscale` regexes (same as sanitization.ts) and per-star floor constants
+- After resolving `costPerPerson` from reference tables, check if the activity matches a known Michelin restaurant and enforce the floor
+- This ensures `activity_costs` rows respect the same minimums as the JSONB data
+
+#### 2. Extract shared Michelin floor constants
+
+To avoid duplication, extract the Michelin regexes and floor constants into a shared export from `sanitization.ts`:
 
 ```typescript
-const DRINKS_ONLY_RE = /\b(cocktail|nightcap|drinks?|bar|lounge|aperitif|speakeasy)\b/i;
-
-// In the time-based detection block:
-if (isDining) {
-  const startTime = (activity as any).startTime || '';
-  const minutes = parseTimeToMinutesLocal(startTime);
-  if (minutes !== null) {
-    if (minutes >= 6 * 60 && minutes < 11 * 60) detected.add('breakfast');
-    else if (minutes >= 11 * 60 && minutes < 15 * 60) detected.add('lunch');
-    else if (minutes >= 17 * 60 && minutes <= 22 * 60) {
-      // Cocktail bars don't count as dinner
-      if (!DRINKS_ONLY_RE.test(title)) {
-        detected.add('dinner');
-      }
-    }
-  }
-}
+export const KNOWN_MICHELIN_HIGH = /\b(belcanto|feitoria|fifty\s*seconds|fortaleza\s*do\s*guincho)\b/i;
+export const KNOWN_MICHELIN_MID = /\b(alma|eleven|epur|cura|loco|eneko|...)\b/i;
+export const KNOWN_UPSCALE = /\b(il\s*gallo|ceia|enoteca|...)\b/i;
+export const MICHELIN_FLOOR = { high: 180, mid: 120, upscale: 60 };
 ```
 
-This means cocktail bars no longer satisfy the dinner requirement, and the existing `enforceRequiredMealsFinalGuard` will inject a proper dinner restaurant.
+Then import and use in both `sanitization.ts` and `action-repair-costs.ts`.
 
-#### 2. Add prompt-layer rule in `compile-prompt.ts`
+#### 3. No changes to fine dining dedup
 
-Add to the meal timing rules section (~line 929):
+The `deduplicateEveningFineDining` logic in `sanitization.ts` (lines 683–720) is already working correctly and will be preserved as-is.
 
-```
-- Cocktail bars, lounges, and nightcap venues do NOT count as dinner. Every full day must have a proper sit-down dinner restaurant between 7:00 PM and 9:30 PM, separate from any bar/lounge visit.
-- If the day includes a cocktail/bar visit, schedule it AFTER dinner.
-```
+#### 4. No prompt changes needed
 
-#### 3. No new files needed
-
-The existing meal guard (`enforceRequiredMealsFinalGuard`) already handles injection of missing meals with real restaurant names. The only fix is making `detectMealSlots` correctly identify that a cocktail bar is not dinner.
+The prompt rules in `compile-prompt.ts` already include Michelin pricing minimums and single-dinner-per-evening rules.
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/day-validation.ts` | Add `DRINKS_ONLY_RE` exclusion to time-based dinner detection |
-| `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` | Add cocktail≠dinner rule to meal timing section |
+| `sanitization.ts` | Export Michelin floor constants and regexes as shared constants |
+| `action-repair-costs.ts` | Import shared constants; apply Michelin floor after cost-reference lookup |
 
 ### Verification
 
-- Generate a 4-day Lisbon trip — every full day should have a proper dinner restaurant
-- Days with cocktail bars should have dinner scheduled before the bar visit
-- Check console for meal guard logs — if it fires for missing dinner, it means the fix is working
-
+- Generate a Lisbon trip → Belcanto should be ≥€180/pp in both the itinerary view AND the Payments tab
+- Check `activity_costs` table rows for Michelin restaurants — all should respect per-star floors
+- Double fine dining dedup continues to work (no regression)
