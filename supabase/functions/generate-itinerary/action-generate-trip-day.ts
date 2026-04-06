@@ -970,7 +970,90 @@ async function _handleGenerateTripDayInner(
     console.warn(`[generate-trip-day] Day deduplication removed ${candidateDays.length - updatedDays.length} duplicate(s)`);
   }
 
-  // NO-SHRINK GUARD (chain save)
+  // ── HOTEL ADDRESS CONSISTENCY PASS (trip-wide) ──────────────────
+  // After all days are assembled, enforce that every accommodation card
+  // for a given hotel uses the same canonical address. Source of truth:
+  // hotel_selection data > majority observed address.
+  {
+    const normalizeHotelKey = (name: string): string =>
+      name.toLowerCase()
+        .replace(/\b(hotel|resort|suites?|inn|lodge|palace|palácio|boutique|luxury|the|a)\b/gi, '')
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ').trim();
+
+    // Build canonical address map from hotel_selection (highest confidence)
+    const canonicalAddresses = new Map<string, string>();
+    for (const h of hotelList) {
+      if (h?.name && h?.address) {
+        canonicalAddresses.set(normalizeHotelKey(h.name), h.address);
+      }
+    }
+
+    // Also check multi-city hotel selections
+    if (dayCityMap) {
+      for (const ci of dayCityMap) {
+        if (ci.hotelName && ci.hotelAddress) {
+          canonicalAddresses.set(normalizeHotelKey(ci.hotelName), ci.hotelAddress);
+        }
+      }
+    }
+
+    const ACCOM_RE = /\b(check.?in|check.?out|checkout|freshen\s*up|return\s+to|luggage\s+drop|settle\s+in|back\s+to)\b/i;
+
+    // Pass 1: If no canonical from hotel_selection, build from majority vote
+    const addressCounts = new Map<string, Map<string, number>>();
+    for (const day of updatedDays) {
+      for (const act of (day.activities || [])) {
+        if ((act.category || '').toLowerCase() !== 'accommodation') continue;
+        if (!ACCOM_RE.test(act.title || act.name || '')) continue;
+        const locName = act.location?.name || '';
+        if (!locName) continue;
+        const key = normalizeHotelKey(locName);
+        if (!key || key.length < 3) continue;
+        const addr = act.location?.address || '';
+        if (!addr) continue;
+        if (!addressCounts.has(key)) addressCounts.set(key, new Map());
+        const counts = addressCounts.get(key)!;
+        counts.set(addr, (counts.get(addr) || 0) + 1);
+      }
+    }
+    for (const [key, counts] of addressCounts) {
+      if (canonicalAddresses.has(key)) continue; // hotel_selection takes precedence
+      let bestAddr = '';
+      let bestCount = 0;
+      for (const [addr, count] of counts) {
+        if (count > bestCount) { bestAddr = addr; bestCount = count; }
+      }
+      if (bestAddr) canonicalAddresses.set(key, bestAddr);
+    }
+
+    // Pass 2: Enforce canonical addresses
+    let addressFixCount = 0;
+    for (const day of updatedDays) {
+      for (const act of (day.activities || [])) {
+        if ((act.category || '').toLowerCase() !== 'accommodation') continue;
+        if (!ACCOM_RE.test(act.title || act.name || '')) continue;
+        const locName = act.location?.name || '';
+        if (!locName) continue;
+        const key = normalizeHotelKey(locName);
+        if (!key || key.length < 3) continue;
+        const correctAddr = canonicalAddresses.get(key);
+        if (!correctAddr) continue;
+        const currentAddr = act.location?.address || '';
+        if (currentAddr !== correctAddr) {
+          console.warn(`HOTEL ADDRESS CONSISTENCY FIX: "${act.title}" (Day ${day.dayNumber}) address "${currentAddr}" → "${correctAddr}"`);
+          if (!act.location) act.location = { name: locName, address: correctAddr };
+          else act.location.address = correctAddr;
+          addressFixCount++;
+        }
+      }
+    }
+    if (addressFixCount > 0) {
+      console.log(`[generate-trip-day] Hotel address consistency: fixed ${addressFixCount} address(es)`);
+    }
+  }
+
+
   let canonicalCount = existingDays.length;
   try {
     const { count: tableRowCount } = await supabase
