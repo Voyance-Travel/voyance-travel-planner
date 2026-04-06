@@ -229,6 +229,20 @@ function sanitizeAddress(address: string): string {
   return result;
 }
 
+// MEAL-TYPE LEAKAGE IN VENUE NAMES
+// The AI sometimes appends meal categories to venue names
+// e.g., "Pavilhão Carlos Lopes Breakfast", "Cervejaria Ramiro Dinner"
+const MEAL_TYPE_SUFFIX_RE = /\s+(?:Breakfast|Lunch|Dinner|Brunch|Supper|Dessert|Snack)\s*$/i;
+
+function cleanVenueNameMealLeakage(name: string): string {
+  if (!name || !MEAL_TYPE_SUFFIX_RE.test(name)) return name;
+  const cleaned = name.replace(MEAL_TYPE_SUFFIX_RE, '').trim();
+  // Don't strip if it would leave a very short name (likely part of real name, e.g. "Dear Breakfast")
+  if (cleaned.length < 3) return name;
+  console.warn(`VENUE NAME LEAKAGE FIX: "${name}" → "${cleaned}"`);
+  return cleaned;
+}
+
 /**
  * Deep-sanitize all user-facing text fields in a generated day object.
  * @param usedRestaurants - Optional list of restaurant names used on previous days for repeat detection.
