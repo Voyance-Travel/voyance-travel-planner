@@ -113,7 +113,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkChainRestaurants(activities, results);
 
   // --- GENERIC_VENUE ---
-  checkGenericVenues(activities, results);
+  checkGenericVenues(activities, results, destination);
 
   // --- TITLE_LABEL_LEAK ---
   checkLabelLeaks(activities, results);
