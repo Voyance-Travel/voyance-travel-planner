@@ -109,6 +109,43 @@ export function extractRestaurantVenueName(title: string): string {
 // HAVERSINE DISTANCE (km)
 // =============================================================================
 
+// =============================================================================
+// FUZZY VENUE NAME MATCHING
+// =============================================================================
+
+/**
+ * Check whether two normalized venue names refer to the same restaurant.
+ * Returns true if:
+ *  - exact match, OR
+ *  - one name contains the other (e.g. "time out market" vs "time out market lisboa"), OR
+ *  - word-overlap ≥ 80 % of the shorter name's words
+ *
+ * Both inputs MUST already be normalizeVenueName'd / extractRestaurantVenueName'd.
+ */
+export function venueNamesMatch(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // Substring containment — handles city-suffix variants
+  if (a.includes(b) || b.includes(a)) return true;
+  // Word-overlap for slight variations
+  const wordsA = new Set(a.split(/\s+/));
+  const wordsB = new Set(b.split(/\s+/));
+  const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
+  const smaller = Math.min(wordsA.size, wordsB.size);
+  return smaller > 0 && intersection / smaller >= 0.8;
+}
+
+/**
+ * Check if `venue` fuzzy-matches ANY entry in a Set of normalized venue names.
+ */
+export function venueMatchesAny(venue: string, usedSet: Set<string>): boolean {
+  if (!venue) return false;
+  for (const used of usedSet) {
+    if (venueNamesMatch(venue, used)) return true;
+  }
+  return false;
+}
+
 export function haversineDistanceKm(
   lat1: number,
   lng1: number,
