@@ -1,89 +1,57 @@
 
 Goal
+- Fix the persistent Miradouro phantom pricing by targeting the real remaining failure points: parser/display drift plus a small hardening pass on the backend matcher/logging.
 
-- Fix the two real issues surfaced by Trip #22:
-  1. Phantom pricing still appears in the logged-in experience, but the backend regex is not the current failure point.
-  2. Consumer trip “sharing” is architecturally mixed with a separate agency share system, which can show the wrong itinerary.
-
-What I found
-
-- For Trip `3edfd845-7055-4dd6-a77b-7b114f39f66e`, the backend trip JSON already has:
-  - `Golden Hour at the Miradouro` at `0`
-  - so Prompt 36 did take effect in backend data.
-- At the same time, another free venue (`Jardim Botânico`) still carries a small non-zero backend value while the UI can still render it as Free.
-- That means pricing is still being decided in multiple places:
-  - backend sanitization / generation
-  - client display helpers
-  - canonical `activity_costs` / sync paths
-- So the remaining Miradouro bug is now a unification bug, not a missing regex bug.
-
-- Sharing is also split across two incompatible systems:
-  - consumer trip share surfaces (`ShareTripCard`, `TripShareModal`, `EditorialItinerary`) call `resolveInviteLink()` and generate `/invite/:token`
-  - public `/share/:shareToken` loads `TripShare`, which reads `agency_trips` via `get_shared_trip_payload`
-- Those are different products/data sources. That explains why a “shared URL” can show a different itinerary: the app currently treats collaborator invites and public shared itineraries as if they were the same thing.
+What I verified in the code
+- `ALWAYS_FREE_VENUE_PATTERNS` already exists in `supabase/functions/generate-itinerary/sanitization.ts`.
+- It is already used in the active backend flow:
+  - `sanitization.ts` via `checkAndApplyFreeVenue(...)`
+  - `action-repair-costs.ts`
+  - `generation-core.ts`
+- The sanitization check is wired into the generation pipeline, and the later cross-day pricing pass in `action-generate-trip-day.ts` only normalizes dining prices, so it is not the Miradouro overwrite.
+- The biggest concrete gap I found is frontend parsing:
+  - `src/utils/itineraryParser.ts` drops numeric `0` because `parseCost()` returns `undefined` for falsy values.
+  - it also does not normalize top-level `estimated_price_per_person` / `price_per_person`.
+  - that can erase backend zeroes and send the UI back into estimation paths.
+- I also want to harden `checkAndApplyFreeVenue(...)` so its debug logging reads cost fields consistently when `estimatedCost` is an object.
 
 Implementation plan
+1. Harden the backend free-venue helper
+- Keep `ALWAYS_FREE_VENUE_PATTERNS` and the pattern list unchanged.
+- Update `checkAndApplyFreeVenue(...)` to resolve cost from all supported shapes (`cost.amount`, numeric `cost`, `estimatedCost.amount`, numeric `estimatedCost`, `estimated_price_per_person`, `price`, `price_per_person`) so the `FREE VENUE CHECK` / `PHANTOM PRICING FIX` logs are trustworthy.
+- Keep the existing title + venue matching and paid-experience exclusion.
+- Add the explicit category candidate gate from the prompt only around the override logic, not around the shared pattern constant.
 
-1. Make one pricing source authoritative in the logged-in UI
-- Audit the final activity-card price renderer and totals pipeline in `EditorialItinerary`/related helpers.
-- Ensure free-venue detection is applied before any fallback estimation or ledger-derived display.
-- Stop showing a paid estimate when the trip JSON already says the activity is free.
+2. Preserve zero-valued prices in the parser
+- Update `src/utils/itineraryParser.ts` so numeric `0` is treated as a valid parsed cost.
+- Normalize top-level price fields into the parsed activity shape instead of losing them when only root-level fields are present.
+- Preserve venue metadata needed by frontend free detection.
 
-2. Remove pricing drift between JSON, UI, and ledger
-- Normalize the client so free-venue logic uses one shared decision path everywhere:
-  - itinerary cards
-  - payments/budget surfaces
-  - payable item aggregation
-  - any activity-cost sync/rebuild path
-- Add a final guard so a free public venue never becomes payable again in client reconciliation.
+3. Make the itinerary UI trust normalized zeroes before estimating
+- Update `getActivityCostInfo(...)` in `src/components/itinerary/EditorialItinerary.tsx` to read the normalized parsed price fields before falling back to estimation.
+- Keep `isLikelyFreePublicVenue(...)` as the safety net so Miradouro/Jardim still render as Free even on older inconsistent trip records.
 
-3. Separate “Invite collaborators” from “Public share”
-- Keep `resolveInviteLink()` for collaboration only (`/invite/:token`).
-- Stop presenting invite links as generic/public share links in consumer trip UI.
-- Rename labels/copy so users know this is a join/invite flow, not a public itinerary mirror.
+4. Reconfirm ledger sync protection
+- Recheck the existing sync guards in `EditorialItinerary`, `usePayableItems.ts`, and assistant sync so free venues never re-write positive `activity_costs`.
+- Ensure stale paid rows for activities now treated as free are cleaned out so itinerary cards, Payments, and Budget all agree.
 
-4. Add a real consumer public-share path if public sharing is required
-- Create a dedicated consumer-trip read-only share flow backed by consumer trip data, not `agency_trips`.
-- Sanitize server payload the same way the agency share flow does.
-- Use a separate route/token contract so consumer public share cannot collide conceptually with collaborator invites.
-
-5. Preserve the agency share system, but isolate it
-- Leave `/share/:shareToken` as agency-only unless explicitly expanded.
-- Prevent consumer trip surfaces from routing users into the agency share page by mistake.
-
-Files most likely involved
-
-- Pricing/UI
-  - `src/components/itinerary/EditorialItinerary.tsx`
-  - `src/hooks/usePayableItems.ts`
-  - `src/lib/cost-estimation.ts`
-  - any budget/payments surface that reads `activity_costs`
-- Sharing architecture
-  - `src/services/inviteResolver.ts`
-  - `src/components/sharing/TripShareModal.tsx`
-  - `src/components/post-trip/ShareTripCard.tsx`
-  - `src/components/itinerary/PostGenerationCTA.tsx`
-  - `src/App.tsx`
-  - `src/pages/agent/TripShare.tsx`
-  - backend read-only payload function for consumer public share
-
-Technical notes
-
-- Do not change `ALWAYS_FREE_VENUE_PATTERNS` again unless a fresh backend miss is proven.
-- Do not merge consumer invite tokens and agency share tokens into one ambiguous route.
-- Keep collaboration acceptance authenticated.
-- Keep any public share payload sanitized and read-only.
+Files to update
+- `supabase/functions/generate-itinerary/sanitization.ts`
+- `src/utils/itineraryParser.ts`
+- `src/components/itinerary/EditorialItinerary.tsx`
+- likely `src/hooks/usePayableItems.ts` and `src/components/itinerary/ItineraryAssistant.tsx` for alignment only
+- No new files expected.
 
 Verification
+- Generate a fresh 4-day Lisbon trip.
+- Confirm any activity with `Miradouro` in title or venue metadata shows Free in:
+  - itinerary cards
+  - Payments tab
+  - Budget totals
+- Confirm `Jardim` venues also show Free unless `bookingRequired` is true.
+- Confirm museums, tours, galleries, and booking-required items stay paid.
+- Confirm edge logs show `FREE VENUE CHECK` / `PHANTOM PRICING FIX`.
+- Confirm the stored trip data and `activity_costs` both end at zero for the matched free venue.
 
-- Logged-in Trip #22:
-  - `Golden Hour at the Miradouro` shows Free everywhere
-  - `Jardim Botânico` also shows Free everywhere
-  - totals match the rendered itinerary
-- Fresh Lisbon generation:
-  - Miradouro/Jardim cases stay free
-  - museums, tours, booking-required items stay paid
-- Sharing:
-  - collaborator invite opens invite/join flow only
-  - public shared consumer itinerary, if enabled, matches the exact underlying trip
-  - agency `/share/...` continues to show only agency trips
+Technical note
+- Based on the current codebase, the most likely issue is no longer “the backend check is missing.” It is “backend zeroes are not being preserved consistently through parsing, display, and reconciliation.” This plan fixes that path without changing the free-venue pattern list.
