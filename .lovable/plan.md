@@ -1,55 +1,67 @@
 
-Goal: make the “always free venue” rule explicit, shared, and guaranteed to run last in the active pricing flow.
+Goal
+
+- Close the remaining phantom-pricing drift. The backend “always free venue” rule is already in place; the remaining mismatch appears to be on the frontend/UI and client-side ledger sync paths.
 
 What I found
-- `ALWAYS_FREE_VENUE_PATTERNS` does not currently exist anywhere in the codebase.
-- There is already free-venue logic in `supabase/functions/generate-itinerary/sanitization.ts`, but it is an inline local regex (`tier1FreePatterns`), not a shared named constant.
-- Similar pricing logic is duplicated again in `action-repair-costs.ts` and `generation-core.ts`, so behavior can drift between paths.
-- The active trip-generation chain (`action-generate-trip.ts` → `action-generate-trip-day.ts`) sanitizes day JSON, but it does not automatically rebuild canonical `activity_costs` at the end. `repair-trip-costs` is only triggered manually from the frontend after regeneration.
-- Important verification note: `FREE VENUE CHECK` / `PHANTOM PRICING FIX` are server logs from the edge function, so checking the browser console alone can make it look like the rule never ran.
+
+- `ALWAYS_FREE_VENUE_PATTERNS` already exists in `supabase/functions/generate-itinerary/sanitization.ts`.
+- It is already being used in:
+  - `sanitization.ts` via `checkAndApplyFreeVenue(...)`
+  - `action-repair-costs.ts`
+  - `generation-core.ts`
+- `action-generate-trip-day.ts` already runs `handleRepairTripCosts(...)` after final table sync, so the backend rule already runs last in the generation chain.
+- Current trip data for `e6e4ac6b-5dfc-4b72-9016-fde0cde28913` shows `Scenic Views at Miradouro de São Pedro de Alcântara` with zero cost in itinerary JSON, so the backend fix is active.
+- The remaining gap is frontend detection:
+  - `src/components/itinerary/EditorialItinerary.tsx` checks free venues using title/location/address/description, but not `venue_name` or `restaurant.name`.
+  - `src/hooks/usePayableItems.ts` passes even less context to the free-venue helper.
+- That means a case where “Miradouro” exists only in `venue_name` can still look paid in UI surfaces even if the backend already sanitized it.
+- There is also a client-side cost sync path (`syncBudgetFromDays`, plus similar assistant sync code) that writes positive `activity_costs` rows from activity cost fields. That path should explicitly respect free-venue detection so client reconciliation cannot reintroduce phantom pricing.
 
 Implementation plan
 
-1. Create a shared always-free matcher in `supabase/functions/generate-itinerary/sanitization.ts`
-- Lift the existing Tier 1 regex into a named exported constant: `ALWAYS_FREE_VENUE_PATTERNS`.
-- Keep the current pattern list unchanged.
-- Add a small helper that checks both `title` and `venue_name`/`restaurant.name` (plus the existing text fields), applies the paid exclusions, and emits:
-  - `FREE VENUE CHECK`
-  - `PHANTOM PRICING FIX`
-- Keep the existing Tier 2 logic and hotel/logistics zeroing intact.
+1. Expand the frontend free-venue helper inputs
+- Update `src/lib/cost-estimation.ts` so `isLikelyFreePublicVenue(...)` also accepts:
+  - `venueName`
+  - `restaurantName`
+  - `placeName`
+- Keep the existing frontend pattern list unchanged.
+- Include these fields in the combined text checked by the helper.
 
-2. Replace the inline sanitization check with the shared helper
-- Update `sanitizeGeneratedDay(...)` to use the new shared matcher instead of the local `tier1FreePatterns`.
-- Make the free-venue override operate on all supported price fields (`cost`, `estimatedCost`, `estimated_price_per_person`, `price`) exactly as today.
-- Preserve the “don’t force-free booking/ticketed experiences” rule.
+2. Pass full venue context everywhere the UI decides if something is free
+- In `src/components/itinerary/EditorialItinerary.tsx`, pass:
+  - `activity.venue_name`
+  - `activity.restaurant?.name`
+  - `activity.place_name`
+  - `activity.location?.name`
+- In `src/hooks/usePayableItems.ts`, expand the activity shape and pass the same venue metadata plus description/address where available.
+- This directly fixes the “title doesn’t include miradouro, venue does” case.
 
-3. Reuse the same matcher in canonical pricing repair
-- Update `supabase/functions/generate-itinerary/action-repair-costs.ts` to import/use the shared always-free matcher instead of its own separate Tier 1 regex.
-- This keeps JSON activity pricing and `activity_costs` repair aligned for miradouros, jardins, plazas, etc.
+3. Prevent client-side ledger sync from reviving paid rows
+- Update `syncBudgetFromDays(...)` in `EditorialItinerary.tsx` to run the same free-venue check before adding positive `activitiesForCostTable` rows.
+- If an activity is detected as a free public venue, do not sync a positive `activity_costs` row for it.
+- Preserve cleanup so stale old paid rows for that activity are removed.
+- Apply the same guard to any other client write path that syncs `activity_costs` directly, especially `src/components/itinerary/ItineraryAssistant.tsx`.
 
-4. Run canonical pricing repair at the end of the active generation chain
-- Update `supabase/functions/generate-itinerary/action-generate-trip-day.ts` so that after final day completion and table sync, it also runs `handleRepairTripCosts` for the trip.
-- This makes the always-free override the last pricing step in the active flow, preventing later cost writes from reintroducing phantom prices in `activity_costs`.
+4. Keep the backend as final authority
+- Do not remove or weaken the existing backend checks.
+- Do not change the existing always-free pattern list.
+- Keep post-generation `repair-trip-costs` as the authoritative final pass.
+- If needed, reuse the existing repair call after client-side rewrite/regeneration flows that materially change activities.
 
-5. Backward-compatibility cleanup
-- Review `supabase/functions/generate-itinerary/generation-core.ts` and replace its duplicated Tier 1 regex with the shared constant/helper as well, so older/fallback paths cannot diverge.
+Files to update
 
-Technical details
-- Files to edit:
-  - `supabase/functions/generate-itinerary/sanitization.ts`
-  - `supabase/functions/generate-itinerary/action-repair-costs.ts`
-  - `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-  - `supabase/functions/generate-itinerary/generation-core.ts`
-- No new files.
-- No pattern-list expansion/removal.
-- No changes to title sanitization.
-- No force-free for `booking_required` or clearly paid experiences.
+- `src/lib/cost-estimation.ts`
+- `src/components/itinerary/EditorialItinerary.tsx`
+- `src/hooks/usePayableItems.ts`
+- `src/components/itinerary/ItineraryAssistant.tsx` (if its direct ledger sync remains active)
 
 Verification
+
 - Generate a fresh 4-day Lisbon trip.
-- Confirm activities like “Scenic Views at Miradouro de São Pedro de Alcântara” and `Jardim` venues resolve to Free.
-- Confirm museums, tours, galleries, and `booking_required` items keep prices.
-- Check edge-function logs for:
-  - `FREE VENUE CHECK`
-  - `PHANTOM PRICING FIX`
-- Confirm both the itinerary card pricing and canonical budget totals agree after generation completes.
+- Confirm these both show as Free across itinerary cards, Payments tab, and budget totals:
+  - a title containing `Miradouro`
+  - a venue where `Miradouro` or `Jardim` appears only in `venue_name` / venue metadata
+- Confirm museums, tours, galleries, and `bookingRequired` items stay paid.
+- Confirm canonical `activity_costs` has no positive row for the free-venue activity after generation and after client-side edit/regeneration flows.
+- Check backend logs for `FREE VENUE CHECK` and `PHANTOM PRICING FIX` during a fresh generation run; if no logs appear, that path was not exercised in the test.
