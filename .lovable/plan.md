@@ -1,32 +1,36 @@
 
 
-## Expand Michelin Fine Dining Price Floor List
+## Fix Phantom Pricing on Gardens and Viewpoints
 
 ### Problem
-"Fifty Seconds by Martín Berasategui" matched the `knownMichelinHigh` regex (line 376: `fifty\s*seconds`) but the user reports it was priced at €28/pp, suggesting the regex didn't fire. Looking more closely, the regex requires word boundary `\b` before "fifty" — this should work. However, the list is incomplete for other restaurants and the user wants a broader expansion.
+"Peaceful Outlook at Jardim do Recolhimento" priced at ~€23/pp despite being a free public garden. The existing tier1FreePatterns already include `jardim` and `garden`, but two gaps exist:
+1. Missing keywords: `outlook`, `vista`, `panoram` (the title says "Outlook")
+2. The `<= 30` cost cap on line 324 may exclude activities where cost is stored as a group total (e.g., 2 travelers × €23 = €46)
+3. No exclusion for paid experiences (guided tours, ticketed gardens)
 
 ### Plan (1 file)
 
-**File: `supabase/functions/generate-itinerary/sanitization.ts`** (lines 375-386)
+**File: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-Expand the three tiered regex patterns:
+**Change 1: Expand tier1FreePatterns** (line 321)
+Add missing keywords to the existing regex:
+- `outlook`, `vista`, `panoram` (viewpoint variants)
+- `evening\s+(?:walk|stroll)`, `morning\s+(?:walk|stroll)`, `historic\s+walk` (walk variants — note: `stroll` and `walk` are already there, but compound forms aren't)
 
-**`knownMichelinHigh`** (floor €150) — add:
-- `fortaleza do guincho` (keep existing `belcanto`, `feitoria`, `fifty seconds`)
+**Change 2: Raise cost cap for tier1** (line 324)
+Change `act.cost.amount <= 30` to `act.cost.amount <= 50` for the outer condition. This catches cases where the cost might be stored as a group total for 2 travelers. Tier1 venues (parks, gardens, viewpoints) are high-confidence free, so a higher cap is safe.
 
-**`knownMichelinMid`** (floor €120) — add:
-- `100 maneiras`, `cem maneiras`, `casa da comida`, `pedro lemos`, `antiqvvm`, `largo do paço`, `euskalduna`, `casa de chá da boa nova`, `boa nova`
-- (keep existing `alma`, `eleven`, `epur`, `cura`, `loco`, `eneko`)
-
-**`knownUpscale`** (floor €60) — add:
-- `mini bar`, `sacramento`, `solar dos presuntos`, `the yeatman`, `yeatman`
-- (keep existing `il gallo`, `ceia`, `enoteca`, `sommelier`)
-
-Replace the three regex lines (376-378) with expanded versions using the same structure.
+**Change 3: Add paid experience exclusion** (inside the tier1 check, after line 344)
+Before zeroing the cost, check that the activity isn't a paid experience:
+```
+const isPaidExperience = (act as any).booking_required ||
+  /\b(tour|guided|ticket|admission|entry|botanical|botânico|botanico)\b/i.test(allTextFields);
+```
+If `isPaidExperience` is true, skip the free override. This protects botanical gardens, guided tours, and ticketed attractions.
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/sanitization.ts` — expand the three tiered fine dining regex lists at lines 376-378
+- `supabase/functions/generate-itinerary/sanitization.ts` — expand tier1 keywords, raise cost cap, add paid experience exclusion
 
 ### Verification
-Generate a 4-day Lisbon trip. If Fifty Seconds, Loco, 100 Maneiras, or any listed restaurant appears, confirm it's priced at or above its tier floor. Check console for `[UNDERPRICED]` correction logs.
+Generate a 4-day Lisbon trip. Gardens (Jardim), viewpoints (Miradouro), and public outlook points should be Free. Paid attractions (museums, botanical gardens, guided tours) should retain prices.
 
