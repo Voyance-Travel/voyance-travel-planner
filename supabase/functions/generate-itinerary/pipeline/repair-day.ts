@@ -2566,7 +2566,9 @@ function repairBookends(
       const firstRealIdx = activities.findIndex(a => !isTransport(a));
       if (firstRealIdx >= 0) {
         const first = activities[firstRealIdx];
-        if (isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first)) {
+        if (isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first) &&
+            // On Day 1, only strip phantoms that appear before check-in
+            (!isFirstDay || (day1CheckInIdx >= 0 && firstRealIdx < day1CheckInIdx))) {
           // On hotel-change days, only strip pre-dawn phantoms (before 06:00)
           // to preserve legitimate mid-day check-in/checkout activities
           if (isHotelChange) {
