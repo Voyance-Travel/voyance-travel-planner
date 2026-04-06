@@ -1,33 +1,41 @@
 
 
-## Fix Generic Venue Repair Fallback — Use Real Restaurant Names When Pool Is Exhausted
+## Fix Departure-Day Restaurant Repetition + Price Consistency
 
-### Root Cause
+### Analysis
 
-The detection works — `validate-day.ts` line 39 correctly catches "Lunch at a bistro" as `GENERIC_VENUE`. The repair in `repair-day.ts` lines 300-327 tries to replace it from `restaurantPool`, but when the pool is exhausted (all matching venues already used), the fallback (lines 329-344) only cleans the location field — it leaves the generic title "Lunch at a bistro" intact.
+The departure day (typically Day 4) consistently fails on restaurant uniqueness. The `usedRestaurants` blocklist is passed correctly, but the AI ignores it on the final day. The existing prompt has generic uniqueness rules but nothing departure-day-specific. The fix adds two targeted reinforcements.
 
-The fix: when the pool has no replacement, use a hardcoded city-aware fallback restaurant list to assign a real restaurant name instead of leaving the placeholder.
+### Plan (2 files)
 
-### Plan (1 file)
+**File 1: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (lines 329-344)
+In the user prompt section (around line 1013, after the HARD RESTAURANT BLOCKLIST block), add a departure-day-specific restaurant block that fires when `isLastDay` is true:
 
-Replace the "no pool venue available" fallback block with logic that:
+```
+if (isLastDay && usedList.length > 0) {
+  // Add DEPARTURE DAY RESTAURANT RULES with the full used list
+  // and a list of safe Lisbon alternatives for lunch
+}
+```
 
-1. Defines a `FALLBACK_RESTAURANTS` map keyed by city (starting with Lisbon, expandable), with entries per meal type — each entry has `name`, `neighborhood`, and `address`
-2. When no pool replacement is found, looks up `resolvedDestination` in the fallback map
-3. Picks a restaurant for the detected meal type that isn't in `usedSet`
-4. Rewrites `act.title` to "Lunch at [Real Name]", `act.location.name` to the real name, and `act.location.address` to the real address
-5. If even the fallback list is exhausted, falls back to the existing behavior (clean location only) but also rewrites the title to remove the generic article pattern (e.g., "Lunch at a bistro" → "Lunch")
+This block will:
+- Explicitly state "This is the FINAL DAY" and list all used restaurants
+- Provide safe departure-day lunch alternatives (Ponto Final, Café de São Bento, O Velho Eurico, Mercado da Ribeira, Cervejaria Trindade, Tasca do Chico, etc.)
+- Instruct: "If your first choice matches ANY name above, REPLACE immediately"
+- Forbid generic placeholders
 
-Example fallback restaurants for Lisbon:
-- **Breakfast**: Heim Café, Copenhagen Coffee Lab, Hello Kristof, The Mill, Nicolau Lisboa
-- **Lunch**: Cervejaria Ramiro, Ponto Final, O Velho Eurico, A Cevicheria, Café de São Bento
-- **Dinner**: Sacramento do Chiado, Solar dos Presuntos, Sea Me, Mini Bar Teatro, Pharmácia
+**File 2: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+
+After each day's result is assembled and used restaurants are updated (post-generation loop), add a cross-day price consistency check:
+- Build a `Map<normalizedName, {price, dayIndex}>` across all assembled days
+- When a duplicate restaurant is found, log a `PRICE INCONSISTENCY` warning and normalize to the higher price
+- Also add a departure-day debug log confirming the usedRestaurants count when `dayNumber === totalDays`
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add city-aware fallback restaurant list for when the pool is exhausted, ensuring generic titles are always replaced with real restaurant names
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add departure-day-specific restaurant uniqueness block in user prompt
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — add cross-day price consistency check + departure-day debug log
 
 ### Verification
-Generate a 4-day Lisbon trip. Every dining activity should have a real restaurant name. Check logs for `[Repair] GENERIC_VENUE` entries — if the fallback fires, it should show "Replaced ... → Lunch at [Real Name]" instead of "No pool replacement".
+Generate a 4-day Lisbon trip. Day 4 lunch should use a different restaurant than Days 1-3. No restaurant should appear on multiple days. Check logs for "DEPARTURE DAY" entries confirming the blocklist is passed.
 
