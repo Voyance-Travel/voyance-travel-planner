@@ -246,6 +246,81 @@ function cleanVenueNameMealLeakage(name: string): string {
   return cleaned;
 }
 
+// =============================================================================
+// GARBLED VENUE NAME DETECTION & REPAIR
+// =============================================================================
+
+/** Words that should never appear in a venue name — indicate AI word substitution */
+const GARBLED_VENUE_WORDS_RE = /\b(?:Alphabetical|Sequential|Numerical|Categorical|Grammatical|Chronological|Geographical|Metaphorical|Hypothetical|Rhetorical|Theological|Philosophical|Symmetrical|Analytical|Botanical)\b/i;
+
+/**
+ * Detect if a venue name contains known garbled English adjectives
+ * that the AI substituted for proper nouns.
+ */
+function detectGarbledVenueWords(venueName: string): boolean {
+  return GARBLED_VENUE_WORDS_RE.test(venueName);
+}
+
+/**
+ * Extract a location/place name from an activity title.
+ * Patterns: "through X District", "in X", "at X", "of X", "around X"
+ */
+function extractLocationFromTitle(title: string): string | null {
+  if (!title) return null;
+  const patterns = [
+    /\bthrough\s+(.+?)\s+District\b/i,
+    /\bin\s+(.+?)\s+District\b/i,
+    /\baround\s+(.+?)\s+District\b/i,
+    /\bof\s+(.+?)\s+District\b/i,
+    /\bthrough\s+([A-Z][a-zà-ú]+(?:\s+[A-Z][a-zà-ú]+)*)\b/,
+    /\bin\s+([A-Z][a-zà-ú]+(?:\s+[A-Z][a-zà-ú]+)*)\b/,
+    /\bat\s+([A-Z][a-zà-ú]+(?:\s+[A-Z][a-zà-ú]+)*)\b/,
+  ];
+  for (const p of patterns) {
+    const m = title.match(p);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+/**
+ * Cross-validate venue_name against the activity title.
+ * If the venue_name references a district/walk/stroll but uses a garbled word
+ * where the title has the correct location, fix it.
+ */
+function validateVenueNameConsistency(title: string, venueName: string): string {
+  if (!title || !venueName) return venueName;
+
+  const titleLocation = extractLocationFromTitle(title);
+  if (!titleLocation) return venueName;
+
+  // Check if venue_name has context words (District, Walk, Stroll, Tour, Heritage)
+  // but does NOT contain the location from the title
+  if (/\b(?:District|Walk|Stroll|Tour|Heritage|Historic|Quarter)\b/i.test(venueName) &&
+      !venueName.includes(titleLocation)) {
+    // Try to find the garbled word and replace it
+    const venuePatterns = [
+      /^(\w+)\s+(Heritage|Historic|District|Walk|Stroll|Quarter)/i,
+      /\bthrough\s+(\w+)\s+District\b/i,
+      /\bin\s+(\w+)\s+District\b/i,
+      /^(\w+)\s+District\b/i,
+    ];
+    for (const vp of venuePatterns) {
+      const vm = venueName.match(vp);
+      if (vm) {
+        const garbledWord = vm[1];
+        if (garbledWord.toLowerCase() !== titleLocation.toLowerCase()) {
+          const fixed = venueName.replace(garbledWord, titleLocation);
+          console.warn(`GARBLED VENUE NAME FIX: "${venueName}" → "${fixed}" (matched title location "${titleLocation}")`);
+          return fixed;
+        }
+      }
+    }
+  }
+
+  return venueName;
+}
+
 /**
  * Deep-sanitize all user-facing text fields in a generated day object.
  * @param usedRestaurants - Optional list of restaurant names used on previous days for repeat detection.
