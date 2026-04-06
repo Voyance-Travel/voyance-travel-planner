@@ -220,6 +220,12 @@ export function usePayableItems({
             title: activity.title || activity.name,
             category: activity.category || activity.type,
             type: activity.type,
+            venueName: (activity as any).venue_name,
+            restaurantName: (activity as any).restaurant?.name,
+            placeName: (activity as any).place_name,
+            locationName: (activity as any).location?.name,
+            description: (activity as any).description,
+            address: (activity as any).location?.address,
           });
           if (isFreeVenue) return; // Skip — free public venues are not payable
 

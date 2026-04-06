@@ -1074,6 +1074,9 @@ function getActivityCostInfo(
     locationName: activity.location?.name,
     address: activity.location?.address,
     description: (activity as any).description,
+    venueName: (activity as any).venue_name,
+    restaurantName: (activity as any).restaurant?.name,
+    placeName: (activity as any).place_name,
   });
 
   if (isFreePublicVenue || (looksLikelyFree && !isNeverFreeCategory(category, title))) {
@@ -1462,6 +1465,22 @@ export function EditorialItinerary({
 
           // Only write rows with actual costs (skip $0 to avoid noise)
           if (costPerPerson > 0) {
+            // Guard: don't write positive rows for free public venues
+            const { isLikelyFreePublicVenue: isFreeVenue } = await import('@/lib/cost-estimation');
+            const isFree = isFreeVenue({
+              title: act.title,
+              category: act.category,
+              type: act.type,
+              locationName: (act as any).location?.name,
+              description: (act as any).description,
+              venueName: (act as any).venue_name,
+              restaurantName: (act as any).restaurant?.name,
+              placeName: (act as any).place_name,
+            });
+            if (isFree) {
+              console.log(`[syncBudgetFromDays] Skipping free venue: "${act.title}"`);
+              continue;
+            }
             activitiesForCostTable.push({
               id: act.id,
               dayNumber: day.dayNumber,
