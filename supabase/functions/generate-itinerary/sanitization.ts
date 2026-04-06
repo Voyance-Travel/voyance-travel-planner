@@ -347,11 +347,31 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         act.title = act.title.replace(/^((?:Travel|Walk|Metro|Bus|Tram|Taxi|Train|Drive|Ride|Ferry)\s+to\s+.+?)\s+(?:Breakfast|Lunch|Dinner|Brunch)\s*$/i, '$1');
         act.name = act.title;
       }
+      // Helper: resolve effective cost from whichever field the AI populated
+      const effectiveCost =
+        (act.cost && typeof act.cost === 'object' ? act.cost.amount : 0) ||
+        (act.estimatedCost && typeof act.estimatedCost === 'object' ? act.estimatedCost.amount : 0) ||
+        (act as any).estimated_price_per_person ||
+        (act as any).price ||
+        0;
+      const effectiveCurrency =
+        (act.cost && typeof act.cost === 'object' ? act.cost.currency : null) ||
+        (act.estimatedCost && typeof act.estimatedCost === 'object' ? act.estimatedCost.currency : null) ||
+        'USD';
+
+      // Helper: zero ALL cost fields on the activity
+      const zeroAllCostFields = () => {
+        act.cost = { amount: 0, currency: effectiveCurrency };
+        if (act.estimatedCost) act.estimatedCost = { amount: 0, currency: effectiveCurrency };
+        if ((act as any).estimated_price_per_person !== undefined) (act as any).estimated_price_per_person = 0;
+        if ((act as any).price !== undefined) (act as any).price = 0;
+      };
+
       // Always-free activities: arrivals, departures, hotel logistics
       const alwaysFreeActivity = /\b(?:arrival|departure|check[\s-]?in|check[\s-]?out|return\s+to|freshen\s+up|settle\s+in)\b/i;
-      if (alwaysFreeActivity.test(act.title || '') && act.cost && typeof act.cost === 'object' && act.cost.amount > 0) {
+      if (alwaysFreeActivity.test(act.title || '') && effectiveCost > 0) {
         console.log(`[sanitize] Zeroed cost on always-free activity: ${act.title}`);
-        act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
+        zeroAllCostFields();
       }
 
       // Zero out pricing for obviously free activity types
@@ -360,7 +380,7 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       const tier1FreePatterns = /\b(?:park|garden|jardim|viewpoint|miradouro|outlook|vista|panoram\w*|plaza|praça|praca|square|piazza|platz|church|igreja|basilica|cathedral|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca|evening\s+(?:walk|stroll)|morning\s+(?:walk|stroll)|historic\s+walk)\b/i;
       const tier2FreePatterns = /\b(?:bridge|fountain|monument|memorial|statue|arch|gate|market|promenade|boardwalk|trail|path|pier|dock|wharf|embankment)\b/i;
 
-      if (act.cost && typeof act.cost === 'object' && act.cost.amount > 0 && act.cost.amount <= 50) {
+      if (effectiveCost > 0 && effectiveCost <= 50) {
         const allTextFields = [
           act.title || '',
           (act as any).venue_name || '',
@@ -375,25 +395,26 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         ].join(' ');
         const description = act.description || '';
 
-        // Debug: log when miradouro is found in any field
-        if (/miradouro/i.test(allTextFields)) {
-          console.log(`[sanitize][debug] Miradouro detected in activity "${act.title}", allText: "${allTextFields.substring(0, 200)}"`);
+        // Diagnostic logging: log when any priced activity matches a free venue pattern
+        const hasAnyPatternMatch = tier1FreePatterns.test(allTextFields) || tier2FreePatterns.test(allTextFields);
+        if (hasAnyPatternMatch) {
+          console.log(`FREE VENUE CHECK: title="${act.title}", venue="${(act as any).venue_name || ''}", category="${act.category}", cost=${effectiveCost}, costField=${act.cost && typeof act.cost === 'object' && act.cost.amount ? 'cost' : act.estimatedCost ? 'estimatedCost' : 'other'}`);
         }
 
         const isPaidExperience = (act as any).booking_required ||
           /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico)\b/i.test(allTextFields);
 
         if (tier1FreePatterns.test(allTextFields) && !isPaidExperience) {
-          console.log(`[sanitize] Zeroed phantom cost $${act.cost.amount} on free venue: ${act.title}`);
-          act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
+          console.log(`PHANTOM PRICING FIX: "${act.title}" venue="${(act as any).venue_name || ''}" (${act.category}) matches free venue pattern. Was $${effectiveCost}/pp → Free`);
+          zeroAllCostFields();
         } else if (tier2FreePatterns.test(allTextFields)) {
           const descSaysFree = /\bfree\b/i.test(description);
-          const isPhantomPrice = act.cost.amount >= 20 && act.cost.amount <= 25;
-          if (descSaysFree || isPhantomPrice) {
-            console.log(`[sanitize] Zeroed tier2 phantom cost $${act.cost.amount} on: ${act.title}`);
-            act.cost = { amount: 0, currency: act.cost.currency || 'USD' };
+          const isPhantomPrice = effectiveCost >= 20 && effectiveCost <= 25;
+          if ((descSaysFree || isPhantomPrice) && !isPaidExperience) {
+            console.log(`PHANTOM PRICING FIX: "${act.title}" (tier2) Was $${effectiveCost}/pp → Free`);
+            zeroAllCostFields();
           }
-      }
+        }
       }
 
       // ---- Dining underpricing floor ----
