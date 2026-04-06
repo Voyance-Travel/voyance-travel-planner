@@ -102,7 +102,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   const { day, dayNumber, isFirstDay, isLastDay, hasHotel, hotelName,
     arrivalTime24, returnDepartureTime24, requiredMeals, previousDays,
     avoidList, dietaryRestrictions, mustDoActivities,
-    isHotelChange, previousHotelName } = input;
+    isHotelChange, previousHotelName, destination } = input;
 
   const activities = day.activities || [];
 
