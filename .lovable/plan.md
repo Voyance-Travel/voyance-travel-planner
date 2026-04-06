@@ -1,43 +1,41 @@
 
 
-## Fix Garbled Venue Names (Word Substitution Variant)
+## Fix: ReferenceError Bug + CORS Timeout Resilience
 
-### Problem
-AI sometimes substitutes proper nouns with phonetically similar English words in `venue_name` fields (e.g., "Alfama" → "Alphabetical"). The activity title is correct, but `venue_name` is garbled.
+### Problem 1: ReferenceError (Critical)
+In `action-generate-day.ts`, `resolvedIsHotelChange` and `resolvedPreviousHotelName` are used at **line 815-816** (in `validationInput`) but declared at **line 832-833** (after the validation block). JavaScript's temporal dead zone causes a `ReferenceError: Cannot access 'resolvedIsHotelChange' before initialization`, which silently skips the entire validate/repair pipeline for every generated day.
 
-### Plan (2 files)
+Logs confirm: `[pipeline] Validate/repair failed (non-blocking): ReferenceError: Cannot access 'resolvedIsHotelChange' before initialization`
 
-**File 1: `supabase/functions/generate-itinerary/sanitization.ts`**
+**Fix**: Move the variable declarations (lines 832-833) **before** the `validationInput` object construction (line 798). The variables depend on `facts` which is available earlier.
 
-Add two functions and wire them into the existing per-activity sanitization loop (around line 317, after `cleanVenueNameMealLeakage`):
+### Problem 2: CORS Timeout
+The browser sees a CORS error because the edge function's Deno runtime terminates before it can return headers. The `generate-trip` action already returns immediately and chains via self-invocation — the CORS error happens when the **initial** `generate-trip` call itself takes too long during its setup phase (enrichment context computation), or when a browser-initiated `generate-day` call (for regeneration) exceeds the wall-clock limit.
 
-1. **`validateVenueNameConsistency(title, venueName)`** — Cross-validates venue_name against the activity title. Extracts location names from title patterns like "through X District", "in X", "at X" and checks if venue_name references a district/walk/stroll but uses a different word. If mismatch found, replaces the garbled word with the title's location. Logs `GARBLED VENUE NAME FIX`.
+**Fix**: This is harder to fully solve without architectural changes. However, the ReferenceError fix above will make the pipeline more reliable and faster (no wasted error-handling overhead). No timeout changes needed — the existing 120s/180s adaptive timeouts are reasonable.
 
-2. **`detectGarbledVenueWords(venueName)`** — Checks venue_name against a list of known garbled words that should never appear in venue names: `Alphabetical`, `Sequential`, `Numerical`, `Categorical`, `Grammatical`, `Chronological`, `Geographical`, `Metaphorical`, `Hypothetical`. If detected and not fixable from title, logs `GARBLED VENUE WORD DETECTED` and falls back to the activity title as venue_name.
+### Plan
 
-Wire into existing loop at line ~317:
-```typescript
-if (act.venue_name) {
-  act.venue_name = cleanVenueNameMealLeakage(act.venue_name);
-  act.venue_name = validateVenueNameConsistency(act.title, act.venue_name);
-  if (detectGarbledVenueWords(act.venue_name)) {
-    // Fall back to a cleaned version derived from the title
-    act.venue_name = extractLocationFromTitle(act.title) || act.venue_name;
-  }
-}
+**File: `supabase/functions/generate-itinerary/action-generate-day.ts`**
+
+Move lines 830-833 (the `resolvedRepairHotelName`, `resolvedRepairHotelAddr`, `resolvedIsHotelChange`, `resolvedPreviousHotelName` declarations) to **before** line 798 where `validationInput` is constructed. This ensures the variables are in scope when referenced in the validation input object.
+
 ```
+// Before (broken order):
+// L798: validationInput uses resolvedIsHotelChange  ← ReferenceError
+// L832: const resolvedIsHotelChange = facts.resolvedIsHotelChange;
 
-**File 2: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
-
-Add a venue name rule to the system prompt (alongside existing rules):
-```
-VENUE NAME RULES:
-- venue_name must be a real place name, not a descriptive phrase.
-- NEVER substitute proper nouns with English adjectives (Alphabetical, Sequential, Historical).
-- venue_name should match the location referenced in the activity title.
+// After (correct order):
+// L798: const resolvedIsHotelChange = facts.resolvedIsHotelChange;  
+// L810: validationInput uses resolvedIsHotelChange  ← works
 ```
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/sanitization.ts` — add venue name consistency check + garbled word detection
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add venue name prompt rule
+- `supabase/functions/generate-itinerary/action-generate-day.ts` — fix variable declaration order
+
+### Verification
+After deploying, check edge function logs for:
+- No more `ReferenceError: Cannot access 'resolvedIsHotelChange'` warnings
+- `[pipeline] Day N validation: all checks passed` or specific issues listed (instead of silent failure)
+- Validate/repair pipeline running successfully
 
