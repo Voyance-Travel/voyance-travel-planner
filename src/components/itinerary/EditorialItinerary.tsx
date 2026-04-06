@@ -985,7 +985,7 @@ const NEVER_FREE_CATEGORIES = [
   'transfer', 'transport', 'transportation', 'airport', 'taxi', 'uber', 'rideshare',
   // Additional categories that should always have a cost
   'shopping', 'entertainment', 'cultural', 'attraction', 'museum', 'gallery',
-  'sightseeing', 'market', 'cooking_class', 'workshop', 'adventure', 'excursion',
+  'market', 'cooking_class', 'workshop', 'adventure', 'excursion',
   'wine', 'tasting', 'snorkeling', 'diving', 'surfing', 'hiking_tour',
 ];
 

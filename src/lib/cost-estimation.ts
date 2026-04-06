@@ -588,8 +588,11 @@ export function isLikelyFreePublicVenue(fields: {
   const ALWAYS_FREE_ACTIVITY = /\b(?:arrival|departure|check[\s-]?in|check[\s-]?out|return\s+to|freshen\s+up|settle\s+in)\b/i;
   if (ALWAYS_FREE_ACTIVITY.test(fields.title || '')) return true;
 
-  // Check paid overrides first — dining at a praça is still paid
-  if (PAID_OVERRIDE_PATTERNS.some(p => p.test(combined))) return false;
+  // Check paid overrides against TITLE ONLY — descriptions of free venues
+  // routinely mention nearby paid landmarks (castle, palace, museum) which
+  // would cause false positives if checked against the full combined text.
+  const titleText = fields.title || '';
+  if (PAID_OVERRIDE_PATTERNS.some(p => p.test(titleText))) return false;
 
   // Check category — dining/transport/etc categories are never free
   const cat = (fields.category || fields.type || '').toLowerCase();
