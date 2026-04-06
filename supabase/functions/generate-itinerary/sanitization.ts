@@ -504,6 +504,21 @@ export function checkAndApplyFreeVenue(activity: Record<string, any>, label = 's
     }
   }
 
+  // --- Tier 3: Known free viewpoints (external viewing of landmarks) ---
+  const KNOWN_FREE_VIEWPOINT_RE = /(?:eiffel tower.*(?:sparkle|illumination|viewing|light show)|colosseum.*(?:view(?:ing|point)?|night.*view)|acropolis.*(?:view(?:ing|point)?|sunset)|sagrada.*(?:view(?:ing)?|exterior)|big ben.*(?:view(?:ing)?|night)|trevi fountain.*(?:view|visit)|brandenburg gate.*(?:view|night)|(?:sparkle|illumination|light show).*eiffel tower)/i;
+  const PAID_ENTRY_RE = /\b(?:ticket|entry|climb|ascend|summit|elevator|lift|tour|skip.?the.?line|reserved|admission|guided)\b/i;
+  const FREE_VIEWING_RE = /\b(?:from|stroll|viewing|watch|admire|gaze|see|photograph|walk.*(?:past|by|to)|outside|exterior|across|champ de mars|trocad[eé]ro)\b/i;
+
+  if (KNOWN_FREE_VIEWPOINT_RE.test(title) || KNOWN_FREE_VIEWPOINT_RE.test(venueName)) {
+    const hasPaidIndicator = PAID_ENTRY_RE.test(allTextFields);
+    const hasFreeIndicator = FREE_VIEWING_RE.test(allTextFields);
+    if (!hasPaidIndicator && hasFreeIndicator) {
+      console.log(`PHANTOM PRICING FIX [${label}]: "${title}" is a free external viewpoint. Was $${effectiveCost}/pp → Free`);
+      zeroActivityCostFields(activity);
+      return true;
+    }
+  }
+
   return false;
 }
 

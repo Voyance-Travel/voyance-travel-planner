@@ -84,6 +84,9 @@ export interface ValidateDayInput {
   /** Hotel change context */
   isHotelChange?: boolean;
   previousHotelName?: string;
+
+  /** Destination city for demonym validation */
+  destination?: string;
 }
 
 // =============================================================================
@@ -99,7 +102,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   const { day, dayNumber, isFirstDay, isLastDay, hasHotel, hotelName,
     arrivalTime24, returnDepartureTime24, requiredMeals, previousDays,
     avoidList, dietaryRestrictions, mustDoActivities,
-    isHotelChange, previousHotelName } = input;
+    isHotelChange, previousHotelName, destination } = input;
 
   const activities = day.activities || [];
 
@@ -148,6 +151,11 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   // --- PRE-CHECKOUT DINING AT WRONG HOTEL (hotel-change days) ---
   if (isHotelChange && previousHotelName && hotelName) {
     checkPreCheckoutDiningHotel(activities, hotelName, previousHotelName, results);
+  }
+
+  // --- WRONG CITY DEMONYM IN DAY TITLE ---
+  if (destination) {
+    checkWrongCityDemonym(day, destination, results);
   }
 
   return results;
@@ -776,6 +784,64 @@ function checkPreCheckoutDiningHotel(
         field: 'title',
         autoRepairable: true,
       });
+    }
+  }
+}
+
+// =============================================================================
+// WRONG CITY DEMONYM — catches AI hallucinating wrong city references in titles
+// =============================================================================
+
+const CITY_DEMONYMS: Record<string, string[]> = {
+  'paris': ['parisian', 'parisien', 'parisienne'],
+  'rome': ['roman', 'romano', 'romana'],
+  'berlin': ['berliner', 'berlinian'],
+  'vienna': ['viennese', 'wiener'],
+  'london': ['londoner', 'london-based'],
+  'madrid': ['madrileño', 'madrilenian', 'madrileñan'],
+  'barcelona': ['barcelonan', 'barcelonese'],
+  'lisbon': ['lisboan', 'lisboeta'],
+  'prague': ['prague-based', 'praguian'],
+  'amsterdam': ['amsterdammer'],
+  'tokyo': ['tokyoite'],
+  'new york': ['new yorker', 'new york-style'],
+  'florence': ['florentine'],
+  'venice': ['venetian'],
+  'naples': ['neapolitan'],
+  'milan': ['milanese'],
+  'istanbul': ['istanbulite'],
+  'budapest': ['budapestian'],
+  'athens': ['athenian'],
+  'munich': ['municher', 'münchner'],
+};
+
+function checkWrongCityDemonym(
+  day: StrictDayMinimal,
+  destination: string,
+  results: ValidationResult[],
+): void {
+  const dayTitle = (day as any).theme || (day as any).title || (day as any).dayTitle || '';
+  if (!dayTitle) return;
+
+  const destLower = destination.toLowerCase().trim();
+  const titleLower = dayTitle.toLowerCase();
+
+  // Build set of demonyms that SHOULD NOT appear (all cities except destination)
+  for (const [city, demonyms] of Object.entries(CITY_DEMONYMS)) {
+    // Skip if destination matches this city
+    if (destLower.includes(city) || city.includes(destLower)) continue;
+
+    for (const demonym of demonyms) {
+      if (titleLower.includes(demonym)) {
+        results.push({
+          code: FAILURE_CODES.TITLE_LABEL_LEAK,
+          severity: 'warning',
+          message: `Day title "${dayTitle}" contains "${demonym}" which refers to ${city}, not ${destination}`,
+          field: 'theme',
+          autoRepairable: true,
+        });
+        return; // One warning per day is enough
+      }
     }
   }
 }
