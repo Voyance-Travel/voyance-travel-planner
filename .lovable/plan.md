@@ -1,100 +1,71 @@
 
-Goal: make Michelin floor enforcement deterministic, observable, and truly final so Eleven/Belcanto cannot slip through on either itinerary cards or the Payments data.
 
-What I found
-- `FINE_DINING_MIN_PRICE_BY_STARS` does not exist.
-- `knownFineDiningStars` does not exist.
-- The current code uses regex buckets in `sanitization.ts`:
-  - `KNOWN_MICHELIN_HIGH`
-  - `KNOWN_MICHELIN_MID`
-  - `KNOWN_UPSCALE`
-  - `MICHELIN_FLOOR = { high: 180, mid: 120, upscale: 60 }`
-- `eleven` is already present, but only as a regex token, not as explicit aliases like `eleven restaurant`.
-- The floor logic is duplicated inline in two places:
-  - `supabase/functions/generate-itinerary/sanitization.ts`
-  - `supabase/functions/generate-itinerary/action-repair-costs.ts`
-- There is no single `enforceFineDiningPriceFloor` helper and no top-level `MICHELIN FLOOR CHECK` log.
-- The day-chain does a lot of mutations after `sanitizeGeneratedDay()`:
-  - `action-generate-day.ts` continues through enrichment, validate/repair, persist, meal guard
-  - `action-generate-trip-day.ts` then does trip-level post-processing before final save
-- So the current floor runs early, not at the true final stage.
-- The prompt already has Michelin pricing rules, but not the explicit Eleven/Belcanto examples from your latest prompt.
+## Fix Cross-Day Restaurant Repetition (Time Out Market Lisboa on Day 1 and Day 4)
 
-Likely root cause
-- The Michelin logic is scattered, regex-based, and not rerun on the final activity objects after later post-processing.
-- Matching is too coarse because it uses broad regex groups instead of an explicit restaurant -> star map with aliases.
-- Because there is no dedicated helper/log, it is hard to prove at runtime whether the floor executed and matched the final title/venue.
+### Root Cause
 
-Implementation plan
-1. Replace the coarse regex-only Michelin tiering with a shared explicit star map
-- In `sanitization.ts`, keep the existing exports for compatibility if needed, but introduce a canonical shared map:
-  - `belcanto: 2`
-  - `alma: 2`
-  - `eleven: 1`
-  - `eleven restaurant: 1`
-  - `feitoria: 1`
-  - `feitoria restaurant: 1`
-  - `cura: 1`
-  - `loco: 1`
-  - `fifty seconds: 1`
-  - `eneko: 1`
-  - `il gallo d'oro: 1`
-  - `ocean: 2`
-  - `vila joya: 2`
-  - `the yeatman: 2`
-- Add per-star floors:
-  - 1-star = 120
-  - 2-star = 180
-  - 3-star = 250
-- Keep a fallback non-star fine-dining floor for upscale venues.
+The cross-day restaurant deduplication uses `extractRestaurantVenueName()` which produces an exact normalized string. If the AI generates "Time Out Market Lisboa" on Day 1 but "Time Out Market" on Day 4 (or vice versa), the normalized keys differ ("time out market lisboa" vs "time out market") and the dedup misses the match.
 
-2. Create one shared helper and use it everywhere
-- Add a shared helper in `sanitization.ts`, e.g. `enforceMichelinPriceFloor(activity, logPrefix?)`.
-- The helper should:
-  - log `MICHELIN FLOOR CHECK` at entry for dining activities
-  - resolve price from all supported fields
-  - match aliases against title, venue name, restaurant name, and normalized meal titles
-  - fall back to explicit Michelin/star keywords if present
-  - write the corrected floor back to all price field shapes
-  - log:
-    - `MICHELIN FLOOR MATCH`
-    - `MICHELIN PRICE FLOOR ENFORCED`
+The existing architecture has THREE dedup layers, all using exact string matching:
+1. **Prompt blocklist** (compile-prompt.ts) — tells AI not to reuse restaurants
+2. **Per-day dedup** (action-generate-trip-day.ts ~line 901) — checks against `usedRestaurants` from metadata
+3. **Failsafe sweep** (action-generate-trip-day.ts ~line 1375) — re-scans all days post-assembly
 
-3. Replace duplicated inline logic with the shared helper
-- Update `sanitization.ts` to remove the inline underpricing block and call the helper instead.
-- Update `action-repair-costs.ts` to use the same helper logic for `activity_costs` instead of maintaining a second copy.
-- Preserve `deduplicateEveningFineDining` exactly as-is.
+All three use `extractRestaurantVenueName()` with exact `Set.has()` comparisons, so name variations slip through.
 
-4. Run the Michelin floor at the actual last pricing stage
-- In `action-generate-day.ts`, run the shared helper after the meal guard and other post-processing, immediately before returning the day.
-- In `action-generate-trip-day.ts`, run the same helper over the final `updatedDays` before saving the trip snapshot, since this file still performs last-minute trip-level mutations.
-- This makes the final JSON itinerary authoritative even if a later step renamed or replaced a dining venue.
+### Plan
 
-5. Tighten the prompt without removing the existing rules
-- Update `pipeline/compile-prompt.ts` by extending the existing Michelin rules with explicit examples:
-  - Eleven Restaurant in Lisbon must be >= €120/pp
-  - Belcanto and Alma must be >= €180/pp
-- Keep the single-dinner-per-evening language already present.
+#### 1. Add fuzzy venue matching to `generation-utils.ts`
 
-Files to update
-- `supabase/functions/generate-itinerary/sanitization.ts`
-- `supabase/functions/generate-itinerary/action-repair-costs.ts`
-- `supabase/functions/generate-itinerary/action-generate-day.ts`
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+Add a `venueNamesMatch(a, b)` function that returns true if:
+- Exact match (current behavior), OR
+- One name contains the other (substring match for cases like "Time Out Market" vs "Time Out Market Lisboa"), OR
+- Word-overlap ≥ 80% (catches minor word additions/removals)
 
-Verification
-- Generate a 4-day Lisbon trip.
-- Confirm in the itinerary itself:
-  - Eleven >= €120/pp
-  - Belcanto >= €180/pp
-- Confirm in Payments / `activity_costs`:
-  - same floors are preserved there too
-- Confirm logs show:
-  - `MICHELIN FLOOR CHECK`
-  - `MICHELIN FLOOR MATCH`
-  - `MICHELIN PRICE FLOOR ENFORCED`
-- Confirm no regression to the existing evening fine-dining dedup behavior.
+```typescript
+export function venueNamesMatch(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  const wordsA = new Set(a.split(/\s+/));
+  const wordsB = new Set(b.split(/\s+/));
+  const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
+  const smaller = Math.min(wordsA.size, wordsB.size);
+  return smaller > 0 && intersection / smaller >= 0.8;
+}
+```
 
-Technical note
-- I would not anchor this fix on `generation-core.ts` first, because the live full-trip flow now goes through the day-chain (`generate-trip` -> `generate-trip-day` -> `generate-day`). The authoritative fix should target that path and the shared repair path.
+#### 2. Replace `Set.has()` with fuzzy matching in the failsafe sweep
+
+In `action-generate-trip-day.ts` at the failsafe dedup (~line 1486), replace:
+```typescript
+if (allUsedRestaurants.has(venue)) {
+```
+with a helper that checks if `venue` fuzzy-matches any entry in `allUsedRestaurants`.
+
+Similarly update:
+- The per-day dedup at ~line 915
+- The `usedRestaurants` extraction at ~line 1692 (to avoid adding near-duplicates)
+- The `usedSet` checks in repair-day.ts
+
+#### 3. Add `venue_name` and `location.name` to the per-day dedup check
+
+At line 914, the per-day dedup only checks `act.title` and `act.location?.name`. Update it to also check `act.venue_name` and `act.restaurant?.name`, matching the failsafe sweep's broader field coverage.
+
+#### 4. No new files, no prompt changes needed
+
+The prompt blocklist is already comprehensive. The issue is the post-generation matching, not the prompt.
+
+### Files to edit
+
+| File | Change |
+|------|--------|
+| `generation-utils.ts` | Add `venueNamesMatch()` fuzzy comparison function |
+| `action-generate-trip-day.ts` | Use fuzzy matching in per-day dedup (~line 915), failsafe sweep (~line 1486), and restaurant extraction (~line 1692) |
+
+### Verification
+
+- Generate a 4-day Lisbon trip — no restaurant should appear on more than one day
+- Check console for "CROSS-DAY DEDUP" logs
+- Specifically verify Time Out Market Lisboa doesn't repeat
+
