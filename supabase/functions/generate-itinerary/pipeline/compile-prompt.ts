@@ -803,22 +803,28 @@ General Requirements:
   • Taxi/Rideshare: Estimate based on distance and city rates (typically $10-40 depending on distance)
   • Ferry: Use the actual fare for the specific route
    • The title MUST include the mode: "Travel to [place] via [mode]" (e.g., "Travel to US Open via 7 Train", "Taxi to hotel")
-- RESTAURANT PRICING — USE REALISTIC PRICES:
+ - RESTAURANT PRICING — USE REALISTIC PRICES (ALL CITIES):
    • Michelin 3-star / destination restaurants: minimum €250/pp
    • Michelin 2-star restaurants: minimum €180/pp
    • Michelin 1-star / high-end tasting menus: minimum €120/pp
    • Well-known fine dining (non-starred): minimum €60/pp
    • Famous seafood restaurants (e.g., cervejaria, marisqueira): minimum €40/pp
    • Mid-range sit-down restaurants: €20-50/pp
-   • Casual dining and cafés: €10-30/pp
-   • Fast casual, bakeries, pastéis: €5-15/pp
-    When in doubt, price HIGHER. Underpricing makes the itinerary unreliable. Use the actual price a real diner would pay at that specific restaurant.
-    SPECIFIC EXAMPLES — enforce these exact minimums:
-    • Eleven Restaurant (Lisbon, 1-star Michelin): minimum €120/pp (tasting menu ~€120-150/pp). Do NOT price at €87 or below.
-    • Belcanto (Lisbon, 2-star Michelin, chef José Avillez): minimum €180/pp. Do NOT price at €166 or below.
-    • Alma (Lisbon, 2-star Michelin): minimum €180/pp.
-    • Feitoria (Lisbon, 1-star Michelin): minimum €120/pp.
-    • LOCO (Lisbon, 1-star Michelin): minimum €120/pp.
+   • Street food, markets, bakeries: €5-15/pp
+     When in doubt, price HIGHER. Underpricing makes the itinerary unreliable. Use the actual price a real diner would pay at that specific restaurant.
+     SPECIFIC EXAMPLES — enforce these exact minimums regardless of city:
+     • Guy Savoy (Paris, 3-star Michelin): minimum €250/pp. Do NOT price at €28 or below.
+     • L'Ambroisie (Paris, 3-star Michelin): minimum €250/pp. Do NOT price at €17 or below.
+     • Arpège (Paris, 3-star Michelin): minimum €250/pp.
+     • Epicure at Le Bristol (Paris, 3-star Michelin): minimum €250/pp.
+     • Facil (Berlin, 2-star Michelin): minimum €180/pp. Do NOT price at €140 or below.
+     • Horváth (Berlin, 1-star Michelin): minimum €120/pp. Do NOT price at €28 or below.
+     • Eleven Restaurant (Lisbon, 1-star Michelin): minimum €120/pp (tasting menu ~€120-150/pp). Do NOT price at €87 or below.
+     • Belcanto (Lisbon, 2-star Michelin, chef José Avillez): minimum €180/pp. Do NOT price at €166 or below.
+     • Alma (Lisbon, 2-star Michelin): minimum €180/pp.
+     • Lasarte (Barcelona, 3-star Michelin): minimum €250/pp.
+     • Disfrutar (Barcelona, 3-star Michelin): minimum €250/pp.
+     • La Pergola (Rome, 3-star Michelin): minimum €250/pp.
 
 DINING RULES — CRITICAL:
 - Schedule exactly ONE dinner restaurant per evening. Never schedule two fine dining or Michelin-starred restaurants in the same evening.
