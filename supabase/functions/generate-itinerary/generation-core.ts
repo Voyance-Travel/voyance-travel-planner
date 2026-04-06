@@ -676,6 +676,7 @@ export async function generateSingleDayWithRetry(
     '14. **NO KEYWORD STUFFING**: Activity titles must be concise (max 8 words). NEVER pad titles with synonym lists of location types (e.g., "borough town place locale district quarter sector area"). Use the specific venue or activity name only.',
     '15. **ALL REAL VENUE NAMES — CRITICAL**: ALL activities must use REAL, SPECIFIC venue names — not generic descriptions. This applies to ALL categories (wellness, cafés, nightlife, shopping, etc.), not just dining. WRONG: "Boutique Wellness in Omotesando". WRONG: "a kissaten". WRONG: "Local Spa". RIGHT: "Omotesando Koffee". RIGHT: "Kayabacho Sabō". RIGHT: "HIGASHIYA GINZA".',
     !isFirstDay ? '16. **NO CHECK-IN ON NON-ARRIVAL DAYS**: On days after Day 1 (or after the first day at a new hotel), do NOT title accommodation activities as "Check-in at [Hotel]". Use "Return to [Hotel]" or "Freshen up at [Hotel]" instead. "Check-in" implies arrival — use it only on the day the traveler first arrives at that hotel.' : '',
+    '17. **NO TAG SUFFIXES IN TITLES**: Activity titles must NOT end with hyphenated mood/category tags. WRONG: "Evening Walk maternal-retreat", "Museum Visit culture-deep-dive", "Dinner romantic-evening". RIGHT: "Evening Walk through Chiado", "National Museum of Ancient Art", "Dinner at Alma". Titles must read as natural language, not as a label with a tag appended.',
   ].filter(Boolean).join('\n');
 
   // Build list of previous experience types for stricter rejection

@@ -166,6 +166,13 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/(?:^|[.]\s*)(?:Recommended|Sourced|Verified|Confirmed)\s+(?:by|from|via)\s+(?:our|the)\s+(?:venue|restaurant|local)\s+database[^.]*\.?\s*/gi, '')
     // Strip "Popular with locals" and similar database stub phrases when embedded inline
     .replace(/\s*[-–—]\s*(?:Popular with locals|A local favou?rite|Great for (?:families|groups|couples)|Tourist (?:hotspot|favorite)|Hidden gem|Must[- ]visit|Highly recommended|Local institution)\.?\s*/gi, '')
+    // Strip garbled hyphenated suffixes (archetype/mood tag leakage)
+    // Known wellness/mood tags
+    .replace(/\s+(?:maternal-retreat|self-care|mind-body|soul-search|inner-peace|life-hack|well-being|self-help|mind-set|heart-felt|culture-deep-dive|culture-immersion|food-journey|art-walk|nature-escape)\s*$/i, (m) => { console.warn(`GARBLED SUFFIX REMOVED: "${m.trim()}"`); return ''; })
+    // General pattern: trailing hyphenated word ending in common AI tag suffixes
+    .replace(/\s+[a-z]+-(?:retreat|journey|quest|path|way|mode|state|zone|vibe|flow|core|soul|self|mind|life|hack|tip|fix|dive|escape|immersion|walk)\s*$/i, (m) => { console.warn(`GARBLED SUFFIX REMOVED: "${m.trim()}"`); return ''; })
+    // Category/tag leakage: trailing "category-xxx", "type-xxx", etc.
+    .replace(/\s+(?:category|type|mode|style|class|kind|sort|form|variant|version)[-:]\w+\s*$/i, (m) => { console.warn(`GARBLED SUFFIX REMOVED: "${m.trim()}"`); return ''; })
     // Deduplicate consecutive repeated words: "Pantheon Pantheon" → "Pantheon"
     .replace(/\b(\w{3,})\s+\1\b/gi, '$1')
     // Catch comma-prefixed schema field names at end of text
