@@ -816,6 +816,7 @@ export async function handleGenerateDay(
           isFirstDay,
           isLastDay,
           totalDays,
+          destination: resolvedDestination || destination || undefined,
           hasHotel: !!((flightContext as any).hotelName || paramHotelName || params.hotelOverride?.name),
           hotelName: (flightContext as any).hotelName || paramHotelName || params.hotelOverride?.name || undefined,
           arrivalTime24: flightContext.arrivalTime24 || (isFirstDay ? '09:00' : undefined),

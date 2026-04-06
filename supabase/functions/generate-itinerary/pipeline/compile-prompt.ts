@@ -843,12 +843,41 @@ MICHELIN DINING INCLUSION (for cities with Michelin restaurants):
 - Every dining activity MUST have a real, specific restaurant name and address — NEVER use "the destination", the city name, or "get a restaurant recommendation" as a venue
 ` : ''}
 
-RESTAURANT NAMING RULES — CRITICAL:
+RESTAURANT NAMING RULES — CRITICAL (ABSOLUTE RULE — NO PLACEHOLDER RESTAURANTS):
 - Every dining activity MUST include a SPECIFIC, REAL restaurant name. Never use generic placeholders like "a local spot", "a nearby café", "a local restaurant", "a bistro", "a nice place", "a charming spot", "the destination", or similar vague descriptions. ANY title matching "Meal at a/an/the [descriptor]" is BANNED.
 - The title MUST contain the actual restaurant name (e.g., "Breakfast at Pastéis de Belém", "Dinner at Cervejaria Ramiro"), NOT a description like "Breakfast at a local spot".
 - The location.name field MUST be the restaurant's actual name — NEVER "the destination", "a local spot", or any generic placeholder.
 - If you cannot think of another unique restaurant for a meal, use the hotel restaurant or a well-known local chain café — NEVER fall back to a generic placeholder.
-- For Lisbon, consider: Pastéis de Belém, Café A Brasileira, Copenhagen Coffee Lab, Dear Breakfast, Heim Café, Nicolau Lisboa, Fábrica Coffee Roasters, Landeau Chocolate, Time Out Market vendors.
+- NEVER generate any of these patterns:
+  • "Breakfast at a neighborhood café" — BANNED
+  • "Lunch at a bistro" — BANNED
+  • "Dinner at a brasserie" — BANNED
+  • "Breakfast at a boulangerie-café" — BANNED
+  • "Lunch at a local restaurant" — BANNED
+  • Any title with "at a [generic venue type]" — BANNED
+  • Any venue named "the destination" or just the city name — BANNED
+  • Any description saying "Get a restaurant recommendation" — BANNED
+${(() => {
+  const cityLower = (destination || '').toLowerCase().trim();
+  if (cityLower.includes('paris')) return `- For Paris, use REAL restaurants like:
+  BREAKFAST: Café de Flore, Angelina, Stohrer, Du Pain et des Idées, Claus, Ladurée, Carette, Holybelly, Boot Café, Ob-La-Di
+  LUNCH: Le Comptoir du Relais, Bouillon Chartier, Chez Janou, Les Philosophes, Pink Mamma, Bofinger, Robert et Louise, Le Bouillon Pigalle
+  DINNER: Sacré Fleur, Le Train Bleu, Brasserie Lipp, Le Relais de l'Entrecôte, Drouant, Le Voltaire, Chez Georges, Frenchie Bar à Vins`;
+  if (cityLower.includes('berlin')) return `- For Berlin, use REAL restaurants like:
+  BREAKFAST: The Barn, House of Small Wonder, Brammibal's Donuts, Father Carpenter, Five Elephant, Distrikt Coffee
+  LUNCH: Curry 36, Monsieur Vuong, Katz Orange, Cocolo Ramen, Markthalle Neun, Mustafa's Gemüse Kebap
+  DINNER: Pauly Saal, Ora, Lode & Stijn, eins44, Nobelhart & Schmutzig, Cordo`;
+  if (cityLower.includes('rome') || cityLower.includes('roma')) return `- For Rome, use REAL restaurants like:
+  BREAKFAST: Roscioli Caffè, Sciascia Caffè, Barnum Café, Forno Campo de' Fiori, Antico Forno Roscioli, Pasticceria Regoli
+  LUNCH: Da Enzo al 29, Armando al Pantheon, Trattoria Da Teo, Salumeria Roscioli, Pizzarium, Tonnarello
+  DINNER: Pierluigi, Felice a Testaccio, Grazia & Graziella, Osteria Fernanda, Roscioli, Da Danilo`;
+  if (cityLower.includes('london')) return `- For London, use REAL restaurants like:
+  BREAKFAST: The Wolseley, Dishoom, Buns from Home, Granger & Co, The Regency Café, E Pellicci
+  LUNCH: Padella, Barrafina, Brasserie Zédel, Rochelle Canteen, Honest Burgers, The Barbary
+  DINNER: St. John, The Palomar, Quo Vadis, Brat, The River Café, Gymkhana`;
+  if (cityLower.includes('lisbon') || cityLower.includes('lisboa')) return `- For Lisbon, consider: Pastéis de Belém, Café A Brasileira, Copenhagen Coffee Lab, Dear Breakfast, Heim Café, Nicolau Lisboa, Fábrica Coffee Roasters, Landeau Chocolate, Time Out Market vendors, Cervejaria Ramiro, Sacramento do Chiado.`;
+  return `- You MUST name specific, real restaurants for ${destination || 'this city'}. Search your knowledge for well-known local establishments.`;
+})()}
 - Parks, gardens, plazas, squares, viewpoints, miradouros, riverside walks, and neighborhood strolls are FREE (€0). Do NOT assign any price to these.
 
 VENUE NAME RULES:
