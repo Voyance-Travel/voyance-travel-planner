@@ -318,10 +318,10 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       // Zero out pricing for obviously free activity types
       // Tier 1 (high confidence): always free — parks, plazas, churches, viewpoints, districts
       // Tier 2 (lower confidence): free only if description says "free" or price is in phantom €20-25 range
-      const tier1FreePatterns = /\b(?:park|garden|jardim|viewpoint|miradouro|plaza|praça|praca|square|piazza|platz|church|igreja|basilica|cathedral|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca)\b/i;
+      const tier1FreePatterns = /\b(?:park|garden|jardim|viewpoint|miradouro|outlook|vista|panoram\w*|plaza|praça|praca|square|piazza|platz|church|igreja|basilica|cathedral|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca|evening\s+(?:walk|stroll)|morning\s+(?:walk|stroll)|historic\s+walk)\b/i;
       const tier2FreePatterns = /\b(?:bridge|fountain|monument|memorial|statue|arch|gate|market|promenade|boardwalk|trail|path|pier|dock|wharf|embankment)\b/i;
 
-      if (act.cost && typeof act.cost === 'object' && act.cost.amount > 0 && act.cost.amount <= 30) {
+      if (act.cost && typeof act.cost === 'object' && act.cost.amount > 0 && act.cost.amount <= 50) {
         const allTextFields = [
           act.title || '',
           (act as any).venue_name || '',
