@@ -1271,13 +1271,86 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // ── CROSS-DAY RESTAURANT DEDUP FAILSAFE ──
-  // Runs on ALL completions (including last day) to catch any duplicates
+  // ── CROSS-DAY RESTAURANT DEDUP FAILSAFE (with replacement + meal protection) ──
+  // Runs on ALL completions (including last day) to catch any duplicates.
+  // Instead of blindly removing duplicates, attempts a fallback replacement first.
   if (updatedDays.length > 1) {
     const { extractRestaurantVenueName } = await import('./generation-utils.ts');
     const MEAL_RE_FAILSAFE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+    const PRIMARY_MEAL_RE = /\b(?:breakfast|lunch|dinner|brunch)\b/i;
     const allUsedRestaurants = new Set<string>();
+    let totalReplaced = 0;
     let totalRemoved = 0;
+
+    // City-aware fallback restaurants for replacement when pool is exhausted
+    const FAILSAFE_FALLBACKS: Record<string, Record<string, { name: string; neighborhood: string; address: string }[]>> = {
+      'lisbon': {
+        breakfast: [
+          { name: 'Heim Café', neighborhood: 'Chiado', address: 'R. de Santos-o-Velho 2, Lisbon' },
+          { name: 'Copenhagen Coffee Lab', neighborhood: 'Chiado', address: 'R. Nova da Piedade 10, Lisbon' },
+          { name: 'Hello Kristof', neighborhood: 'Príncipe Real', address: 'R. do Poço dos Negros 103, Lisbon' },
+          { name: 'The Mill', neighborhood: 'Santos', address: 'R. do Poço dos Negros 1, Lisbon' },
+          { name: 'Nicolau Lisboa', neighborhood: 'Rossio', address: 'R. de São Nicolau 17, Lisbon' },
+          { name: 'Dear Breakfast', neighborhood: 'Estrela', address: 'R. de São Marçal 62, Lisbon' },
+        ],
+        lunch: [
+          { name: 'Ponto Final', neighborhood: 'Cacilhas', address: 'R. do Ginjal 72, Almada' },
+          { name: 'O Velho Eurico', neighborhood: 'Alfama', address: 'Largo de São Cristóvão 3, Lisbon' },
+          { name: 'A Cevicheria', neighborhood: 'Príncipe Real', address: 'R. Dom Pedro V 129, Lisbon' },
+          { name: 'Café de São Bento', neighborhood: 'São Bento', address: 'R. de São Bento 212, Lisbon' },
+          { name: 'Mercado da Ribeira', neighborhood: 'Cais do Sodré', address: 'Av. 24 de Julho 49, Lisbon' },
+          { name: 'Cervejaria Trindade', neighborhood: 'Bairro Alto', address: 'R. Nova da Trindade 20C, Lisbon' },
+          { name: 'Solar dos Presuntos', neighborhood: 'Restauradores', address: 'R. das Portas de Santo Antão 150, Lisbon' },
+        ],
+        dinner: [
+          { name: 'Sacramento do Chiado', neighborhood: 'Chiado', address: 'R. do Sacramento 26, Lisbon' },
+          { name: 'Sea Me', neighborhood: 'Chiado', address: 'R. do Loreto 21, Lisbon' },
+          { name: 'Mini Bar Teatro', neighborhood: 'Chiado', address: 'R. António Maria Cardoso 58, Lisbon' },
+          { name: 'Pharmácia', neighborhood: 'Santa Catarina', address: 'R. Marechal Saldanha 1, Lisbon' },
+          { name: 'Tasca do Chico', neighborhood: 'Alfama', address: 'R. dos Remédios 83, Lisbon' },
+        ],
+      },
+      'porto': {
+        breakfast: [
+          { name: 'Mesa 325', neighborhood: 'Ribeira', address: 'R. de Santa Catarina 325, Porto' },
+          { name: 'Combi Coffee Roasters', neighborhood: 'Cedofeita', address: 'R. de Passos Manuel 27, Porto' },
+        ],
+        lunch: [
+          { name: 'Cantinho do Avillez', neighborhood: 'Ribeira', address: 'R. de Mouzinho da Silveira 166, Porto' },
+          { name: 'Café Santiago', neighborhood: 'Baixa', address: 'R. de Passos Manuel 226, Porto' },
+        ],
+        dinner: [
+          { name: 'Pedro Lemos', neighborhood: 'Foz', address: 'R. do Padre Luís Cabral 974, Porto' },
+          { name: 'Cafeína', neighborhood: 'Foz do Douro', address: 'R. do Padrão 100, Porto' },
+        ],
+      },
+      'barcelona': {
+        breakfast: [
+          { name: 'Federal Café', neighborhood: 'Gòtic', address: 'Passatge de la Pau 11, Barcelona' },
+          { name: 'Flax & Kale', neighborhood: 'Raval', address: 'C/ dels Tallers 74B, Barcelona' },
+        ],
+        lunch: [
+          { name: 'Can Culleretes', neighborhood: 'Gòtic', address: "C/ d'en Quintana 5, Barcelona" },
+          { name: 'La Pepita', neighborhood: 'Gràcia', address: 'C/ de Còrsega 343, Barcelona' },
+        ],
+        dinner: [
+          { name: 'Tickets', neighborhood: 'Poble-sec', address: 'Av. del Paral·lel 164, Barcelona' },
+          { name: 'Can Paixano', neighborhood: 'Barceloneta', address: 'C/ de la Reina Cristina 7, Barcelona' },
+        ],
+      },
+    };
+
+    // Detect meal type from title
+    function detectMealTypeFromTitle(title: string): 'breakfast' | 'lunch' | 'dinner' {
+      const t = (title || '').toLowerCase();
+      if (/\bbreakfast\b/.test(t)) return 'breakfast';
+      if (/\bdinner\b|\bsupper\b/.test(t)) return 'dinner';
+      return 'lunch'; // default for lunch, brunch, tapas, etc.
+    }
+
+    // Resolve city key for fallback lookup
+    const tripDestination = (updatedDays[0]?.destination || updatedDays[0]?.city || '').toLowerCase().trim();
+    const cityKey = Object.keys(FAILSAFE_FALLBACKS).find(k => tripDestination.includes(k)) || '';
 
     for (let di = 0; di < updatedDays.length; di++) {
       const day = updatedDays[di];
@@ -1297,7 +1370,41 @@ async function _handleGenerateTripDayInner(
         if (!venue) return true;
 
         if (allUsedRestaurants.has(venue)) {
-          console.warn(`CROSS-DAY DEDUP FAILSAFE: "${act.title}" on Day ${di + 1} — "${venue}" already used. Removing.`);
+          // DUPLICATE FOUND — attempt replacement instead of removal
+          const mealType = detectMealTypeFromTitle(act.title || '');
+          const fallbackList = FAILSAFE_FALLBACKS[cityKey]?.[mealType] || [];
+          const fallback = fallbackList.find(f => {
+            const fNorm = extractRestaurantVenueName(f.name);
+            return fNorm && !allUsedRestaurants.has(fNorm);
+          });
+
+          if (fallback) {
+            // Replace with fallback
+            const mealMatch = (act.title || '').match(/^(Breakfast|Brunch|Lunch|Dinner|Supper|Cocktails|Nightcap)\s+(?:at|:)\s+/i);
+            const newTitle = mealMatch ? `${mealMatch[1]} at ${fallback.name}` : `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} at ${fallback.name}`;
+            console.warn(`DEDUP REPLACEMENT: Day ${di + 1} — replacing duplicate "${act.title}" with "${fallback.name}"`);
+            act.title = newTitle;
+            act.name = newTitle;
+            if (act.location) {
+              act.location.name = fallback.name;
+              act.location.address = fallback.address;
+            }
+            if (act.venue_name) act.venue_name = fallback.name;
+            if (act.restaurant) act.restaurant.name = fallback.name;
+            allUsedRestaurants.add(extractRestaurantVenueName(fallback.name));
+            totalReplaced++;
+            return true; // Keep the activity with new venue
+          }
+
+          // No fallback available — check if primary meal
+          const isPrimaryMeal = PRIMARY_MEAL_RE.test(act.title || '');
+          if (isPrimaryMeal) {
+            console.warn(`DEDUP FAILSAFE: "${act.title}" on Day ${di + 1} is a PRIMARY MEAL with no fallback — KEEPING duplicate (meal > uniqueness)`);
+            return true; // Keep duplicate rather than leave a missing meal
+          }
+
+          // Not a primary meal and no fallback — safe to remove
+          console.warn(`DEDUP FAILSAFE: "${act.title}" on Day ${di + 1} — no fallback, not primary meal — REMOVING`);
           return false;
         }
         allUsedRestaurants.add(venue);
@@ -1306,13 +1413,48 @@ async function _handleGenerateTripDayInner(
       const removed = beforeCount - day.activities.length;
       if (removed > 0) {
         totalRemoved += removed;
-        console.warn(`CROSS-DAY DEDUP FAILSAFE: Removed ${removed} duplicate restaurant(s) from Day ${di + 1}`);
       }
     }
-    if (totalRemoved > 0) {
-      console.log(`CROSS-DAY DEDUP FAILSAFE: Total removed across trip: ${totalRemoved}`);
-      // Update the partialItinerary with cleaned days
+    if (totalReplaced > 0 || totalRemoved > 0) {
+      console.log(`DEDUP FAILSAFE SUMMARY: ${totalReplaced} replaced, ${totalRemoved} removed across trip`);
       partialItinerary.days = updatedDays;
+    }
+
+    // ── ORPHANED TRAVEL ROUTING CLEANUP ──
+    // After dedup, travel routing may reference restaurants no longer in the activity list
+    for (let di = 0; di < updatedDays.length; di++) {
+      const day = updatedDays[di];
+      if (!Array.isArray(day.travelRouting) || day.travelRouting.length === 0) continue;
+
+      const activityVenues = new Set<string>(
+        (day.activities || [])
+          .map((a: any) => (a.location?.name || a.venue_name || a.restaurant?.name || a.title || '').trim().toLowerCase())
+          .filter(Boolean)
+      );
+
+      const beforeRouteCount = day.travelRouting.length;
+      day.travelRouting = day.travelRouting.filter((route: any) => {
+        const routeDest = (route.destination || route.to || route.toName || '').trim().toLowerCase();
+        if (!routeDest) return true; // keep routes with no destination info
+
+        // Always keep routes to hotels, airports, stations, and landmarks
+        if (/hotel|airport|aeroporto|ritz|ludovice|station|terminal|museum|church|garden|miradouro|castelo|torre|praça|plaza/i.test(routeDest)) {
+          return true;
+        }
+
+        // Check if any activity venue partially matches this route destination
+        for (const venue of activityVenues) {
+          if (venue.includes(routeDest) || routeDest.includes(venue)) return true;
+        }
+
+        console.warn(`ORPHANED ROUTE CLEANUP: Day ${di + 1} — removing travel route to "${routeDest}" (no matching activity)`);
+        return false;
+      });
+
+      const routesRemoved = beforeRouteCount - day.travelRouting.length;
+      if (routesRemoved > 0) {
+        console.log(`ORPHANED ROUTE CLEANUP: Removed ${routesRemoved} orphaned route(s) from Day ${di + 1}`);
+      }
     }
   }
 
