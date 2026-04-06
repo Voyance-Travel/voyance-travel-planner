@@ -962,6 +962,15 @@ TICKETED ATTRACTION PRICING:
 - Public VIEWPOINTS of attractions can be Free (e.g., "Views of the Colosseum from outside"), but entering the site is NOT Free.
 - Parks, piazzas, fountains, viewpoints, and public gardens remain Free.
 
+VENUE TYPE PRICING GUIDELINES:
+Match the price to the VENUE TYPE, not just the category:
+- STREET FOOD / CASUAL QUICK-SERVICE (€5-15/pp): Street food stalls, market stands, pizza-by-the-slice, kebab, known casual brands (Trapizzino, Bao, Supplizio). If the venue is a known street food brand, price at €5-15/pp.
+- BAR / COCKTAIL / NIGHTCAP (€15-35/pp): Hotel bars, cocktail bars, wine bars, speakeasies. If the activity title includes "nightcap", "cocktail", "bar", "drinks", or "aperitif", price at €15-35/pp. NEVER price a bar/cocktail activity above €50/pp. A "nightcap" is 1-2 drinks, NOT a dinner.
+- CASUAL RESTAURANTS / TRATTORIAS / BISTROS (€15-45/pp): Neighborhood trattorias, brasseries, bistros, tapas bars, casual lunch spots.
+- UPSCALE RESTAURANTS (€45-120/pp): Fine dining without Michelin stars, hotel restaurants (non-starred), contemporary cuisine.
+- MICHELIN-STARRED: Use established Michelin price floors (1-star min €120, 2-star min €180, 3-star min €250).
+- BREAKFAST (city-dependent): Budget cafés €8-15/pp, mid-range €15-30/pp, luxury hotel €40-80/pp.
+
 ${preferenceContext}
 ${tripIntentsContext}
 ${mustDoPrompt}
