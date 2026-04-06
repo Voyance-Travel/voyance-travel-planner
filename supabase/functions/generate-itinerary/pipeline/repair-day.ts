@@ -71,6 +71,9 @@ export interface RepairDayInput {
   previousHotelName?: string;
   previousHotelAddress?: string;
 
+  // Dawn guard: earliest allowed activity time for this day (HH:MM 24h)
+  earliestStart?: string;
+
   // Locked activities (never remove)
   lockedActivities: StrictActivityMinimal[];
 
@@ -469,6 +472,65 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     repairs.push({ code: FAILURE_CODES.CHRONOLOGY, action: 'sorted_by_time' });
   }
 
+  // --- DAWN GUARD: shift pre-6AM activities forward on non-arrival days ---
+  {
+    const DAWN_LIMIT = 6 * 60; // 06:00 = 360 minutes
+    const earliestAllowed = input.earliestStart
+      ? (parseTimeToMinutes(input.earliestStart) ?? 8 * 60)
+      : 8 * 60; // default 08:00
+
+    // Find the earliest non-flight/transport activity
+    const preDawnActivities: number[] = [];
+    for (let i = 0; i < activities.length; i++) {
+      const act = activities[i];
+      const mins = parseTimeToMinutes(act.startTime || '') ?? null;
+      if (mins === null) continue;
+      if (mins >= DAWN_LIMIT) continue;
+
+      // Skip flight/arrival cards on first day — those are legitimate pre-dawn
+      const cat = (act.category || '').toLowerCase();
+      const title = (act.title || '').toLowerCase();
+      const isFlightOrArrival = cat === 'flight' || (cat === 'transport' && title.includes('airport'));
+      if (isFirstDay && isFlightOrArrival) continue;
+
+      // Skip locked activities
+      if (lockedIds.has(act.id)) continue;
+
+      preDawnActivities.push(i);
+    }
+
+    if (preDawnActivities.length > 0) {
+      // Find the earliest pre-dawn time to compute offset
+      let earliestPreDawn = Infinity;
+      for (const idx of preDawnActivities) {
+        const mins = parseTimeToMinutes(activities[idx].startTime || '') ?? Infinity;
+        if (mins < earliestPreDawn) earliestPreDawn = mins;
+      }
+
+      const shiftAmount = Math.max(0, earliestAllowed - earliestPreDawn);
+      if (shiftAmount > 0) {
+        console.log(`[Repair] DAWN_GUARD: ${preDawnActivities.length} activities before 6:00 AM — shifting ALL activities forward by ${shiftAmount} min (earliest was ${earliestPreDawn} min, target ${earliestAllowed} min)`);
+
+        // Shift ALL activities forward by the same offset to preserve relative spacing
+        for (const act of activities) {
+          const startMins = parseTimeToMinutes(act.startTime || '') ?? null;
+          const endMins = parseTimeToMinutes(act.endTime || '') ?? null;
+          if (startMins !== null) {
+            act.startTime = minutesToHHMM(startMins + shiftAmount);
+          }
+          if (endMins !== null) {
+            act.endTime = minutesToHHMM(endMins + shiftAmount);
+          }
+        }
+
+        repairs.push({
+          code: FAILURE_CODES.CHRONOLOGY,
+          action: `dawn_guard_shifted_${preDawnActivities.length}_activities_by_${shiftAmount}min`,
+        });
+      }
+    }
+  }
+
   // --- 3b. ARRIVAL FLIGHT + AIRPORT TRANSFER (Day 1 only) ---
   if (isFirstDay && arrivalTime24 && !isHotelChange) {
     const arrivalAirportName = input.arrivalAirport || 'the Airport';
@@ -765,6 +827,42 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         action: 'relabeled_meal_for_time',
         before,
         after: act.title,
+      });
+    }
+  }
+
+  // --- 5a-post. NIGHTCAP SEQUENCING: move nightcap/cocktail before dinner to after dinner ---
+  {
+    const NIGHTCAP_KW = /\b(nightcap|after[- ]dinner|evening cocktail|digestif)\b/i;
+    let dinnerIdx = -1;
+    let nightcapIdx = -1;
+
+    for (let i = 0; i < activities.length; i++) {
+      const title = (activities[i].title || '').toLowerCase();
+      const cat = (activities[i].category || '').toLowerCase();
+      if (title.includes('dinner') && (cat.includes('dining') || cat.includes('food') || cat.includes('restaurant'))) {
+        dinnerIdx = i;
+      }
+      if (NIGHTCAP_KW.test(activities[i].title || '')) {
+        nightcapIdx = i;
+      }
+    }
+
+    if (nightcapIdx >= 0 && dinnerIdx >= 0 && nightcapIdx < dinnerIdx && !lockedIds.has(activities[nightcapIdx].id)) {
+      console.log(`[Repair] NIGHTCAP_SWAP: "${activities[nightcapIdx].title}" (idx ${nightcapIdx}) before dinner (idx ${dinnerIdx}) — moving after dinner`);
+      const [nightcap] = activities.splice(nightcapIdx, 1);
+      // dinnerIdx shifted left by 1 after splice
+      const newDinnerIdx = activities.findIndex((a: any) => {
+        const t = (a.title || '').toLowerCase();
+        const c = (a.category || '').toLowerCase();
+        return t.includes('dinner') && (c.includes('dining') || c.includes('food') || c.includes('restaurant'));
+      });
+      activities.splice(newDinnerIdx + 1, 0, nightcap);
+      repairs.push({
+        code: FAILURE_CODES.MEAL_ORDER,
+        action: 'nightcap_moved_after_dinner',
+        before: `index ${nightcapIdx}`,
+        after: `index ${newDinnerIdx + 1}`,
       });
     }
   }
