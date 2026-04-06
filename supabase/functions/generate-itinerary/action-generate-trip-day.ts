@@ -1487,13 +1487,13 @@ async function _handleGenerateTripDayInner(
                       extractRestaurantVenueName(act.location?.name || '');
         if (!venue) return true;
 
-        if (allUsedRestaurants.has(venue)) {
+        if (venueMatchesAny(venue, allUsedRestaurants)) {
           // DUPLICATE FOUND — attempt replacement instead of removal
           const mealType = detectMealTypeFromTitle(act.title || '');
           const fallbackList = FAILSAFE_FALLBACKS[cityKey]?.[mealType] || [];
           const fallback = fallbackList.find(f => {
             const fNorm = extractRestaurantVenueName(f.name);
-            return fNorm && !allUsedRestaurants.has(fNorm);
+            return fNorm && !venueMatchesAny(fNorm, allUsedRestaurants);
           });
 
           if (fallback) {
