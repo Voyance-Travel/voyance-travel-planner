@@ -1,56 +1,58 @@
 
 
-## Fix Meal Type Leakage in Venue Names
+## Fix Garbled/Truncated Day Titles
 
 ### Problem
-AI appends meal-type words ("Breakfast", "Lunch", "Dinner") to `venue_name` fields (e.g., "Pavilhão Carlos Lopes Breakfast"). This propagates to travel routing destinations. Activity titles are clean but the underlying venue data is corrupted.
+Day title "Arrival in Lisbon, the of Seven Hills" — the word "City" is missing. The existing `sanitizeAITextField` (line 195) only catches `in the of` but NOT `, the of` (comma-prefixed). The day title passes through `sanitizeAITextField` at line 253, so fixing the regex there will cover day titles too.
 
-### Plan (1 file)
+### Plan (2 files)
 
-**File: `supabase/functions/generate-itinerary/sanitization.ts`**
+**File 1: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-**Change 1: Add `cleanVenueNameMealLeakage` helper** (before `sanitizeGeneratedDay`, around line 230)
-
+**Change 1: Broaden the "the of" fix** (line 195)
+The current regex only matches `in the of`. Expand to also catch `, the of` and standalone `the of`:
 ```typescript
-const MEAL_TYPE_SUFFIX_RE = /\s+(?:Breakfast|Lunch|Dinner|Brunch|Supper|Dessert|Snack)\s*$/i;
+// ", the of [Noun]" or "the of [Noun]" → ", the City of [Noun]" (with destination context)
+result = result.replace(/,\s*the\s+of\b/gi, ', the City of');
+result = result.replace(/\bin the of\b/gi, 'in ' + destination + ', the City of');
+```
 
-function cleanVenueNameMealLeakage(name: string): string {
-  if (!name || !MEAL_TYPE_SUFFIX_RE.test(name)) return name;
-  const cleaned = name.replace(MEAL_TYPE_SUFFIX_RE, '').trim();
-  if (cleaned.length < 3) return name; // protect names like "Dear Breakfast"
-  console.warn(`VENUE NAME LEAKAGE FIX: "${name}" → "${cleaned}"`);
-  return cleaned;
+**Change 2: Add garbled day title detection + logging** (after line 256, after day.title is set)
+Add validation and cleanup for common garbled patterns in day titles:
+```typescript
+// Garbled day title detection
+const GARBLED_TITLE_PATTERNS = [
+  /\bthe\s+of\b/i,    // missing noun: "the of"
+  /\ba\s+of\b/i,       // missing noun: "a of"
+  /\ban\s+of\b/i,      // missing noun: "an of"
+  /\s{2,}/,            // double spaces (dropped word)
+  /,\s*$/,             // trailing comma
+  /^,/,                // leading comma
+];
+const titleToCheck = day.title;
+for (const p of GARBLED_TITLE_PATTERNS) {
+  if (p.test(titleToCheck)) {
+    console.warn(`GARBLED DAY TITLE: "${titleToCheck}" matched ${p}`);
+    break;
+  }
 }
+day.title = day.title.replace(/\s{2,}/g, ' ').replace(/,\s*$/, '').replace(/^,\s*/, '').trim();
 ```
 
-**Change 2: Apply to venue fields in the activity loop** (after line 281, where `venue_address` is sanitized)
+**File 2: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
 
-Add cleanup for `venue_name` and `restaurant.name`:
-```typescript
-if (act.venue_name) act.venue_name = cleanVenueNameMealLeakage(act.venue_name);
-if (act.restaurant?.name) act.restaurant.name = cleanVenueNameMealLeakage(act.restaurant.name);
+**Change 3: Add day title quality rule** (after line 856, in the OUTPUT QUALITY section)
 ```
-
-**Change 3: Apply to travel routing destinations** (after the activity loop ends, before existing travel routing logic or at the end of `sanitizeGeneratedDay`)
-
-```typescript
-if (Array.isArray(day.travelRouting)) {
-  day.travelRouting.forEach((route: any) => {
-    if (route.destination) route.destination = cleanVenueNameMealLeakage(route.destination);
-    if (route.to) route.to = cleanVenueNameMealLeakage(route.to);
-  });
-}
-```
-
-Also apply to transit activity titles that embed venue names (the "Travel to X Breakfast" pattern) — the existing transit title cleanup on line 304 already strips "Breakfast at" from "Travel to Breakfast at X", but doesn't catch "Travel to X Breakfast". Add after line 308:
-```typescript
-// Strip trailing meal-type from transit destinations
-act.title = act.title.replace(/^((?:Travel|Walk|Metro|Bus|Tram|Taxi|Train|Drive|Ride|Ferry)\s+to\s+.+?)\s+(?:Breakfast|Lunch|Dinner|Brunch)\s*$/i, '$1');
+DAY TITLE RULES:
+- Day titles must be complete, grammatically correct phrases under 60 characters.
+- Every article (the, a, an) must be followed by a noun, never directly by a preposition.
+- BAD: "Arrival in Lisbon, the of Seven Hills" — GOOD: "Arrival in Lisbon, the City of Seven Hills"
 ```
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/sanitization.ts`
+- `supabase/functions/generate-itinerary/sanitization.ts` — broaden "the of" regex fix, add garbled title detection
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add day title quality rule to prompt
 
 ### Verification
-Generate a 4-day Lisbon trip. Confirm no venue_name fields have trailing meal-type words, travel routing is clean, and restaurants named with meal words (e.g., "Dear Breakfast") are preserved.
+Generate a 4-day Lisbon trip. Confirm all day titles are grammatically complete with no "the of" patterns or truncated phrases.
 
