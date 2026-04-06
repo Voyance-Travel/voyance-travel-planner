@@ -679,7 +679,49 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     });
   }
 
-  // Strip phantom midnight hotel entries sequentially from the start of the day
+  // ---- Evening fine-dining deduplication ----
+  // Prevent two fine dining / Michelin restaurants in the same evening
+  if (day.activities && Array.isArray(day.activities)) {
+    const eveningFineDining: { index: number; price: number; title: string }[] = [];
+
+    day.activities.forEach((activity: any, index: number) => {
+      const timeStr = activity.startTime || activity.start_time || activity.time || '';
+      const hour = parseInt((timeStr || '12:00').split(':')[0], 10);
+      if (isNaN(hour) || hour < 18) return; // only evening (6 PM+)
+
+      const title = (activity.title || '').toLowerCase();
+      const category = (activity.category || '').toUpperCase();
+
+      // Resolve price from all field shapes
+      let price = 0;
+      if (activity.cost && typeof activity.cost === 'object' && typeof activity.cost.amount === 'number') price = activity.cost.amount;
+      else if (typeof activity.cost === 'number') price = activity.cost;
+      else if (typeof activity.price_per_person === 'number') price = activity.price_per_person;
+      else if (typeof activity.estimated_price_per_person === 'number') price = activity.estimated_price_per_person;
+
+      const isFineDining =
+        (category === 'DINING' || /dining|restaurant|dinner/i.test(category)) &&
+        (activity.booking_required ||
+         price >= 80 ||
+         /\b(michelin|tasting|fine dining|starred)\b/i.test(title));
+
+      if (isFineDining) {
+        eveningFineDining.push({ index, price, title: activity.title || '' });
+      }
+    });
+
+    if (eveningFineDining.length >= 2) {
+      console.warn(`DOUBLE FINE DINING: Found ${eveningFineDining.length} fine dining activities in evening: ${eveningFineDining.map(f => `"${f.title}" €${f.price}`).join(', ')}. Keeping most expensive.`);
+
+      // Sort by price descending — keep the first (most expensive)
+      eveningFineDining.sort((a, b) => b.price - a.price);
+      const indicesToRemove = new Set(eveningFineDining.slice(1).map(f => f.index));
+
+      day.activities = day.activities.filter((_: any, index: number) => !indicesToRemove.has(index));
+    }
+  }
+
+
   // These are spillover from the previous day or AI hallucinations (e.g. "Return to Hotel" at 12:05 AM on Day 1)
   // Strategy: walk from the start, removing pre-dawn (00:00-04:59) hotel entries until we hit a real activity
   if (day.activities.length > 0) {
