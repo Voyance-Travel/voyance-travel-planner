@@ -546,7 +546,7 @@ const PAID_OVERRIDE_PATTERNS = [
   // Dining / bars
   /\b(?:breakfast|brunch|lunch|dinner|restaurant|café|cafe|coffee|bar|bistro|tapas|food|cocktail|nightcap)\b/i,
   // Ticketed attractions
-  /\b(?:museum|monastery|palace|castle|tower|aquarium|zoo|show|concert|theater|theatre|ticket|admission|entrance|gallery)\b/i,
+  /\b(?:museum|monastery|palace|palácio|castle|castelo|tower|torre|aquarium|zoo|show|concert|theater|theatre|ticket|admission|entrance|gallery)\b/i,
   // Wellness
   /\b(?:spa|wellness|massage|treatment|hammam|thermal|sauna)\b/i,
   // Transport

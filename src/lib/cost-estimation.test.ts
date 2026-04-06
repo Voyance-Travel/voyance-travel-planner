@@ -84,12 +84,19 @@ describe('isLikelyFreePublicVenue', () => {
     })).toBe(false);
   });
 
-  it('excludes ticketed attractions even with free-venue words in description', () => {
+  it('excludes ticketed attractions (castelo) even with free-venue words in description', () => {
     expect(isLikelyFreePublicVenue({
       title: 'Castelo de São Jorge',
       category: 'explore',
       description: 'Historic castle overlooking the park and praça below',
-    })).toBe(false); // "castle" in title triggers paid override
+    })).toBe(false); // "castelo" in title triggers paid override
+  });
+
+  it('excludes palácio (Portuguese palace)', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Palácio Nacional de Sintra',
+      category: 'explore',
+    })).toBe(false);
   });
 
   it('excludes transport', () => {
