@@ -1,58 +1,66 @@
 
 
-## Fix Garbled/Truncated Day Titles
+## Fix Phantom Pricing — Multi-Field Cost Check
 
 ### Problem
-Day title "Arrival in Lisbon, the of Seven Hills" — the word "City" is missing. The existing `sanitizeAITextField` (line 195) only catches `in the of` but NOT `, the of` (comma-prefixed). The day title passes through `sanitizeAITextField` at line 253, so fixing the regex there will cover day titles too.
+"Views at São Pedro de Alcântara" with venue_name "Miradouro de São Pedro de Alcântara" is priced at ~€23/pp despite being a free viewpoint. The `tier1FreePatterns` regex includes `miradouro` and `allTextFields` includes `venue_name` — so the pattern match should work. The real bug is that the **cost entry condition** at line 363 only checks `act.cost.amount`, but the AI sometimes stores pricing in `act.estimatedCost.amount`, `act.estimated_price_per_person`, or `act.price` instead. If `act.cost` is absent, the entire free-venue check is skipped.
 
-### Plan (2 files)
+### Root Cause
+Line 363: `if (act.cost && typeof act.cost === 'object' && act.cost.amount > 0 && act.cost.amount <= 50)`
 
-**File 1: `supabase/functions/generate-itinerary/sanitization.ts`**
+This gate blocks the check entirely when cost lives in a different field. Additionally, even when `act.cost` is zeroed, other cost fields (`estimatedCost`, `price`, `estimated_price_per_person`) are not cleared.
 
-**Change 1: Broaden the "the of" fix** (line 195)
-The current regex only matches `in the of`. Expand to also catch `, the of` and standalone `the of`:
+### Plan (1 file)
+
+**File: `supabase/functions/generate-itinerary/sanitization.ts`**
+
+**Change 1: Broaden cost detection** (replace lines 363-397)
+
+Add a helper to extract cost from any field the AI might use:
 ```typescript
-// ", the of [Noun]" or "the of [Noun]" → ", the City of [Noun]" (with destination context)
-result = result.replace(/,\s*the\s+of\b/gi, ', the City of');
-result = result.replace(/\bin the of\b/gi, 'in ' + destination + ', the City of');
+// Resolve the effective per-person cost from whichever field the AI populated
+const effectiveCost =
+  (act.cost?.amount) ||
+  (act.estimatedCost?.amount) ||
+  (act as any).estimated_price_per_person ||
+  (act as any).price ||
+  0;
+const effectiveCurrency = act.cost?.currency || act.estimatedCost?.currency || 'USD';
 ```
 
-**Change 2: Add garbled day title detection + logging** (after line 256, after day.title is set)
-Add validation and cleanup for common garbled patterns in day titles:
+Change the entry condition from `act.cost && ... act.cost.amount > 0` to `effectiveCost > 0 && effectiveCost <= 50`.
+
+**Change 2: Zero ALL cost fields on free-venue match**
+
+When a tier1 or tier2 free venue is detected, zero every cost representation:
 ```typescript
-// Garbled day title detection
-const GARBLED_TITLE_PATTERNS = [
-  /\bthe\s+of\b/i,    // missing noun: "the of"
-  /\ba\s+of\b/i,       // missing noun: "a of"
-  /\ban\s+of\b/i,      // missing noun: "an of"
-  /\s{2,}/,            // double spaces (dropped word)
-  /,\s*$/,             // trailing comma
-  /^,/,                // leading comma
-];
-const titleToCheck = day.title;
-for (const p of GARBLED_TITLE_PATTERNS) {
-  if (p.test(titleToCheck)) {
-    console.warn(`GARBLED DAY TITLE: "${titleToCheck}" matched ${p}`);
-    break;
+act.cost = { amount: 0, currency: effectiveCurrency };
+if (act.estimatedCost) act.estimatedCost = { amount: 0, currency: effectiveCurrency };
+if ((act as any).estimated_price_per_person !== undefined) (act as any).estimated_price_per_person = 0;
+if ((act as any).price !== undefined) (act as any).price = 0;
+```
+
+**Change 3: Add diagnostic logging** (before the pattern check)
+
+When any priced activity matches a free venue pattern, log it for debugging:
+```typescript
+if (effectiveCost > 0) {
+  const hasAnyPatternMatch = tier1FreePatterns.test(allTextFields) || tier2FreePatterns.test(allTextFields);
+  if (hasAnyPatternMatch) {
+    console.log(`FREE VENUE CHECK: title="${act.title}", venue="${(act as any).venue_name}", category="${act.category}", cost=${effectiveCost}, costField=${act.cost ? 'cost' : act.estimatedCost ? 'estimatedCost' : 'other'}`);
   }
 }
-day.title = day.title.replace(/\s{2,}/g, ' ').replace(/,\s*$/, '').replace(/^,\s*/, '').trim();
 ```
 
-**File 2: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
-
-**Change 3: Add day title quality rule** (after line 856, in the OUTPUT QUALITY section)
-```
-DAY TITLE RULES:
-- Day titles must be complete, grammatically correct phrases under 60 characters.
-- Every article (the, a, an) must be followed by a noun, never directly by a preposition.
-- BAD: "Arrival in Lisbon, the of Seven Hills" — GOOD: "Arrival in Lisbon, the City of Seven Hills"
-```
+Also apply the same multi-field zeroing to the always-free logistics check at lines 350-355.
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/sanitization.ts` — broaden "the of" regex fix, add garbled title detection
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add day title quality rule to prompt
+- `supabase/functions/generate-itinerary/sanitization.ts` — broaden cost detection to all fields, zero all cost fields on free-venue match, add diagnostic logging
 
 ### Verification
-Generate a 4-day Lisbon trip. Confirm all day titles are grammatically complete with no "the of" patterns or truncated phrases.
+Generate a 4-day Lisbon trip. Confirm:
+- "Miradouro" in venue_name (but not title) triggers free pricing
+- All cost fields (`cost`, `estimatedCost`, `price`, `estimated_price_per_person`) are zeroed
+- Museums, tours, and `booking_required` activities retain prices
+- Console shows "FREE VENUE CHECK" logs
 
