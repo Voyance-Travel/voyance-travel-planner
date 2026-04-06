@@ -258,6 +258,24 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
   day.title = cleanTitle || cleanTheme || `Day ${dayNumber}`;
   day.theme = cleanTheme || cleanTitle || day.title;
 
+  // Garbled day title detection and cleanup
+  const GARBLED_TITLE_PATTERNS = [
+    /\bthe\s+of\b/i,
+    /\ba\s+of\b/i,
+    /\ban\s+of\b/i,
+    /\s{2,}/,
+    /,\s*$/,
+    /^,/,
+  ];
+  const titleToCheck = day.title;
+  for (const p of GARBLED_TITLE_PATTERNS) {
+    if (p.test(titleToCheck)) {
+      console.warn(`GARBLED DAY TITLE: "${titleToCheck}" matched ${p}`);
+      break;
+    }
+  }
+  day.title = day.title.replace(/\s{2,}/g, ' ').replace(/,\s*$/, '').replace(/^,\s*/, '').trim();
+
   if (day.name) {
     day.name = sanitizeAITextField(day.name, destination);
   }
