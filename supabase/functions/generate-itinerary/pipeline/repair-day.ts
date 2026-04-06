@@ -2617,6 +2617,15 @@ function repairBookends(
         });
         if (checkoutIdx >= 0 && checkInIdx > checkoutIdx && i >= checkoutIdx && i < checkInIdx) continue;
       }
+      // On Day 1, suppress freshen-up injection before check-in
+      if (isFirstDay) {
+        const day1CiIdx = activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+        });
+        if (day1CiIdx >= 0 && i < day1CiIdx) continue;
+        if (day1CiIdx < 0) continue; // No check-in found at all on Day 1 — skip all freshen-ups
+      }
       const card = makeAccomCard('Freshen up at', activities[i].endTime || offset(activities[i].startTime || '14:00', 15), 30);
       activities.splice(i + 1, 0, card);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_freshen_up' });
