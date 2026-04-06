@@ -948,6 +948,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
 
       const coHotelName = previousHotelName || 'Your Hotel';
+      const coHotelAddress = input.previousHotelAddress || '';
       const checkoutStartMin = 11 * 60;
       const checkoutStart = minutesToHHMM(checkoutStartMin);
       const checkoutEnd = minutesToHHMM(checkoutStartMin + 30);
@@ -958,7 +959,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         description: `Check out from ${coHotelName}. Store luggage if needed before continuing your day.`,
         startTime: checkoutStart, endTime: checkoutEnd,
         category: 'accommodation', type: 'accommodation',
-        location: { name: coHotelName, address: '' },
+        location: { name: coHotelName, address: coHotelAddress },
         cost: { amount: 0, currency: 'USD' },
         bookingRequired: false, isLocked: false, durationMinutes: 30,
         source: 'repair-checkout-guarantee',
