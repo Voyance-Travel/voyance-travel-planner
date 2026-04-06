@@ -294,10 +294,11 @@ function parseLocation(raw: unknown): ParsedLocation | undefined {
  * Parse cost from various formats
  */
 function parseCost(raw: unknown): ParsedCost | undefined {
-  if (!raw) return undefined;
+  // CRITICAL: numeric 0 is a valid cost (free venue) — do NOT treat it as falsy
+  if (raw === null || raw === undefined || raw === '') return undefined;
   
   if (typeof raw === 'number') {
-    return { amount: raw };
+    return isNaN(raw) ? undefined : { amount: raw };
   }
   
   if (typeof raw === 'object' && raw !== null) {
