@@ -203,6 +203,7 @@ function AnimatedRoutes() {
         
         {/* Public Share Routes */}
         <Route path="/share/:shareToken" element={<TripShare />} />
+        <Route path="/trip-share/:token" element={<ConsumerTripShare />} />
         <Route path="/intake/:intakeToken" element={<ClientIntakeForm />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         
