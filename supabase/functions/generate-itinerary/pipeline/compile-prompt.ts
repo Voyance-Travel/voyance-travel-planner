@@ -1012,6 +1012,26 @@ ${(() => {
   return `🚫 HARD RESTAURANT BLOCKLIST — ZERO TOLERANCE:\nThese restaurants were ALREADY used on previous days. Do NOT use ANY of them again, not even under a slightly different name:\n${usedList.join(', ')}\nEvery breakfast, lunch, and dinner MUST be at a DIFFERENT restaurant than all previous days. No exceptions.`;
 })()}
 
+${(() => {
+  if (!isLastDay) return '';
+  const usedList = paramUsedRestaurants || [];
+  if (usedList.length === 0) return '';
+  return `🛫 DEPARTURE DAY RESTAURANT RULES — THIS IS THE FINAL DAY:
+The traveler has already eaten at these restaurants on prior days: ${usedList.join(', ')}
+You MUST choose restaurants that are NOT in the above list.
+For the departure day lunch specifically, here are SAFE options that are unlikely to have been used:
+  • Ponto Final (Cacilhas, across the river)
+  • Café de São Bento (steakhouse near Rato)
+  • O Velho Eurico (traditional Alfama)
+  • Mercado da Ribeira / Time Out Market (food hall)
+  • Solar dos Presuntos (traditional Portuguese)
+  • A Cevicheria (Príncipe Real)
+  • Tasca do Chico (Alfama fado restaurant)
+  • Cervejaria Trindade (historic beer hall)
+If your first restaurant choice matches ANY name in the used list above, REPLACE it immediately with one from the safe options list.
+DO NOT use generic placeholders like "a bistro" or "a café" — always use a specific real restaurant name.`;
+})()}
+
 CRITICAL REMINDERS:
 1. ${isFullDay ? `This is a FULL DAY: ${dayMealPolicy?.requiredMeals?.join(' + ') ?? 'breakfast + lunch + dinner'} + 3 paid activities + 2 free activities + transit between all stops + evening activity + next morning preview. Fill EVERY hour.` : dayMealPolicy && !isFirstDay && !isLastDay ? `This is a ${dayMealPolicy.dayMode.replace(/_/g, ' ')} day. Required meals: ${dayMealPolicy.requiredMeals.length > 0 ? dayMealPolicy.requiredMeals.join(', ') : 'none'}. Do NOT add extra meals beyond what the meal policy specifies.` : `${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} scheduled sightseeing activities for this ${isFirstDay ? 'arrival' : 'departure'} day.`}
 2. Check the archetype's avoid list. If it says "no spa", there are ZERO spa activities.

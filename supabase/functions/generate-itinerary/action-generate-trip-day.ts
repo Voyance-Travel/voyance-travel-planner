@@ -348,7 +348,9 @@ async function _handleGenerateTripDayInner(
   console.log(`Type: ${typeof tripMeta.used_restaurants}, IsArray: ${Array.isArray(tripMeta.used_restaurants)}`);
   const allRestaurantParams = Object.keys(tripMeta).filter(k => /restaurant|used|block|previous|dining/i.test(k));
   console.log('All restaurant-related metadata keys:', JSON.stringify(allRestaurantParams.map(k => ({ key: k, count: Array.isArray(tripMeta[k]) ? (tripMeta[k] as any[]).length : 'N/A' }))));
-  
+  if (dayNumber === totalDays) {
+    console.log(`DEPARTURE DAY GENERATION: usedRestaurants contains ${usedRestaurants.length} entries:`, JSON.stringify(usedRestaurants));
+  }
   // Get the pool for this day's city
   const dayCity = cityInfo?.cityName || destination || '';
   let restaurantPool: any[] = restaurantPoolByCity[dayCity] || [];
@@ -1232,6 +1234,40 @@ async function _handleGenerateTripDayInner(
         .eq('trip_id', tripId)
         .eq('city_name', currentCityInfo.cityName);
       console.log(`[generate-trip-day] City "${currentCityInfo.cityName}" generation complete`);
+    }
+  }
+
+  // ── CROSS-DAY PRICE CONSISTENCY CHECK ──
+  // If same restaurant appears on multiple days, normalize to higher price
+  if (updatedDays.length > 1) {
+    const restaurantPrices = new Map<string, { price: number; dayIndex: number }>();
+    const { extractRestaurantVenueName: extractVenuePrice } = await import('./generation-utils.ts');
+    const MEAL_RE_PRICE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+
+    for (let di = 0; di < updatedDays.length; di++) {
+      const day = updatedDays[di];
+      if (!Array.isArray(day.activities)) continue;
+      for (const act of day.activities) {
+        const cat = (act.category || '').toLowerCase();
+        const isDining = cat === 'dining' || MEAL_RE_PRICE.test(act.title || '');
+        if (!isDining) continue;
+        const venue = extractVenuePrice(act.title || '') ||
+                      extractVenuePrice(act.venue_name || '') ||
+                      extractVenuePrice(act.restaurant?.name || '') ||
+                      extractVenuePrice(act.location?.name || '');
+        if (!venue) continue;
+        const price = act.estimatedCost?.amount ?? act.estimated_price_per_person ?? act.price ?? 0;
+        if (restaurantPrices.has(venue)) {
+          const existing = restaurantPrices.get(venue)!;
+          console.warn(`PRICE INCONSISTENCY: "${venue}" is €${existing.price}/pp on Day ${existing.dayIndex + 1} but €${price}/pp on Day ${di + 1}. Using higher price €${Math.max(existing.price, price)}.`);
+          const consistentPrice = Math.max(existing.price, price);
+          if (act.estimatedCost) act.estimatedCost.amount = consistentPrice;
+          if (act.estimated_price_per_person !== undefined) act.estimated_price_per_person = consistentPrice;
+          if (act.price !== undefined) act.price = consistentPrice;
+        } else {
+          restaurantPrices.set(venue, { price, dayIndex: di });
+        }
+      }
     }
   }
 
