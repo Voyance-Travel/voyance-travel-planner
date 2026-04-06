@@ -4,7 +4,7 @@
  */
 
 import { type ActionContext, verifyTripAccess, okJson, errorJson } from './action-types.ts';
-import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS, FINE_DINING_MIN_PRICE_DEFAULT, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR } from './sanitization.ts';
+import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS, FINE_DINING_MIN_PRICE_DEFAULT, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR, KNOWN_TICKETED_ATTRACTIONS } from './sanitization.ts';
 
 export async function handleRepairTripCosts(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
@@ -146,6 +146,25 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
           notes: '[Free venue - Tier 1]',
         });
         continue;
+      }
+
+      // Tier 1b: Known ticketed attraction override — restore min price if zeroed
+      const titleLower = title.toLowerCase();
+      const venueNameLower2 = (activity.venue_name || '').toLowerCase();
+      const sortedTicketedKeys = Object.keys(KNOWN_TICKETED_ATTRACTIONS).sort((a, b) => b.length - a.length);
+      let ticketedMatch: { key: string; minPrice: number } | null = null;
+      for (const key of sortedTicketedKeys) {
+        if (titleLower.includes(key) || venueNameLower2.includes(key)) {
+          ticketedMatch = { key, minPrice: KNOWN_TICKETED_ATTRACTIONS[key] };
+          break;
+        }
+      }
+      if (ticketedMatch && costPerPerson < ticketedMatch.minPrice) {
+        console.warn(`[repair-trip-costs] TICKETED ATTRACTION FIX: "${title}" at $${costPerPerson} → raised to $${ticketedMatch.minPrice} (${ticketedMatch.key})`);
+        costPerPerson = ticketedMatch.minPrice;
+        source = 'ticketed_attraction_floor';
+        wasCorrected = true;
+        corrected++;
       }
 
       let ref: any = null;

@@ -20,7 +20,84 @@ export const ALWAYS_FREE_VENUE_PATTERNS = /\b(?:park|garden|jardim|viewpoint|mir
 export const TIER2_FREE_VENUE_PATTERNS = /\b(?:bridge|fountain|monument|memorial|statue|arch|gate|market|promenade|boardwalk|trail|path|pier|dock|wharf|embankment)\b/i;
 
 /** Paid-experience exclusion — don't force-free if any of these match */
-const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|aquarium|zoo|monastery|mosteiro)\b/i;
+const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|aquarium|zoo|monastery|mosteiro|colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena\s+floor)\b/i;
+
+// =============================================================================
+// KNOWN TICKETED ATTRACTIONS — minimum admission prices (EUR/USD) by venue
+// =============================================================================
+
+/** Known ticketed attractions that should NEVER be Free. Maps lowercase venue substring → min price per person. */
+export const KNOWN_TICKETED_ATTRACTIONS: Record<string, number> = {
+  // Rome
+  'colosseum arena floor': 24,
+  'colosseum arena': 24,
+  'colosseum': 16,
+  'coliseum': 16,
+  'vatican museums': 17,
+  'vatican museum': 17,
+  'sistine chapel': 17,
+  'borghese gallery': 13,
+  'galleria borghese': 13,
+  "castel sant'angelo": 10,
+  'castel sant angelo': 10,
+  "st peter's dome": 8,
+  'st peters dome': 8,
+  'palatine hill': 16,
+  'roman forum': 16,
+  // Berlin
+  'pergamon museum': 12,
+  'neues museum': 12,
+  'berlin tv tower': 22,
+  'fernsehturm': 22,
+  'jewish museum berlin': 8,
+  'charlottenburg palace': 12,
+  // Lisbon
+  'jerónimos monastery': 10,
+  'jeronimos monastery': 10,
+  'belém tower': 8,
+  'belem tower': 8,
+  'torre de belém': 8,
+  'torre de belem': 8,
+  // Paris
+  'louvre': 17,
+  'musée du louvre': 17,
+  'eiffel tower': 11,
+  'tour eiffel': 11,
+  'versailles': 18,
+  'palace of versailles': 18,
+  "musée d'orsay": 14,
+  'musee d orsay': 14,
+  'arc de triomphe': 13,
+  'sainte-chapelle': 11,
+  'sainte chapelle': 11,
+  // Barcelona
+  'sagrada familia': 26,
+  'la sagrada familia': 26,
+  'park güell': 10,
+  'park guell': 10,
+  'casa batlló': 35,
+  'casa batllo': 35,
+  'casa milà': 25,
+  'casa mila': 25,
+  'la pedrera': 25,
+  // London
+  'tower of london': 29,
+  'westminster abbey': 25,
+  "st paul's cathedral": 21,
+  'st pauls cathedral': 21,
+  'kew gardens': 15,
+  // Amsterdam
+  'rijksmuseum': 22,
+  'van gogh museum': 20,
+  'anne frank house': 16,
+  // Prague
+  'prague castle': 14,
+  'st vitus cathedral': 14,
+  // Vienna
+  'schönbrunn palace': 22,
+  'schonbrunn palace': 22,
+  'belvedere palace': 16,
+};
 
 // =============================================================================
 // MICHELIN / FINE DINING PRICE FLOOR CONSTANTS — shared with action-repair-costs
@@ -440,6 +517,61 @@ function zeroActivityCostFields(act: Record<string, any>): void {
   act.price = 0;
   act.price_per_person = 0;
   act.is_free = true;
+}
+
+// =============================================================================
+// TICKETED ATTRACTION PRICING ENFORCEMENT
+// =============================================================================
+
+/**
+ * Enforce minimum pricing for known ticketed attractions.
+ * Call AFTER checkAndApplyFreeVenue (to restore incorrectly zeroed prices)
+ * and BEFORE enforceMichelinPriceFloor (which handles dining only).
+ * Returns true if a price was restored.
+ */
+export function enforceTicketedAttractionPricing(activity: Record<string, any>, logPrefix = 'SANITIZE'): boolean {
+  // Resolve current price from all field shapes
+  const resolvePrice = (): number => {
+    if (activity.cost && typeof activity.cost === 'object' && typeof activity.cost.amount === 'number') return activity.cost.amount;
+    if (typeof activity.cost === 'number') return activity.cost;
+    if (activity.estimatedCost && typeof activity.estimatedCost === 'object' && typeof activity.estimatedCost.amount === 'number') return activity.estimatedCost.amount;
+    if (typeof activity.estimatedCost === 'number') return activity.estimatedCost;
+    if (typeof activity.estimated_cost === 'number') return activity.estimated_cost;
+    if (typeof activity.price_per_person === 'number') return activity.price_per_person;
+    if (typeof activity.estimated_price_per_person === 'number') return activity.estimated_price_per_person;
+    if (typeof activity.price === 'number') return activity.price;
+    return 0;
+  };
+
+  const currentPrice = resolvePrice();
+  if (currentPrice > 0) return false; // Already has a price, don't override
+
+  const title = (activity.title || activity.name || '').toLowerCase();
+  const venueName = (activity.venue_name || activity.restaurant?.name || '').toLowerCase();
+
+  // Check against known ticketed attractions (longest keys first for greedy match)
+  const sortedKeys = Object.keys(KNOWN_TICKETED_ATTRACTIONS).sort((a, b) => b.length - a.length);
+  for (const key of sortedKeys) {
+    if (title.includes(key) || venueName.includes(key)) {
+      const minPrice = KNOWN_TICKETED_ATTRACTIONS[key];
+      console.warn(`TICKETED ATTRACTION FIX [${logPrefix}]: "${activity.title}" was Free but "${key}" is a ticketed attraction (min €${minPrice}). Restoring price.`);
+      writePriceToAllFields(activity, minPrice);
+      activity.is_free = false;
+      return true;
+    }
+  }
+
+  // Heuristic warning: booking_required + free = suspicious
+  const bookingRequired = activity.booking_required ||
+    /booking required/i.test(activity.description || '');
+  if (bookingRequired && currentPrice === 0) {
+    const cat = (activity.category || '').toUpperCase();
+    if (['EXPLORE', 'ACTIVITY', 'SIGHTSEEING', 'CULTURAL'].includes(cat)) {
+      console.warn(`TICKETED ATTRACTION WARNING [${logPrefix}]: "${activity.title}" has booking_required=true but is Free. Likely needs a price.`);
+    }
+  }
+
+  return false;
 }
 
 // =============================================================================
@@ -910,6 +1042,9 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
 
       // Zero out pricing for obviously free activity types — uses shared helper
       checkAndApplyFreeVenue(act as any, 'sanitize');
+
+      // Restore pricing for known ticketed attractions incorrectly zeroed
+      enforceTicketedAttractionPricing(act as any, 'SANITIZE');
 
       // ---- Dining underpricing floor ----
       const isDining = /dining|restaurant|breakfast|lunch|dinner|brunch/i.test((act.category || '') + ' ' + (act.title || ''));
