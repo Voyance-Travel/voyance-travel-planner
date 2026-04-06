@@ -619,17 +619,13 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           floor = 120; reason = 'Fine dining / tasting menu';
         }
 
-        // Known Michelin-starred / fine dining — tiered by actual price range
-        const knownMichelinHigh = /\b(belcanto|feitoria|fifty\s*seconds|fortaleza\s*do\s*guincho)\b/i;
-        const knownMichelinMid = /\b(alma|eleven|epur|cura|loco|eneko|100\s*maneiras|cem\s*maneiras|casa\s*da\s*comida|pedro\s*lemos|antiqvvm|largo\s*do\s*pa[çc]o|euskalduna|casa\s*de\s*ch[áa]\s*da\s*boa\s*nova|boa\s*nova)\b/i;
-        const knownUpscale = /\b(il\s*gallo|ceia|enoteca|sommelier|mini\s*bar|sacramento|solar\s*dos\s*presuntos|the\s*yeatman|yeatman)\b/i;
-
-        if (floor < 180 && knownMichelinHigh.test(combined)) {
-          floor = 180; reason = 'Known top-tier Michelin restaurant';
-        } else if (floor < 120 && knownMichelinMid.test(combined)) {
-          floor = 120; reason = 'Known Michelin-starred restaurant';
-        } else if (floor < 60 && knownUpscale.test(combined)) {
-          floor = 60; reason = 'Known upscale restaurant';
+        // Known Michelin-starred / fine dining — use shared constants
+        if (floor < MICHELIN_FLOOR.high && KNOWN_MICHELIN_HIGH.test(combined)) {
+          floor = MICHELIN_FLOOR.high; reason = 'Known top-tier Michelin restaurant';
+        } else if (floor < MICHELIN_FLOOR.mid && KNOWN_MICHELIN_MID.test(combined)) {
+          floor = MICHELIN_FLOOR.mid; reason = 'Known Michelin-starred restaurant';
+        } else if (floor < MICHELIN_FLOOR.upscale && KNOWN_UPSCALE.test(combined)) {
+          floor = MICHELIN_FLOOR.upscale; reason = 'Known upscale restaurant';
         }
 
         // Famous seafood
