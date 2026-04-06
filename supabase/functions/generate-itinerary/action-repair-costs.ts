@@ -4,7 +4,7 @@
  */
 
 import { type ActionContext, verifyTripAccess, okJson, errorJson } from './action-types.ts';
-import { ALWAYS_FREE_VENUE_PATTERNS } from './sanitization.ts';
+import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR } from './sanitization.ts';
 
 export async function handleRepairTripCosts(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
@@ -176,6 +176,48 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       }
 
       if (wasCorrected) corrected++;
+
+      // ── Michelin / fine dining floor enforcement ──
+      // Ensures activity_costs table respects the same minimums as the JSONB data
+      const combinedText = [
+        title,
+        activity.description || '',
+        activity.venue_name || '',
+        activity.place_name || '',
+        (activity as any).restaurant?.name || '',
+        (activity as any).restaurant?.description || '',
+      ].join(' ');
+
+      let michelinFloor = 0;
+      let michelinReason = '';
+
+      // Check star-count indicators in text
+      if (/michelin\s*3|3[\s-]*star/i.test(combinedText)) {
+        michelinFloor = 250; michelinReason = 'Michelin 3-star';
+      } else if (/michelin\s*2|2[\s-]*star/i.test(combinedText)) {
+        michelinFloor = MICHELIN_FLOOR.high; michelinReason = 'Michelin 2-star';
+      } else if (/michelin\s*1|1[\s-]*star|michelin[\s-]*starred/i.test(combinedText)) {
+        michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Michelin 1-star';
+      } else if (/tasting menu|fine dining|haute cuisine|degustation|omakase/i.test(combinedText)) {
+        michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Fine dining / tasting menu';
+      }
+
+      // Known restaurant name overrides
+      if (michelinFloor < MICHELIN_FLOOR.high && KNOWN_MICHELIN_HIGH.test(combinedText)) {
+        michelinFloor = MICHELIN_FLOOR.high; michelinReason = 'Known top-tier Michelin restaurant';
+      } else if (michelinFloor < MICHELIN_FLOOR.mid && KNOWN_MICHELIN_MID.test(combinedText)) {
+        michelinFloor = MICHELIN_FLOOR.mid; michelinReason = 'Known Michelin-starred restaurant';
+      } else if (michelinFloor < MICHELIN_FLOOR.upscale && KNOWN_UPSCALE.test(combinedText)) {
+        michelinFloor = MICHELIN_FLOOR.upscale; michelinReason = 'Known upscale restaurant';
+      }
+
+      if (michelinFloor > 0 && costPerPerson < michelinFloor) {
+        console.warn(`[repair-trip-costs] MICHELIN PRICE FLOOR: "${title}" at €${costPerPerson} → raised to €${michelinFloor} (${michelinReason})`);
+        costPerPerson = michelinFloor;
+        source = 'michelin_floor';
+        wasCorrected = true;
+        corrected++;
+      }
 
       rows.push({
         trip_id: tripId,
