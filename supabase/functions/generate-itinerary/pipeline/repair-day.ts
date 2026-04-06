@@ -2551,7 +2551,14 @@ function repairBookends(
   // accommodation cards at the start of the day that aren't check-in/checkout.
   // The traveler woke up at the hotel; "Return to Hotel" / "Freshen Up" as the
   // first activity is nonsensical.
-  if (!isFirstDay && !isDepartureDay) {
+  if (!isDepartureDay) {
+    // On Day 1, find the check-in index so we only strip phantoms BEFORE check-in
+    const day1CheckInIdx = isFirstDay
+      ? activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+        })
+      : -1;
     let stripped = true;
     while (stripped) {
       stripped = false;
@@ -2559,7 +2566,9 @@ function repairBookends(
       const firstRealIdx = activities.findIndex(a => !isTransport(a));
       if (firstRealIdx >= 0) {
         const first = activities[firstRealIdx];
-        if (isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first)) {
+        if (isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first) &&
+            // On Day 1, only strip phantoms that appear before check-in
+            (!isFirstDay || (day1CheckInIdx >= 0 && firstRealIdx < day1CheckInIdx))) {
           // On hotel-change days, only strip pre-dawn phantoms (before 06:00)
           // to preserve legitimate mid-day check-in/checkout activities
           if (isHotelChange) {
@@ -2608,6 +2617,15 @@ function repairBookends(
         });
         if (checkoutIdx >= 0 && checkInIdx > checkoutIdx && i >= checkoutIdx && i < checkInIdx) continue;
       }
+      // On Day 1, suppress freshen-up injection before check-in
+      if (isFirstDay) {
+        const day1CiIdx = activities.findIndex((a: any) => {
+          const t = (a.title || '').toLowerCase();
+          return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+        });
+        if (day1CiIdx >= 0 && i < day1CiIdx) continue;
+        if (day1CiIdx < 0) continue; // No check-in found at all on Day 1 — skip all freshen-ups
+      }
       const card = makeAccomCard('Freshen up at', activities[i].endTime || offset(activities[i].startTime || '14:00', 15), 30);
       activities.splice(i + 1, 0, card);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_freshen_up' });
@@ -2644,7 +2662,8 @@ function repairBookends(
     const dinnerIdx = activities.findIndex(a => (a.category === 'dining') && /\b(dinner|evening meal)\b/i.test(a.title || ''));
     if (lunchIdx >= 0 && dinnerIdx > lunchIdx) {
       // On first day, skip mid-day hotel return if lunch is before check-in
-      const skipBecausePreCheckIn = isFirstDay && checkInIdx >= 0 && lunchIdx < checkInIdx;
+      // On first day, skip mid-day hotel return if lunch is before check-in OR if no check-in exists at all
+      const skipBecausePreCheckIn = isFirstDay && (checkInIdx < 0 || lunchIdx < checkInIdx);
       // On hotel-change days, skip if the mid-day return would fall between checkout and check-in
       const lunchMin = parseTimeToMinutes(activities[lunchIdx]?.startTime || '') ?? 0;
       const skipBecauseHotelChange = isHotelChange && lunchMin >= hotelChangeCheckoutMin && lunchMin < hotelChangeCheckInMin;
