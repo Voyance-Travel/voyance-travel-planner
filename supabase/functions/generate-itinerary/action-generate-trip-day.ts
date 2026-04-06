@@ -1380,7 +1380,7 @@ async function _handleGenerateTripDayInner(
   // Runs on ALL completions (including last day) to catch any duplicates.
   // Instead of blindly removing duplicates, attempts a fallback replacement first.
   if (updatedDays.length > 1) {
-    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
+    const { extractRestaurantVenueName, venueMatchesAny } = await import('./generation-utils.ts');
     const MEAL_RE_FAILSAFE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
     const PRIMARY_MEAL_RE = /\b(?:breakfast|lunch|dinner|brunch)\b/i;
     const allUsedRestaurants = new Set<string>();
