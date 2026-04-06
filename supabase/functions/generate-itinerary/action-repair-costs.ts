@@ -4,6 +4,7 @@
  */
 
 import { type ActionContext, verifyTripAccess, okJson, errorJson } from './action-types.ts';
+import { ALWAYS_FREE_VENUE_PATTERNS } from './sanitization.ts';
 
 export async function handleRepairTripCosts(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
