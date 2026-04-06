@@ -1443,6 +1443,77 @@ async function _handleGenerateTripDayInner(
           { name: 'Can Paixano', neighborhood: 'Barceloneta', address: 'C/ de la Reina Cristina 7, Barcelona' },
         ],
       },
+      'paris': {
+        breakfast: [
+          { name: 'Café de Flore', neighborhood: 'Saint-Germain', address: '172 Bd Saint-Germain, 75006 Paris' },
+          { name: 'Claus Paris', neighborhood: 'Louvre', address: '14 Rue Jean-Jacques Rousseau, 75001 Paris' },
+          { name: 'Ob-La-Di', neighborhood: 'Marais', address: '54 Rue de Saintonge, 75003 Paris' },
+          { name: 'Holybelly 5', neighborhood: 'Canal Saint-Martin', address: '5 Rue Lucien Sampaix, 75010 Paris' },
+          { name: 'Café Kitsuné', neighborhood: 'Palais Royal', address: '2 Rue de Richelieu, 75001 Paris' },
+          { name: 'Season', neighborhood: 'Opéra', address: '1 Rue Charles V, 75004 Paris' },
+        ],
+        lunch: [
+          { name: 'Chez Janou', neighborhood: 'Marais', address: '2 Rue Roger Verlomme, 75003 Paris' },
+          { name: 'Bouillon Chartier', neighborhood: 'Grands Boulevards', address: '7 Rue du Faubourg Montmartre, 75009 Paris' },
+          { name: 'Le Comptoir du Panthéon', neighborhood: 'Latin Quarter', address: '5 Rue Soufflot, 75005 Paris' },
+        ],
+        dinner: [
+          { name: 'Le Bouillon Julien', neighborhood: 'Strasbourg-Saint-Denis', address: '16 Rue du Faubourg Saint-Denis, 75010 Paris' },
+          { name: 'Chez L\'Ami Jean', neighborhood: 'Invalides', address: '27 Rue Malar, 75007 Paris' },
+          { name: 'Le Baratin', neighborhood: 'Belleville', address: '3 Rue Jouye-Rouve, 75020 Paris' },
+        ],
+      },
+      'berlin': {
+        breakfast: [
+          { name: 'House of Small Wonder', neighborhood: 'Mitte', address: 'Johannisstraße 20, 10117 Berlin' },
+          { name: 'Two and Two', neighborhood: 'Kreuzberg', address: 'Graefestraße 2, 10967 Berlin' },
+          { name: 'Father Carpenter', neighborhood: 'Mitte', address: 'Münzstraße 21, 10178 Berlin' },
+          { name: 'Café Fleury', neighborhood: 'Mitte', address: 'Weinbergsweg 20, 10119 Berlin' },
+          { name: 'Benedict Berlin', neighborhood: 'Charlottenburg', address: 'Uhlandstraße 49, 10719 Berlin' },
+        ],
+        lunch: [
+          { name: 'Monsieur Vuong', neighborhood: 'Mitte', address: 'Alte Schönhauser Str. 46, 10119 Berlin' },
+          { name: 'Markthalle Neun', neighborhood: 'Kreuzberg', address: 'Eisenbahnstraße 42/43, 10997 Berlin' },
+        ],
+        dinner: [
+          { name: 'Nobelhart & Schmutzig', neighborhood: 'Kreuzberg', address: 'Friedrichstraße 218, 10969 Berlin' },
+          { name: 'Eins44', neighborhood: 'Neukölln', address: 'Elbestraße 28/29, 12045 Berlin' },
+        ],
+      },
+      'rome': {
+        breakfast: [
+          { name: 'Sciascia Caffè', neighborhood: 'Prati', address: 'Via Fabio Massimo 80, 00192 Roma' },
+          { name: 'Roscioli Caffè', neighborhood: 'Centro Storico', address: 'Piazza Benedetto Cairoli 16, 00186 Roma' },
+          { name: 'Faro - Luminaries of Coffee', neighborhood: 'Trastevere', address: 'Via Piave 55, 00185 Roma' },
+          { name: 'Antico Caffè Greco', neighborhood: 'Spagna', address: 'Via dei Condotti 86, 00187 Roma' },
+          { name: 'Bar del Fico', neighborhood: 'Navona', address: 'Piazza del Fico 26, 00186 Roma' },
+        ],
+        lunch: [
+          { name: 'Tonnarello', neighborhood: 'Trastevere', address: 'Via della Paglia 35, 00153 Roma' },
+          { name: 'Armando al Pantheon', neighborhood: 'Pantheon', address: 'Salita dei Crescenzi 31, 00186 Roma' },
+        ],
+        dinner: [
+          { name: 'Roscioli', neighborhood: 'Campo de\' Fiori', address: 'Via dei Giubbonari 21, 00186 Roma' },
+          { name: 'Da Enzo al 29', neighborhood: 'Trastevere', address: 'Via dei Vascellari 29, 00153 Roma' },
+        ],
+      },
+      'london': {
+        breakfast: [
+          { name: 'Dishoom King\'s Cross', neighborhood: 'King\'s Cross', address: '5 Stable St, London N1C 4AB' },
+          { name: 'The Wolseley', neighborhood: 'Mayfair', address: '160 Piccadilly, London W1J 9EB' },
+          { name: 'Caravan Bankside', neighborhood: 'Southwark', address: '30 Great Guildford St, London SE1 0HS' },
+          { name: 'Granger & Co', neighborhood: 'Notting Hill', address: '175 Westbourne Grove, London W11 2SB' },
+          { name: 'Buns From Home', neighborhood: 'Covent Garden', address: '31 The Market, London WC2E 8RD' },
+        ],
+        lunch: [
+          { name: 'Padella', neighborhood: 'Borough', address: '6 Southwark St, London SE1 1TQ' },
+          { name: 'Bao Soho', neighborhood: 'Soho', address: '53 Lexington St, London W1F 9AS' },
+        ],
+        dinner: [
+          { name: 'Brat', neighborhood: 'Shoreditch', address: '4 Redchurch St, London E1 6JL' },
+          { name: 'The Palomar', neighborhood: 'Soho', address: '34 Rupert St, London W1D 6DN' },
+        ],
+      },
     };
 
     // Detect meal type from title
@@ -1458,6 +1529,10 @@ async function _handleGenerateTripDayInner(
       'lisbon': ['lisboa', 'lisbonne', 'lissabon'],
       'porto': ['oporto'],
       'barcelona': ['barcelone', 'barcellona'],
+      'paris': ['paris'],
+      'berlin': ['berlin'],
+      'rome': ['roma', 'rom'],
+      'london': ['londres'],
     };
 
     // Resolve city key for fallback lookup
