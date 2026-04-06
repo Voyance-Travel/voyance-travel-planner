@@ -1,41 +1,37 @@
 
 
-## Fix Departure-Day Restaurant Repetition + Price Consistency
+## Fix Missing Meal When Cross-Day Dedup Strips a Restaurant + Orphaned Travel Routing
 
-### Analysis
+### Problem
 
-The departure day (typically Day 4) consistently fails on restaurant uniqueness. The `usedRestaurants` blocklist is passed correctly, but the AI ignores it on the final day. The existing prompt has generic uniqueness rules but nothing departure-day-specific. The fix adds two targeted reinforcements.
+Two dedup passes exist in `action-generate-trip-day.ts`:
+1. **Post-generation dedup** (lines 883-932): Has primary meal protection (keeps duplicates rather than removing meals) and attempts pool replacement — but when pool is exhausted, primary meals are kept as duplicates.
+2. **Failsafe dedup** (lines 1274-1317): Runs on trip completion but has NO primary meal protection and NO replacement logic — it blindly removes all duplicates, causing missing meals and orphaned travel routing.
 
-### Plan (2 files)
+### Plan (1 file)
 
-**File 1: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
+**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
 
-In the user prompt section (around line 1013, after the HARD RESTAURANT BLOCKLIST block), add a departure-day-specific restaurant block that fires when `isLastDay` is true:
+**Change 1: Import and define FALLBACK_RESTAURANTS map** (~line 15)
+- Import the `FallbackVenue` type and reuse the same city-keyed fallback map already in `repair-day.ts` (Lisbon, Porto, Barcelona with breakfast/lunch/dinner lists). Define it as a local constant or import it.
 
-```
-if (isLastDay && usedList.length > 0) {
-  // Add DEPARTURE DAY RESTAURANT RULES with the full used list
-  // and a list of safe Lisbon alternatives for lunch
-}
-```
+**Change 2: Rewrite the failsafe dedup block** (lines 1274-1317)
+- Instead of `return false` (removing), attempt replacement:
+  1. Detect meal type from title
+  2. Look up fallback from `FALLBACK_RESTAURANTS[cityKey][mealType]`
+  3. Find one not in `allUsedRestaurants`
+  4. Rewrite `act.title`, `act.location.name`, `act.venue_name`, `act.restaurant.name`
+  5. If no fallback available AND it's a primary meal, KEEP the duplicate (log warning)
+  6. Only remove if it's NOT a primary meal and no fallback exists
 
-This block will:
-- Explicitly state "This is the FINAL DAY" and list all used restaurants
-- Provide safe departure-day lunch alternatives (Ponto Final, Café de São Bento, O Velho Eurico, Mercado da Ribeira, Cervejaria Trindade, Tasca do Chico, etc.)
-- Instruct: "If your first choice matches ANY name above, REPLACE immediately"
-- Forbid generic placeholders
-
-**File 2: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
-
-After each day's result is assembled and used restaurants are updated (post-generation loop), add a cross-day price consistency check:
-- Build a `Map<normalizedName, {price, dayIndex}>` across all assembled days
-- When a duplicate restaurant is found, log a `PRICE INCONSISTENCY` warning and normalize to the higher price
-- Also add a departure-day debug log confirming the usedRestaurants count when `dayNumber === totalDays`
+**Change 3: Add orphaned travel routing cleanup** (after the failsafe dedup, ~line 1317)
+- For each day, build a set of current activity venue names
+- Filter `day.travelRouting` to remove entries whose destination doesn't match any current activity and isn't a hotel/airport/known landmark
+- Log each orphaned route removal
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add departure-day-specific restaurant uniqueness block in user prompt
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — add cross-day price consistency check + departure-day debug log
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — rewrite failsafe dedup with replacement fallback + add orphaned travel routing cleanup
 
 ### Verification
-Generate a 4-day Lisbon trip. Day 4 lunch should use a different restaurant than Days 1-3. No restaurant should appear on multiple days. Check logs for "DEPARTURE DAY" entries confirming the blocklist is passed.
+Generate a 4-day Lisbon trip. All days should have complete meals. No orphaned travel routing. No placeholder names. Check logs for `DEDUP REPLACEMENT` and `ORPHANED ROUTE CLEANUP` entries.
 
