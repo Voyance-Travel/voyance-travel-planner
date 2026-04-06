@@ -1,50 +1,37 @@
 
 
-## Fix Ticketed Attractions Being Marked as Free (Colosseum at €0)
+## Fix Repeated Breakfast Restaurants Across Multi-Day Trips
 
 ### Root Cause
 
-"Colosseum Arena Floor Exploration" doesn't contain any word from `PAID_EXPERIENCE_RE` (museum, castle, palace, tower, etc.), so `checkAndApplyFreeVenue` doesn't exclude it. Meanwhile, the word "walk" or other free-venue patterns in the description text can trigger `ALWAYS_FREE_VENUE_PATTERNS`, zeroing the price. There's no mechanism to restore prices for known ticketed attractions after the free-venue pass.
+The dedup code already tracks breakfast venues in `MEAL_RE` and `MEAL_RE_FAILSAFE`. However, two issues combine to let breakfast repeats through:
 
-### Plan
+1. **Hotel breakfast preference creates repeats at the source.** The prompt says "At the hotel's own restaurant (preferred)" for breakfast. On a 5-day trip at Shangri-La Paris, the AI picks the hotel restaurant for breakfast on multiple days because it's explicitly told to prefer it. The hotel restaurant name then appears in `usedRestaurants`, but on the next day the prompt again says "preferred" — contradicting the blocklist.
 
-#### 1. Add `KNOWN_TICKETED_ATTRACTIONS` map to `sanitization.ts` (~after line 36)
+2. **No Paris/Berlin/Rome/London failsafe fallbacks.** When the post-assembly dedup detects a duplicate breakfast, it tries `FAILSAFE_FALLBACKS[cityKey]` — but only Lisbon, Porto, and Barcelona have entries. For Paris, `cityKey` resolves to `''`, so `fallbackList` is empty. The duplicate is kept under the "primary meal > uniqueness" rule.
 
-A `Record<string, number>` mapping lowercase venue substrings to minimum admission prices (EUR). Covers Rome, Berlin, Lisbon, Paris, Barcelona, and London (~40 entries). Export it for use in `action-repair-costs.ts` too.
+### Changes
 
-#### 2. Add `enforceTicketedAttractionPricing()` helper to `sanitization.ts` (~after `enforceMichelinPriceFloor`)
+#### 1. Limit hotel breakfast preference to specific days only (`compile-prompt.ts` ~line 425)
 
-Logic:
-- Resolve current price from all field shapes
-- If price > 0, return (already priced)
-- Check title and venue_name against `KNOWN_TICKETED_ATTRACTIONS` keys (substring match)
-- If matched, write the minimum price using existing `writePriceToAllFields`
-- Also: if `booking_required` is true AND price is 0 AND category is EXPLORE/ACTIVITY, log a warning
+Change the breakfast instruction so that hotel breakfast is only "preferred" on Day 1 (arrival day) and checkout day. On other days, instruct the AI to pick a local café or bakery — not the hotel. This prevents the AI from generating the same hotel restaurant on 3-5 days.
 
-#### 3. Call the new function in three places
+Specifically: wrap the existing hotel-preference text with a condition:
+- If `isFirstDay` or `isLastDay` → keep "At the hotel's own restaurant (preferred)"
+- Otherwise → use "At a well-reviewed local café, bakery, or brasserie near your hotel. Do NOT use the hotel restaurant — choose a DIFFERENT breakfast venue each day."
 
-| Location | When |
-|----------|------|
-| `sanitization.ts` ~line 912 | Right AFTER `checkAndApplyFreeVenue()` in `sanitizeGeneratedDay` |
-| `action-generate-trip-day.ts` ~line 1584 | After `enforceMichelinPriceFloor` in the final guard loop |
-| `action-repair-costs.ts` ~line 134 | After the free venue check, before pushing the cost row |
+#### 2. Add Paris, Berlin, Rome, and London failsafe fallbacks (`action-generate-trip-day.ts` ~line 1446)
 
-This ensures: free venue zeroing runs first → ticketed attraction restore runs second → Michelin floor runs last.
+Add fallback breakfast/lunch/dinner entries for Paris, Berlin, Rome, and London to the `FAILSAFE_FALLBACKS` map — at minimum 4-6 breakfast spots per city. This ensures that when dedup fires, there's a replacement available instead of keeping the duplicate.
 
-#### 4. Expand `PAID_EXPERIENCE_RE` (line 23)
+#### 3. Add city aliases for new cities (`action-generate-trip-day.ts` ~line 1457)
 
-Add `colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena` to prevent the Colosseum (and similar sites) from matching free-venue patterns in the first place. This is a belt-and-suspenders approach.
-
-#### 5. Update prompt in `compile-prompt.ts`
-
-Add a "TICKETED ATTRACTION PRICING" section with examples (Colosseum €16-35, Vatican Museums €17, Louvre €17, Sagrada Familia €26) and the rule that "Booking Required" attractions should never be Free.
+Add aliases: `'paris': ['paris']`, `'berlin': ['berlin']`, `'rome': ['roma']`, `'london': ['londres']`.
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `sanitization.ts` | Add `KNOWN_TICKETED_ATTRACTIONS` map, `enforceTicketedAttractionPricing()` helper, expand `PAID_EXPERIENCE_RE` |
-| `action-generate-trip-day.ts` | Call `enforceTicketedAttractionPricing` in final guard loop |
-| `action-repair-costs.ts` | Call ticketed attraction check after free venue check |
-| `compile-prompt.ts` | Add ticketed attraction pricing rules to system prompt |
+| `compile-prompt.ts` | Limit hotel breakfast preference to arrival/departure days; other days say "pick a different local café" |
+| `action-generate-trip-day.ts` | Add Paris, Berlin, Rome, London to `FAILSAFE_FALLBACKS` with 4-6 breakfast + 2-3 lunch/dinner each; add city aliases |
 
