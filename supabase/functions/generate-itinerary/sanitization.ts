@@ -426,6 +426,14 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     });
   }
 
+  // Clean meal-type leakage from travel routing destinations
+  if (Array.isArray(day.travelRouting)) {
+    day.travelRouting.forEach((route: any) => {
+      if (route.destination) route.destination = cleanVenueNameMealLeakage(route.destination);
+      if (route.to) route.to = cleanVenueNameMealLeakage(route.to);
+    });
+  }
+
   // ---- Meal time validation: fix misplaced meals ----
   if (day.activities && Array.isArray(day.activities)) {
     for (const act of day.activities) {
