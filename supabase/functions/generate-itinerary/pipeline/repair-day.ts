@@ -2662,7 +2662,8 @@ function repairBookends(
     const dinnerIdx = activities.findIndex(a => (a.category === 'dining') && /\b(dinner|evening meal)\b/i.test(a.title || ''));
     if (lunchIdx >= 0 && dinnerIdx > lunchIdx) {
       // On first day, skip mid-day hotel return if lunch is before check-in
-      const skipBecausePreCheckIn = isFirstDay && checkInIdx >= 0 && lunchIdx < checkInIdx;
+      // On first day, skip mid-day hotel return if lunch is before check-in OR if no check-in exists at all
+      const skipBecausePreCheckIn = isFirstDay && (checkInIdx < 0 || lunchIdx < checkInIdx);
       // On hotel-change days, skip if the mid-day return would fall between checkout and check-in
       const lunchMin = parseTimeToMinutes(activities[lunchIdx]?.startTime || '') ?? 0;
       const skipBecauseHotelChange = isHotelChange && lunchMin >= hotelChangeCheckoutMin && lunchMin < hotelChangeCheckInMin;
