@@ -8067,6 +8067,8 @@ export type Database = {
           origin_city: string | null
           owner_plan_tier: string | null
           price_lock_expires_at: string | null
+          share_enabled: boolean | null
+          share_token: string | null
           smart_finish_purchased: boolean
           smart_finish_purchased_at: string | null
           start_date: string
@@ -8129,6 +8131,8 @@ export type Database = {
           origin_city?: string | null
           owner_plan_tier?: string | null
           price_lock_expires_at?: string | null
+          share_enabled?: boolean | null
+          share_token?: string | null
           smart_finish_purchased?: boolean
           smart_finish_purchased_at?: string | null
           start_date: string
@@ -8191,6 +8195,8 @@ export type Database = {
           origin_city?: string | null
           owner_plan_tier?: string | null
           price_lock_expires_at?: string | null
+          share_enabled?: boolean | null
+          share_token?: string | null
           smart_finish_purchased?: boolean
           smart_finish_purchased_at?: string | null
           start_date?: string
@@ -9479,6 +9485,10 @@ export type Database = {
       generate_share_token:
         | { Args: never; Returns: string }
         | { Args: { size?: number }; Returns: string }
+      get_consumer_shared_trip: {
+        Args: { p_share_token: string }
+        Returns: Json
+      }
       get_current_user_email: { Args: never; Returns: string }
       get_founding_member_count: { Args: never; Returns: number }
       get_intake_account: {
@@ -9538,6 +9548,8 @@ export type Database = {
           origin_city: string | null
           owner_plan_tier: string | null
           price_lock_expires_at: string | null
+          share_enabled: boolean | null
+          share_token: string | null
           smart_finish_purchased: boolean
           smart_finish_purchased_at: string | null
           start_date: string
@@ -9659,6 +9671,10 @@ export type Database = {
         Returns: Json
       }
       sync_expired_credit_balances: { Args: never; Returns: number }
+      toggle_consumer_trip_share: {
+        Args: { p_enabled: boolean; p_trip_id: string }
+        Returns: Json
+      }
       transition_booking_state: {
         Args: {
           p_activity_id: string

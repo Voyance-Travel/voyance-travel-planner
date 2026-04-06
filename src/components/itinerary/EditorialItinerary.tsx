@@ -7669,10 +7669,11 @@ export function EditorialItinerary({
              {tripPermission?.isOwner && (
                <>
                  <div className="pt-4 border-t border-border space-y-2">
-                   <label className="text-sm font-medium">Invite Link</label>
+                   <label className="text-sm font-medium">Invite to Collaborate</label>
+                   <p className="text-xs text-muted-foreground">Friends who accept will join as trip collaborators</p>
                    <div className="flex gap-2">
                      <Input
-                       value={shareLink || 'Click to generate link...'}
+                       value={shareLink || 'Click to generate invite link...'}
                        readOnly
                        className="flex-1 text-sm"
                        onClick={!shareLink ? () => handleCreateShareLink() : undefined}
@@ -7680,7 +7681,6 @@ export function EditorialItinerary({
                      <Button 
                        onClick={async () => {
                          if (shareLink) {
-                           // Always re-resolve to guarantee freshness
                            await handleCreateShareLink();
                          } else {
                            handleCreateShareLink();
@@ -7699,18 +7699,17 @@ export function EditorialItinerary({
                        {inviteCopied ? 'Copied!' : shareLink ? 'Copy' : 'Generate'}
                      </Button>
                    </div>
-                   {/* Invite health info */}
                    {inviteHealth?.success && (
                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                        <Check className="h-3 w-3 text-green-500" />
-                       <span>Link active</span>
+                       <span>Invite active</span>
                        <span>·</span>
                        <span>Expires in 30 days</span>
                      </div>
                    )}
                    {!inviteHealth && (
                      <p className="text-xs text-muted-foreground">
-                       Link expires in 30 days. Share this trip with others.
+                       Invite link expires in 30 days.
                      </p>
                    )}
                    {/* Reset link button */}

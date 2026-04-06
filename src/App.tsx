@@ -121,6 +121,7 @@ import TripForm from "./pages/agent/TripForm";
 import AgentTasks from "./pages/agent/AgentTasks";
 import TripWorkspace from "./pages/agent/TripWorkspace";
 import TripShare from "./pages/agent/TripShare";
+import ConsumerTripShare from "./pages/ConsumerTripShare";
 import AgentSettings from "./pages/agent/AgentSettings";
 import AgentDocuments from "./pages/agent/AgentDocuments";
 import AgentPayouts from "./pages/agent/AgentPayouts";
@@ -202,6 +203,7 @@ function AnimatedRoutes() {
         
         {/* Public Share Routes */}
         <Route path="/share/:shareToken" element={<TripShare />} />
+        <Route path="/trip-share/:token" element={<ConsumerTripShare />} />
         <Route path="/intake/:intakeToken" element={<ClientIntakeForm />} />
         <Route path="/invite/:token" element={<AcceptInvite />} />
         
