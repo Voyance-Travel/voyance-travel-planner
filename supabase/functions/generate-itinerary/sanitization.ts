@@ -574,20 +574,33 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
 
       // ---- Dining underpricing floor ----
       const isDining = /dining|restaurant|breakfast|lunch|dinner|brunch/i.test((act.category || '') + ' ' + (act.title || ''));
-      if (isDining && act.cost && typeof act.cost === 'object' && act.cost.amount > 0) {
+      if (isDining) {
+        // Resolve current cost from all possible field shapes
+        const currentCost = (() => {
+          if (act.cost && typeof act.cost === 'object' && typeof act.cost.amount === 'number') return act.cost.amount;
+          if (typeof act.cost === 'number') return act.cost;
+          if (act.estimatedCost && typeof act.estimatedCost === 'object' && typeof act.estimatedCost.amount === 'number') return act.estimatedCost.amount;
+          if (typeof act.estimatedCost === 'number') return act.estimatedCost;
+          if (typeof (act as any).price_per_person === 'number') return (act as any).price_per_person;
+          if (typeof (act as any).estimated_price_per_person === 'number') return (act as any).estimated_price_per_person;
+          if (typeof (act as any).price === 'number') return (act as any).price;
+          return 0;
+        })();
+
+        if (currentCost > 0) {
         const combined = ((act.title || '') + ' ' + (act.venue_name || '') + ' ' + (act.description || '') + ' ' + ((act as any).restaurant?.name || '') + ' ' + ((act as any).restaurant?.description || '')).toLowerCase();
         let floor = 0;
         let reason = '';
 
-        // Michelin / fine dining indicators
+        // Michelin / fine dining indicators — raised per-star minimums
         if (/michelin\s*3|3[\s-]*star/i.test(combined)) {
-          floor = 180; reason = 'Michelin 3-star';
+          floor = 250; reason = 'Michelin 3-star';
         } else if (/michelin\s*2|2[\s-]*star/i.test(combined)) {
-          floor = 120; reason = 'Michelin 2-star';
+          floor = 180; reason = 'Michelin 2-star';
         } else if (/michelin\s*1|1[\s-]*star|michelin[\s-]*starred/i.test(combined)) {
-          floor = 80; reason = 'Michelin 1-star';
+          floor = 120; reason = 'Michelin 1-star';
         } else if (/tasting menu|fine dining|haute cuisine|degustation|omakase/i.test(combined)) {
-          floor = 80; reason = 'Fine dining / tasting menu';
+          floor = 120; reason = 'Fine dining / tasting menu';
         }
 
         // Known Michelin-starred / fine dining — tiered by actual price range
@@ -595,8 +608,8 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         const knownMichelinMid = /\b(alma|eleven|epur|cura|loco|eneko|100\s*maneiras|cem\s*maneiras|casa\s*da\s*comida|pedro\s*lemos|antiqvvm|largo\s*do\s*pa[çc]o|euskalduna|casa\s*de\s*ch[áa]\s*da\s*boa\s*nova|boa\s*nova)\b/i;
         const knownUpscale = /\b(il\s*gallo|ceia|enoteca|sommelier|mini\s*bar|sacramento|solar\s*dos\s*presuntos|the\s*yeatman|yeatman)\b/i;
 
-        if (floor < 150 && knownMichelinHigh.test(combined)) {
-          floor = 150; reason = 'Known top-tier Michelin restaurant';
+        if (floor < 180 && knownMichelinHigh.test(combined)) {
+          floor = 180; reason = 'Known top-tier Michelin restaurant';
         } else if (floor < 120 && knownMichelinMid.test(combined)) {
           floor = 120; reason = 'Known Michelin-starred restaurant';
         } else if (floor < 60 && knownUpscale.test(combined)) {
@@ -609,13 +622,21 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         }
 
         // Generic dinner floor
-        if (floor < 15 && /dinner/i.test(act.title || '') && act.cost.amount < 15) {
+        if (floor < 15 && /dinner/i.test(act.title || '') && currentCost < 15) {
           floor = 15; reason = 'Dinner at named restaurant';
         }
 
-        if (floor > 0 && act.cost.amount < floor) {
-          console.warn(`[UNDERPRICED] "${act.title}" at ${act.cost.amount}/pp → corrected to ${floor}/pp (${reason})`);
-          act.cost.amount = floor;
+        if (floor > 0 && currentCost < floor) {
+          console.warn(`[UNDERPRICED] "${act.title}" at ${currentCost}/pp → corrected to ${floor}/pp (${reason})`);
+          // Write floor to all cost field shapes present on the activity
+          if (act.cost && typeof act.cost === 'object') act.cost.amount = floor;
+          else act.cost = { amount: floor, currency: effectiveCurrency };
+          if (act.estimatedCost && typeof act.estimatedCost === 'object') act.estimatedCost.amount = floor;
+          else if (typeof act.estimatedCost === 'number') act.estimatedCost = floor;
+          if ((act as any).price_per_person !== undefined) (act as any).price_per_person = floor;
+          if ((act as any).estimated_price_per_person !== undefined) (act as any).estimated_price_per_person = floor;
+          if ((act as any).price !== undefined) (act as any).price = floor;
+        }
         }
       }
 
