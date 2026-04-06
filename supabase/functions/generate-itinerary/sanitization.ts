@@ -322,6 +322,8 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Settle\s+(?:in|into)\s+(?:at\s+)?/i, '$1 to ')
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Wind\s+Down\s+at\s+/i, '$1 to ')
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Rest\s+(?:&|and)\s+Recharge\s+at\s+/i, '$1 to ');
+        // Strip trailing meal-type from transit destinations (e.g. "Travel to Pavilhão Carlos Lopes Breakfast")
+        act.title = act.title.replace(/^((?:Travel|Walk|Metro|Bus|Tram|Taxi|Train|Drive|Ride|Ferry)\s+to\s+.+?)\s+(?:Breakfast|Lunch|Dinner|Brunch)\s*$/i, '$1');
         act.name = act.title;
       }
       // Always-free activities: arrivals, departures, hotel logistics
