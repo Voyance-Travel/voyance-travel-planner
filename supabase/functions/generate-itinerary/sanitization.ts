@@ -757,6 +757,42 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     });
   }
 
+  // Deduplicate consecutive hotel return activities (e.g., two back-to-back "Return to Four Seasons Ritz")
+  if (day.activities && day.activities.length >= 2) {
+    const HOTEL_RETURN_RE = /\b(return to|retire to|back to|freshen up|settle in)\b/i;
+    const indicesToRemove: number[] = [];
+
+    for (let i = 1; i < day.activities.length; i++) {
+      const prev = day.activities[i - 1];
+      const curr = day.activities[i];
+
+      const prevCat = (prev.category || '').toLowerCase();
+      const currCat = (curr.category || '').toLowerCase();
+      const stayCategories = ['stay', 'accommodation', 'hotel'];
+
+      if (!stayCategories.includes(prevCat) || !stayCategories.includes(currCat)) continue;
+
+      const prevTitle = (prev.title || prev.name || '').toLowerCase();
+      const currTitle = (curr.title || curr.name || '').toLowerCase();
+
+      if (HOTEL_RETURN_RE.test(prevTitle) && HOTEL_RETURN_RE.test(currTitle)) {
+        const prevVenue = (prev.venue_name || '').toLowerCase();
+        const currVenue = (curr.venue_name || '').toLowerCase();
+        const sameHotel = prevVenue && currVenue && prevVenue === currVenue;
+        const sameTitle = prevTitle === currTitle;
+
+        if (sameHotel || sameTitle) {
+          console.warn(`[sanitizeGeneratedDay] DUPLICATE HOTEL RETURN: Removing duplicate "${curr.title}" at index ${i} on day ${dayNumber}. Previous "${prev.title}" already covers this.`);
+          indicesToRemove.push(i);
+        }
+      }
+    }
+
+    if (indicesToRemove.length > 0) {
+      day.activities = day.activities.filter((_: unknown, idx: number) => !indicesToRemove.includes(idx));
+    }
+  }
+
   // Fix hotel name mismatches in "Return to" entries
   for (const act of day.activities) {
     if (/^Return to /i.test(act.title || '') && act.venue_name) {
