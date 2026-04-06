@@ -1572,6 +1572,16 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── FINAL MICHELIN PRICE FLOOR GUARD (trip-level) ──
+  // Runs over ALL days before the final save so no prior step can overwrite floors
+  for (const day of updatedDays) {
+    if (Array.isArray(day.activities)) {
+      for (const act of day.activities) {
+        enforceMichelinPriceFloor(act, 'TRIP_DAY_FINAL');
+      }
+    }
+  }
+
   if (dayNumber >= totalDays) {
     // All days complete — but only mark ready if all days have real activities
     const finalStatus = isComplete ? 'ready' : 'partial';
