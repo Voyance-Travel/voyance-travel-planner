@@ -18,6 +18,7 @@ import { parseLocalDate } from '@/utils/dateUtils';
 import type { TripPhoto } from '@/hooks/useTripPhotos';
 import { useBonusCredits } from '@/hooks/useBonusCredits';
 import { resolveInviteLink, getInviteErrorMessage } from '@/services/inviteResolver';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ShareTripCardProps {
   isOpen: boolean;
