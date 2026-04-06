@@ -558,48 +558,8 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         zeroAllCostFields();
       }
 
-      // Zero out pricing for obviously free activity types
-      // Tier 1 (high confidence): always free — parks, plazas, churches, viewpoints, districts
-      // Tier 2 (lower confidence): free only if description says "free" or price is in phantom €20-25 range
-      const tier1FreePatterns = /\b(?:park|garden|jardim|viewpoint|miradouro|outlook|vista|panoram\w*|plaza|praça|praca|square|piazza|platz|church|igreja|basilica|cathedral|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca|evening\s+(?:walk|stroll)|morning\s+(?:walk|stroll)|historic\s+walk)\b/i;
-      const tier2FreePatterns = /\b(?:bridge|fountain|monument|memorial|statue|arch|gate|market|promenade|boardwalk|trail|path|pier|dock|wharf|embankment)\b/i;
-
-      if (effectiveCost > 0 && effectiveCost <= 50) {
-        const allTextFields = [
-          act.title || '',
-          (act as any).venue_name || '',
-          act.description || '',
-          (act.location as any)?.name || '',
-          (act as any).address || '',
-          (act as any).place_name || '',
-          typeof (act as any).place === 'string' ? (act as any).place : ((act as any).place?.name || ''),
-          (act as any).venue || '',
-          (act as any).restaurant?.name || '',
-          (act as any).restaurant?.description || '',
-        ].join(' ');
-        const description = act.description || '';
-
-        // Diagnostic logging: log when any priced activity matches a free venue pattern
-        const hasAnyPatternMatch = tier1FreePatterns.test(allTextFields) || tier2FreePatterns.test(allTextFields);
-        if (hasAnyPatternMatch) {
-          console.log(`FREE VENUE CHECK: title="${act.title}", venue="${(act as any).venue_name || ''}", category="${act.category}", cost=${effectiveCost}, costField=${act.cost && typeof act.cost === 'object' && act.cost.amount ? 'cost' : act.estimatedCost ? 'estimatedCost' : 'other'}`);
-        }
-
-        const isPaidExperience = (act as any).booking_required ||
-          /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico)\b/i.test(allTextFields);
-
-        if (tier1FreePatterns.test(allTextFields) && !isPaidExperience) {
-          console.log(`PHANTOM PRICING FIX: "${act.title}" venue="${(act as any).venue_name || ''}" (${act.category}) matches free venue pattern. Was $${effectiveCost}/pp → Free`);
-          zeroAllCostFields();
-        } else if (tier2FreePatterns.test(allTextFields)) {
-          const descSaysFree = /\bfree\b/i.test(description);
-          const isPhantomPrice = effectiveCost >= 20 && effectiveCost <= 25;
-          if ((descSaysFree || isPhantomPrice) && !isPaidExperience) {
-            console.log(`PHANTOM PRICING FIX: "${act.title}" (tier2) Was $${effectiveCost}/pp → Free`);
-            zeroAllCostFields();
-          }
-        }
-      }
+      // Zero out pricing for obviously free activity types — uses shared helper
+      checkAndApplyFreeVenue(act as any, 'sanitize');
 
       // ---- Dining underpricing floor ----
       const isDining = /dining|restaurant|breakfast|lunch|dinner|brunch/i.test((act.category || '') + ' ' + (act.title || ''));
