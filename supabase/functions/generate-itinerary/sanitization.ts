@@ -6,6 +6,93 @@
 import { extractRestaurantVenueName } from './generation-utils.ts';
 
 // =============================================================================
+// ALWAYS-FREE VENUE PATTERNS — shared across sanitization, repair, and generation
+// =============================================================================
+
+/**
+ * Tier 1: venues that are always free (parks, plazas, viewpoints, etc.).
+ * Exported so that action-repair-costs.ts and generation-core.ts use the
+ * exact same list instead of maintaining their own copies.
+ */
+export const ALWAYS_FREE_VENUE_PATTERNS = /\b(?:park|garden|jardim|viewpoint|miradouro|miradouros|outlook|vista|panoram\w*|plaza|praça|praca|square|piazza|platz|church|igreja|basilica|cathedral|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca|evening\s+(?:walk|stroll)|morning\s+(?:walk|stroll)|historic\s+walk)\b/i;
+
+/** Tier 2: free only when description says "free" or price is in phantom range */
+export const TIER2_FREE_VENUE_PATTERNS = /\b(?:bridge|fountain|monument|memorial|statue|arch|gate|market|promenade|boardwalk|trail|path|pier|dock|wharf|embankment)\b/i;
+
+/** Paid-experience exclusion — don't force-free if any of these match */
+const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico)\b/i;
+
+/**
+ * Check whether an activity should be forced free.
+ * Returns true if the activity matched a free-venue pattern and was zeroed.
+ * Emits FREE VENUE CHECK / PHANTOM PRICING FIX logs for debugging.
+ */
+export function checkAndApplyFreeVenue(activity: Record<string, any>, label = 'sanitize'): boolean {
+  const title = activity.title || '';
+  const venueName = activity.venue_name || activity.restaurant?.name || '';
+  const allTextFields = [
+    title,
+    venueName,
+    activity.description || '',
+    activity.location?.name || activity.place_name || '',
+    activity.address || '',
+    typeof activity.place === 'string' ? activity.place : (activity.place?.name || ''),
+    activity.venue || '',
+    activity.restaurant?.description || '',
+  ].join(' ');
+
+  const effectiveCost = Math.max(
+    typeof activity.cost === 'object' ? (activity.cost?.amount ?? 0) : (typeof activity.cost === 'number' ? activity.cost : 0),
+    activity.estimatedCost ?? 0,
+    activity.estimated_price_per_person ?? 0,
+    activity.price ?? 0,
+    activity.price_per_person ?? 0,
+  );
+
+  if (effectiveCost <= 0) return false;
+
+  const matchesTier1 = ALWAYS_FREE_VENUE_PATTERNS.test(allTextFields);
+  const matchesTier2 = TIER2_FREE_VENUE_PATTERNS.test(allTextFields);
+
+  if (!matchesTier1 && !matchesTier2) return false;
+
+  // Log diagnostic
+  console.log(`FREE VENUE CHECK: title="${title}", venue="${venueName}", category="${activity.category}", booking_required=${activity.booking_required}, price=${effectiveCost}`);
+
+  const isPaidExperience = activity.booking_required || PAID_EXPERIENCE_RE.test(allTextFields);
+
+  if (matchesTier1 && !isPaidExperience) {
+    console.log(`PHANTOM PRICING FIX [${label}]: "${title}" venue="${venueName}" (${activity.category}) matches free venue pattern. Was $${effectiveCost}/pp → Free`);
+    zeroActivityCostFields(activity);
+    return true;
+  }
+
+  if (matchesTier2 && !isPaidExperience && effectiveCost <= 50) {
+    const descSaysFree = /\bfree\b/i.test(activity.description || '');
+    const isPhantomPrice = effectiveCost >= 20 && effectiveCost <= 25;
+    if (descSaysFree || isPhantomPrice) {
+      console.log(`PHANTOM PRICING FIX [${label}]: "${title}" (tier2) Was $${effectiveCost}/pp → Free`);
+      zeroActivityCostFields(activity);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/** Zero out all known cost fields on an activity object */
+function zeroActivityCostFields(act: Record<string, any>): void {
+  if (act.cost && typeof act.cost === 'object') act.cost.amount = 0;
+  if (typeof act.cost === 'number') act.cost = 0;
+  act.estimatedCost = 0;
+  act.estimated_cost = 0;
+  act.estimated_price_per_person = 0;
+  act.price = 0;
+  act.price_per_person = 0;
+  act.is_free = true;
+}
+
+// =============================================================================
 // DATE SANITIZATION — Strip non-ASCII chars that leak from CJK locale prompts
 // =============================================================================
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
