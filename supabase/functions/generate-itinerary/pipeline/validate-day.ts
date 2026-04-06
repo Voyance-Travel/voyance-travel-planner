@@ -84,6 +84,9 @@ export interface ValidateDayInput {
   /** Hotel change context */
   isHotelChange?: boolean;
   previousHotelName?: string;
+
+  /** Destination city for demonym validation */
+  destination?: string;
 }
 
 // =============================================================================

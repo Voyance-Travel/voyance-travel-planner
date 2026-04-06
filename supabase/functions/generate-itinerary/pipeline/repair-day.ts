@@ -193,6 +193,87 @@ const FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackVenue[]>> = {
       { name: 'Can Paixano', neighborhood: 'Barceloneta', address: 'C/ de la Reina Cristina 7, Barcelona' },
     ],
   },
+  },
+  'paris': {
+    breakfast: [
+      { name: 'Café de Flore', neighborhood: 'Saint-Germain-des-Prés', address: '172 Bd Saint-Germain, Paris' },
+      { name: 'Carette', neighborhood: 'Trocadéro', address: '4 Pl. du Trocadéro et du 11 Novembre, Paris' },
+      { name: 'Du Pain et des Idées', neighborhood: 'Canal Saint-Martin', address: '34 R. Yves Toudic, Paris' },
+      { name: 'Claus Paris', neighborhood: 'Louvre', address: '14 R. Jean-Jacques Rousseau, Paris' },
+    ],
+    lunch: [
+      { name: 'Le Comptoir du Panthéon', neighborhood: 'Latin Quarter', address: '5 R. Soufflot, Paris' },
+      { name: 'Chez Janou', neighborhood: 'Marais', address: '2 R. Roger Verlomme, Paris' },
+      { name: 'Bouillon Chartier', neighborhood: 'Grands Boulevards', address: '7 R. du Faubourg Montmartre, Paris' },
+      { name: 'Le Bouillon Pigalle', neighborhood: 'Pigalle', address: '22 Bd de Clichy, Paris' },
+    ],
+    dinner: [
+      { name: 'Le Petit Cler', neighborhood: '7th arrondissement', address: '29 R. Cler, Paris' },
+      { name: "Chez l'Ami Jean", neighborhood: '7th arrondissement', address: '27 R. Malar, Paris' },
+      { name: 'Le Baratin', neighborhood: 'Belleville', address: '3 R. Jouye-Rouve, Paris' },
+      { name: 'Frenchie Bar à Vins', neighborhood: 'Sentier', address: '6 R. du Nil, Paris' },
+    ],
+  },
+  'berlin': {
+    breakfast: [
+      { name: 'The Barn', neighborhood: 'Mitte', address: 'Auguststraße 58, Berlin' },
+      { name: 'House of Small Wonder', neighborhood: 'Mitte', address: 'Johannisstraße 20, Berlin' },
+      { name: "Brammibal's Donuts", neighborhood: 'Kreuzberg', address: 'Maybachufer 8, Berlin' },
+      { name: 'Father Carpenter', neighborhood: 'Mitte', address: 'Münzstraße 21, Berlin' },
+    ],
+    lunch: [
+      { name: 'Curry 36', neighborhood: 'Kreuzberg', address: 'Mehringdamm 36, Berlin' },
+      { name: 'Monsieur Vuong', neighborhood: 'Mitte', address: 'Alte Schönhauser Str. 46, Berlin' },
+      { name: 'Katz Orange', neighborhood: 'Mitte', address: 'Bergstraße 22, Berlin' },
+      { name: 'Cocolo Ramen', neighborhood: 'Mitte', address: 'Gipsstraße 3, Berlin' },
+    ],
+    dinner: [
+      { name: 'Pauly Saal', neighborhood: 'Mitte', address: 'Auguststraße 11-13, Berlin' },
+      { name: 'Ora', neighborhood: 'Kreuzberg', address: 'Oranienpl. 14, Berlin' },
+      { name: 'Lode & Stijn', neighborhood: 'Kreuzberg', address: 'Lausitzer Str. 25, Berlin' },
+      { name: 'eins44', neighborhood: 'Neukölln', address: 'Elbestraße 28/29, Berlin' },
+    ],
+  },
+  'rome': {
+    breakfast: [
+      { name: 'Roscioli Caffè', neighborhood: 'Centro Storico', address: 'Piazza Benedetto Cairoli 16, Rome' },
+      { name: 'Sciascia Caffè', neighborhood: 'Prati', address: 'Via Fabio Massimo 80/A, Rome' },
+      { name: 'Barnum Café', neighborhood: 'Centro Storico', address: 'Via del Pellegrino 87, Rome' },
+      { name: 'Forno Campo de\' Fiori', neighborhood: 'Campo de\' Fiori', address: 'Piazza Campo de\' Fiori 22, Rome' },
+    ],
+    lunch: [
+      { name: 'Da Enzo al 29', neighborhood: 'Trastevere', address: 'Via dei Vascellari 29, Rome' },
+      { name: 'Armando al Pantheon', neighborhood: 'Pantheon', address: 'Salita dei Crescenzi 31, Rome' },
+      { name: 'Trattoria Da Teo', neighborhood: 'Trastevere', address: 'Piazza dei Ponziani 7A, Rome' },
+      { name: 'Salumeria Roscioli', neighborhood: 'Centro Storico', address: 'Via dei Giubbonari 21, Rome' },
+    ],
+    dinner: [
+      { name: 'Pierluigi', neighborhood: 'Centro Storico', address: 'Piazza de\' Ricci 144, Rome' },
+      { name: 'Felice a Testaccio', neighborhood: 'Testaccio', address: 'Via Mastro Giorgio 29, Rome' },
+      { name: 'Grazia & Graziella', neighborhood: 'Trastevere', address: 'Largo M.D. Fumasoni Biondi 5, Rome' },
+      { name: 'Osteria Fernanda', neighborhood: 'Trastevere', address: 'Via Crescenzo del Monte 18, Rome' },
+    ],
+  },
+  'london': {
+    breakfast: [
+      { name: 'The Wolseley', neighborhood: 'Mayfair', address: '160 Piccadilly, London' },
+      { name: 'Dishoom', neighborhood: 'Covent Garden', address: '12 Upper St Martin\'s Ln, London' },
+      { name: 'Buns from Home', neighborhood: 'Covent Garden', address: '24 Bedford St, London' },
+      { name: 'Granger & Co', neighborhood: 'Notting Hill', address: '175 Westbourne Grove, London' },
+    ],
+    lunch: [
+      { name: 'Padella', neighborhood: 'Borough', address: '6 Southwark St, London' },
+      { name: 'Barrafina', neighborhood: 'Soho', address: '26-27 Dean St, London' },
+      { name: 'Brasserie Zédel', neighborhood: 'Piccadilly', address: '20 Sherwood St, London' },
+      { name: 'Rochelle Canteen', neighborhood: 'Shoreditch', address: 'Arnold Circus, London' },
+    ],
+    dinner: [
+      { name: 'St. John', neighborhood: 'Clerkenwell', address: '26 St John St, London' },
+      { name: 'The Palomar', neighborhood: 'Soho', address: '34 Rupert St, London' },
+      { name: 'Quo Vadis', neighborhood: 'Soho', address: '26-29 Dean St, London' },
+      { name: 'Brat', neighborhood: 'Shoreditch', address: '4 Redchurch St, London' },
+    ],
+  },
 };
 
 export function getCityTier(city?: string): CityTransitTier {
