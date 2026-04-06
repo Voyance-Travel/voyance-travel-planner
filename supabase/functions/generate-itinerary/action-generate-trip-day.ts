@@ -900,7 +900,7 @@ async function _handleGenerateTripDayInner(
 
   // POST-GENERATION: Enforce cross-day restaurant uniqueness
   if (dayResult?.activities?.length > 0) {
-    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
+    const { extractRestaurantVenueName, venueMatchesAny } = await import('./generation-utils.ts');
     const usedNorm = new Set(usedRestaurants.map(n => extractRestaurantVenueName(n)));
     const MEAL_RE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
 
@@ -911,13 +911,17 @@ async function _handleGenerateTripDayInner(
       const isDining = cat === 'dining' || typ === 'dining' || MEAL_RE.test(act.title || '');
       if (!isDining) continue;
 
-      const venue = extractRestaurantVenueName(act.title || '') || extractRestaurantVenueName(act.location?.name || '');
-      if (!venue || !usedNorm.has(venue)) continue;
+      // Check ALL venue-bearing fields for fuzzy match
+      const venue = extractRestaurantVenueName(act.title || '') ||
+                    extractRestaurantVenueName(act.venue_name || '') ||
+                    extractRestaurantVenueName(act.restaurant?.name || '') ||
+                    extractRestaurantVenueName(act.location?.name || '');
+      if (!venue || !venueMatchesAny(venue, usedNorm)) continue;
 
       // Find a replacement from the pool that hasn't been used
       const replacement = restaurantPool.find(r => {
         const rNorm = extractRestaurantVenueName(r.name || r.title || '');
-        return rNorm && !usedNorm.has(rNorm);
+        return rNorm && !venueMatchesAny(rNorm, usedNorm);
       });
 
       if (replacement) {
