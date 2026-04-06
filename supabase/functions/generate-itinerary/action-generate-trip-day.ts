@@ -354,13 +354,31 @@ async function _handleGenerateTripDayInner(
   // Get the pool for this day's city
   const dayCity = cityInfo?.cityName || destination || '';
   let restaurantPool: any[] = restaurantPoolByCity[dayCity] || [];
-  // Also try partial match if exact city not found
+  // Also try partial match if exact city not found (including city aliases)
   if (restaurantPool.length === 0 && dayCity) {
+    const dayCityLower = dayCity.toLowerCase();
+    const POOL_CITY_ALIASES: Record<string, string[]> = {
+      'lisbon': ['lisboa', 'lisbonne', 'lissabon'],
+      'porto': ['oporto'],
+      'barcelona': ['barcelone', 'barcellona'],
+    };
     for (const [poolCity, pool] of Object.entries(restaurantPoolByCity)) {
-      if (poolCity.toLowerCase().includes(dayCity.toLowerCase()) || dayCity.toLowerCase().includes(poolCity.toLowerCase())) {
+      const poolCityLower = poolCity.toLowerCase();
+      if (poolCityLower.includes(dayCityLower) || dayCityLower.includes(poolCityLower)) {
         restaurantPool = pool;
         break;
       }
+      // Check aliases: if poolCity matches an alias of dayCityLower or vice versa
+      for (const [canonical, aliases] of Object.entries(POOL_CITY_ALIASES)) {
+        const allForms = [canonical, ...aliases];
+        const poolMatches = allForms.some(f => poolCityLower.includes(f));
+        const dayMatches = allForms.some(f => dayCityLower.includes(f));
+        if (poolMatches && dayMatches) {
+          restaurantPool = pool;
+          break;
+        }
+      }
+      if (restaurantPool.length > 0) break;
     }
   }
   if (restaurantPool.length > 0) {
@@ -1431,9 +1449,22 @@ async function _handleGenerateTripDayInner(
       return 'lunch'; // default for lunch, brunch, tapas, etc.
     }
 
+    // City aliases for matching local-language destination names to fallback keys
+    const CITY_ALIASES: Record<string, string[]> = {
+      'lisbon': ['lisboa', 'lisbonne', 'lissabon'],
+      'porto': ['oporto'],
+      'barcelona': ['barcelone', 'barcellona'],
+    };
+
     // Resolve city key for fallback lookup
-    const tripDestination = (updatedDays[0]?.destination || updatedDays[0]?.city || '').toLowerCase().trim();
-    const cityKey = Object.keys(FAILSAFE_FALLBACKS).find(k => tripDestination.includes(k)) || '';
+    const tripDestination = (updatedDays[0]?.destination || updatedDays[0]?.city || destination || '').toLowerCase().trim();
+    const cityKey = Object.keys(FAILSAFE_FALLBACKS).find(k => {
+      if (tripDestination.includes(k)) return true;
+      const aliases = CITY_ALIASES[k] || [];
+      return aliases.some(a => tripDestination.includes(a));
+    }) || '';
+    console.log(`=== CROSS-DAY RESTAURANT DEDUP FAILSAFE ===`);
+    console.log(`tripDestination: "${tripDestination}", resolved cityKey: "${cityKey}"`);
 
     for (let di = 0; di < updatedDays.length; di++) {
       const day = updatedDays[di];
