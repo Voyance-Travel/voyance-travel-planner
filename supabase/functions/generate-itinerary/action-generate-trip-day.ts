@@ -1693,7 +1693,7 @@ async function _handleGenerateTripDayInner(
       ].filter(Boolean);
       for (const src of sources) {
         const venueName = extractRestaurantVenueName(src);
-        if (venueName && !newUsedRestaurants.some(u => extractRestaurantVenueName(u) === venueName)) {
+        if (venueName && !newUsedRestaurants.some(u => venueNamesMatch(extractRestaurantVenueName(u), venueName))) {
           newUsedRestaurants.push(venueName);
         }
       }
