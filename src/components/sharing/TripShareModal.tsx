@@ -1,12 +1,18 @@
 /**
  * Trip Share Modal Component
- * Shareable modal with link, social buttons, email, and referral credits
+ * 
+ * Two distinct sharing modes:
+ * 1. "Invite to Trip" — generates /invite/:token links for collaboration
+ * 2. "Public Link" — generates /trip-share/:token read-only links for viewing
+ * 
+ * These are architecturally separate: invite links require auth and add
+ * the recipient as a collaborator; public links show a sanitized read-only view.
  */
 
 import { useState, useCallback, useEffect } from 'react';
 import { 
   Link2, Mail, Copy, Check, MessageCircle, 
-  Share2, Users, Gift, X
+  Share2, Users, Gift, X, Eye, Globe
 } from 'lucide-react';
 import { 
   Dialog, 
@@ -17,10 +23,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { FirstUseHint } from '@/components/itinerary/FirstUseHint';
 import { resolveInviteLink, getInviteErrorMessage } from '@/services/inviteResolver';
+import { supabase } from '@/integrations/supabase/client';
+import { getAppUrl } from '@/utils/getAppUrl';
 
 interface TripShareModalProps {
   isOpen: boolean;
@@ -41,12 +51,19 @@ export function TripShareModal({
   shareLink: initialShareLink,
   onCreateShareLink
 }: TripShareModalProps) {
-  const [shareLink, setShareLink] = useState(initialShareLink || '');
+  // Invite link state (collaboration)
+  const [inviteLink, setInviteLink] = useState(initialShareLink || '');
   const [copied, setCopied] = useState(false);
   const [friendEmails, setFriendEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState('');
   const [isCreatingLink, setIsCreatingLink] = useState(false);
   const [spotsRemaining, setSpotsRemaining] = useState<number | null>(null);
+
+  // Public share state (read-only view)
+  const [publicShareEnabled, setPublicShareEnabled] = useState(false);
+  const [publicShareToken, setPublicShareToken] = useState<string | null>(null);
+  const [publicCopied, setPublicCopied] = useState(false);
+  const [isTogglingPublic, setIsTogglingPublic] = useState(false);
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
@@ -85,76 +102,136 @@ export function TripShareModal({
 
   // Reset share state when tripId changes
   useEffect(() => {
-    setShareLink('');
+    setInviteLink('');
     setCopied(false);
   }, [tripId]);
 
-  const getOrCreateShareLink = async () => {
-    if (shareLink) return shareLink;
+  // Load public share status on open
+  useEffect(() => {
+    if (!isOpen || !tripId) return;
+    const loadShareStatus = async () => {
+      const { data } = await supabase
+        .from('trips')
+        .select('share_enabled, share_token')
+        .eq('id', tripId)
+        .single();
+      if (data) {
+        setPublicShareEnabled(data.share_enabled || false);
+        setPublicShareToken(data.share_token || null);
+      }
+    };
+    loadShareStatus();
+  }, [isOpen, tripId]);
+
+  const getOrCreateInviteLink = async () => {
+    if (inviteLink) return inviteLink;
     
     setIsCreatingLink(true);
     try {
-      // Use centralized resolver
       const result = await resolveInviteLink(tripId);
       if (!result.success || !result.link) {
         toast.error(getInviteErrorMessage(result.reason));
         return '';
       }
-      setShareLink(result.link);
+      setInviteLink(result.link);
       if (result.maxUses != null && result.usesCount != null) {
         setSpotsRemaining(result.maxUses - result.usesCount);
       }
       return result.link;
     } catch (e) {
-      console.error('Failed to create share link:', e);
-      toast.error('Failed to create share link. Please try again.');
+      console.error('Failed to create invite link:', e);
+      toast.error('Failed to create invite link. Please try again.');
       return '';
     } finally {
       setIsCreatingLink(false);
     }
   };
 
-  const copyLink = async () => {
-    const link = await getOrCreateShareLink();
+  const copyInviteLink = async () => {
+    const link = await getOrCreateInviteLink();
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
-      toast.success('Link copied to clipboard!');
+      toast.success('Invite link copied!');
       setTimeout(() => setCopied(false), 2000);
     } catch (e) {
       toast.error('Failed to copy link');
     }
   };
 
+  const togglePublicShare = async () => {
+    setIsTogglingPublic(true);
+    try {
+      const newEnabled = !publicShareEnabled;
+      const { data, error } = await supabase.rpc('toggle_consumer_trip_share', {
+        p_trip_id: tripId,
+        p_enabled: newEnabled,
+      });
+
+      if (error) throw error;
+
+      const result = data as unknown as { success: boolean; share_enabled: boolean; share_token: string; reason?: string };
+      if (result.success) {
+        setPublicShareEnabled(result.share_enabled);
+        setPublicShareToken(result.share_token);
+        toast.success(result.share_enabled ? 'Public link enabled' : 'Public link disabled');
+      } else {
+        toast.error('Failed to update sharing');
+      }
+    } catch (e) {
+      console.error('Failed to toggle public share:', e);
+      toast.error('Failed to update sharing');
+    } finally {
+      setIsTogglingPublic(false);
+    }
+  };
+
+  const publicShareUrl = publicShareToken ? `${getAppUrl()}/trip-share/${publicShareToken}` : '';
+
+  const copyPublicLink = async () => {
+    try {
+      await navigator.clipboard.writeText(publicShareUrl);
+      setPublicCopied(true);
+      toast.success('Public link copied!');
+      setTimeout(() => setPublicCopied(false), 2000);
+    } catch (e) {
+      toast.error('Failed to copy link');
+    }
+  };
+
   const shareNative = async () => {
-    const link = await getOrCreateShareLink();
+    const link = publicShareEnabled && publicShareUrl ? publicShareUrl : await getOrCreateInviteLink();
     
     if (navigator.share) {
       try {
         await navigator.share({
           title: tripName,
-          text: `Check out my trip to ${destination}! Plan yours too and get 150 bonus credits.`,
+          text: `Check out my trip to ${destination}!`,
           url: link,
         });
       } catch (e) {
-        // User cancelled or not supported
-        copyLink();
+        // User cancelled
       }
     } else {
-      copyLink();
+      try {
+        await navigator.clipboard.writeText(link);
+        toast.success('Link copied!');
+      } catch (e) {
+        toast.error('Failed to copy');
+      }
     }
   };
 
   const shareWhatsApp = async () => {
-    const link = await getOrCreateShareLink();
+    const link = publicShareEnabled && publicShareUrl ? publicShareUrl : await getOrCreateInviteLink();
     const text = encodeURIComponent(
-      `Check out my trip to ${destination}! Plan your own and get 150 bonus credits to get started: ${link}`
+      `Check out my trip to ${destination}! ${link}`
     );
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
   const shareTwitter = async () => {
-    const link = await getOrCreateShareLink();
+    const link = publicShareEnabled && publicShareUrl ? publicShareUrl : await getOrCreateInviteLink();
     const text = encodeURIComponent(`Just planned my trip to ${destination} with @Voyance_Travel! 🌍✨`);
     window.open(
       `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(link)}`,
@@ -163,7 +240,6 @@ export function TripShareModal({
   };
 
   const sendEmail = async () => {
-    // Also add any text in the input before sending
     if (emailInput.trim()) {
       const email = emailInput.trim().toLowerCase();
       if (isValidEmail(email) && !friendEmails.includes(email) && friendEmails.length < 10) {
@@ -173,14 +249,13 @@ export function TripShareModal({
     }
     if (friendEmails.length === 0) return;
     
-    const link = await getOrCreateShareLink();
-    const subject = encodeURIComponent(`You should see my ${destination} trip!`);
+    const link = await getOrCreateInviteLink();
+    const subject = encodeURIComponent(`Join my ${destination} trip!`);
     const body = encodeURIComponent(
       `Hey!\n\n` +
-      `I just planned an amazing trip to ${destination} and thought you'd love to see it.\n\n` +
-      `Check it out: ${link}\n\n` +
-      `When you sign up with Voyance, you'll get 150 bonus credits to get started!\n\n` +
-      `Let me know what you think!`
+      `I'm planning a trip to ${destination} and want you to join!\n\n` +
+      `Accept the invite here: ${link}\n\n` +
+      `You'll be able to view and collaborate on the itinerary together.`
     );
     
     window.open(`mailto:${friendEmails.join(',')}?subject=${subject}&body=${body}`, '_blank');
@@ -198,70 +273,62 @@ export function TripShareModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-2">
+        <div className="space-y-5 py-2">
           {/* First-use hint */}
           <FirstUseHint
             hintKey="share_hint_shown"
             message="New: You can choose how guests interact. Let them edit freely, or use Propose & Vote so you stay in control."
           />
-          {/* Referral Bonus Banner */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20">
-            <div className="p-2 rounded-full bg-primary/20">
-              <Gift className="h-4 w-4 text-primary" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-foreground">
-                Friends get 150 bonus credits
-              </p>
-              <p className="text-xs text-muted-foreground">
-                They get 150 credits to start!
-              </p>
-            </div>
-            <Badge className="bg-primary/20 text-primary border-0 text-xs">
-              Free
-            </Badge>
-          </div>
 
-          {/* Share Link */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Share Link</label>
-            <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <Input
-                  value={shareLink || 'Click to generate link...'}
-                  readOnly
-                  className="pr-10 text-sm"
-                  onClick={getOrCreateShareLink}
-                />
-                {shareLink && (
-                  <Link2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                )}
+          {/* Public Read-Only Link */}
+          <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <Label className="text-sm font-medium">Public Link</Label>
+                  <p className="text-xs text-muted-foreground">Anyone with the link can view</p>
+                </div>
               </div>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={copyLink}
-                disabled={isCreatingLink}
-                className={cn(copied && "bg-green-500/10 text-green-600 border-green-500/30")}
-              >
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </Button>
+              <Switch
+                checked={publicShareEnabled}
+                onCheckedChange={togglePublicShare}
+                disabled={isTogglingPublic}
+              />
             </div>
+
+            {publicShareEnabled && publicShareUrl && (
+              <div className="flex gap-2">
+                <Input
+                  value={publicShareUrl}
+                  readOnly
+                  className="text-xs font-mono"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={copyPublicLink}
+                  className={cn(publicCopied && "bg-green-500/10 text-green-600 border-green-500/30")}
+                >
+                  {publicCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            )}
           </div>
 
-          {/* Share Buttons */}
+          {/* Quick Share Buttons */}
           <div className="grid grid-cols-4 gap-2">
             <button 
-              onClick={copyLink}
+              onClick={publicShareEnabled ? copyPublicLink : copyInviteLink}
               className={cn(
                 "flex flex-col items-center gap-1.5 p-3 rounded-lg transition-colors",
-                copied 
+                (copied || publicCopied) 
                   ? "bg-green-500/10 text-green-600" 
                   : "bg-secondary hover:bg-secondary/80 text-foreground"
               )}
             >
-              {copied ? <Check className="h-5 w-5" /> : <Link2 className="h-5 w-5" />}
-              <span className="text-xs font-medium">{copied ? 'Copied!' : 'Copy'}</span>
+              {(copied || publicCopied) ? <Check className="h-5 w-5" /> : <Link2 className="h-5 w-5" />}
+              <span className="text-xs font-medium">{(copied || publicCopied) ? 'Copied!' : 'Copy'}</span>
             </button>
             
             <button 
@@ -289,11 +356,11 @@ export function TripShareModal({
             </button>
           </div>
 
-          {/* Invite Friends */}
+          {/* Invite to Collaborate */}
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2">
               <Users className="h-4 w-4" />
-              Invite friends
+              Invite to collaborate
             </label>
             <div className="flex gap-2">
               <div className="flex-1 flex flex-wrap items-center gap-1.5 min-h-[40px] px-3 py-1.5 border border-input rounded-md bg-background focus-within:ring-2 focus-within:ring-ring">
@@ -332,17 +399,30 @@ export function TripShareModal({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              This link works for everyone — share it with your whole group
+              Invited friends can join and collaborate on this trip
               {spotsRemaining != null && (
                 <span className="ml-1">({spotsRemaining} spots remaining)</span>
               )}
             </p>
           </div>
 
-          {/* Preview Mode Note */}
-          <p className="text-xs text-center text-muted-foreground">
-            Friends can view your full itinerary without logging in
-          </p>
+          {/* Referral Bonus Banner */}
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20">
+            <div className="p-2 rounded-full bg-primary/20">
+              <Gift className="h-4 w-4 text-primary" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-foreground">
+                Friends get 150 bonus credits
+              </p>
+              <p className="text-xs text-muted-foreground">
+                When they sign up and plan their own trip
+              </p>
+            </div>
+            <Badge className="bg-primary/20 text-primary border-0 text-xs">
+              Free
+            </Badge>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
