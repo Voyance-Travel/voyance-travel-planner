@@ -20,7 +20,7 @@ export const ALWAYS_FREE_VENUE_PATTERNS = /\b(?:park|garden|jardim|viewpoint|mir
 export const TIER2_FREE_VENUE_PATTERNS = /\b(?:bridge|fountain|monument|memorial|statue|arch|gate|market|promenade|boardwalk|trail|path|pier|dock|wharf|embankment)\b/i;
 
 /** Paid-experience exclusion — don't force-free if any of these match */
-const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico)\b/i;
+const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|aquarium|zoo|monastery|mosteiro)\b/i;
 
 /**
  * Check whether an activity should be forced free.
