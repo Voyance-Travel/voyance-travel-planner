@@ -900,7 +900,7 @@ async function _handleGenerateTripDayInner(
 
   // POST-GENERATION: Enforce cross-day restaurant uniqueness
   if (dayResult?.activities?.length > 0) {
-    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
+    const { extractRestaurantVenueName, venueMatchesAny } = await import('./generation-utils.ts');
     const usedNorm = new Set(usedRestaurants.map(n => extractRestaurantVenueName(n)));
     const MEAL_RE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
 
@@ -911,13 +911,17 @@ async function _handleGenerateTripDayInner(
       const isDining = cat === 'dining' || typ === 'dining' || MEAL_RE.test(act.title || '');
       if (!isDining) continue;
 
-      const venue = extractRestaurantVenueName(act.title || '') || extractRestaurantVenueName(act.location?.name || '');
-      if (!venue || !usedNorm.has(venue)) continue;
+      // Check ALL venue-bearing fields for fuzzy match
+      const venue = extractRestaurantVenueName(act.title || '') ||
+                    extractRestaurantVenueName(act.venue_name || '') ||
+                    extractRestaurantVenueName(act.restaurant?.name || '') ||
+                    extractRestaurantVenueName(act.location?.name || '');
+      if (!venue || !venueMatchesAny(venue, usedNorm)) continue;
 
       // Find a replacement from the pool that hasn't been used
       const replacement = restaurantPool.find(r => {
         const rNorm = extractRestaurantVenueName(r.name || r.title || '');
-        return rNorm && !usedNorm.has(rNorm);
+        return rNorm && !venueMatchesAny(rNorm, usedNorm);
       });
 
       if (replacement) {
@@ -1376,7 +1380,7 @@ async function _handleGenerateTripDayInner(
   // Runs on ALL completions (including last day) to catch any duplicates.
   // Instead of blindly removing duplicates, attempts a fallback replacement first.
   if (updatedDays.length > 1) {
-    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
+    const { extractRestaurantVenueName, venueMatchesAny } = await import('./generation-utils.ts');
     const MEAL_RE_FAILSAFE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
     const PRIMARY_MEAL_RE = /\b(?:breakfast|lunch|dinner|brunch)\b/i;
     const allUsedRestaurants = new Set<string>();
@@ -1483,13 +1487,13 @@ async function _handleGenerateTripDayInner(
                       extractRestaurantVenueName(act.location?.name || '');
         if (!venue) return true;
 
-        if (allUsedRestaurants.has(venue)) {
+        if (venueMatchesAny(venue, allUsedRestaurants)) {
           // DUPLICATE FOUND — attempt replacement instead of removal
           const mealType = detectMealTypeFromTitle(act.title || '');
           const fallbackList = FAILSAFE_FALLBACKS[cityKey]?.[mealType] || [];
           const fallback = fallbackList.find(f => {
             const fNorm = extractRestaurantVenueName(f.name);
-            return fNorm && !allUsedRestaurants.has(fNorm);
+            return fNorm && !venueMatchesAny(fNorm, allUsedRestaurants);
           });
 
           if (fallback) {
@@ -1671,7 +1675,7 @@ async function _handleGenerateTripDayInner(
     const nextCityName = dayCityMap?.[dayNumber]?.cityName || null;
     // Track used restaurants from this day's dining activities (normalized venue names)
     // Broadened: extract from title, venue_name, restaurant.name, AND location.name
-    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
+    const { extractRestaurantVenueName, venueNamesMatch } = await import('./generation-utils.ts');
     const newUsedRestaurants = [...usedRestaurants];
     const dayActivities = dayResult?.activities || [];
     const MEAL_RE_EXTRACT = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
@@ -1689,7 +1693,7 @@ async function _handleGenerateTripDayInner(
       ].filter(Boolean);
       for (const src of sources) {
         const venueName = extractRestaurantVenueName(src);
-        if (venueName && !newUsedRestaurants.some(u => extractRestaurantVenueName(u) === venueName)) {
+        if (venueName && !newUsedRestaurants.some(u => venueNamesMatch(extractRestaurantVenueName(u), venueName))) {
           newUsedRestaurants.push(venueName);
         }
       }
