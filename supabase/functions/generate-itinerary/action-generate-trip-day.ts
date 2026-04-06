@@ -1675,7 +1675,7 @@ async function _handleGenerateTripDayInner(
     const nextCityName = dayCityMap?.[dayNumber]?.cityName || null;
     // Track used restaurants from this day's dining activities (normalized venue names)
     // Broadened: extract from title, venue_name, restaurant.name, AND location.name
-    const { extractRestaurantVenueName } = await import('./generation-utils.ts');
+    const { extractRestaurantVenueName, venueNamesMatch } = await import('./generation-utils.ts');
     const newUsedRestaurants = [...usedRestaurants];
     const dayActivities = dayResult?.activities || [];
     const MEAL_RE_EXTRACT = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
