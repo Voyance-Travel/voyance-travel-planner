@@ -824,6 +824,12 @@ RESTAURANT NAMING RULES — CRITICAL:
 - If you cannot think of another unique restaurant for a meal, use the hotel restaurant or a well-known local chain café — NEVER fall back to a generic placeholder.
 - For Lisbon, consider: Pastéis de Belém, Café A Brasileira, Copenhagen Coffee Lab, Dear Breakfast, Heim Café, Nicolau Lisboa, Fábrica Coffee Roasters, Landeau Chocolate, Time Out Market vendors.
 - Parks, gardens, plazas, squares, viewpoints, miradouros, riverside walks, and neighborhood strolls are FREE (€0). Do NOT assign any price to these.
+
+HOTEL ADDRESS RULE — CRITICAL:
+- ALL hotel-related activities (Check-in, Checkout, Freshen Up, Return to Hotel, Luggage Drop) MUST use the EXACT hotel address provided in the day constraints or hotel context. Do NOT invent, approximate, or vary the street number.
+- On hotel-change days, pre-checkout activities use the PREVIOUS hotel's address; post-checkin activities use the NEW hotel's address.
+- Specific known addresses (ALWAYS use these exact addresses when the hotel matches):
+  • Palácio Ludovice Wine Experience Hotel: R. de São Pedro de Alcântara 39, 1250-238 Lisboa
 - Every activity MUST have a "title" field (the display name)
 - All times MUST be in 24-hour HH:MM format
 - ACTIVITY COUNT: This includes meals, transit, and evening activities. Fill the day completely.

@@ -1566,20 +1566,38 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         canonical = `Check-in at ${resolvedHn}`;
       }
 
-      if (canonical && act.title !== canonical) {
+      if (canonical) {
         const before = act.title;
-        act.title = canonical;
-        act.name = canonical;
-        // Also ensure location references the resolved hotel
-        if (!act.location?.name || act.location.name === 'Your Hotel') {
-          act.location = { name: resolvedHn, address: act.location?.address || '' };
+        const titleChanged = act.title !== canonical;
+        if (titleChanged) {
+          act.title = canonical;
+          act.name = canonical;
         }
-        repairs.push({
-          code: FAILURE_CODES.MISSING_SLOT,
-          action: 'normalized_accommodation_title',
-          before,
-          after: canonical,
-        });
+
+        // Resolve the correct address for this accommodation card
+        const resolvedAddr = (isHotelChange && checkoutIdx >= 0 && i <= checkoutIdx)
+          ? (input.previousHotelAddress || '')
+          : (hotelAddress || '');
+
+        // Always ensure location references the resolved hotel name and address
+        const locNeedsUpdate = !act.location?.name || act.location.name === 'Your Hotel' ||
+          (resolvedAddr && act.location?.address !== resolvedAddr);
+        if (locNeedsUpdate) {
+          const oldAddr = act.location?.address || '';
+          act.location = { name: resolvedHn, address: resolvedAddr || act.location?.address || '' };
+          if (resolvedAddr && oldAddr !== resolvedAddr) {
+            console.log(`[Repair] HOTEL ADDRESS NORM: "${canonical}" address "${oldAddr}" → "${resolvedAddr}"`);
+          }
+        }
+
+        if (titleChanged || locNeedsUpdate) {
+          repairs.push({
+            code: FAILURE_CODES.MISSING_SLOT,
+            action: 'normalized_accommodation_title',
+            before,
+            after: canonical,
+          });
+        }
       }
     }
   }

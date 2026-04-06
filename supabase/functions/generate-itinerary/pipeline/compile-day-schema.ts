@@ -583,6 +583,7 @@ DEPARTURE DAY ACTIVITIES: 1-2 maximum (morning only, near hotel)
 4. "Hotel Checkout & Collect Luggage"
    - startTime: "${checkoutStart}", endTime: "${checkoutEnd}"
    - category: "accommodation"
+   - location: { name: "${hotelNameDisplay}", address: "${flightContext.hotelAddress || ''}" }
    - description: "Check out and collect stored luggage"
 
 5. "Transfer to Airport"
