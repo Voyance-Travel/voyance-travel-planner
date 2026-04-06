@@ -154,13 +154,21 @@ export function detectMealSlots(
     }
 
     // Time-based meal detection for dining-category activities (e.g. "De Kas" at 19:00)
+    // Cocktail bars / lounges / nightcap venues do NOT count as dinner
+    const DRINKS_ONLY_RE = /\b(cocktails?|nightcap|drinks?|bar|lounge|aperitifs?|speakeasy|aperitivo)\b/i;
     if (isDining) {
       const startTime = (activity as any).startTime || '';
       const minutes = parseTimeToMinutesLocal(startTime);
       if (minutes !== null) {
         if (minutes >= 6 * 60 && minutes < 11 * 60) detected.add('breakfast');
         else if (minutes >= 11 * 60 && minutes < 15 * 60) detected.add('lunch');
-        else if (minutes >= 17 * 60 && minutes <= 22 * 60) detected.add('dinner');
+        else if (minutes >= 17 * 60 && minutes <= 22 * 60) {
+          if (!DRINKS_ONLY_RE.test(title)) {
+            detected.add('dinner');
+          } else {
+            console.log(`[detectMealSlots] Skipping drinks-only venue as dinner: "${title}"`);
+          }
+        }
       }
     }
   }
