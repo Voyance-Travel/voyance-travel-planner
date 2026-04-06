@@ -293,6 +293,8 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         if (act.location.address) act.location.address = sanitizeAddress(sanitizeAITextField(act.location.address, destination) || act.location.address);
       }
       if (act.venue_address) act.venue_address = sanitizeAddress(act.venue_address);
+      if (act.venue_name) act.venue_name = cleanVenueNameMealLeakage(act.venue_name);
+      if (act.restaurant?.name) act.restaurant.name = cleanVenueNameMealLeakage(act.restaurant.name);
       if (act.transportation && typeof act.transportation === 'object') {
         if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions, destination) || undefined;
         const method = (act.transportation.method || '').toLowerCase();
