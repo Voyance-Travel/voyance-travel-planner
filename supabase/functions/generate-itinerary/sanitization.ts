@@ -520,6 +520,61 @@ function zeroActivityCostFields(act: Record<string, any>): void {
 }
 
 // =============================================================================
+// TICKETED ATTRACTION PRICING ENFORCEMENT
+// =============================================================================
+
+/**
+ * Enforce minimum pricing for known ticketed attractions.
+ * Call AFTER checkAndApplyFreeVenue (to restore incorrectly zeroed prices)
+ * and BEFORE enforceMichelinPriceFloor (which handles dining only).
+ * Returns true if a price was restored.
+ */
+export function enforceTicketedAttractionPricing(activity: Record<string, any>, logPrefix = 'SANITIZE'): boolean {
+  // Resolve current price from all field shapes
+  const resolvePrice = (): number => {
+    if (activity.cost && typeof activity.cost === 'object' && typeof activity.cost.amount === 'number') return activity.cost.amount;
+    if (typeof activity.cost === 'number') return activity.cost;
+    if (activity.estimatedCost && typeof activity.estimatedCost === 'object' && typeof activity.estimatedCost.amount === 'number') return activity.estimatedCost.amount;
+    if (typeof activity.estimatedCost === 'number') return activity.estimatedCost;
+    if (typeof activity.estimated_cost === 'number') return activity.estimated_cost;
+    if (typeof activity.price_per_person === 'number') return activity.price_per_person;
+    if (typeof activity.estimated_price_per_person === 'number') return activity.estimated_price_per_person;
+    if (typeof activity.price === 'number') return activity.price;
+    return 0;
+  };
+
+  const currentPrice = resolvePrice();
+  if (currentPrice > 0) return false; // Already has a price, don't override
+
+  const title = (activity.title || activity.name || '').toLowerCase();
+  const venueName = (activity.venue_name || activity.restaurant?.name || '').toLowerCase();
+
+  // Check against known ticketed attractions (longest keys first for greedy match)
+  const sortedKeys = Object.keys(KNOWN_TICKETED_ATTRACTIONS).sort((a, b) => b.length - a.length);
+  for (const key of sortedKeys) {
+    if (title.includes(key) || venueName.includes(key)) {
+      const minPrice = KNOWN_TICKETED_ATTRACTIONS[key];
+      console.warn(`TICKETED ATTRACTION FIX [${logPrefix}]: "${activity.title}" was Free but "${key}" is a ticketed attraction (min €${minPrice}). Restoring price.`);
+      writePriceToAllFields(activity, minPrice);
+      activity.is_free = false;
+      return true;
+    }
+  }
+
+  // Heuristic warning: booking_required + free = suspicious
+  const bookingRequired = activity.booking_required ||
+    /booking required/i.test(activity.description || '');
+  if (bookingRequired && currentPrice === 0) {
+    const cat = (activity.category || '').toUpperCase();
+    if (['EXPLORE', 'ACTIVITY', 'SIGHTSEEING', 'CULTURAL'].includes(cat)) {
+      console.warn(`TICKETED ATTRACTION WARNING [${logPrefix}]: "${activity.title}" has booking_required=true but is Free. Likely needs a price.`);
+    }
+  }
+
+  return false;
+}
+
+// =============================================================================
 // DATE SANITIZATION — Strip non-ASCII chars that leak from CJK locale prompts
 // =============================================================================
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
