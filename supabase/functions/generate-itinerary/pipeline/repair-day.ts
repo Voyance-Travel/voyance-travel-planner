@@ -2673,7 +2673,18 @@ function repairBookends(
       return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
     });
 
-    if (hasCheckedIn) {
+    // Check if ANY "Return to Hotel" / "Freshen Up" accommodation card already exists
+    // ANYWHERE in the activities (not just at the end). The AI may have generated one
+    // that sorted to a different position due to time-format issues.
+    const hasExistingReturn = activities.some((a: any) => {
+      if (!isAccom(a)) return false;
+      const t = (a.title || '').toLowerCase();
+      return (t.includes('return to') || t.includes('freshen up') || t.includes('freshen-up'))
+        && !t.includes('check-in') && !t.includes('checkin') && !t.includes('check in')
+        && !t.includes('checkout') && !t.includes('check-out') && !t.includes('check out');
+    });
+
+    if (hasCheckedIn && !hasExistingReturn) {
       const visible = activities.filter(a => !isTransport(a));
       const last = visible[visible.length - 1];
       // Harden: only treat as "already has return" if it's BOTH accommodation category
