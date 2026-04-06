@@ -1043,6 +1043,9 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       // Zero out pricing for obviously free activity types — uses shared helper
       checkAndApplyFreeVenue(act as any, 'sanitize');
 
+      // Restore pricing for known ticketed attractions incorrectly zeroed
+      enforceTicketedAttractionPricing(act as any, 'SANITIZE');
+
       // ---- Dining underpricing floor ----
       const isDining = /dining|restaurant|breakfast|lunch|dinner|brunch/i.test((act.category || '') + ' ' + (act.title || ''));
       if (isDining) {

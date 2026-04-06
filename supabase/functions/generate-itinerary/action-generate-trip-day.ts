@@ -1576,11 +1576,12 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // ── FINAL MICHELIN PRICE FLOOR GUARD (trip-level) ──
+  // ── FINAL TICKETED ATTRACTION + MICHELIN PRICE FLOOR GUARD (trip-level) ──
   // Runs over ALL days before the final save so no prior step can overwrite floors
   for (const day of updatedDays) {
     if (Array.isArray(day.activities)) {
       for (const act of day.activities) {
+        enforceTicketedAttractionPricing(act, 'TRIP_DAY_FINAL');
         enforceMichelinPriceFloor(act, 'TRIP_DAY_FINAL');
       }
     }
