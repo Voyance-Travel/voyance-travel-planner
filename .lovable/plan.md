@@ -1,54 +1,61 @@
 
 
-## Remaining Fixes from Cross-City Audit
+## Fix Placeholder Meals and Restore Michelin Dining to Luxury Trips
 
-Most bug classes from this audit (1-4, 6-7) are already addressed by Prompts 45-51 which have been implemented. Three gaps remain:
+### Analysis
 
-### Already Fixed (no action needed)
-- **Bug 1** (Michelin underpricing): `KNOWN_FINE_DINING_STARS` already has Paris, Berlin, Rome restaurants
-- **Bug 2** (Time generation): Midnight activity stripping + prompt rules exist
-- **Bug 3** (Ticketed attractions Free): `KNOWN_TICKETED_ATTRACTIONS` + `enforceTicketedAttractionPricing` exist
-- **Bug 4** (Breakfast repeats): Hotel breakfast limited to arrival/departure days + city fallbacks exist
-- **Bug 6** (Casual venue overpricing): `enforceBarNightcapPriceCap` + `enforceCasualVenuePriceCap` exist
-- **Bug 7** (Arrival sequencing): Prompt rules about Day 1 exist
+The validation layer (`validate-day.ts`) already catches generic titles like "Lunch at a bistro" and locations like "the destination", and the repair layer (`repair-day.ts`) already has Paris/Berlin/Rome/London fallback restaurants. However, two gaps remain:
 
-### Remaining Gaps — 3 Changes
+1. **Placeholder detection gaps**: The validator doesn't catch when `location.name` is just the city name (e.g., `"Paris"`) or when descriptions contain `"get a restaurant recommendation"`. These slip through validation, so repair never fires.
 
-#### 1. Add known-free viewpoint patterns to `sanitization.ts`
+2. **No Michelin inclusion guidance**: The prompt tells the AI how to *price* Michelin restaurants but never tells it to *include* them. After pricing enforcement was added, the AI learned to avoid Michelin venues entirely rather than price them correctly.
 
-Bug 5: "Eiffel Tower Evening Sparkle Viewing" charged €60 when it's a free activity (watching from Trocadéro/Champ de Mars). The `ALWAYS_FREE_VENUE_PATTERNS` don't catch this because "Eiffel Tower" isn't a free-venue keyword.
+### Changes
 
-Add a `KNOWN_FREE_VIEWPOINTS` list with entries like:
-- `eiffel tower.*sparkle`, `eiffel tower.*illumination`, `eiffel tower.*viewing` (watching from outside)
-- `colosseum.*view` (external viewpoint, not entry)
-- `acropolis.*view` (viewing from Philopappos Hill)
+#### 1. Expand placeholder detection in `validate-day.ts` (~line 247)
 
-In `checkAndApplyFreeVenue`, after the main pattern check, also check against these viewpoint patterns. Only match if the activity description/title suggests watching from outside (contains "from", "stroll", "viewing", "watch") and does NOT contain "ticket", "entry", "climb", "ascend", "summit".
+In `checkGenericVenues`, expand `hasPlaceholderLocation` to also catch:
+- Location name matching the destination city name (case-insensitive) — e.g., `"paris"`, `"rome"`, `"berlin"`
+- Description containing `"get a restaurant recommendation"` or `"ask for recommendations"`
 
-#### 2. Add Paris, Berlin, Rome, London to `FALLBACK_RESTAURANTS` in `repair-day.ts`
+This requires passing the destination city into the validator. Add `destination?: string` to `ValidateDayInput` (it's already there from the demonym fix) and thread it into `checkGenericVenues`.
 
-Bug 8: "Lunch at a bistro" with venue "the destination" appears because `FALLBACK_RESTAURANTS` only has Lisbon, Porto, and Barcelona. When the generic venue repair fires for Paris, it finds no fallback and keeps the placeholder.
+```typescript
+// Add to hasPlaceholderLocation check:
+const destLower = (destination || '').toLowerCase().trim();
+const isCityNameOnly = destLower && locationName === destLower;
+const hasPlaceholderDescription = description.includes('get a restaurant recommendation') || 
+  description.includes('ask for recommendations');
 
-Add 3-5 entries per meal type for each city:
-- **Paris**: breakfast (Café de Flore, Carette, Du Pain et des Idées), lunch (Le Comptoir, Chez Janou, Bouillon Chartier), dinner (Le Petit Cler, Chez l'Ami Jean, Le Baratin)
-- **Berlin**: breakfast (The Barn, House of Small Wonder, Brammibal's), lunch (Curry 36, Monsieur Vuong, Katz Orange), dinner (Nobelhart & Schmutzig, Pauly Saal, Ora)
-- **Rome**: breakfast (Roscioli Caffè, Sciascia Caffè, Barnum Café), lunch (Da Enzo al 29, Armando al Pantheon, Trattoria Da Teo), dinner (Roscioli, Pierluigi, Felice a Testaccio)
-- **London**: breakfast (The Wolseley, Dishoom, Buns from Home), lunch (Padella, Barrafina, Brasserie Zédel), dinner (St. John, The Palomar, Quo Vadis)
+const hasPlaceholderLocation = locationName === 'the destination' || locationName === '' ||
+  isCityNameOnly || hasPlaceholderDescription ||
+  /^(a |the )?(local |nearby )?(spot|place|restaurant|...)/i.test(locationName);
+```
 
-#### 3. Add city-name validation to day titles in `validate-day.ts`
+#### 2. Add Michelin inclusion guidance to prompt (`compile-prompt.ts` ~line 832)
 
-Bug 9: Berlin Day 3 titled "Palatial Goodbyes and Viennese Charm" — wrong city reference.
+After the existing Michelin pricing rules, add inclusion guidance that scales with trip length:
 
-Add a `WRONG_CITY_RE` check in `validateDayTitle` (or as a new validation):
-- Build a set of city demonyms that should NOT appear for the current destination (e.g., if destination is Berlin, flag "Viennese", "Parisian", "Roman")
-- If a day title contains a wrong-city demonym, flag it as a warning
-- In repair, strip the offending phrase or replace with the correct demonym
+```
+MICHELIN DINING INCLUSION (for cities with Michelin restaurants):
+- Trips of 3+ days: include AT LEAST 1 Michelin-starred dinner
+- Trips of 5+ days: include 2-3 Michelin-starred dinners
+- It is BETTER to include a correctly-priced Michelin restaurant than to avoid all Michelin restaurants
+- Do NOT remove Michelin restaurants to avoid pricing issues — price them correctly instead
+- Michelin dinners add prestige and variety to a luxury itinerary
+```
+
+This block should be conditional — only injected when the trip is 3+ days. The `totalDays` variable is already available in scope.
+
+#### 3. Add Michelin inclusion logging in `action-generate-trip-day.ts`
+
+After the final guard loop where Michelin price floors are enforced, add a diagnostic log that checks whether any dinner activity matches a `KNOWN_FINE_DINING_STARS` key. If none match on a 3+ day trip, log a warning: `MICHELIN INCLUSION: No Michelin restaurants on a N-day trip`. This is observability only — no mutation.
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `sanitization.ts` | Add `KNOWN_FREE_VIEWPOINTS` patterns and check in `checkAndApplyFreeVenue` |
-| `pipeline/repair-day.ts` | Add Paris, Berlin, Rome, London to `FALLBACK_RESTAURANTS` |
-| `pipeline/validate-day.ts` | Add wrong-city demonym check for day titles |
+| `pipeline/validate-day.ts` | Expand `checkGenericVenues` to catch city-name-as-location and placeholder descriptions; thread `destination` param |
+| `pipeline/compile-prompt.ts` | Add Michelin inclusion guidance block after pricing rules (conditional on 3+ day trips) |
+| `action-generate-trip-day.ts` | Add post-guard Michelin inclusion diagnostic log |
 
