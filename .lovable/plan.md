@@ -1,60 +1,50 @@
 
 
-## Fix Day 2+ Pre-Dawn Activity Scheduling (12:15 AM / 1:20 AM / 3:05 AM)
+## Fix Ticketed Attractions Being Marked as Free (Colosseum at €0)
 
 ### Root Cause
 
-The AI sometimes returns times in ambiguous format for middle days. While the prompt says "24-hour HH:MM format," the AI occasionally outputs low hour values (`0:15`, `1:20`, `3:05`) that are interpreted as AM times. There is **no normalization step** after AI response parsing that converts 12h→24h, and **no dawn guard** in the repair pipeline that catches activities before 6:00 AM on non-arrival days.
+"Colosseum Arena Floor Exploration" doesn't contain any word from `PAID_EXPERIENCE_RE` (museum, castle, palace, tower, etc.), so `checkAndApplyFreeVenue` doesn't exclude it. Meanwhile, the word "walk" or other free-venue patterns in the description text can trigger `ALWAYS_FREE_VENUE_PATTERNS`, zeroing the price. There's no mechanism to restore prices for known ticketed attractions after the free-venue pass.
 
-The prompt already says "Do NOT include any activities between 12:00 AM and 6:00 AM" (line 955), and `buildRegularDayPrompt` correctly sets `earliestStart` to 07:30–10:30 based on DNA — but neither the AI nor the repair pipeline enforces this deterministically.
+### Plan
 
-### Changes
+#### 1. Add `KNOWN_TICKETED_ATTRACTIONS` map to `sanitization.ts` (~after line 36)
 
-#### 1. Add time normalization in `action-generate-day.ts` (~line 302)
+A `Record<string, number>` mapping lowercase venue substrings to minimum admission prices (EUR). Covers Rome, Berlin, Lisbon, Paris, Barcelona, and London (~40 entries). Export it for use in `action-repair-costs.ts` too.
 
-In the activity normalization map (where titles, costs, and locations are already normalized), add `startTime` and `endTime` normalization using the existing `normalizeTo24h()` helper:
+#### 2. Add `enforceTicketedAttractionPricing()` helper to `sanitization.ts` (~after `enforceMichelinPriceFloor`)
 
-```typescript
-startTime: act.startTime ? (normalizeTo24h(act.startTime) || act.startTime) : undefined,
-endTime: act.endTime ? (normalizeTo24h(act.endTime) || act.endTime) : undefined,
-```
+Logic:
+- Resolve current price from all field shapes
+- If price > 0, return (already priced)
+- Check title and venue_name against `KNOWN_TICKETED_ATTRACTIONS` keys (substring match)
+- If matched, write the minimum price using existing `writePriceToAllFields`
+- Also: if `booking_required` is true AND price is 0 AND category is EXPLORE/ACTIVITY, log a warning
 
-This catches cases where the AI returns `"1:20 PM"` → `"13:20"`.
+#### 3. Call the new function in three places
 
-#### 2. Add dawn guard in `repair-day.ts` — new step after chronology sort (~line 470)
+| Location | When |
+|----------|------|
+| `sanitization.ts` ~line 912 | Right AFTER `checkAndApplyFreeVenue()` in `sanitizeGeneratedDay` |
+| `action-generate-trip-day.ts` ~line 1584 | After `enforceMichelinPriceFloor` in the final guard loop |
+| `action-repair-costs.ts` ~line 134 | After the free venue check, before pushing the cost row |
 
-Add a deterministic guard that shifts all pre-6AM activities forward on **non-arrival days** (or non-arrival activities on arrival days). The logic:
+This ensures: free venue zeroing runs first → ticketed attraction restore runs second → Michelin floor runs last.
 
-- Parse each activity's `startTime`
-- If `startTime` < 06:00 (360 minutes) AND the activity is not a flight/arrival/transport-to-airport:
-  - Compute the offset needed to shift the first pre-dawn activity to the day's `earliestStart` (passed as a new parameter, defaulting to `"08:00"`)
-  - Shift ALL activities forward by the same offset (preserving relative spacing)
-  - Log `DAWN_GUARD: shifted N activities forward by X minutes`
+#### 4. Expand `PAID_EXPERIENCE_RE` (line 23)
 
-This handles both the "AI meant PM but wrote AM" case and the "AI started from midnight" case by uniformly rebasing the day.
+Add `colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena` to prevent the Colosseum (and similar sites) from matching free-venue patterns in the first place. This is a belt-and-suspenders approach.
 
-#### 3. Pass `earliestStart` to `repairDay`
+#### 5. Update prompt in `compile-prompt.ts`
 
-The `RepairDayInput` interface already has flight/hotel context. Add an optional `earliestStart?: string` field so the dawn guard knows when the day should begin (from `buildRegularDayPrompt`). The callers in `action-generate-day.ts` and `action-generate-trip-day.ts` already have this value from the prompt builder.
-
-#### 4. Add nightcap-before-dinner swap in `repair-day.ts`
-
-After the meal order step (~step 5a), add a check: if any activity with "nightcap" / "cocktail" / "after-dinner" in the title appears before dinner, move it to after dinner. This is a simple index-based reorder within the existing meal sequencing logic.
+Add a "TICKETED ATTRACTION PRICING" section with examples (Colosseum €16-35, Vatican Museums €17, Louvre €17, Sagrada Familia €26) and the rule that "Booking Required" attractions should never be Free.
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `action-generate-day.ts` | Normalize `startTime`/`endTime` via `normalizeTo24h()` in activity map (~line 302) |
-| `pipeline/repair-day.ts` | Add dawn guard (~line 470) that rebases pre-6AM days; add nightcap swap in meal ordering |
-| `pipeline/repair-day.ts` | Add `earliestStart?: string` to `RepairDayInput` interface |
-| `action-generate-trip-day.ts` | Pass `earliestStart` when calling `repairDay` |
-
-### Verification
-
-- Generate a 3+ day Berlin trip
-- Day 2 activities should start at 08:00–10:00 AM, not midnight
-- No activities before 6:00 AM on any day
-- Nightcap activities appear after dinner
-- Check logs for `DAWN_GUARD` entries
+| `sanitization.ts` | Add `KNOWN_TICKETED_ATTRACTIONS` map, `enforceTicketedAttractionPricing()` helper, expand `PAID_EXPERIENCE_RE` |
+| `action-generate-trip-day.ts` | Call `enforceTicketedAttractionPricing` in final guard loop |
+| `action-repair-costs.ts` | Call ticketed attraction check after free venue check |
+| `compile-prompt.ts` | Add ticketed attraction pricing rules to system prompt |
 
