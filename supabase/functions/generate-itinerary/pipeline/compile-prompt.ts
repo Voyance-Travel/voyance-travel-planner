@@ -818,7 +818,7 @@ General Requirements:
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
 
 RESTAURANT NAMING RULES — CRITICAL:
-- Every dining activity MUST include a SPECIFIC, REAL restaurant name. Never use generic placeholders like "a local spot", "a nearby café", "a local restaurant", "the destination", or similar vague descriptions.
+- Every dining activity MUST include a SPECIFIC, REAL restaurant name. Never use generic placeholders like "a local spot", "a nearby café", "a local restaurant", "a bistro", "a nice place", "a charming spot", "the destination", or similar vague descriptions. ANY title matching "Meal at a/an/the [descriptor]" is BANNED.
 - The title MUST contain the actual restaurant name (e.g., "Breakfast at Pastéis de Belém", "Dinner at Cervejaria Ramiro"), NOT a description like "Breakfast at a local spot".
 - The location.name field MUST be the restaurant's actual name — NEVER "the destination", "a local spot", or any generic placeholder.
 - If you cannot think of another unique restaurant for a meal, use the hotel restaurant or a well-known local chain café — NEVER fall back to a generic placeholder.
