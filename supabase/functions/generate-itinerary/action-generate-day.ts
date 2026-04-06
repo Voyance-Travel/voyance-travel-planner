@@ -33,6 +33,7 @@ import {
   sanitizeDateFields,
   normalizeDurationString,
   stripPhantomHotelActivities,
+  enforceMichelinPriceFloor,
 } from './sanitization.ts';
 import {
   EXCHANGE_RATES_TO_USD,
@@ -1062,6 +1063,14 @@ export async function handleGenerateDay(
       innerTimer.endPhase(`post_processing_day_${dayNumber}`);
       const postProcPct = 5 + Math.round((dayNumber / Math.max(1, totalDays || 1)) * 90);
       await innerTimer.updateProgress(`day_${dayNumber}_post_processing_complete`, postProcPct);
+    }
+
+    // ── FINAL MICHELIN PRICE FLOOR GUARD ──
+    // Must run LAST so no other pricing step can overwrite the corrected price
+    if (Array.isArray(generatedDay.activities)) {
+      for (const act of generatedDay.activities) {
+        enforceMichelinPriceFloor(act, 'GENERATE_DAY_FINAL');
+      }
     }
 
     // ── BUILD DIAGNOSTICS ──

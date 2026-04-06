@@ -11,7 +11,7 @@ import { corsHeaders } from './action-types.ts';
 import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
-import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField } from './sanitization.ts';
+import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
@@ -1568,6 +1568,16 @@ async function _handleGenerateTripDayInner(
       const routesRemoved = beforeRouteCount - day.travelRouting.length;
       if (routesRemoved > 0) {
         console.log(`ORPHANED ROUTE CLEANUP: Removed ${routesRemoved} orphaned route(s) from Day ${di + 1}`);
+      }
+    }
+  }
+
+  // ── FINAL MICHELIN PRICE FLOOR GUARD (trip-level) ──
+  // Runs over ALL days before the final save so no prior step can overwrite floors
+  for (const day of updatedDays) {
+    if (Array.isArray(day.activities)) {
+      for (const act of day.activities) {
+        enforceMichelinPriceFloor(act, 'TRIP_DAY_FINAL');
       }
     }
   }

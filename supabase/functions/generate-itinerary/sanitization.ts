@@ -38,6 +38,175 @@ export const KNOWN_UPSCALE = /\b(il\s*gallo|ceia|enoteca|sommelier|mini\s*bar|sa
 /** Per-tier Michelin price floors (EUR/pp) */
 export const MICHELIN_FLOOR = { high: 180, mid: 120, upscale: 60 } as const;
 
+// =============================================================================
+// EXPLICIT STAR MAPPING — canonical restaurant name → Michelin star count
+// =============================================================================
+
+/** Explicit restaurant → star count map. Keys must be lowercase. */
+export const KNOWN_FINE_DINING_STARS: Record<string, number> = {
+  'belcanto': 2,
+  'alma': 2,
+  'ocean': 2,
+  'vila joya': 2,
+  'the yeatman': 2,
+  'eleven': 1,
+  'eleven restaurant': 1,
+  'feitoria': 1,
+  'feitoria restaurant': 1,
+  'cura': 1,
+  'loco': 1,
+  'fifty seconds': 1,
+  'eneko': 1,
+  "il gallo d'oro": 1,
+  'epur': 1,
+  '100 maneiras': 1,
+  'cem maneiras': 1,
+  'casa da comida': 1,
+  'pedro lemos': 1,
+  'antiqvvm': 1,
+  'largo do paço': 1,
+  'euskalduna': 1,
+  'casa de chá da boa nova': 1,
+  'boa nova': 1,
+  'fortaleza do guincho': 2,
+};
+
+/** Per-star price floors (EUR/pp) */
+export const FINE_DINING_MIN_PRICE_BY_STARS: Record<number, number> = {
+  1: 120,
+  2: 180,
+  3: 250,
+};
+
+/** Default floor for known fine dining without star info */
+export const FINE_DINING_MIN_PRICE_DEFAULT = 120;
+
+// =============================================================================
+// SHARED HELPER: enforceMichelinPriceFloor
+// =============================================================================
+
+/**
+ * Enforce Michelin price floors on a single activity object.
+ * Matches against KNOWN_FINE_DINING_STARS map, then falls back to keyword detection.
+ * Writes corrected price to ALL cost field shapes on the activity.
+ *
+ * Call this as the LAST pricing step so no subsequent logic can overwrite it.
+ */
+export function enforceMichelinPriceFloor(activity: Record<string, any>, logPrefix = 'FINAL'): boolean {
+  const category = (activity.category || '').toUpperCase();
+  const title = (activity.title || activity.name || '').toLowerCase();
+
+  // Only check dining-related activities
+  const isDining = /DINING|RESTAURANT/i.test(category) ||
+    /\b(breakfast|lunch|dinner|brunch|restaurant|dining)\b/i.test(title);
+  if (!isDining) return false;
+
+  // Resolve current price from all field shapes
+  const resolvePrice = (): number => {
+    if (activity.cost && typeof activity.cost === 'object' && typeof activity.cost.amount === 'number') return activity.cost.amount;
+    if (typeof activity.cost === 'number') return activity.cost;
+    if (activity.estimatedCost && typeof activity.estimatedCost === 'object' && typeof activity.estimatedCost.amount === 'number') return activity.estimatedCost.amount;
+    if (typeof activity.estimatedCost === 'number') return activity.estimatedCost;
+    if (typeof activity.estimated_cost === 'number') return activity.estimated_cost;
+    if (typeof activity.price_per_person === 'number') return activity.price_per_person;
+    if (typeof activity.estimated_price_per_person === 'number') return activity.estimated_price_per_person;
+    if (typeof activity.price === 'number') return activity.price;
+    return 0;
+  };
+
+  const currentPrice = resolvePrice();
+
+  console.log(`MICHELIN FLOOR CHECK [${logPrefix}]: "${activity.title}" price=${currentPrice} category=${activity.category}`);
+
+  // Build combined text for matching
+  const venueName = (activity.venue_name || activity.restaurant?.name || '').toLowerCase();
+  const combined = [title, venueName, (activity.description || '').toLowerCase(), (activity.restaurant?.description || '').toLowerCase()].join(' ');
+
+  // Strategy 1: Match against explicit star map
+  let matchedKey: string | null = null;
+  let starRating = 0;
+
+  // Strip meal-type prefixes for matching: "Dinner at Eleven Restaurant" → "eleven restaurant"
+  const strippedTitle = title.replace(/^(breakfast|lunch|dinner|brunch|meal)\s*(at|:|-|–)\s*/i, '').trim();
+
+  for (const [key, stars] of Object.entries(KNOWN_FINE_DINING_STARS)) {
+    if (
+      title.includes(key) ||
+      strippedTitle.includes(key) ||
+      venueName.includes(key) ||
+      (key.length >= 4 && strippedTitle === key) ||
+      (key.length >= 4 && venueName === key)
+    ) {
+      matchedKey = key;
+      starRating = stars;
+      break;
+    }
+  }
+
+  // Strategy 2: Fall back to Michelin keywords in text
+  if (!matchedKey) {
+    if (/michelin\s*3|3[\s-]*star/i.test(combined)) {
+      starRating = 3; matchedKey = '[keyword: 3-star]';
+    } else if (/michelin\s*2|2[\s-]*star/i.test(combined)) {
+      starRating = 2; matchedKey = '[keyword: 2-star]';
+    } else if (/michelin\s*1|1[\s-]*star|michelin[\s-]*starred/i.test(combined)) {
+      starRating = 1; matchedKey = '[keyword: 1-star]';
+    } else if (/tasting menu|fine dining|haute cuisine|degustation|omakase/i.test(combined)) {
+      starRating = 1; matchedKey = '[keyword: fine dining]';
+    }
+  }
+
+  // Strategy 3: Fall back to regex buckets (existing constants)
+  if (!matchedKey) {
+    if (KNOWN_MICHELIN_HIGH.test(combined)) {
+      starRating = 2; matchedKey = '[regex: KNOWN_MICHELIN_HIGH]';
+    } else if (KNOWN_MICHELIN_MID.test(combined)) {
+      starRating = 1; matchedKey = '[regex: KNOWN_MICHELIN_MID]';
+    } else if (KNOWN_UPSCALE.test(combined)) {
+      // Upscale but not starred — use upscale floor
+      const minPrice = MICHELIN_FLOOR.upscale;
+      if (currentPrice > 0 && currentPrice < minPrice) {
+        console.warn(`MICHELIN PRICE FLOOR ENFORCED [${logPrefix}]: "${activity.title}" was €${currentPrice}/pp → raised to €${minPrice}/pp (Known upscale restaurant)`);
+        writePriceToAllFields(activity, minPrice);
+        return true;
+      }
+      return false;
+    }
+  }
+
+  if (!matchedKey) return false;
+
+  const minPrice = starRating > 0
+    ? (FINE_DINING_MIN_PRICE_BY_STARS[starRating] || FINE_DINING_MIN_PRICE_DEFAULT)
+    : FINE_DINING_MIN_PRICE_DEFAULT;
+
+  console.log(`MICHELIN FLOOR MATCH [${logPrefix}]: "${activity.title}" matched="${matchedKey}" stars=${starRating} price=${currentPrice} minPrice=${minPrice}`);
+
+  if (currentPrice > 0 && currentPrice < minPrice) {
+    console.warn(`MICHELIN PRICE FLOOR ENFORCED [${logPrefix}]: "${activity.title}" was €${currentPrice}/pp → raised to €${minPrice}/pp (${starRating}-star minimum)`);
+    writePriceToAllFields(activity, minPrice);
+    return true;
+  }
+
+  return false;
+}
+
+/** Write a corrected price to every cost field shape present on an activity. */
+function writePriceToAllFields(activity: Record<string, any>, price: number): void {
+  if (activity.cost && typeof activity.cost === 'object') activity.cost.amount = price;
+  else if (typeof activity.cost === 'number') activity.cost = price;
+  else activity.cost = { amount: price, currency: 'EUR' };
+
+  if (activity.estimatedCost && typeof activity.estimatedCost === 'object') activity.estimatedCost.amount = price;
+  else if (typeof activity.estimatedCost === 'number') activity.estimatedCost = price;
+
+  if (typeof activity.estimated_cost === 'number') activity.estimated_cost = price;
+  if (activity.price_per_person !== undefined) activity.price_per_person = price;
+  if (activity.estimated_price_per_person !== undefined) activity.estimated_price_per_person = price;
+  if (activity.price !== undefined) activity.price = price;
+  if (activity.estimated_price !== undefined) activity.estimated_price = price;
+}
+
 /**
  * Check whether an activity should be forced free.
  * Returns true if the activity matched a free-venue pattern and was zeroed.

@@ -812,7 +812,13 @@ General Requirements:
    • Mid-range sit-down restaurants: €20-50/pp
    • Casual dining and cafés: €10-30/pp
    • Fast casual, bakeries, pastéis: €5-15/pp
-   When in doubt, price HIGHER. Underpricing makes the itinerary unreliable. Use the actual price a real diner would pay at that specific restaurant.
+    When in doubt, price HIGHER. Underpricing makes the itinerary unreliable. Use the actual price a real diner would pay at that specific restaurant.
+    SPECIFIC EXAMPLES — enforce these exact minimums:
+    • Eleven Restaurant (Lisbon, 1-star Michelin): minimum €120/pp (tasting menu ~€120-150/pp). Do NOT price at €87 or below.
+    • Belcanto (Lisbon, 2-star Michelin, chef José Avillez): minimum €180/pp. Do NOT price at €166 or below.
+    • Alma (Lisbon, 2-star Michelin): minimum €180/pp.
+    • Feitoria (Lisbon, 1-star Michelin): minimum €120/pp.
+    • LOCO (Lisbon, 1-star Michelin): minimum €120/pp.
 
 DINING RULES — CRITICAL:
 - Schedule exactly ONE dinner restaurant per evening. Never schedule two fine dining or Michelin-starred restaurants in the same evening.
