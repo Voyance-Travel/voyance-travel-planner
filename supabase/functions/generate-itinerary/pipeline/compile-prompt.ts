@@ -1061,6 +1061,7 @@ If you need a museum, choose a DIFFERENT museum. If you need a landmark, choose 
 })()}
 
 
+${(() => {
   if (!paramRestaurantPool || !Array.isArray(paramRestaurantPool) || paramRestaurantPool.length === 0) return '';
   // Use the imported extractRestaurantVenueName for consistent identity matching
   const usedNormalized = new Set((paramUsedRestaurants || []).map((n: string) => extractRestaurantVenueName(n)));
