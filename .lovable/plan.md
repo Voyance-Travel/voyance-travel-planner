@@ -1,37 +1,33 @@
 
 
-## Fix "Lunch at a bistro" Placeholder — Expand Generic Venue Detection
+## Fix Generic Venue Repair Fallback — Use Real Restaurant Names When Pool Is Exhausted
 
 ### Root Cause
 
-The existing `GENERIC_VENUE_PATTERNS` in `validate-day.ts` (line 39) only catches `at a local spot|nearby spot|restaurant` but misses `at a bistro`, `at a café`, `at a nice place`, etc. The title "Lunch at a bistro" slips through validation, so `repair-day.ts` never fires its GENERIC_VENUE replacement logic.
+The detection works — `validate-day.ts` line 39 correctly catches "Lunch at a bistro" as `GENERIC_VENUE`. The repair in `repair-day.ts` lines 300-327 tries to replace it from `restaurantPool`, but when the pool is exhausted (all matching venues already used), the fallback (lines 329-344) only cleans the location field — it leaves the generic title "Lunch at a bistro" intact.
 
-The validate+repair pipeline already handles this bug category — it just needs wider pattern coverage.
+The fix: when the pool has no replacement, use a hardcoded city-aware fallback restaurant list to assign a real restaurant name instead of leaving the placeholder.
 
-### Plan (2 files)
+### Plan (1 file)
 
-**File 1: `supabase/functions/generate-itinerary/pipeline/validate-day.ts`**
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (lines 329-344)
 
-Expand `GENERIC_VENUE_PATTERNS` (line 39) to catch more generic meal titles:
+Replace the "no pool venue available" fallback block with logic that:
 
-```
-// Current (line 39):
-/^(breakfast|brunch|lunch|dinner)\s+at\s+a\s+(local\s+spot|nearby\s+spot|restaurant)/i,
+1. Defines a `FALLBACK_RESTAURANTS` map keyed by city (starting with Lisbon, expandable), with entries per meal type — each entry has `name`, `neighborhood`, and `address`
+2. When no pool replacement is found, looks up `resolvedDestination` in the fallback map
+3. Picks a restaurant for the detected meal type that isn't in `usedSet`
+4. Rewrites `act.title` to "Lunch at [Real Name]", `act.location.name` to the real name, and `act.location.address` to the real address
+5. If even the fallback list is exhausted, falls back to the existing behavior (clean location only) but also rewrites the title to remove the generic article pattern (e.g., "Lunch at a bistro" → "Lunch")
 
-// Replace with broader pattern:
-/^(breakfast|brunch|lunch|dinner|supper|meal)\s+at\s+(a|an|the)\s+/i,
-```
-
-This catches "Lunch at a bistro", "Dinner at a café", "Breakfast at a nice place", etc. — any meal title using an article instead of a proper noun is a placeholder.
-
-**File 2: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
-
-Add "a bistro" and "a nice place" to the BANNED phrases in the existing RESTAURANT NAMING RULES section (~line 821) to reduce AI generation of these placeholders in the first place.
+Example fallback restaurants for Lisbon:
+- **Breakfast**: Heim Café, Copenhagen Coffee Lab, Hello Kristof, The Mill, Nicolau Lisboa
+- **Lunch**: Cervejaria Ramiro, Ponto Final, O Velho Eurico, A Cevicheria, Café de São Bento
+- **Dinner**: Sacramento do Chiado, Solar dos Presuntos, Sea Me, Mini Bar Teatro, Pharmácia
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — broaden generic venue regex to catch all "Meal at a [descriptor]" patterns
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add more banned placeholder phrases to prompt
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add city-aware fallback restaurant list for when the pool is exhausted, ensuring generic titles are always replaced with real restaurant names
 
 ### Verification
-Generate a 4-day Lisbon trip. Every dining activity should have a real restaurant name. Check edge function logs for GENERIC_VENUE repair entries to confirm the detection fires if the AI still generates placeholders.
+Generate a 4-day Lisbon trip. Every dining activity should have a real restaurant name. Check logs for `[Repair] GENERIC_VENUE` entries — if the fallback fires, it should show "Replaced ... → Lunch at [Real Name]" instead of "No pool replacement".
 
