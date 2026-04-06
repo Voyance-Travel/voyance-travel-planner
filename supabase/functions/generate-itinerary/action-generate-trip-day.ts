@@ -348,7 +348,9 @@ async function _handleGenerateTripDayInner(
   console.log(`Type: ${typeof tripMeta.used_restaurants}, IsArray: ${Array.isArray(tripMeta.used_restaurants)}`);
   const allRestaurantParams = Object.keys(tripMeta).filter(k => /restaurant|used|block|previous|dining/i.test(k));
   console.log('All restaurant-related metadata keys:', JSON.stringify(allRestaurantParams.map(k => ({ key: k, count: Array.isArray(tripMeta[k]) ? (tripMeta[k] as any[]).length : 'N/A' }))));
-  
+  if (dayNumber === totalDays) {
+    console.log(`DEPARTURE DAY GENERATION: usedRestaurants contains ${usedRestaurants.length} entries:`, JSON.stringify(usedRestaurants));
+  }
   // Get the pool for this day's city
   const dayCity = cityInfo?.cityName || destination || '';
   let restaurantPool: any[] = restaurantPoolByCity[dayCity] || [];
