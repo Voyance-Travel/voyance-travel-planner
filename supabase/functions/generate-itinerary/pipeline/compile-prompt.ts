@@ -833,6 +833,15 @@ DINING RULES — CRITICAL:
 - Include meals as specified by the day's meal policy (see timing instructions above) — each a real named restaurant with price
 - Each lunch and dinner recommendation should include 1 ALTERNATIVE option in its "tips" field
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
+${(totalDays || 1) >= 3 ? `
+MICHELIN DINING INCLUSION (for cities with Michelin restaurants):
+- Trips of 3+ days: include AT LEAST 1 Michelin-starred dinner across the trip
+- Trips of 5+ days: include 2-3 Michelin-starred dinners across the trip
+- It is BETTER to include a correctly-priced Michelin restaurant than to avoid all Michelin restaurants
+- Do NOT remove Michelin restaurants to avoid pricing issues — price them correctly instead
+- Michelin dinners add prestige, variety, and authenticity to a luxury itinerary
+- Every dining activity MUST have a real, specific restaurant name and address — NEVER use "the destination", the city name, or "get a restaurant recommendation" as a venue
+` : ''}
 
 RESTAURANT NAMING RULES — CRITICAL:
 - Every dining activity MUST include a SPECIFIC, REAL restaurant name. Never use generic placeholders like "a local spot", "a nearby café", "a local restaurant", "a bistro", "a nice place", "a charming spot", "the destination", or similar vague descriptions. ANY title matching "Meal at a/an/the [descriptor]" is BANNED.

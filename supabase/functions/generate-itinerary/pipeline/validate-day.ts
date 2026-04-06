@@ -113,7 +113,7 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   checkChainRestaurants(activities, results);
 
   // --- GENERIC_VENUE ---
-  checkGenericVenues(activities, results);
+  checkGenericVenues(activities, results, destination);
 
   // --- TITLE_LABEL_LEAK ---
   checkLabelLeaks(activities, results);
@@ -236,7 +236,9 @@ function checkChainRestaurants(activities: StrictActivityMinimal[], results: Val
   }
 }
 
-function checkGenericVenues(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
+function checkGenericVenues(activities: StrictActivityMinimal[], results: ValidationResult[], destination?: string): void {
+  const destLower = (destination || '').toLowerCase().trim();
+
   for (let i = 0; i < activities.length; i++) {
     const title = activities[i].title || '';
     const cat = (activities[i].category || '').toLowerCase();
@@ -244,7 +246,16 @@ function checkGenericVenues(activities: StrictActivityMinimal[], results: Valida
 
     // Also check venue/location name for placeholder patterns
     const locationName = ((activities[i] as any).location?.name || '').trim().toLowerCase();
+    const description = ((activities[i] as any).description || '').toLowerCase();
+
+    // Catch city-name-only venues (e.g., "Paris", "Rome") and placeholder descriptions
+    const isCityNameOnly = destLower && locationName === destLower;
+    const hasPlaceholderDescription = description.includes('get a restaurant recommendation') ||
+      description.includes('ask for recommendations') ||
+      description.includes('ask your concierge');
+
     const hasPlaceholderLocation = locationName === 'the destination' || locationName === '' ||
+      isCityNameOnly || hasPlaceholderDescription ||
       /^(a |the )?(local |nearby )?(spot|place|restaurant|caf[eé]|cafe|eatery|bistro|establishment)/i.test(locationName);
 
     if (GENERIC_VENUE_PATTERNS.some(re => re.test(title.trim()))) {

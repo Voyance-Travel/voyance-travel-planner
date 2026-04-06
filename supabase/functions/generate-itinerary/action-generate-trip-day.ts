@@ -1664,6 +1664,21 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── Michelin inclusion diagnostic ──
+  if (totalDays >= 3) {
+    const allActs = updatedDays.flatMap((d: any) => d.activities || []);
+    const { KNOWN_FINE_DINING_STARS } = await import('./sanitization.ts');
+    const starKeys = Object.keys(KNOWN_FINE_DINING_STARS || {});
+    const hasMichelin = allActs.some((a: any) => {
+      const t = (a.title || '').toLowerCase();
+      const v = ((a as any).location?.name || (a as any).venue_name || '').toLowerCase();
+      return starKeys.some(k => t.includes(k) || v.includes(k));
+    });
+    if (!hasMichelin) {
+      console.warn(`[MICHELIN INCLUSION] No Michelin restaurants found on a ${totalDays}-day ${destination} trip. Consider adding at least one starred dinner.`);
+    }
+  }
+
   if (dayNumber >= totalDays) {
     // All days complete — but only mark ready if all days have real activities
     const finalStatus = isComplete ? 'ready' : 'partial';
