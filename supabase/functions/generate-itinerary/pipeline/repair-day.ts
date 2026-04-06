@@ -193,7 +193,6 @@ const FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackVenue[]>> = {
       { name: 'Can Paixano', neighborhood: 'Barceloneta', address: 'C/ de la Reina Cristina 7, Barcelona' },
     ],
   },
-  },
   'paris': {
     breakfast: [
       { name: 'Café de Flore', neighborhood: 'Saint-Germain-des-Prés', address: '172 Bd Saint-Germain, Paris' },
