@@ -1,37 +1,52 @@
 
 
-## Fix Repeated Breakfast Restaurants Across Multi-Day Trips
+## Fix Venue Type Pricing — Street Food at €65, Bar Nightcaps at €143
 
 ### Root Cause
 
-The dedup code already tracks breakfast venues in `MEAL_RE` and `MEAL_RE_FAILSAFE`. However, two issues combine to let breakfast repeats through:
-
-1. **Hotel breakfast preference creates repeats at the source.** The prompt says "At the hotel's own restaurant (preferred)" for breakfast. On a 5-day trip at Shangri-La Paris, the AI picks the hotel restaurant for breakfast on multiple days because it's explicitly told to prefer it. The hotel restaurant name then appears in `usedRestaurants`, but on the next day the prompt again says "preferred" — contradicting the blocklist.
-
-2. **No Paris/Berlin/Rome/London failsafe fallbacks.** When the post-assembly dedup detects a duplicate breakfast, it tries `FAILSAFE_FALLBACKS[cityKey]` — but only Lisbon, Porto, and Barcelona have entries. For Paris, `cityKey` resolves to `''`, so `fallbackList` is empty. The duplicate is kept under the "primary meal > uniqueness" rule.
+The Michelin price floor only raises prices; there's no corresponding **price ceiling** for casual venues and bar/cocktail activities. The AI assigns restaurant-tier prices to all DINING activities regardless of venue type. No post-generation cap exists for bars, nightcaps, or street food.
 
 ### Changes
 
-#### 1. Limit hotel breakfast preference to specific days only (`compile-prompt.ts` ~line 425)
+#### 1. Add venue-type price caps to `sanitization.ts`
 
-Change the breakfast instruction so that hotel breakfast is only "preferred" on Day 1 (arrival day) and checkout day. On other days, instruct the AI to pick a local café or bakery — not the hotel. This prevents the AI from generating the same hotel restaurant on 3-5 days.
+Add two new exported functions after `enforceTicketedAttractionPricing`:
 
-Specifically: wrap the existing hotel-preference text with a condition:
-- If `isFirstDay` or `isLastDay` → keep "At the hotel's own restaurant (preferred)"
-- Otherwise → use "At a well-reviewed local café, bakery, or brasserie near your hotel. Do NOT use the hotel restaurant — choose a DIFFERENT breakfast venue each day."
+**`enforceBarNightcapPriceCap(activity, logPrefix)`**
+- Detect bar/nightcap activities via title keywords: `nightcap`, `cocktail`, `aperitif`, `drinks at`, `bar` (excluding `barbecue`, `barista`, `bar restaurant`)
+- Skip if activity matches any `KNOWN_FINE_DINING_STARS` key (a hotel bar at a Michelin restaurant should not be capped)
+- If price > 50, cap at 35 and log `BAR PRICING CAP`
+- Uses existing `resolvePrice` pattern and `writePriceToAllFields`
 
-#### 2. Add Paris, Berlin, Rome, and London failsafe fallbacks (`action-generate-trip-day.ts` ~line 1446)
+**`enforceCasualVenuePriceCap(activity, logPrefix)`**
+- `KNOWN_CASUAL_VENUES` map: `Record<string, number>` — ~10 entries (trapizzino: 15, bao: 20, five guys: 20, shake shack: 20, currywurst: 12, döner: 12, etc.)
+- Check title and venue_name against keys; if price exceeds the max, cap it and log `CASUAL VENUE CAP`
 
-Add fallback breakfast/lunch/dinner entries for Paris, Berlin, Rome, and London to the `FAILSAFE_FALLBACKS` map — at minimum 4-6 breakfast spots per city. This ensures that when dedup fires, there's a replacement available instead of keeping the duplicate.
+#### 2. Call caps in the final guard loops
 
-#### 3. Add city aliases for new cities (`action-generate-trip-day.ts` ~line 1457)
+In both `action-generate-trip-day.ts` (~line 1658) and `action-generate-day.ts` (~line 1076), call the two new cap functions **before** `enforceMichelinPriceFloor` (so Michelin floor still wins for starred restaurants):
 
-Add aliases: `'paris': ['paris']`, `'berlin': ['berlin']`, `'rome': ['roma']`, `'london': ['londres']`.
+```
+enforceBarNightcapPriceCap(act)
+enforceCasualVenuePriceCap(act)
+enforceTicketedAttractionPricing(act)
+enforceMichelinPriceFloor(act)  // last — always wins
+```
+
+#### 3. Add venue-type pricing guidance to prompt (`compile-prompt.ts`)
+
+After the "TICKETED ATTRACTION PRICING" block, add a "VENUE TYPE PRICING" section covering:
+- Street food / casual quick-service: €5-15/pp
+- Bar / cocktail / nightcap: €15-35/pp, never above €50
+- Casual restaurants: €15-45/pp
+- Upscale non-starred: €45-120/pp
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `compile-prompt.ts` | Limit hotel breakfast preference to arrival/departure days; other days say "pick a different local café" |
-| `action-generate-trip-day.ts` | Add Paris, Berlin, Rome, London to `FAILSAFE_FALLBACKS` with 4-6 breakfast + 2-3 lunch/dinner each; add city aliases |
+| `sanitization.ts` | Add `KNOWN_CASUAL_VENUES`, `enforceBarNightcapPriceCap()`, `enforceCasualVenuePriceCap()` |
+| `action-generate-trip-day.ts` | Call both cap functions in final guard loop before Michelin floor |
+| `action-generate-day.ts` | Same — call both cap functions before Michelin floor |
+| `compile-prompt.ts` | Add venue-type pricing guidelines after ticketed attraction section |
 
