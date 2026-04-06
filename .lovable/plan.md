@@ -1,61 +1,43 @@
 
 
-## Fix Restaurant Repetition Regression (Pino Day 3 + Day 4)
+## Fix Garbled Venue Names (Word Substitution Variant)
 
-### Root Cause Analysis
+### Problem
+AI sometimes substitutes proper nouns with phonetically similar English words in `venue_name` fields (e.g., "Alfama" → "Alphabetical"). The activity title is correct, but `venue_name` is garbled.
 
-I traced the full dedup pipeline. There are **two** dedup layers, and both likely failed for different reasons:
+### Plan (2 files)
 
-**Layer 1 — Per-day dedup** (line 883): Runs when Day 4 is generated. Checks `usedRestaurants` from metadata. If "Pino" was correctly extracted from Day 3 and stored, this should catch it. If replacement from `restaurantPool` fails (pool exhausted), it keeps the duplicate because lunch is a primary meal (`Meal > Uniqueness` rule).
+**File 1: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-**Layer 2 — Trip-wide failsafe** (line 1357): Runs after all days are assembled into `updatedDays`. Tries to replace duplicates using `FAILSAFE_FALLBACKS`. The city key lookup at line 1435-1436 does `tripDestination.includes('lisbon')` — but if the destination is stored as "**Lisboa**" (Portuguese), it won't match `"lisbon"`, so **no fallback list is found**. The duplicate is then kept because lunch is a primary meal.
+Add two functions and wire them into the existing per-activity sanitization loop (around line 317, after `cleanVenueNameMealLeakage`):
 
-**Most likely root cause**: The city key matching in the failsafe is too strict — `"lisboa".includes("lisbon")` is `false`. Additionally, logging is insufficient to confirm which layer is failing and why.
+1. **`validateVenueNameConsistency(title, venueName)`** — Cross-validates venue_name against the activity title. Extracts location names from title patterns like "through X District", "in X", "at X" and checks if venue_name references a district/walk/stroll but uses a different word. If mismatch found, replaces the garbled word with the title's location. Logs `GARBLED VENUE NAME FIX`.
 
-### Plan (1 file)
+2. **`detectGarbledVenueWords(venueName)`** — Checks venue_name against a list of known garbled words that should never appear in venue names: `Alphabetical`, `Sequential`, `Numerical`, `Categorical`, `Grammatical`, `Chronological`, `Geographical`, `Metaphorical`, `Hypothetical`. If detected and not fixable from title, logs `GARBLED VENUE WORD DETECTED` and falls back to the activity title as venue_name.
 
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
-
-**Change 1: Fix city key matching in failsafe** (around line 1434-1436)
-
-Add city aliases so "Lisboa" matches "lisbon", and similar for Porto/Oporto, etc.:
-
+Wire into existing loop at line ~317:
 ```typescript
-const CITY_ALIASES: Record<string, string[]> = {
-  'lisbon': ['lisboa', 'lisbonne', 'lissabon'],
-  'porto': ['oporto'],
-  'barcelona': ['barcelone', 'barcellona'],
-};
-
-const tripDestination = (updatedDays[0]?.destination || updatedDays[0]?.city || destination || '').toLowerCase().trim();
-const cityKey = Object.keys(FAILSAFE_FALLBACKS).find(k => {
-  if (tripDestination.includes(k)) return true;
-  const aliases = CITY_ALIASES[k] || [];
-  return aliases.some(a => tripDestination.includes(a));
-}) || '';
+if (act.venue_name) {
+  act.venue_name = cleanVenueNameMealLeakage(act.venue_name);
+  act.venue_name = validateVenueNameConsistency(act.title, act.venue_name);
+  if (detectGarbledVenueWords(act.venue_name)) {
+    // Fall back to a cleaned version derived from the title
+    act.venue_name = extractLocationFromTitle(act.title) || act.venue_name;
+  }
+}
 ```
 
-**Change 2: Add diagnostic logging to failsafe** (around line 1438)
+**File 2: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
 
-Log the resolved `cityKey` and `tripDestination` so we can confirm the lookup is working:
-
-```typescript
-console.log(`=== CROSS-DAY RESTAURANT DEDUP FAILSAFE ===`);
-console.log(`tripDestination: "${tripDestination}", resolved cityKey: "${cityKey}"`);
+Add a venue name rule to the system prompt (alongside existing rules):
 ```
-
-**Change 3: Apply same city alias fix to per-day dedup pool lookup** (around line 355-370)
-
-The `dayCity` lookup for restaurant pool also likely suffers from the same alias issue. Apply the same `CITY_ALIASES` map when resolving `restaurantPoolByCity[dayCity]`.
-
-**Change 4: Add "Pino" to the used-restaurants logging** (no code change needed — existing debug logging at line 344-353 already covers this; just verify it's working)
+VENUE NAME RULES:
+- venue_name must be a real place name, not a descriptive phrase.
+- NEVER substitute proper nouns with English adjectives (Alphabetical, Sequential, Historical).
+- venue_name should match the location referenced in the activity title.
+```
 
 ### Files to edit
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — fix city alias matching in failsafe + pool lookup, add diagnostic logging
-
-### Verification
-Generate a 4-day Lisbon trip. Confirm:
-- No restaurant appears on more than one day
-- Console shows `CROSS-DAY RESTAURANT DEDUP FAILSAFE` with correct `cityKey: "lisbon"` even when destination is "Lisboa"
-- If any duplicates found, `DEDUP REPLACEMENT` logs show successful replacement
+- `supabase/functions/generate-itinerary/sanitization.ts` — add venue name consistency check + garbled word detection
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add venue name prompt rule
 
