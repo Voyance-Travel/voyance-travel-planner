@@ -229,6 +229,20 @@ function sanitizeAddress(address: string): string {
   return result;
 }
 
+// MEAL-TYPE LEAKAGE IN VENUE NAMES
+// The AI sometimes appends meal categories to venue names
+// e.g., "Pavilhão Carlos Lopes Breakfast", "Cervejaria Ramiro Dinner"
+const MEAL_TYPE_SUFFIX_RE = /\s+(?:Breakfast|Lunch|Dinner|Brunch|Supper|Dessert|Snack)\s*$/i;
+
+function cleanVenueNameMealLeakage(name: string): string {
+  if (!name || !MEAL_TYPE_SUFFIX_RE.test(name)) return name;
+  const cleaned = name.replace(MEAL_TYPE_SUFFIX_RE, '').trim();
+  // Don't strip if it would leave a very short name (likely part of real name, e.g. "Dear Breakfast")
+  if (cleaned.length < 3) return name;
+  console.warn(`VENUE NAME LEAKAGE FIX: "${name}" → "${cleaned}"`);
+  return cleaned;
+}
+
 /**
  * Deep-sanitize all user-facing text fields in a generated day object.
  * @param usedRestaurants - Optional list of restaurant names used on previous days for repeat detection.
@@ -279,6 +293,8 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         if (act.location.address) act.location.address = sanitizeAddress(sanitizeAITextField(act.location.address, destination) || act.location.address);
       }
       if (act.venue_address) act.venue_address = sanitizeAddress(act.venue_address);
+      if (act.venue_name) act.venue_name = cleanVenueNameMealLeakage(act.venue_name);
+      if (act.restaurant?.name) act.restaurant.name = cleanVenueNameMealLeakage(act.restaurant.name);
       if (act.transportation && typeof act.transportation === 'object') {
         if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions, destination) || undefined;
         const method = (act.transportation.method || '').toLowerCase();
@@ -306,6 +322,8 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Settle\s+(?:in|into)\s+(?:at\s+)?/i, '$1 to ')
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Wind\s+Down\s+at\s+/i, '$1 to ')
           .replace(/^(Travel|Taxi|Walk|Bus|Metro|Tram|Train|Drive|Ride|Ferry)\s+to\s+Rest\s+(?:&|and)\s+Recharge\s+at\s+/i, '$1 to ');
+        // Strip trailing meal-type from transit destinations (e.g. "Travel to Pavilhão Carlos Lopes Breakfast")
+        act.title = act.title.replace(/^((?:Travel|Walk|Metro|Bus|Tram|Taxi|Train|Drive|Ride|Ferry)\s+to\s+.+?)\s+(?:Breakfast|Lunch|Dinner|Brunch)\s*$/i, '$1');
         act.name = act.title;
       }
       // Always-free activities: arrivals, departures, hotel logistics
@@ -405,6 +423,14 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
       }
 
       return act;
+    });
+  }
+
+  // Clean meal-type leakage from travel routing destinations
+  if (Array.isArray(day.travelRouting)) {
+    day.travelRouting.forEach((route: any) => {
+      if (route.destination) route.destination = cleanVenueNameMealLeakage(route.destination);
+      if (route.to) route.to = cleanVenueNameMealLeakage(route.to);
     });
   }
 
