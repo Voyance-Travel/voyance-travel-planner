@@ -472,7 +472,7 @@ REQUIRED SEQUENCE:
 2. "Hotel Checkout"
    - startTime: "${hotelCheckout}", endTime: "${addMinutesToHHMM(hotelCheckout, 15)}"
    - category: "accommodation"
-   - location: { name: "${hotelNameDisplay}" }
+   - location: { name: "${hotelNameDisplay}", address: "${flightContext.hotelAddress || ''}" }
 
 3. "Transfer to Airport"
    - startTime: "${leaveHotelBy}", endTime: "${airportArrival}"
