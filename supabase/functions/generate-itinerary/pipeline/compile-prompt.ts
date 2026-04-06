@@ -932,7 +932,9 @@ CRITICAL TIME ORDERING & MEAL TIMING RULES:
 - Morning activities: 9:00 AM – 12:00 PM.
 - Lunch: 11:30 AM – 1:30 PM.
 - Afternoon activities: 1:00 PM – 5:00 PM.
-- Dinner: 6:00 PM – 9:00 PM. NEVER schedule dinner before 5:00 PM.
+- Dinner: 7:00 PM – 9:30 PM at a proper sit-down restaurant. NEVER schedule dinner before 5:00 PM.
+- Cocktail bars, lounges, and nightcap venues do NOT count as dinner. They are supplementary evening activities that must come AFTER a proper dinner restaurant, not replace it.
+- Every full day (not departure day) MUST include breakfast, lunch, AND dinner at a proper restaurant.
 - Evening activities/nightlife: 7:00 PM – 11:00 PM.
 - Nightcap/late night: 9:00 PM – midnight. NEVER schedule a nightcap before 8:00 PM.
 - Activities must flow logically: morning → midday → afternoon → evening → night.
