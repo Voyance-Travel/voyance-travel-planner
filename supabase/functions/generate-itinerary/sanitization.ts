@@ -373,9 +373,9 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         }
 
         // Known Michelin-starred / fine dining — tiered by actual price range
-        const knownMichelinHigh = /\b(belcanto|feitoria|fifty\s*seconds)\b/i;
-        const knownMichelinMid = /\b(alma|eleven|epur|cura|loco|eneko)\b/i;
-        const knownUpscale = /\b(il\s*gallo|ceia|enoteca|sommelier)\b/i;
+        const knownMichelinHigh = /\b(belcanto|feitoria|fifty\s*seconds|fortaleza\s*do\s*guincho)\b/i;
+        const knownMichelinMid = /\b(alma|eleven|epur|cura|loco|eneko|100\s*maneiras|cem\s*maneiras|casa\s*da\s*comida|pedro\s*lemos|antiqvvm|largo\s*do\s*pa[çc]o|euskalduna|casa\s*de\s*ch[áa]\s*da\s*boa\s*nova|boa\s*nova)\b/i;
+        const knownUpscale = /\b(il\s*gallo|ceia|enoteca|sommelier|mini\s*bar|sacramento|solar\s*dos\s*presuntos|the\s*yeatman|yeatman)\b/i;
 
         if (floor < 150 && knownMichelinHigh.test(combined)) {
           floor = 150; reason = 'Known top-tier Michelin restaurant';
