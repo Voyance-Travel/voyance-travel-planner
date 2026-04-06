@@ -1091,6 +1091,21 @@ function getActivityCostInfo(
   const rawCostAmount = activity.cost?.amount;
   const costAmount = (rawCostAmount !== null && rawCostAmount !== undefined && !isNaN(rawCostAmount))
     ? rawCostAmount : undefined;
+
+  // Also check normalized root-level price fields preserved by the parser spread
+  // These survive even when parseCost couldn't build a cost object
+  const actAny = activity as any;
+  const normalizedPrice = (() => {
+    for (const field of ['price_per_person', 'estimated_price_per_person', 'price']) {
+      const v = actAny[field];
+      if (typeof v === 'number' && !isNaN(v)) return v;
+    }
+    return undefined;
+  })();
+  // If backend explicitly marked is_free, trust it
+  if (actAny.is_free === true) {
+    return { amount: 0, isEstimated: false, confidence: 'high' as const, basis: 'flat' as CostBasis };
+  }
   
   // Check cost.amount first - this is explicit pricing from venue data
   // BUT if it's 0 and the category should never be free, fall through to estimation
@@ -1112,6 +1127,14 @@ function getActivityCostInfo(
   } else if (costAmount === 0) {
     // Truly free activity (parks, viewpoints, walking tours, etc.)
     return { amount: 0, isEstimated: false, confidence: 'high', basis };
+  }
+
+  // Check normalized root-level price fields (e.g. price_per_person: 0 from backend)
+  if (normalizedPrice !== undefined && normalizedPrice === 0 && !shouldNeverBeFree) {
+    return { amount: 0, isEstimated: false, confidence: 'high', basis };
+  }
+  if (normalizedPrice !== undefined && normalizedPrice > 0 && costAmount === undefined) {
+    return { amount: normalizedPrice, isEstimated: false, confidence: 'medium', basis };
   }
   
   // Check estimatedCost - AI-provided estimate during generation

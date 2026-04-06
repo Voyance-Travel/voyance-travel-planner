@@ -41,12 +41,23 @@ export function checkAndApplyFreeVenue(activity: Record<string, any>, label = 's
     activity.restaurant?.description || '',
   ].join(' ');
 
+  // Resolve cost from all supported shapes — handle objects and numbers uniformly
+  const resolveCostField = (v: unknown): number => {
+    if (typeof v === 'number' && !isNaN(v)) return v;
+    if (v && typeof v === 'object' && 'amount' in (v as any)) {
+      const amt = (v as any).amount;
+      return typeof amt === 'number' && !isNaN(amt) ? amt : 0;
+    }
+    return 0;
+  };
+
   const effectiveCost = Math.max(
-    typeof activity.cost === 'object' ? (activity.cost?.amount ?? 0) : (typeof activity.cost === 'number' ? activity.cost : 0),
-    activity.estimatedCost ?? 0,
-    activity.estimated_price_per_person ?? 0,
-    activity.price ?? 0,
-    activity.price_per_person ?? 0,
+    resolveCostField(activity.cost),
+    resolveCostField(activity.estimatedCost),
+    resolveCostField(activity.estimated_cost),
+    typeof activity.estimated_price_per_person === 'number' ? activity.estimated_price_per_person : 0,
+    typeof activity.price === 'number' ? activity.price : 0,
+    typeof activity.price_per_person === 'number' ? activity.price_per_person : 0,
   );
 
   if (effectiveCost <= 0) return false;

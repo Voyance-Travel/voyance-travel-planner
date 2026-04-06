@@ -204,7 +204,14 @@ export function usePayableItems({
     // Activities from itinerary
     days.forEach(day => {
       day.activities.forEach(activity => {
-        let cost = (typeof activity.cost === 'number' ? activity.cost : (activity.cost as any)?.amount) || (activity.estimatedCost as any)?.amount || 0;
+        // Use nullish coalescing so that explicit 0 is preserved (free venues)
+        const rawCost = typeof activity.cost === 'number' ? activity.cost : (activity.cost as any)?.amount;
+        const rawEst = (activity.estimatedCost as any)?.amount;
+        let cost = (rawCost !== null && rawCost !== undefined && !isNaN(rawCost)) ? rawCost
+          : (rawEst !== null && rawEst !== undefined && !isNaN(rawEst)) ? rawEst : 0;
+
+        // Also check is_free flag set by backend sanitization
+        if ((activity as any).is_free === true) cost = 0;
 
         const titleLower = (activity.title || '').toLowerCase();
         const catLower = (activity.type || activity.category || '').toLowerCase();
