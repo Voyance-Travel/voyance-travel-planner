@@ -121,6 +121,7 @@ export async function compilePrompt(
     isFirstDayInCity: paramIsFirstDayInCity,
     restaurantPool: paramRestaurantPool,
     usedRestaurants: paramUsedRestaurants,
+    usedVenues: paramUsedVenues,
     hotelOverride: paramHotelOverride,
   } = params;
 
