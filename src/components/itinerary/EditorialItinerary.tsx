@@ -1074,6 +1074,9 @@ function getActivityCostInfo(
     locationName: activity.location?.name,
     address: activity.location?.address,
     description: (activity as any).description,
+    venueName: (activity as any).venue_name,
+    restaurantName: (activity as any).restaurant?.name,
+    placeName: (activity as any).place_name,
   });
 
   if (isFreePublicVenue || (looksLikelyFree && !isNeverFreeCategory(category, title))) {
