@@ -40,20 +40,46 @@ export function ShareTripCard({ isOpen, onClose, trip, photos, highlights }: Sha
     setShareUrl('');
   }, [trip.id]);
 
-  // Resolve invite link on open using centralized resolver
+  // Resolve public share link on open (prefer public read-only link over invite)
   useEffect(() => {
     if (!isOpen || shareUrl) return;
     const createLink = async () => {
       try {
-        const result = await resolveInviteLink(trip.id);
-        if (result.success && result.link) {
-          setShareUrl(result.link);
+        // First try to enable public share and get read-only link
+        const { data: tripData } = await supabase
+          .from('trips')
+          .select('share_enabled, share_token')
+          .eq('id', trip.id)
+          .single();
+
+        if (tripData?.share_enabled && tripData?.share_token) {
+          const { getAppUrl: getUrl } = await import('@/utils/getAppUrl');
+          setShareUrl(`${getUrl()}/trip-share/${tripData.share_token}`);
+          return;
+        }
+
+        // Enable public share if not already enabled
+        const { data: toggleResult } = await supabase.rpc('toggle_consumer_trip_share', {
+          p_trip_id: trip.id,
+          p_enabled: true,
+        });
+        const result = toggleResult as unknown as { success: boolean; share_token: string };
+        if (result?.success && result?.share_token) {
+          const { getAppUrl: getUrl } = await import('@/utils/getAppUrl');
+          setShareUrl(`${getUrl()}/trip-share/${result.share_token}`);
+          return;
+        }
+
+        // Fallback to invite link
+        const inviteResult = await resolveInviteLink(trip.id);
+        if (inviteResult.success && inviteResult.link) {
+          setShareUrl(inviteResult.link);
         } else {
-          console.error('[ShareTripCard] Invite resolution failed:', result.reason);
-          toast.error(getInviteErrorMessage(result.reason));
+          console.error('[ShareTripCard] Invite resolution failed:', inviteResult.reason);
+          toast.error(getInviteErrorMessage(inviteResult.reason));
         }
       } catch (e) {
-        console.error('[ShareTripCard] Failed to create invite link:', e);
+        console.error('[ShareTripCard] Failed to create share link:', e);
       }
     };
     createLink();
