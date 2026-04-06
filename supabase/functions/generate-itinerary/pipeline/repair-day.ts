@@ -128,6 +128,70 @@ const CITY_TO_TIER: Record<string, string> = {
   'tbilisi': 'budget', 'tashkent': 'budget',
 };
 
+// =============================================================================
+// FALLBACK RESTAURANTS — City-aware hardcoded venues for when pool is exhausted
+// =============================================================================
+
+interface FallbackVenue {
+  name: string;
+  neighborhood: string;
+  address: string;
+}
+
+const FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackVenue[]>> = {
+  'lisbon': {
+    breakfast: [
+      { name: 'Heim Café', neighborhood: 'Chiado', address: 'R. de Santos-o-Velho 2, Lisbon' },
+      { name: 'Copenhagen Coffee Lab', neighborhood: 'Chiado', address: 'R. Nova da Piedade 10, Lisbon' },
+      { name: 'Hello Kristof', neighborhood: 'Príncipe Real', address: 'R. do Poço dos Negros 103, Lisbon' },
+      { name: 'The Mill', neighborhood: 'Santos', address: 'R. do Poço dos Negros 1, Lisbon' },
+      { name: 'Nicolau Lisboa', neighborhood: 'Rossio', address: 'R. de São Nicolau 17, Lisbon' },
+    ],
+    lunch: [
+      { name: 'Cervejaria Ramiro', neighborhood: 'Intendente', address: 'Av. Almirante Reis 1H, Lisbon' },
+      { name: 'Ponto Final', neighborhood: 'Cacilhas', address: 'R. do Ginjal 72, Almada' },
+      { name: 'O Velho Eurico', neighborhood: 'Alfama', address: 'Largo de São Cristóvão 3, Lisbon' },
+      { name: 'A Cevicheria', neighborhood: 'Príncipe Real', address: 'R. Dom Pedro V 129, Lisbon' },
+      { name: 'Café de São Bento', neighborhood: 'São Bento', address: 'R. de São Bento 212, Lisbon' },
+    ],
+    dinner: [
+      { name: 'Sacramento do Chiado', neighborhood: 'Chiado', address: 'R. do Sacramento 26, Lisbon' },
+      { name: 'Solar dos Presuntos', neighborhood: 'Restauradores', address: 'R. das Portas de Santo Antão 150, Lisbon' },
+      { name: 'Sea Me', neighborhood: 'Chiado', address: 'R. do Loreto 21, Lisbon' },
+      { name: 'Mini Bar Teatro', neighborhood: 'Chiado', address: 'R. António Maria Cardoso 58, Lisbon' },
+      { name: 'Pharmácia', neighborhood: 'Santa Catarina', address: 'R. Marechal Saldanha 1, Lisbon' },
+    ],
+  },
+  'porto': {
+    breakfast: [
+      { name: 'Mesa 325', neighborhood: 'Ribeira', address: 'R. de Santa Catarina 325, Porto' },
+      { name: 'Combi Coffee Roasters', neighborhood: 'Cedofeita', address: 'R. de Passos Manuel 27, Porto' },
+    ],
+    lunch: [
+      { name: 'Cantinho do Avillez', neighborhood: 'Ribeira', address: 'R. de Mouzinho da Silveira 166, Porto' },
+      { name: 'Café Santiago', neighborhood: 'Baixa', address: 'R. de Passos Manuel 226, Porto' },
+    ],
+    dinner: [
+      { name: 'Pedro Lemos', neighborhood: 'Foz', address: 'R. do Padre Luís Cabral 974, Porto' },
+      { name: 'Cafeína', neighborhood: 'Foz do Douro', address: 'R. do Padrão 100, Porto' },
+    ],
+  },
+  'barcelona': {
+    breakfast: [
+      { name: 'Federal Café', neighborhood: 'Gòtic', address: 'Passatge de la Pau 11, Barcelona' },
+      { name: 'Flax & Kale', neighborhood: 'Raval', address: 'C/ dels Tallers 74B, Barcelona' },
+    ],
+    lunch: [
+      { name: 'Can Culleretes', neighborhood: 'Gòtic', address: "C/ d'en Quintana 5, Barcelona" },
+      { name: 'La Pepita', neighborhood: 'Gràcia', address: 'C/ de Còrsega 343, Barcelona' },
+    ],
+    dinner: [
+      { name: 'Tickets', neighborhood: 'Poble-sec', address: 'Av. del Paral·lel 164, Barcelona' },
+      { name: 'Can Paixano', neighborhood: 'Barceloneta', address: 'C/ de la Reina Cristina 7, Barcelona' },
+    ],
+  },
+};
+
 export function getCityTier(city?: string): CityTransitTier {
   if (!city) return TRANSIT_TIERS.default;
   const lower = city.toLowerCase().trim();
