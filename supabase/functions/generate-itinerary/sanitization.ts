@@ -389,8 +389,30 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
         if (act.location.address) act.location.address = sanitizeAddress(sanitizeAITextField(act.location.address, destination) || act.location.address);
       }
       if (act.venue_address) act.venue_address = sanitizeAddress(act.venue_address);
-      if (act.venue_name) act.venue_name = cleanVenueNameMealLeakage(act.venue_name);
-      if (act.restaurant?.name) act.restaurant.name = cleanVenueNameMealLeakage(act.restaurant.name);
+      if (act.venue_name) {
+        act.venue_name = cleanVenueNameMealLeakage(act.venue_name);
+        act.venue_name = validateVenueNameConsistency(act.title, act.venue_name);
+        if (detectGarbledVenueWords(act.venue_name)) {
+          const titleLoc = extractLocationFromTitle(act.title);
+          if (titleLoc) {
+            console.warn(`GARBLED VENUE WORD DETECTED: "${act.venue_name}" — falling back to title location "${titleLoc}"`);
+            act.venue_name = titleLoc;
+          } else {
+            console.warn(`GARBLED VENUE WORD DETECTED: "${act.venue_name}" — no title location available`);
+          }
+        }
+      }
+      if (act.restaurant?.name) {
+        act.restaurant.name = cleanVenueNameMealLeakage(act.restaurant.name);
+        act.restaurant.name = validateVenueNameConsistency(act.title, act.restaurant.name);
+        if (detectGarbledVenueWords(act.restaurant.name)) {
+          const titleLoc = extractLocationFromTitle(act.title);
+          if (titleLoc) {
+            console.warn(`GARBLED VENUE WORD DETECTED (restaurant.name): "${act.restaurant.name}" — falling back to "${titleLoc}"`);
+            act.restaurant.name = titleLoc;
+          }
+        }
+      }
       if (act.transportation && typeof act.transportation === 'object') {
         if (act.transportation.instructions) act.transportation.instructions = sanitizeAITextField(act.transportation.instructions, destination) || undefined;
         const method = (act.transportation.method || '').toLowerCase();
