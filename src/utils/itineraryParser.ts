@@ -294,10 +294,11 @@ function parseLocation(raw: unknown): ParsedLocation | undefined {
  * Parse cost from various formats
  */
 function parseCost(raw: unknown): ParsedCost | undefined {
-  if (!raw) return undefined;
+  // CRITICAL: numeric 0 is a valid cost (free venue) — do NOT treat it as falsy
+  if (raw === null || raw === undefined || raw === '') return undefined;
   
   if (typeof raw === 'number') {
-    return { amount: raw };
+    return isNaN(raw) ? undefined : { amount: raw };
   }
   
   if (typeof raw === 'object' && raw !== null) {
@@ -419,8 +420,9 @@ function parseSingleActivity(
     voucherUrl: extractString(activityData, ['voucherUrl', 'voucher_url']),
     bookingRequired: extractBoolean(activityData, ['bookingRequired', 'booking_required']),
     reservationTime: extractString(activityData, ['reservationTime', 'reservation_time']),
-    cost: parseCost(activityData.cost || activityData.estimatedCost || activityData.estimated_cost),
-    estimatedCost: parseCost(activityData.estimatedCost || activityData.estimated_cost || activityData.cost),
+    // Use nullish coalescing (??) instead of || so numeric 0 is preserved
+    cost: parseCost(activityData.cost ?? activityData.estimatedCost ?? activityData.estimated_cost),
+    estimatedCost: parseCost(activityData.estimatedCost ?? activityData.estimated_cost ?? activityData.cost),
     transportation: parseTransportation(activityData.transportation),
     isLocked: extractBoolean(activityData, ['isLocked', 'is_locked', 'locked']),
     rating: parseRating(activityData.rating),
