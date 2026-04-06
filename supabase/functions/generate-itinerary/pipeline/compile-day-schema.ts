@@ -402,7 +402,7 @@ REQUIRED SEQUENCE:
 2. "Hotel Checkout"
    - startTime: "${calculatedCheckout}", endTime: "${addMinutesToHHMM(calculatedCheckout, 15)}"
    - category: "accommodation"
-   - location: { name: "${hotelNameDisplay}" }
+   - location: { name: "${hotelNameDisplay}", address: "${flightContext.hotelAddress || ''}" }
 
 3. "Transfer to ${depStation}"
    - startTime: "${leaveForStation}", endTime: "${addMinutesToHHMM(depTime, -10)}"
@@ -472,7 +472,7 @@ REQUIRED SEQUENCE:
 2. "Hotel Checkout"
    - startTime: "${hotelCheckout}", endTime: "${addMinutesToHHMM(hotelCheckout, 15)}"
    - category: "accommodation"
-   - location: { name: "${hotelNameDisplay}" }
+   - location: { name: "${hotelNameDisplay}", address: "${flightContext.hotelAddress || ''}" }
 
 3. "Transfer to Airport"
    - startTime: "${leaveHotelBy}", endTime: "${airportArrival}"
@@ -583,6 +583,7 @@ DEPARTURE DAY ACTIVITIES: 1-2 maximum (morning only, near hotel)
 4. "Hotel Checkout & Collect Luggage"
    - startTime: "${checkoutStart}", endTime: "${checkoutEnd}"
    - category: "accommodation"
+   - location: { name: "${hotelNameDisplay}", address: "${flightContext.hotelAddress || ''}" }
    - description: "Check out and collect stored luggage"
 
 5. "Transfer to Airport"
