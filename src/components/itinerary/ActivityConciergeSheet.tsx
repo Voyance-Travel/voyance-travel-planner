@@ -107,6 +107,8 @@ export default function ActivityConciergeSheet({
   travelers = 1,
   currency = 'USD',
   onActivitySwap,
+  onSaveNote,
+  savedNoteContents,
 }: ActivityConciergeSheetProps) {
   const isMobile = useIsMobile();
   const [input, setInput] = useState('');
