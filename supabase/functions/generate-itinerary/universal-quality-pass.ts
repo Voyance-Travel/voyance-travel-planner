@@ -132,51 +132,23 @@ export async function universalQualityPass(
     );
   }
 
-  // ── Step 4: Free venue pricing ──
+  // ── Step 5: Free venue pricing ──
   for (const act of result) {
     checkAndApplyFreeVenue(act, label);
   }
 
-  // ── Step 5: Market dining cap ──
+  // ── Step 6: Market dining cap ──
   for (const act of result) {
     enforceMarketDiningCap(act, label);
   }
 
-  // ── Step 6: Universal price caps ──
+  // ── Step 7: Universal price caps ──
   for (const act of result) {
     enforceBarNightcapPriceCap(act, label);
     enforceCasualVenuePriceCap(act, label);
     enforceVenueTypePriceCap(act, label);
     enforceTicketedAttractionPricing(act, label);
     enforceMichelinPriceFloor(act, label);
-  }
-
-  // ── Step 7: Cross-day venue dedup ──
-  if (usedVenueNames.size > 0) {
-    result = result.filter(a => {
-      const cat = (a.category || '').toLowerCase();
-      if (DEDUP_SKIP_CATS.has(cat)) return true;
-      // Don't dedup dining — it's handled separately by restaurant dedup
-      if (cat === 'dining' || cat === 'restaurant') return true;
-
-      const candidates = [
-        a.location?.name || '',
-        a.venue_name || '',
-        a.title || '',
-      ].map(s => s.trim()).filter(s => s.length > 3 && !/your hotel/i.test(s));
-
-      for (const raw of candidates) {
-        const norm = normalizeVenueName(raw);
-        if (!norm) continue;
-        for (const used of usedVenueNames) {
-          if (venueNamesMatch(norm, used)) {
-            console.warn(`[QUALITY] DEDUP: "${a.title}" at "${a.venue_name || a.location?.name || ''}" repeats from previous day — REMOVING`);
-            return false;
-          }
-        }
-      }
-      return true;
-    });
   }
 
   // ── Step 8: Ensure hotel return at end of day (except departure day) ──

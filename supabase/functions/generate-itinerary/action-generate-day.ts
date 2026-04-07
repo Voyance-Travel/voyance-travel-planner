@@ -345,7 +345,8 @@ export async function handleGenerateDay(
       normalizedActivities = await universalQualityPass(normalizedActivities, {
         city: destination,
         country: destinationCountry || '',
-        tripType: tripType || 'Explorer',
+        dnaTier: tripType || 'Explorer',
+        dnaArchetype: '',
         dayIndex: dayNumber - 1,
         totalDays: totalDays || 1,
         usedVenueNames: new Set<string>(),

@@ -1016,7 +1016,8 @@ async function _handleGenerateTripDayInner(
     dayResult.activities = await universalQualityPass(dayResult.activities, {
       city: cityInfo?.cityName || destination,
       country: destinationCountry || '',
-      tripType: tripType || 'Explorer',
+      dnaTier: tripType || 'Explorer',
+      dnaArchetype: '',
       dayIndex: dayNumber - 1,
       totalDays,
       usedVenueNames: usedVenueSet,
