@@ -1,54 +1,55 @@
 
 
-## Add Departure-Day Activity Stripping in the Orchestrator
+## Expand Free Venue Patterns
 
-### Context
+### What Changes
 
-The departure-day 3-hour buffer filter already exists in `action-generate-day.ts` (lines 567-589) and `repair-day.ts` handles logistics sequencing. However, as a safety net — matching the pattern requested for arrival-day — we need an explicit post-processing filter in the orchestrator (`action-generate-trip-day.ts`) that strips activities scheduled after `departureTime - 3h`.
+Two files need updating — the backend regex (single combined pattern) and the frontend pattern array — plus the corresponding test file.
 
-### The Fix
+### 1. Backend: `supabase/functions/generate-itinerary/sanitization.ts`
 
-**File: `action-generate-trip-day.ts` — after the validate/repair pipeline (~line 950), before cross-day dedup (~line 952)**
+**Line 17 — `ALWAYS_FREE_VENUE_PATTERNS`**: Expand the single regex to add:
+- Bridges: `pont\s+\w+|bridge`
+- Religious (free entry): `basilique|cathédrale|église` (basilica/cathedral/church already present)
+- Paris-specific free venues: `champs.?[eé]lys[eé]es|montmartre|sacr[eé].?c[oœ]ur|tuileries|champ\s+de\s+mars|palais.?royal.*garden`
+- Walking patterns: `neighborhood\s+walk|seine.*walk|walk.*seine`
+- Squares/promenades: `place\s+de|parc|esplanade` (some already in Tier 2, promote)
+- Île Saint-Louis: `[iî]le\s+saint.?louis`
 
-Insert a departure-day filter block:
+**Line 20 — `TIER2_FREE_VENUE_PATTERNS`**: Remove `bridge|promenade|boardwalk` from Tier 2 since they're being promoted to Tier 1 (always free).
 
-```typescript
-// DEPARTURE-DAY SAFETY NET: strip activities after departure - 3h buffer
-if (isLastDay && depTime24 && dayResult?.activities?.length > 0) {
-  const departureMins = parseTimeToMinutes(depTime24) || 0;
-  const latestAllowed = departureMins - 180; // 3 hours before departure
-  if (latestAllowed > 0) {
-    const before = dayResult.activities.length;
-    dayResult.activities = dayResult.activities.filter((activity: any) => {
-      const cat = ((activity.category || '') as string).toUpperCase();
-      const title = ((activity.title || '') as string).toLowerCase();
-      if (cat === 'TRANSPORT' || cat === 'FLIGHT' || /departure|heading home/i.test(title)) return true;
-      if (cat === 'STAY' && /check.?out/i.test(title)) return true;
+**Line 23 — `PAID_EXPERIENCE_RE`**: Add `musée|orangerie|galerie` to the paid exclusion so museums inside free venues (e.g., l'Orangerie in Tuileries) are not zeroed.
 
-      const startMinutes = parseTimeToMinutes(activity.startTime || activity.start_time || '');
-      if (startMinutes > 0 && startMinutes > latestAllowed) {
-        console.warn(`[DEPARTURE-FIX] Removed "${activity.title}" at ${activity.startTime || activity.start_time} — after departure - 3h buffer`);
-        return false;
-      }
-      return true;
-    });
-    if (dayResult.activities.length < before) {
-      console.log(`[generate-trip-day] Departure safety net removed ${before - dayResult.activities.length} activities`);
-    }
-  }
-}
-```
+### 2. Frontend: `src/lib/cost-estimation.ts`
 
-This mirrors the arrival-day filter and ensures any activities that slip through the per-day generator or repair pipeline are caught before cross-day dedup and persistence.
+**Lines 519-540 — `FREE_VENUE_PATTERNS` array**: Add new patterns:
+- `/\bpont\s+\w+\b/i` and `/\bbridge\b/i`
+- `/\bbasilique\b/i`, `/\bcath[eé]drale\b/i`, `/\b[eé]glise\b/i`, `/\bchurch\b/i`
+- `/\bchamps.?[eé]lys[eé]es\b/i`, `/\bmontmartre\b/i`, `/\bsacr[eé].?c[oœ]ur\b/i`
+- `/\btuileries\b/i`, `/\bchamp\s+de\s+mars\b/i`, `/\bpalais.?royal.*garden\b/i`
+- `/\bseine.*walk|walk.*seine\b/i`, `/\bparc\b/i`
+- `/\b[iî]le\s+saint.?louis\b/i`
+
+**Lines 545-556 — `PAID_OVERRIDE_PATTERNS`**: Add `/\b(?:musée|orangerie|galerie)\b/i` to the ticketed attractions line.
+
+### 3. Tests: `supabase/functions/generate-itinerary/sanitization_free_venue_test.ts`
+
+Add test cases for:
+- `Pont Neuf` → true
+- `Sacré-Cœur` → true  
+- `Champs-Élysées` → true
+- `Tuileries Garden` → true
+- `Musée de l'Orangerie` → false (paid exclusion)
 
 ### Files to Edit
 
 | File | Change |
 |------|--------|
-| `action-generate-trip-day.ts` | Insert departure-day stripping filter at ~line 950, after repair pipeline, before cross-day dedup |
+| `supabase/functions/generate-itinerary/sanitization.ts` | Expand `ALWAYS_FREE_VENUE_PATTERNS`, trim `TIER2`, add musée to `PAID_EXPERIENCE_RE` |
+| `src/lib/cost-estimation.ts` | Add new patterns to `FREE_VENUE_PATTERNS`, add musée/orangerie to `PAID_OVERRIDE_PATTERNS` |
+| `supabase/functions/generate-itinerary/sanitization_free_venue_test.ts` | Add test cases for new patterns |
 
 ### What We're NOT Changing
-- `action-generate-day.ts` — already has this filter (lines 567-589)
-- `repair-day.ts` — already handles departure logistics sequencing
-- `validate-day.ts` — already checks logistics sequence
+- `checkAndApplyFreeVenue` function logic — already works correctly with the expanded patterns
+- `generation-core.ts` / `action-repair-costs.ts` — they import the shared pattern, so they get the expansion automatically
 
