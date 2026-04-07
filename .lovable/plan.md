@@ -1,60 +1,29 @@
 
 
-## DNA-Aware Dining Configuration
+## Extract Universal `isPlaceholderMeal` Function
 
-### Goal
-Create a dining configuration system that maps each archetype tier and specific archetype to dining behavior (price ranges, Michelin policy, dining style, avoid patterns). Wire it into prompt compilation and placeholder replacement so dining recommendations are personalized by traveler DNA.
+### Current State
+The placeholder detection logic already exists inline in `fix-placeholders.ts` (lines 419-424) with the same patterns the user specified. The patterns (`PLACEHOLDER_TITLE_PATTERNS`, `PLACEHOLDER_VENUE_PATTERNS`) are already exported.
 
-### New File: `supabase/functions/generate-itinerary/dining-config.ts`
+What's missing: a clean, exported `isPlaceholderMeal(activity, cityName)` function that encapsulates all checks into one reusable call.
 
-Contains the full `DiningConfig` interface, `TIER_DINING_DEFAULTS` (6 tiers: Explorer, Connector, Achiever, Restorer, Curator, Transformer), `ARCHETYPE_OVERRIDES` (per-archetype exceptions), and `getDiningConfig(tier, archetype)` function. Directly implements the data tables from the user's specification.
+### Changes
 
-### Wire Into `pipeline/compile-prompt.ts`
+#### `supabase/functions/generate-itinerary/fix-placeholders.ts`
 
-Currently the Michelin/dining section (lines 865-942) uses only `tripType` (luminary/budget/explorer) to decide dining rules. Replace this with DNA-aware logic:
+1. Add an exported `isPlaceholderMeal(activity, cityName): boolean` function after the pattern arrays (around line 201) that consolidates:
+   - Category check (DINING/RESTAURANT only)
+   - Title pattern matching
+   - Venue-equals-city check
+   - Venue pattern matching
+   - Description recommendation CTA check
 
-1. Import `getDiningConfig` from `dining-config.ts`
-2. After profile loading (~line 506), resolve the archetype's category from `profile.archetypeContext.definition.category`
-3. Call `getDiningConfig(category, primaryArchetype)` to get the config
-4. Replace the hardcoded Michelin prompt block (lines 872-905) with config-driven output:
-   - Use `config.michelinPolicy` to decide mandatory/encouraged/optional/discouraged
-   - Use `config.michelinMinByTripLength` for required counts
-   - Inject `config.diningStyle` as the AI's dining guidance
-   - Inject `config.avoidPatterns` as explicit dining exclusions
-   - Inject `config.priceRange` as per-meal price guidance brackets
-5. Keep the existing restaurant naming rules and city-specific examples (lines 906-942) unchanged
-
-The dining prompt block will look like:
-```
-DINING PERSONALITY (from traveler DNA):
-Style: {config.diningStyle}
-Avoid: {config.avoidPatterns.join(', ')}
-Price guidance per person: Breakfast €{min}-{max}, Lunch €{min}-{max}, Dinner €{min}-{max}
-{michelinBlock based on policy + trip length}
-```
-
-### Wire Into `fix-placeholders.ts`
-
-When replacing placeholder meals, pass the `diningStyle` and `priceRange` from the config so replacement restaurants match the traveler's DNA. Update `fixPlaceholdersForDay` signature to accept an optional `DiningConfig` parameter, and include it in the replacement prompt.
-
-### Wire Into `universal-quality-pass.ts`
-
-Add optional `diningConfig` to `UniversalQualityOptions`. Pass it through to `fixPlaceholdersForDay`. No other quality steps need the config (price caps in sanitization.ts remain as safety nets).
-
-### Files to Edit
-
-| File | Change |
-|------|--------|
-| `supabase/functions/generate-itinerary/dining-config.ts` | **New** — DiningConfig interface, tier defaults, archetype overrides, `getDiningConfig()` |
-| `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` | Import dining config; replace hardcoded Michelin/dining block with DNA-driven prompt |
-| `supabase/functions/generate-itinerary/fix-placeholders.ts` | Accept optional `DiningConfig`, use style/price in replacement prompts |
-| `supabase/functions/generate-itinerary/universal-quality-pass.ts` | Add `diningConfig` to options, pass through to placeholder fixer |
+2. Refactor the inline detection in `fixPlaceholdersForDay` (lines 419-424) to call the new function instead of duplicating the logic.
 
 ### What Stays Unchanged
-- `enforceMichelinPriceFloor()` in sanitization.ts — still enforces minimum pricing as a safety net
-- Restaurant naming rules and city-specific examples in compile-prompt.ts — kept as-is
-- `destination-guides.ts` per-archetype diningStyle — coexists (destination-level is more specific)
-- Archetype constraints and profile loader — untouched
+- The pattern arrays themselves — identical to what the user provided and what already exists
+- The replacement/fallback logic — untouched
+- All other files — no changes needed since this is a refactor within one file
 
 ### Deployment
 Redeploy `generate-itinerary` edge function.
