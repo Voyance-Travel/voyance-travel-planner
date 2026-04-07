@@ -386,6 +386,7 @@ export async function fixPlaceholdersForDay(
   apiKey: string,
   lockedActivities: any[],
   dayTitle?: string,
+  diningConfig?: DiningConfig,
 ): Promise<void> {
   const destinationLower = (city || '').toLowerCase().trim();
   const destinationCity = destinationLower.split(',')[0].trim();
