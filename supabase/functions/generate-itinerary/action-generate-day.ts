@@ -335,34 +335,28 @@ export async function handleGenerateDay(
     });
 
     // =========================================================================
-    // UNIVERSAL PLACEHOLDER ELIMINATION — works for ANY city worldwide
-    // =========================================================================
-    await fixPlaceholdersForDay(
-      normalizedActivities,
-      destination,
-      destinationCountry || '',
-      tripType || 'Explorer',
-      dayNumber,
-      paramUsedRestaurants || [],
-      budgetTier || 'moderate',
-      LOVABLE_API_KEY,
-      lockedActivities,
-      dayItinerary?.theme,
-    );
-
-    // =========================================================================
-    // ARRIVAL / DEPARTURE TIMING ENFORCEMENT — deterministic, unconditional
+    // UNIVERSAL QUALITY PASS — placeholder fix, timing, pricing, dedup
     // =========================================================================
     {
       const _arrivalTime24 = (flightContext as any)?.arrivalTime24 as string | undefined;
       const _departureTime24 = (flightContext as any)?.returnDepartureTime24 as string | undefined;
 
-      if (isFirstDay && _arrivalTime24) {
-        normalizedActivities = enforceArrivalTiming(normalizedActivities, _arrivalTime24);
-      }
-      if (isLastDay && _departureTime24) {
-        normalizedActivities = enforceDepartureTiming(normalizedActivities, _departureTime24);
-      }
+      const { universalQualityPass } = await import('./universal-quality-pass.ts');
+      normalizedActivities = await universalQualityPass(normalizedActivities, {
+        city: destination,
+        country: destinationCountry || '',
+        tripType: tripType || 'Explorer',
+        dayIndex: dayNumber - 1,
+        totalDays: totalDays || 1,
+        usedVenueNames: new Set<string>(),
+        arrivalTime: isFirstDay ? _arrivalTime24 : undefined,
+        departureTime: isLastDay ? _departureTime24 : undefined,
+        dayTitle: dayItinerary?.theme,
+        budgetTier: budgetTier || 'moderate',
+        apiKey: LOVABLE_API_KEY,
+        lockedActivities: lockedActivities,
+        usedRestaurants: paramUsedRestaurants || [],
+      });
     }
 
     if (lockedActivities.length > 0) {
