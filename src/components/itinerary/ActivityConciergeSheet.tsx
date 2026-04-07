@@ -327,9 +327,28 @@ export default function ActivityConciergeSheet({
                   )}
                 >
                   {msg.role === 'assistant' ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ul]:ml-4">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    </div>
+                    <>
+                      <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ul]:ml-4">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                      {onSaveNote && (
+                        <div className="flex justify-end mt-1">
+                          <button
+                            onClick={() => handleSaveNote(i)}
+                            disabled={isNoteSaved(msg.content)}
+                            className={cn(
+                              'p-1 rounded transition-colors',
+                              isNoteSaved(msg.content)
+                                ? 'text-primary cursor-default'
+                                : 'text-muted-foreground hover:text-primary'
+                            )}
+                            title={isNoteSaved(msg.content) ? 'Saved' : 'Save note to card'}
+                          >
+                            <Bookmark className={cn('w-3.5 h-3.5', isNoteSaved(msg.content) && 'fill-current')} />
+                          </button>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p>{msg.content}</p>
                   )}
