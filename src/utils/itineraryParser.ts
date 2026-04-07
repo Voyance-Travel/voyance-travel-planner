@@ -668,9 +668,10 @@ export function parseActiveTripDays(
 export function parseEditorialDays(
   rawData: unknown,
   tripStartDate?: string,
-  tripEndDate?: string
+  tripEndDate?: string,
+  options?: { partial?: boolean }
 ): EditorialParsedDay[] {
-  const days = parseItineraryDays(rawData, tripStartDate, tripEndDate);
+  const days = parseItineraryDays(rawData, tripStartDate, tripEndDate, options);
   
   return days.map(day => ({
     ...day,
