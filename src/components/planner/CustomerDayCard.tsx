@@ -349,6 +349,37 @@ export default function CustomerDayCard({
         destination={destination}
         onSelectAlternative={handleSwapActivity}
       />
+
+      {/* AI Concierge Sheet */}
+      {conciergeActivity && (
+        <ActivityConciergeSheet
+          open={!!conciergeActivity}
+          onClose={() => setConciergeActivity(null)}
+          activity={conciergeActivity}
+          dayDate={day.date}
+          dayTitle={day.title || day.theme}
+          previousActivity={
+            (() => {
+              const idx = day.activities.findIndex(a => a.id === conciergeActivity.id);
+              return idx > 0 ? day.activities[idx - 1].title : undefined;
+            })()
+          }
+          nextActivity={
+            (() => {
+              const idx = day.activities.findIndex(a => a.id === conciergeActivity.id);
+              return idx < day.activities.length - 1 ? day.activities[idx + 1].title : undefined;
+            })()
+          }
+          destination={destination || ''}
+          tripType={tripType}
+          totalDays={totalDays}
+          travelers={travelers}
+          currency={currency}
+          onActivitySwap={onActivitySwap ? (activityId, newData) => {
+            onActivitySwap(activityId, newData as unknown as ItineraryActivity);
+          } : undefined}
+        />
+      )}
     </>
   );
 }
