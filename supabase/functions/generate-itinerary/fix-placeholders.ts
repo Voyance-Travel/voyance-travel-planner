@@ -288,16 +288,24 @@ export async function generateFallbackRestaurant(
   const styleDesc = styleDescriptions[effectiveTripType] || styleDescriptions.Explorer;
   const locationStr = country ? `${city}, ${country}` : city;
 
+  const avoidStr = diningConfig?.avoidPatterns?.length ? `\n- AVOID these dining types: ${diningConfig.avoidPatterns.join(', ')}` : '';
+  const michelinHint = diningConfig?.michelinPolicy === 'required' && mealType === 'dinner'
+    ? '\n- Consider Michelin-starred restaurants if appropriate'
+    : diningConfig?.michelinPolicy === 'discouraged' && mealType === 'dinner'
+      ? '\n- Do NOT suggest Michelin-starred restaurants'
+      : '';
+
   const promptParts = [
     `You are a restaurant expert for ${locationStr}. Suggest ONE real, currently operating ${mealType} restaurant.`,
-    `- Trip style: ${effectiveTripType} (${styleDesc})`,
+    `- Dining style: ${styleDesc}`,
     `- Price range: ${priceRange}`,
     neighborhood ? `- Preferably in or near: ${neighborhood}` : null,
     dayTheme ? `- Day theme: ${dayTheme}` : null,
-    mealType === 'dinner' && effectiveTripType === 'Luminary' ? '- Consider Michelin-starred restaurants if appropriate' : null,
+    michelinHint || null,
     mealType === 'drinks' ? '- Suggest a bar, wine bar, cocktail lounge, or similar venue' : null,
     `- Must be a REAL place with a REAL street address`,
     `- Pick a well-reviewed local favorite, not a tourist trap`,
+    avoidStr || null,
     `- DO NOT suggest: ${blocklist || 'none'}`,
   ].filter(Boolean);
 
