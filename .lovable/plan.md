@@ -1,72 +1,60 @@
 
 
-## Create Universal Quality Pass Orchestrator
+## DNA-Aware Dining Configuration
 
 ### Goal
-Consolidate 9 scattered quality enforcement steps into one reusable `universalQualityPass()` function, then wire it into both generation paths.
+Create a dining configuration system that maps each archetype tier and specific archetype to dining behavior (price ranges, Michelin policy, dining style, avoid patterns). Wire it into prompt compilation and placeholder replacement so dining recommendations are personalized by traveler DNA.
 
-### New File: `supabase/functions/generate-itinerary/universal-quality-pass.ts`
+### New File: `supabase/functions/generate-itinerary/dining-config.ts`
 
-Creates and exports `universalQualityPass(activities, options)` that runs these steps in order:
+Contains the full `DiningConfig` interface, `TIER_DINING_DEFAULTS` (6 tiers: Explorer, Connector, Achiever, Restorer, Curator, Transformer), `ARCHETYPE_OVERRIDES` (per-archetype exceptions), and `getDiningConfig(tier, archetype)` function. Directly implements the data tables from the user's specification.
 
-| Step | Function | Source |
-|------|----------|--------|
-| 1. Arrival timing | `enforceArrivalTiming()` | Already in `flight-hotel-context.ts` |
-| 2. Departure timing | `enforceDepartureTiming()` | Already in `flight-hotel-context.ts` |
-| 3. Fix placeholder meals | `fixPlaceholdersForDay()` | Move/re-export from `action-generate-day.ts` |
-| 4. Free venue pricing | `checkAndApplyFreeVenue()` | Already in `sanitization.ts` |
-| 5. Market dining cap | `enforceMarketDiningCap()` | Already in `sanitization.ts` |
-| 6. Universal price caps | `enforceBarNightcapPriceCap()` + `enforceCasualVenuePriceCap()` + `enforceVenueTypePriceCap()` + `enforceTicketedAttractionPricing()` + `enforceMichelinPriceFloor()` | Already in `sanitization.ts` |
-| 7. Cross-day venue dedup | New inline logic using fuzzy `venueNamesMatch()` | Currently inline in `action-generate-trip-day.ts` lines 1020-1057 |
-| 8. Hotel return injection | New logic — append "Return to Your Hotel" if last activity isn't STAY (skip departure day) | Currently not implemented |
-| 9. Update used venues set | New inline — adds all venue names to `usedVenueNames` for next day | Currently inline |
+### Wire Into `pipeline/compile-prompt.ts`
 
-**Options interface:**
-```typescript
-interface UniversalQualityOptions {
-  city: string;
-  country: string;
-  tripType: string;
-  dayIndex: number;        // 0-based
-  totalDays: number;
-  usedVenueNames: Set<string>;
-  arrivalTime?: string;    // HH:MM, day 0 only
-  departureTime?: string;  // HH:MM, last day only
-  dayTitle?: string;
-  budgetTier?: string;
-  apiKey?: string;
-  lockedActivities?: any[];
-}
+Currently the Michelin/dining section (lines 865-942) uses only `tripType` (luminary/budget/explorer) to decide dining rules. Replace this with DNA-aware logic:
+
+1. Import `getDiningConfig` from `dining-config.ts`
+2. After profile loading (~line 506), resolve the archetype's category from `profile.archetypeContext.definition.category`
+3. Call `getDiningConfig(category, primaryArchetype)` to get the config
+4. Replace the hardcoded Michelin prompt block (lines 872-905) with config-driven output:
+   - Use `config.michelinPolicy` to decide mandatory/encouraged/optional/discouraged
+   - Use `config.michelinMinByTripLength` for required counts
+   - Inject `config.diningStyle` as the AI's dining guidance
+   - Inject `config.avoidPatterns` as explicit dining exclusions
+   - Inject `config.priceRange` as per-meal price guidance brackets
+5. Keep the existing restaurant naming rules and city-specific examples (lines 906-942) unchanged
+
+The dining prompt block will look like:
+```
+DINING PERSONALITY (from traveler DNA):
+Style: {config.diningStyle}
+Avoid: {config.avoidPatterns.join(', ')}
+Price guidance per person: Breakfast €{min}-{max}, Lunch €{min}-{max}, Dinner €{min}-{max}
+{michelinBlock based on policy + trip length}
 ```
 
-### Extract `fixPlaceholdersForDay` to Shared Module
+### Wire Into `fix-placeholders.ts`
 
-`fixPlaceholdersForDay()` currently lives as a private function inside `action-generate-day.ts` (line 270). It needs to be importable by the new orchestrator.
+When replacing placeholder meals, pass the `diningStyle` and `priceRange` from the config so replacement restaurants match the traveler's DNA. Update `fixPlaceholdersForDay` signature to accept an optional `DiningConfig` parameter, and include it in the replacement prompt.
 
-**File: `supabase/functions/generate-itinerary/fix-placeholders.ts`** — Move the function here and export it. Update `action-generate-day.ts` to import from the new file.
+### Wire Into `universal-quality-pass.ts`
 
-### Wire Into `action-generate-trip-day.ts`
-
-Replace the scattered quality steps (cross-day dedup at lines 1020-1057, pricing guards at lines 1764-1776) with a single call to `universalQualityPass()` per day during the generation loop. The trip-level Michelin count check (lines 1778-1803) stays as-is since it's a trip-wide concern.
-
-### Wire Into `action-generate-day.ts`
-
-Replace the scattered steps (placeholder fix at line 765, arrival/departure at lines 781-791, final pricing guard at lines 1568-1574) with a single `universalQualityPass()` call after normalization.
+Add optional `diningConfig` to `UniversalQualityOptions`. Pass it through to `fixPlaceholdersForDay`. No other quality steps need the config (price caps in sanitization.ts remain as safety nets).
 
 ### Files to Edit
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/universal-quality-pass.ts` | **New** — orchestrator function |
-| `supabase/functions/generate-itinerary/fix-placeholders.ts` | **New** — extracted from action-generate-day.ts |
-| `supabase/functions/generate-itinerary/action-generate-day.ts` | Import `fixPlaceholdersForDay` from new file; replace scattered quality steps with `universalQualityPass()` call |
-| `supabase/functions/generate-itinerary/action-generate-trip-day.ts` | Replace scattered dedup + pricing loops with `universalQualityPass()` call per day |
+| `supabase/functions/generate-itinerary/dining-config.ts` | **New** — DiningConfig interface, tier defaults, archetype overrides, `getDiningConfig()` |
+| `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` | Import dining config; replace hardcoded Michelin/dining block with DNA-driven prompt |
+| `supabase/functions/generate-itinerary/fix-placeholders.ts` | Accept optional `DiningConfig`, use style/price in replacement prompts |
+| `supabase/functions/generate-itinerary/universal-quality-pass.ts` | Add `diningConfig` to options, pass through to placeholder fixer |
 
 ### What Stays Unchanged
-- All individual enforcement functions in `sanitization.ts` and `flight-hotel-context.ts` — untouched
-- Trip-level Michelin count warning — stays in `action-generate-trip-day.ts`
-- Locked activity conflict resolution — stays separate (runs before quality pass)
-- Meal guard — stays separate (runs after quality pass)
+- `enforceMichelinPriceFloor()` in sanitization.ts — still enforces minimum pricing as a safety net
+- Restaurant naming rules and city-specific examples in compile-prompt.ts — kept as-is
+- `destination-guides.ts` per-archetype diningStyle — coexists (destination-level is more specific)
+- Archetype constraints and profile loader — untouched
 
 ### Deployment
 Redeploy `generate-itinerary` edge function.
