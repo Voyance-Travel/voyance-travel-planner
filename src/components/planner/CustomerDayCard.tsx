@@ -75,6 +75,12 @@ export default function CustomerDayCard({
   const [hoveredActivity, setHoveredActivity] = useState<string | null>(null);
   const [conciergeActivity, setConciergeActivity] = useState<ItineraryActivity | null>(null);
 
+  const conciergeSavedNoteContents = useMemo(() => {
+    if (!conciergeActivity) return new Set<string>();
+    const notes = (conciergeActivity as any).aiNotes || [];
+    return new Set(notes.map((n: AISavedNote) => n.content));
+  }, [conciergeActivity]);
+
   // Version history for undo
   const { canUndoDay, isUndoing, handleUndo } = useVersionHistory({
     tripId,
