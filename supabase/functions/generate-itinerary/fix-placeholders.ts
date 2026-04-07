@@ -200,6 +200,27 @@ export const PLACEHOLDER_VENUE_PATTERNS = [
   /^.{0,3}$/,
 ];
 
+/**
+ * Universal placeholder meal detection.
+ * Returns true if the activity looks like a generic/placeholder dining entry.
+ */
+export function isPlaceholderMeal(activity: any, cityName: string): boolean {
+  const category = (activity.category || '').toUpperCase();
+  if (category !== 'DINING' && category !== 'RESTAURANT') return false;
+
+  const title = (activity.title || '').trim();
+  const venue = (activity.location?.name || activity.venue_name || '').trim();
+  const description = (activity.description || '').trim();
+
+  if (PLACEHOLDER_TITLE_PATTERNS.some(p => p.test(title))) return true;
+  if (cityName.length > 2 && venue.toLowerCase() === cityName.toLowerCase()) return true;
+  if (PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venue))) return true;
+  if (/get a restaurant recommendation/i.test(description)) return true;
+  if (/get a restaurant recommendation/i.test(venue)) return true;
+
+  return false;
+}
+
 interface PlaceholderSlot {
   activityRef: any;
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
@@ -409,19 +430,12 @@ export async function fixPlaceholdersForDay(
   const placeholderSlots: PlaceholderSlot[] = [];
 
   for (const activity of activities) {
-    const category = ((activity as any).category || '').toLowerCase();
-    if (category !== 'dining' && category !== 'restaurant') continue;
+    if (!isPlaceholderMeal(activity, destinationCity)) continue;
 
     const title = ((activity as any).title || '').trim();
     const venueName = ((activity as any).location?.name || (activity as any).venue_name || '').trim();
-    const description = ((activity as any).description || '').trim();
 
-    const isPlaceholderTitle = PLACEHOLDER_TITLE_PATTERNS.some(p => p.test(title));
-    const isPlaceholderVenue = PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venueName))
-      || (destinationCity.length > 2 && venueName.toLowerCase() === destinationCity);
-    const hasRecommendationCTA = /get a restaurant recommendation/i.test(description);
-
-    if (isPlaceholderTitle || isPlaceholderVenue || hasRecommendationCTA) {
+    {
       console.error(`[QUALITY] Day ${dayIndex}: PLACEHOLDER DETECTED: "${title}" at "${venueName}" — replacing`);
 
       const startTimeStr = (activity as any).startTime || '12:00';
