@@ -239,11 +239,8 @@ export default function CustomerDayCard({
                                 </p>
                               </div>
 
-                              {/* Activity Actions - visible on hover */}
-                              <div className={cn(
-                                  "flex items-center gap-1 transition-opacity",
-                                  isHovered ? "opacity-100" : "opacity-0 sm:opacity-0"
-                              )}>
+                              {/* Activity Actions */}
+                              <div className="flex items-center gap-1">
                                 {(() => {
                                   const cat = (activity.type || '').toUpperCase();
                                   const hideAI = ['TRANSPORTATION', 'TRANSPORT', 'TRAVEL', 'LOGISTICS', 'TRANSIT'].includes(cat) ||
