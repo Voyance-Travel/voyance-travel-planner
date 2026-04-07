@@ -318,6 +318,13 @@ export default function CustomerDayCard({
                                 </Badge>
                               )}
                             </div>
+                            {/* AI Saved Notes */}
+                            {(activity as any).aiNotes && (activity as any).aiNotes.length > 0 && (
+                              <AISavedNotes
+                                notes={(activity as any).aiNotes}
+                                onDeleteNote={onDeleteAINote ? (noteId) => onDeleteAINote(activity.id, noteId) : undefined}
+                              />
+                            )}
                           </div>
                         </div>
                       </motion.div>
