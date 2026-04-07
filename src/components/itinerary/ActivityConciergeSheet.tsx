@@ -123,7 +123,7 @@ export default function ActivityConciergeSheet({
   const startTime = activity.startTime || activity.start_time || activity.time || '';
   const endTime = activity.endTime || activity.end_time || '';
   const rawCost = activity.cost;
-  const cost = typeof rawCost === 'object' && rawCost !== null ? (rawCost as { amount: number }).amount : (rawCost ?? activity.price ?? 0);
+  const cost: number = typeof rawCost === 'object' && rawCost !== null ? (rawCost as { amount: number }).amount : (rawCost as number ?? activity.price ?? 0);
   const imageUrl = activity.imageUrl || activity.image_url || ((activity as any).photos?.[0]?.url ?? (activity as any).photos?.[0]);
 
   const chips = CHIPS_BY_CATEGORY[category] || DEFAULT_CHIPS;
