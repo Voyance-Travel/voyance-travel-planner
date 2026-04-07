@@ -89,21 +89,34 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
               )}
             </div>
 
-            {/* Lock Toggle */}
-            {onToggleLock && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0"
-                onClick={() => onToggleLock(activity.id, !activity.isLocked)}
-              >
-                {activity.isLocked ? (
-                  <Lock className="h-4 w-4 text-primary" />
-                ) : (
-                  <LockOpen className="h-4 w-4 text-muted-foreground" />
-                )}
-              </Button>
-            )}
+            {/* Action Buttons */}
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              {showConcierge && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => onOpenConcierge(activity)}
+                  title="Ask AI concierge"
+                >
+                  <Sparkles className="h-4 w-4 text-primary" />
+                </Button>
+              )}
+              {onToggleLock && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => onToggleLock(activity.id, !activity.isLocked)}
+                >
+                  {activity.isLocked ? (
+                    <Lock className="h-4 w-4 text-primary" />
+                  ) : (
+                    <LockOpen className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Meta info */}
