@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { 
   Clock, MapPin, ChevronDown, ChevronUp, RefreshCw, 
-  Search, Lock, LockOpen, Undo2
+  Search, Lock, LockOpen, Undo2, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import ActivityAlternativesDrawer from './ActivityAlternativesDrawer';
 import { useVersionHistory } from '@/hooks/useVersionHistory';
+import ActivityConciergeSheet from '@/components/itinerary/ActivityConciergeSheet';
 
 interface CustomerDayCardProps {
   day: DayItinerary;
