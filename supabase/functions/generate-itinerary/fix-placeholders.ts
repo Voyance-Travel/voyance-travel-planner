@@ -210,6 +210,17 @@ export const PLACEHOLDER_TITLE_PATTERNS = [
   /^(breakfast|lunch|dinner)\s+at\s+(a\s+)?(local|nearby|neighborhood|traditional|typical|popular|cozy|charming)/i,
   /at a (bistro|brasserie|café|cafe|boulangerie|trattoria|osteria|taverna|izakaya|tapas bar|pub|diner|restaurant|eatery|food stall|canteen|pizzeria|ramen shop|noodle shop|sushi bar|beer hall|wine bar|gastro)/i,
   /get a restaurant recommendation/i,
+  // Verb-led titles
+  /^enjoy\s+(breakfast|lunch|dinner|brunch|a meal)/i,
+  /^have\s+(breakfast|lunch|dinner|brunch|a meal)/i,
+  /^grab\s+(breakfast|lunch|dinner|brunch|a meal|a bite|a coffee)/i,
+  /^try\s+(breakfast|lunch|dinner|brunch|a meal|some local)/i,
+  // Adjective-led generics
+  /^(traditional|local|typical|authentic|regional)\s+(cuisine|food|meal|breakfast|lunch|dinner|dining)/i,
+  // Spot/recommendation patterns
+  /^(breakfast|lunch|dinner|brunch)\s+(spot|recommendation|place|option)/i,
+  // "Sample local cuisine" etc.
+  /^sample\s+(local|traditional|regional)/i,
 ];
 
 export const PLACEHOLDER_VENUE_PATTERNS = [
@@ -221,6 +232,12 @@ export const PLACEHOLDER_VENUE_PATTERNS = [
   /^your hotel$/i,
   /get a restaurant recommendation/i,
   /^.{0,3}$/,
+  // Generic venue names
+  /^local\s+(café|cafe|restaurant|bistro|trattoria|osteria|taverna|eatery|diner|pub|bar|pizzeria|brasserie)/i,
+  /^a\s+(cozy|charming|traditional|nearby|local|popular|quaint|lovely|nice|good)\s+(restaurant|café|cafe|bistro|trattoria|eatery|spot|place)/i,
+  /^recommended\s+(restaurant|café|cafe|spot|place|eatery)/i,
+  /^popular\s+(spot|restaurant|café|cafe|eatery|place)/i,
+  /^neighborhood\s+(restaurant|café|cafe|bistro|spot)/i,
 ];
 
 /**
