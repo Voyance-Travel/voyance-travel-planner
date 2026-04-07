@@ -10500,36 +10500,39 @@ function ActivityRow({
                 </button>
               )}
               {isEditable && (
-              <button
-                onClick={() => onLock(dayIndex, activity.id)}
-                className={cn(
-                  "p-1.5 rounded transition-colors",
-                  activity.isLocked ? "bg-primary/10 text-primary" : "hover:bg-secondary text-muted-foreground"
-                )}
-              >
-                {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-              </button>
-              {!activity.isLocked && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors hover:bg-secondary text-foreground/60 hover:text-foreground touch-manipulation">
-                      <MoreHorizontal className="h-5 w-5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="bg-background border shadow-lg z-50 min-w-[160px]">
-                    {onSwap && canViewPremium && (
-                      <DropdownMenuItem onClick={() => onSwap(dayIndex, activity)} className="cursor-pointer gap-2">
-                        <ArrowRightLeft className="h-4 w-4" /> Find Alternative
-                      </DropdownMenuItem>
+                <>
+                  <button
+                    onClick={() => onLock(dayIndex, activity.id)}
+                    className={cn(
+                      "p-1.5 rounded transition-colors",
+                      activity.isLocked ? "bg-primary/10 text-primary" : "hover:bg-secondary text-muted-foreground"
                     )}
-                    <DropdownMenuItem onClick={() => onEdit(dayIndex, activityIndex, activity)} className="cursor-pointer gap-2">
-                      <Edit3 className="h-4 w-4" /> Edit Details
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
-                      <Trash2 className="h-4 w-4" /> Remove
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  >
+                    {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                  </button>
+                  {!activity.isLocked && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors hover:bg-secondary text-foreground/60 hover:text-foreground touch-manipulation">
+                          <MoreHorizontal className="h-5 w-5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                        {onSwap && canViewPremium && (
+                          <DropdownMenuItem onClick={() => onSwap(dayIndex, activity)} className="cursor-pointer gap-2">
+                            <ArrowRightLeft className="h-4 w-4" /> Find Alternative
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => onEdit(dayIndex, activityIndex, activity)} className="cursor-pointer gap-2">
+                          <Edit3 className="h-4 w-4" /> Edit Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
+                          <Trash2 className="h-4 w-4" /> Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </>
               )}
             </div>
           )}
