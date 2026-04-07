@@ -9845,6 +9845,7 @@ function DayCard({
                           onPhotoResolved={onPhotoResolved}
                           isManualMode={isManualMode}
                           onOpenConcierge={onOpenConcierge}
+                          onDeleteAINote={onDeleteAINote}
                         />
                       </div>
                     </div>
