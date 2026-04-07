@@ -2238,6 +2238,17 @@ Generate activities for this day following ALL constraints above.`;
         // MEAL FINAL GUARD — shared helper, single source of truth
         // Runs AFTER all post-processing (dedup, etc.) to guarantee meals
         // ====================================================================
+        // Compute timing window so the meal guard respects flight arrival/departure
+        const _arrivalTime24ForGuard = isFirstDay ? context.flightData?.arrivalTime24 : undefined;
+        const _departureTime24ForGuard = isLastDay ? (context.flightData?.departureTime24 || context.flightData?.returnDepartureTime24) : undefined;
+        const _parseGuardMins = (t?: string) => {
+          if (!t) return undefined;
+          const m = t.match(/(\d{1,2}):(\d{2})/);
+          return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : undefined;
+        };
+        const mealGuardEarliestMins = _arrivalTime24ForGuard ? _parseGuardMins(_arrivalTime24ForGuard) : undefined;
+        const mealGuardLatestMins = _departureTime24ForGuard ? (() => { const m = _parseGuardMins(_departureTime24ForGuard); return m ? m - 180 : undefined; })() : undefined;
+
         const mealGuardResult = enforceRequiredMealsFinalGuard(
           generatedDay.activities || [],
           dayMealPolicy.requiredMeals,
@@ -2253,6 +2264,7 @@ Generate activities for this day following ALL constraints above.`;
                 mealType: r.mealType || 'any',
               }))
             : [],
+          { earliestTimeMins: mealGuardEarliestMins, latestTimeMins: mealGuardLatestMins },
         );
         if (!mealGuardResult.alreadyCompliant) {
           // If NOT the last attempt, treat meal guard firing as a retry trigger

@@ -2437,11 +2437,22 @@ export function EditorialItinerary({
   }, []);
 
   // Build saved note content set for current concierge activity
+  // Derive from `days` state (not the stale `conciergeActivity` snapshot) so the
+  // bookmark icon updates immediately after saving a note.
   const conciergeSavedNoteContents = useMemo(() => {
     if (!conciergeActivity) return new Set<string>();
+    const actId = conciergeActivity.id;
+    for (const day of days) {
+      const liveAct = day.activities?.find((a: EditorialActivity) => a.id === actId);
+      if (liveAct) {
+        const notes = liveAct.aiNotes || [];
+        return new Set(notes.map(n => n.content));
+      }
+    }
+    // Fallback to snapshot if not found in days
     const notes = conciergeActivity.aiNotes || [];
     return new Set(notes.map(n => n.content));
-  }, [conciergeActivity]);
+  }, [conciergeActivity, days]);
 
   const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
   const [reviewsTarget, setReviewsTarget] = useState<{ 

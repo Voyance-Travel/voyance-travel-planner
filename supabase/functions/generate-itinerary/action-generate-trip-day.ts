@@ -1267,7 +1267,7 @@ async function _handleGenerateTripDayInner(
   const flightSel = (tripCheck?.flight_selection as Record<string, any>) || null;
   const nestedDepSaved = flightSel?.departure as Record<string, any> | undefined;
   const nestedRetSaved = flightSel?.return as Record<string, any> | undefined;
-  const savedArrivalTime24: string | undefined =
+  let savedArrivalTime24: string | undefined =
     flightSel?.arrivalTime24 || flightSel?.arrivalTime || flightSel?.outbound?.arrivalTime
     || nestedDepSaved?.arrival?.time
     || flightSel?.legs?.[0]?.arrival?.time
@@ -1277,6 +1277,22 @@ async function _handleGenerateTripDayInner(
     || nestedRetSaved?.departure?.time || nestedRetSaved?.departureTime
     || (Array.isArray(flightSel?.legs) && flightSel.legs.length > 0 ? flightSel.legs[flightSel.legs.length - 1]?.departure?.time : undefined)
     || undefined;
+
+  // FALLBACK: If arrival time is missing from flight_selection, extract from repair-injected flight card on Day 1
+  if (!savedArrivalTime24 && updatedDays.length > 0) {
+    const day1 = updatedDays[0];
+    const repairFlight = (day1?.activities || []).find((a: any) =>
+      a.source === 'repair-arrival-flight' || a.source === 'injected-arrival-flight' ||
+      ((a.category || '').toLowerCase() === 'flight' && (a.title || '').toLowerCase().includes('arrival'))
+    );
+    if (repairFlight) {
+      const endTime = repairFlight.endTime || repairFlight.end_time;
+      if (endTime) {
+        savedArrivalTime24 = endTime;
+        console.log(`[generate-trip-day] ✈️ Extracted arrival time ${endTime} from repair-injected flight card`);
+      }
+    }
+  }
 
   for (let i = 0; i < updatedDays.length; i++) {
     const d = updatedDays[i];
