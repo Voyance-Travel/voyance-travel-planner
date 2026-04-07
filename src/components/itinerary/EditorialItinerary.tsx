@@ -7605,7 +7605,45 @@ export function EditorialItinerary({
         onSelectAlternative={handleSelectSwapAlternative}
       />
 
-      {/* Reviews Drawer */}
+      {/* AI Concierge Sheet */}
+      {conciergeActivity && (
+        <ActivityConciergeSheet
+          open={conciergeOpen}
+          onClose={() => {
+            setConciergeOpen(false);
+            setConciergeActivity(null);
+          }}
+          activity={{
+            id: conciergeActivity.id,
+            title: conciergeActivity.title,
+            description: conciergeActivity.description,
+            category: conciergeActivity.category || conciergeActivity.type,
+            startTime: conciergeActivity.startTime || conciergeActivity.time,
+            endTime: conciergeActivity.endTime,
+            cost: conciergeActivity.cost,
+            location: conciergeActivity.location,
+            imageUrl: (() => {
+              const p = conciergeActivity.photos;
+              if (!p || p.length === 0) return undefined;
+              const first = p[0];
+              return typeof first === 'string' ? first : first?.url;
+            })(),
+            bookingRequired: conciergeActivity.bookingRequired,
+            bookingUrl: conciergeActivity.bookingUrl || conciergeActivity.website,
+          }}
+          dayDate={conciergeDayDate}
+          dayTitle={conciergeDayTitle}
+          previousActivity={conciergePrevActivity}
+          nextActivity={conciergeNextActivity}
+          destination={destination}
+          tripType={tripType}
+          totalDays={days.length}
+          travelers={travelers}
+          currency={destinationInfo?.currency || 'USD'}
+          hotelName={hotelSelection?.name}
+        />
+      )}
+
       <ReviewsDrawer
         open={reviewsDrawerOpen}
         onClose={() => {
