@@ -7677,6 +7677,8 @@ export function EditorialItinerary({
           travelers={travelers}
           currency={destinationInfo?.currency || 'USD'}
           hotelName={hotelSelection?.name}
+          onSaveNote={handleSaveAINote}
+          savedNoteContents={conciergeSavedNoteContents}
         />
       )}
 
