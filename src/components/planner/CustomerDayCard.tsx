@@ -20,7 +20,8 @@ import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import ActivityAlternativesDrawer from './ActivityAlternativesDrawer';
 import { useVersionHistory } from '@/hooks/useVersionHistory';
-import ActivityConciergeSheet from '@/components/itinerary/ActivityConciergeSheet';
+import ActivityConciergeSheet, { type AISavedNote } from '@/components/itinerary/ActivityConciergeSheet';
+import { AISavedNotes } from '@/components/itinerary/AISavedNotes';
 
 interface CustomerDayCardProps {
   day: DayItinerary;
