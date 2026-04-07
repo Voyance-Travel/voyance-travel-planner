@@ -129,6 +129,7 @@ const DayTimeline: React.FC<DayTimelineProps> = ({
                 activity={activity}
                 currency={currency}
                 onToggleLock={onToggleLock}
+                onOpenConcierge={onOpenConcierge}
               />
             </motion.div>
           ))
