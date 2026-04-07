@@ -703,10 +703,11 @@ export async function handleGenerateDay(
           const hourMatch = startTimeStr.match(/^(\d{1,2})/);
           const hour24 = hourMatch ? parseInt(hourMatch[1], 10) : 12;
 
-          let mealType: 'breakfast' | 'lunch' | 'dinner';
+          let mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
           if (hour24 < 11) mealType = 'breakfast';
           else if (hour24 < 16) mealType = 'lunch';
-          else mealType = 'dinner';
+          else if (hour24 < 21) mealType = 'dinner';
+          else mealType = 'drinks';
 
           // Fast path: try hardcoded fallback first (free, instant)
           const fallback = getRandomFallbackRestaurant(destination, mealType, usedVenueNamesInDay);
