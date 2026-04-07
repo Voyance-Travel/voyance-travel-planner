@@ -1,65 +1,51 @@
 
-Fix missing sparkle on regenerated trips
 
-What I found
-- The sparkle button already exists in planner-only components: `CustomerDayCard` and `TripActivityCard`.
-- Regenerated/saved trips are not rendered with those components. They go through `TripDetail` → `EditorialItinerary` → `DayCard` / `ActivityRow`.
-- `EditorialItinerary` currently has no concierge trigger at all, so hover is not the issue on that screen — the button is simply never rendered there.
-- There is also a compatibility gap: `ActivityConciergeSheet` currently expects a numeric `cost`, but `EditorialActivity` uses `cost.amount`, so its context normalization needs to be adapted before reuse here.
-- One more issue to handle cleanly: concierge “swap + undo” cannot call the paid swap path twice, or undo could accidentally retrigger credits/version logic.
+## Nuclear Placeholder Elimination — Generation-Level Fix
 
-Implementation plan
-1. Add the concierge trigger to the actual regenerated-trip card UI
-- Update `src/components/itinerary/EditorialItinerary.tsx` so `ActivityRow` shows a visible sparkle button in both:
-  - desktop action area
-  - mobile expanded action row
-- Keep it always visible when eligible, not hover-only.
+### Root Cause
 
-2. Apply the correct visibility rules in `EditorialItinerary`
-- Show for venue-based activities like dining, explore, culture, activity, shopping, wellness, and real hotel/stay cards.
-- Hide for transport/logistics/filler cards such as:
-  - transport / transit / travel
-  - arrival / departure
-  - return to hotel / freshen up
-  - generic downtime cards
+The validate/repair pipeline in `action-generate-day.ts` (~line 787-889) is inside a `try/catch` that silently swallows errors. If ANY part of validation or repair throws, all placeholder fixes are skipped and the raw AI output (with placeholders) goes straight to persist. Additionally, the fallback restaurant DB in `repair-day.ts` lacks descriptions and prices, producing low-quality replacements.
 
-3. Wire `ActivityConciergeSheet` into `EditorialItinerary`
-- Add top-level concierge state in `EditorialItinerary` for:
-  - selected activity
-  - selected day date/title
-  - previous visible activity
-  - next visible activity
-- Pass an `onOpenConcierge` callback down into `ActivityRow`.
-- Render one shared `ActivityConciergeSheet` near the existing drawers at the bottom of `EditorialItinerary`.
+### Changes
 
-4. Adapt the sheet for `EditorialActivity`
-- Update `src/components/itinerary/ActivityConciergeSheet.tsx` to normalize:
-  - `cost?.amount`
-  - `image_url` / `photos`
-  - `website` / `bookingUrl`
-  - `startTime` / `time`
-- Make sure the sheet gets the same full trip context in regenerated-trip view as it already gets in planner preview.
+#### 1. Add unconditional inline placeholder rejection in `action-generate-day.ts`
 
-5. Make concierge swapping safe in the real itinerary flow
-- Route concierge swaps through `EditorialItinerary`, not directly through the sheet.
-- Reuse the existing swap target / replacement logic where possible.
-- Move undo/application responsibility to the parent so:
-  - swap applies once
-  - undo does not retrigger paid swap logic
-  - existing version history + enrichment behavior still works
+Insert a new block at ~line 326 (after activity normalization, BEFORE enrichment and validate/repair). This runs outside the validate/repair try/catch, so it ALWAYS executes.
 
-Files to update
-- `src/components/itinerary/EditorialItinerary.tsx`
-- `src/components/itinerary/ActivityConciergeSheet.tsx`
+- Define `PLACEHOLDER_TITLE_PATTERNS` (11 regexes covering "at a bistro", "at a brasserie", "at a café", "at a boulangerie", "at a neighborhood", "at a local", "at a nearby", "at a restaurant")
+- Define `PLACEHOLDER_VENUE_PATTERNS` (regexes for city names, "the destination", "get a restaurant recommendation")
+- Loop through all dining activities, detect placeholders by title OR venue OR description
+- Replace with a random fallback from a new `getRandomFallbackRestaurant()` function (defined in the same file)
+- Track used venue names in a Set to prevent duplicates within the same day
+- Log every replacement with `console.error("PLACEHOLDER DETECTED: ...")`
 
-Technical details
-- Best insertion points in `EditorialItinerary` are the current lock / more-action areas in `ActivityRow`.
-- Use the already-computed visible-neighbor logic (`prevVisibleActivity` / next visible activity) so concierge context is accurate even with grouped/optional activities.
-- Keep existing “Find Alternative” and “Propose Replacement” actions intact; this adds concierge support to the real itinerary renderer rather than replacing other tools.
+The fallback database will include Paris (6 breakfast, 6 lunch, 6 dinner), Rome (3/3/3), Berlin (3/3/3) with full descriptions and prices — richer than the existing repair-day.ts entries.
 
-How to verify
-- Open a regenerated trip in the main trip detail view and confirm the sparkle appears on eligible activity cards.
-- Confirm it does not appear on transport/logistics/filler cards.
-- Open the concierge from dining, museum, and hotel cards and check that the sheet has the correct title, time, image, and contextual opener.
-- Test desktop and mobile.
-- Test “Suggest an alternative” from the concierge and verify the card updates once and undo works without triggering duplicate swap/credit behavior.
+#### 2. Move restaurant naming rules to TOP of system prompt in `compile-prompt.ts`
+
+Currently the "RESTAURANT NAMING RULES" block is at line ~847, buried after 800+ lines of other instructions. Move the critical "ABSOLUTE RULE — REAL RESTAURANTS ONLY" block to the very beginning of the system prompt string, before archetype guidance and schema sections. The AI prioritizes early instructions.
+
+#### 3. Expand fallback DB in `repair-day.ts` with descriptions and prices
+
+Update the existing `FallbackVenue` interface to include `description` and `price` fields. Enrich existing Paris, Rome, Berlin entries (and add a few more per city) so that repaired venues don't get the generic "Local dining in the city center" description.
+
+#### 4. Pass `usedVenueNames` from trip-day orchestrator to day generator
+
+In `action-generate-trip-day.ts`, after each day is generated (~line 530), collect all venue names from the day's dining activities into the running used-restaurants list. Pass this to the next day's `generate-day` call so the inline placeholder replacer can avoid cross-day duplicates.
+
+### Files to edit
+
+| File | Change |
+|------|--------|
+| `action-generate-day.ts` | Add inline placeholder rejection block + fallback restaurant DB + `getRandomFallbackRestaurant()` after normalization (~line 326) |
+| `pipeline/compile-prompt.ts` | Move restaurant naming rules to top of system prompt |
+| `pipeline/repair-day.ts` | Add `description` and `price` to `FallbackVenue` interface; enrich existing entries |
+| `action-generate-trip-day.ts` | Accumulate dining venue names after each day completes; already passes usedRestaurants |
+
+### What we're NOT changing
+
+- The validate/repair pipeline itself (it's a second safety net)
+- The AI model or tool schema
+- The meal policy or meal guard
+- Any frontend code
+
