@@ -12,14 +12,7 @@
  * 7. Universal price caps (bar, casual, venue-type, ticketed, Michelin floor)
  * 8. Hotel return injection (except departure day)
  * 9. Update used venues set for next day
- * 2. Departure timing (Last day only)
- * 3. Fix placeholder meals (AI re-generation)
- * 4. Free venue pricing
- * 5. Market dining cap
- * 6. Universal price caps (bar, casual, venue-type, ticketed, Michelin floor)
- * 7. Cross-day venue dedup
- * 8. Hotel return injection (except departure day)
- * 9. Update used venues set for next day
+ * 10. Terminal cleanup (placeholder + timing scrub) — exported for use after meal guards
  */
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
