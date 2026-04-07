@@ -430,19 +430,12 @@ export async function fixPlaceholdersForDay(
   const placeholderSlots: PlaceholderSlot[] = [];
 
   for (const activity of activities) {
-    const category = ((activity as any).category || '').toLowerCase();
-    if (category !== 'dining' && category !== 'restaurant') continue;
+    if (!isPlaceholderMeal(activity, destinationCity)) continue;
 
     const title = ((activity as any).title || '').trim();
     const venueName = ((activity as any).location?.name || (activity as any).venue_name || '').trim();
-    const description = ((activity as any).description || '').trim();
 
-    const isPlaceholderTitle = PLACEHOLDER_TITLE_PATTERNS.some(p => p.test(title));
-    const isPlaceholderVenue = PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venueName))
-      || (destinationCity.length > 2 && venueName.toLowerCase() === destinationCity);
-    const hasRecommendationCTA = /get a restaurant recommendation/i.test(description);
-
-    if (isPlaceholderTitle || isPlaceholderVenue || hasRecommendationCTA) {
+    {
       console.error(`[QUALITY] Day ${dayIndex}: PLACEHOLDER DETECTED: "${title}" at "${venueName}" — replacing`);
 
       const startTimeStr = (activity as any).startTime || '12:00';
