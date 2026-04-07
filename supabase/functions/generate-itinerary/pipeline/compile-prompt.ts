@@ -881,53 +881,17 @@ ${(() => {
 
   if (isLuminary && days >= 3) {
     const minCount = days >= 7 ? 3 : days >= 5 ? 2 : 1;
-    const cityLower = (destination || '').toLowerCase();
-    let michelinList = '';
-    if (cityLower.includes('paris')) {
-      michelinList = `
-KNOWN MICHELIN RESTAURANTS — PARIS (use these, do NOT invent fake starred restaurants):
-  3-star: L'Ambroisie (9 Pl. des Vosges, 4e), Arpège (84 Rue de Varenne, 7e), Le Cinq (31 Av. George V, 8e), Guy Savoy (Monnaie de Paris, 11 Quai de Conti, 6e), Epicure at Le Bristol (112 Rue du Faubourg Saint-Honoré, 8e)
-  2-star: Kei (5 Rue Coq Héron, 1er), Le Taillevent (15 Rue Lamennais, 8e), Passage 53 (53 Passage des Panoramas, 2e), Le Clarence (31 Av. Franklin Roosevelt, 8e)
-  1-star: Septime (80 Rue de Charonne, 11e), Frenchie (5 Rue du Nil, 2e), David Toutain (29 Rue Surcouf, 7e), Le Jules Verne (Eiffel Tower, Av. Gustave Eiffel, 7e)`;
-    } else if (cityLower.includes('rome') || cityLower.includes('roma')) {
-      michelinList = `
-KNOWN MICHELIN RESTAURANTS — ROME:
-  3-star: La Pergola (Via Alberto Cadlolo 101)
-  2-star: Il Pagliaccio (129 Via dei Banchi Vecchi)
-  1-star: Aroma (1 Via Labicana), Imàgo (Piazza Trinità dei Monti 6), Pipero (Corso Vittorio Emanuele II 250)`;
-    } else if (cityLower.includes('berlin')) {
-      michelinList = `
-KNOWN MICHELIN RESTAURANTS — BERLIN:
-  3-star: Rutz (44 Chausseestraße)
-  2-star: Facil (3 Potsdamer Str.)
-  1-star: Horváth (44 Paul-Lincke-Ufer), CODA (47 Friedelstraße), Nobelhart & Schmutzig (218 Friedrichstraße)`;
-    } else if (cityLower.includes('lisbon') || cityLower.includes('lisboa')) {
-      michelinList = `
-KNOWN MICHELIN RESTAURANTS — LISBON:
-  2-star: Belcanto (Largo de São Carlos 10)
-  1-star: Alma (Rua Anchieta 15), EPUR (Largo da Academia Nacional de Belas Artes 14)`;
-    } else if (cityLower.includes('london')) {
-      michelinList = `
-KNOWN MICHELIN RESTAURANTS — LONDON:
-  3-star: Core by Clare Smyth, Sketch (Lecture Room), Alain Ducasse at The Dorchester
-  2-star: Dinner by Heston Blumenthal, The Ledbury, Ikoyi
-  1-star: Brat (41 Shorting High St), The Clove Club, Lyle's`;
-    } else if (cityLower.includes('barcelona')) {
-      michelinList = `
-KNOWN MICHELIN RESTAURANTS — BARCELONA:
-  3-star: Lasarte, Disfrutar
-  2-star: ABaC, Moments, Cocina Hermanos Torres
-  1-star: Cinc Sentits, Enigma, Alkimia`;
-    }
 
-    return `MICHELIN DINING INCLUSION — LUMINARY TRIP (MANDATORY):
-- This is a LUXURY trip. You MUST include at least ${minCount} Michelin-starred dinner(s) across the ${days}-day trip.
-- For 3-4 day trips: at least 1 Michelin dinner. For 5-6 days: at least 2. For 7+ days: at least 3.
-- Spread Michelin dinners across different days (never two starred dinners on the same day).
-- Price Michelin restaurants CORRECTLY: 1-star €120-180/pp, 2-star €180-280/pp, 3-star €250-400/pp.
-- It is BETTER to include a correctly-priced Michelin restaurant than to avoid all Michelin restaurants.
-- Do NOT remove Michelin restaurants to avoid pricing issues — price them correctly instead.
-${michelinList}`;
+    return `LUMINARY DINNER GUIDANCE (MANDATORY):
+This is a Luminary (luxury) trip. For at least ${minCount} dinner(s) across the full ${days}-day trip, suggest a Michelin-starred restaurant or equivalent top-tier fine dining restaurant that genuinely exists in ${destination || 'the destination'}.
+- Price these at the restaurant's real tasting menu price (usually €120-350 per person for starred restaurants)
+- Include the real address
+- Only suggest restaurants you are confident actually exist and hold the star rating
+- If you are unsure about Michelin status in this city, suggest the most acclaimed fine dining restaurant you know of
+- Spread Michelin dinners across different days (never two starred dinners on the same day)
+- Price Michelin restaurants CORRECTLY: 1-star €120-180/pp, 2-star €180-280/pp, 3-star €250-400/pp
+- It is BETTER to include a correctly-priced Michelin restaurant than to avoid all Michelin restaurants
+- Do NOT remove Michelin restaurants to avoid pricing issues — price them correctly instead`;
   }
 
   if (days >= 3) {
