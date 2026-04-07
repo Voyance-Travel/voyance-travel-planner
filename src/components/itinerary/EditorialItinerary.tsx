@@ -10115,6 +10115,12 @@ function ActivityRow({
   const isRatingEligible = ratingEligibleTypes.includes(activityType) && !isDowntime && !isTransport && !isCheckIn && !isAirport && !isAccommodation;
   const rating = isRatingEligible ? rawRating : null;
   
+  // Concierge eligibility — show for venue-based activities only
+  const CONCIERGE_HIDDEN_TYPES = ['transportation', 'transport', 'transit', 'travel', 'logistics'];
+  const CONCIERGE_HIDDEN_TITLES = ['return to your hotel', 'freshen up', 'arrival flight', 'departure', 'check-in', 'check in', 'free time'];
+  const showConcierge = onOpenConcierge && !CONCIERGE_HIDDEN_TYPES.includes(activityType) && !isDowntime
+    && !CONCIERGE_HIDDEN_TITLES.some(t => titleLower.includes(t));
+
   // Determine if this is a dining activity that should show venue name prominently
   const isDiningActivity = ['dining', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'].includes(activityType);
 
