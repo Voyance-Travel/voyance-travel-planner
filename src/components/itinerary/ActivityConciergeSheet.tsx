@@ -26,7 +26,7 @@ interface ActivityConciergeSheetProps {
     end_time?: string;
     time?: string;
     duration?: string | number;
-    cost?: number;
+    cost?: number | { amount: number; currency?: string };
     price?: number;
     location?: { name?: string; address?: string } | string;
     venue_name?: string;
