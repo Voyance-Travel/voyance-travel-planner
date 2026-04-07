@@ -236,9 +236,8 @@ export function terminalCleanup(
   let removed = 0;
 
   // ── 1. Nuclear placeholder sweep (zero API, synchronous) ──
+  // Uses imports already available at module level
   try {
-    const { isPlaceholderMeal, nuclearPlaceholderSweep } = require('./fix-placeholders.ts');
-    const { getDiningConfig } = require('./dining-config.ts');
     const diningConfig = getDiningConfig('Explorer', '');
     const nuclearCount = nuclearPlaceholderSweep(activities, city || '', diningConfig);
     if (nuclearCount > 0) {
