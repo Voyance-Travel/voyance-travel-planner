@@ -842,9 +842,31 @@ async function _handleGenerateTripDayInner(
       const isFirstDay = dayNumber === 1;
       const isLastDay = dayNumber >= totalDays;
 
-      const arrTime24 = isFirstDay ? (flightSel.arrivalTime24 || flightSel.arrivalTime || flightSel.outbound?.arrivalTime || undefined) : undefined;
-      const depTime24Raw = isLastDay ? (flightSel.returnDepartureTime24 || flightSel.returnDepartureTime || flightSel.return?.departureTime || undefined) : undefined;
+      // Extract arrival/departure times — check all known flight_selection shapes
+      const nestedDep = flightSel.departure as Record<string, any> | undefined;
+      const nestedRet = flightSel.return as Record<string, any> | undefined;
+      const arrTime24Raw = isFirstDay
+        ? (flightSel.arrivalTime24
+          || flightSel.arrivalTime
+          || flightSel.outbound?.arrivalTime
+          || nestedDep?.arrival?.time
+          || flightSel.legs?.[0]?.arrival?.time
+          || undefined)
+        : undefined;
+      const arrTime24 = arrTime24Raw ? normalizeTo24h(arrTime24Raw) : undefined;
+
+      const depTime24Raw = isLastDay
+        ? (flightSel.returnDepartureTime24
+          || flightSel.returnDepartureTime
+          || nestedRet?.departure?.time
+          || nestedRet?.departureTime
+          || (Array.isArray(flightSel.legs) && flightSel.legs.length > 0 ? flightSel.legs[flightSel.legs.length - 1]?.departure?.time : undefined)
+          || undefined)
+        : undefined;
       const depTime24 = depTime24Raw ? normalizeTo24h(depTime24Raw) : undefined;
+
+      if (isFirstDay) console.log(`[generate-trip-day] Day ${dayNumber} arrival time: ${arrTime24 || 'NONE'} (raw: ${arrTime24Raw || 'none found'})`);
+      if (isLastDay) console.log(`[generate-trip-day] Day ${dayNumber} departure time: ${depTime24 || 'NONE'} (raw: ${depTime24Raw || 'none found'})`);
 
       const policy = deriveMealPolicy({
         dayNumber, totalDays, isFirstDay, isLastDay,
@@ -1250,12 +1272,20 @@ async function _handleGenerateTripDayInner(
   // ── MEAL COMPLIANCE GUARD (before save) ──────────────────────────
   // The generate-day action already has a meal guard, but this catches
   // edge cases where post-processing in this file may have altered days.
-  // Extract flight times so meal policy respects actual departure/arrival
+  // Extract flight times — check all known flight_selection shapes
   const flightSel = (tripCheck?.flight_selection as Record<string, any>) || null;
+  const nestedDepSaved = flightSel?.departure as Record<string, any> | undefined;
+  const nestedRetSaved = flightSel?.return as Record<string, any> | undefined;
   const savedArrivalTime24: string | undefined =
-    flightSel?.arrivalTime24 || flightSel?.arrivalTime || flightSel?.outbound?.arrivalTime || undefined;
+    flightSel?.arrivalTime24 || flightSel?.arrivalTime || flightSel?.outbound?.arrivalTime
+    || nestedDepSaved?.arrival?.time
+    || flightSel?.legs?.[0]?.arrival?.time
+    || undefined;
   const savedDepartureTime24: string | undefined =
-    flightSel?.returnDepartureTime24 || flightSel?.returnDepartureTime || flightSel?.return?.departureTime || undefined;
+    flightSel?.returnDepartureTime24 || flightSel?.returnDepartureTime
+    || nestedRetSaved?.departure?.time || nestedRetSaved?.departureTime
+    || (Array.isArray(flightSel?.legs) && flightSel.legs.length > 0 ? flightSel.legs[flightSel.legs.length - 1]?.departure?.time : undefined)
+    || undefined;
 
   for (let i = 0; i < updatedDays.length; i++) {
     const d = updatedDays[i];
