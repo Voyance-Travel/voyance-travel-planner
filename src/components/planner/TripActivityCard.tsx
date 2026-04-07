@@ -48,8 +48,15 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
   const iconName = getActivityIconName(activity.type);
   const IconComponent = iconMap[iconName] || MapPin;
 
+  // Determine if concierge should be shown
+  const cat = (activity.category || activity.type || '').toUpperCase();
+  const title = activity.name || '';
+  const hideConcierge =
+    ['TRANSPORT', 'TRAVEL', 'LOGISTICS', 'TRANSIT'].includes(cat) ||
+    /Return to Your Hotel|Freshen Up|Arrival Flight|Departure/i.test(title);
+  const showConcierge = onOpenConcierge && !hideConcierge;
+
   const handleCardClick = () => {
-    // Track activity interaction for personalization
     trackActivityClick(
       activity.id,
       activity.name,
