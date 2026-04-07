@@ -25,7 +25,7 @@ import {
   enforceMichelinPriceFloor,
 } from './sanitization.ts';
 import { normalizeVenueName, venueNamesMatch } from './generation-utils.ts';
-import { type DiningConfig } from './dining-config.ts';
+import { getDiningConfig } from './dining-config.ts';
 
 // =============================================================================
 // OPTIONS INTERFACE
@@ -34,7 +34,8 @@ import { type DiningConfig } from './dining-config.ts';
 export interface UniversalQualityOptions {
   city: string;
   country: string;
-  tripType: string;
+  dnaTier?: string;        // Explorer, Connector, Achiever, Restorer, Curator, Transformer
+  dnaArchetype?: string;   // "The Luxury Luminary", "The Urban Nomad", etc.
   dayIndex: number;        // 0-based
   totalDays: number;
   usedVenueNames: Set<string>;
@@ -45,7 +46,6 @@ export interface UniversalQualityOptions {
   apiKey?: string;
   lockedActivities?: any[];
   usedRestaurants?: string[];
-  diningConfig?: DiningConfig;
 }
 
 // Categories to skip for cross-day venue dedup (these repeat legitimately)
@@ -62,13 +62,16 @@ export async function universalQualityPass(
   options: UniversalQualityOptions,
 ): Promise<any[]> {
   const {
-    city, country, tripType, dayIndex, totalDays,
+    city, country, dnaTier, dnaArchetype, dayIndex, totalDays,
     usedVenueNames, arrivalTime, departureTime,
-    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants, diningConfig,
+    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants,
   } = options;
 
+  // Compute DNA-aware dining config internally
+  const diningConfig = getDiningConfig(dnaTier || 'Explorer', dnaArchetype || '');
+
   const label = `QUALITY_PASS_D${dayIndex + 1}`;
-  console.log(`\n[QUALITY] ====== Day ${dayIndex + 1} of ${totalDays}: ${city}, ${country} (${tripType}) ======`);
+  console.log(`\n[QUALITY] ====== Day ${dayIndex + 1} of ${totalDays}: ${city}, ${country} | ${dnaArchetype || 'default'} (${dnaTier || 'Explorer'}) ======`);
 
   let result = [...activities];
 
@@ -84,43 +87,7 @@ export async function universalQualityPass(
     console.log(`[QUALITY] After departure filter: ${result.length} activities`);
   }
 
-  // ── Step 3: Fix placeholder meals (AI re-generation) ──
-  if (apiKey) {
-    await fixPlaceholdersForDay(
-      result,
-      city,
-      country,
-      tripType,
-      dayIndex,
-      usedRestaurants || [],
-      budgetTier || 'moderate',
-      apiKey,
-      lockedActivities || [],
-      dayTitle,
-      diningConfig,
-    );
-  }
-
-  // ── Step 4: Free venue pricing ──
-  for (const act of result) {
-    checkAndApplyFreeVenue(act, label);
-  }
-
-  // ── Step 5: Market dining cap ──
-  for (const act of result) {
-    enforceMarketDiningCap(act, label);
-  }
-
-  // ── Step 6: Universal price caps ──
-  for (const act of result) {
-    enforceBarNightcapPriceCap(act, label);
-    enforceCasualVenuePriceCap(act, label);
-    enforceVenueTypePriceCap(act, label);
-    enforceTicketedAttractionPricing(act, label);
-    enforceMichelinPriceFloor(act, label);
-  }
-
-  // ── Step 7: Cross-day venue dedup ──
+  // ── Step 3: Cross-day venue dedup (before placeholder fixing — no point fixing a dupe) ──
   if (usedVenueNames.size > 0) {
     result = result.filter(a => {
       const cat = (a.category || '').toLowerCase();
@@ -146,6 +113,42 @@ export async function universalQualityPass(
       }
       return true;
     });
+  }
+
+  // ── Step 4: Fix placeholder meals (DNA-aware AI re-generation) ──
+  if (apiKey) {
+    await fixPlaceholdersForDay(
+      result,
+      city,
+      country,
+      dnaTier || 'Explorer',
+      dayIndex,
+      usedRestaurants || [],
+      budgetTier || 'moderate',
+      apiKey,
+      lockedActivities || [],
+      dayTitle,
+      diningConfig,
+    );
+  }
+
+  // ── Step 5: Free venue pricing ──
+  for (const act of result) {
+    checkAndApplyFreeVenue(act, label);
+  }
+
+  // ── Step 6: Market dining cap ──
+  for (const act of result) {
+    enforceMarketDiningCap(act, label);
+  }
+
+  // ── Step 7: Universal price caps ──
+  for (const act of result) {
+    enforceBarNightcapPriceCap(act, label);
+    enforceCasualVenuePriceCap(act, label);
+    enforceVenueTypePriceCap(act, label);
+    enforceTicketedAttractionPricing(act, label);
+    enforceMichelinPriceFloor(act, label);
   }
 
   // ── Step 8: Ensure hotel return at end of day (except departure day) ──
