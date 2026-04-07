@@ -268,32 +268,20 @@ export function isPlaceholderMeal(activity: any, cityName: string): boolean {
 // =============================================================================
 export const GENERIC_VENUE_TEMPLATES: Record<string, string[]> = {
   breakfast: [
-    "Café Lumière", "Morning Glory Café", "Le Petit Matin", "Café Soleil",
-    "The Corner Bakery", "Café des Arts", "The Golden Cup", "Maison du Café",
-    "Sunrise Café", "The Local Roast", "Café Paradis", "The Morning Table",
-    "Petit Déjeuner", "Café Étoile", "The Pastry House", "Atelier du Café",
-    "Café Belle Vue", "The Bread Basket", "Café du Jardin", "Le Réveil",
+    "Local Breakfast Café", "Neighborhood Morning Café", "A Local Bakery & Café",
+    "Breakfast at a Local Café", "Morning Coffee & Pastry Spot",
   ],
   lunch: [
-    "Trattoria del Corso", "Bistrot du Marché", "The Market Kitchen", "Chez Marcel",
-    "La Petite Table", "Osteria del Porto", "The Garden Bistro", "Casa del Gusto",
-    "Taverna Centrale", "Le Coin Gourmand", "Brasserie du Parc", "The Olive Tree",
-    "Cantina Verde", "Le Bon Vivant", "Piazza Kitchen", "Tavola Calda",
-    "The Courtyard Kitchen", "Bistro Saint-Pierre", "La Cuisine Locale", "The Stone Oven",
+    "Local Lunch Restaurant", "Neighborhood Lunch Spot", "A Local Bistro for Lunch",
+    "Lunch at a Local Restaurant", "Midday Dining Spot",
   ],
   dinner: [
-    "Ristorante La Luna", "Le Grand Couvert", "The Amber Room", "Maison Rouge",
-    "Taverna Nocturna", "Le Clos Saint-Jacques", "The Walled Garden", "Casa Nostra",
-    "Osteria della Sera", "Le Flambeau", "The Golden Fork", "Palazzo del Gusto",
-    "La Table d'Hôte", "The Harvest Table", "Ristorante Vecchia", "Le Petit Château",
-    "Cucina del Mercato", "The Fireside Table", "Brasserie Étoile", "La Maison Dorée",
+    "Local Dinner Restaurant", "Neighborhood Evening Restaurant", "A Local Restaurant for Dinner",
+    "Dinner at a Local Restaurant", "Evening Dining Spot",
   ],
   drinks: [
-    "The Velvet Lounge", "Bar Centrale", "The Copper Still", "Le Petit Bar",
-    "The Night Owl", "Cocktail Club", "The Rooftop Bar", "Enoteca del Corso",
-    "The Hidden Bar", "Le Bar à Vin", "The Jazz Cellar", "Aperitivo Bar",
-    "The Terrace Lounge", "Bar Luminoso", "The Library Bar", "Wine & Co.",
-    "The Cobblestone Bar", "Le Comptoir", "The Signal Room", "Bar Botanica",
+    "Local Bar", "Neighborhood Wine Bar", "A Local Cocktail Bar",
+    "Drinks at a Local Bar", "Evening Bar & Lounge",
   ],
 };
 
