@@ -462,11 +462,10 @@ export default function ItineraryPreview({
       if (error) throw error;
       
       if (data?.success && data?.day) {
-        // Update local days with the regenerated day
+        // Convert backend-shaped response through normalization pipeline
+        const converted = convertBackendDay(data.day);
         setLocalDays(prev => prev.map(d => 
-          d.dayNumber === dayNumber 
-            ? { ...d, ...data.day, activities: data.day.activities || d.activities }
-            : d
+          d.dayNumber === dayNumber ? converted : d
         ));
         toast.success(`Day ${dayNumber} has been refreshed!`);
       }
