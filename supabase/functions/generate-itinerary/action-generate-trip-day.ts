@@ -1893,6 +1893,41 @@ async function _handleGenerateTripDayInner(
 
     console.log(`[generate-trip-day] ${isComplete ? '✅' : '⚠️'} Trip ${tripId} generation ${isComplete ? 'complete' : 'partial (failed/missing days)'}: ${totalDays} days, status=${finalStatus}`);
 
+    // ── TRIP GENERATION SUMMARY ──
+    // This confirms all validators ran and provides a diagnostic snapshot
+    {
+      const allActivities: any[] = [];
+      const allVenueNames = new Set<string>();
+      const allRestaurantNames = new Set<string>();
+      const categoryBreakdown: Record<string, number> = {};
+      const MEAL_RE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+
+      for (const day of (partialItinerary?.days || [])) {
+        for (const act of (day?.activities || [])) {
+          allActivities.push(act);
+          const cat = (act.category || 'other').toLowerCase();
+          categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + 1;
+
+          const venue = (act.venue_name || act.location?.name || '').trim().toLowerCase();
+          if (venue && venue !== 'your hotel' && !/your hotel/i.test(venue)) {
+            allVenueNames.add(venue);
+          }
+          const isDining = cat === 'dining' || MEAL_RE.test(act.title || '');
+          if (isDining && venue) {
+            allRestaurantNames.add(venue);
+          }
+        }
+      }
+
+      console.log('=== TRIP GENERATION SUMMARY ===');
+      console.log(`City: ${destination}, Days: ${totalDays}, Type: ${tripType || 'vacation'}, Budget: ${budgetTier || 'moderate'}`);
+      console.log(`Total activities: ${allActivities.length}, Categories: ${JSON.stringify(categoryBreakdown)}`);
+      console.log(`Unique venues: ${allVenueNames.size} — ${[...allVenueNames].slice(0, 15).join(', ')}${allVenueNames.size > 15 ? '...' : ''}`);
+      console.log(`Unique restaurants: ${allRestaurantNames.size} — ${[...allRestaurantNames].join(', ')}`);
+      console.log(`Validators pipeline: usedVenues(${usedVenues.length}), usedRestaurants(${usedRestaurants.length}), sanitize, repairDay, crossDayDedup, hotelReturn, michelin`);
+      console.log('================================');
+    }
+
     // ── SYNC NORMALIZED TABLES on chain completion ──────────────────
     // This ensures itinerary_days + itinerary_activities stay in sync
     // with the JSON snapshot, preventing "Unplanned" days on reload.
