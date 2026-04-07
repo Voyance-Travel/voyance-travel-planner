@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { checkAndApplyFreeVenue, ALWAYS_FREE_VENUE_PATTERNS } from "./sanitization.ts";
+import { checkAndApplyFreeVenue, enforceMarketDiningCap, ALWAYS_FREE_VENUE_PATTERNS } from "./sanitization.ts";
 
 // ─── Tier 1 pattern matching ───
 
@@ -222,4 +222,187 @@ Deno.test("checkAndApplyFreeVenue does NOT zero galerie", () => {
   const result = checkAndApplyFreeVenue(activity, "test");
   assertEquals(result, false);
   assertEquals(activity.price_per_person, 10);
+});
+
+// ─── New universal patterns ───
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes campo (Italian square)", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Campo de' Fiori"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes platz (German square)", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Alexanderplatz"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes seafront", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Walk along the Seafront"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes corniche", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Corniche Promenade"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes monument", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("War Monument"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes fountain/fontaine", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Fontaine des Innocents"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes statue", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Statue of Liberty viewpoint"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes mosque", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Blue Mosque"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes temple", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Sensō-ji Temple"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes synagogue", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Great Synagogue"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes souk", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Souk el-Attarine"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes puente (Spanish bridge)", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Puente Nuevo"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes brücke (German bridge)", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Oberbaumbrücke"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes overlook", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Scenic Overlook"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes belvedere", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Belvedere viewpoint"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes market", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Borough Market"), true);
+});
+
+Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes mercato", () => {
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Mercato Centrale"), true);
+});
+
+// ─── checkAndApplyFreeVenue with new patterns ───
+
+Deno.test("checkAndApplyFreeVenue zeros fountain in title", () => {
+  const activity = {
+    title: "Visit the Fontaine des Innocents",
+    category: "explore",
+    price_per_person: 15,
+    price: 15,
+  };
+  const result = checkAndApplyFreeVenue(activity, "test");
+  assertEquals(result, true);
+  assertEquals(activity.price_per_person, 0);
+});
+
+Deno.test("checkAndApplyFreeVenue zeros mosque in title", () => {
+  const activity = {
+    title: "Visit the Blue Mosque",
+    category: "explore",
+    price_per_person: 10,
+    price: 10,
+  };
+  const result = checkAndApplyFreeVenue(activity, "test");
+  assertEquals(result, true);
+  assertEquals(activity.price_per_person, 0);
+});
+
+Deno.test("checkAndApplyFreeVenue zeros market entry", () => {
+  const activity = {
+    title: "Explore Borough Market",
+    category: "explore",
+    price_per_person: 12,
+    price: 12,
+  };
+  const result = checkAndApplyFreeVenue(activity, "test");
+  assertEquals(result, true);
+  assertEquals(activity.price_per_person, 0);
+});
+
+Deno.test("checkAndApplyFreeVenue does NOT zero spa", () => {
+  const activity = {
+    title: "Spa Treatment at the Park Hotel",
+    category: "wellness",
+    price_per_person: 80,
+    price: 80,
+  };
+  const result = checkAndApplyFreeVenue(activity, "test");
+  assertEquals(result, false);
+  assertEquals(activity.price_per_person, 80);
+});
+
+Deno.test("checkAndApplyFreeVenue does NOT zero gondola", () => {
+  const activity = {
+    title: "Gondola Ride on the Canal",
+    category: "activity",
+    price_per_person: 40,
+    price: 40,
+  };
+  const result = checkAndApplyFreeVenue(activity, "test");
+  assertEquals(result, false);
+  assertEquals(activity.price_per_person, 40);
+});
+
+Deno.test("checkAndApplyFreeVenue does NOT zero cooking class", () => {
+  const activity = {
+    title: "Cooking Class at the Market",
+    category: "experience",
+    price_per_person: 65,
+    price: 65,
+  };
+  const result = checkAndApplyFreeVenue(activity, "test");
+  assertEquals(result, false);
+  assertEquals(activity.price_per_person, 65);
+});
+
+// ─── enforceMarketDiningCap tests ───
+
+Deno.test("enforceMarketDiningCap caps dining at market to €20", () => {
+  const activity = {
+    title: "Lunch at Mercato Centrale",
+    category: "dining",
+    price_per_person: 35,
+    price: 35,
+  };
+  const result = enforceMarketDiningCap(activity, "test");
+  assertEquals(result, true);
+  assertEquals(activity.price_per_person, 20);
+  assertEquals(activity.price, 20);
+});
+
+Deno.test("enforceMarketDiningCap does NOT cap if already under €20", () => {
+  const activity = {
+    title: "Snack at the Souk",
+    category: "dining",
+    price_per_person: 8,
+    price: 8,
+  };
+  const result = enforceMarketDiningCap(activity, "test");
+  assertEquals(result, false);
+  assertEquals(activity.price_per_person, 8);
+});
+
+Deno.test("enforceMarketDiningCap does NOT cap non-dining at market", () => {
+  const activity = {
+    title: "Explore Borough Market",
+    category: "explore",
+    price_per_person: 30,
+    price: 30,
+  };
+  const result = enforceMarketDiningCap(activity, "test");
+  assertEquals(result, false);
+  assertEquals(activity.price_per_person, 30);
 });

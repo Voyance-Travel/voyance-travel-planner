@@ -14,13 +14,41 @@ import { extractRestaurantVenueName } from './generation-utils.ts';
  * Exported so that action-repair-costs.ts and generation-core.ts use the
  * exact same list instead of maintaining their own copies.
  */
-export const ALWAYS_FREE_VENUE_PATTERNS = /\b(?:park|parc|garden|jardim|jardin|viewpoint|miradouro|miradouros|outlook|vista|panoram\w*|plaza|praça|praca|square|piazza|platz|place\s+de|church|igreja|[eé]glise|basilica|basilique|cathedral|cath[eé]drale|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca|evening\s+(?:walk|stroll)|morning\s+(?:walk|stroll)|historic\s+walk|bridge|pont\s+\w+|promenade|esplanade|boardwalk|champs.?[eé]lys[eé]es|montmartre|sacr[eé].?c[oœ]ur|tuileries|champ\s+de\s+mars|palais.?royal.*garden|seine.*walk|walk.*seine|neighborhood\s+walk|[iî]le\s+saint.?louis)\b/i;
+export const ALWAYS_FREE_VENUE_PATTERNS = /\b(?:park|parc|parque|garden|jardim|jardin|garten|giardino|viewpoint|miradouro|miradouros|mirador|outlook|overlook|belvedere|vista|panoram\w*|plaza|praça|praca|square|piazza|platz|place\s+de|largo|campo|church|igreja|iglesia|chiesa|kirche|[eé]glise|basilica|basilique|basilika|cathedral|cath[eé]drale|cattedrale|kathedrale|dom|mosque|moschee|mosqu[eé]e|temple|shrine|synagogue|riverside|waterfront|riverbank|seafront|corniche|lakefront|canal\s+walk|stroll|walk|wander|walking\s+tour|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca|evening\s+(?:walk|stroll)|morning\s+(?:walk|stroll)|historic\s+walk|bridge|pont\s+\w+|puente|ponte|br[üu]cke|brug|promenade|esplanade|boardwalk|paseo|monument|memorial|statue|fountain|fontaine|fontana|brunnen|market|march[eé]|mercato|markt|mercado|feira|bazar|bazaar|souk|champs.?[eé]lys[eé]es|montmartre|sacr[eé].?c[oœ]ur|tuileries|champ\s+de\s+mars|palais.?royal.*garden|seine.*walk|walk.*seine|neighborhood\s+walk|[iî]le\s+saint.?louis)\b/i;
 
 /** Tier 2: free only when description says "free" or price is in phantom range */
-export const TIER2_FREE_VENUE_PATTERNS = /\b(?:fountain|monument|memorial|statue|arch|gate|market|trail|path|pier|dock|wharf|embankment)\b/i;
+export const TIER2_FREE_VENUE_PATTERNS = /\b(?:arch|gate|trail|path|pier|dock|wharf|embankment)\b/i;
 
 /** Paid-experience exclusion — don't force-free if any of these match */
-const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|mus[eé]e|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|galerie|orangerie|aquarium|zoo|monastery|mosteiro|colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena\s+floor)\b/i;
+const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|mus[eé]e|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|galerie|orangerie|aquarium|zoo|monastery|mosteiro|colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena\s+floor|observation\s+deck|rooftop.*ticket|climb.*ticket|boat|cruise|ferry|gondola|cable\s+car|funicular|show|concert|performance|exhibition|spa|wellness|treatment|massage|hammam|class|workshop|course|lesson|cooking)\b/i;
+
+// =============================================================================
+// MARKET PATTERNS — shared for market dining cap
+// =============================================================================
+const MARKET_RE = /\b(?:market|march[eé]|mercato|markt|mercado|feira|bazar|bazaar|souk)\b/i;
+
+/**
+ * Cap dining-at-market prices to €20/pp instead of zeroing.
+ * Markets are free to enter but food costs money.
+ */
+export function enforceMarketDiningCap(activity: Record<string, any>, label = 'sanitize'): boolean {
+  const category = (activity.category || '').toUpperCase();
+  if (category !== 'DINING' && category !== 'RESTAURANT') return false;
+
+  const combined = `${activity.title || ''} ${activity.venue_name || ''}`;
+  if (!MARKET_RE.test(combined)) return false;
+
+  const price = typeof activity.price_per_person === 'number' ? activity.price_per_person : 0;
+  if (price > 20) {
+    console.warn(`[MARKET-CAP] [${label}] "${activity.title}" at market capped from €${price} to €20`);
+    activity.price_per_person = 20;
+    activity.price = 20;
+    if (typeof activity.cost === 'number') activity.cost = 20;
+    if (activity.cost && typeof activity.cost === 'object') activity.cost.amount = 20;
+    return true;
+  }
+  return false;
+}
 
 // =============================================================================
 // KNOWN TICKETED ATTRACTIONS — minimum admission prices (EUR/USD) by venue
