@@ -5,6 +5,7 @@ import { Plane, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkl
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import type { DayItinerary, ItineraryActivity } from '@/types/itinerary';
+import { convertBackendDay } from '@/types/itinerary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useEffect, useState, useCallback } from 'react';
 import { useEntitlements, canUse, getRemainingQuota, useConsumeUsage } from '@/hooks/useEntitlements';
@@ -461,11 +462,10 @@ export default function ItineraryPreview({
       if (error) throw error;
       
       if (data?.success && data?.day) {
-        // Update local days with the regenerated day
+        // Convert backend-shaped response through normalization pipeline
+        const converted = convertBackendDay(data.day);
         setLocalDays(prev => prev.map(d => 
-          d.dayNumber === dayNumber 
-            ? { ...d, ...data.day, activities: data.day.activities || d.activities }
-            : d
+          d.dayNumber === dayNumber ? converted : d
         ));
         toast.success(`Day ${dayNumber} has been refreshed!`);
       }
