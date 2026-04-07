@@ -783,8 +783,8 @@ export function enforceCasualVenuePriceCap(activity: Record<string, any>, logPre
 const CASUAL_VENUE_TYPE_PATTERNS: Array<{ pattern: RegExp; maxPrice: number }> = [
   { pattern: /\b(?:march[eé]|market|mercato|markt|mercado|feira|bazar|bazaar|souk)\b/i, maxPrice: 20 },
   { pattern: /\b(?:bookshop|bookstore|librairie|librer[ií]a)\b/i, maxPrice: 25 },
-  { pattern: /\b(?:boulangerie|bakery|bäckerei|backerei|patisserie|pâtisserie|panader[ií]a|padaria)\b/i, maxPrice: 25 },
-  { pattern: /\b(?:street food|food stall|food truck|food cart|hawker|vendor)\b/i, maxPrice: 15 },
+  { pattern: /\b(?:boulangerie|bakery|bäckerei|backerei|patisserie|pâtisserie|panader[ií]a|padaria)\b/i, maxPrice: 35 },
+  { pattern: /\b(?:street food|food stall|food truck|food cart|hawker|vendor)\b/i, maxPrice: 18 },
   { pattern: /\bcaf[eé]\b.*\b(?:bookshop|literary|book)\b/i, maxPrice: 25 },
   { pattern: /\b(?:bookshop|literary|book)\b.*\bcaf[eé]\b/i, maxPrice: 25 },
   // Ice cream and dessert shops
