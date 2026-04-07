@@ -1,35 +1,30 @@
 
+Fix regenerate 500 error
 
-## Fix: Day Regeneration Not Updating the UI
+Diagnosis
+- The 500 is coming from the backend `generate-itinerary` function, not the browser.
+- Edge logs show the AI call succeeds first (`[ai-call] ✓ Day 1...`) and then the function crashes with `ReferenceError: dayItinerary is not defined`.
+- A `ReferenceError` means code referenced a variable that does not exist in the current scope.
+- Do I know what the issue is? Yes — `handleGenerateDay` is using an undefined variable during post-processing, so every regenerate request fails before a response can be returned.
 
-### Problem
-When you click "Regenerate Day", the edge function runs successfully and returns fresh data, but the UI shows the exact same content. This happens because the backend response uses **different field names** than the frontend expects:
+What to change
+1. Update `supabase/functions/generate-itinerary/action-generate-day.ts`.
+2. Replace the broken `dayTitle: dayItinerary?.theme` inside the `universalQualityPass(...)` call.
+3. Use the already-available generated day data instead, following the working pattern already used in `action-generate-trip-day.ts`, for example:
+   - `generatedDay?.theme || generatedDay?.title || \`Day ${dayNumber}\``
 
-| Backend field | Frontend field |
-|---|---|
-| `startTime` | `time` |
-| `name` | `title` |
-| `category` | `type` |
-| `estimatedCost.amount` | `cost` |
+Why the retries appear
+- `src/components/itinerary/EditorialItinerary.tsx` automatically retries failed regenerations at 3s, 8s, and 15s.
+- Those warnings are expected retry behavior, but they cannot succeed until the backend crash is fixed.
 
-The current code does `{ ...d, ...data.day, activities: data.day.activities }`, which overlays backend-shaped objects onto frontend-shaped state. Since the field names don't match, the old values (from the previous render) stay in place and nothing visually changes.
+Verification
+1. Trigger “Regenerate Day” again.
+2. Confirm the function returns 200 instead of 500.
+3. Confirm the retry warnings stop.
+4. Confirm the regenerated day updates in the UI through the existing frontend normalization already added in `src/components/planner/steps/ItineraryPreview.tsx`.
 
-### Fix
-
-**File: `src/components/planner/steps/ItineraryPreview.tsx`**
-
-1. Import `convertBackendDay` from `@/types/itinerary`
-2. In `handleRegenerateDay`, convert `data.day` through `convertBackendDay` before setting it into `localDays`:
-
-```ts
-const converted = convertBackendDay(data.day);
-setLocalDays(prev => prev.map(d =>
-  d.dayNumber === dayNumber ? converted : d
-));
-```
-
-This ensures the regenerated day goes through the same normalization pipeline that the initial load uses, mapping backend fields to frontend fields correctly.
-
-### Files Changed
-1. `src/components/planner/steps/ItineraryPreview.tsx` — import `convertBackendDay`, apply it to regenerated day response
-
+Technical details
+- Root cause file: `supabase/functions/generate-itinerary/action-generate-day.ts`
+- Broken line pattern: `dayTitle: dayItinerary?.theme`
+- Reference implementation to mirror: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- No database, auth, RLS, or secrets changes are needed for this fix.
