@@ -244,6 +244,22 @@ export default function CustomerDayCard({
                                   "flex items-center gap-1 transition-opacity",
                                   isHovered ? "opacity-100" : "opacity-0 sm:opacity-0"
                               )}>
+                                {(() => {
+                                  const cat = (activity.type || '').toUpperCase();
+                                  const hideAI = ['TRANSPORTATION', 'TRANSPORT', 'TRAVEL', 'LOGISTICS', 'TRANSIT'].includes(cat) ||
+                                    /Return to Your Hotel|Freshen Up|Arrival Flight|Departure/i.test(activity.title);
+                                  return !hideAI ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={() => setConciergeActivity(activity)}
+                                      title="Ask AI concierge"
+                                    >
+                                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                                    </Button>
+                                  ) : null;
+                                })()}
                                 {onActivitySwap && (
                                   <Button
                                     variant="ghost"
