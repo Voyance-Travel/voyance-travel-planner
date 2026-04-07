@@ -45,7 +45,18 @@ export const ALWAYS_FREE_VENUE_PATTERNS: RegExp[] = [
 export const TIER2_FREE_VENUE_PATTERNS = /\b(?:arch|gate|trail|path|pier|dock|wharf|embankment)\b/i;
 
 /** Paid-experience exclusion — don't force-free if any of these match */
-const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|mus[eé]e|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|galerie|orangerie|aquarium|zoo|monastery|mosteiro|colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena\s+floor|observation\s+deck|rooftop.*ticket|climb.*ticket|boat|cruise|ferry|gondola|cable\s+car|funicular|show|concert|performance|exhibition|spa|wellness|treatment|massage|hammam|class|workshop|course|lesson|cooking)\b/i;
+const PAID_EXPERIENCE_RE: RegExp[] = [
+  /\b(museum|mus[eé]e|museo|muzeum|gallery|galerie|galleria|orangerie)\b/i,
+  /\b(observation\s+deck|tower.*ticket|climb.*ticket|rooftop.*ticket|dome.*climb)\b/i,
+  /\b(boat|cruise|ferry|gondola|cable\s+car|funicular)\b/i,
+  /\b(show|concert|performance|exhibition)\b/i,
+  /\b(spa|wellness|treatment|massage|hammam|onsen)\b/i,
+  /\b(class|workshop|course|lesson|cooking)\b/i,
+  /\b(guided\s+tour|walking\s+tour|food\s+tour)\b/i,
+  /\b(tour|guided|ticket|admission|entry)\b/i,
+  /\b(botanical|bot[âa]nico|castle|castelo|pal[áa]cio|palace|tower|torre|aquarium|zoo|monastery|mosteiro)\b/i,
+  /\b(colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena\s+floor)\b/i,
+];
 
 // =============================================================================
 // MARKET PATTERNS — shared for market dining cap
