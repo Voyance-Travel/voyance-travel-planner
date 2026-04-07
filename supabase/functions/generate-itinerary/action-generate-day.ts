@@ -262,13 +262,65 @@ const RESTAURANT_SUGGESTION_TOOL = {
 
 async function generateFallbackRestaurant(
   city: string,
-  mealType: 'breakfast' | 'lunch' | 'dinner',
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
   budgetTier: string,
   apiKey: string,
   usedNames: Set<string>,
+  country?: string,
+  tripType?: string,
+  dayTheme?: string,
+  neighborhood?: string,
 ): Promise<FallbackRestaurant | null> {
   const blocklist = Array.from(usedNames).slice(0, 20).join(', ');
-  const prompt = `You are a restaurant expert for ${city}. Suggest ONE real, currently operating ${mealType} restaurant suitable for ${budgetTier}-budget travelers. It must be a real place with a real address. DO NOT suggest: ${blocklist || 'none'}. Pick a well-reviewed local favorite, not a tourist trap.`;
+
+  // Trip-type-aware price guidance
+  const priceGuidance: Record<string, Record<string, string>> = {
+    Luminary: {
+      breakfast: '€25-60 per person',
+      lunch: '€40-80 per person',
+      dinner: '€60-200 per person (Michelin-starred options welcome)',
+      drinks: '€20-50 per person',
+    },
+    Explorer: {
+      breakfast: '€10-30 per person',
+      lunch: '€20-50 per person',
+      dinner: '€30-80 per person',
+      drinks: '€15-35 per person',
+    },
+    Budget: {
+      breakfast: '€5-15 per person',
+      lunch: '€8-25 per person',
+      dinner: '€15-40 per person',
+      drinks: '€8-20 per person',
+    },
+  };
+
+  const styleDescriptions: Record<string, string> = {
+    Luminary: 'luxury, refined, memorable dining experiences',
+    Explorer: 'authentic, local favorites, quality over price',
+    Budget: 'affordable, good value, local gems',
+  };
+
+  const effectiveTripType = tripType || 'Explorer';
+  const prices = priceGuidance[effectiveTripType] || priceGuidance.Explorer;
+  const priceRange = prices[mealType] || prices.lunch;
+  const styleDesc = styleDescriptions[effectiveTripType] || styleDescriptions.Explorer;
+  const locationStr = country ? `${city}, ${country}` : city;
+
+  const promptParts = [
+    `You are a restaurant expert for ${locationStr}. Suggest ONE real, currently operating ${mealType} restaurant.`,
+    `- Trip style: ${effectiveTripType} (${styleDesc})`,
+    `- Price range: ${priceRange}`,
+    neighborhood ? `- Preferably in or near: ${neighborhood}` : null,
+    dayTheme ? `- Day theme: ${dayTheme}` : null,
+    mealType === 'dinner' && effectiveTripType === 'Luminary' ? '- Consider Michelin-starred restaurants if appropriate' : null,
+    mealType === 'drinks' ? '- Suggest a bar, wine bar, cocktail lounge, or similar venue' : null,
+    `- Must be a REAL place with a REAL street address`,
+    `- Pick a well-reviewed local favorite, not a tourist trap`,
+    `- DO NOT suggest: ${blocklist || 'none'}`,
+  ].filter(Boolean);
+
+  const prompt = promptParts.join('\n');
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000); // 10s max
@@ -627,7 +679,7 @@ export async function handleGenerateDay(
       // Collect placeholder slots for potential AI batch
       interface PlaceholderSlot {
         activityRef: any;
-        mealType: 'breakfast' | 'lunch' | 'dinner';
+        mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
       }
       const placeholderSlots: PlaceholderSlot[] = [];
 
@@ -651,10 +703,11 @@ export async function handleGenerateDay(
           const hourMatch = startTimeStr.match(/^(\d{1,2})/);
           const hour24 = hourMatch ? parseInt(hourMatch[1], 10) : 12;
 
-          let mealType: 'breakfast' | 'lunch' | 'dinner';
+          let mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
           if (hour24 < 11) mealType = 'breakfast';
           else if (hour24 < 16) mealType = 'lunch';
-          else mealType = 'dinner';
+          else if (hour24 < 21) mealType = 'dinner';
+          else mealType = 'drinks';
 
           // Fast path: try hardcoded fallback first (free, instant)
           const fallback = getRandomFallbackRestaurant(destination, mealType, usedVenueNamesInDay);
@@ -670,6 +723,7 @@ export async function handleGenerateDay(
       // AI micro-call fallback for cities without hardcoded restaurants
       if (placeholderSlots.length > 0) {
         console.log(`[generate-day] ${placeholderSlots.length} placeholder(s) need AI fallback for "${destination}"`);
+        const generatedDayTheme = dayItinerary?.theme || dayItinerary?.title || undefined;
         for (const slot of placeholderSlots) {
           try {
             const aiRestaurant = await generateFallbackRestaurant(
@@ -678,6 +732,9 @@ export async function handleGenerateDay(
               budgetTier || 'moderate',
               LOVABLE_API_KEY,
               usedVenueNamesInDay,
+              destinationCountry || undefined,
+              tripType || undefined,
+              generatedDayTheme,
             );
             if (aiRestaurant) {
               applyFallbackToActivity(slot.activityRef, aiRestaurant, slot.mealType, usedVenueNamesInDay);
