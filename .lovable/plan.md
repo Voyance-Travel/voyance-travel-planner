@@ -1,35 +1,34 @@
 
 
-## Fix: Transport/Transit Card Alignment
+## Add Restaurant & Activity Rules to AI Generation Prompt
 
-### Problem
-The transport-related UI elements (transit gap indicators, transport mode rows, and inter-city transport cards) are not properly centered/aligned within the day card. They "hang off" visually compared to the activity cards above and below them.
+### Analysis
 
-### Root Cause
-Three different transport-related elements render at the same level as activity cards but with inconsistent padding and no alignment to the activity card's column structure (time column + thumbnail + content):
+After reviewing the 1,225-line `compile-prompt.ts`, most of the requested rules **already exist** in the prompt. Here's the gap analysis:
 
-1. **TransitModePicker** (e.g., "Travel to Ob-La-Di 47 min") — uses `px-4 py-2`, not aligned to the activity card's time+thumbnail+content columns
-2. **TransitGapIndicator** (e.g., "Walk to CDG → Home 5 min") — similar flat layout with its own padding
-3. **InterCityTransportCard** (e.g., "CDG → Home") — has `mx-2 sm:mx-0 my-1`, sitting flush against the container edge on desktop
+| Rule | Status | Notes |
+|------|--------|-------|
+| 1. Real restaurants only | ✅ Already present | Lines 796-806, 879-912 — extensive banned-pattern enforcement |
+| 2. Destination cuisine | ⚠️ Partially | City-specific restaurant lists exist, but no explicit "must serve local cuisine" rule |
+| 3. Real addresses | ✅ Already present | Lines 799, 806, 877 |
+| 4. No repeats | ✅ Already present | Lines 1085-1092, 1134-1156, 1185-1186 — triple-enforced blocklist |
+| 5. No same activity type on consecutive days | ❌ Missing | Not mentioned anywhere |
+| 6. Price reality | ✅ Already present | Lines 846-868, 1036-1043 — detailed price tiers with Michelin minimums |
+| 7. Arrival day timing | ✅ Already present | Lines 778-784 — 2h buffer after landing |
+| 8. Departure day timing | ✅ Already present | Lines 786-793 — 3h buffer before departure, no lunch if flight before 13:30 |
 
-### Fix
+### What to add
 
-1. **`src/components/itinerary/EditorialItinerary.tsx`**
-   - Adjust the InterCityTransportCard wrapper to use consistent horizontal padding (`mx-0 sm:mx-4`) so it aligns with activity content area
-   - On mobile, wrap transport rows inside the same timeline card container used by regular activities so they share the same left margin/indent
+Two new rule blocks in the **system prompt** section of `compile-prompt.ts`, inserted after the existing dining rules (~line 877):
 
-2. **`src/components/itinerary/TransitModePicker.tsx`**
-   - Add left padding on desktop to align with the content column of activity cards (offset by the combined width of time column 96px + thumbnail column 96px = ~192px left margin, or use `sm:pl-[12rem]` to align with activity content)
-   - Alternatively, keep the full-width row but indent it with a `sm:ml-[12rem]` so it visually aligns with activity titles
+**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
 
-3. **`src/components/itinerary/TransitGapIndicator.tsx`**
-   - Apply the same desktop alignment adjustment so gap indicators sit under the activity content column rather than spanning from the left edge
+1. **Destination cuisine rule** (~5 lines): Explicit instruction that restaurants must primarily serve the destination city's local/regional cuisine, with at most one international-cuisine exception per trip if it's a renowned destination restaurant.
 
-### Approach
-The simplest fix is to add a consistent `sm:px-6` or `sm:pl-[12.5rem]` to the transport row containers on desktop, matching the start position of the activity content column (after time + thumbnail). This keeps them visually anchored to the same content flow without restructuring the component hierarchy.
+2. **Activity type variety rule** (~5 lines): If the previous day's activities are available, do not repeat the same experience *type* on consecutive days (e.g., spa on Day 3 → no spa on Day 4; cooking class on Day 5 → no cooking class on Day 6). This will reference `previousDayActivities` which is already passed to the prompt context.
 
-### Files Changed
-1. `src/components/itinerary/EditorialItinerary.tsx` — adjust InterCityTransportCard className and transport row wrappers
-2. `src/components/itinerary/TransitModePicker.tsx` — align the collapsed transit row with activity content columns
-3. `src/components/itinerary/TransitGapIndicator.tsx` — same alignment adjustment
+Then redeploy the `generate-itinerary` edge function.
+
+### Files changed
+1. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add 2 rule blocks
 
