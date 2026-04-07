@@ -393,6 +393,8 @@ export default function CustomerDayCard({
           onActivitySwap={onActivitySwap ? (activityId, newData) => {
             onActivitySwap(activityId, newData as unknown as ItineraryActivity);
           } : undefined}
+          onSaveNote={onSaveAINote}
+          savedNoteContents={conciergeSavedNoteContents}
         />
       )}
     </>
