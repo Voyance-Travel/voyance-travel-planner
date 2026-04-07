@@ -9273,6 +9273,8 @@ interface DayCardProps {
    isManualMode?: boolean;
    /** Handler to open AI concierge for an activity */
    onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
+   /** Handler to delete an AI saved note */
+   onDeleteAINote?: (activityId: string, noteId: string) => void;
 }
 
 function DayCard({
