@@ -696,6 +696,47 @@ export function enforceCasualVenuePriceCap(activity: Record<string, any>, logPre
   return false;
 }
 
+// =============================================================================
+// VENUE-TYPE PATTERN PRICE CAP (regex-based fallback for uncatalogued venues)
+// =============================================================================
+
+const CASUAL_VENUE_TYPE_PATTERNS: Array<{ pattern: RegExp; maxPrice: number }> = [
+  { pattern: /\b(?:march[eé]|market|mercato|markt|mercado)\b/i, maxPrice: 20 },
+  { pattern: /\b(?:bookshop|bookstore|librairie)\b/i, maxPrice: 25 },
+  { pattern: /\b(?:boulangerie|bakery|bäckerei|backerei|patisserie)\b/i, maxPrice: 25 },
+  { pattern: /\b(?:street food|food stall|food truck|food cart)\b/i, maxPrice: 15 },
+  { pattern: /\bcaf[eé]\b.*\b(?:bookshop|literary|book)\b/i, maxPrice: 25 },
+  { pattern: /\b(?:bookshop|literary|book)\b.*\bcaf[eé]\b/i, maxPrice: 25 },
+];
+
+/**
+ * Cap venue prices based on venue-type patterns (markets, bakeries, bookshop cafés, etc.).
+ * This catches venues NOT in the explicit KNOWN_CASUAL_VENUES map.
+ */
+export function enforceVenueTypePriceCap(activity: Record<string, any>, logPrefix = 'SANITIZE'): boolean {
+  const title = (activity.title || activity.name || '').toLowerCase();
+  const venueName = (activity.venue_name || activity.restaurant?.name || '').toLowerCase();
+  const combined = `${title} ${venueName}`;
+
+  // Don't cap Michelin restaurants
+  for (const key of Object.keys(KNOWN_FINE_DINING_STARS)) {
+    if (title.includes(key) || venueName.includes(key)) return false;
+  }
+
+  const currentPrice = resolveActivityPrice(activity);
+  if (currentPrice <= 0) return false;
+
+  for (const { pattern, maxPrice } of CASUAL_VENUE_TYPE_PATTERNS) {
+    if (pattern.test(combined) && currentPrice > maxPrice) {
+      console.warn(`VENUE TYPE CAP [${logPrefix}]: "${activity.title}" at "${activity.venue_name || ''}" capped from €${currentPrice} to €${maxPrice} (venue type pattern)`);
+      writePriceToAllFields(activity, maxPrice);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /** Resolve the effective price from all supported field shapes */
 function resolveActivityPrice(activity: Record<string, any>): number {
   if (activity.cost && typeof activity.cost === 'object' && typeof activity.cost.amount === 'number') return activity.cost.amount;
