@@ -1014,7 +1014,6 @@ export function enforceRequiredMealsFinalGuard(
     // TRY 2: Use hardcoded fallback DB from fix-placeholders.ts (real named venues)
     if (!venueName) {
       try {
-        const { getRandomFallbackRestaurant, applyFallbackToActivity } = await import('./fix-placeholders.ts');
         const usedNames = [...usedVenueNamesForInjection];
         const fallback = getRandomFallbackRestaurant(destination, mealType, usedNames);
         if (fallback) {
@@ -1025,23 +1024,20 @@ export function enforceRequiredMealsFinalGuard(
           usedRealVenue = true;
           console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Using FALLBACK DB venue "${fallback.name}" for ${mealType}`);
         }
-      } catch (_e) { /* fix-placeholders import failed, continue */ }
+      } catch (_e) { /* fix-placeholders failed, continue */ }
     }
 
     // TRY 3 (LAST RESORT): Use generic cultural template — NEVER "at a bistro/neighborhood café"
     if (!venueName) {
-      try {
-        const { GENERIC_VENUE_TEMPLATES } = await import('./fix-placeholders.ts');
-        const templates = GENERIC_VENUE_TEMPLATES[mealType] || GENERIC_VENUE_TEMPLATES['dinner'] || [];
-        const unused = templates.filter((t: string) => !usedVenueNamesForInjection.has(t.toLowerCase()));
-        const pick = unused.length > 0 ? unused[Math.floor(Math.random() * unused.length)] : templates[0];
-        if (pick) {
-          venueName = `${label} at ${pick}`;
-          venueDescription = `${label} at ${pick} — a local spot worth trying`;
-          usedVenueNamesForInjection.add(pick.toLowerCase());
-          console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Using GENERIC TEMPLATE "${pick}" for ${mealType}`);
-        }
-      } catch (_e) {
+      const templates = GENERIC_VENUE_TEMPLATES[mealType] || GENERIC_VENUE_TEMPLATES['dinner'] || [];
+      const unused = templates.filter((t: string) => !usedVenueNamesForInjection.has(t.toLowerCase()));
+      const pick = unused.length > 0 ? unused[Math.floor(Math.random() * unused.length)] : templates[0];
+      if (pick) {
+        venueName = `${label} at ${pick}`;
+        venueDescription = `${label} at ${pick} — a local spot worth trying`;
+        usedVenueNamesForInjection.add(pick.toLowerCase());
+        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Using GENERIC TEMPLATE "${pick}" for ${mealType}`);
+      } else {
         // Absolute last resort — but NEVER use "at a bistro" style text
         const emergencyNames: Record<RequiredMeal, string> = {
           breakfast: 'Café Matinal',
