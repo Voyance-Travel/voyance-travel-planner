@@ -9895,6 +9895,7 @@ function DayCard({
                           onPhotoResolved={onPhotoResolved}
                           isManualMode={isManualMode}
                           onOpenConcierge={onOpenConcierge}
+                          onDeleteAINote={onDeleteAINote}
                         />
                     </div>
                     {/* Compact transit gap indicator between activities */}
