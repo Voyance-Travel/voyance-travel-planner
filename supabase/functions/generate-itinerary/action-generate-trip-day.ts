@@ -950,15 +950,7 @@ async function _handleGenerateTripDayInner(
       console.warn('[generate-trip-day] Pipeline validate/repair failed (non-blocking):', pipelineErr);
     }
 
-    // ARRIVAL-DAY SAFETY NET: strip activities before arrival + 2h buffer
-    if (isFirstDay && arrTime24 && dayResult?.activities?.length > 0) {
-      dayResult.activities = enforceArrivalTiming(dayResult.activities, arrTime24);
-    }
-
-    // DEPARTURE-DAY SAFETY NET: strip activities after departure - 3h buffer
-    if (isLastDay && depTime24 && dayResult?.activities?.length > 0) {
-      dayResult.activities = enforceDepartureTiming(dayResult.activities, depTime24);
-    }
+    // ARRIVAL/DEPARTURE timing now handled by universalQualityPass below
   }
 
   // POST-GENERATION: Enforce cross-day restaurant uniqueness
@@ -1017,43 +1009,29 @@ async function _handleGenerateTripDayInner(
     dayResult.activities = dayResult.activities.filter((a: any) => a !== null);
   }
 
-  // POST-GENERATION: Enforce cross-day NON-DINING venue uniqueness (parks, museums, landmarks)
-  if (dayResult?.activities?.length > 0 && usedVenues.length > 0) {
-    const { normalizeVenueName, venueNamesMatch } = await import('./generation-utils.ts');
-    const SKIP_CATS = new Set(['stay', 'transport', 'travel', 'logistics', 'flight', 'accommodation', 'dining']);
-    const usedVenueNorms = new Set(usedVenues.map(v => normalizeVenueName(v)));
-
-    for (let i = 0; i < dayResult.activities.length; i++) {
-      const act = dayResult.activities[i];
-      const cat = (act.category || '').toLowerCase();
-      if (SKIP_CATS.has(cat)) continue; // dining handled above, transport/stay irrelevant
-
-      // Collect all venue identifiers for this activity
-      const candidates = [
-        act.location?.name || '',
-        act.venue_name || '',
-        act.title || '',
-      ].map(s => s.trim()).filter(s => s.length > 3 && !/your hotel/i.test(s));
-
-      let matched = false;
-      for (const raw of candidates) {
-        const norm = normalizeVenueName(raw);
-        if (!norm) continue;
-        for (const used of usedVenueNorms) {
-          if (venueNamesMatch(norm, used)) {
-            matched = true;
-            break;
-          }
-        }
-        if (matched) break;
-      }
-
-      if (matched) {
-        console.warn(`[generate-trip-day] 🚫 ACTIVITY DEDUP: "${act.title}" at "${act.venue_name || act.location?.name || ''}" repeats from previous day — REMOVING`);
-        dayResult.activities[i] = null;
-      }
+  // ── UNIVERSAL QUALITY PASS — timing, pricing, non-dining dedup, hotel return ──
+  if (dayResult?.activities?.length > 0) {
+    const { universalQualityPass } = await import('./universal-quality-pass.ts');
+    const usedVenueSet = new Set(usedVenues.map(v => v.toLowerCase()));
+    dayResult.activities = await universalQualityPass(dayResult.activities, {
+      city: cityInfo?.cityName || destination,
+      country: destinationCountry || '',
+      tripType: tripType || 'Explorer',
+      dayIndex: dayNumber - 1,
+      totalDays,
+      usedVenueNames: usedVenueSet,
+      arrivalTime: isFirstDay ? arrTime24 : undefined,
+      departureTime: isLastDay ? depTime24 : undefined,
+      dayTitle: dayResult?.theme || dayResult?.title,
+      budgetTier: budgetTier || 'moderate',
+      apiKey: Deno.env.get("LOVABLE_API_KEY") || undefined,
+      lockedActivities: [],
+      usedRestaurants: usedRestaurants,
+    });
+    // Sync usedVenues back from the Set for subsequent days
+    for (const v of usedVenueSet) {
+      if (!usedVenues.includes(v)) usedVenues.push(v);
     }
-    dayResult.activities = dayResult.activities.filter((a: any) => a !== null);
   }
 
   // Flush stage logger (non-blocking, non-fatal)
@@ -1761,19 +1739,8 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // ── FINAL TICKETED ATTRACTION + MICHELIN PRICE FLOOR GUARD (trip-level) ──
-  // Runs over ALL days before the final save so no prior step can overwrite floors
-  for (const day of updatedDays) {
-    if (Array.isArray(day.activities)) {
-      for (const act of day.activities) {
-        enforceBarNightcapPriceCap(act, 'TRIP_DAY_FINAL');
-        enforceCasualVenuePriceCap(act, 'TRIP_DAY_FINAL');
-        enforceVenueTypePriceCap(act, 'TRIP_DAY_FINAL');
-        enforceTicketedAttractionPricing(act, 'TRIP_DAY_FINAL');
-        enforceMichelinPriceFloor(act, 'TRIP_DAY_FINAL');
-      }
-    }
-  }
+  // ── FINAL PRICING GUARD — handled by universalQualityPass per-day above ──
+  // No-op: pricing caps already enforced during quality pass
 
   // ── Michelin inclusion enforcement for Luminary trips ──
   const tripTypeLower = (tripType || '').toLowerCase();
