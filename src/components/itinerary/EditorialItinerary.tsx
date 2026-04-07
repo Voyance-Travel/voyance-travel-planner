@@ -10133,6 +10133,8 @@ interface ActivityRowProps {
     isManualMode?: boolean;
     /** Handler to open AI concierge sheet */
     onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
+    /** Handler to delete an AI saved note from an activity */
+    onDeleteAINote?: (activityId: string, noteId: string) => void;
 }
 
 function ActivityRow({
