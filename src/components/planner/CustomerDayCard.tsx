@@ -60,10 +60,15 @@ export default function CustomerDayCard({
   onActivitySwap,
   onDayRestore,
   destination,
+  tripType,
+  totalDays,
+  travelers,
+  currency,
 }: CustomerDayCardProps) {
   const [isExpanded, setIsExpanded] = useState(dayIndex < 2);
   const [selectedActivityForSwap, setSelectedActivityForSwap] = useState<ItineraryActivity | null>(null);
   const [hoveredActivity, setHoveredActivity] = useState<string | null>(null);
+  const [conciergeActivity, setConciergeActivity] = useState<ItineraryActivity | null>(null);
 
   // Version history for undo
   const { canUndoDay, isUndoing, handleUndo } = useVersionHistory({
