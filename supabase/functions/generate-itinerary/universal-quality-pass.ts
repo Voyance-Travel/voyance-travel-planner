@@ -34,7 +34,8 @@ import { getDiningConfig } from './dining-config.ts';
 export interface UniversalQualityOptions {
   city: string;
   country: string;
-  tripType: string;
+  dnaTier?: string;        // Explorer, Connector, Achiever, Restorer, Curator, Transformer
+  dnaArchetype?: string;   // "The Luxury Luminary", "The Urban Nomad", etc.
   dayIndex: number;        // 0-based
   totalDays: number;
   usedVenueNames: Set<string>;
@@ -45,7 +46,6 @@ export interface UniversalQualityOptions {
   apiKey?: string;
   lockedActivities?: any[];
   usedRestaurants?: string[];
-  diningConfig?: DiningConfig;
 }
 
 // Categories to skip for cross-day venue dedup (these repeat legitimately)
