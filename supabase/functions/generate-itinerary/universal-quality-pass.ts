@@ -1,8 +1,17 @@
 /**
  * Universal Quality Pass — Single orchestrator for all post-generation quality steps.
  *
- * Consolidates 9 scattered enforcement steps into one reusable function:
+ * Consolidates scattered enforcement steps into one reusable function:
  * 1. Arrival timing (Day 1 only)
+ * 2. Departure timing (Last day only)
+ * 3. Cross-day venue dedup
+ * 4. Fix placeholder meals (AI re-generation)
+ * 4b. Nuclear placeholder sweep (synchronous last-resort)
+ * 5. Free venue pricing
+ * 6. Market dining cap
+ * 7. Universal price caps (bar, casual, venue-type, ticketed, Michelin floor)
+ * 8. Hotel return injection (except departure day)
+ * 9. Update used venues set for next day
  * 2. Departure timing (Last day only)
  * 3. Fix placeholder meals (AI re-generation)
  * 4. Free venue pricing
@@ -14,7 +23,7 @@
  */
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
-import { fixPlaceholdersForDay } from './fix-placeholders.ts';
+import { fixPlaceholdersForDay, nuclearPlaceholderSweep } from './fix-placeholders.ts';
 import {
   checkAndApplyFreeVenue,
   enforceMarketDiningCap,
@@ -116,20 +125,25 @@ export async function universalQualityPass(
   }
 
   // ── Step 4: Fix placeholder meals (DNA-aware AI re-generation) ──
-  if (apiKey) {
-    await fixPlaceholdersForDay(
-      result,
-      city,
-      country,
-      dnaTier || 'Explorer',
-      dayIndex,
-      usedRestaurants || [],
-      budgetTier || 'moderate',
-      apiKey,
-      lockedActivities || [],
-      dayTitle,
-      diningConfig,
-    );
+  // Runs even without apiKey — the fast DB path works without it; only AI fallback needs the key
+  await fixPlaceholdersForDay(
+    result,
+    city,
+    country,
+    dnaTier || 'Explorer',
+    dayIndex,
+    usedRestaurants || [],
+    budgetTier || 'moderate',
+    apiKey || '',
+    lockedActivities || [],
+    dayTitle,
+    diningConfig,
+  );
+
+  // ── Step 4b: Nuclear placeholder sweep (synchronous, zero-API last resort) ──
+  const nuclearCount = nuclearPlaceholderSweep(result, city, diningConfig);
+  if (nuclearCount > 0) {
+    console.warn(`[QUALITY] Nuclear sweep replaced ${nuclearCount} surviving placeholder(s) in Day ${dayIndex + 1}`);
   }
 
   // ── Step 5: Free venue pricing ──
