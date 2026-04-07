@@ -33,6 +33,10 @@ interface CustomerDayCardProps {
   onActivitySwap?: (activityId: string, newActivity: ItineraryActivity) => void;
   onDayRestore?: (dayNumber: number, activities: ItineraryActivity[], metadata?: { title?: string; theme?: string }) => void;
   destination?: string;
+  tripType?: string;
+  totalDays?: number;
+  travelers?: number;
+  currency?: string;
 }
 
 const activityTypeStyles: Record<string, { bg: string; text: string; border: string }> = {
