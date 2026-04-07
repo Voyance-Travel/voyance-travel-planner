@@ -42,7 +42,7 @@ export function AISavedNotes({ notes, onDeleteNote }: AISavedNotesProps) {
                   className="absolute top-1.5 right-1.5 p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors"
                   aria-label="Remove note"
                 >
-                  <X className="h-3 w-3" />
+                  <Trash2 className="h-3 w-3" />
                 </button>
               )}
               {note.query && (
