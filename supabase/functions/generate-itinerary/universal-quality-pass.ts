@@ -117,6 +117,39 @@ export async function universalQualityPass(
     });
   }
 
+  // ── Step 3b: Venue-meal-type guard — prevent lunch/snack spots from being dinner ──
+  // Runs BEFORE placeholder fixing so flagged venues get replaced by the AI or nuclear sweep
+  {
+    const NOT_DINNER_VENUES: Record<string, string> = {
+      'petit bon': 'lunch',
+      'angelina': 'breakfast',
+      'stohrer': 'breakfast',
+      'ladurée': 'breakfast',
+      'laduree': 'breakfast',
+      'du pain et des idées': 'breakfast',
+      'du pain et des idees': 'breakfast',
+    };
+
+    for (const act of result) {
+      const cat = (act.category || '').toUpperCase();
+      if (cat !== 'DINING' && cat !== 'RESTAURANT') continue;
+
+      const venueName = (act.venue_name || act.title || '').toLowerCase().trim();
+      const startStr = act.startTime || act.start_time || '';
+      const startMins = parseTimeMins(startStr);
+
+      for (const [venueKey, correctMeal] of Object.entries(NOT_DINNER_VENUES)) {
+        if (venueName.includes(venueKey) && startMins !== null && startMins >= 17 * 60) {
+          console.warn(`[${label}] VENUE-MEAL GUARD: "${act.title}" is a ${correctMeal} venue scheduled at dinner time (${startStr}) — flagging for replacement`);
+          act.title = `Dinner at a Local Restaurant`;
+          act.venue_name = '';
+          act.description = `[Auto-replaced: ${venueName} is a ${correctMeal}/snack venue, not suitable for dinner]`;
+          break;
+        }
+      }
+    }
+  }
+
   // ── Step 4: Fix placeholder meals (DNA-aware AI re-generation) ──
   // Runs even without apiKey — the fast DB path works without it; only AI fallback needs the key
   await fixPlaceholdersForDay(
@@ -137,41 +170,6 @@ export async function universalQualityPass(
   const nuclearCount = nuclearPlaceholderSweep(result, city, diningConfig);
   if (nuclearCount > 0) {
     console.warn(`[QUALITY] Nuclear sweep replaced ${nuclearCount} surviving placeholder(s) in Day ${dayIndex + 1}`);
-  }
-
-  // ── Step 4c: Venue-meal-type guard — prevent lunch/snack spots from being dinner ──
-  {
-    // Map of venue names (lowercase) that should NEVER be used as dinner
-    const LUNCH_ONLY_VENUES: Record<string, string> = {
-      'petit bon': 'lunch',
-      'angelina': 'breakfast',
-      'stohrer': 'breakfast',
-      'ladurée': 'breakfast',
-      'laduree': 'breakfast',
-      'du pain et des idées': 'breakfast',
-      'du pain et des idees': 'breakfast',
-    };
-
-    for (const act of result) {
-      const cat = (act.category || '').toUpperCase();
-      if (cat !== 'DINING' && cat !== 'RESTAURANT') continue;
-
-      const venueName = (act.venue_name || act.title || '').toLowerCase().trim();
-      const startStr = act.startTime || act.start_time || '';
-      const startMins = parseTimeMins(startStr);
-
-      // Check if this venue is in the lunch-only list AND scheduled at dinner time (17:00+)
-      for (const [venueKey, correctMeal] of Object.entries(LUNCH_ONLY_VENUES)) {
-        if (venueName.includes(venueKey) && startMins !== null && startMins >= 17 * 60) {
-          console.warn(`[${label}] VENUE-MEAL GUARD: "${act.title}" is a ${correctMeal} venue scheduled at dinner time (${startStr}) — flagging for replacement`);
-          // Mark as placeholder so fix-placeholders or nuclear sweep replaces it
-          act.title = `Dinner at a Local Restaurant`;
-          act.venue_name = '';
-          act.description = `[Auto-replaced: ${venueName} is a ${correctMeal}/snack venue, not suitable for dinner]`;
-          break;
-        }
-      }
-    }
   }
 
   // ── Step 5: Free venue pricing ──
