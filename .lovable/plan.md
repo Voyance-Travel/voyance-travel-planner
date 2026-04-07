@@ -1,73 +1,54 @@
 
 
-## Fix: Arrival Time Extraction in the Orchestrator
+## Add Departure-Day Activity Stripping in the Orchestrator
 
-### Root Cause
+### Context
 
-The orchestrator (`action-generate-trip-day.ts` line 845) extracts the arrival time from `flight_selection` using wrong property paths:
-
-```
-flightSel.arrivalTime24 || flightSel.arrivalTime || flightSel.outbound?.arrivalTime
-```
-
-But the actual `flight_selection` structure stores it at `departure.arrival.time` (or `legs[0].arrival.time`). None of the checked paths exist, so `arrTime24` is always `undefined`.
-
-This means:
-- `repairDay()` receives no arrival time → its pre-arrival filter never fires
-- `deriveMealPolicy()` receives no arrival time → wrong meal expectations for Day 1
-- The per-day generator (`action-generate-day.ts`) works correctly because it uses `getFlightHotelContext()` which checks the right paths
+The departure-day 3-hour buffer filter already exists in `action-generate-day.ts` (lines 567-589) and `repair-day.ts` handles logistics sequencing. However, as a safety net — matching the pattern requested for arrival-day — we need an explicit post-processing filter in the orchestrator (`action-generate-trip-day.ts`) that strips activities scheduled after `departureTime - 3h`.
 
 ### The Fix
 
-**File: `action-generate-trip-day.ts` (~line 845)**
+**File: `action-generate-trip-day.ts` — after the validate/repair pipeline (~line 950), before cross-day dedup (~line 952)**
 
-Replace the arrival/departure time extraction with the same logic used by `getFlightHotelContext`:
+Insert a departure-day filter block:
 
 ```typescript
-// Current (broken):
-const arrTime24 = isFirstDay ? (flightSel.arrivalTime24 || flightSel.arrivalTime || flightSel.outbound?.arrivalTime || undefined) : undefined;
-const depTime24Raw = isLastDay ? (flightSel.returnDepartureTime24 || flightSel.returnDepartureTime || flightSel.return?.departureTime || undefined) : undefined;
+// DEPARTURE-DAY SAFETY NET: strip activities after departure - 3h buffer
+if (isLastDay && depTime24 && dayResult?.activities?.length > 0) {
+  const departureMins = parseTimeToMinutes(depTime24) || 0;
+  const latestAllowed = departureMins - 180; // 3 hours before departure
+  if (latestAllowed > 0) {
+    const before = dayResult.activities.length;
+    dayResult.activities = dayResult.activities.filter((activity: any) => {
+      const cat = ((activity.category || '') as string).toUpperCase();
+      const title = ((activity.title || '') as string).toLowerCase();
+      if (cat === 'TRANSPORT' || cat === 'FLIGHT' || /departure|heading home/i.test(title)) return true;
+      if (cat === 'STAY' && /check.?out/i.test(title)) return true;
 
-// Fixed — check all known flight_selection shapes:
-const nestedDep = flightSel.departure as Record<string, any> | undefined;
-const nestedRet = flightSel.return as Record<string, any> | undefined;
-const arrTime24Raw = isFirstDay
-  ? (flightSel.arrivalTime24
-    || flightSel.arrivalTime
-    || flightSel.outbound?.arrivalTime
-    || nestedDep?.arrival?.time          // ← manual entry format
-    || flightSel.legs?.[0]?.arrival?.time // ← legs format
-    || undefined)
-  : undefined;
-const arrTime24 = arrTime24Raw ? normalizeTo24h(arrTime24Raw) : undefined;
-
-const depTime24Raw = isLastDay
-  ? (flightSel.returnDepartureTime24
-    || flightSel.returnDepartureTime
-    || nestedRet?.departure?.time         // ← manual entry format
-    || nestedRet?.departureTime
-    || flightSel.legs?.[flightSel.legs.length - 1]?.departure?.time // ← legs format
-    || undefined)
-  : undefined;
-const depTime24 = depTime24Raw ? normalizeTo24h(depTime24Raw) : undefined;
+      const startMinutes = parseTimeToMinutes(activity.startTime || activity.start_time || '');
+      if (startMinutes > 0 && startMinutes > latestAllowed) {
+        console.warn(`[DEPARTURE-FIX] Removed "${activity.title}" at ${activity.startTime || activity.start_time} — after departure - 3h buffer`);
+        return false;
+      }
+      return true;
+    });
+    if (dayResult.activities.length < before) {
+      console.log(`[generate-trip-day] Departure safety net removed ${before - dayResult.activities.length} activities`);
+    }
+  }
+}
 ```
 
-Apply the same fix at the **second extraction point** (~line 1255) where `savedArrivalTime24` / `savedDepartureTime24` are extracted for the meal-slot recalculation pass.
-
-**Add a diagnostic log** after extraction so we can verify it works:
-```typescript
-if (isFirstDay) console.log(`[generate-trip-day] Day ${dayNumber} arrival time: ${arrTime24 || 'NONE'} (raw: ${arrTime24Raw || 'none found'})`);
-if (isLastDay) console.log(`[generate-trip-day] Day ${dayNumber} departure time: ${depTime24 || 'NONE'} (raw: ${depTime24Raw || 'none found'})`);
-```
+This mirrors the arrival-day filter and ensures any activities that slip through the per-day generator or repair pipeline are caught before cross-day dedup and persistence.
 
 ### Files to Edit
 
 | File | Change |
 |------|--------|
-| `action-generate-trip-day.ts` | Fix arrival/departure time extraction at lines ~845 and ~1255 to check `departure.arrival.time` and `legs[0].arrival.time` paths |
+| `action-generate-trip-day.ts` | Insert departure-day stripping filter at ~line 950, after repair pipeline, before cross-day dedup |
 
 ### What We're NOT Changing
-- `action-generate-day.ts` — already works correctly via `getFlightHotelContext()`
-- `repair-day.ts` — already has correct logic, just receives `undefined` due to the orchestrator bug
-- `flight-hotel-context.ts` — already handles all formats correctly
+- `action-generate-day.ts` — already has this filter (lines 567-589)
+- `repair-day.ts` — already handles departure logistics sequencing
+- `validate-day.ts` — already checks logistics sequence
 
