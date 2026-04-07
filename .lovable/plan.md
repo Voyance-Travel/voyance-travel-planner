@@ -1,27 +1,51 @@
 
 
-## Arrival & Departure Timing Enforcement — Assessment
+## Fix: Michelin Price Floor overriding Casual Venue Cap
 
-### Already Implemented
+### Problem
+"Le Moulin de la Galette" is correctly capped to €50 by `enforceCasualVenuePriceCap`, but then `enforceMichelinPriceFloor` runs immediately after (same loop, line 151) and re-raises the price. This happens because Strategy 2 (keyword detection) matches terms like "tasting menu" or "fine dining" in the AI-generated description, triggering a €120+ floor that overwrites the €50 cap.
 
-Every element of the proposed spec is already present in the codebase:
+### Root Cause
+`enforceMichelinPriceFloor` has no guard to skip venues already identified as casual. The casual cap runs first but gets immediately undone.
 
-| Spec Requirement | Existing Implementation | Location |
-|---|---|---|
-| **Post-parse filter: Day 1, remove before arrival + 2h** | `enforceArrivalTiming()` — filters activities before `arrivalMins + 120`, preserves transport/check-in/arrival | `flight-hotel-context.ts:501-525` |
-| **Post-parse filter: Last day, remove after departure - 3h** | `enforceDepartureTiming()` — filters activities after `departureMins - 180`, preserves transport/checkout/departure | `flight-hotel-context.ts:532-559` |
-| **Called inline after AI parse** | Both called in `universalQualityPass()` (Steps 1 & 2), which runs after AI response parsing | `universal-quality-pass.ts:78-87` |
-| **Also called in orchestrator** | Both imported and used in `action-generate-trip-day.ts` and `action-generate-day.ts` | Lines 11, 59-62 respectively |
-| **AI prompt for Day 1** | `buildArrivalDayPrompt()` injects flight arrival time, earliest start (arrival + buffer), energy level, required hotel check-in sequence, late arrival guidance | `prompt-library.ts:916-1060` |
-| **AI prompt for Last Day** | `buildDepartureDayPrompt()` injects departure time, latest end (departure - 3h), checkout sequence | `prompt-library.ts:1067-1479` |
-| `parseTimeToMinutes` helper | Already exists in both `flight-hotel-context.ts` and `src/utils/timeFormat.ts` | Both files |
+### Fix
+In `enforceMichelinPriceFloor()` (sanitization.ts ~line 390), add an early-exit check: if the venue matches any key in `KNOWN_CASUAL_VENUES`, return false immediately — it's not Michelin, regardless of what the AI wrote in the description.
 
-### Conclusion
+### File Change
 
-**No changes needed.** The existing implementation covers all three parts of the spec:
-1. ✅ Post-parse arrival filter (2h buffer)
-2. ✅ Post-parse departure filter (3h buffer)
-3. ✅ AI system prompt injection for both Day 1 and Last Day
+**`supabase/functions/generate-itinerary/sanitization.ts`**
 
-The current version is actually more sophisticated — it includes DNA-aware energy levels, jet lag sensitivity, arrival window categorization (morning/afternoon/evening/night), and hotel check-in time awareness.
+At the top of `enforceMichelinPriceFloor()`, after resolving `title` and `venueName` (around line 417), add:
+
+```typescript
+// Guard: skip venues explicitly catalogued as casual
+for (const key of Object.keys(KNOWN_CASUAL_VENUES)) {
+  if (title.includes(key) || venueName.includes(key)) {
+    console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" is in KNOWN_CASUAL_VENUES — skipping Michelin floor`);
+    return false;
+  }
+}
+```
+
+This ensures the casual cap (€50 for Le Moulin de la Galette) is never overridden by the Michelin floor.
+
+### Additional: Add pattern-based bistro/trattoria guard
+
+Also add a broader pattern guard for generic casual venue types that should never trigger Michelin floors, even if not in the known map:
+
+```typescript
+const CASUAL_TYPE_GUARD = /\b(bistro|brasserie|trattoria|osteria|pizzeria|taverna|izakaya|taqueria|crêperie|kebab|deli|ramen)\b/i;
+if (CASUAL_TYPE_GUARD.test(title) || CASUAL_TYPE_GUARD.test(venueName)) {
+  // Only allow Michelin match if the venue is explicitly in KNOWN_FINE_DINING_STARS
+  if (!matchedKey || matchedKey.startsWith('[')) {
+    console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" matches casual venue type pattern — skipping keyword-based Michelin floor`);
+    return false;
+  }
+}
+```
+
+This goes after Strategy 1 matching (line 438) but before Strategy 2, ensuring that a bistro only gets Michelin pricing if it's explicitly listed in the fine dining map.
+
+### Deployment
+Redeploy `generate-itinerary` edge function.
 
