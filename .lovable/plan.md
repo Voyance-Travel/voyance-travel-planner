@@ -1,56 +1,54 @@
 
 
-## Extract Arrival/Departure Timing into Reusable Functions
-
-### Current State
-The arrival/departure timing enforcement logic is **duplicated inline** in two files:
-- `action-generate-day.ts` (lines 775-828) — has both arrival and departure filtering
-- `action-generate-trip-day.ts` (lines 954-977) — has only departure filtering (missing arrival)
-
-Both use the same pattern: filter activities based on time buffers (2h after arrival, 3h before departure), preserving transport/flight/check-in/check-out activities.
+## Make Michelin Inclusion Universal (Remove Hardcoded City Lists)
 
 ### Problem
-1. Code duplication across two generation paths
-2. `action-generate-trip-day.ts` is missing arrival timing enforcement entirely
-3. No shared, testable functions for this logic
+Both the AI prompt and the post-generation Michelin injection use hardcoded restaurant lists for 6 cities (Paris, Rome, Berlin, Lisbon, London, Barcelona). Any other city gets no Michelin guidance or fallback injection.
 
 ### Changes
 
-**File: `supabase/functions/generate-itinerary/flight-hotel-context.ts`**
+#### 1. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` (lines 872-941)
 
-Add two exported functions at the end of the file (this file already exports `parseTimeToMinutes`, `minutesToHHMM`, etc.):
+Replace the city-specific `if/else` Michelin restaurant lists with the universal prompt the user provided:
 
-- `enforceArrivalTiming(activities, arrivalTime24)` — filters out activities starting before arrival + 2h, preserving transport/flight/check-in
-- `enforceDepartureTiming(activities, departureTime24)` — filters out activities starting after departure - 3h, preserving transport/flight/check-out
+```
+LUMINARY DINNER GUIDANCE:
+This is a Luminary (luxury) trip. For at least {minCount} dinner(s) across the full trip,
+suggest a Michelin-starred restaurant or equivalent top-tier fine dining restaurant
+that genuinely exists in {destination}.
+- Price these at the restaurant's real tasting menu price (usually €120-350/pp for starred restaurants)
+- Include the real address
+- Only suggest restaurants you are confident actually exist and hold the star rating
+- If you are unsure about Michelin status in this city, suggest the most acclaimed
+  fine dining restaurant you know of
+```
 
-Both return the filtered array and log removals with `[ARRIVAL]` / `[DEPARTURE]` prefixes.
+Keep the existing trip-type branching (budget → skip, luminary → mandatory, explorer → optional) and the count logic (3-4d→1, 5-6d→2, 7+→3). Just remove the hardcoded `michelinList` blocks.
 
-**File: `supabase/functions/generate-itinerary/action-generate-day.ts`**
+#### 2. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (lines 1801-1889)
 
-- Import `enforceArrivalTiming` and `enforceDepartureTiming` from `flight-hotel-context.ts`
-- Replace the inline block (lines 776-828) with two function calls:
-  ```typescript
-  if (isFirstDay && _arrivalTime24) {
-    normalizedActivities = enforceArrivalTiming(normalizedActivities, _arrivalTime24);
-  }
-  if (isLastDay && _departureTime24) {
-    normalizedActivities = enforceDepartureTiming(normalizedActivities, _departureTime24);
-  }
-  ```
+Remove the `MICHELIN_FALLBACKS` hardcoded map and the injection loop. Since the AI prompt now universally instructs Michelin inclusion for any city, the deterministic fallback swap is no longer needed (it can't work for unknown cities anyway). Replace with a log-only warning if the count is still short after generation, so we can monitor without silently injecting wrong data.
 
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
-
-- Import `enforceArrivalTiming` and `enforceDepartureTiming` from `flight-hotel-context.ts`
-- Replace the inline departure block (lines 954-977) with a call to `enforceDepartureTiming`
-- **Add** arrival timing enforcement (currently missing) using `enforceArrivalTiming` for `isFirstDay`
+Replace lines 1801-1889 with:
+```typescript
+if (isLuminaryTrip && michelinCount < requiredCount) {
+  console.warn(`[MICHELIN] Only ${michelinCount}/${requiredCount} Michelin dinners generated for Luminary ${totalDays}-day ${destination} trip. AI prompt should have included them.`);
+}
+```
 
 ### Files to Edit
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/flight-hotel-context.ts` | Add `enforceArrivalTiming()` and `enforceDepartureTiming()` exports |
-| `supabase/functions/generate-itinerary/action-generate-day.ts` | Replace inline block with function calls |
-| `supabase/functions/generate-itinerary/action-generate-trip-day.ts` | Replace inline departure block + add missing arrival enforcement |
+| `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` | Replace hardcoded city Michelin lists with universal AI guidance prompt |
+| `supabase/functions/generate-itinerary/action-generate-trip-day.ts` | Remove `MICHELIN_FALLBACKS` map and injection loop, keep warning log |
+
+### What Stays Unchanged
+- `enforceMichelinPriceFloor()` in sanitization.ts — still enforces minimum pricing for any Michelin restaurant the AI suggests
+- `KNOWN_FINE_DINING_STARS` and `FINE_DINING_MIN_PRICE_BY_STARS` — still used for price floor enforcement
+- `canHaveMichelin()` in archetype-constraints.ts — still controls which archetypes allow Michelin
+- Budget trip exclusion — still skips Michelin entirely
+- Explorer trip optional inclusion — still encouraged but not mandatory
 
 ### Deployment
 Redeploy `generate-itinerary` edge function.
