@@ -1,35 +1,26 @@
 
 
-## Fix: Align "Travel to Charles de Gaulle" Card with Desktop Layout
+## Kill Hallucinated Restaurants
 
-### The Problem
+### Root Cause
 
-On desktop, regular activity cards use a structured layout:
-- **Time column** (w-24, ~6rem) — shows departure/arrival times
-- **Thumbnail column** (w-24, ~6rem) — shows activity image
-- **Content area** — the actual card content
+"Trattoria del Corso" and "Café Lumière" aren't AI hallucinations — they're **hardcoded fallback templates** in `fix-placeholders.ts` (lines 269-297). The `GENERIC_VENUE_TEMPLATES` pool is used when the nuclear sweep can't find a real replacement. These fake names get injected with no real address, then survive all downstream guards.
 
-The `InterCityTransportCard` (used for the "Flight to Charles de Gaulle" departure card) bypasses this layout entirely. It renders with just `className="mx-3 sm:mx-4 my-1"` — meaning it sits flush against the left edge with only 16px margin on desktop. This makes it visually "too low" and misaligned compared to the activity cards above and below it.
+### Fix (3 changes, 2 files)
 
-### The Fix
+#### 1. Remove fake names from GENERIC_VENUE_TEMPLATES (fix-placeholders.ts)
+Replace the entire template pool with names that are obviously generic/descriptive rather than plausible-sounding fake restaurant names. Use format like "Local Breakfast Café", "Neighborhood Lunch Spot", "Evening Restaurant" — names that clearly signal "placeholder" so the AI or user knows to replace them, OR better yet, remove the template pool entirely and have the nuclear sweep use a structured format like `"[Meal] at a Local [Cuisine] Restaurant"` which is already handled by downstream placeholder detection.
 
-**File: `src/components/itinerary/EditorialItinerary.tsx`** (line ~9768-9775)
+#### 2. Add hallucination filter after AI parse in action-generate-trip-day.ts (~line 748)
+Insert the user's filter code right after `dayResult` is set and before sanitization (line 746). This catches AI-generated fakes before any other processing:
+- Block known fake names (trattoria del corso, café lumière, etc.)
+- Block dining with missing/fake addresses (< 10 chars, "the destination", bare city names)
 
-Update the desktop rendering of `InterCityTransportCard` to add left padding that aligns it with the content column of regular activity cards. The time + thumbnail columns together are `w-24 + w-24 = 12rem`, so the transport card needs `sm:pl-[12rem]` (or `sm:ml-[12rem]`) to start at the same horizontal position as activity content.
-
-Change the `className` from:
-```
-className="mx-3 sm:mx-4 my-1"
-```
-to:
-```
-className="mx-3 sm:mx-4 sm:pl-[12rem] my-1"
-```
-
-Alternatively, wrap the desktop version in a flex layout that mirrors the time+thumbnail+content structure — but the padding approach is simpler and matches the pattern documented in the project memory.
-
-This is a single-line CSS change that aligns the departure transport card with the content column on desktop while preserving the mobile layout.
+#### 3. Add same filter in action-generate-day.ts (~line 287)
+Insert after `normalizedActivities` is created from `generatedDay.activities.map(...)`, before the quality pass.
 
 ### Files Changed
-1. `src/components/itinerary/EditorialItinerary.tsx` — add `sm:pl-[12rem]` to InterCityTransportCard wrapper
+1. `supabase/functions/generate-itinerary/fix-placeholders.ts` — remove fake restaurant names from GENERIC_VENUE_TEMPLATES, replace with clearly-labeled generic format
+2. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — add inline hallucination filter after AI parse
+3. `supabase/functions/generate-itinerary/action-generate-day.ts` — add same inline hallucination filter after normalization
 
