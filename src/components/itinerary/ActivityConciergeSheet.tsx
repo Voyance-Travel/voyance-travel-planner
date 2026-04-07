@@ -301,9 +301,6 @@ export default function ActivityConciergeSheet({
               </p>
             )}
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
         </div>
 
         {/* Messages */}
