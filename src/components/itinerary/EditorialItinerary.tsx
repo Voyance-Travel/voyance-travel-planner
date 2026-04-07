@@ -10082,6 +10082,8 @@ function ActivityRow({
   isCleanPreview = false,
   onPhotoResolved,
   isManualMode = false,
+  isManualMode = false,
+  onOpenConcierge,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
