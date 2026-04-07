@@ -2382,6 +2382,14 @@ export function EditorialItinerary({
   const [restaurantDrawerOpen, setRestaurantDrawerOpen] = useState(false);
   const [restaurantDrawerMealType, setRestaurantDrawerMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'any'>('any');
 
+  // AI Concierge state
+  const [conciergeOpen, setConciergeOpen] = useState(false);
+  const [conciergeActivity, setConciergeActivity] = useState<EditorialActivity | null>(null);
+  const [conciergeDayDate, setConciergeDayDate] = useState('');
+  const [conciergeDayTitle, setConciergeDayTitle] = useState('');
+  const [conciergePrevActivity, setConciergePrevActivity] = useState<string | undefined>();
+  const [conciergeNextActivity, setConciergeNextActivity] = useState<string | undefined>();
+
   // Reviews Drawer state
   const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
   const [reviewsTarget, setReviewsTarget] = useState<{ 
