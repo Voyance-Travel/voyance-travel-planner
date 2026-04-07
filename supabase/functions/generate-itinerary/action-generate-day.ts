@@ -212,6 +212,125 @@ function getRandomFallbackRestaurant(
   return available[Math.floor(Math.random() * available.length)];
 }
 
+// =============================================================================
+// HELPER: Apply fallback restaurant data to an activity
+// =============================================================================
+function applyFallbackToActivity(
+  activity: any,
+  fallback: FallbackRestaurant,
+  mealType: 'breakfast' | 'lunch' | 'dinner',
+  usedVenueNamesInDay: Set<string>,
+): void {
+  const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : 'Dinner';
+  activity.title = `${mealLabel} at ${fallback.name}`;
+  activity.name = activity.title;
+  if (activity.location) {
+    activity.location.name = fallback.name;
+    activity.location.address = fallback.address;
+  } else {
+    activity.location = { name: fallback.name, address: fallback.address };
+  }
+  activity.venue_name = fallback.name;
+  if (fallback.description) activity.description = fallback.description;
+  if (fallback.price && activity.cost) {
+    activity.cost.amount = fallback.price;
+  }
+  usedVenueNamesInDay.add(fallback.name.toLowerCase());
+  console.log(`[generate-day] PLACEHOLDER REPLACED → "${activity.title}" at "${fallback.address}"`);
+}
+
+// =============================================================================
+// AI MICRO-CALL: Generate a real restaurant for any city
+// =============================================================================
+const RESTAURANT_SUGGESTION_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "suggest_restaurant",
+    description: "Suggest a single real restaurant",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Real restaurant name" },
+        address: { type: "string", description: "Full street address" },
+        price: { type: "number", description: "Average cost per person in USD" },
+        description: { type: "string", description: "1-2 sentence description with signature dish" },
+      },
+      required: ["name", "address", "price", "description"],
+    },
+  },
+};
+
+async function generateFallbackRestaurant(
+  city: string,
+  mealType: 'breakfast' | 'lunch' | 'dinner',
+  budgetTier: string,
+  apiKey: string,
+  usedNames: Set<string>,
+): Promise<FallbackRestaurant | null> {
+  const blocklist = Array.from(usedNames).slice(0, 20).join(', ');
+  const prompt = `You are a restaurant expert for ${city}. Suggest ONE real, currently operating ${mealType} restaurant suitable for ${budgetTier}-budget travelers. It must be a real place with a real address. DO NOT suggest: ${blocklist || 'none'}. Pick a well-reviewed local favorite, not a tourist trap.`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000); // 10s max
+
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [
+          { role: "user", content: prompt },
+        ],
+        tools: [RESTAURANT_SUGGESTION_TOOL],
+        tool_choice: { type: "function", function: { name: "suggest_restaurant" } },
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      console.warn(`[ai-restaurant] HTTP ${response.status} for ${mealType} in ${city}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall?.function?.arguments) {
+      console.warn(`[ai-restaurant] No tool call in response for ${mealType} in ${city}`);
+      return null;
+    }
+
+    const args = typeof toolCall.function.arguments === 'string'
+      ? JSON.parse(toolCall.function.arguments)
+      : toolCall.function.arguments;
+
+    if (!args.name || !args.address) {
+      console.warn(`[ai-restaurant] Missing name/address for ${mealType} in ${city}`);
+      return null;
+    }
+
+    console.log(`[ai-restaurant] ✓ Generated: "${args.name}" for ${mealType} in ${city}`);
+    return {
+      name: args.name,
+      address: args.address,
+      price: args.price || 30,
+      description: args.description || '',
+    };
+  } catch (err) {
+    if ((err as any)?.name === 'AbortError') {
+      console.warn(`[ai-restaurant] Timeout for ${mealType} in ${city}`);
+    } else {
+      console.warn(`[ai-restaurant] Error for ${mealType} in ${city}:`, err);
+    }
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function handleGenerateDay(
   supabase: any,
   userId: string,
