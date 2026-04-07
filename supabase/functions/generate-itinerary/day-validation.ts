@@ -4,6 +4,7 @@
 
 import { isRecurringEvent } from './currency-utils.ts';
 import type { RequiredMeal } from './meal-policy.ts';
+import { getRandomFallbackRestaurant, GENERIC_VENUE_TEMPLATES } from './fix-placeholders.ts';
 
 // =============================================================================
 // CHAIN RESTAURANT BLOCKLIST — prevents chain restaurants from appearing
