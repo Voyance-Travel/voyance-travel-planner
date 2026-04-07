@@ -517,47 +517,34 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
  * Checked against combined text from title + location + description.
  */
 const FREE_VENUE_PATTERNS = [
-  // Portuguese
-  /\bpra[çc]a\b/i, /\bmiradouro\b/i, /\bjardim\b/i, /\blargo\b/i, /\bparque\b/i,
-  // Spanish
-  /\bplaza\b/i, /\bmirador\b/i, /\bjard[ií]n\b/i, /\bpaseo\b/i,
-  // English
-  /\bsquare\b/i, /\bviewpoint\b/i, /\blookout\b/i, /\boverlook\b/i, /\bbelvedere\b/i,
-  /\bgarden(?:s)?\b/i,
-  /\bpark\b/i, /\bparc\b/i, /\bwaterfront\b/i, /\briverside\b/i, /\bpromenade\b/i,
-  /\bboardwalk\b/i, /\bpier\b/i, /\bbeach\b/i,
-  /\bseafront\b/i, /\bcorniche\b/i, /\blakefront\b/i, /\bcanal\s+walk\b/i,
-  /\bneighborhood\s+(?:walk|stroll|explore)\b/i,
-  /\bdistrict\s+(?:walk|stroll|explore)\b/i,
+  // Parks and gardens (multilingual)
+  /\b(garden|jardin|garten|giardino|jardim|park|parc|parque|tuin)\b/i,
+  // Public squares and plazas
+  /\b(plaza|piazza|place\s|platz|praça|praca|square|largo|campo|plein)\b/i,
+  // Bridges
+  /\b(pont\s|bridge|puente|ponte|br[üu]cke|brug)\b/i,
+  // Waterfront walks
+  /\b(promenade|esplanade|boardwalk|waterfront|riverside|seafront|canal\s+walk|corniche|malec[oó]n|lungomare|lakefront)\b/i,
+  // Walks and strolls
+  /\b(neighborhood\s+walk|stroll|wander)\b/i,
+  /\b(?:walk|stroll)\s+(?:through|around|along)\b/i,
+  /\bwalking\s+tour\b/i,
+  // Viewpoints (not observation decks)
+  /\b(viewpoint|miradouro|mirador|lookout|overlook|belvedere|panoram\w*)\b/i,
+  // Religious sites (usually free entry)
+  /\b(church|[eé]glise|chiesa|kirche|iglesia|igreja|cathedral|cath[eé]drale|cattedrale|kathedrale|dom|basilica|basilique|basilika|mosque|mosqu[eé]e|moschee|temple|shrine|synagogue|pagoda)\b/i,
+  // Markets (entry free, food priced separately)
+  /\b(market|march[eé]|mercato|markt|mercado|feira|bazar|bazaar|souk)\b/i,
+  // Monuments and memorials
+  /\b(monument|memorial|statue|fountain|fontaine|fontana|brunnen|fuente)\b/i,
+  // District exploration
   /\bexplore\b.*\b(?:district|neighborhood|neighbourhood|quarter|old\s+town|area)\b/i,
   /\bstroll\b.*\b(?:district|neighborhood|neighbourhood|quarter)\b/i,
-  /\b(?:walk|stroll)\s+(?:through|around|along)\b/i,
-  /\bwander\b/i, /\bwalking\s+tour\b/i,
-  // French
-  /\bjardin\b/i, /\bplace\s+\w/i, /\besplanade\b/i,
-  // Italian
-  /\bpiazza\b/i, /\bgiardino\b/i, /\bcampo\b/i,
-  // German/Dutch
-  /\bplatz\b/i, /\bgarten\b/i, /\bbr[üu]cke\b/i, /\bbrug\b/i,
-  // Bridges (multilingual)
-  /\bpont\s+\w+\b/i, /\bbridge\b/i, /\bpuente\b/i, /\bponte\b/i,
-  // Free-entry religious sites (multilingual)
-  /\bbasilique\b/i, /\bcath[eé]drale\b/i, /\b[eé]glise\b/i, /\bchurch\b/i,
-  /\bbasilica\b/i, /\bbasilika\b/i, /\bcathedral\b/i, /\bcattedrale\b/i, /\bkathedrale\b/i,
-  /\biglesia\b/i, /\bchiesa\b/i, /\bkirche\b/i, /\bdom\b/i,
-  /\bmosque\b/i, /\bmoschee\b/i, /\bmosqu[eé]e\b/i,
-  /\btemple\b/i, /\bshrine\b/i, /\bsynagogue\b/i,
-  // Monuments & memorials
-  /\bmonument\b/i, /\bmemorial\b/i, /\bstatue\b/i,
-  /\bfountain\b/i, /\bfontaine\b/i, /\bfontana\b/i, /\bbrunnen\b/i,
-  // Markets (free entry)
-  /\bmarket\b/i, /\bmarch[eé]\b/i, /\bmercato\b/i, /\bmarkt\b/i,
-  /\bmercado\b/i, /\bfeira\b/i, /\bbazar\b/i, /\bbazaar\b/i, /\bsouk\b/i,
+  /\bpaseo\b/i, /\bpier\b/i, /\bbeach\b/i,
   // Paris-specific free venues
   /\bchamps.?[eé]lys[eé]es\b/i, /\bmontmartre\b/i, /\bsacr[eé].?c[oœ]ur\b/i,
   /\btuileries\b/i, /\bchamp\s+de\s+mars\b/i, /\bpalais.?royal.*garden\b/i,
   /\b[iî]le\s+saint.?louis\b/i,
-  // Walking patterns
   /\bseine.*walk|walk.*seine\b/i, /\bneighborhood\s+walk\b/i,
   // Common free venue types
   /\bpublic\s+(?:square|garden|park|space)\b/i,
