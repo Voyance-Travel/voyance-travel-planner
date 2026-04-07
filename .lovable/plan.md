@@ -1,74 +1,43 @@
 
 
-## Expand Universal Free Venue Detection
+## Expand Universal Venue-Type Price Caps
 
-### Problem
-The current `ALWAYS_FREE_VENUE_PATTERNS` in `sanitization.ts` and `FREE_VENUE_PATTERNS` / `PAID_OVERRIDE_PATTERNS` in `src/lib/cost-estimation.ts` work but are missing many universal venue types from the user's expanded list — waterfront walks (corniche, seafront, lakefront), public monuments (fountain, statue, memorial), markets (souk, bazaar, feira), German/Dutch/other language bridge/garden terms, mosques, temples, shrines, synagogues, and more.
+### Current State
+The system already has the architecture the user described, split across three functions:
+- `enforceBarNightcapPriceCap()` — handles bars, nightcaps, cocktails (cap €35, max €50)
+- `enforceCasualVenuePriceCap()` — handles known venue names (city-specific map)
+- `enforceVenueTypePriceCap()` — handles regex-based category caps (markets €20, bakeries €25, street food €15, bookshop cafés €25)
 
-Additionally, there's no market-specific pricing cap for dining-at-market scenarios.
-
-### What Already Works
-- `checkAndApplyFreeVenue()` in sanitization.ts — tier 1/2/3 system with paid-experience exclusion
-- `isLikelyFreePublicVenue()` in cost-estimation.ts — client-side free venue detection with paid overrides
-- Both have pattern arrays and paid-exception lists, but they're incomplete
+The existing `CASUAL_VENUE_TYPE_PATTERNS` array is missing several categories from the user's list.
 
 ### Changes
 
-#### 1. `supabase/functions/generate-itinerary/sanitization.ts`
+**File: `supabase/functions/generate-itinerary/sanitization.ts`**
 
-**Expand `ALWAYS_FREE_VENUE_PATTERNS` regex** to add:
-- Multilingual squares: `largo`, `campo`, `platz`
-- Waterfront: `seafront`, `corniche`, `lakefront`, `canal walk`
-- Monuments: `monument`, `memorial`, `statue`, `fountain`, `fontaine`, `fontana`, `brunnen`
-- Religious: `mosque`, `moschee`, `mosquée`, `temple`, `shrine`, `synagogue`, `iglesia`, `chiesa`, `kirche`, `dom`
-- Markets: `market`, `marché`, `mercato`, `markt`, `mercado`, `feira`, `bazar`, `bazaar`, `souk`
-- German/Dutch bridges: `brücke`, `brug`
-- Spanish: `puente`, `paseo`
-- Neighborhood: `wander`, `walking tour`
-- Overlook/belvedere: `overlook`, `belvedere`
+Expand `CASUAL_VENUE_TYPE_PATTERNS` (line 747) to add these missing patterns:
 
-**Expand `PAID_EXPERIENCE_RE`** to add:
-- `observation deck`, `rooftop.*ticket`, `climb.*ticket`
-- `boat`, `cruise`, `ferry`, `gondola`, `cable car`, `funicular`
-- `show`, `concert`, `performance`, `exhibition`
-- `spa`, `wellness`, `treatment`, `massage`, `hammam`
-- `class`, `workshop`, `course`, `lesson`, `cooking`
+| Pattern | Max Price | Notes |
+|---------|-----------|-------|
+| `gelato\|ice cream\|gelateria\|glacier\|frozen yogurt\|dessert shop` | €15 | Ice cream and dessert shops |
+| `fast casual\|quick bite\|grab and go\|take.?away\|to go` | €20 | Fast casual / quick service |
+| `nightcap\|cocktail\|drinks\|aperitif\|apéro\|late night` | €50 | Already handled by `enforceBarNightcapPriceCap` — skip to avoid conflict |
+| `casual\|simple\|corner` in "Breakfast/Lunch at a..." | €25 | Casual unnamed cafés |
+| `panadería\|padaria` | €25 | Spanish/Portuguese bakeries (extend existing bakery pattern) |
 
-**Add `enforceMarketDiningCap()`** — new exported function:
-- Detects market patterns in title/venue
-- If category is DINING/RESTAURANT, caps `price_per_person` at €20 instead of zeroing
-- Called after `checkAndApplyFreeVenue` in the sanitization pipeline
+Specifically:
+1. Add gelato/ice cream/dessert pattern (€15)
+2. Add fast casual/quick bite pattern (€20)
+3. Extend bakery pattern to include `panadería` and `padaria`
+4. Add casual café pattern for "Breakfast at a casual..." titles (€25)
+5. Skip bar/nightcap/cocktail — already covered by the dedicated `enforceBarNightcapPriceCap` function with its own logic and Michelin exclusions
 
-#### 2. `src/lib/cost-estimation.ts`
-
-**Expand `FREE_VENUE_PATTERNS`** array to match the same universal types added to sanitization.ts (monuments, waterfront, markets, multilingual religious sites, etc.)
-
-**Expand `PAID_OVERRIDE_PATTERNS`** to add the same paid exceptions (observation deck, cable car, spa, workshop, etc.)
-
-#### 3. Update test files
-
-**`supabase/functions/generate-itinerary/sanitization_free_venue_test.ts`** — add tests for:
-- Multilingual squares (piazza, platz, plaza)
-- Waterfront/corniche/seafront
-- Monuments/fountains/statues
-- Markets (free entry, but dining-at-market stays paid)
-- Mosques, temples, shrines
-- New paid exceptions (spa, workshop, gondola)
-
-**`src/lib/cost-estimation.test.ts`** — add tests for:
-- Monument/fountain/memorial detection
-- Market entry detection
-- Mosque/temple detection
-- New paid overrides (spa, cable car, cooking class)
+No new functions needed. No new files. Just expanding the existing pattern array.
 
 ### Files to Edit
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/sanitization.ts` | Expand `ALWAYS_FREE_VENUE_PATTERNS`, expand `PAID_EXPERIENCE_RE`, add `enforceMarketDiningCap()` |
-| `src/lib/cost-estimation.ts` | Expand `FREE_VENUE_PATTERNS` and `PAID_OVERRIDE_PATTERNS` with universal types |
-| `supabase/functions/generate-itinerary/sanitization_free_venue_test.ts` | Add tests for new patterns and market cap |
-| `src/lib/cost-estimation.test.ts` | Add tests for new patterns and paid overrides |
+| `supabase/functions/generate-itinerary/sanitization.ts` | Add 3-4 entries to `CASUAL_VENUE_TYPE_PATTERNS` array |
 
 ### Deployment
 Redeploy `generate-itinerary` edge function.
