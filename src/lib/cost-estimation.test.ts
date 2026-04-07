@@ -229,3 +229,4 @@ describe('isLikelyFreePublicVenue', () => {
       category: 'culture',
     })).toBe(false);
   });
+});
