@@ -1,8 +1,17 @@
 /**
  * Universal Quality Pass — Single orchestrator for all post-generation quality steps.
  *
- * Consolidates 9 scattered enforcement steps into one reusable function:
+ * Consolidates scattered enforcement steps into one reusable function:
  * 1. Arrival timing (Day 1 only)
+ * 2. Departure timing (Last day only)
+ * 3. Cross-day venue dedup
+ * 4. Fix placeholder meals (AI re-generation)
+ * 4b. Nuclear placeholder sweep (synchronous last-resort)
+ * 5. Free venue pricing
+ * 6. Market dining cap
+ * 7. Universal price caps (bar, casual, venue-type, ticketed, Michelin floor)
+ * 8. Hotel return injection (except departure day)
+ * 9. Update used venues set for next day
  * 2. Departure timing (Last day only)
  * 3. Fix placeholder meals (AI re-generation)
  * 4. Free venue pricing
