@@ -723,6 +723,7 @@ export async function handleGenerateDay(
       // AI micro-call fallback for cities without hardcoded restaurants
       if (placeholderSlots.length > 0) {
         console.log(`[generate-day] ${placeholderSlots.length} placeholder(s) need AI fallback for "${destination}"`);
+        const generatedDayTheme = dayItinerary?.theme || dayItinerary?.title || undefined;
         for (const slot of placeholderSlots) {
           try {
             const aiRestaurant = await generateFallbackRestaurant(
@@ -731,6 +732,9 @@ export async function handleGenerateDay(
               budgetTier || 'moderate',
               LOVABLE_API_KEY,
               usedVenueNamesInDay,
+              destinationCountry || undefined,
+              tripType || undefined,
+              generatedDayTheme,
             );
             if (aiRestaurant) {
               applyFallbackToActivity(slot.activityRef, aiRestaurant, slot.mealType, usedVenueNamesInDay);
