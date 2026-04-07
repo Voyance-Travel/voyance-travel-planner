@@ -159,6 +159,7 @@ export function applyFallbackToActivity(
   fallback: FallbackRestaurant,
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
   usedVenueNamesInDay: Set<string>,
+  diningConfig?: DiningConfig,
 ): void {
   const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : mealType === 'drinks' ? 'Drinks' : 'Dinner';
   activity.title = `${mealLabel} at ${fallback.name}`;
@@ -171,11 +172,24 @@ export function applyFallbackToActivity(
   }
   activity.venue_name = fallback.name;
   if (fallback.description) activity.description = fallback.description;
-  if (fallback.price && activity.cost) {
-    activity.cost.amount = fallback.price;
+
+  // Price clamping: clamp to DNA config range when available
+  let price = fallback.price;
+  if (price && diningConfig) {
+    const pr = diningConfig.priceRange[mealType] || diningConfig.priceRange.dinner;
+    if (pr) {
+      price = Math.max(pr[0], Math.min(pr[1], price));
+    }
   }
+  if (price && activity.cost) {
+    activity.cost.amount = price;
+  }
+  if (price) {
+    activity.cost_per_person = price;
+  }
+
   usedVenueNamesInDay.add(fallback.name.toLowerCase());
-  console.log(`[PLACEHOLDER] REPLACED → "${activity.title}" at "${fallback.address}"`);
+  console.log(`[PLACEHOLDER] REPLACED → "${activity.title}" at "${fallback.address}" (€${price}/pp)`);
 }
 
 // =============================================================================
