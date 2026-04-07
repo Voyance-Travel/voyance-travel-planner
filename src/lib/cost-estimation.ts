@@ -558,15 +558,17 @@ const PAID_OVERRIDE_PATTERNS = [
   // Dining / bars
   /\b(?:breakfast|brunch|lunch|dinner|restaurant|café|cafe|coffee|bar|bistro|tapas|food|cocktail|nightcap)\b/i,
   // Ticketed attractions
-  /\b(?:museum|mus[eé]e|monastery|palace|palácio|castle|castelo|tower|torre|aquarium|zoo|show|concert|theater|theatre|ticket|admission|entrance|gallery|galerie|orangerie|exhibition)\b/i,
+  /\b(?:museum|mus[eé]e|museo|muzeum|gallery|galerie|galleria|orangerie|exhibition)\b/i,
+  /\b(?:monastery|palace|palácio|castle|castelo|tower|torre|aquarium|zoo)\b/i,
+  /\b(?:ticket|admission|entrance|theater|theatre)\b/i,
   // Observation / rides
-  /\b(?:observation\s+deck|rooftop.*ticket|climb.*ticket|boat|cruise|ferry|gondola|cable\s+car|funicular)\b/i,
+  /\b(?:observation\s+deck|rooftop.*ticket|climb.*ticket|dome.*climb|boat|cruise|ferry|gondola|cable\s+car|funicular)\b/i,
   // Wellness
-  /\b(?:spa|wellness|massage|treatment|hammam|thermal|sauna)\b/i,
+  /\b(?:spa|wellness|massage|treatment|hammam|onsen|thermal|sauna)\b/i,
   // Transport
   /\b(?:airport|taxi|uber|rideshare|transfer|shuttle|train\s+to|bus\s+to|private\s+car)\b/i,
   // Tours / experiences / classes
-  /\b(?:guided\s+tour|boat\s+tour|cruise|cooking\s+class|workshop|tasting|class|course|lesson)\b/i,
+  /\b(?:guided\s+tour|boat\s+tour|food\s+tour|cooking\s+class|workshop|tasting|class|course|lesson)\b/i,
   // Performances
   /\b(?:show|concert|performance)\b/i,
 ];

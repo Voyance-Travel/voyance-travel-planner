@@ -229,4 +229,47 @@ describe('isLikelyFreePublicVenue', () => {
       category: 'culture',
     })).toBe(false);
   });
+
+  // ─── New multilingual patterns ───
+  it('detects pagoda', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Visit the Five-Story Pagoda',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects malecón', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Walk along the Malecón',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects lungomare', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Stroll the Lungomare promenade',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects fuente (Spanish fountain)', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Fuente de Cibeles',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects plein (Dutch square)', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Leidseplein area walk',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('excludes onsen', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Onsen experience at the Temple district',
+      category: 'wellness',
+    })).toBe(false);
+  });
 });

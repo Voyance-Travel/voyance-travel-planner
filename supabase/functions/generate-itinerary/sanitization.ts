@@ -542,7 +542,7 @@ export function checkAndApplyFreeVenue(activity: Record<string, any>, label = 's
 
   if (effectiveCost <= 0) return false;
 
-  const matchesTier1 = ALWAYS_FREE_VENUE_PATTERNS.test(allTextFields);
+  const matchesTier1 = ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test(allTextFields));
   const matchesTier2 = TIER2_FREE_VENUE_PATTERNS.test(allTextFields);
 
   if (!matchesTier1 && !matchesTier2) return false;
@@ -550,7 +550,7 @@ export function checkAndApplyFreeVenue(activity: Record<string, any>, label = 's
   // Log diagnostic
   console.log(`FREE VENUE CHECK: title="${title}", venue="${venueName}", category="${activity.category}", booking_required=${activity.booking_required}, price=${effectiveCost}`);
 
-  const isPaidExperience = activity.booking_required || PAID_EXPERIENCE_RE.test(allTextFields);
+  const isPaidExperience = activity.booking_required || PAID_EXPERIENCE_RE.some(p => p.test(allTextFields));
 
   if (matchesTier1 && !isPaidExperience) {
     console.log(`PHANTOM PRICING FIX [${label}]: "${title}" venue="${venueName}" (${activity.category}) matches free venue pattern. Was $${effectiveCost}/pp → Free`);
