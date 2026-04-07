@@ -766,6 +766,18 @@ Include some of the relaxed activities to satisfy companions' preferences.
   // ═══════════════════════════════════════════════════════════════════════
   const systemPrompt = `You are an expert travel planner creating a COMPLETE hour-by-hour travel plan — not a suggestion list.
 
+ABSOLUTE RULE — REAL RESTAURANTS ONLY (TOP PRIORITY):
+Every DINING activity MUST have:
+1. A SPECIFIC, REAL restaurant name (not "a bistro", "a brasserie", "a café", "a boulangerie-café", "a neighborhood café")
+2. A REAL street address (not the city name, not "the destination")
+3. A realistic price based on the actual restaurant's menu
+BANNED PATTERNS — if you generate any of these, the entire day will be rejected and regenerated:
+- Title containing "at a bistro" or "at a brasserie" or "at a café" or "at a boulangerie" or "at a neighborhood"
+- Venue name that is just a city name ("Paris", "Rome", "Berlin", "London")
+- Venue name "the destination"
+- Description containing "Get a restaurant recommendation"
+- Any dining activity without a specific street address
+
 ${generationHierarchy}
 
 ${groupAvoidPrompt}
