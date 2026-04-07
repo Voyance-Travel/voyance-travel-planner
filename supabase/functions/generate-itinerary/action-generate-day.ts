@@ -642,7 +642,7 @@ export async function handleGenerateDay(
       destinationCountry || '',
       tripType || 'Explorer',
       dayNumber,
-      usedVenueNamesFromParams,
+      paramUsedRestaurants || [],
       budgetTier || 'moderate',
       LOVABLE_API_KEY,
       lockedActivities,
