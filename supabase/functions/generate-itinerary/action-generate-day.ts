@@ -463,20 +463,33 @@ export async function handleGenerateDay(
     });
 
     // =========================================================================
-    // INLINE PLACEHOLDER REJECTION — runs unconditionally, BEFORE enrichment
+    // UNIVERSAL PLACEHOLDER ELIMINATION — works for ANY city worldwide
     // =========================================================================
     {
       const PLACEHOLDER_TITLE_PATTERNS = [
-        /breakfast at a /i, /lunch at a /i, /dinner at a /i, /meal at a /i,
-        /at a bistro/i, /at a brasserie/i, /at a caf[eé]/i, /at a boulangerie/i,
-        /at a neighborhood/i, /at a local /i, /at a nearby/i, /at a restaurant/i,
+        // English generic patterns
+        /^(breakfast|lunch|dinner|meal|brunch)\s+(at\s+)?a\s+/i,
+        /^(breakfast|lunch|dinner|meal|brunch)\s+(at\s+)?the\s+/i,
+        /^(breakfast|lunch|dinner)\s+at\s+(a\s+)?(local|nearby|neighborhood|traditional|typical|popular|cozy|charming)/i,
+        // Specific generic venue types (any language)
+        /at a (bistro|brasserie|café|cafe|boulangerie|trattoria|osteria|taverna|izakaya|tapas bar|pub|diner|restaurant|eatery|food stall|canteen|pizzeria|ramen shop|noodle shop|sushi bar|beer hall|wine bar|gastro)/i,
+        // "Get a restaurant recommendation" pattern
+        /get a restaurant recommendation/i,
       ];
       const PLACEHOLDER_VENUE_PATTERNS = [
         /^the destination$/i,
-        /^paris$/i, /^rome$/i, /^roma$/i, /^berlin$/i, /^london$/i,
-        /^lisbon$/i, /^lisboa$/i, /^tokyo$/i, /^new york$/i, /^barcelona$/i,
+        /^the city$/i,
+        /^(city|town) center$/i,
+        /^downtown$/i,
+        /^near(by)?\s+(the\s+)?hotel$/i,
+        /^your hotel$/i,
         /get a restaurant recommendation/i,
+        /^.{0,3}$/,  // 3 chars or fewer
       ];
+      // Dynamic check: if venue name matches the trip's destination city, it's a placeholder
+      const destinationLower = (destination || '').toLowerCase().trim();
+      const destinationCity = destinationLower.split(',')[0].trim();
+
       const usedVenueNamesInDay = new Set<string>();
       // Seed with locked dining venue names
       for (const locked of lockedActivities) {
@@ -492,6 +505,13 @@ export async function handleGenerateDay(
         if (u) usedVenueNamesInDay.add(u.toLowerCase());
       }
 
+      // Collect placeholder slots for potential AI batch
+      interface PlaceholderSlot {
+        activityRef: any;
+        mealType: 'breakfast' | 'lunch' | 'dinner';
+      }
+      const placeholderSlots: PlaceholderSlot[] = [];
+
       for (const activity of normalizedActivities) {
         const category = ((activity as any).category || '').toLowerCase();
         if (category !== 'dining' && category !== 'restaurant') continue;
@@ -501,11 +521,12 @@ export async function handleGenerateDay(
         const description = ((activity as any).description || '').trim();
 
         const isPlaceholderTitle = PLACEHOLDER_TITLE_PATTERNS.some(p => p.test(title));
-        const isPlaceholderVenue = PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venueName));
+        const isPlaceholderVenue = PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venueName))
+          || (destinationCity.length > 2 && venueName.toLowerCase() === destinationCity);
         const hasRecommendationCTA = /get a restaurant recommendation/i.test(description);
 
         if (isPlaceholderTitle || isPlaceholderVenue || hasRecommendationCTA) {
-          console.error(`[generate-day] PLACEHOLDER DETECTED: "${title}" at "${venueName}" — replacing with fallback`);
+          console.error(`[generate-day] PLACEHOLDER DETECTED: "${title}" at "${venueName}" — replacing`);
 
           const startTimeStr = (activity as any).startTime || '12:00';
           const hourMatch = startTimeStr.match(/^(\d{1,2})/);
@@ -516,24 +537,36 @@ export async function handleGenerateDay(
           else if (hour24 < 16) mealType = 'lunch';
           else mealType = 'dinner';
 
+          // Fast path: try hardcoded fallback first (free, instant)
           const fallback = getRandomFallbackRestaurant(destination, mealType, usedVenueNamesInDay);
           if (fallback) {
-            const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : 'Dinner';
-            (activity as any).title = `${mealLabel} at ${fallback.name}`;
-            (activity as any).name = (activity as any).title;
-            if ((activity as any).location) {
-              (activity as any).location.name = fallback.name;
-              (activity as any).location.address = fallback.address;
+            applyFallbackToActivity(activity, fallback, mealType, usedVenueNamesInDay);
+          } else {
+            // No hardcoded fallback — queue for AI micro-call
+            placeholderSlots.push({ activityRef: activity, mealType });
+          }
+        }
+      }
+
+      // AI micro-call fallback for cities without hardcoded restaurants
+      if (placeholderSlots.length > 0) {
+        console.log(`[generate-day] ${placeholderSlots.length} placeholder(s) need AI fallback for "${destination}"`);
+        for (const slot of placeholderSlots) {
+          try {
+            const aiRestaurant = await generateFallbackRestaurant(
+              destination,
+              slot.mealType,
+              budgetTier || 'moderate',
+              LOVABLE_API_KEY,
+              usedVenueNamesInDay,
+            );
+            if (aiRestaurant) {
+              applyFallbackToActivity(slot.activityRef, aiRestaurant, slot.mealType, usedVenueNamesInDay);
             } else {
-              (activity as any).location = { name: fallback.name, address: fallback.address };
+              console.warn(`[generate-day] AI fallback returned null for ${slot.mealType} in ${destination}`);
             }
-            (activity as any).venue_name = fallback.name;
-            if (fallback.description) (activity as any).description = fallback.description;
-            if (fallback.price && (activity as any).cost) {
-              (activity as any).cost.amount = fallback.price;
-            }
-            usedVenueNamesInDay.add(fallback.name.toLowerCase());
-            console.log(`[generate-day] PLACEHOLDER REPLACED → "${(activity as any).title}" at "${fallback.address}"`);
+          } catch (err) {
+            console.warn(`[generate-day] AI fallback failed for ${slot.mealType} in ${destination}:`, err);
           }
         }
       }
