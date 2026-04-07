@@ -53,6 +53,7 @@ export interface ItineraryActivity {
   tips?: string;
   walkingDistance?: number;
   walkingTime?: number;
+  aiNotes?: Array<{ id: string; content: string; savedAt: string; query?: string }>;
 }
 
 // Backend activity type (from itineraryAPI.ts)
