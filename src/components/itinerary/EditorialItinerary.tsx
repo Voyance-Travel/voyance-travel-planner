@@ -6375,6 +6375,7 @@ export function EditorialItinerary({
                           onApplyRefreshChanges={(changes) => handleApplyRefreshChanges(selectedDayIndex, changes)}
                           onPhotoResolved={reportPhoto}
                           isManualMode={isManualMode}
+                          onOpenConcierge={handleOpenConcierge}
                         />
                       )}
                     </>
