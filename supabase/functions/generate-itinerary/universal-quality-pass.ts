@@ -125,20 +125,25 @@ export async function universalQualityPass(
   }
 
   // ── Step 4: Fix placeholder meals (DNA-aware AI re-generation) ──
-  if (apiKey) {
-    await fixPlaceholdersForDay(
-      result,
-      city,
-      country,
-      dnaTier || 'Explorer',
-      dayIndex,
-      usedRestaurants || [],
-      budgetTier || 'moderate',
-      apiKey,
-      lockedActivities || [],
-      dayTitle,
-      diningConfig,
-    );
+  // Runs even without apiKey — the fast DB path works without it; only AI fallback needs the key
+  await fixPlaceholdersForDay(
+    result,
+    city,
+    country,
+    dnaTier || 'Explorer',
+    dayIndex,
+    usedRestaurants || [],
+    budgetTier || 'moderate',
+    apiKey || '',
+    lockedActivities || [],
+    dayTitle,
+    diningConfig,
+  );
+
+  // ── Step 4b: Nuclear placeholder sweep (synchronous, zero-API last resort) ──
+  const nuclearCount = nuclearPlaceholderSweep(result, city, diningConfig);
+  if (nuclearCount > 0) {
+    console.warn(`[QUALITY] Nuclear sweep replaced ${nuclearCount} surviving placeholder(s) in Day ${dayIndex + 1}`);
   }
 
   // ── Step 5: Free venue pricing ──
