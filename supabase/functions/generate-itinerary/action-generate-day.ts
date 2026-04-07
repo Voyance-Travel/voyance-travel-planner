@@ -218,10 +218,10 @@ function getRandomFallbackRestaurant(
 function applyFallbackToActivity(
   activity: any,
   fallback: FallbackRestaurant,
-  mealType: 'breakfast' | 'lunch' | 'dinner',
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
   usedVenueNamesInDay: Set<string>,
 ): void {
-  const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : 'Dinner';
+  const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : mealType === 'drinks' ? 'Drinks' : 'Dinner';
   activity.title = `${mealLabel} at ${fallback.name}`;
   activity.name = activity.title;
   if (activity.location) {
