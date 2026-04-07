@@ -1,39 +1,33 @@
 
 
-## Fix: Missing DialogTitle Accessibility + Double X in AI Insight
+## Fix: AI Notes Lost on Page Reload
 
-### Two issues to fix
+### Problem
+AI notes save correctly to the database (the `aiNotes` array is included in the JSON blob written to `trips.itinerary_data`), but they are stripped when the itinerary is loaded back from the database. 
 
-**1. `DialogContent requires a DialogTitle` warning**
+The `convertBackendActivity()` function in `src/types/itinerary.ts` constructs a new object with explicit field assignments and does not include `aiNotes`. Every load path (`useLovableItinerary.ts`, `ItineraryPreview.tsx`) runs through this converter, so `aiNotes` is silently dropped.
 
-Several components use `DialogContent` or `SheetContent` without a corresponding `DialogTitle`/`SheetTitle`, triggering the Radix accessibility warning in the console. The fix is to add a visually hidden title for screen readers using Radix's `VisuallyHidden` utility.
+### Fix
 
-Affected components:
-- `src/components/itinerary/ActivityConciergeSheet.tsx` — uses `SheetContent` with a plain `<h3>` instead of `SheetTitle`
-- `src/components/modals/OutOfFreeActionsModal.tsx` — uses `DialogContent` with a plain `<h2>` instead of `DialogTitle`
-- `src/components/trip/TripDebriefModal.tsx` — uses `DialogContent` with no title at all
+**File: `src/types/itinerary.ts`**
 
-**Fix for each:**
-- `ActivityConciergeSheet.tsx`: Import `SheetTitle` from sheet.tsx, wrap it with `VisuallyHidden` (from `@radix-ui/react-visually-hidden`) or add `SheetTitle` with `className="sr-only"` inside the `SheetContent`
-- `OutOfFreeActionsModal.tsx`: Import `DialogTitle`, add a visually hidden `<DialogTitle className="sr-only">Free actions exhausted</DialogTitle>` inside `DialogContent`
-- `TripDebriefModal.tsx`: Same pattern — add a hidden `DialogTitle`
+1. Add `aiNotes` as an optional field to the `ItineraryActivity` interface (around line 55):
+   ```ts
+   aiNotes?: Array<{ id: string; content: string; savedAt: string; query?: string }>;
+   ```
 
-**2. Double X close button in AI Insight (ActivityConciergeSheet)**
+2. Add `aiNotes` as an optional field to the `BackendActivity` interface (around line 89):
+   ```ts
+   aiNotes?: Array<{ id: string; content: string; savedAt: string; query?: string }>;
+   ```
 
-The `SheetContent` component (from `sheet.tsx` line 60) renders a built-in close X button at `absolute right-4 top-4`. After the previous fix removed the manual X button, there should only be one. However, the built-in X may be visually conflicting with the header layout (overlapping the header content area at top-right). The fix: since the sheet has its own styled header, suppress the default close button by removing it from `SheetContent` for this usage — either by passing a custom prop or by adding `SheetTitle` properly and removing the unused `X` import.
+3. In `convertBackendActivity()` (line 264-282), add `aiNotes` to the returned object:
+   ```ts
+   aiNotes: activity.aiNotes,
+   ```
 
-### Files changed
+This ensures AI notes survive the save → load round-trip without affecting any other functionality.
 
-1. **`src/components/itinerary/ActivityConciergeSheet.tsx`**
-   - Import `SheetTitle` from sheet
-   - Add `<SheetTitle className="sr-only">{actTitle} — AI Concierge</SheetTitle>` inside `SheetContent`
-   - Remove unused `X` import from lucide-react
-
-2. **`src/components/modals/OutOfFreeActionsModal.tsx`**
-   - Import `DialogTitle`
-   - Add `<DialogTitle className="sr-only">Free actions exhausted</DialogTitle>` after the `DialogContent` opening tag
-
-3. **`src/components/trip/TripDebriefModal.tsx`**
-   - Import `DialogTitle`
-   - Add `<DialogTitle className="sr-only">Trip Debrief</DialogTitle>` after `DialogContent` opening tag
+### Files Changed
+1. `src/types/itinerary.ts` — add `aiNotes` to both interfaces and to the converter function
 
