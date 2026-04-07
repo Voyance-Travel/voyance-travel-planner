@@ -1739,19 +1739,8 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // ── FINAL TICKETED ATTRACTION + MICHELIN PRICE FLOOR GUARD (trip-level) ──
-  // Runs over ALL days before the final save so no prior step can overwrite floors
-  for (const day of updatedDays) {
-    if (Array.isArray(day.activities)) {
-      for (const act of day.activities) {
-        enforceBarNightcapPriceCap(act, 'TRIP_DAY_FINAL');
-        enforceCasualVenuePriceCap(act, 'TRIP_DAY_FINAL');
-        enforceVenueTypePriceCap(act, 'TRIP_DAY_FINAL');
-        enforceTicketedAttractionPricing(act, 'TRIP_DAY_FINAL');
-        enforceMichelinPriceFloor(act, 'TRIP_DAY_FINAL');
-      }
-    }
-  }
+  // ── FINAL PRICING GUARD — handled by universalQualityPass per-day above ──
+  // No-op: pricing caps already enforced during quality pass
 
   // ── Michelin inclusion enforcement for Luminary trips ──
   const tripTypeLower = (tripType || '').toLowerCase();
