@@ -256,6 +256,29 @@ export function terminalCleanup(
     }
   }
 
+  // ── 1b. Deduplicate "Return to Hotel" entries — keep only the LAST one ──
+  {
+    const hotelReturnRe = /return\s+to\s+(your\s+)?hotel|back\s+to\s+(the\s+)?hotel|hotel\s+return/i;
+    const returnIndices: number[] = [];
+    for (let i = 0; i < activities.length; i++) {
+      const title = (activities[i].title || '').trim();
+      const cat = (activities[i].category || '').toLowerCase();
+      if (cat === 'accommodation' && hotelReturnRe.test(title)) {
+        returnIndices.push(i);
+      }
+    }
+    if (returnIndices.length > 1) {
+      // Keep only the last one, remove earlier duplicates
+      const toRemove = new Set(returnIndices.slice(0, -1));
+      const before = activities.length;
+      const filtered = activities.filter((_, idx) => !toRemove.has(idx));
+      activities.length = 0;
+      activities.push(...filtered);
+      console.warn(`[${label}] Deduped ${before - activities.length} duplicate "Return to Hotel" entries (kept last)`);
+      removed += before - activities.length;
+    }
+  }
+
   // ── 2. Pre-arrival filter (Day 1) ──
   if (isFirstDay && arrivalTime24) {
     const arrivalMins = parseTimeMins(arrivalTime24);
