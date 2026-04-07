@@ -1282,25 +1282,45 @@ async function _handleGenerateTripDayInner(
     const d = updatedDays[i];
     if (!d?.activities || !Array.isArray(d.activities)) continue;
     const dn = d.dayNumber || (i + 1);
+    const isFirstDayLoop = dn === 1;
+    const isLastDayLoop = dn === totalDays;
     const policy = deriveMealPolicy({
       dayNumber: dn,
       totalDays,
-      isFirstDay: dn === 1,
-      isLastDay: dn === totalDays,
-      arrivalTime24: dn === 1 ? savedArrivalTime24 : undefined,
-      departureTime24: dn === totalDays ? savedDepartureTime24 : undefined,
+      isFirstDay: isFirstDayLoop,
+      isLastDay: isLastDayLoop,
+      arrivalTime24: isFirstDayLoop ? savedArrivalTime24 : undefined,
+      departureTime24: isLastDayLoop ? savedDepartureTime24 : undefined,
     });
     if (policy.requiredMeals.length === 0) continue;
     const detected = detectMealSlots(d.activities);
     const missing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
+
+    // Compute timing window
+    const arrMinsLoop = isFirstDayLoop && savedArrivalTime24 ? (() => { const m = savedArrivalTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : undefined; })() : undefined;
+    const depMinsLoop = isLastDayLoop && savedDepartureTime24 ? (() => { const m = savedDepartureTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - 180 : undefined; })() : undefined;
+
     if (missing.length > 0) {
       const dest = d.city || cityInfo?.cityName || destination || 'the destination';
-      const result = enforceRequiredMealsFinalGuard(d.activities, policy.requiredMeals, dn, dest, 'USD', policy.dayMode, fallbackVenues);
+      const result = enforceRequiredMealsFinalGuard(d.activities, policy.requiredMeals, dn, dest, 'USD', policy.dayMode, fallbackVenues, { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop });
       if (!result.alreadyCompliant) {
         updatedDays[i] = { ...d, activities: result.activities };
         console.warn(`[generate-trip-day] 🍽️ MEAL GUARD: Day ${dn} missing [${result.injectedMeals.join(', ')}] — injected before chain save`);
       }
     }
+
+    // Terminal cleanup for each day
+    try {
+      const { terminalCleanup } = await import('./universal-quality-pass.ts');
+      terminalCleanup(updatedDays[i].activities, {
+        arrivalTime24: isFirstDayLoop ? savedArrivalTime24 : undefined,
+        departureTime24: isLastDayLoop ? savedDepartureTime24 : undefined,
+        city: d.city || cityInfo?.cityName || destination,
+        dayNumber: dn,
+        isFirstDay: isFirstDayLoop,
+        isLastDay: isLastDayLoop,
+      });
+    } catch (_e) { /* non-blocking */ }
   }
 
   // ── DATE NORMALIZATION (ensure every day has a date) ─────────────
