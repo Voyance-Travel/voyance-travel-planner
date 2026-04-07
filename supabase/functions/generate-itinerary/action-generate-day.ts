@@ -679,7 +679,7 @@ export async function handleGenerateDay(
       // Collect placeholder slots for potential AI batch
       interface PlaceholderSlot {
         activityRef: any;
-        mealType: 'breakfast' | 'lunch' | 'dinner';
+        mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
       }
       const placeholderSlots: PlaceholderSlot[] = [];
 
