@@ -270,6 +270,8 @@ export interface EditorialActivity {
   };
   /** Placeholder activity that needs a real recommendation */
   needsRefinement?: boolean;
+  /** Saved AI concierge notes */
+  aiNotes?: import('./ActivityConciergeSheet').AISavedNote[];
 }
 
 export interface TransportOption {
