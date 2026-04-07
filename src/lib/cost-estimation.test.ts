@@ -261,7 +261,7 @@ describe('isLikelyFreePublicVenue', () => {
 
   it('detects plein (Dutch square)', () => {
     expect(isLikelyFreePublicVenue({
-      title: 'Leidseplein area walk',
+      title: 'Walk around the Plein in The Hague',
       category: 'explore',
     })).toBe(true);
   });
