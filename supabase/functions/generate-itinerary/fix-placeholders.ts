@@ -405,6 +405,69 @@ export async function generateFallbackRestaurant(
 }
 
 // =============================================================================
+// HELPER: Determine meal type from start time
+// =============================================================================
+function parseMealType(startTime: string): 'breakfast' | 'lunch' | 'dinner' | 'drinks' {
+  const hourMatch = startTime.match(/^(\d{1,2})/);
+  const hour24 = hourMatch ? parseInt(hourMatch[1], 10) : 12;
+  if (hour24 < 11) return 'breakfast';
+  if (hour24 < 16) return 'lunch';
+  if (hour24 < 21) return 'dinner';
+  return 'drinks';
+}
+
+// =============================================================================
+// EXPORTED: Fill a single placeholder slot (detection + replace + patch)
+// =============================================================================
+export async function fillPlaceholderSlot(
+  activity: any,
+  city: string,
+  country: string,
+  tripType: string,
+  budgetTier: string,
+  apiKey: string,
+  usedVenueNames: Set<string>,
+  dayTheme?: string,
+  diningConfig?: DiningConfig,
+): Promise<boolean> {
+  const startTimeStr = activity.startTime || activity.start_time || '12:00';
+  const mealType = parseMealType(startTimeStr);
+
+  // Fast path: hardcoded fallback (free, instant)
+  const fallback = getRandomFallbackRestaurant(city, mealType, usedVenueNames);
+  if (fallback) {
+    applyFallbackToActivity(activity, fallback, mealType, usedVenueNames, diningConfig);
+    return true;
+  }
+
+  // Slow path: AI-powered fallback
+  if (!apiKey) return false;
+
+  try {
+    const aiRestaurant = await generateFallbackRestaurant(
+      city,
+      mealType,
+      budgetTier,
+      apiKey,
+      usedVenueNames,
+      country || undefined,
+      tripType || undefined,
+      dayTheme,
+      undefined,
+      diningConfig,
+    );
+    if (aiRestaurant) {
+      applyFallbackToActivity(activity, aiRestaurant, mealType, usedVenueNames, diningConfig);
+      return true;
+    }
+  } catch (err) {
+    console.warn(`[SLOT-FILLER] AI fallback failed for ${mealType} in ${city}:`, err);
+  }
+
+  return false;
+}
+
+// =============================================================================
 // MAIN: Detect and fix all placeholder dining activities for a day
 // =============================================================================
 export async function fixPlaceholdersForDay(
@@ -438,67 +501,31 @@ export async function fixPlaceholdersForDay(
     if (u) usedVenueNamesInDay.add(u.toLowerCase());
   }
 
-  const placeholderSlots: PlaceholderSlot[] = [];
+  let placeholderCount = 0;
 
   for (const activity of activities) {
     if (!isPlaceholderMeal(activity, destinationCity)) continue;
 
-    const title = ((activity as any).title || '').trim();
-    const venueName = ((activity as any).location?.name || (activity as any).venue_name || '').trim();
+    const title = (activity.title || '').trim();
+    const venueName = (activity.location?.name || activity.venue_name || '').trim();
+    console.error(`[QUALITY] Day ${dayIndex}: PLACEHOLDER DETECTED: "${title}" at "${venueName}" — replacing`);
 
-    {
-      console.error(`[QUALITY] Day ${dayIndex}: PLACEHOLDER DETECTED: "${title}" at "${venueName}" — replacing`);
+    const success = await fillPlaceholderSlot(
+      activity, city, country, tripType, budgetTier, apiKey,
+      usedVenueNamesInDay, dayTitle, diningConfig,
+    );
 
-      const startTimeStr = (activity as any).startTime || '12:00';
-      const hourMatch = startTimeStr.match(/^(\d{1,2})/);
-      const hour24 = hourMatch ? parseInt(hourMatch[1], 10) : 12;
-
-      let mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
-      if (hour24 < 11) mealType = 'breakfast';
-      else if (hour24 < 16) mealType = 'lunch';
-      else if (hour24 < 21) mealType = 'dinner';
-      else mealType = 'drinks';
-
-      // Fast path: try hardcoded fallback first (free, instant)
-      const fallback = getRandomFallbackRestaurant(city, mealType, usedVenueNamesInDay);
-      if (fallback) {
-        applyFallbackToActivity(activity, fallback, mealType, usedVenueNamesInDay);
-      } else {
-        placeholderSlots.push({ activityRef: activity, mealType });
-      }
+    if (success) {
+      placeholderCount++;
+      console.log(`[QUALITY] Replaced placeholder with: "${activity.title}"`);
+    } else {
+      console.error(`[QUALITY] Failed to fill placeholder at day ${dayIndex}: "${title}"`);
     }
   }
 
-  if (placeholderSlots.length === 0) {
+  if (placeholderCount === 0) {
     console.log(`[QUALITY] Day ${dayIndex}: No placeholders detected ✓`);
-    return;
-  }
-
-  console.warn(`[QUALITY] Day ${dayIndex}: ${placeholderSlots.length} placeholder(s) need AI fallback for "${city}"`);
-  const generatedDayTheme = dayTitle || undefined;
-
-  for (const slot of placeholderSlots) {
-    try {
-      const aiRestaurant = await generateFallbackRestaurant(
-        city,
-        slot.mealType,
-        budgetTier,
-        apiKey,
-        usedVenueNamesInDay,
-        country || undefined,
-        tripType || undefined,
-        generatedDayTheme,
-        undefined,
-        diningConfig,
-      );
-      if (aiRestaurant) {
-        applyFallbackToActivity(slot.activityRef, aiRestaurant, slot.mealType, usedVenueNamesInDay);
-        console.log(`[QUALITY] Replaced placeholder with: "${slot.activityRef.title}" (€${aiRestaurant.price || '?'}/pp)`);
-      } else {
-        console.error(`[QUALITY] Failed to fill ${slot.mealType} slot at day ${dayIndex}`);
-      }
-    } catch (err) {
-      console.warn(`[QUALITY] AI fallback failed for ${slot.mealType} in ${city}:`, err);
-    }
+  } else {
+    console.log(`[QUALITY] Day ${dayIndex}: Fixed ${placeholderCount} placeholder(s)`);
   }
 }
