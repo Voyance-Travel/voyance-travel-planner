@@ -324,6 +324,83 @@ export async function handleGenerateDay(
       return normalized;
     });
 
+    // =========================================================================
+    // INLINE PLACEHOLDER REJECTION — runs unconditionally, BEFORE enrichment
+    // =========================================================================
+    {
+      const PLACEHOLDER_TITLE_PATTERNS = [
+        /breakfast at a /i, /lunch at a /i, /dinner at a /i, /meal at a /i,
+        /at a bistro/i, /at a brasserie/i, /at a caf[eé]/i, /at a boulangerie/i,
+        /at a neighborhood/i, /at a local /i, /at a nearby/i, /at a restaurant/i,
+      ];
+      const PLACEHOLDER_VENUE_PATTERNS = [
+        /^the destination$/i,
+        /^paris$/i, /^rome$/i, /^roma$/i, /^berlin$/i, /^london$/i,
+        /^lisbon$/i, /^lisboa$/i, /^tokyo$/i, /^new york$/i, /^barcelona$/i,
+        /get a restaurant recommendation/i,
+      ];
+      const usedVenueNamesInDay = new Set<string>();
+      // Seed with locked dining venue names
+      for (const locked of lockedActivities) {
+        const lCat = (locked.category || '').toLowerCase();
+        if (lCat === 'dining' || lCat === 'restaurant') {
+          const lName = (locked.location?.name || locked.title || '').toLowerCase();
+          if (lName) usedVenueNamesInDay.add(lName);
+        }
+      }
+      // Seed with usedRestaurants passed from orchestrator
+      const paramUsedRestaurantsList: string[] = Array.isArray(paramUsedRestaurants) ? paramUsedRestaurants : [];
+      for (const u of paramUsedRestaurantsList) {
+        if (u) usedVenueNamesInDay.add(u.toLowerCase());
+      }
+
+      for (const activity of normalizedActivities) {
+        const category = ((activity as any).category || '').toLowerCase();
+        if (category !== 'dining' && category !== 'restaurant') continue;
+
+        const title = ((activity as any).title || '').trim();
+        const venueName = ((activity as any).location?.name || (activity as any).venue_name || '').trim();
+        const description = ((activity as any).description || '').trim();
+
+        const isPlaceholderTitle = PLACEHOLDER_TITLE_PATTERNS.some(p => p.test(title));
+        const isPlaceholderVenue = PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venueName));
+        const hasRecommendationCTA = /get a restaurant recommendation/i.test(description);
+
+        if (isPlaceholderTitle || isPlaceholderVenue || hasRecommendationCTA) {
+          console.error(`[generate-day] PLACEHOLDER DETECTED: "${title}" at "${venueName}" — replacing with fallback`);
+
+          const startTimeStr = (activity as any).startTime || '12:00';
+          const hourMatch = startTimeStr.match(/^(\d{1,2})/);
+          const hour24 = hourMatch ? parseInt(hourMatch[1], 10) : 12;
+
+          let mealType: 'breakfast' | 'lunch' | 'dinner';
+          if (hour24 < 11) mealType = 'breakfast';
+          else if (hour24 < 16) mealType = 'lunch';
+          else mealType = 'dinner';
+
+          const fallback = getRandomFallbackRestaurant(destination, mealType, usedVenueNamesInDay);
+          if (fallback) {
+            const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : 'Dinner';
+            (activity as any).title = `${mealLabel} at ${fallback.name}`;
+            (activity as any).name = (activity as any).title;
+            if ((activity as any).location) {
+              (activity as any).location.name = fallback.name;
+              (activity as any).location.address = fallback.address;
+            } else {
+              (activity as any).location = { name: fallback.name, address: fallback.address };
+            }
+            (activity as any).venue_name = fallback.name;
+            if (fallback.description) (activity as any).description = fallback.description;
+            if (fallback.price && (activity as any).cost) {
+              (activity as any).cost.amount = fallback.price;
+            }
+            usedVenueNamesInDay.add(fallback.name.toLowerCase());
+            console.log(`[generate-day] PLACEHOLDER REPLACED → "${(activity as any).title}" at "${fallback.address}"`);
+          }
+        }
+      }
+    }
+
     // Pre-arrival filtering and locked activity merge are now handled by pipeline/repair-day
 
     if (lockedActivities.length > 0) {
