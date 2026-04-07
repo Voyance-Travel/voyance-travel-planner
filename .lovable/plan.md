@@ -1,30 +1,39 @@
 
-Fix regenerate 500 error
 
-Diagnosis
-- The 500 is coming from the backend `generate-itinerary` function, not the browser.
-- Edge logs show the AI call succeeds first (`[ai-call] ✓ Day 1...`) and then the function crashes with `ReferenceError: dayItinerary is not defined`.
-- A `ReferenceError` means code referenced a variable that does not exist in the current scope.
-- Do I know what the issue is? Yes — `handleGenerateDay` is using an undefined variable during post-processing, so every regenerate request fails before a response can be returned.
+## Fix: Missing DialogTitle Accessibility + Double X in AI Insight
 
-What to change
-1. Update `supabase/functions/generate-itinerary/action-generate-day.ts`.
-2. Replace the broken `dayTitle: dayItinerary?.theme` inside the `universalQualityPass(...)` call.
-3. Use the already-available generated day data instead, following the working pattern already used in `action-generate-trip-day.ts`, for example:
-   - `generatedDay?.theme || generatedDay?.title || \`Day ${dayNumber}\``
+### Two issues to fix
 
-Why the retries appear
-- `src/components/itinerary/EditorialItinerary.tsx` automatically retries failed regenerations at 3s, 8s, and 15s.
-- Those warnings are expected retry behavior, but they cannot succeed until the backend crash is fixed.
+**1. `DialogContent requires a DialogTitle` warning**
 
-Verification
-1. Trigger “Regenerate Day” again.
-2. Confirm the function returns 200 instead of 500.
-3. Confirm the retry warnings stop.
-4. Confirm the regenerated day updates in the UI through the existing frontend normalization already added in `src/components/planner/steps/ItineraryPreview.tsx`.
+Several components use `DialogContent` or `SheetContent` without a corresponding `DialogTitle`/`SheetTitle`, triggering the Radix accessibility warning in the console. The fix is to add a visually hidden title for screen readers using Radix's `VisuallyHidden` utility.
 
-Technical details
-- Root cause file: `supabase/functions/generate-itinerary/action-generate-day.ts`
-- Broken line pattern: `dayTitle: dayItinerary?.theme`
-- Reference implementation to mirror: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-- No database, auth, RLS, or secrets changes are needed for this fix.
+Affected components:
+- `src/components/itinerary/ActivityConciergeSheet.tsx` — uses `SheetContent` with a plain `<h3>` instead of `SheetTitle`
+- `src/components/modals/OutOfFreeActionsModal.tsx` — uses `DialogContent` with a plain `<h2>` instead of `DialogTitle`
+- `src/components/trip/TripDebriefModal.tsx` — uses `DialogContent` with no title at all
+
+**Fix for each:**
+- `ActivityConciergeSheet.tsx`: Import `SheetTitle` from sheet.tsx, wrap it with `VisuallyHidden` (from `@radix-ui/react-visually-hidden`) or add `SheetTitle` with `className="sr-only"` inside the `SheetContent`
+- `OutOfFreeActionsModal.tsx`: Import `DialogTitle`, add a visually hidden `<DialogTitle className="sr-only">Free actions exhausted</DialogTitle>` inside `DialogContent`
+- `TripDebriefModal.tsx`: Same pattern — add a hidden `DialogTitle`
+
+**2. Double X close button in AI Insight (ActivityConciergeSheet)**
+
+The `SheetContent` component (from `sheet.tsx` line 60) renders a built-in close X button at `absolute right-4 top-4`. After the previous fix removed the manual X button, there should only be one. However, the built-in X may be visually conflicting with the header layout (overlapping the header content area at top-right). The fix: since the sheet has its own styled header, suppress the default close button by removing it from `SheetContent` for this usage — either by passing a custom prop or by adding `SheetTitle` properly and removing the unused `X` import.
+
+### Files changed
+
+1. **`src/components/itinerary/ActivityConciergeSheet.tsx`**
+   - Import `SheetTitle` from sheet
+   - Add `<SheetTitle className="sr-only">{actTitle} — AI Concierge</SheetTitle>` inside `SheetContent`
+   - Remove unused `X` import from lucide-react
+
+2. **`src/components/modals/OutOfFreeActionsModal.tsx`**
+   - Import `DialogTitle`
+   - Add `<DialogTitle className="sr-only">Free actions exhausted</DialogTitle>` after the `DialogContent` opening tag
+
+3. **`src/components/trip/TripDebriefModal.tsx`**
+   - Import `DialogTitle`
+   - Add `<DialogTitle className="sr-only">Trip Debrief</DialogTitle>` after `DialogContent` opening tag
+
