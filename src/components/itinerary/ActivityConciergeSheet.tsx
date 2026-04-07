@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Sparkles, Send, MapPin, DollarSign } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Sparkles, Send, MapPin, DollarSign, Bookmark } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,13 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useActivityConcierge, type ConciergeMessage, type AlternativeSuggestion } from '@/hooks/useActivityConcierge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+export interface AISavedNote {
+  id: string;
+  content: string;
+  savedAt: string;
+  query?: string;
+}
 
 interface ActivityConciergeSheetProps {
   open: boolean;
