@@ -1,66 +1,156 @@
 
 
-## Extend Cross-Day Dedup to Cover Attractions & Museums
+## Per-Activity AI Concierge Chat
 
-### Current State
+### Summary
+Add a contextual AI chat to every venue-based activity card, allowing users to ask questions, get insider tips, and swap activities — all pre-loaded with full trip and activity context.
 
-The validation and repair layers already handle cross-day attraction dedup — `validateDay` flags "TRIP-WIDE DUPLICATE" for non-dining repeats, and `repairDay` removes them. However, two gaps allow duplicates like "Louvre Museum" (Day 2) / "Louvre Museum Exploration" (Day 4) to slip through:
+### Architecture Overview
 
-1. **Prompt-level prevention is weak for attractions**: `previousActivities` only sends activity titles from the last 3 days. The AI doesn't receive venue/location names separately, so "Louvre Museum" as a title and "Louvre Museum Exploration" look different enough to the AI.
+```text
+┌─────────────────────┐     ┌──────────────────────┐
+│ TripActivityCard    │     │ CustomerDayCard       │
+│  + ✨ concierge btn │     │  + ✨ concierge btn   │
+└────────┬────────────┘     └────────┬─────────────┘
+         │                           │
+         ▼                           ▼
+┌────────────────────────────────────────────────┐
+│ ActivityConciergeSheet (new component)         │
+│  - Header: venue name, time, photo             │
+│  - AI opening message (auto on open)           │
+│  - Quick action chips                          │
+│  - Chat messages (persisted per activity ID)   │
+│  - "Swap to this" buttons on alternatives      │
+│  - Sheet on desktop, bottom sheet on mobile    │
+└────────────────────┬───────────────────────────┘
+                     │ supabase.functions.invoke
+                     ▼
+┌────────────────────────────────────────────────┐
+│ Edge Function: activity-concierge (new)        │
+│  - Receives activity + trip + surrounding ctx  │
+│  - System prompt: local concierge persona      │
+│  - Streaming responses via Lovable AI Gateway  │
+│  - Tool calling for "suggest alternatives"     │
+└────────────────────────────────────────────────┘
+```
 
-2. **Removed duplicates aren't replaced**: When repair strips a duplicate attraction, the day just loses an activity — no replacement is injected. This can leave a gap in the schedule.
+### New Files
 
-### Changes
+#### 1. `src/components/itinerary/ActivityConciergeSheet.tsx`
+The main UI component — a `Sheet` (right side desktop, bottom sheet mobile via `useIsMobile`).
 
-#### 1. Build and pass `usedVenues` list alongside `usedRestaurants` in `action-generate-trip-day.ts` (~line 392)
-
-After building `previousActivities` from titles, also build a `usedVenues` list from `location.name` fields of all non-logistical activities across ALL previous days (not capped to 3 days like titles):
-
+**Props:**
 ```typescript
-const usedVenues: string[] = [];
-for (const day of existingDays) {
-  for (const act of (day?.activities || [])) {
-    const cat = (act.category || '').toUpperCase();
-    if (['STAY', 'TRANSPORT', 'TRAVEL', 'LOGISTICS'].includes(cat)) continue;
-    const locName = (act.location?.name || '').trim();
-    if (locName && locName.length > 3) usedVenues.push(locName);
-  }
+interface ActivityConciergeSheetProps {
+  open: boolean;
+  onClose: () => void;
+  activity: TripActivity | ItineraryActivity;
+  dayDate: string;
+  dayTitle?: string;
+  previousActivity?: string;
+  nextActivity?: string;
+  destination: string;
+  tripType?: string;
+  totalDays?: number;
+  travelers?: number;
+  currency?: string;
+  hotelName?: string;
+  onActivitySwap?: (activityId: string, newActivity: any) => void;
 }
 ```
 
-Pass `usedVenues` to the `compilePrompt` call alongside `usedRestaurants`.
+**Behavior:**
+- On open, auto-sends an opening request (no user input needed) to get proactive insights
+- Shows streaming response token-by-token
+- Renders quick action chips based on category (DINING vs EXPLORE vs STAY etc.)
+- Chat history stored in component state, keyed by activity ID via a `useRef<Map<string, Message[]>>`
+- "Suggest an alternative" responses include structured swap buttons
+- Tapping "Swap to this" calls `onActivitySwap`, shows undo toast
 
-#### 2. Add venue blocklist to prompt in `compile-prompt.ts` (~line 1035)
+**Filtering logic** — hide the concierge button when:
+- Category is `TRANSPORT`, `TRAVEL`, `LOGISTICS`, `TRANSIT`
+- Title contains "Return to Your Hotel", "Freshen Up", "Arrival Flight", "Departure"
 
-After the existing "Avoid repeating these specific venues/activities" block, add a dedicated venue blocklist:
+#### 2. `supabase/functions/activity-concierge/index.ts`
+New edge function with streaming SSE support.
 
+**Input:** `{ messages, activityContext, tripContext, surroundingContext }`
+
+**System prompt** includes all the context (venue, time, day of week, trip type, budget, previous/next activity). Instructs the AI to be a knowledgeable local concierge. Uses `google/gemini-3-flash-preview` via Lovable AI Gateway.
+
+**Tool calling** for structured alternative suggestions:
+```typescript
+tools: [{
+  type: "function",
+  function: {
+    name: "suggest_alternatives",
+    description: "Suggest 2-3 real alternative venues",
+    parameters: {
+      type: "object",
+      properties: {
+        alternatives: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              address: { type: "string" },
+              price_per_person: { type: "number" },
+              reason: { type: "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}]
 ```
-VENUE DEDUP — DO NOT REVISIT THESE LOCATIONS:
-The following venues/locations have already been scheduled on previous days. 
-Do NOT include any of them again, even under a different activity title:
-${usedVenues.join(', ')}
 
-This applies to ALL activity types — museums, landmarks, parks, attractions, and restaurants.
-If you need a museum, choose a DIFFERENT museum. If you need a landmark, choose a DIFFERENT one.
-```
+Streams text responses; returns structured JSON for alternatives.
 
-This is separate from the restaurant blocklist and covers ALL venue types.
+#### 3. `src/hooks/useActivityConcierge.ts`
+Custom hook managing:
+- Per-activity chat history (Map keyed by activity ID)
+- Streaming fetch to the edge function
+- Opening message generation on first open
+- Message state management
+- History reset when activity ID changes (swap scenario)
 
-#### 3. Add `usedVenues` param to `CompilePromptParams` type
+### Modified Files
 
-Add `usedVenues?: string[]` to the params interface so it flows through cleanly.
+#### 4. `src/components/planner/TripActivityCard.tsx`
+- Add `onOpenConcierge?: (activity: TripActivity) => void` prop
+- Add a sparkle (✨) icon button in the actions area (near lock toggle), filtered by category
+- The parent controls the sheet open state
 
-### Files to edit
+#### 5. `src/components/planner/CustomerDayCard.tsx`
+- Add sparkle button to each activity row (in the hover actions area, next to Search and Lock buttons)
+- Manage `ActivityConciergeSheet` open state
+- Pass surrounding activity context (previous/next titles) from the day's activity array
 
-| File | Change |
-|------|--------|
-| `action-generate-trip-day.ts` | Build `usedVenues` from all previous days' `location.name` fields; pass to `compilePrompt` |
-| `pipeline/compile-prompt.ts` | Add `usedVenues` param; inject venue blocklist into prompt after the activity avoid list |
+#### 6. `src/components/planner/DayTimeline.tsx`
+- Pass concierge-related props through to `TripActivityCard`
 
-### What we're NOT changing
+### Quick Action Chips by Category
 
-- The validation layer (already catches dupes correctly)
-- The repair layer (already removes non-dining dupes)
-- Restaurant dedup (untouched, this extends it)
-- Hotel/transport/logistics activities (excluded from venue tracking)
+| Category | Chips |
+|----------|-------|
+| DINING | "What should I order?" · "Do I need a reservation?" · "What's the dress code?" · "Suggest an alternative" |
+| EXPLORE/CULTURE | "What should I not miss?" · "How do I skip the line?" · "What's nearby after?" · "Suggest an alternative" |
+| STAY | "Any insider tips?" · "What's near the hotel?" · "Best room to request?" · "Suggest an alternative" |
+| ACTIVITY/WELLNESS | "What should I order?" · "What's the vibe like?" · "Do I need a reservation?" · "Suggest an alternative" |
+
+### Swap Flow
+1. User taps "Suggest an alternative" chip or types it
+2. AI returns structured alternatives via tool calling
+3. Each alternative renders with a "Swap to this" button
+4. Tapping calls `onActivitySwap(activityId, newActivityData)`
+5. Sonner toast with "Undo" action appears for 10 seconds
+6. Chat history for that activity ID resets (new venue = new conversation)
+
+### What We're NOT Changing
+- Global Voyance chat (bottom-right bubble) — untouched
+- Existing "Why this?" / ExplainableActivity — stays as-is
+- ActivityAlternativesDrawer — remains for the Search button flow
+- No database tables needed — chat is session-only per the requirement
 
