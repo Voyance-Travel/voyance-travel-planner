@@ -271,7 +271,7 @@ export default function ActivityConciergeSheet({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent
+      <SheetContent aria-describedby={undefined}
         side={sheetSide}
         className={cn(
           'flex flex-col p-0 gap-0',

@@ -42,7 +42,8 @@ export function OutOfFreeActionsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden" aria-describedby={undefined}>
+        <DialogTitle className="sr-only">Free actions exhausted</DialogTitle>
         {/* Header */}
         <div className="bg-gold/10 px-6 pt-6 pb-4 text-center">
           <motion.div

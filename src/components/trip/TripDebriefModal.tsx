@@ -537,7 +537,8 @@ export function TripDebriefModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogTitle className="sr-only">Trip Debrief</DialogTitle>
         {/* Progress bar */}
         <div className="flex gap-1 mb-4">
           {STEPS.map((step, idx) => (
