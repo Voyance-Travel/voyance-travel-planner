@@ -10385,6 +10385,20 @@ function ActivityRow({
             </p>
           </div>
         )}
+
+        {/* AI Concierge button */}
+        {showConcierge && (
+          <div className="mt-3 flex items-center">
+            <button
+              onClick={() => onOpenConcierge!(activity, dayIndex, activityIndex)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+              aria-label="AI Concierge"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              AI Concierge
+            </button>
+          </div>
+        )}
       </div>
     );
   }
