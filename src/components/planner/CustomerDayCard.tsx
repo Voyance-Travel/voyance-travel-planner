@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { 
   Clock, MapPin, ChevronDown, ChevronUp, RefreshCw, 
-  Search, Lock, LockOpen, Undo2
+  Search, Lock, LockOpen, Undo2, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import ActivityAlternativesDrawer from './ActivityAlternativesDrawer';
 import { useVersionHistory } from '@/hooks/useVersionHistory';
+import ActivityConciergeSheet from '@/components/itinerary/ActivityConciergeSheet';
 
 interface CustomerDayCardProps {
   day: DayItinerary;
@@ -32,6 +33,10 @@ interface CustomerDayCardProps {
   onActivitySwap?: (activityId: string, newActivity: ItineraryActivity) => void;
   onDayRestore?: (dayNumber: number, activities: ItineraryActivity[], metadata?: { title?: string; theme?: string }) => void;
   destination?: string;
+  tripType?: string;
+  totalDays?: number;
+  travelers?: number;
+  currency?: string;
 }
 
 const activityTypeStyles: Record<string, { bg: string; text: string; border: string }> = {
@@ -55,10 +60,15 @@ export default function CustomerDayCard({
   onActivitySwap,
   onDayRestore,
   destination,
+  tripType,
+  totalDays,
+  travelers,
+  currency,
 }: CustomerDayCardProps) {
   const [isExpanded, setIsExpanded] = useState(dayIndex < 2);
   const [selectedActivityForSwap, setSelectedActivityForSwap] = useState<ItineraryActivity | null>(null);
   const [hoveredActivity, setHoveredActivity] = useState<string | null>(null);
+  const [conciergeActivity, setConciergeActivity] = useState<ItineraryActivity | null>(null);
 
   // Version history for undo
   const { canUndoDay, isUndoing, handleUndo } = useVersionHistory({
@@ -234,6 +244,22 @@ export default function CustomerDayCard({
                                   "flex items-center gap-1 transition-opacity",
                                   isHovered ? "opacity-100" : "opacity-0 sm:opacity-0"
                               )}>
+                                {(() => {
+                                  const cat = (activity.type || '').toUpperCase();
+                                  const hideAI = ['TRANSPORTATION', 'TRANSPORT', 'TRAVEL', 'LOGISTICS', 'TRANSIT'].includes(cat) ||
+                                    /Return to Your Hotel|Freshen Up|Arrival Flight|Departure/i.test(activity.title);
+                                  return !hideAI ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={() => setConciergeActivity(activity)}
+                                      title="Ask AI concierge"
+                                    >
+                                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                                    </Button>
+                                  ) : null;
+                                })()}
                                 {onActivitySwap && (
                                   <Button
                                     variant="ghost"
@@ -323,6 +349,37 @@ export default function CustomerDayCard({
         destination={destination}
         onSelectAlternative={handleSwapActivity}
       />
+
+      {/* AI Concierge Sheet */}
+      {conciergeActivity && (
+        <ActivityConciergeSheet
+          open={!!conciergeActivity}
+          onClose={() => setConciergeActivity(null)}
+          activity={conciergeActivity}
+          dayDate={day.date}
+          dayTitle={day.theme}
+          previousActivity={
+            (() => {
+              const idx = day.activities.findIndex(a => a.id === conciergeActivity.id);
+              return idx > 0 ? day.activities[idx - 1].title : undefined;
+            })()
+          }
+          nextActivity={
+            (() => {
+              const idx = day.activities.findIndex(a => a.id === conciergeActivity.id);
+              return idx < day.activities.length - 1 ? day.activities[idx + 1].title : undefined;
+            })()
+          }
+          destination={destination || ''}
+          tripType={tripType}
+          totalDays={totalDays}
+          travelers={travelers}
+          currency={currency}
+          onActivitySwap={onActivitySwap ? (activityId, newData) => {
+            onActivitySwap(activityId, newData as unknown as ItineraryActivity);
+          } : undefined}
+        />
+      )}
     </>
   );
 }

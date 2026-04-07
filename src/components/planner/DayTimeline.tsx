@@ -20,6 +20,7 @@ interface DayTimelineProps {
     icon: string;
   };
   onToggleLock?: (activityId: string, locked: boolean) => void;
+  onOpenConcierge?: (activity: TripActivity) => void;
 }
 
 const DayTimeline: React.FC<DayTimelineProps> = ({
@@ -31,7 +32,8 @@ const DayTimeline: React.FC<DayTimelineProps> = ({
   onRegenerateDay,
   isRegenerating = false,
   weather,
-  onToggleLock
+  onToggleLock,
+  onOpenConcierge,
 }) => {
   const container = {
     hidden: { opacity: 0 },
@@ -127,6 +129,7 @@ const DayTimeline: React.FC<DayTimelineProps> = ({
                 activity={activity}
                 currency={currency}
                 onToggleLock={onToggleLock}
+                onOpenConcierge={onOpenConcierge}
               />
             </motion.div>
           ))
