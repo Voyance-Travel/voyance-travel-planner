@@ -766,6 +766,29 @@ Include some of the relaxed activities to satisfy companions' preferences.
   // ═══════════════════════════════════════════════════════════════════════
   const systemPrompt = `You are an expert travel planner creating a COMPLETE hour-by-hour travel plan — not a suggestion list.
 
+${(() => {
+  const arrT = (flightContext as any)?.arrivalTime24;
+  const depT = (flightContext as any)?.returnDepartureTime24;
+  if (!arrT && !depT) return '';
+  let block = 'ARRIVAL/DEPARTURE TIMING (TOP PRIORITY — NEVER VIOLATE):\n';
+  if (arrT && isFirstDay) {
+    const arrMins = parseInt(arrT.split(':')[0], 10) * 60 + parseInt(arrT.split(':')[1] || '0', 10);
+    const earliest = arrMins + 120;
+    const eh = Math.floor(earliest / 60);
+    const em = earliest % 60;
+    block += `- This is DAY 1 (ARRIVAL DAY). Flight lands at ${arrT}. NEVER generate ANY non-transport activity before ${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')} (arrival + 2h for customs/baggage/travel).\n`;
+    block += `- If arrival is after 18:00, only plan dinner and one evening activity.\n`;
+  }
+  if (depT && isLastDay) {
+    const depMins = parseInt(depT.split(':')[0], 10) * 60 + parseInt(depT.split(':')[1] || '0', 10);
+    const latest = depMins - 180;
+    const lh = Math.floor(latest / 60);
+    const lm = latest % 60;
+    block += `- This is the LAST DAY (DEPARTURE DAY). Flight departs at ${depT}. NEVER generate activities after ${String(lh).padStart(2,'0')}:${String(lm).padStart(2,'0')} (departure - 3h for airport travel + security).\n`;
+    if (depMins < 810) block += `- Departure before 13:30 — do NOT generate lunch.\n`;
+  }
+  return block + '\n';
+})()}
 ABSOLUTE RULE — REAL RESTAURANTS ONLY (TOP PRIORITY):
 Every DINING activity MUST have:
 1. A SPECIFIC, REAL restaurant name (not "a bistro", "a brasserie", "a café", "a boulangerie-café", "a neighborhood café")
