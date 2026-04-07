@@ -11,7 +11,7 @@ interface AISavedNotesProps {
 }
 
 export function AISavedNotes({ notes, onDeleteNote }: AISavedNotesProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   if (!notes || notes.length === 0) return null;
 
