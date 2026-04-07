@@ -84,21 +84,13 @@ export function ExplainableActivity({
             className="overflow-hidden"
           >
             <div className="p-3 bg-muted/50 rounded-lg border border-border/50">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {isLoading ? (
-                    <span className="animate-pulse">Generating personalized explanation...</span>
-                  ) : (
-                    explanation
-                  )}
-                </p>
-                <button
-                  onClick={() => setIsVisible(false)}
-                  className="text-muted-foreground hover:text-foreground p-0.5"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {isLoading ? (
+                  <span className="animate-pulse">Generating personalized explanation...</span>
+                ) : (
+                  explanation
+                )}
+              </p>
             </div>
           </motion.div>
         )}
