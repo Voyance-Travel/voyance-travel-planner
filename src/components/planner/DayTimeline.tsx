@@ -20,6 +20,7 @@ interface DayTimelineProps {
     icon: string;
   };
   onToggleLock?: (activityId: string, locked: boolean) => void;
+  onOpenConcierge?: (activity: TripActivity) => void;
 }
 
 const DayTimeline: React.FC<DayTimelineProps> = ({
