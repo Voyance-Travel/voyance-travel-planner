@@ -36,6 +36,7 @@ import {
   enforceMichelinPriceFloor,
   enforceBarNightcapPriceCap,
   enforceCasualVenuePriceCap,
+  enforceVenueTypePriceCap,
 } from './sanitization.ts';
 import {
   EXCHANGE_RATES_TO_USD,
