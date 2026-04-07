@@ -211,10 +211,26 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
 
   // Extract flight times so meal policy respects actual departure/arrival
   const flightSel = trip?.flight_selection as Record<string, any> | null;
-  const savedArrivalTime24: string | undefined =
+  let savedArrivalTime24: string | undefined =
     flightSel?.arrivalTime24 || flightSel?.arrivalTime || flightSel?.outbound?.arrivalTime || undefined;
-  const savedDepartureTime24: string | undefined =
+  let savedDepartureTime24: string | undefined =
     flightSel?.returnDepartureTime24 || flightSel?.returnDepartureTime || flightSel?.return?.departureTime || undefined;
+
+  // FALLBACK: If arrival time is missing from flight_selection, extract from repair-injected flight card on Day 1
+  if (!savedArrivalTime24 && itineraryDays.length > 0) {
+    const day1 = itineraryDays[0];
+    const repairFlight = (day1?.activities || []).find((a: any) =>
+      a.source === 'repair-arrival-flight' || a.source === 'injected-arrival-flight' ||
+      ((a.category || '').toLowerCase() === 'flight' && (a.title || '').toLowerCase().includes('arrival'))
+    );
+    if (repairFlight) {
+      const endTime = repairFlight.endTime || repairFlight.end_time;
+      if (endTime) {
+        savedArrivalTime24 = endTime;
+        console.log(`[save-itinerary] ✈️ Extracted arrival time ${endTime} from repair-injected flight card`);
+      }
+    }
+  }
 
   if (totalDays > 0) {
     for (let i = 0; i < itineraryDays.length; i++) {
