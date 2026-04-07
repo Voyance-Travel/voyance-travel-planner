@@ -352,7 +352,7 @@ export async function handleGenerateDay(
         usedVenueNames: new Set<string>(),
         arrivalTime: isFirstDay ? _arrivalTime24 : undefined,
         departureTime: isLastDay ? _departureTime24 : undefined,
-        dayTitle: dayItinerary?.theme,
+        dayTitle: generatedDay?.theme || generatedDay?.title || `Day ${dayNumber}`,
         budgetTier: budgetTier || 'moderate',
         apiKey: LOVABLE_API_KEY,
         lockedActivities: lockedActivities,
