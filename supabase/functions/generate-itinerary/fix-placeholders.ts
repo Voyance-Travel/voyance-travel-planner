@@ -319,9 +319,6 @@ export async function generateFallbackRestaurant(
   }
 
   const locationStr = country ? `${city}, ${country}` : city;
-  const priceRange = prices[mealType] || prices.lunch;
-  const styleDesc = styleDescriptions[effectiveTripType] || styleDescriptions.Explorer;
-  const locationStr = country ? `${city}, ${country}` : city;
 
   const avoidStr = diningConfig?.avoidPatterns?.length ? `\n- AVOID these dining types: ${diningConfig.avoidPatterns.join(', ')}` : '';
   const michelinHint = diningConfig?.michelinPolicy === 'required' && mealType === 'dinner'
