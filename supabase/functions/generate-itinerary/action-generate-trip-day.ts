@@ -929,7 +929,7 @@ async function _handleGenerateTripDayInner(
 
   // POST-GENERATION: Enforce cross-day restaurant uniqueness
   if (dayResult?.activities?.length > 0) {
-    const { extractRestaurantVenueName, venueMatchesAny } = await import('./generation-utils.ts');
+    const { extractRestaurantVenueName, venueMatchesAny, normalizeVenueName } = await import('./generation-utils.ts');
     const usedNorm = new Set(usedRestaurants.map(n => extractRestaurantVenueName(n)));
     const MEAL_RE = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
 
@@ -980,6 +980,45 @@ async function _handleGenerateTripDayInner(
       }
     }
     // Filter out nulled (removed) activities
+    dayResult.activities = dayResult.activities.filter((a: any) => a !== null);
+  }
+
+  // POST-GENERATION: Enforce cross-day NON-DINING venue uniqueness (parks, museums, landmarks)
+  if (dayResult?.activities?.length > 0 && usedVenues.length > 0) {
+    const { normalizeVenueName, venueNamesMatch } = await import('./generation-utils.ts');
+    const SKIP_CATS = new Set(['stay', 'transport', 'travel', 'logistics', 'flight', 'accommodation', 'dining']);
+    const usedVenueNorms = new Set(usedVenues.map(v => normalizeVenueName(v)));
+
+    for (let i = 0; i < dayResult.activities.length; i++) {
+      const act = dayResult.activities[i];
+      const cat = (act.category || '').toLowerCase();
+      if (SKIP_CATS.has(cat)) continue; // dining handled above, transport/stay irrelevant
+
+      // Collect all venue identifiers for this activity
+      const candidates = [
+        act.location?.name || '',
+        act.venue_name || '',
+        act.title || '',
+      ].map(s => s.trim()).filter(s => s.length > 3 && !/your hotel/i.test(s));
+
+      let matched = false;
+      for (const raw of candidates) {
+        const norm = normalizeVenueName(raw);
+        if (!norm) continue;
+        for (const used of usedVenueNorms) {
+          if (venueNamesMatch(norm, used)) {
+            matched = true;
+            break;
+          }
+        }
+        if (matched) break;
+      }
+
+      if (matched) {
+        console.warn(`[generate-trip-day] 🚫 ACTIVITY DEDUP: "${act.title}" at "${act.venue_name || act.location?.name || ''}" repeats from previous day — REMOVING`);
+        dayResult.activities[i] = null;
+      }
+    }
     dayResult.activities = dayResult.activities.filter((a: any) => a !== null);
   }
 

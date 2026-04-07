@@ -2889,10 +2889,20 @@ function repairBookends(
       return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
     });
 
-    // Check if ANY "Return to Hotel" / "Freshen Up" accommodation card already exists
-    // ANYWHERE in the activities (not just at the end). The AI may have generated one
-    // that sorted to a different position due to time-format issues.
-    const hasExistingReturn = activities.some((a: any) => {
+    // Check if an end-of-day "Return to Hotel" accommodation card exists.
+    // IMPORTANT: Only count returns that appear AFTER the last real (non-transport,
+    // non-accommodation) activity. A mid-day "Freshen Up" does NOT satisfy the
+    // end-of-day hotel return requirement.
+    let lastRealActivityIdx = -1;
+    for (let ri = activities.length - 1; ri >= 0; ri--) {
+      const act = activities[ri];
+      if (!isAccom(act) && !isTransport(act)) {
+        lastRealActivityIdx = ri;
+        break;
+      }
+    }
+    const hasExistingReturn = activities.some((a: any, idx: number) => {
+      if (idx <= lastRealActivityIdx) return false; // mid-day accommodation doesn't count
       if (!isAccom(a)) return false;
       const t = (a.title || '').toLowerCase();
       return (t.includes('return to') || t.includes('freshen up') || t.includes('freshen-up'))
