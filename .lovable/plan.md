@@ -1,18 +1,35 @@
 
 
-## Fix: Make AI Saved Notes Visible on Activity Cards
+## Fix: Day Regeneration Not Updating the UI
 
 ### Problem
-AI Notes are saving correctly and persisting to the database, but they're hidden behind a **collapsed accordion** that defaults to closed. The small "✨ AI Notes (1)" toggle blends into the card and is easy to miss — especially right after saving, when the user expects to see the note immediately.
+When you click "Regenerate Day", the edge function runs successfully and returns fresh data, but the UI shows the exact same content. This happens because the backend response uses **different field names** than the frontend expects:
+
+| Backend field | Frontend field |
+|---|---|
+| `startTime` | `time` |
+| `name` | `title` |
+| `category` | `type` |
+| `estimatedCost.amount` | `cost` |
+
+The current code does `{ ...d, ...data.day, activities: data.day.activities }`, which overlays backend-shaped objects onto frontend-shaped state. Since the field names don't match, the old values (from the previous render) stay in place and nothing visually changes.
 
 ### Fix
 
-**File: `src/components/itinerary/AISavedNotes.tsx`**
+**File: `src/components/planner/steps/ItineraryPreview.tsx`**
 
-1. Change the default state from collapsed to **expanded** — `useState(true)` instead of `useState(false)`. Users who just saved a note should see it immediately on the card without hunting for it. They can still collapse it if they want.
+1. Import `convertBackendDay` from `@/types/itinerary`
+2. In `handleRegenerateDay`, convert `data.day` through `convertBackendDay` before setting it into `localDays`:
 
-That's a one-line change: line 14, `useState(false)` → `useState(true)`.
+```ts
+const converted = convertBackendDay(data.day);
+setLocalDays(prev => prev.map(d =>
+  d.dayNumber === dayNumber ? converted : d
+));
+```
+
+This ensures the regenerated day goes through the same normalization pipeline that the initial load uses, mapping backend fields to frontend fields correctly.
 
 ### Files Changed
-1. `src/components/itinerary/AISavedNotes.tsx` — default accordion to open
+1. `src/components/planner/steps/ItineraryPreview.tsx` — import `convertBackendDay`, apply it to regenerated day response
 
