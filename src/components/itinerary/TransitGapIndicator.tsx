@@ -392,7 +392,7 @@ export function TransitGapIndicator({
       {/* Tappable transit row — styled like TransitModePicker */}
       <div
         className={cn(
-          "flex items-center gap-2 px-4 py-2",
+          "flex items-center gap-2 px-3 sm:px-4 py-2",
           canExpand && "cursor-pointer hover:bg-secondary/20 transition-colors",
         )}
         onClick={handleExpand}

@@ -313,7 +313,7 @@ export function TransitModePicker({
       {/* Tappable transit row */}
       <div
         className={cn(
-          "flex items-center gap-2 px-4 py-2 group/activity",
+          "flex items-center gap-2 px-3 sm:px-4 py-2 group/activity",
           !isLast && !isExpanded && "border-b border-border/30",
           isEditable && "cursor-pointer hover:bg-secondary/20 transition-colors",
         )}
