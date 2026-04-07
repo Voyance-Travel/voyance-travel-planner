@@ -55,6 +55,8 @@ interface ActivityConciergeSheetProps {
   currency?: string;
   hotelName?: string;
   onActivitySwap?: (activityId: string, newActivity: Record<string, unknown>) => void;
+  onSaveNote?: (activityId: string, note: AISavedNote) => void;
+  savedNoteContents?: Set<string>;
 }
 
 const CHIPS_BY_CATEGORY: Record<string, string[]> = {
