@@ -3,7 +3,7 @@
  * Offers: continue with credits (if affordable) or get more credits.
  */
 
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { Zap, Coins, ArrowRight } from 'lucide-react';
