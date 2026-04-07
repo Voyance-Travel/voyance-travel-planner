@@ -10604,7 +10604,7 @@ function ActivityRow({
           {activity.aiNotes && activity.aiNotes.length > 0 && !isDowntime && !isTransport && (
             <AISavedNotes
               notes={activity.aiNotes}
-              onDeleteNote={effectiveIsEditable ? (noteId) => handleDeleteAINote(activity.id, noteId) : undefined}
+              onDeleteNote={isEditable && onDeleteAINote ? (noteId) => onDeleteAINote(activity.id, noteId) : undefined}
             />
           )}
           {/* Mobile action buttons */}
