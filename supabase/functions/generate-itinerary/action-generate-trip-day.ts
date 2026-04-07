@@ -950,15 +950,7 @@ async function _handleGenerateTripDayInner(
       console.warn('[generate-trip-day] Pipeline validate/repair failed (non-blocking):', pipelineErr);
     }
 
-    // ARRIVAL-DAY SAFETY NET: strip activities before arrival + 2h buffer
-    if (isFirstDay && arrTime24 && dayResult?.activities?.length > 0) {
-      dayResult.activities = enforceArrivalTiming(dayResult.activities, arrTime24);
-    }
-
-    // DEPARTURE-DAY SAFETY NET: strip activities after departure - 3h buffer
-    if (isLastDay && depTime24 && dayResult?.activities?.length > 0) {
-      dayResult.activities = enforceDepartureTiming(dayResult.activities, depTime24);
-    }
+    // ARRIVAL/DEPARTURE timing now handled by universalQualityPass below
   }
 
   // POST-GENERATION: Enforce cross-day restaurant uniqueness
