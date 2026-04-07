@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Sparkles, Send, MapPin, DollarSign, Bookmark } from 'lucide-react';
+import { Sparkles, Send, MapPin, DollarSign, Bookmark } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -271,13 +271,14 @@ export default function ActivityConciergeSheet({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent
+      <SheetContent aria-describedby={undefined}
         side={sheetSide}
         className={cn(
           'flex flex-col p-0 gap-0',
           isMobile ? 'h-[85vh] rounded-t-2xl' : 'w-[420px] sm:max-w-[420px]'
         )}
       >
+        <SheetTitle className="sr-only">{actTitle} — AI Concierge</SheetTitle>
         {/* Header */}
         <div className="flex items-start gap-3 p-4 border-b border-border bg-muted/30">
           {imageUrl && (
