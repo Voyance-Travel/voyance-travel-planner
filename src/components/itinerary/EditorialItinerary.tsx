@@ -2410,6 +2410,39 @@ export function EditorialItinerary({
     setConciergeOpen(true);
   }, [days]);
 
+  // AI Note save/delete handlers
+  const handleSaveAINote = useCallback((activityId: string, note: AISavedNote) => {
+    setDays(prev => prev.map(day => ({
+      ...day,
+      activities: day.activities.map(act => {
+        if (act.id !== activityId) return act;
+        const existing = act.aiNotes || [];
+        // Dedup by content
+        if (existing.some(n => n.content === note.content)) return act;
+        return { ...act, aiNotes: [...existing, note] };
+      }),
+    })));
+    setHasChanges(true);
+  }, []);
+
+  const handleDeleteAINote = useCallback((activityId: string, noteId: string) => {
+    setDays(prev => prev.map(day => ({
+      ...day,
+      activities: day.activities.map(act => {
+        if (act.id !== activityId) return act;
+        return { ...act, aiNotes: (act.aiNotes || []).filter(n => n.id !== noteId) };
+      }),
+    })));
+    setHasChanges(true);
+  }, []);
+
+  // Build saved note content set for current concierge activity
+  const conciergeSavedNoteContents = useMemo(() => {
+    if (!conciergeActivity) return new Set<string>();
+    const notes = conciergeActivity.aiNotes || [];
+    return new Set(notes.map(n => n.content));
+  }, [conciergeActivity]);
+
   const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
   const [reviewsTarget, setReviewsTarget] = useState<{ 
     placeName: string; 
