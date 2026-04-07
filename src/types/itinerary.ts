@@ -53,6 +53,7 @@ export interface ItineraryActivity {
   tips?: string;
   walkingDistance?: number;
   walkingTime?: number;
+  aiNotes?: Array<{ id: string; content: string; savedAt: string; query?: string }>;
 }
 
 // Backend activity type (from itineraryAPI.ts)
@@ -87,6 +88,7 @@ export interface BackendActivity {
   };
   savedByUser?: boolean;
   savedByCount?: number;
+  aiNotes?: Array<{ id: string; content: string; savedAt: string; query?: string }>;
 }
 
 export interface DayWeather {
@@ -279,6 +281,7 @@ export function convertBackendActivity(activity: BackendActivity): ItineraryActi
     tips: activity.tips,
     walkingDistance: activity.walkingDistance,
     walkingTime: activity.walkingTime,
+    aiNotes: activity.aiNotes,
   };
 }
 
