@@ -673,6 +673,22 @@ const KNOWN_CASUAL_VENUES: Record<string, number> = {
   'angelina': 50,
   'carette': 40,
   'stohrer': 30,
+
+  // Montmartre casual restaurants
+  'le moulin de la galette': 50,
+  'le consulat': 40,
+  'la maison rose': 45,
+
+  // Other commonly overpriced Paris venues
+  'le petit journal': 50,
+  'bouillon chartier': 30,
+  'bouillon pigalle': 30,
+  'bouillon julien': 35,
+  "le relais de l'entrecôte": 55,
+  "le relais de l'entrecote": 55,
+  'pink mamma': 40,
+  'breizh café': 35,
+  'breizh cafe': 35,
 };
 
 /**
