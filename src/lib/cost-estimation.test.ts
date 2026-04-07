@@ -129,4 +129,103 @@ describe('isLikelyFreePublicVenue', () => {
       category: 'accommodation',
     })).toBe(true);
   });
-});
+
+  // ─── New universal patterns ───
+  it('detects monument', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Visit the War Monument',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects fountain/fontaine', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Fontaine des Innocents',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects memorial', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Holocaust Memorial',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects mosque', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Visit the Blue Mosque',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects temple', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Sensō-ji Temple',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects market (free entry)', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Explore Borough Market',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects souk', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Souk el-Attarine',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects corniche/seafront', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Walk along the Corniche',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  it('detects overlook/belvedere', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Scenic Belvedere viewpoint',
+      category: 'explore',
+    })).toBe(true);
+  });
+
+  // ─── New paid overrides ───
+  it('excludes spa at park', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Spa Treatment at the Park Hotel',
+      category: 'wellness',
+    })).toBe(false);
+  });
+
+  it('excludes cable car', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Cable Car ride over the park',
+      category: 'activity',
+    })).toBe(false);
+  });
+
+  it('excludes cooking class at market', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Cooking Class at the Market',
+      category: 'experience',
+    })).toBe(false);
+  });
+
+  it('excludes gondola ride', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Gondola Ride on the Canal',
+      category: 'activity',
+    })).toBe(false);
+  });
+
+  it('excludes exhibition', () => {
+    expect(isLikelyFreePublicVenue({
+      title: 'Exhibition at the Square Gallery',
+      category: 'culture',
+    })).toBe(false);
+  });
