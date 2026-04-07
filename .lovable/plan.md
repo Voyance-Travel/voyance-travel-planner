@@ -1,59 +1,36 @@
 
 
-## Michelin Inclusion for Luminary Trips + Café/Market Pricing Fix
+## Activity Dedup Across Days + End-of-Day Hotel Return Fix
 
-### What's Already in Place
-- `enforceMichelinPriceFloor` in `sanitization.ts` correctly raises underpriced Michelin restaurants
-- `enforceCasualVenuePriceCap` exists but only covers street food (Trapizzino, Bao, etc.) — no cafés, markets, or bookshops
-- `compile-prompt.ts` has Michelin inclusion rules (~line 872) but they apply to ALL trip types, not just Luminary
-- `action-generate-trip-day.ts` has a diagnostic Michelin log (~line 1684) but takes no corrective action
+### Root Cause Analysis
+
+**Problem A (Cross-day venue repeats):** The cross-day dedup logic at `action-generate-trip-day.ts` line 918 ONLY checks dining activities (`isDining` gate). Non-dining activities like parks, museums, and landmarks are completely ignored. The `usedVenues` list IS passed to the AI prompt correctly (compile-prompt.ts line 1144), but the AI sometimes ignores it. There is no post-generation enforcement for non-dining repeats.
+
+**Problem B (Missing hotel return):** The `repairBookends` function in `repair-day.ts` (line 2884-2920) already injects "Return to Hotel" on non-departure days. However, it checks for `hasExistingReturn` by looking for ANY accommodation card with "return to" or "freshen up" ANYWHERE in activities. If the AI generated a mid-day "Freshen Up" card, it counts as `hasExistingReturn = true`, and the end-of-day return is skipped. The logic needs to check specifically for a LATE accommodation card, not any accommodation card.
 
 ### Changes
 
-#### 1. `sanitization.ts` — Expand `KNOWN_CASUAL_VENUES` + add venue-type pattern matcher
+#### 1. `action-generate-trip-day.ts` — Expand cross-day dedup to ALL activity types
 
-Expand the `KNOWN_CASUAL_VENUES` map to include the specific overpriced venues from the bug report plus common categories:
-- Shakespeare and Company Café → max €25
-- Marché des Enfants Rouges → max €20
-- Café de Flore, Les Deux Magots → max €45
-- Ladurée, Angelina → max €50
-- Borough Market, Mercato Centrale, Markthalle Neun → max €20
+At line ~918, after the existing dining-only dedup block, add a new block that checks ALL non-dining, non-transport activities against `usedVenues` using fuzzy normalized matching. When a duplicate is found, mark it for removal. Also expand the `usedVenues` collection (line 409-422) to include `venue_name`, `title`-extracted names, and `location.name` for broader coverage.
 
-Add a new exported function `enforceVenueTypePriceCap()` that checks regex patterns for venue *types* (markets, bakeries, bookshop cafés, street food) and caps them even when the specific venue name isn't in the map. This catches future cases the explicit map misses.
+#### 2. `pipeline/repair-day.ts` — Fix end-of-day hotel return logic
 
-#### 2. `compile-prompt.ts` — Make Michelin inclusion rules trip-type-aware
+At line 2895, change `hasExistingReturn` to only count accommodation cards that appear AFTER the last non-accommodation, non-transport activity — i.e., check if the day actually ENDS with a hotel return, not just that one exists somewhere mid-day. Specifically: find the last non-transport, non-accommodation activity index, then check if any "return to" / accommodation card exists after that index.
 
-Replace the current generic Michelin inclusion block (~line 872) with trip-type-conditional rules:
-- **Luminary**: "MUST include" language with specific minimums (1 for 3-4 days, 2 for 5-6 days, 3 for 7+). Include the known Michelin restaurant list by city so the AI has concrete options.
-- **Explorer**: "Optional but encouraged" — keep current language
-- **Budget/Backpacker**: "Do NOT include Michelin-starred restaurants"
+#### 3. `action-generate-trip-day.ts` — Also collect venue names from newly generated day
 
-The `tripType` variable is already in scope.
-
-#### 3. `action-generate-trip-day.ts` — Upgrade Michelin diagnostic to enforcement
-
-At ~line 1684, replace the console.warn-only diagnostic with actual Michelin injection logic for Luminary trips:
-- Count Michelin restaurants across all generated days using a `KNOWN_MICHELIN_SET`
-- If count is below the required minimum, find dinner slots without Michelin restaurants and swap in a fallback from a `MICHELIN_FALLBACK_BY_CITY` map
-- Only inject on days that don't already have a Michelin dinner
-- Log each injection with `console.warn("MICHELIN INJECTION: ...")`
-
-#### 4. `sanitization.ts` — Call new `enforceVenueTypePriceCap` from existing callers
-
-Wire the new function into the same call sites where `enforceCasualVenuePriceCap` is already called (in `action-generate-day.ts` and `action-generate-trip-day.ts` final pricing loops).
+After the day is saved, append the current day's venue names to `usedVenues` for the next iteration. This is already partially done for restaurants but not for general venues. Ensure the venue names from `venue_name`, `location.name`, and title-extracted names all get added.
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `sanitization.ts` | Expand `KNOWN_CASUAL_VENUES`, add `enforceVenueTypePriceCap()` |
-| `pipeline/compile-prompt.ts` | Make Michelin rules conditional on `tripType` |
-| `action-generate-trip-day.ts` | Upgrade Michelin diagnostic to injection for Luminary trips |
-| `action-generate-day.ts` | Wire `enforceVenueTypePriceCap` into final pricing loop |
+| `action-generate-trip-day.ts` | Expand `usedVenues` collection to include `venue_name` + title; add non-dining cross-day dedup block after line 972 |
+| `pipeline/repair-day.ts` | Fix `hasExistingReturn` check to only consider end-of-day position, not mid-day freshen-ups |
 
 ### What we're NOT changing
-- `enforceMichelinPriceFloor` — already works correctly for price floors
-- `enforceBarNightcapPriceCap` — already works
-- The placeholder rejection from Prompt 59 — stays as-is
-- Frontend code — no changes needed
+- The AI prompt venue dedup section (already correct in compile-prompt.ts)
+- The dining-specific dedup (stays as-is, this adds a second pass for everything else)
+- Mid-day freshen-up injection (works correctly)
 
