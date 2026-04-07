@@ -660,7 +660,7 @@ export function enforceTicketedAttractionPricing(activity: Record<string, any>, 
 const BAR_KEYWORDS = /\b(nightcap|cocktail|aperitif|drinks?\s+at|wine\s+bar|rooftop\s+bar|hotel\s+bar|speakeasy)\b/i;
 const BAR_TITLE_BAR = /\bbar\b/i;
 const BAR_EXCLUDE = /\b(barbecue|barista|bar\s+restaurant|sushi\s+bar)\b/i;
-const MAX_BAR_PRICE = 50;
+const MAX_BAR_PRICE = 55;
 const DEFAULT_BAR_PRICE = 35;
 
 /**
