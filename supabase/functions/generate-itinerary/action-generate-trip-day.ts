@@ -8,6 +8,7 @@
  */
 
 import { corsHeaders } from './action-types.ts';
+import { parseTimeToMinutes } from './flight-hotel-context.ts';
 import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
