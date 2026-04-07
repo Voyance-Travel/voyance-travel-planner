@@ -335,6 +335,53 @@ export async function handleGenerateDay(
     });
 
     // =========================================================================
+    // HALLUCINATION FILTER — remove known fake restaurants and dining with bogus addresses
+    // =========================================================================
+    {
+      const BLOCKED_RESTAURANT_NAMES = [
+        'trattoria del corso', 'café lumière', 'cafe lumiere',
+        'ristorante della piazza', 'la belle époque bistro',
+        'ristorante la luna', 'osteria del porto', 'osteria della sera',
+        'taverna centrale', 'taverna nocturna', 'palazzo del gusto',
+        'casa del gusto', 'casa nostra', 'cucina del mercato',
+        'ristorante vecchia', 'tavola calda', 'cantina verde',
+        'enoteca del corso', 'bar luminoso', 'bar centrale',
+      ];
+      const FAKE_ADDRESS_PATTERNS = [
+        /^the destination$/i, /^your destination$/i, /^the city$/i,
+        /^paris$/i, /^rome$/i, /^berlin$/i, /^tokyo$/i, /^london$/i,
+        /^[a-z\s]+,?\s*(france|italy|germany|japan|spain|uk)?$/i,
+      ];
+      const beforeFilter = normalizedActivities.length;
+      normalizedActivities = normalizedActivities.filter((act: any) => {
+        const cat = (act.category || '').toLowerCase();
+        if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') return true;
+        const name = (act.venueName || act.title || '').toLowerCase().trim();
+        for (const blocked of BLOCKED_RESTAURANT_NAMES) {
+          if (name.includes(blocked)) {
+            console.log(`[HALLUCINATION FILTER] Removed blocked restaurant: ${name}`);
+            return false;
+          }
+        }
+        const address = (act.address || (act.location && typeof act.location === 'object' ? (act.location as any).address : '') || '').trim();
+        if (!address || address.length < 10) {
+          console.log(`[HALLUCINATION FILTER] Removed restaurant with no real address: ${name} (address: "${address}")`);
+          return false;
+        }
+        for (const pattern of FAKE_ADDRESS_PATTERNS) {
+          if (pattern.test(address)) {
+            console.log(`[HALLUCINATION FILTER] Removed restaurant with placeholder address: ${name} (address: "${address}")`);
+            return false;
+          }
+        }
+        return true;
+      });
+      if (normalizedActivities.length < beforeFilter) {
+        console.log(`[HALLUCINATION FILTER] Day ${dayNumber}: removed ${beforeFilter - normalizedActivities.length} fake restaurants`);
+      }
+    }
+
+    // =========================================================================
     // UNIVERSAL QUALITY PASS — placeholder fix, timing, pricing, dedup
     // =========================================================================
     {
