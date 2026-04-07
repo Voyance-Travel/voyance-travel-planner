@@ -159,6 +159,8 @@ import { SmartFinishBanner } from './SmartFinishBanner';
 import { InterCityTransportEditor } from './InterCityTransportEditor';
 import { useUpdateCityTransport } from '@/hooks/useTripCities';
 
+import ActivityConciergeSheet from '@/components/itinerary/ActivityConciergeSheet';
+
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 import SortableFlightLegCards from './SortableFlightLegCards';
 
@@ -2382,7 +2384,29 @@ export function EditorialItinerary({
   const [restaurantDrawerOpen, setRestaurantDrawerOpen] = useState(false);
   const [restaurantDrawerMealType, setRestaurantDrawerMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'any'>('any');
 
-  // Reviews Drawer state
+  // AI Concierge state
+  const [conciergeOpen, setConciergeOpen] = useState(false);
+  const [conciergeActivity, setConciergeActivity] = useState<EditorialActivity | null>(null);
+  const [conciergeDayDate, setConciergeDayDate] = useState('');
+  const [conciergeDayTitle, setConciergeDayTitle] = useState('');
+  const [conciergePrevActivity, setConciergePrevActivity] = useState<string | undefined>();
+  const [conciergeNextActivity, setConciergeNextActivity] = useState<string | undefined>();
+
+  const handleOpenConcierge = useCallback((activity: EditorialActivity, dayIndex: number, _activityIndex: number) => {
+    const day = days[dayIndex];
+    if (!day) return;
+    setConciergeActivity(activity);
+    setConciergeDayDate(day.date || '');
+    setConciergeDayTitle(day.title || day.theme || `Day ${day.dayNumber}`);
+    // Find previous/next visible activities
+    const actIdx = day.activities.findIndex(a => a.id === activity.id);
+    const prev = actIdx > 0 ? day.activities[actIdx - 1] : undefined;
+    const next = actIdx < day.activities.length - 1 ? day.activities[actIdx + 1] : undefined;
+    setConciergePrevActivity(prev?.title);
+    setConciergeNextActivity(next?.title);
+    setConciergeOpen(true);
+  }, [days]);
+
   const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
   const [reviewsTarget, setReviewsTarget] = useState<{ 
     placeName: string; 
@@ -6351,6 +6375,7 @@ export function EditorialItinerary({
                           onApplyRefreshChanges={(changes) => handleApplyRefreshChanges(selectedDayIndex, changes)}
                           onPhotoResolved={reportPhoto}
                           isManualMode={isManualMode}
+                          onOpenConcierge={handleOpenConcierge}
                         />
                       )}
                     </>
@@ -7580,7 +7605,45 @@ export function EditorialItinerary({
         onSelectAlternative={handleSelectSwapAlternative}
       />
 
-      {/* Reviews Drawer */}
+      {/* AI Concierge Sheet */}
+      {conciergeActivity && (
+        <ActivityConciergeSheet
+          open={conciergeOpen}
+          onClose={() => {
+            setConciergeOpen(false);
+            setConciergeActivity(null);
+          }}
+          activity={{
+            id: conciergeActivity.id,
+            title: conciergeActivity.title,
+            description: conciergeActivity.description,
+            category: conciergeActivity.category || conciergeActivity.type,
+            startTime: conciergeActivity.startTime || conciergeActivity.time,
+            endTime: conciergeActivity.endTime,
+            cost: conciergeActivity.cost,
+            location: conciergeActivity.location,
+            imageUrl: (() => {
+              const p = conciergeActivity.photos;
+              if (!p || p.length === 0) return undefined;
+              const first = p[0];
+              return typeof first === 'string' ? first : first?.url;
+            })(),
+            bookingRequired: conciergeActivity.bookingRequired,
+            bookingUrl: conciergeActivity.bookingUrl || conciergeActivity.website,
+          }}
+          dayDate={conciergeDayDate}
+          dayTitle={conciergeDayTitle}
+          previousActivity={conciergePrevActivity}
+          nextActivity={conciergeNextActivity}
+          destination={destination}
+          tripType={tripType}
+          totalDays={days.length}
+          travelers={travelers}
+          currency={destinationInfo?.currency || 'USD'}
+          hotelName={hotelSelection?.name}
+        />
+      )}
+
       <ReviewsDrawer
         open={reviewsDrawerOpen}
         onClose={() => {
@@ -9170,6 +9233,8 @@ interface DayCardProps {
    onPhotoResolved?: (activityId: string, photoUrl: string) => void;
    /** Manual builder mode — skip real photo fetching to avoid API costs */
    isManualMode?: boolean;
+   /** Handler to open AI concierge for an activity */
+   onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
 }
 
 function DayCard({
@@ -9232,6 +9297,7 @@ function DayCard({
   isModalEditing = false,
   onPhotoResolved,
   isManualMode = false,
+  onOpenConcierge,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -9737,6 +9803,7 @@ function DayCard({
                           isCleanPreview={isCleanPreview}
                           onPhotoResolved={onPhotoResolved}
                           isManualMode={isManualMode}
+                          onOpenConcierge={onOpenConcierge}
                         />
                       </div>
                     </div>
@@ -9785,6 +9852,7 @@ function DayCard({
                           isCleanPreview={isCleanPreview}
                           onPhotoResolved={onPhotoResolved}
                           isManualMode={isManualMode}
+                          onOpenConcierge={onOpenConcierge}
                         />
                     </div>
                     {/* Compact transit gap indicator between activities */}
@@ -10024,7 +10092,9 @@ interface ActivityRowProps {
    /** Callback to report a resolved photo URL for batch write-back */
    onPhotoResolved?: (activityId: string, photoUrl: string) => void;
    /** Manual builder mode — skip real photo fetching to avoid API costs */
-   isManualMode?: boolean;
+    isManualMode?: boolean;
+    /** Handler to open AI concierge sheet */
+    onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
 }
 
 function ActivityRow({
@@ -10070,6 +10140,7 @@ function ActivityRow({
   isCleanPreview = false,
   onPhotoResolved,
   isManualMode = false,
+  onOpenConcierge,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -10102,6 +10173,12 @@ function ActivityRow({
   const isRatingEligible = ratingEligibleTypes.includes(activityType) && !isDowntime && !isTransport && !isCheckIn && !isAirport && !isAccommodation;
   const rating = isRatingEligible ? rawRating : null;
   
+  // Concierge eligibility — show for venue-based activities only
+  const CONCIERGE_HIDDEN_TYPES = ['transportation', 'transport', 'transit', 'travel', 'logistics'];
+  const CONCIERGE_HIDDEN_TITLES = ['return to your hotel', 'freshen up', 'arrival flight', 'departure', 'check-in', 'check in', 'free time'];
+  const showConcierge = onOpenConcierge && !CONCIERGE_HIDDEN_TYPES.includes(activityType) && !isDowntime
+    && !CONCIERGE_HIDDEN_TITLES.some(t => titleLower.includes(t));
+
   // Determine if this is a dining activity that should show venue name prominently
   const isDiningActivity = ['dining', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'].includes(activityType);
 
@@ -10469,38 +10546,51 @@ function ActivityRow({
             </div>
           )}
           {/* Mobile action buttons */}
-          {isEditable && !isPreview && (
+          {!isPreview && (
             <div className="flex items-center gap-1 pt-1">
-              <button
-                onClick={() => onLock(dayIndex, activity.id)}
-                className={cn(
-                  "p-1.5 rounded transition-colors",
-                  activity.isLocked ? "bg-primary/10 text-primary" : "hover:bg-secondary text-muted-foreground"
-                )}
-              >
-                {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-              </button>
-              {!activity.isLocked && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors hover:bg-secondary text-foreground/60 hover:text-foreground touch-manipulation">
-                      <MoreHorizontal className="h-5 w-5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="bg-background border shadow-lg z-50 min-w-[160px]">
-                    {onSwap && canViewPremium && (
-                      <DropdownMenuItem onClick={() => onSwap(dayIndex, activity)} className="cursor-pointer gap-2">
-                        <ArrowRightLeft className="h-4 w-4" /> Find Alternative
-                      </DropdownMenuItem>
+              {showConcierge && (
+                <button
+                  onClick={() => onOpenConcierge!(activity, dayIndex, activityIndex)}
+                  className="p-1.5 rounded transition-colors hover:bg-primary/10 text-primary"
+                  aria-label="AI Concierge"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {isEditable && (
+                <>
+                  <button
+                    onClick={() => onLock(dayIndex, activity.id)}
+                    className={cn(
+                      "p-1.5 rounded transition-colors",
+                      activity.isLocked ? "bg-primary/10 text-primary" : "hover:bg-secondary text-muted-foreground"
                     )}
-                    <DropdownMenuItem onClick={() => onEdit(dayIndex, activityIndex, activity)} className="cursor-pointer gap-2">
-                      <Edit3 className="h-4 w-4" /> Edit Details
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
-                      <Trash2 className="h-4 w-4" /> Remove
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  >
+                    {activity.isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                  </button>
+                  {!activity.isLocked && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition-colors hover:bg-secondary text-foreground/60 hover:text-foreground touch-manipulation">
+                          <MoreHorizontal className="h-5 w-5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="bg-background border shadow-lg z-50 min-w-[160px]">
+                        {onSwap && canViewPremium && (
+                          <DropdownMenuItem onClick={() => onSwap(dayIndex, activity)} className="cursor-pointer gap-2">
+                            <ArrowRightLeft className="h-4 w-4" /> Find Alternative
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => onEdit(dayIndex, activityIndex, activity)} className="cursor-pointer gap-2">
+                          <Edit3 className="h-4 w-4" /> Edit Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onRemove(dayIndex, activity.id)} className="cursor-pointer gap-2 text-destructive focus:text-destructive">
+                          <Trash2 className="h-4 w-4" /> Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -10930,6 +11020,23 @@ function ActivityRow({
                   compact
                 />
               </>
+            )}
+            {/* AI Concierge button - always visible for eligible activities */}
+            {showConcierge && !isPreview && (
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => onOpenConcierge!(activity, dayIndex, activityIndex)}
+                    className="p-1.5 rounded transition-colors hover:bg-primary/10 text-primary"
+                    aria-label="AI Concierge"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <span className="text-xs font-medium">AI Concierge</span>
+                </TooltipContent>
+              </Tooltip>
             )}
             {isEditable && !isPreview && (
               <div className="flex items-center gap-0.5">

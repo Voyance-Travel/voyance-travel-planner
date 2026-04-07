@@ -26,7 +26,7 @@ interface ActivityConciergeSheetProps {
     end_time?: string;
     time?: string;
     duration?: string | number;
-    cost?: number;
+    cost?: number | { amount: number; currency?: string };
     price?: number;
     location?: { name?: string; address?: string } | string;
     venue_name?: string;
@@ -122,8 +122,9 @@ export default function ActivityConciergeSheet({
   const category = (activity.category || activity.type || 'activity').toLowerCase();
   const startTime = activity.startTime || activity.start_time || activity.time || '';
   const endTime = activity.endTime || activity.end_time || '';
-  const cost = activity.cost ?? activity.price ?? 0;
-  const imageUrl = activity.imageUrl || activity.image_url;
+  const rawCost = activity.cost;
+  const cost: number = typeof rawCost === 'object' && rawCost !== null ? (rawCost as { amount: number }).amount : (rawCost as number ?? activity.price ?? 0);
+  const imageUrl = activity.imageUrl || activity.image_url || ((activity as any).photos?.[0]?.url ?? (activity as any).photos?.[0]);
 
   const chips = CHIPS_BY_CATEGORY[category] || DEFAULT_CHIPS;
 
