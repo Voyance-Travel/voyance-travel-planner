@@ -25,7 +25,7 @@ import {
   enforceMichelinPriceFloor,
 } from './sanitization.ts';
 import { normalizeVenueName, venueNamesMatch } from './generation-utils.ts';
-import { type DiningConfig } from './dining-config.ts';
+import { getDiningConfig } from './dining-config.ts';
 
 // =============================================================================
 // OPTIONS INTERFACE
