@@ -745,12 +745,18 @@ export function enforceCasualVenuePriceCap(activity: Record<string, any>, logPre
 // =============================================================================
 
 const CASUAL_VENUE_TYPE_PATTERNS: Array<{ pattern: RegExp; maxPrice: number }> = [
-  { pattern: /\b(?:march[eé]|market|mercato|markt|mercado)\b/i, maxPrice: 20 },
-  { pattern: /\b(?:bookshop|bookstore|librairie)\b/i, maxPrice: 25 },
-  { pattern: /\b(?:boulangerie|bakery|bäckerei|backerei|patisserie)\b/i, maxPrice: 25 },
-  { pattern: /\b(?:street food|food stall|food truck|food cart)\b/i, maxPrice: 15 },
+  { pattern: /\b(?:march[eé]|market|mercato|markt|mercado|feira|bazar|bazaar|souk)\b/i, maxPrice: 20 },
+  { pattern: /\b(?:bookshop|bookstore|librairie|librer[ií]a)\b/i, maxPrice: 25 },
+  { pattern: /\b(?:boulangerie|bakery|bäckerei|backerei|patisserie|pâtisserie|panader[ií]a|padaria)\b/i, maxPrice: 25 },
+  { pattern: /\b(?:street food|food stall|food truck|food cart|hawker|vendor)\b/i, maxPrice: 15 },
   { pattern: /\bcaf[eé]\b.*\b(?:bookshop|literary|book)\b/i, maxPrice: 25 },
   { pattern: /\b(?:bookshop|literary|book)\b.*\bcaf[eé]\b/i, maxPrice: 25 },
+  // Ice cream and dessert shops
+  { pattern: /\b(?:gelato|ice cream|gelateria|glacier|frozen yogurt|dessert shop)\b/i, maxPrice: 15 },
+  // Fast casual / quick service
+  { pattern: /\b(?:fast casual|quick bite|grab and go|take.?away|to go)\b/i, maxPrice: 20 },
+  // Casual unnamed café pattern: "Breakfast at a casual..."
+  { pattern: /^(?:breakfast|lunch|brunch)\s+at\s+a\s+(?:casual|simple|small|corner|local|neighborhood)\b/i, maxPrice: 25 },
 ];
 
 /**
