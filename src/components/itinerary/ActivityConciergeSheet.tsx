@@ -238,6 +238,35 @@ export default function ActivityConciergeSheet({
     });
   };
 
+  const handleSaveNote = useCallback((msgIndex: number) => {
+    if (!onSaveNote) return;
+    const msg = messages[msgIndex];
+    if (!msg || msg.role !== 'assistant') return;
+
+    // Find the preceding user message as context
+    let query: string | undefined;
+    for (let i = msgIndex - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        query = messages[i].content;
+        break;
+      }
+    }
+
+    const note: AISavedNote = {
+      id: crypto.randomUUID(),
+      content: msg.content,
+      savedAt: new Date().toISOString(),
+      query,
+    };
+
+    onSaveNote(activity.id, note);
+    toast('Note saved to card', { duration: 2000, className: 'companion-toast' });
+  }, [onSaveNote, messages, activity.id]);
+
+  const isNoteSaved = useCallback((content: string) => {
+    return savedNoteContents?.has(content) ?? false;
+  }, [savedNoteContents]);
+
   const sheetSide = isMobile ? 'bottom' as const : 'right' as const;
 
   return (
