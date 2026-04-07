@@ -2392,7 +2392,21 @@ export function EditorialItinerary({
   const [conciergePrevActivity, setConciergePrevActivity] = useState<string | undefined>();
   const [conciergeNextActivity, setConciergeNextActivity] = useState<string | undefined>();
 
-  // Reviews Drawer state
+  const handleOpenConcierge = useCallback((activity: EditorialActivity, dayIndex: number, _activityIndex: number) => {
+    const day = days[dayIndex];
+    if (!day) return;
+    setConciergeActivity(activity);
+    setConciergeDayDate(day.date || '');
+    setConciergeDayTitle(day.title || day.theme || `Day ${day.dayNumber}`);
+    // Find previous/next visible activities
+    const actIdx = day.activities.findIndex(a => a.id === activity.id);
+    const prev = actIdx > 0 ? day.activities[actIdx - 1] : undefined;
+    const next = actIdx < day.activities.length - 1 ? day.activities[actIdx + 1] : undefined;
+    setConciergePrevActivity(prev?.title);
+    setConciergeNextActivity(next?.title);
+    setConciergeOpen(true);
+  }, [days]);
+
   const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
   const [reviewsTarget, setReviewsTarget] = useState<{ 
     placeName: string; 
