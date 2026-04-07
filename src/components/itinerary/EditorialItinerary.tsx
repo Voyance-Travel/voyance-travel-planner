@@ -10488,8 +10488,18 @@ function ActivityRow({
             </div>
           )}
           {/* Mobile action buttons */}
-          {isEditable && !isPreview && (
+          {!isPreview && (
             <div className="flex items-center gap-1 pt-1">
+              {showConcierge && (
+                <button
+                  onClick={() => onOpenConcierge!(activity, dayIndex, activityIndex)}
+                  className="p-1.5 rounded transition-colors hover:bg-primary/10 text-primary"
+                  aria-label="AI Concierge"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {isEditable && (
               <button
                 onClick={() => onLock(dayIndex, activity.id)}
                 className={cn(
