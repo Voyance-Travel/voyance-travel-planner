@@ -236,38 +236,54 @@ export async function generateFallbackRestaurant(
   tripType?: string,
   dayTheme?: string,
   neighborhood?: string,
+  diningConfig?: DiningConfig,
 ): Promise<FallbackRestaurant | null> {
   const blocklist = Array.from(usedNames).slice(0, 20).join(', ');
 
-  const priceGuidance: Record<string, Record<string, string>> = {
-    Luminary: {
-      breakfast: '€25-60 per person',
-      lunch: '€40-80 per person',
-      dinner: '€60-200 per person (Michelin-starred options welcome)',
-      drinks: '€20-50 per person',
-    },
-    Explorer: {
-      breakfast: '€10-30 per person',
-      lunch: '€20-50 per person',
-      dinner: '€30-80 per person',
-      drinks: '€15-35 per person',
-    },
-    Budget: {
-      breakfast: '€5-15 per person',
-      lunch: '€8-25 per person',
-      dinner: '€15-40 per person',
-      drinks: '€8-20 per person',
-    },
-  };
+  // If we have a DNA-aware dining config, use its price ranges and style
+  let priceRange: string;
+  let styleDesc: string;
 
-  const styleDescriptions: Record<string, string> = {
-    Luminary: 'luxury, refined, memorable dining experiences',
-    Explorer: 'authentic, local favorites, quality over price',
-    Budget: 'affordable, good value, local gems',
-  };
+  if (diningConfig) {
+    const pr = diningConfig.priceRange[mealType] || diningConfig.priceRange.dinner;
+    priceRange = `€${pr[0]}-${pr[1]} per person`;
+    styleDesc = diningConfig.diningStyle;
+  } else {
+    // Legacy fallback
+    const priceGuidance: Record<string, Record<string, string>> = {
+      Luminary: {
+        breakfast: '€25-60 per person',
+        lunch: '€40-80 per person',
+        dinner: '€60-200 per person (Michelin-starred options welcome)',
+        drinks: '€20-50 per person',
+      },
+      Explorer: {
+        breakfast: '€10-30 per person',
+        lunch: '€20-50 per person',
+        dinner: '€30-80 per person',
+        drinks: '€15-35 per person',
+      },
+      Budget: {
+        breakfast: '€5-15 per person',
+        lunch: '€8-25 per person',
+        dinner: '€15-40 per person',
+        drinks: '€8-20 per person',
+      },
+    };
 
-  const effectiveTripType = tripType || 'Explorer';
-  const prices = priceGuidance[effectiveTripType] || priceGuidance.Explorer;
+    const styleDescriptions: Record<string, string> = {
+      Luminary: 'luxury, refined, memorable dining experiences',
+      Explorer: 'authentic, local favorites, quality over price',
+      Budget: 'affordable, good value, local gems',
+    };
+
+    const effectiveTripType = tripType || 'Explorer';
+    const prices = priceGuidance[effectiveTripType] || priceGuidance.Explorer;
+    priceRange = prices[mealType] || prices.lunch;
+    styleDesc = styleDescriptions[effectiveTripType] || styleDescriptions.Explorer;
+  }
+
+  const locationStr = country ? `${city}, ${country}` : city;
   const priceRange = prices[mealType] || prices.lunch;
   const styleDesc = styleDescriptions[effectiveTripType] || styleDescriptions.Explorer;
   const locationStr = country ? `${city}, ${country}` : city;
