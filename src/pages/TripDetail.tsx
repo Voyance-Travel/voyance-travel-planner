@@ -2353,7 +2353,7 @@ export default function TripDetail() {
                     </p>
                     <EditorialItinerary
                       tripId={trip.id}
-                      days={parseEditorialDays({ days: generationPoller.partialDays }, trip.start_date, trip.end_date) as EditorialDay[]}
+                      days={parseEditorialDays({ days: generationPoller.partialDays }, trip.start_date, trip.end_date, { partial: true }) as EditorialDay[]}
                       destination={trip.destination || ''}
                       startDate={trip.start_date}
                       endDate={effectiveEndDate}

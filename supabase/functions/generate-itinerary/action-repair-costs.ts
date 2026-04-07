@@ -117,6 +117,10 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         : (activity.cost && typeof activity.cost === "object") ? (activity.cost.amount || 0)
         : 0;
 
+      // Declare source/wasCorrected BEFORE any branch that uses them
+      let source = "repair";
+      let wasCorrected = false;
+
       // Tier 1 free venue check — uses shared ALWAYS_FREE_VENUE_PATTERNS
       const allText = [
         title,
@@ -175,16 +179,13 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         ref = refMap.get(`${destination}|${category}|`);
       }
 
-      let source = "repair";
-      let wasCorrected = false;
-
       if (ref) {
         const maxAllowed = ref.cost_high_usd * 3;
         if (costPerPerson > maxAllowed || costPerPerson < 0) {
           costPerPerson = ref.cost_mid_usd;
           source = "auto_corrected";
           wasCorrected = true;
-        } else if (costPerPerson === 0) {
+        } else if (costPerPerson === 0 && !wasCorrected) {
           costPerPerson = ref.cost_mid_usd;
           source = "reference_fallback";
         }
@@ -194,7 +195,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         wasCorrected = true;
       }
 
-      if (wasCorrected) corrected++;
+      if (wasCorrected && source !== 'ticketed_attraction_floor') corrected++;
 
       // ── Michelin / fine dining floor enforcement ──
       // Uses the shared KNOWN_FINE_DINING_STARS map for explicit star lookups

@@ -524,7 +524,8 @@ function parseSingleDay(
 export function parseItineraryDays(
   rawData: unknown,
   tripStartDate?: string,
-  tripEndDate?: string
+  tripEndDate?: string,
+  options?: { partial?: boolean }
 ): ParsedDay[] {
   // Validate top-level structure
   if (!rawData || typeof rawData !== 'object') {
@@ -606,8 +607,8 @@ export function parseItineraryDays(
     date: calculateDayDate(tripStartDate, idx) || day.date,
   }));
 
-  // Step 5: Day-count mismatch detection (diagnostic only)
-  if (tripStartDate && tripEndDate) {
+  // Step 5: Day-count mismatch detection (diagnostic only, skip for partial/in-progress data)
+  if (tripStartDate && tripEndDate && !options?.partial) {
     try {
       const start = new Date(tripStartDate + 'T00:00:00');
       const end = new Date(tripEndDate + 'T00:00:00');
@@ -667,9 +668,10 @@ export function parseActiveTripDays(
 export function parseEditorialDays(
   rawData: unknown,
   tripStartDate?: string,
-  tripEndDate?: string
+  tripEndDate?: string,
+  options?: { partial?: boolean }
 ): EditorialParsedDay[] {
-  const days = parseItineraryDays(rawData, tripStartDate, tripEndDate);
+  const days = parseItineraryDays(rawData, tripStartDate, tripEndDate, options);
   
   return days.map(day => ({
     ...day,
