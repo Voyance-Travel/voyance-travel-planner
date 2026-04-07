@@ -9770,7 +9770,7 @@ function DayCard({
                         title={activityToRender.title || ''}
                         travelMeta={travelMeta}
                         variant={isFinalDeparture ? 'final' : 'default'}
-                        className="mx-3 sm:mx-4 my-1"
+                        className="mx-3 sm:mx-4 sm:pl-[12rem] my-1"
                       />
                     );
                   }
