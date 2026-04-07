@@ -60,6 +60,7 @@ import {
   buildFullPromptGuidanceAsync,
   getArchetypeDefinition,
 } from '../archetype-data.ts';
+import { getDiningConfig, buildDiningPromptBlock } from '../dining-config.ts';
 import {
   buildTripTypePromptSection,
 } from '../trip-type-modifiers.ts';
