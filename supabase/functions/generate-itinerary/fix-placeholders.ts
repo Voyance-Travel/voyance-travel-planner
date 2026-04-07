@@ -3,6 +3,8 @@
  * Shared by universal-quality-pass.ts and action-generate-day.ts.
  */
 
+import { type DiningConfig } from './dining-config.ts';
+
 // =============================================================================
 // FALLBACK RESTAURANT DATABASE — Rich city-aware venue pool for placeholder replacement
 // =============================================================================
