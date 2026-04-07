@@ -74,7 +74,140 @@ import { persistDay } from './pipeline/persist-day.ts';
 import { callAI, AICallError } from './pipeline/ai-call.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
 
-export async function handleGenerateDay(
+// =============================================================================
+// FALLBACK RESTAURANT DATABASE — Rich city-aware venue pool for placeholder replacement
+// =============================================================================
+
+interface FallbackRestaurant {
+  name: string;
+  address: string;
+  price: number;
+  description: string;
+}
+
+const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackRestaurant[]>> = {
+  paris: {
+    breakfast: [
+      { name: "Café de Flore", address: "172 Bd Saint-Germain, 75006 Paris", price: 35, description: "Iconic Left Bank café. Famous for its Art Deco interior and literary history. Order the croissants with house jam and a grand crème." },
+      { name: "Carette", address: "4 Pl. du Trocadéro et du 11 Novembre, 75016 Paris", price: 30, description: "Elegant patisserie with Eiffel Tower views from the terrace. Known for their macarons and hot chocolate." },
+      { name: "Le Nemours", address: "2 Pl. Colette, 75001 Paris", price: 25, description: "Classic Parisian terrace café facing the Palais Royal gardens. Perfect for a leisurely morning coffee and croissant." },
+      { name: "Maison Sauvage", address: "5 Rue de Buci, 75006 Paris", price: 25, description: "Flower-covered façade in Saint-Germain. Excellent avocado toast and fresh pastries in a photogenic setting." },
+      { name: "Hôtel Costes", address: "239 Rue Saint-Honoré, 75001 Paris", price: 45, description: "Glamorous hotel restaurant with a lush courtyard. A see-and-be-seen breakfast spot near Place Vendôme." },
+      { name: "Claus Paris", address: "14 Rue Jean-Jacques Rousseau, 75001 Paris", price: 28, description: "Self-proclaimed 'haute couture of breakfast.' Artisanal granola, organic eggs, and fresh-squeezed juices." },
+    ],
+    lunch: [
+      { name: "Le Comptoir du Relais", address: "9 Carrefour de l'Odéon, 75006 Paris", price: 55, description: "Yves Camdeborde's legendary bistro. The lunch menu is a masterclass in French comfort food. No reservations at lunch — arrive early." },
+      { name: "Breizh Café", address: "109 Rue Vieille du Temple, 75003 Paris", price: 30, description: "The best crêpes in Paris. Buckwheat galettes with premium ingredients in the heart of Le Marais." },
+      { name: "Bouillon Pigalle", address: "22 Bd de Clichy, 75018 Paris", price: 25, description: "Neo-bouillon revival with stunning Belle Époque interior. Traditional French dishes at surprisingly accessible prices." },
+      { name: "Chez Janou", address: "2 Rue Roger Verlomme, 75003 Paris", price: 40, description: "Provençal bistro near Place des Vosges. Famous for their chocolate mousse served in a giant bowl." },
+      { name: "Le Petit Cler", address: "29 Rue Cler, 75007 Paris", price: 35, description: "Charming neighborhood bistro on the market street Rue Cler. Simple, excellent French cuisine near the Eiffel Tower." },
+      { name: "Pink Mamma", address: "20bis Rue de Douai, 75009 Paris", price: 30, description: "Four-story Italian trattoria. Neapolitan pizza and handmade pasta in a vibrant, plant-filled space." },
+    ],
+    dinner: [
+      { name: "Le Relais de l'Entrecôte", address: "20 Rue Saint-Benoît, 75006 Paris", price: 50, description: "One menu only: walnut salad followed by steak-frites with their legendary secret sauce, served in two rounds. No reservations — expect a short queue." },
+      { name: "Chez l'Ami Jean", address: "27 Rue Malar, 75007 Paris", price: 75, description: "Basque-influenced gastro-bistro. The rice pudding dessert is legendary. Boisterous, generous, unforgettable." },
+      { name: "Le Chateaubriand", address: "129 Av. Parmentier, 75011 Paris", price: 80, description: "Neo-bistro pioneer. Creative tasting menu that changes daily. One of the restaurants that defined modern Parisian dining." },
+      { name: "Frenchie", address: "5 Rue du Nil, 75002 Paris", price: 95, description: "Gregory Marchand's celebrated restaurant. Market-driven tasting menu with inventive French-global flavors. Book well in advance." },
+      { name: "Le Bouillon Julien", address: "16 Rue du Faubourg Saint-Denis, 75010 Paris", price: 30, description: "Stunning Art Nouveau dining room from 1906. Classic French brasserie fare — onion soup, duck confit, profiteroles." },
+      { name: "Septime", address: "80 Rue de Charonne, 75011 Paris", price: 110, description: "Modern French tasting menu from chef Bertrand Grébaut. Michelin-starred, ingredient-forward, one of the world's best restaurants." },
+    ],
+  },
+  rome: {
+    breakfast: [
+      { name: "Roscioli Caffè", address: "2 Piazza Benedetto Cairoli, 00186 Rome", price: 18, description: "Artisan pastries and specialty coffee from the famous Roscioli family. Try the cornetto with pistachio cream." },
+      { name: "Sant'Eustachio Il Caffè", address: "82 Piazza di Sant'Eustachio, 00186 Rome", price: 12, description: "Legendary Roman coffee bar since 1938. Their gran caffè is pre-sweetened and impossibly creamy." },
+      { name: "Antico Caffè Greco", address: "86 Via dei Condotti, 00187 Rome", price: 25, description: "Rome's oldest café, established 1760. Marble tables, gilded mirrors, and a pastry selection worthy of the setting." },
+    ],
+    lunch: [
+      { name: "Da Enzo al 29", address: "29 Via dei Vascellari, 00153 Rome", price: 30, description: "Trastevere institution. The cacio e pepe and carbonara are textbook-perfect Roman cuisine." },
+      { name: "Armando al Pantheon", address: "110 Salita dei Crescenzi, 00186 Rome", price: 45, description: "Family-run trattoria steps from the Pantheon. Classic Roman dishes executed with precision for over 60 years." },
+      { name: "Roscioli", address: "21 Via dei Giubbonari, 00186 Rome", price: 50, description: "Part deli, part restaurant. World-class cheese and salumi selection. Their carbonara is competition-worthy." },
+    ],
+    dinner: [
+      { name: "Ristorante Aroma", address: "1 Via Labicana, 00184 Rome", price: 130, description: "Michelin-starred rooftop dining with direct Colosseum views. Chef Di Iorio's modern Italian cuisine is theatrical and precise." },
+      { name: "Pipero", address: "9 Corso Vittorio Emanuele II, 00186 Rome", price: 120, description: "Michelin-starred contemporary Roman restaurant. Cacio e pepe reimagined. Elegant but not stuffy." },
+      { name: "Il Pagliaccio", address: "129 Via dei Banchi Vecchi, 00186 Rome", price: 200, description: "Two Michelin stars. Chef Kotaro Noda's Japanese-Italian fusion is among Rome's most refined dining experiences." },
+    ],
+  },
+  berlin: {
+    breakfast: [
+      { name: "Café Einstein Stammhaus", address: "58 Kurfürstenstraße, 10785 Berlin", price: 25, description: "Grand Viennese-style café in a 1920s villa. Excellent Wiener Frühstück with fresh pastries and newspapers." },
+      { name: "House of Small Wonder", address: "11 Johannisstraße, 10117 Berlin", price: 20, description: "Japanese-inspired brunch café. Fluffy Japanese pancakes and matcha lattes in a treehouse-like interior." },
+      { name: "Café Anna Blume", address: "49 Kollwitzstraße, 10405 Berlin", price: 20, description: "Flower shop meets café in Prenzlauer Berg. Their signature 'Blumenstrauß' breakfast platter is a feast." },
+    ],
+    lunch: [
+      { name: "Borchardt", address: "47 Französische Str., 10117 Berlin", price: 55, description: "Berlin's power-lunch institution. High ceilings, white tablecloths, and the city's most famous Wiener Schnitzel." },
+      { name: "Katz Orange", address: "27 Bergstraße, 10115 Berlin", price: 45, description: "Slow food in a former brewery courtyard. Famous for their 12-hour roasted Duroc pork. Beautiful garden." },
+      { name: "Lokal", address: "3 Linienstraße, 10178 Berlin", price: 35, description: "Farm-to-table German cuisine in Mitte. Daily changing menu based on what's fresh from Brandenburg farms." },
+    ],
+    dinner: [
+      { name: "Horváth", address: "44 Paul-Lincke-Ufer, 10999 Berlin", price: 130, description: "Michelin-starred modern Austrian cuisine on the Landwehr Canal. Chef Sebastian Frank's vegetable-forward tasting menu is Berlin's finest." },
+      { name: "Facil", address: "3 Potsdamer Str., 10785 Berlin", price: 180, description: "Two Michelin stars in the Mandala Hotel. A glass-roofed garden setting with impeccable contemporary European cuisine." },
+      { name: "Rutz", address: "44 Chausseestraße, 10115 Berlin", price: 200, description: "Three Michelin stars — Berlin's highest-rated restaurant. Marco Müller's creative German tasting menu. Legendary wine list." },
+    ],
+  },
+  london: {
+    breakfast: [
+      { name: "The Wolseley", address: "160 Piccadilly, W1J 9EB London", price: 30, description: "Grand European café-restaurant in a former car showroom. The quintessential London breakfast experience." },
+      { name: "Dishoom", address: "12 Upper St Martin's Ln, WC2H 9FB London", price: 20, description: "Bombay-inspired café. Their bacon naan roll and chai are legendary. Expect a queue at weekends." },
+      { name: "Granger & Co", address: "175 Westbourne Grove, W11 2SB London", price: 22, description: "Australian brunch pioneer. Famous ricotta hotcakes and scrambled eggs in a light-filled Notting Hill space." },
+    ],
+    lunch: [
+      { name: "Padella", address: "6 Southwark St, SE1 1TQ London", price: 18, description: "Fresh handmade pasta near Borough Market. The pici cacio e pepe is unmissable. No reservations — queue early." },
+      { name: "Barrafina", address: "26-27 Dean St, W1D 3LL London", price: 45, description: "Counter-seated Spanish tapas bar. Michelin-starred quality in a buzzy Soho setting." },
+      { name: "Brasserie Zédel", address: "20 Sherwood St, W1F 7ED London", price: 25, description: "Grand Parisian brasserie hidden beneath Piccadilly. Remarkable value for central London." },
+    ],
+    dinner: [
+      { name: "St. John", address: "26 St John St, EC1M 4AY London", price: 60, description: "Pioneering nose-to-tail restaurant. Fergus Henderson's roast bone marrow is a pilgrimage dish." },
+      { name: "The Palomar", address: "34 Rupert St, W1D 6DN London", price: 55, description: "Modern Jerusalem cuisine in the heart of Soho. Sit at the bar for the full experience." },
+      { name: "Gymkhana", address: "42 Albemarle St, W1S 4JH London", price: 75, description: "Michelin-starred Indian restaurant in Mayfair. Colonial hunting-lodge décor with extraordinary modern Indian cuisine." },
+    ],
+  },
+  lisbon: {
+    breakfast: [
+      { name: "Heim Café", address: "R. de Santos-o-Velho 2, 1200-808 Lisbon", price: 15, description: "Cozy brunch spot in Santos. Excellent avocado toast, açaí bowls, and specialty coffee." },
+      { name: "Copenhagen Coffee Lab", address: "R. Nova da Piedade 10, 1200-298 Lisbon", price: 12, description: "Scandinavian-style specialty coffee roaster. Perfectly crafted pour-overs in a minimalist Chiado setting." },
+      { name: "Nicolau Lisboa", address: "R. de São Nicolau 17, 1100-547 Lisbon", price: 14, description: "Modern café near Rossio square. Great eggs Benedict and fresh juices with a street-level people-watching terrace." },
+    ],
+    lunch: [
+      { name: "Cervejaria Ramiro", address: "Av. Almirante Reis 1H, 1150-007 Lisbon", price: 45, description: "Legendary seafood beer hall. Tiger prawns, percebes, and a steak sandwich to finish. Cash-heavy, always packed." },
+      { name: "A Cevicheria", address: "R. Dom Pedro V 129, 1250-093 Lisbon", price: 40, description: "Chef Kiko Martins' Peruvian-Portuguese fusion. Creative ceviches under a hanging giant octopus sculpture." },
+      { name: "Café de São Bento", address: "R. de São Bento 212, 1200-821 Lisbon", price: 50, description: "Classic Lisbon steakhouse. Their prego steak sandwich and garlic prawns are local institutions." },
+    ],
+    dinner: [
+      { name: "Sacramento do Chiado", address: "R. do Sacramento 26, 1200-394 Lisbon", price: 45, description: "Converted church in Chiado. Portuguese cuisine with a modern twist in a stunning architectural setting." },
+      { name: "Solar dos Presuntos", address: "R. das Portas de Santo Antão 150, 1150-269 Lisbon", price: 55, description: "Minho-style cooking near Restauradores. Legendary presunto (cured ham) and seafood rice." },
+      { name: "Pharmácia", address: "R. Marechal Saldanha 1, 1249-069 Lisbon", price: 40, description: "Pharmacy-themed restaurant in Santa Catarina. Creative Portuguese dishes served in lab glassware with Tagus views." },
+    ],
+  },
+};
+
+function getRandomFallbackRestaurant(
+  city: string,
+  mealType: 'breakfast' | 'lunch' | 'dinner',
+  usedNames: Set<string>
+): FallbackRestaurant | null {
+  const cityKey = city.toLowerCase().trim();
+  // Find matching city key (partial match for "Paris, France" etc.)
+  let cityData: Record<string, FallbackRestaurant[]> | undefined;
+  for (const [key, data] of Object.entries(INLINE_FALLBACK_RESTAURANTS)) {
+    if (cityKey.includes(key) || key.includes(cityKey)) {
+      cityData = data;
+      break;
+    }
+  }
+  if (!cityData) return null;
+
+  const options = cityData[mealType];
+  if (!options || options.length === 0) return null;
+
+  const available = options.filter(r => !usedNames.has(r.name.toLowerCase()));
+  if (available.length === 0) return options[0]; // Last resort: allow a repeat
+
+  return available[Math.floor(Math.random() * available.length)];
+}
+
+
   supabase: any,
   userId: string,
   params: Record<string, any>

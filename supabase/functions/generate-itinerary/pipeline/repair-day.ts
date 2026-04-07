@@ -139,6 +139,8 @@ interface FallbackVenue {
   name: string;
   neighborhood: string;
   address: string;
+  description?: string;
+  price?: number;
 }
 
 const FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackVenue[]>> = {
