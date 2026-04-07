@@ -1,44 +1,29 @@
 
 
-## Universal Price Sanity — Align Category-Based Caps
+## Cross-Day Venue Dedup — Assessment
 
 ### Current State
 
-The backend (`sanitization.ts`) already has three separate price cap functions that cover the same ground as the user's `PRICE_CAPS` spec, but with slightly different values:
+The codebase already has **two layers** of cross-day venue dedup that fully cover the user's spec:
 
-| Category | User Spec | Current Code | Location |
-|---|---|---|---|
-| Bakery/boulangerie | €35 | €25 | `CASUAL_VENUE_TYPE_PATTERNS` |
-| Bookshop/bookstore | €25 | €25 | `CASUAL_VENUE_TYPE_PATTERNS` ✓ |
-| Street food | €18 | €15 | `CASUAL_VENUE_TYPE_PATTERNS` |
-| Gelato/ice cream | €15 | €15 | `CASUAL_VENUE_TYPE_PATTERNS` ✓ |
-| Nightcap/cocktail | €55 | €50 max / €35 default | `enforceBarNightcapPriceCap` |
+#### 1. Prompt-Level Blocklist (compile-prompt.ts, lines 1079-1093)
+Already injects a "VENUE DEDUP — DO NOT REVISIT THESE LOCATIONS" block into the AI prompt with the full list of used venues. This matches the user's `buildVenueBlocklistPrompt` concept but is more detailed (includes guidance about name variations like "Louvre Museum" vs "Louvre Museum Exploration").
 
-The existing system is **more comprehensive** than the spec (includes Michelin exclusions, venue-specific maps, multiple field shape writes). The spec's values are slightly more generous for bakeries (€35 vs €25), street food (€18 vs €15), and nightcaps (€55 vs €50).
+#### 2. Post-Generation Dedup (universal-quality-pass.ts, Step 7)
+Already filters activities against `usedVenueNames` set using fuzzy matching (`venueNamesMatch` with 80% word-overlap threshold). This is **more robust** than the user's `removeRepeatedVenues` which uses exact `Set.has()` — the current code catches near-matches like "Sagrada Familia" vs "La Sagrada Familia".
 
-### Changes
+### Comparison
 
-#### `supabase/functions/generate-itinerary/sanitization.ts`
+| Feature | User Spec | Current Code |
+|---|---|---|
+| Prompt blocklist | `buildVenueBlocklistPrompt` — simple list | `compile-prompt.ts` — detailed with anti-variation guidance ✓ |
+| Post-gen filter | `removeRepeatedVenues` — exact match via `Set.has()` | `universal-quality-pass.ts` Step 7 — fuzzy match via `venueNamesMatch` ✓ |
+| Skip categories | STAY, TRANSPORT, TRAVEL, FLIGHT | Same + LOGISTICS, ACCOMMODATION ✓ |
+| Skip dining | Not handled | Skips dining/restaurant (handled by separate restaurant dedup) ✓ |
+| Hotel exclusion | `venue === 'your hotel'` | Same ✓ |
+| Venue tracking | Not shown | Step 9 updates `usedVenueNames` set after each day ✓ |
 
-1. **Update `CASUAL_VENUE_TYPE_PATTERNS`** (lines 783-796):
-   - Bakery/boulangerie/patisserie: `maxPrice` from 25 → **35**
-   - Street food/food stall/hawker: `maxPrice` from 15 → **18**
-   - Bookshop and gelato already match — no change
+### Conclusion
 
-2. **Update bar/nightcap constants** (lines 663-664):
-   - `MAX_BAR_PRICE` from 50 → **55**
-   - `DEFAULT_BAR_PRICE` stays at 35 (the spec's €55 is a ceiling, not a default)
-
-No new functions needed — the existing three-function system (`enforceBarNightcapPriceCap`, `enforceCasualVenuePriceCap`, `enforceVenueTypePriceCap`) already covers all the user's patterns with better granularity (Michelin exclusions, venue-specific maps, multi-field writes).
-
-### What Stays Unchanged
-- `enforceCasualVenuePriceCap` with `KNOWN_CASUAL_VENUES` map — unchanged
-- `enforceVenueTypePriceCap` function logic — unchanged (just cap values updated)
-- `enforceBarNightcapPriceCap` function logic — unchanged (just ceiling updated)
-- `enforceMichelinPriceFloor` — unchanged
-- `universal-quality-pass.ts` — already calls all three functions
-- Frontend (`cost-estimation.ts`) — no changes needed (caps are backend-only)
-
-### Deployment
-Redeploy `generate-itinerary` edge function.
+**No changes needed.** The current implementation is a strict superset of the user's spec — it has fuzzy matching instead of exact matching, richer prompt injection, and additional category exclusions. Changing to exact `Set.has()` would be a regression.
 
