@@ -911,6 +911,17 @@ ${(() => {
   if (cityLower.includes('lisbon') || cityLower.includes('lisboa')) return `- For Lisbon, consider: Pastéis de Belém, Café A Brasileira, Copenhagen Coffee Lab, Dear Breakfast, Heim Café, Nicolau Lisboa, Fábrica Coffee Roasters, Landeau Chocolate, Time Out Market vendors, Cervejaria Ramiro, Sacramento do Chiado.`;
   return `- You MUST name specific, real restaurants for ${destination || 'this city'}. Search your knowledge for well-known local establishments.`;
 })()}
+
+DESTINATION CUISINE RULE:
+- Restaurants MUST primarily serve the local/regional cuisine of the destination city. Paris → French, Rome → Italian, Tokyo → Japanese, Barcelona → Spanish/Catalan, Berlin → German/European, etc.
+- At most ONE international-cuisine restaurant is acceptable per entire trip, and only if it is a well-known destination restaurant in that city (e.g., a famous Japanese restaurant in Paris like Zen or a renowned Italian in London like Padella).
+- Do NOT default to international chains or generic "fusion" restaurants. Prioritize authentic local dining experiences.
+
+ACTIVITY TYPE VARIETY RULE:
+- Do NOT repeat the same special experience type on consecutive days. If the previous day included a spa/hammam, today must NOT include a spa/hammam. If the previous day had a cooking class, today must NOT have a cooking class. If the previous day had a boat tour, today must NOT have a boat tour.
+- This applies to: spa, hammam, cooking class, wine tasting, bike tour, boat tour, food tour, market tour, yoga/wellness, and similar experiential activities.
+- Standard activities (museums, restaurants, walks, shopping) are exempt from this rule.
+
 - Parks, gardens, plazas, squares, viewpoints, miradouros, riverside walks, and neighborhood strolls are FREE (€0). Do NOT assign any price to these.
 
 VENUE NAME RULES:
