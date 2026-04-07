@@ -422,8 +422,9 @@ async function _handleGenerateTripDayInner(
       if (venueName && venueName.length > 3 && venueName !== locName && !/your hotel/i.test(venueName)) usedVenues.push(venueName);
       // Also extract venue name from title (e.g. "Morning at Palais-Royal Gardens" → "Palais-Royal Gardens")
       const stripped = titleName
-        .replace(/^(?:morning|afternoon|evening|final|early|late)\s+(?:at|in|visit\s+to|stroll\s+(?:at|in|through))\s+/i, '')
-        .replace(/^(?:visit|explore|discover|stroll|walk)\s+(?:at|in|through|around)?\s*/i, '')
+        .replace(/^(?:morning|afternoon|evening|final|early|late|leisurely|scenic|guided)\s+(?:at|in|visit\s+to|stroll\s+(?:at|in|through)|walk\s+(?:at|in|through|around))\s+/i, '')
+        .replace(/^(?:visit|explore|discover|stroll|walk|wander|tour|enjoy)\s+(?:at|in|through|around|along)?\s*/i, '')
+        .replace(/\s+(?:stroll|walk|tour|visit|exploration)$/i, '')
         .trim();
       if (stripped && stripped.length > 3 && stripped !== locName && stripped !== venueName && !/your hotel/i.test(stripped)) {
         usedVenues.push(stripped);
