@@ -1,53 +1,59 @@
 
 
-## Arrival/Departure Timing Enforcement — Inline Post-Generation Fix
+## Michelin Inclusion for Luminary Trips + Café/Market Pricing Fix
 
 ### What's Already in Place
-The prompt system (`compile-day-schema.ts`) already generates detailed arrival/departure constraints (e.g., "DO NOT plan activities before arrival time"). The AI sometimes ignores these. The fix: add deterministic post-generation enforcement that strips violating activities, just like the placeholder rejection block from Prompt 59.
+- `enforceMichelinPriceFloor` in `sanitization.ts` correctly raises underpriced Michelin restaurants
+- `enforceCasualVenuePriceCap` exists but only covers street food (Trapizzino, Bao, etc.) — no cafés, markets, or bookshops
+- `compile-prompt.ts` has Michelin inclusion rules (~line 872) but they apply to ALL trip types, not just Luminary
+- `action-generate-trip-day.ts` has a diagnostic Michelin log (~line 1684) but takes no corrective action
 
 ### Changes
 
-#### 1. `action-generate-day.ts` — Add inline arrival/departure timing enforcement
+#### 1. `sanitization.ts` — Expand `KNOWN_CASUAL_VENUES` + add venue-type pattern matcher
 
-Insert a new block immediately after the placeholder rejection block (~line 535, before locked activity merge). This block:
+Expand the `KNOWN_CASUAL_VENUES` map to include the specific overpriced venues from the bug report plus common categories:
+- Shakespeare and Company Café → max €25
+- Marché des Enfants Rouges → max €20
+- Café de Flore, Les Deux Magots → max €45
+- Ladurée, Angelina → max €50
+- Borough Market, Mercato Centrale, Markthalle Neun → max €20
 
-- Defines a `timeToMinutes()` helper (or reuses existing `parseTimeToMinutes`)
-- On **Day 1 (arrival day)**: Reads `flightContext.arrivalTime24` and calculates `arrivalMinutes + 120` as the earliest allowed non-transport activity. Filters out any activity starting before that threshold (keeping TRANSPORT, FLIGHT, TRANSIT, and hotel check-in)
-- On **Last Day (departure day)**: Reads `flightContext.returnDepartureTime24` and calculates `departureMinutes - 180` as the latest allowed non-transport activity. Filters out any activity starting after that threshold (keeping TRANSPORT, FLIGHT, TRANSIT, and hotel check-out)
-- Logs every removed activity with `console.warn("ARRIVAL TIMING: ...")` or `console.warn("DEPARTURE TIMING: ...")`
+Add a new exported function `enforceVenueTypePriceCap()` that checks regex patterns for venue *types* (markets, bakeries, bookshop cafés, street food) and caps them even when the specific venue name isn't in the map. This catches future cases the explicit map misses.
 
-Uses `isFirstDay` and `isLastDay` flags already available in scope, plus `flightContext` already extracted.
+#### 2. `compile-prompt.ts` — Make Michelin inclusion rules trip-type-aware
 
-#### 2. `action-generate-day.ts` — Add time overlap fixer
+Replace the current generic Michelin inclusion block (~line 872) with trip-type-conditional rules:
+- **Luminary**: "MUST include" language with specific minimums (1 for 3-4 days, 2 for 5-6 days, 3 for 7+). Include the known Michelin restaurant list by city so the AI has concrete options.
+- **Explorer**: "Optional but encouraged" — keep current language
+- **Budget/Backpacker**: "Do NOT include Michelin-starred restaurants"
 
-After the arrival/departure filter and after locked activity merge, add a sequential overlap fixer:
+The `tripType` variable is already in scope.
 
-- Sort activities by start time
-- For each consecutive pair, if `prev.endTime > curr.startTime`, shift `curr` forward to `prev.endTime + 15 minutes`
-- Cascade end times accordingly
-- Log each shift with `console.warn("TIME OVERLAP: ...")`
+#### 3. `action-generate-trip-day.ts` — Upgrade Michelin diagnostic to enforcement
 
-#### 3. `compile-prompt.ts` — Strengthen arrival/departure rules at prompt top
+At ~line 1684, replace the console.warn-only diagnostic with actual Michelin injection logic for Luminary trips:
+- Count Michelin restaurants across all generated days using a `KNOWN_MICHELIN_SET`
+- If count is below the required minimum, find dinner slots without Michelin restaurants and swap in a fallback from a `MICHELIN_FALLBACK_BY_CITY` map
+- Only inject on days that don't already have a Michelin dinner
+- Log each injection with `console.warn("MICHELIN INJECTION: ...")`
 
-Add a concise reinforcement block right after the existing "REAL RESTAURANTS ONLY" rule at the top of the system prompt:
+#### 4. `sanitization.ts` — Call new `enforceVenueTypePriceCap` from existing callers
 
-```
-ARRIVAL/DEPARTURE TIMING (TOP PRIORITY):
-- Day 1: NEVER generate activities before {arrivalTime} + 2 hours
-- Last Day: NEVER generate activities after {departureTime} - 3 hours
-```
-
-This uses the already-available `flightContext` values to inject specific times.
+Wire the new function into the same call sites where `enforceCasualVenuePriceCap` is already called (in `action-generate-day.ts` and `action-generate-trip-day.ts` final pricing loops).
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `action-generate-day.ts` | Add arrival/departure filter block + time overlap fixer after placeholder rejection (~line 535) |
-| `pipeline/compile-prompt.ts` | Add concise arrival/departure timing reminder at top of system prompt |
+| `sanitization.ts` | Expand `KNOWN_CASUAL_VENUES`, add `enforceVenueTypePriceCap()` |
+| `pipeline/compile-prompt.ts` | Make Michelin rules conditional on `tripType` |
+| `action-generate-trip-day.ts` | Upgrade Michelin diagnostic to injection for Luminary trips |
+| `action-generate-day.ts` | Wire `enforceVenueTypePriceCap` into final pricing loop |
 
 ### What we're NOT changing
-- `compile-day-schema.ts` — already generates correct constraints
-- The validate/repair pipeline — stays as secondary safety net
-- Meal policy derivation — already accounts for arrival/departure times
+- `enforceMichelinPriceFloor` — already works correctly for price floors
+- `enforceBarNightcapPriceCap` — already works
+- The placeholder rejection from Prompt 59 — stays as-is
+- Frontend code — no changes needed
 
