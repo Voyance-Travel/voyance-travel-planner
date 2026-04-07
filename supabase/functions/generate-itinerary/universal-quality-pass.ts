@@ -64,7 +64,7 @@ export async function universalQualityPass(
   const {
     city, country, tripType, dayIndex, totalDays,
     usedVenueNames, arrivalTime, departureTime,
-    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants,
+    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants, diningConfig,
   } = options;
 
   const label = `QUALITY_PASS_D${dayIndex + 1}`;
