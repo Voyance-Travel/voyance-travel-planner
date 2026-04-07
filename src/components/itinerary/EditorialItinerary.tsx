@@ -10963,7 +10963,27 @@ function ActivityRow({
                 />
               </>
             )}
-            {isEditable && !isPreview && (
+            {!isPreview && (
+              <div className="flex items-center gap-0.5">
+                {/* AI Concierge button */}
+                {showConcierge && (
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => onOpenConcierge!(activity, dayIndex, activityIndex)}
+                        className="p-1.5 rounded transition-colors hover:bg-primary/10 text-primary"
+                        aria-label="AI Concierge"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <span className="text-xs font-medium">AI Concierge</span>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+            {isEditable && (
+              <>
               <div className="flex items-center gap-0.5">
                 {/* Lock button */}
                 <Tooltip delayDuration={200}>
