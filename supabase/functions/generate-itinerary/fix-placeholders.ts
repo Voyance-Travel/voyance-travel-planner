@@ -129,8 +129,9 @@ export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, Fallback
 // =============================================================================
 export function getRandomFallbackRestaurant(
   city: string,
-  mealType: 'breakfast' | 'lunch' | 'dinner',
-  usedNames: Set<string>
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
+  usedNames: Set<string>,
+  ignoreUsed?: boolean,
 ): FallbackRestaurant | null {
   const cityKey = city.toLowerCase().trim();
   let cityData: Record<string, FallbackRestaurant[]> | undefined;
@@ -142,8 +143,16 @@ export function getRandomFallbackRestaurant(
   }
   if (!cityData) return null;
 
-  const options = cityData[mealType];
+  // Drinks falls back to dinner pool
+  let options = cityData[mealType];
+  if ((!options || options.length === 0) && mealType === 'drinks') {
+    options = cityData['dinner'];
+  }
   if (!options || options.length === 0) return null;
+
+  if (ignoreUsed) {
+    return options[Math.floor(Math.random() * options.length)];
+  }
 
   const available = options.filter(r => !usedNames.has(r.name.toLowerCase()));
   if (available.length === 0) return options[0];
