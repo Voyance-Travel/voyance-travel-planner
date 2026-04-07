@@ -668,6 +668,9 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
   }
 
   const archetypeContext = getFullArchetypeContext(primaryArchetype, resolvedDestination, effectiveBudgetTier, effectiveTraitScores);
+  const archetypeTier = archetypeContext.definition.category || 'Explorer';
+  const diningConfig = getDiningConfig(archetypeTier, archetypeContext.definition.identity || primaryArchetype);
+  console.log(`[compile-prompt] Dining DNA: tier=${archetypeTier}, policy=${diningConfig.michelinPolicy}, style=${diningConfig.diningStyle.substring(0, 60)}...`);
   const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;
   const minActivitiesFromArchetype = archetypeContext.definition.dayStructure.minScheduledActivities
     || Math.max(3, Math.ceil(maxActivitiesFromArchetype * 0.6));
