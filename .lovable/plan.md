@@ -1,54 +1,72 @@
 
 
-## Make Michelin Inclusion Universal (Remove Hardcoded City Lists)
+## Create Universal Quality Pass Orchestrator
 
-### Problem
-Both the AI prompt and the post-generation Michelin injection use hardcoded restaurant lists for 6 cities (Paris, Rome, Berlin, Lisbon, London, Barcelona). Any other city gets no Michelin guidance or fallback injection.
+### Goal
+Consolidate 9 scattered quality enforcement steps into one reusable `universalQualityPass()` function, then wire it into both generation paths.
 
-### Changes
+### New File: `supabase/functions/generate-itinerary/universal-quality-pass.ts`
 
-#### 1. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` (lines 872-941)
+Creates and exports `universalQualityPass(activities, options)` that runs these steps in order:
 
-Replace the city-specific `if/else` Michelin restaurant lists with the universal prompt the user provided:
+| Step | Function | Source |
+|------|----------|--------|
+| 1. Arrival timing | `enforceArrivalTiming()` | Already in `flight-hotel-context.ts` |
+| 2. Departure timing | `enforceDepartureTiming()` | Already in `flight-hotel-context.ts` |
+| 3. Fix placeholder meals | `fixPlaceholdersForDay()` | Move/re-export from `action-generate-day.ts` |
+| 4. Free venue pricing | `checkAndApplyFreeVenue()` | Already in `sanitization.ts` |
+| 5. Market dining cap | `enforceMarketDiningCap()` | Already in `sanitization.ts` |
+| 6. Universal price caps | `enforceBarNightcapPriceCap()` + `enforceCasualVenuePriceCap()` + `enforceVenueTypePriceCap()` + `enforceTicketedAttractionPricing()` + `enforceMichelinPriceFloor()` | Already in `sanitization.ts` |
+| 7. Cross-day venue dedup | New inline logic using fuzzy `venueNamesMatch()` | Currently inline in `action-generate-trip-day.ts` lines 1020-1057 |
+| 8. Hotel return injection | New logic — append "Return to Your Hotel" if last activity isn't STAY (skip departure day) | Currently not implemented |
+| 9. Update used venues set | New inline — adds all venue names to `usedVenueNames` for next day | Currently inline |
 
-```
-LUMINARY DINNER GUIDANCE:
-This is a Luminary (luxury) trip. For at least {minCount} dinner(s) across the full trip,
-suggest a Michelin-starred restaurant or equivalent top-tier fine dining restaurant
-that genuinely exists in {destination}.
-- Price these at the restaurant's real tasting menu price (usually €120-350/pp for starred restaurants)
-- Include the real address
-- Only suggest restaurants you are confident actually exist and hold the star rating
-- If you are unsure about Michelin status in this city, suggest the most acclaimed
-  fine dining restaurant you know of
-```
-
-Keep the existing trip-type branching (budget → skip, luminary → mandatory, explorer → optional) and the count logic (3-4d→1, 5-6d→2, 7+→3). Just remove the hardcoded `michelinList` blocks.
-
-#### 2. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (lines 1801-1889)
-
-Remove the `MICHELIN_FALLBACKS` hardcoded map and the injection loop. Since the AI prompt now universally instructs Michelin inclusion for any city, the deterministic fallback swap is no longer needed (it can't work for unknown cities anyway). Replace with a log-only warning if the count is still short after generation, so we can monitor without silently injecting wrong data.
-
-Replace lines 1801-1889 with:
+**Options interface:**
 ```typescript
-if (isLuminaryTrip && michelinCount < requiredCount) {
-  console.warn(`[MICHELIN] Only ${michelinCount}/${requiredCount} Michelin dinners generated for Luminary ${totalDays}-day ${destination} trip. AI prompt should have included them.`);
+interface UniversalQualityOptions {
+  city: string;
+  country: string;
+  tripType: string;
+  dayIndex: number;        // 0-based
+  totalDays: number;
+  usedVenueNames: Set<string>;
+  arrivalTime?: string;    // HH:MM, day 0 only
+  departureTime?: string;  // HH:MM, last day only
+  dayTitle?: string;
+  budgetTier?: string;
+  apiKey?: string;
+  lockedActivities?: any[];
 }
 ```
+
+### Extract `fixPlaceholdersForDay` to Shared Module
+
+`fixPlaceholdersForDay()` currently lives as a private function inside `action-generate-day.ts` (line 270). It needs to be importable by the new orchestrator.
+
+**File: `supabase/functions/generate-itinerary/fix-placeholders.ts`** — Move the function here and export it. Update `action-generate-day.ts` to import from the new file.
+
+### Wire Into `action-generate-trip-day.ts`
+
+Replace the scattered quality steps (cross-day dedup at lines 1020-1057, pricing guards at lines 1764-1776) with a single call to `universalQualityPass()` per day during the generation loop. The trip-level Michelin count check (lines 1778-1803) stays as-is since it's a trip-wide concern.
+
+### Wire Into `action-generate-day.ts`
+
+Replace the scattered steps (placeholder fix at line 765, arrival/departure at lines 781-791, final pricing guard at lines 1568-1574) with a single `universalQualityPass()` call after normalization.
 
 ### Files to Edit
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` | Replace hardcoded city Michelin lists with universal AI guidance prompt |
-| `supabase/functions/generate-itinerary/action-generate-trip-day.ts` | Remove `MICHELIN_FALLBACKS` map and injection loop, keep warning log |
+| `supabase/functions/generate-itinerary/universal-quality-pass.ts` | **New** — orchestrator function |
+| `supabase/functions/generate-itinerary/fix-placeholders.ts` | **New** — extracted from action-generate-day.ts |
+| `supabase/functions/generate-itinerary/action-generate-day.ts` | Import `fixPlaceholdersForDay` from new file; replace scattered quality steps with `universalQualityPass()` call |
+| `supabase/functions/generate-itinerary/action-generate-trip-day.ts` | Replace scattered dedup + pricing loops with `universalQualityPass()` call per day |
 
 ### What Stays Unchanged
-- `enforceMichelinPriceFloor()` in sanitization.ts — still enforces minimum pricing for any Michelin restaurant the AI suggests
-- `KNOWN_FINE_DINING_STARS` and `FINE_DINING_MIN_PRICE_BY_STARS` — still used for price floor enforcement
-- `canHaveMichelin()` in archetype-constraints.ts — still controls which archetypes allow Michelin
-- Budget trip exclusion — still skips Michelin entirely
-- Explorer trip optional inclusion — still encouraged but not mandatory
+- All individual enforcement functions in `sanitization.ts` and `flight-hotel-context.ts` — untouched
+- Trip-level Michelin count warning — stays in `action-generate-trip-day.ts`
+- Locked activity conflict resolution — stays separate (runs before quality pass)
+- Meal guard — stays separate (runs after quality pass)
 
 ### Deployment
 Redeploy `generate-itinerary` edge function.
