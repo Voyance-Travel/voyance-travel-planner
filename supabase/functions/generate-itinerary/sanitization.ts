@@ -633,6 +633,7 @@ export function enforceBarNightcapPriceCap(activity: Record<string, any>, logPre
 
 /** Known casual/street food venues — max price per person in EUR */
 const KNOWN_CASUAL_VENUES: Record<string, number> = {
+  // Street food
   'trapizzino': 15,
   'bao': 20,
   'five guys': 20,
@@ -645,6 +646,33 @@ const KNOWN_CASUAL_VENUES: Record<string, number> = {
   'kebab': 15,
   'pizza al taglio': 12,
   'supplizio': 15,
+
+  // Bookstore cafés
+  'shakespeare and company café': 25,
+  'shakespeare and company cafe': 25,
+  'shakespeare and company': 25,
+
+  // Markets (entry free, food stalls cheap)
+  'marché des enfants rouges': 20,
+  'marche des enfants rouges': 20,
+  'marché aux puces': 15,
+  'marché bastille': 15,
+  'marché d\'aligre': 15,
+  "marche d'aligre": 15,
+  'borough market': 20,
+  'mercato centrale': 20,
+  'mercato testaccio': 15,
+  'markthalle neun': 20,
+
+  // Famous cafés (not fine dining)
+  'café de flore': 45,
+  'cafe de flore': 45,
+  'les deux magots': 40,
+  'ladurée': 50,
+  'laduree': 50,
+  'angelina': 50,
+  'carette': 40,
+  'stohrer': 30,
 };
 
 /**
