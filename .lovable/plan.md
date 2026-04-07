@@ -1,19 +1,18 @@
 
 
-## Fix Double Close Button on Activity Concierge Sheet
+## Fix: Make AI Saved Notes Visible on Activity Cards
 
-The `SheetContent` component from `src/components/ui/sheet.tsx` automatically renders a close (X) button at `top-4 right-4` (line 60). The `ActivityConciergeSheet` also renders its own X button in the header (line 304). This creates two overlapping close buttons.
+### Problem
+AI Notes are saving correctly and persisting to the database, but they're hidden behind a **collapsed accordion** that defaults to closed. The small "✨ AI Notes (1)" toggle blends into the card and is easy to miss — especially right after saving, when the user expects to see the note immediately.
 
 ### Fix
 
-**File: `src/components/itinerary/ActivityConciergeSheet.tsx`**
+**File: `src/components/itinerary/AISavedNotes.tsx`**
 
-Remove the manual X button from the header (lines 304-306). The built-in `SheetPrimitive.Close` X from `SheetContent` already handles closing via the `Sheet`'s `onOpenChange` prop. The custom header X is redundant.
+1. Change the default state from collapsed to **expanded** — `useState(true)` instead of `useState(false)`. Users who just saved a note should see it immediately on the card without hunting for it. They can still collapse it if they want.
 
-Alternatively, if we want the X to stay in the header row (visually part of the header layout), we hide the default one instead:
+That's a one-line change: line 14, `useState(false)` → `useState(true)`.
 
-**File: `src/components/itinerary/ActivityConciergeSheet.tsx`**
-- Remove the `<Button variant="ghost" ...><X /></Button>` block at lines 304-306
-
-The Sheet's built-in close button will remain and handle closing. One file, three lines removed.
+### Files Changed
+1. `src/components/itinerary/AISavedNotes.tsx` — default accordion to open
 
