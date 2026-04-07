@@ -45,6 +45,7 @@ export interface UniversalQualityOptions {
   apiKey?: string;
   lockedActivities?: any[];
   usedRestaurants?: string[];
+  diningConfig?: DiningConfig;
 }
 
 // Categories to skip for cross-day venue dedup (these repeat legitimately)
