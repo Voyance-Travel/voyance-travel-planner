@@ -1675,6 +1675,7 @@ async function _handleGenerateTripDayInner(
       for (const act of day.activities) {
         enforceBarNightcapPriceCap(act, 'TRIP_DAY_FINAL');
         enforceCasualVenuePriceCap(act, 'TRIP_DAY_FINAL');
+        enforceVenueTypePriceCap(act, 'TRIP_DAY_FINAL');
         enforceTicketedAttractionPricing(act, 'TRIP_DAY_FINAL');
         enforceMichelinPriceFloor(act, 'TRIP_DAY_FINAL');
       }
