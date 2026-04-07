@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { checkAndApplyFreeVenue, ALWAYS_FREE_VENUE_PATTERNS } from "./sanitization.ts";
+import { checkAndApplyFreeVenue, enforceMarketDiningCap, ALWAYS_FREE_VENUE_PATTERNS } from "./sanitization.ts";
 
 // ─── Tier 1 pattern matching ───
 
