@@ -266,7 +266,7 @@ export function isPlaceholderMeal(activity: any, cityName: string): boolean {
 // =============================================================================
 // GENERIC VENUE TEMPLATE POOL — for cities without fallback data
 // =============================================================================
-const GENERIC_VENUE_TEMPLATES: Record<string, string[]> = {
+export const GENERIC_VENUE_TEMPLATES: Record<string, string[]> = {
   breakfast: [
     "Café Lumière", "Morning Glory Café", "Le Petit Matin", "Café Soleil",
     "The Corner Bakery", "Café des Arts", "The Golden Cup", "Maison du Café",

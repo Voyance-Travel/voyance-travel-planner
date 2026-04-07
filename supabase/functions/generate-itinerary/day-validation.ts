@@ -4,6 +4,7 @@
 
 import { isRecurringEvent } from './currency-utils.ts';
 import type { RequiredMeal } from './meal-policy.ts';
+import { getRandomFallbackRestaurant, GENERIC_VENUE_TEMPLATES } from './fix-placeholders.ts';
 
 // =============================================================================
 // CHAIN RESTAURANT BLOCKLIST — prevents chain restaurants from appearing
@@ -801,10 +802,15 @@ export function enforceRequiredMealsFinalGuard(
   currency: string = 'USD',
   dayMode: string = 'unknown',
   fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [],
+  options?: { earliestTimeMins?: number; latestTimeMins?: number },
 ): MealGuardResult {
   if (requiredMeals.length === 0) {
     return { activities, injectedMeals: [], alreadyCompliant: true };
   }
+
+  // Timing window: if provided, skip meals that fall outside the available window
+  const earliestMins = options?.earliestTimeMins ?? 0;     // default: midnight
+  const latestMins = options?.latestTimeMins ?? 24 * 60;   // default: end of day
 
   // Pre-filter: remove any chain restaurants from fallbackVenues
   const cleanFallbackVenues = fallbackVenues.filter(v => !isChainRestaurant(v.name));
@@ -955,10 +961,10 @@ export function enforceRequiredMealsFinalGuard(
     `MISSING=[${missing.join(',')}] — injecting ${fallbackVenues.length > 0 ? 'REAL VENUE' : 'destination-aware'} fallback meals (dayMode=${dayMode})`
   );
 
-  const fallbackTimes: Record<RequiredMeal, { start: string; end: string; cost: number }> = {
-    breakfast: { start: '08:30', end: '09:15', cost: 12 },
-    lunch:     { start: '12:30', end: '13:30', cost: 18 },
-    dinner:    { start: '19:00', end: '20:15', cost: 30 },
+  const fallbackTimes: Record<RequiredMeal, { start: string; end: string; cost: number; startMins: number }> = {
+    breakfast: { start: '08:30', end: '09:15', cost: 12, startMins: 510 },
+    lunch:     { start: '12:30', end: '13:30', cost: 18, startMins: 750 },
+    dinner:    { start: '19:00', end: '20:15', cost: 30, startMins: 1140 },
   };
 
   // Track which venue names have been used to avoid duplicates within this guard call
@@ -972,10 +978,17 @@ export function enforceRequiredMealsFinalGuard(
     const slot = fallbackTimes[mealType];
     const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
 
+    // TIMING CHECK: Skip this meal if it falls outside the available window
+    if (slot.startMins < earliestMins || slot.startMins > latestMins) {
+      console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Skipping ${mealType} — slot ${slot.start} is outside available window (${earliestMins}-${latestMins} mins)`);
+      continue;
+    }
+
     // TRY 1: Use a real venue from fallbackVenues
     let venueName: string | null = null;
     let venueAddress: string = destination;
     let venueDescription: string = '';
+    let usedRealVenue = false;
 
     // Find matching venue: prefer specific meal type, then 'any'
     const matchingVenues = fallbackVenues.filter(v =>
@@ -991,19 +1004,50 @@ export function enforceRequiredMealsFinalGuard(
       venueAddress = venue.address || destination;
       venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
       usedVenueNamesForInjection.add(venue.name.toLowerCase());
+      usedRealVenue = true;
       // Remove from fallbackVenues so next meal gets a different one
       const idx = fallbackVenues.indexOf(venue);
       if (idx >= 0) fallbackVenues.splice(idx, 1);
       console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Using REAL venue "${venue.name}" for ${mealType}`);
     }
 
-    // TRY 2: Fall back to destination-aware hints — use venue TYPE, never "${Meal} in ${City}"
+    // TRY 2: Use hardcoded fallback DB from fix-placeholders.ts (real named venues)
     if (!venueName) {
-      const hint = getDestinationHint(destination, mealType);
-      // Use the venue type suffix (e.g. "bistro", "trattoria", "izakaya") instead of city name
-      venueName = `${label} at a ${hint.venueSuffix}`;
-      venueDescription = hint.description;
-      console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: No real venue for ${mealType} — using type-based fallback "${venueName}" (needs refinement)`);
+      try {
+        const usedNames = [...usedVenueNamesForInjection];
+        const fallback = getRandomFallbackRestaurant(destination, mealType, usedNames);
+        if (fallback) {
+          venueName = `${label} at ${fallback.name}`;
+          venueAddress = fallback.address || destination;
+          venueDescription = fallback.description || `${label} at ${fallback.name}`;
+          usedVenueNamesForInjection.add(fallback.name.toLowerCase());
+          usedRealVenue = true;
+          console.log(`[MEAL FINAL GUARD] Day ${dayNumber}: Using FALLBACK DB venue "${fallback.name}" for ${mealType}`);
+        }
+      } catch (_e) { /* fix-placeholders failed, continue */ }
+    }
+
+    // TRY 3 (LAST RESORT): Use generic cultural template — NEVER "at a bistro/neighborhood café"
+    if (!venueName) {
+      const templates = GENERIC_VENUE_TEMPLATES[mealType] || GENERIC_VENUE_TEMPLATES['dinner'] || [];
+      const unused = templates.filter((t: string) => !usedVenueNamesForInjection.has(t.toLowerCase()));
+      const pick = unused.length > 0 ? unused[Math.floor(Math.random() * unused.length)] : templates[0];
+      if (pick) {
+        venueName = `${label} at ${pick}`;
+        venueDescription = `${label} at ${pick} — a local spot worth trying`;
+        usedVenueNamesForInjection.add(pick.toLowerCase());
+        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Using GENERIC TEMPLATE "${pick}" for ${mealType}`);
+      } else {
+        // Absolute last resort — but NEVER use "at a bistro" style text
+        const emergencyNames: Record<RequiredMeal, string> = {
+          breakfast: 'Café Matinal',
+          lunch: 'Bistrot du Marché',
+          dinner: 'Restaurant Le Jardin',
+        };
+        venueName = `${label} at ${emergencyNames[mealType]}`;
+        venueDescription = `${label} at a local favorite`;
+        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Emergency fallback for ${mealType}: "${venueName}"`);
+      }
     }
 
     result.push({
@@ -1018,10 +1062,10 @@ export function enforceRequiredMealsFinalGuard(
       tags: ['dining', mealType, 'meal-guard'],
       bookingRequired: false,
       transportation: { method: 'walk', duration: '5 min', estimatedCost: { amount: 0, currency }, instructions: 'Short walk from the previous activity' },
-      tips: venue
+      tips: usedRealVenue
         ? `Check opening hours before heading over — some spots close for afternoon breaks.`
         : `Ask a local or check recent reviews to find a great spot nearby.`,
-      needsRefinement: !venue,
+      needsRefinement: !usedRealVenue,
     } as StrictActivityMinimal);
   }
 

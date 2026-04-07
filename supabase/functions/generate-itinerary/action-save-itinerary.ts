@@ -241,6 +241,10 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
 
       if (missing.length > 0) {
         const destination = day.city || day.destination || 'the destination';
+        // Compute timing window
+        const arrMinsLoop = isFirstDay && savedArrivalTime24 ? (() => { const m = savedArrivalTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : undefined; })() : undefined;
+        const depMinsLoop = isLastDay && savedDepartureTime24 ? (() => { const m = savedDepartureTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - 180 : undefined; })() : undefined;
+
         // Try to load real venue fallbacks from verified_venues for this city
         let saveFallbackVenues: Array<{ name: string; address: string; mealType: string }> = [];
         try {
@@ -266,6 +270,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           'USD',
           policy.dayMode,
           saveFallbackVenues,
+          { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop },
         );
         if (!result.alreadyCompliant) {
           itineraryDays[i] = { ...day, activities: result.activities };
@@ -274,6 +279,19 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
             `[save-itinerary] 🍽️ MEAL GUARD: Day ${dayNumber} was missing [${result.injectedMeals.join(', ')}] — injected before save`
           );
         }
+
+        // Terminal cleanup for this day
+        try {
+          const { terminalCleanup } = await import('./universal-quality-pass.ts');
+          terminalCleanup(itineraryDays[i].activities, {
+            arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+            departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+            city: destination,
+            dayNumber,
+            isFirstDay,
+            isLastDay,
+          });
+        } catch (_e) { /* non-blocking */ }
       }
     }
 

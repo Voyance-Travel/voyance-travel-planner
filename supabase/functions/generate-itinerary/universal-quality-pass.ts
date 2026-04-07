@@ -12,14 +12,7 @@
  * 7. Universal price caps (bar, casual, venue-type, ticketed, Michelin floor)
  * 8. Hotel return injection (except departure day)
  * 9. Update used venues set for next day
- * 2. Departure timing (Last day only)
- * 3. Fix placeholder meals (AI re-generation)
- * 4. Free venue pricing
- * 5. Market dining cap
- * 6. Universal price caps (bar, casual, venue-type, ticketed, Michelin floor)
- * 7. Cross-day venue dedup
- * 8. Hotel return injection (except departure day)
- * 9. Update used venues set for next day
+ * 10. Terminal cleanup (placeholder + timing scrub) — exported for use after meal guards
  */
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
@@ -203,3 +196,144 @@ export async function universalQualityPass(
   console.log(`[QUALITY] Day ${dayIndex + 1} complete: ${result.length} activities ======\n`);
   return result;
 }
+
+// =============================================================================
+// TERMINAL CLEANUP — Run AFTER meal guard to guarantee no placeholders/timing violations
+// =============================================================================
+
+export interface TerminalCleanupOptions {
+  /** 24h arrival time (Day 1 only), e.g. "13:44" */
+  arrivalTime24?: string;
+  /** 24h departure time (last day only), e.g. "18:30" */
+  departureTime24?: string;
+  /** City name for placeholder replacement context */
+  city?: string;
+  /** Day number (1-based) */
+  dayNumber?: number;
+  /** Is this the first day? */
+  isFirstDay?: boolean;
+  /** Is this the last day? */
+  isLastDay?: boolean;
+}
+
+/**
+ * Terminal cleanup pass — the absolute last line of defense.
+ * Runs AFTER any meal guard to guarantee:
+ * 1. No placeholder meals survive (uses nuclearPlaceholderSweep)
+ * 2. No activities before arrival time (Day 1)
+ * 3. No activities after departure buffer (last day)
+ * 
+ * This function modifies activities IN PLACE and returns the cleaned array.
+ */
+export function terminalCleanup(
+  activities: any[],
+  options: TerminalCleanupOptions,
+): any[] {
+  if (!activities || activities.length === 0) return activities;
+
+  const { arrivalTime24, departureTime24, city, dayNumber, isFirstDay, isLastDay } = options;
+  const label = `TERMINAL_D${dayNumber || '?'}`;
+  let removed = 0;
+
+  // ── 1. Nuclear placeholder sweep (zero API, synchronous) ──
+  // Uses imports already available at module level
+  try {
+    const diningConfig = getDiningConfig('Explorer', '');
+    const nuclearCount = nuclearPlaceholderSweep(activities, city || '', diningConfig);
+    if (nuclearCount > 0) {
+      console.warn(`[${label}] Terminal nuclear sweep replaced ${nuclearCount} placeholder(s)`);
+    }
+  } catch (e) {
+    // Fallback: inline placeholder check
+    const PLACEHOLDER_RE = /\b(at a |at an |neighborhood caf[eé]|local restaurant|local bistro|a bistro|a brasserie|a trattoria)\b/i;
+    for (const act of activities) {
+      const cat = (act.category || '').toUpperCase();
+      if (cat !== 'DINING' && cat !== 'RESTAURANT') continue;
+      const title = act.title || '';
+      if (PLACEHOLDER_RE.test(title)) {
+        console.error(`[${label}] PLACEHOLDER SURVIVED ALL PASSES: "${title}" — this should never happen`);
+      }
+    }
+  }
+
+  // ── 2. Pre-arrival filter (Day 1) ──
+  if (isFirstDay && arrivalTime24) {
+    const arrivalMins = parseTimeMins(arrivalTime24);
+    if (arrivalMins !== null) {
+      // Activities must start after arrival (no buffer here — universalQualityPass already applied 2h buffer)
+      const result: any[] = [];
+      for (const act of activities) {
+        const cat = (act.category || '').toLowerCase();
+        // Always keep structural activities
+        if (['stay', 'transport', 'flight', 'accommodation', 'logistics'].includes(cat)) {
+          result.push(act);
+          continue;
+        }
+        const startStr = act.startTime || act.start_time || '';
+        const startMins = parseTimeMins(startStr);
+        if (startMins !== null && startMins < arrivalMins) {
+          console.warn(`[${label}] Removing pre-arrival activity "${act.title}" at ${startStr} (arrival: ${arrivalTime24})`);
+          removed++;
+          continue;
+        }
+        result.push(act);
+      }
+      activities.length = 0;
+      activities.push(...result);
+    }
+  }
+
+  // ── 3. Post-departure filter (last day) ──
+  if (isLastDay && departureTime24) {
+    const depMins = parseTimeMins(departureTime24);
+    if (depMins !== null) {
+      const latestEnd = depMins - 180; // 3h buffer
+      if (latestEnd > 0) {
+        const result: any[] = [];
+        for (const act of activities) {
+          const cat = (act.category || '').toLowerCase();
+          if (['transport', 'flight', 'accommodation', 'logistics'].includes(cat)) {
+            result.push(act);
+            continue;
+          }
+          const startStr = act.startTime || act.start_time || '';
+          const startMins = parseTimeMins(startStr);
+          if (startMins !== null && startMins > latestEnd) {
+            // Check if it's a departure-related activity (keep those)
+            const title = (act.title || '').toLowerCase();
+            if (/depart|airport|flight|check.?out/i.test(title)) {
+              result.push(act);
+              continue;
+            }
+            console.warn(`[${label}] Removing post-departure activity "${act.title}" at ${startStr} (departure: ${departureTime24})`);
+            removed++;
+            continue;
+          }
+          result.push(act);
+        }
+        activities.length = 0;
+        activities.push(...result);
+      }
+    }
+  }
+
+  if (removed > 0) {
+    console.log(`[${label}] Terminal cleanup removed ${removed} timing-violating activities`);
+  }
+
+  return activities;
+}
+
+/** Simple time parser for terminal cleanup */
+function parseTimeMins(timeStr: string): number | null {
+  if (!timeStr) return null;
+  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const mins = parseInt(match[2], 10);
+  const period = match[3]?.toUpperCase();
+  if (period === 'PM' && hours !== 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+  return hours * 60 + mins;
+}
+

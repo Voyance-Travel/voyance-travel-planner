@@ -1105,6 +1105,12 @@ export async function handleGenerateDay(
       // Snapshot meals BEFORE guard for accurate diagnostics
       mealsBeforeGuard = detectMealSlots(generatedDay.activities || []);
 
+      // Compute timing window for meal guard
+      const _arrTime24 = (flightContext as any)?.arrivalTime24 as string | undefined;
+      const _depTime24 = (flightContext as any)?.returnDepartureTime24 as string | undefined;
+      const arrMinsForGuard = isFirstDay && _arrTime24 ? (() => { const m = _arrTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : undefined; })() : undefined;
+      const depMinsForGuard = isLastDay && _depTime24 ? (() => { const m = _depTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - 180 : undefined; })() : undefined;
+
       mealGuardResult = enforceRequiredMealsFinalGuard(
         generatedDay.activities || [],
         dayMealPolicy.requiredMeals,
@@ -1113,6 +1119,7 @@ export async function handleGenerateDay(
         'USD',
         dayMealPolicy.dayMode,
         mealFallbackVenues,
+        { earliestTimeMins: arrMinsForGuard, latestTimeMins: depMinsForGuard },
       );
       if (!mealGuardResult.alreadyCompliant) {
         generatedDay.activities = mealGuardResult.activities as any;
@@ -1124,6 +1131,22 @@ export async function handleGenerateDay(
 
       // Snapshot meals AFTER guard
       mealsAfterGuard = detectMealSlots(generatedDay.activities || []);
+
+      // ── TERMINAL CLEANUP: final placeholder + timing scrub ──
+      {
+        const { terminalCleanup } = await import('./universal-quality-pass.ts');
+        const _arrivalForCleanup = isFirstDay ? ((flightContext as any)?.arrivalTime24 as string | undefined) : undefined;
+        const _departureForCleanup = isLastDay ? ((flightContext as any)?.returnDepartureTime24 as string | undefined) : undefined;
+        terminalCleanup(generatedDay.activities, {
+          arrivalTime24: _arrivalForCleanup,
+          departureTime24: _departureForCleanup,
+          city: resolvedDestination || destination,
+          dayNumber,
+          isFirstDay,
+          isLastDay,
+        });
+        normalizedActivities = generatedDay.activities;
+      }
     }
 
     // End post-processing phase and write progress
