@@ -38,6 +38,8 @@ interface CustomerDayCardProps {
   totalDays?: number;
   travelers?: number;
   currency?: string;
+  onSaveAINote?: (activityId: string, note: AISavedNote) => void;
+  onDeleteAINote?: (activityId: string, noteId: string) => void;
 }
 
 const activityTypeStyles: Record<string, { bg: string; text: string; border: string }> = {
