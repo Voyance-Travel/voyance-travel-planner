@@ -607,8 +607,8 @@ export function parseItineraryDays(
     date: calculateDayDate(tripStartDate, idx) || day.date,
   }));
 
-  // Step 5: Day-count mismatch detection (diagnostic only)
-  if (tripStartDate && tripEndDate) {
+  // Step 5: Day-count mismatch detection (diagnostic only, skip for partial/in-progress data)
+  if (tripStartDate && tripEndDate && !options?.partial) {
     try {
       const start = new Date(tripStartDate + 'T00:00:00');
       const end = new Date(tripEndDate + 'T00:00:00');
