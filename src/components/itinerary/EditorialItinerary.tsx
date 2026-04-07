@@ -6412,6 +6412,7 @@ export function EditorialItinerary({
                           onPhotoResolved={reportPhoto}
                           isManualMode={isManualMode}
                           onOpenConcierge={handleOpenConcierge}
+                          onDeleteAINote={handleDeleteAINote}
                         />
                       )}
                     </>
