@@ -1009,43 +1009,29 @@ async function _handleGenerateTripDayInner(
     dayResult.activities = dayResult.activities.filter((a: any) => a !== null);
   }
 
-  // POST-GENERATION: Enforce cross-day NON-DINING venue uniqueness (parks, museums, landmarks)
-  if (dayResult?.activities?.length > 0 && usedVenues.length > 0) {
-    const { normalizeVenueName, venueNamesMatch } = await import('./generation-utils.ts');
-    const SKIP_CATS = new Set(['stay', 'transport', 'travel', 'logistics', 'flight', 'accommodation', 'dining']);
-    const usedVenueNorms = new Set(usedVenues.map(v => normalizeVenueName(v)));
-
-    for (let i = 0; i < dayResult.activities.length; i++) {
-      const act = dayResult.activities[i];
-      const cat = (act.category || '').toLowerCase();
-      if (SKIP_CATS.has(cat)) continue; // dining handled above, transport/stay irrelevant
-
-      // Collect all venue identifiers for this activity
-      const candidates = [
-        act.location?.name || '',
-        act.venue_name || '',
-        act.title || '',
-      ].map(s => s.trim()).filter(s => s.length > 3 && !/your hotel/i.test(s));
-
-      let matched = false;
-      for (const raw of candidates) {
-        const norm = normalizeVenueName(raw);
-        if (!norm) continue;
-        for (const used of usedVenueNorms) {
-          if (venueNamesMatch(norm, used)) {
-            matched = true;
-            break;
-          }
-        }
-        if (matched) break;
-      }
-
-      if (matched) {
-        console.warn(`[generate-trip-day] 🚫 ACTIVITY DEDUP: "${act.title}" at "${act.venue_name || act.location?.name || ''}" repeats from previous day — REMOVING`);
-        dayResult.activities[i] = null;
-      }
+  // ── UNIVERSAL QUALITY PASS — timing, pricing, non-dining dedup, hotel return ──
+  if (dayResult?.activities?.length > 0) {
+    const { universalQualityPass } = await import('./universal-quality-pass.ts');
+    const usedVenueSet = new Set(usedVenues.map(v => v.toLowerCase()));
+    dayResult.activities = await universalQualityPass(dayResult.activities, {
+      city: cityInfo?.cityName || destination,
+      country: destinationCountry || '',
+      tripType: tripType || 'Explorer',
+      dayIndex: dayNumber - 1,
+      totalDays,
+      usedVenueNames: usedVenueSet,
+      arrivalTime: isFirstDay ? arrTime24 : undefined,
+      departureTime: isLastDay ? depTime24 : undefined,
+      dayTitle: dayResult?.theme || dayResult?.title,
+      budgetTier: budgetTier || 'moderate',
+      apiKey: Deno.env.get("LOVABLE_API_KEY") || undefined,
+      lockedActivities: [],
+      usedRestaurants: usedRestaurants,
+    });
+    // Sync usedVenues back from the Set for subsequent days
+    for (const v of usedVenueSet) {
+      if (!usedVenues.includes(v)) usedVenues.push(v);
     }
-    dayResult.activities = dayResult.activities.filter((a: any) => a !== null);
   }
 
   // Flush stage logger (non-blocking, non-fatal)
