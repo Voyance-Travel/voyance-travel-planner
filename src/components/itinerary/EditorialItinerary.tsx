@@ -9194,6 +9194,8 @@ interface DayCardProps {
    onPhotoResolved?: (activityId: string, photoUrl: string) => void;
    /** Manual builder mode — skip real photo fetching to avoid API costs */
    isManualMode?: boolean;
+   /** Handler to open AI concierge for an activity */
+   onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
 }
 
 function DayCard({
