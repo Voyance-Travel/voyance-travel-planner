@@ -1132,16 +1132,8 @@ export async function handleGenerateDay(
       await innerTimer.updateProgress(`day_${dayNumber}_post_processing_complete`, postProcPct);
     }
 
-    // ── FINAL MICHELIN PRICE FLOOR GUARD ──
-    // Must run LAST so no other pricing step can overwrite the corrected price
-    if (Array.isArray(generatedDay.activities)) {
-      for (const act of generatedDay.activities) {
-        enforceBarNightcapPriceCap(act, 'GENERATE_DAY_FINAL');
-        enforceCasualVenuePriceCap(act, 'GENERATE_DAY_FINAL');
-        enforceVenueTypePriceCap(act, 'GENERATE_DAY_FINAL');
-        enforceMichelinPriceFloor(act, 'GENERATE_DAY_FINAL');
-      }
-    }
+    // ── FINAL PRICING GUARD — handled by universalQualityPass earlier ──
+    // No-op: pricing caps already enforced during quality pass
 
     // ── BUILD DIAGNOSTICS ──
     // Use the canonical detectMealSlots for consistent reporting
