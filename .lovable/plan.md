@@ -1,51 +1,53 @@
 
 
-## Nuclear Placeholder Elimination — Generation-Level Fix
+## Arrival/Departure Timing Enforcement — Inline Post-Generation Fix
 
-### Root Cause
-
-The validate/repair pipeline in `action-generate-day.ts` (~line 787-889) is inside a `try/catch` that silently swallows errors. If ANY part of validation or repair throws, all placeholder fixes are skipped and the raw AI output (with placeholders) goes straight to persist. Additionally, the fallback restaurant DB in `repair-day.ts` lacks descriptions and prices, producing low-quality replacements.
+### What's Already in Place
+The prompt system (`compile-day-schema.ts`) already generates detailed arrival/departure constraints (e.g., "DO NOT plan activities before arrival time"). The AI sometimes ignores these. The fix: add deterministic post-generation enforcement that strips violating activities, just like the placeholder rejection block from Prompt 59.
 
 ### Changes
 
-#### 1. Add unconditional inline placeholder rejection in `action-generate-day.ts`
+#### 1. `action-generate-day.ts` — Add inline arrival/departure timing enforcement
 
-Insert a new block at ~line 326 (after activity normalization, BEFORE enrichment and validate/repair). This runs outside the validate/repair try/catch, so it ALWAYS executes.
+Insert a new block immediately after the placeholder rejection block (~line 535, before locked activity merge). This block:
 
-- Define `PLACEHOLDER_TITLE_PATTERNS` (11 regexes covering "at a bistro", "at a brasserie", "at a café", "at a boulangerie", "at a neighborhood", "at a local", "at a nearby", "at a restaurant")
-- Define `PLACEHOLDER_VENUE_PATTERNS` (regexes for city names, "the destination", "get a restaurant recommendation")
-- Loop through all dining activities, detect placeholders by title OR venue OR description
-- Replace with a random fallback from a new `getRandomFallbackRestaurant()` function (defined in the same file)
-- Track used venue names in a Set to prevent duplicates within the same day
-- Log every replacement with `console.error("PLACEHOLDER DETECTED: ...")`
+- Defines a `timeToMinutes()` helper (or reuses existing `parseTimeToMinutes`)
+- On **Day 1 (arrival day)**: Reads `flightContext.arrivalTime24` and calculates `arrivalMinutes + 120` as the earliest allowed non-transport activity. Filters out any activity starting before that threshold (keeping TRANSPORT, FLIGHT, TRANSIT, and hotel check-in)
+- On **Last Day (departure day)**: Reads `flightContext.returnDepartureTime24` and calculates `departureMinutes - 180` as the latest allowed non-transport activity. Filters out any activity starting after that threshold (keeping TRANSPORT, FLIGHT, TRANSIT, and hotel check-out)
+- Logs every removed activity with `console.warn("ARRIVAL TIMING: ...")` or `console.warn("DEPARTURE TIMING: ...")`
 
-The fallback database will include Paris (6 breakfast, 6 lunch, 6 dinner), Rome (3/3/3), Berlin (3/3/3) with full descriptions and prices — richer than the existing repair-day.ts entries.
+Uses `isFirstDay` and `isLastDay` flags already available in scope, plus `flightContext` already extracted.
 
-#### 2. Move restaurant naming rules to TOP of system prompt in `compile-prompt.ts`
+#### 2. `action-generate-day.ts` — Add time overlap fixer
 
-Currently the "RESTAURANT NAMING RULES" block is at line ~847, buried after 800+ lines of other instructions. Move the critical "ABSOLUTE RULE — REAL RESTAURANTS ONLY" block to the very beginning of the system prompt string, before archetype guidance and schema sections. The AI prioritizes early instructions.
+After the arrival/departure filter and after locked activity merge, add a sequential overlap fixer:
 
-#### 3. Expand fallback DB in `repair-day.ts` with descriptions and prices
+- Sort activities by start time
+- For each consecutive pair, if `prev.endTime > curr.startTime`, shift `curr` forward to `prev.endTime + 15 minutes`
+- Cascade end times accordingly
+- Log each shift with `console.warn("TIME OVERLAP: ...")`
 
-Update the existing `FallbackVenue` interface to include `description` and `price` fields. Enrich existing Paris, Rome, Berlin entries (and add a few more per city) so that repaired venues don't get the generic "Local dining in the city center" description.
+#### 3. `compile-prompt.ts` — Strengthen arrival/departure rules at prompt top
 
-#### 4. Pass `usedVenueNames` from trip-day orchestrator to day generator
+Add a concise reinforcement block right after the existing "REAL RESTAURANTS ONLY" rule at the top of the system prompt:
 
-In `action-generate-trip-day.ts`, after each day is generated (~line 530), collect all venue names from the day's dining activities into the running used-restaurants list. Pass this to the next day's `generate-day` call so the inline placeholder replacer can avoid cross-day duplicates.
+```
+ARRIVAL/DEPARTURE TIMING (TOP PRIORITY):
+- Day 1: NEVER generate activities before {arrivalTime} + 2 hours
+- Last Day: NEVER generate activities after {departureTime} - 3 hours
+```
+
+This uses the already-available `flightContext` values to inject specific times.
 
 ### Files to edit
 
 | File | Change |
 |------|--------|
-| `action-generate-day.ts` | Add inline placeholder rejection block + fallback restaurant DB + `getRandomFallbackRestaurant()` after normalization (~line 326) |
-| `pipeline/compile-prompt.ts` | Move restaurant naming rules to top of system prompt |
-| `pipeline/repair-day.ts` | Add `description` and `price` to `FallbackVenue` interface; enrich existing entries |
-| `action-generate-trip-day.ts` | Accumulate dining venue names after each day completes; already passes usedRestaurants |
+| `action-generate-day.ts` | Add arrival/departure filter block + time overlap fixer after placeholder rejection (~line 535) |
+| `pipeline/compile-prompt.ts` | Add concise arrival/departure timing reminder at top of system prompt |
 
 ### What we're NOT changing
-
-- The validate/repair pipeline itself (it's a second safety net)
-- The AI model or tool schema
-- The meal policy or meal guard
-- Any frontend code
+- `compile-day-schema.ts` — already generates correct constraints
+- The validate/repair pipeline — stays as secondary safety net
+- Meal policy derivation — already accounts for arrival/departure times
 
