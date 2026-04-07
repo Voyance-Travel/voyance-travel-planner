@@ -281,6 +281,7 @@ export function convertBackendActivity(activity: BackendActivity): ItineraryActi
     tips: activity.tips,
     walkingDistance: activity.walkingDistance,
     walkingTime: activity.walkingTime,
+    aiNotes: activity.aiNotes,
   };
 }
 
