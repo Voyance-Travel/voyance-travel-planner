@@ -1,156 +1,65 @@
 
+Fix missing sparkle on regenerated trips
 
-## Per-Activity AI Concierge Chat
+What I found
+- The sparkle button already exists in planner-only components: `CustomerDayCard` and `TripActivityCard`.
+- Regenerated/saved trips are not rendered with those components. They go through `TripDetail` → `EditorialItinerary` → `DayCard` / `ActivityRow`.
+- `EditorialItinerary` currently has no concierge trigger at all, so hover is not the issue on that screen — the button is simply never rendered there.
+- There is also a compatibility gap: `ActivityConciergeSheet` currently expects a numeric `cost`, but `EditorialActivity` uses `cost.amount`, so its context normalization needs to be adapted before reuse here.
+- One more issue to handle cleanly: concierge “swap + undo” cannot call the paid swap path twice, or undo could accidentally retrigger credits/version logic.
 
-### Summary
-Add a contextual AI chat to every venue-based activity card, allowing users to ask questions, get insider tips, and swap activities — all pre-loaded with full trip and activity context.
+Implementation plan
+1. Add the concierge trigger to the actual regenerated-trip card UI
+- Update `src/components/itinerary/EditorialItinerary.tsx` so `ActivityRow` shows a visible sparkle button in both:
+  - desktop action area
+  - mobile expanded action row
+- Keep it always visible when eligible, not hover-only.
 
-### Architecture Overview
+2. Apply the correct visibility rules in `EditorialItinerary`
+- Show for venue-based activities like dining, explore, culture, activity, shopping, wellness, and real hotel/stay cards.
+- Hide for transport/logistics/filler cards such as:
+  - transport / transit / travel
+  - arrival / departure
+  - return to hotel / freshen up
+  - generic downtime cards
 
-```text
-┌─────────────────────┐     ┌──────────────────────┐
-│ TripActivityCard    │     │ CustomerDayCard       │
-│  + ✨ concierge btn │     │  + ✨ concierge btn   │
-└────────┬────────────┘     └────────┬─────────────┘
-         │                           │
-         ▼                           ▼
-┌────────────────────────────────────────────────┐
-│ ActivityConciergeSheet (new component)         │
-│  - Header: venue name, time, photo             │
-│  - AI opening message (auto on open)           │
-│  - Quick action chips                          │
-│  - Chat messages (persisted per activity ID)   │
-│  - "Swap to this" buttons on alternatives      │
-│  - Sheet on desktop, bottom sheet on mobile    │
-└────────────────────┬───────────────────────────┘
-                     │ supabase.functions.invoke
-                     ▼
-┌────────────────────────────────────────────────┐
-│ Edge Function: activity-concierge (new)        │
-│  - Receives activity + trip + surrounding ctx  │
-│  - System prompt: local concierge persona      │
-│  - Streaming responses via Lovable AI Gateway  │
-│  - Tool calling for "suggest alternatives"     │
-└────────────────────────────────────────────────┘
-```
+3. Wire `ActivityConciergeSheet` into `EditorialItinerary`
+- Add top-level concierge state in `EditorialItinerary` for:
+  - selected activity
+  - selected day date/title
+  - previous visible activity
+  - next visible activity
+- Pass an `onOpenConcierge` callback down into `ActivityRow`.
+- Render one shared `ActivityConciergeSheet` near the existing drawers at the bottom of `EditorialItinerary`.
 
-### New Files
+4. Adapt the sheet for `EditorialActivity`
+- Update `src/components/itinerary/ActivityConciergeSheet.tsx` to normalize:
+  - `cost?.amount`
+  - `image_url` / `photos`
+  - `website` / `bookingUrl`
+  - `startTime` / `time`
+- Make sure the sheet gets the same full trip context in regenerated-trip view as it already gets in planner preview.
 
-#### 1. `src/components/itinerary/ActivityConciergeSheet.tsx`
-The main UI component — a `Sheet` (right side desktop, bottom sheet mobile via `useIsMobile`).
+5. Make concierge swapping safe in the real itinerary flow
+- Route concierge swaps through `EditorialItinerary`, not directly through the sheet.
+- Reuse the existing swap target / replacement logic where possible.
+- Move undo/application responsibility to the parent so:
+  - swap applies once
+  - undo does not retrigger paid swap logic
+  - existing version history + enrichment behavior still works
 
-**Props:**
-```typescript
-interface ActivityConciergeSheetProps {
-  open: boolean;
-  onClose: () => void;
-  activity: TripActivity | ItineraryActivity;
-  dayDate: string;
-  dayTitle?: string;
-  previousActivity?: string;
-  nextActivity?: string;
-  destination: string;
-  tripType?: string;
-  totalDays?: number;
-  travelers?: number;
-  currency?: string;
-  hotelName?: string;
-  onActivitySwap?: (activityId: string, newActivity: any) => void;
-}
-```
+Files to update
+- `src/components/itinerary/EditorialItinerary.tsx`
+- `src/components/itinerary/ActivityConciergeSheet.tsx`
 
-**Behavior:**
-- On open, auto-sends an opening request (no user input needed) to get proactive insights
-- Shows streaming response token-by-token
-- Renders quick action chips based on category (DINING vs EXPLORE vs STAY etc.)
-- Chat history stored in component state, keyed by activity ID via a `useRef<Map<string, Message[]>>`
-- "Suggest an alternative" responses include structured swap buttons
-- Tapping "Swap to this" calls `onActivitySwap`, shows undo toast
+Technical details
+- Best insertion points in `EditorialItinerary` are the current lock / more-action areas in `ActivityRow`.
+- Use the already-computed visible-neighbor logic (`prevVisibleActivity` / next visible activity) so concierge context is accurate even with grouped/optional activities.
+- Keep existing “Find Alternative” and “Propose Replacement” actions intact; this adds concierge support to the real itinerary renderer rather than replacing other tools.
 
-**Filtering logic** — hide the concierge button when:
-- Category is `TRANSPORT`, `TRAVEL`, `LOGISTICS`, `TRANSIT`
-- Title contains "Return to Your Hotel", "Freshen Up", "Arrival Flight", "Departure"
-
-#### 2. `supabase/functions/activity-concierge/index.ts`
-New edge function with streaming SSE support.
-
-**Input:** `{ messages, activityContext, tripContext, surroundingContext }`
-
-**System prompt** includes all the context (venue, time, day of week, trip type, budget, previous/next activity). Instructs the AI to be a knowledgeable local concierge. Uses `google/gemini-3-flash-preview` via Lovable AI Gateway.
-
-**Tool calling** for structured alternative suggestions:
-```typescript
-tools: [{
-  type: "function",
-  function: {
-    name: "suggest_alternatives",
-    description: "Suggest 2-3 real alternative venues",
-    parameters: {
-      type: "object",
-      properties: {
-        alternatives: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              address: { type: "string" },
-              price_per_person: { type: "number" },
-              reason: { type: "string" }
-            }
-          }
-        }
-      }
-    }
-  }
-}]
-```
-
-Streams text responses; returns structured JSON for alternatives.
-
-#### 3. `src/hooks/useActivityConcierge.ts`
-Custom hook managing:
-- Per-activity chat history (Map keyed by activity ID)
-- Streaming fetch to the edge function
-- Opening message generation on first open
-- Message state management
-- History reset when activity ID changes (swap scenario)
-
-### Modified Files
-
-#### 4. `src/components/planner/TripActivityCard.tsx`
-- Add `onOpenConcierge?: (activity: TripActivity) => void` prop
-- Add a sparkle (✨) icon button in the actions area (near lock toggle), filtered by category
-- The parent controls the sheet open state
-
-#### 5. `src/components/planner/CustomerDayCard.tsx`
-- Add sparkle button to each activity row (in the hover actions area, next to Search and Lock buttons)
-- Manage `ActivityConciergeSheet` open state
-- Pass surrounding activity context (previous/next titles) from the day's activity array
-
-#### 6. `src/components/planner/DayTimeline.tsx`
-- Pass concierge-related props through to `TripActivityCard`
-
-### Quick Action Chips by Category
-
-| Category | Chips |
-|----------|-------|
-| DINING | "What should I order?" · "Do I need a reservation?" · "What's the dress code?" · "Suggest an alternative" |
-| EXPLORE/CULTURE | "What should I not miss?" · "How do I skip the line?" · "What's nearby after?" · "Suggest an alternative" |
-| STAY | "Any insider tips?" · "What's near the hotel?" · "Best room to request?" · "Suggest an alternative" |
-| ACTIVITY/WELLNESS | "What should I order?" · "What's the vibe like?" · "Do I need a reservation?" · "Suggest an alternative" |
-
-### Swap Flow
-1. User taps "Suggest an alternative" chip or types it
-2. AI returns structured alternatives via tool calling
-3. Each alternative renders with a "Swap to this" button
-4. Tapping calls `onActivitySwap(activityId, newActivityData)`
-5. Sonner toast with "Undo" action appears for 10 seconds
-6. Chat history for that activity ID resets (new venue = new conversation)
-
-### What We're NOT Changing
-- Global Voyance chat (bottom-right bubble) — untouched
-- Existing "Why this?" / ExplainableActivity — stays as-is
-- ActivityAlternativesDrawer — remains for the Search button flow
-- No database tables needed — chat is session-only per the requirement
-
+How to verify
+- Open a regenerated trip in the main trip detail view and confirm the sparkle appears on eligible activity cards.
+- Confirm it does not appear on transport/logistics/filler cards.
+- Open the concierge from dining, museum, and hotel cards and check that the sheet has the correct title, time, image, and contextual opener.
+- Test desktop and mobile.
+- Test “Suggest an alternative” from the concierge and verify the card updates once and undo works without triggering duplicate swap/credit behavior.
