@@ -77,8 +77,8 @@ export default function CustomerDayCard({
 
   const conciergeSavedNoteContents = useMemo(() => {
     if (!conciergeActivity) return new Set<string>();
-    const notes = (conciergeActivity as any).aiNotes || [];
-    return new Set(notes.map((n: AISavedNote) => n.content));
+    const notes: AISavedNote[] = (conciergeActivity as any).aiNotes || [];
+    return new Set(notes.map((n) => n.content));
   }, [conciergeActivity]);
 
   // Version history for undo
