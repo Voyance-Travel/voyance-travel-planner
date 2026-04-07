@@ -32,7 +32,8 @@ const DayTimeline: React.FC<DayTimelineProps> = ({
   onRegenerateDay,
   isRegenerating = false,
   weather,
-  onToggleLock
+  onToggleLock,
+  onOpenConcierge,
 }) => {
   const container = {
     hidden: { opacity: 0 },
