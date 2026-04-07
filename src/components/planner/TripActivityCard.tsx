@@ -41,7 +41,8 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
   onEdit,
   onDelete: _onDelete,
   onActivityUpdate: _onActivityUpdate,
-  showExplain = false
+  showExplain = false,
+  onOpenConcierge,
 }) => {
   const categoryColor = getActivityColor(activity.category || activity.type);
   const iconName = getActivityIconName(activity.type);
