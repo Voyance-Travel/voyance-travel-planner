@@ -14,13 +14,13 @@ import { extractRestaurantVenueName } from './generation-utils.ts';
  * Exported so that action-repair-costs.ts and generation-core.ts use the
  * exact same list instead of maintaining their own copies.
  */
-export const ALWAYS_FREE_VENUE_PATTERNS = /\b(?:park|garden|jardim|viewpoint|miradouro|miradouros|outlook|vista|panoram\w*|plaza|praça|praca|square|piazza|platz|church|igreja|basilica|cathedral|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca|evening\s+(?:walk|stroll)|morning\s+(?:walk|stroll)|historic\s+walk)\b/i;
+export const ALWAYS_FREE_VENUE_PATTERNS = /\b(?:park|parc|garden|jardim|jardin|viewpoint|miradouro|miradouros|outlook|vista|panoram\w*|plaza|praça|praca|square|piazza|platz|place\s+de|church|igreja|[eé]glise|basilica|basilique|cathedral|cath[eé]drale|dom|riverside|waterfront|riverbank|stroll|walk|district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca|evening\s+(?:walk|stroll)|morning\s+(?:walk|stroll)|historic\s+walk|bridge|pont\s+\w+|promenade|esplanade|boardwalk|champs.?[eé]lys[eé]es|montmartre|sacr[eé].?c[oœ]ur|tuileries|champ\s+de\s+mars|palais.?royal.*garden|seine.*walk|walk.*seine|neighborhood\s+walk|[iî]le\s+saint.?louis)\b/i;
 
 /** Tier 2: free only when description says "free" or price is in phantom range */
-export const TIER2_FREE_VENUE_PATTERNS = /\b(?:bridge|fountain|monument|memorial|statue|arch|gate|market|promenade|boardwalk|trail|path|pier|dock|wharf|embankment)\b/i;
+export const TIER2_FREE_VENUE_PATTERNS = /\b(?:fountain|monument|memorial|statue|arch|gate|market|trail|path|pier|dock|wharf|embankment)\b/i;
 
 /** Paid-experience exclusion — don't force-free if any of these match */
-const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|aquarium|zoo|monastery|mosteiro|colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena\s+floor)\b/i;
+const PAID_EXPERIENCE_RE = /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico|museum|mus[eé]e|castle|castelo|pal[áa]cio|palace|tower|torre|gallery|galerie|orangerie|aquarium|zoo|monastery|mosteiro|colosseum|coliseum|amphitheatre|amphitheater|archaeological|ruins|excavation|arena\s+floor)\b/i;
 
 // =============================================================================
 // KNOWN TICKETED ATTRACTIONS — minimum admission prices (EUR/USD) by venue
