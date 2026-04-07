@@ -62,13 +62,16 @@ export async function universalQualityPass(
   options: UniversalQualityOptions,
 ): Promise<any[]> {
   const {
-    city, country, tripType, dayIndex, totalDays,
+    city, country, dnaTier, dnaArchetype, dayIndex, totalDays,
     usedVenueNames, arrivalTime, departureTime,
-    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants, diningConfig,
+    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants,
   } = options;
 
+  // Compute DNA-aware dining config internally
+  const diningConfig = getDiningConfig(dnaTier || 'Explorer', dnaArchetype || '');
+
   const label = `QUALITY_PASS_D${dayIndex + 1}`;
-  console.log(`\n[QUALITY] ====== Day ${dayIndex + 1} of ${totalDays}: ${city}, ${country} (${tripType}) ======`);
+  console.log(`\n[QUALITY] ====== Day ${dayIndex + 1} of ${totalDays}: ${city}, ${country} | ${dnaArchetype || 'default'} (${dnaTier || 'Explorer'}) ======`);
 
   let result = [...activities];
 
@@ -84,13 +87,41 @@ export async function universalQualityPass(
     console.log(`[QUALITY] After departure filter: ${result.length} activities`);
   }
 
-  // ── Step 3: Fix placeholder meals (AI re-generation) ──
+  // ── Step 3: Cross-day venue dedup (before placeholder fixing — no point fixing a dupe) ──
+  if (usedVenueNames.size > 0) {
+    result = result.filter(a => {
+      const cat = (a.category || '').toLowerCase();
+      if (DEDUP_SKIP_CATS.has(cat)) return true;
+      // Don't dedup dining — it's handled separately by restaurant dedup
+      if (cat === 'dining' || cat === 'restaurant') return true;
+
+      const candidates = [
+        a.location?.name || '',
+        a.venue_name || '',
+        a.title || '',
+      ].map(s => s.trim()).filter(s => s.length > 3 && !/your hotel/i.test(s));
+
+      for (const raw of candidates) {
+        const norm = normalizeVenueName(raw);
+        if (!norm) continue;
+        for (const used of usedVenueNames) {
+          if (venueNamesMatch(norm, used)) {
+            console.warn(`[QUALITY] DEDUP: "${a.title}" at "${a.venue_name || a.location?.name || ''}" repeats from previous day — REMOVING`);
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+  }
+
+  // ── Step 4: Fix placeholder meals (DNA-aware AI re-generation) ──
   if (apiKey) {
     await fixPlaceholdersForDay(
       result,
       city,
       country,
-      tripType,
+      dnaTier || 'Explorer',
       dayIndex,
       usedRestaurants || [],
       budgetTier || 'moderate',
