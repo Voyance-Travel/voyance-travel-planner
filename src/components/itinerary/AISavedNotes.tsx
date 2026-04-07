@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, X, ChevronDown } from 'lucide-react';
+import { Sparkles, Trash2, ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
