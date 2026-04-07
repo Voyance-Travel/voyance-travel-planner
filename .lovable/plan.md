@@ -1,79 +1,58 @@
 
 
-## Replace Hardcoded Restaurant Fallbacks with Universal AI Re-Generation
+## Enhance AI Restaurant Slot Filler with Trip-Aware Context
 
 ### Problem
-The current placeholder detection works for any city, but the **replacement** step only works for Paris, Rome, Berlin, London, and Lisbon (hardcoded `INLINE_FALLBACK_RESTAURANTS`). For any other city (Tokyo, Barcelona, Marrakech, etc.), `getRandomFallbackRestaurant` returns `null` and the placeholder survives into the final itinerary.
+The existing `generateFallbackRestaurant()` function works but uses a minimal prompt — it only passes city, meal type, and budget tier as a plain string. It lacks trip-type-aware price guidance, country context, neighborhood hints, day theme, and doesn't handle `drinks` as a meal type.
 
-### Solution
-When a placeholder is detected and no hardcoded fallback exists, make a targeted AI micro-call to generate a real restaurant for that specific slot. Keep the hardcoded database as a fast path (no AI cost) for covered cities.
-
-### Architecture
-
-```text
-Placeholder detected
-  ├─ Hardcoded fallback exists? → Use it (fast, free) ← unchanged
-  └─ No fallback? → AI micro-call to generate 1 real restaurant
-       ├─ Prompt includes: city, meal type, budget tier, time, used venues blocklist
-       └─ Returns: name, address, price, description
-```
+### What Already Works
+- Placeholder detection (expanded patterns) — done
+- AI micro-call with tool calling and 10s timeout — done
+- Hardcoded fast-path fallback — done
+- Integration into the placeholder replacement loop — done
 
 ### Changes
 
 **File: `supabase/functions/generate-itinerary/action-generate-day.ts`**
 
-1. **Expand `PLACEHOLDER_TITLE_PATTERNS`** with the user's broader patterns:
-   - Add patterns for `brunch`, generic venue types in multiple languages (trattoria, osteria, izakaya, tapas bar, etc.)
-   - Add trailing action word patterns
+1. **Expand `generateFallbackRestaurant()` signature** to accept: `country`, `tripType`, `dayTheme`, `neighborhood` (all optional)
 
-2. **Make `PLACEHOLDER_VENUE_PATTERNS` universal** — replace the hardcoded city list with a single dynamic check: if the venue name matches the trip's destination city name (case-insensitive), it's a placeholder. Keep the other generic patterns (empty, "the destination", "downtown", etc.)
+2. **Add trip-type-aware price guidance** inside the function:
+   - Luminary: breakfast €25-60, lunch €40-80, dinner €60-200 (mention Michelin), drinks €20-50
+   - Explorer: breakfast €10-30, lunch €20-50, dinner €30-80, drinks €15-35
+   - Budget: breakfast €5-15, lunch €8-25, dinner €15-40, drinks €8-20
 
-3. **Add `generateFallbackRestaurant()` async function** that calls the AI gateway with a focused micro-prompt:
-   - Uses `google/gemini-2.5-flash-lite` (cheapest/fastest model) with tool calling
-   - Prompt: "You are a restaurant expert for {city}. Suggest ONE real {mealType} restaurant for {budgetTier} travelers at {time}. DO NOT suggest: {usedVenues}. Return a real place with real address."
-   - Tool schema returns: `{ name, address, price, description }`
-   - Timeout: 10 seconds max
-   - On failure: log warning but leave activity as-is (better than crashing)
+3. **Enhance the prompt** to include:
+   - Country (for cultural context)
+   - Trip style description (luxury/authentic/affordable)
+   - Price range per person for the specific meal type
+   - Neighborhood hint if available
+   - Day theme if available
+   - Michelin note for Luminary dinners
 
-4. **Update the placeholder replacement block** (lines 507-539):
-   - First try `getRandomFallbackRestaurant()` (existing fast path)
-   - If null, call `await generateFallbackRestaurant()` 
-   - Since this is inside a for-loop over activities, collect all placeholder slots first, then batch the AI calls (or run sequentially to avoid rate limits)
+4. **Add `drinks` as a valid meal type** in the `PlaceholderSlot` interface and detection logic (hour >= 21)
 
-5. **Keep `INLINE_FALLBACK_RESTAURANTS`** as-is — it's a free, instant fallback for the most common cities.
+5. **Update the call site** (lines 673-681) to pass the new params: `destinationCountry`, `tripType`, day theme from the generated day data
 
 ### Technical Details
 
-**AI micro-prompt tool schema:**
-```typescript
-const RESTAURANT_SUGGESTION_TOOL = {
-  type: "function",
-  function: {
-    name: "suggest_restaurant",
-    description: "Suggest a single real restaurant",
-    parameters: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Real restaurant name" },
-        address: { type: "string", description: "Full street address" },
-        price: { type: "number", description: "Average cost per person in USD" },
-        description: { type: "string", description: "1-2 sentence description with signature dish" },
-      },
-      required: ["name", "address", "price", "description"]
-    }
-  }
-};
+The enhanced prompt becomes:
+```
+You are a restaurant expert for {city}, {country}. Suggest ONE real {mealType} restaurant.
+- Trip style: {tripType} ({style description})
+- Price range: {range} per person
+- Neighborhood: {neighborhood or 'any'}
+- Day theme: {theme or 'general'}
+- DO NOT suggest: {blocklist}
 ```
 
-**Cost impact:** Each placeholder fix costs ~200 input + 100 output tokens on flash-lite (~$0.0001). Typical trip has 0-2 placeholders, so negligible.
-
-**Failure handling:** If the AI call fails (timeout, rate limit), log the error and leave the original activity unchanged. The itinerary is still usable — the user just sees a generic dining slot they can manually edit.
+No new dependencies. Same model (`gemini-2.5-flash-lite`), same tool schema, same timeout.
 
 ### Files to Edit
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-itinerary/action-generate-day.ts` | Expand placeholder patterns, add `generateFallbackRestaurant()`, update replacement logic to fall through to AI when no hardcoded fallback exists |
+| `supabase/functions/generate-itinerary/action-generate-day.ts` | Enhance `generateFallbackRestaurant()` with richer prompt context, add `drinks` meal type, update call site to pass country/tripType/theme |
 
 ### Deployment
 Redeploy `generate-itinerary` edge function.
