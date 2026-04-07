@@ -10034,7 +10034,9 @@ interface ActivityRowProps {
    /** Callback to report a resolved photo URL for batch write-back */
    onPhotoResolved?: (activityId: string, photoUrl: string) => void;
    /** Manual builder mode — skip real photo fetching to avoid API costs */
-   isManualMode?: boolean;
+    isManualMode?: boolean;
+    /** Handler to open AI concierge sheet */
+    onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
 }
 
 function ActivityRow({
