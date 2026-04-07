@@ -27,6 +27,7 @@ interface TripActivityCardProps {
   onDelete?: (activityId: string) => void;
   onActivityUpdate?: (activity: TripActivity) => void;
   showExplain?: boolean;
+  onOpenConcierge?: (activity: TripActivity) => void;
 }
 
 const TripActivityCard: React.FC<TripActivityCardProps> = ({
