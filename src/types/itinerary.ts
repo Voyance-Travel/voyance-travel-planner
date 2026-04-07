@@ -88,6 +88,7 @@ export interface BackendActivity {
   };
   savedByUser?: boolean;
   savedByCount?: number;
+  aiNotes?: Array<{ id: string; content: string; savedAt: string; query?: string }>;
 }
 
 export interface DayWeather {
