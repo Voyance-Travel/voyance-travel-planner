@@ -1,24 +1,32 @@
 
 
-## Cross-Day Venue Deduplication — Assessment
+## "Wire Everything Together" — Assessment
 
-### Already Implemented
+### Already Wired
 
-The exact scenario described ("Tuileries Garden" vs "Jardin des Tuileries") is explicitly handled:
+Both generation pipelines already call `universalQualityPass()` **inline**, exactly in the order you specified:
 
-| Mechanism | Location | What It Does |
-|---|---|---|
-| **Venue Alias Map** | `generation-utils.ts:116-118` | Maps both `"tuileries garden"` and `"jardin des tuileries"` → `"tuileries"` |
-| **Alias Resolution in Match** | `generation-utils.ts:374-376` | `venueNamesMatch()` resolves both names to their alias before comparing |
-| **Diacritics Stripping** | `generation-utils.ts:64-73` | `normalizeVenueName()` strips accents (é→e, etc.) |
-| **Word-Overlap Fallback** | `generation-utils.ts:380-385` | 50-80% word overlap catches names not in the alias map |
-| **Substring Containment** | `generation-utils.ts:378` | Catches partial matches like "Louvre" vs "Louvre Museum" |
-| **Cross-Day Execution** | `universal-quality-pass.ts:93-115` | Runs dedup against `usedVenueNames` from all previous days |
-| **Venue Accumulation** | `universal-quality-pass.ts:143-152` | After each day, adds venues to the shared set for next day's dedup |
+| Pipeline | File | Lines | Call Site |
+|---|---|---|---|
+| **Single-day** (`generate-day`) | `action-generate-day.ts` | 340–361 | Called right after AI response parsing + normalization |
+| **Trip orchestrator** (`generate-trip-day`) | `action-generate-trip-day.ts` | 1012–1036 | Called after sanitization, validate/repair, and restaurant dedup |
 
-The alias map already covers 80+ venues across Paris, Rome, London, Tokyo, Barcelona, Berlin, and more — all with bilingual variant resolution.
+### What `universalQualityPass()` runs (in order)
+
+Inside `universal-quality-pass.ts`, the exact sequence matches your spec:
+
+1. **Timing** — `enforceArrivalTiming()` (Day 1) and `enforceDepartureTiming()` (last day)
+2. **Cross-day venue dedup** — fuzzy match against `usedVenueNames` from all prior days
+3. **Placeholders** — `fixPlaceholdersForDay()` replaces generic meals with real restaurants via AI re-prompting + fallback database
+4. **Pricing** — `checkAndApplyFreeVenue()`, `enforceMarketDiningCap()`, `enforceBarNightcapPriceCap()`, `enforceCasualVenuePriceCap()`, `enforceVenueTypePriceCap()`, `enforceTicketedAttractionPricing()`, `enforceMichelinPriceFloor()`
+5. **Hotel return injection** — adds "Return to Your Hotel" at end of non-departure days
+6. **Used venue accumulation** — populates `usedVenueNames` set for next day's dedup
+
+### Not Dead Code
+
+The concern about "standalone validator functions that never get called" does not apply here. Both `action-generate-day.ts:344` and `action-generate-trip-day.ts:1014` dynamically import and invoke `universalQualityPass()`. The orchestrator (`action-generate-trip-day.ts`) additionally runs its own restaurant-specific dedup at lines 956–1009 *before* the universal pass, giving dining double coverage.
 
 ### Conclusion
 
-**No changes needed.** The "Tuileries Garden" / "Jardin des Tuileries" case is handled by an explicit alias entry. If this dedup is still not firing in practice, the issue would be in how `usedVenueNames` is passed between days in the orchestrator — but the matching logic itself is correct and comprehensive.
+**No changes needed.** All four fixes are already wired inline in both generation code paths, running in the correct order after AI response parsing.
 
