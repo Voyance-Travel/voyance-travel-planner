@@ -67,6 +67,8 @@ export default function CustomerDayCard({
   totalDays,
   travelers,
   currency,
+  onSaveAINote,
+  onDeleteAINote,
 }: CustomerDayCardProps) {
   const [isExpanded, setIsExpanded] = useState(dayIndex < 2);
   const [selectedActivityForSwap, setSelectedActivityForSwap] = useState<ItineraryActivity | null>(null);
