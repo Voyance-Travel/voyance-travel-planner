@@ -95,6 +95,10 @@ const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackRestaur
       { name: "Maison Sauvage", address: "5 Rue de Buci, 75006 Paris", price: 25, description: "Flower-covered façade in Saint-Germain. Excellent avocado toast and fresh pastries in a photogenic setting." },
       { name: "Hôtel Costes", address: "239 Rue Saint-Honoré, 75001 Paris", price: 45, description: "Glamorous hotel restaurant with a lush courtyard. A see-and-be-seen breakfast spot near Place Vendôme." },
       { name: "Claus Paris", address: "14 Rue Jean-Jacques Rousseau, 75001 Paris", price: 28, description: "Self-proclaimed 'haute couture of breakfast.' Artisanal granola, organic eggs, and fresh-squeezed juices." },
+      { name: "Ob-La-Di", address: "54 Rue de Saintonge, 75003 Paris", price: 20, description: "Third-wave coffee shop in Le Marais with excellent pastries and avocado toast." },
+      { name: "Café Kitsuné", address: "51 Galerie de Montpensier, 75001 Paris", price: 22, description: "Japanese-French café in the Palais-Royal gardens. Matcha latte and flaky croissants." },
+      { name: "Holybelly", address: "19 Rue Lucien Sampaix, 75010 Paris", price: 25, description: "Australian-style brunch in the Canal Saint-Martin area. Legendary pancakes." },
+      { name: "La Fontaine de Belleville", address: "31-33 Rue Juliette Dodu, 75010 Paris", price: 18, description: "Specialty coffee roastery with homemade pastries. A local favorite near République." },
     ],
     lunch: [
       { name: "Le Comptoir du Relais", address: "9 Carrefour de l'Odéon, 75006 Paris", price: 55, description: "Yves Camdeborde's legendary bistro. The lunch menu is a masterclass in French comfort food. No reservations at lunch — arrive early." },
