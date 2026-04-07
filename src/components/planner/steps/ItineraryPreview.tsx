@@ -5,6 +5,7 @@ import { Plane, MapPin, Clock, Calendar, Loader2, RefreshCw, AlertCircle, Sparkl
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import type { DayItinerary, ItineraryActivity } from '@/types/itinerary';
+import { convertBackendDay } from '@/types/itinerary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useEffect, useState, useCallback } from 'react';
 import { useEntitlements, canUse, getRemainingQuota, useConsumeUsage } from '@/hooks/useEntitlements';
