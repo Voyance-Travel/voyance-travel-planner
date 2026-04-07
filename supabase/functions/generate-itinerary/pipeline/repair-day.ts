@@ -2076,6 +2076,65 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 9e. ORPHANED ROUND-TRIP TRANSPORT REMOVAL ---
+  // Detect consecutive transport cards with no real activity between them
+  // (e.g., "Travel to Le Moulin" → "Travel to Your Hotel") and remove both.
+  {
+    const isTransportCatRT = (a: any) => {
+      const cat = (a.category || '').toLowerCase();
+      return cat === 'transport' || cat === 'transportation';
+    };
+    const hotelPattern = /hotel|hostel|airbnb|apartment|residence|lodge|inn|resort/i;
+    const returnPattern = /return|back to|travel to your|head back/i;
+
+    let removedAny = false;
+    const rtIndicesToRemove = new Set<number>();
+
+    for (let i = 0; i < activities.length - 1; i++) {
+      if (rtIndicesToRemove.has(i)) continue;
+      if (!isTransportCatRT(activities[i])) continue;
+
+      // Find next non-removed activity
+      let j = i + 1;
+      while (j < activities.length && rtIndicesToRemove.has(j)) j++;
+      if (j >= activities.length) break;
+
+      if (!isTransportCatRT(activities[j])) continue;
+
+      // Two consecutive transports — check if they form a round-trip
+      const first = activities[i];
+      const second = activities[j];
+      const firstTitle = (first.title || '').toLowerCase();
+      const secondTitle = (second.title || '').toLowerCase();
+
+      // Pattern: first goes TO a venue, second comes BACK (to hotel or return)
+      const secondGoesBack = hotelPattern.test(secondTitle) || returnPattern.test(secondTitle);
+      // Pattern: first goes TO venue X, second goes FROM venue X back
+      const firstDest = (first.location?.name || '').toLowerCase();
+      const secondFrom = (second.fromLocation?.name || '').toLowerCase();
+      const destMatchesOrigin = firstDest && secondFrom && (
+        firstDest.includes(secondFrom) || secondFrom.includes(firstDest)
+      );
+
+      if (secondGoesBack || destMatchesOrigin) {
+        rtIndicesToRemove.add(i);
+        rtIndicesToRemove.add(j);
+        removedAny = true;
+        repairs.push({
+          code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+          action: 'removed_orphaned_round_trip_transport',
+          before: `${first.title} → ${second.title}`,
+          after: 'removed both (no activity between)',
+        });
+        console.log(`[repair-day] 9e: Removed orphaned round-trip: "${first.title}" → "${second.title}"`);
+      }
+    }
+
+    if (removedAny) {
+      activities = activities.filter((_, i) => !rtIndicesToRemove.has(i));
+    }
+  }
+
   // --- 10. TITLE_LABEL_LEAK ---
   if (byCode.has(FAILURE_CODES.TITLE_LABEL_LEAK)) {
     for (const vr of byCode.get(FAILURE_CODES.TITLE_LABEL_LEAK) || []) {
