@@ -10597,6 +10597,13 @@ function ActivityRow({
               )}
             </div>
           )}
+          {/* AI Saved Notes */}
+          {activity.aiNotes && activity.aiNotes.length > 0 && !isDowntime && !isTransport && (
+            <AISavedNotes
+              notes={activity.aiNotes}
+              onDeleteNote={effectiveIsEditable ? (noteId) => handleDeleteAINote(activity.id, noteId) : undefined}
+            />
+          )}
           {/* Mobile action buttons */}
           {!isPreview && (
             <div className="flex items-center gap-1 pt-1">
