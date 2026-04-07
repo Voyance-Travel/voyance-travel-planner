@@ -11,7 +11,7 @@ import { corsHeaders } from './action-types.ts';
 import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
-import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap } from './sanitization.ts';
+import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap, enforceVenueTypePriceCap, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
@@ -1675,23 +1675,126 @@ async function _handleGenerateTripDayInner(
       for (const act of day.activities) {
         enforceBarNightcapPriceCap(act, 'TRIP_DAY_FINAL');
         enforceCasualVenuePriceCap(act, 'TRIP_DAY_FINAL');
+        enforceVenueTypePriceCap(act, 'TRIP_DAY_FINAL');
         enforceTicketedAttractionPricing(act, 'TRIP_DAY_FINAL');
         enforceMichelinPriceFloor(act, 'TRIP_DAY_FINAL');
       }
     }
   }
 
-  // ── Michelin inclusion diagnostic ──
+  // ── Michelin inclusion enforcement for Luminary trips ──
+  const tripTypeLower = (tripType || '').toLowerCase();
+  const isLuminaryTrip = tripTypeLower === 'luminary' || tripTypeLower === 'luxury';
+
   if (totalDays >= 3) {
     const allActs = updatedDays.flatMap((d: any) => d.activities || []);
-    const { KNOWN_FINE_DINING_STARS } = await import('./sanitization.ts');
     const starKeys = Object.keys(KNOWN_FINE_DINING_STARS || {});
-    const hasMichelin = allActs.some((a: any) => {
-      const t = (a.title || '').toLowerCase();
-      const v = ((a as any).location?.name || (a as any).venue_name || '').toLowerCase();
-      return starKeys.some(k => t.includes(k) || v.includes(k));
-    });
-    if (!hasMichelin) {
+
+    const michelinDinnerDays = new Set<number>();
+    for (let di = 0; di < updatedDays.length; di++) {
+      for (const a of (updatedDays[di].activities || [])) {
+        const t = (a.title || '').toLowerCase();
+        const v = ((a as any).location?.name || (a as any).venue_name || '').toLowerCase();
+        const strippedT = t.replace(/^(breakfast|lunch|dinner|brunch|meal)\s*(at|:|-|–)\s*/i, '').trim();
+        if (starKeys.some(k => t.includes(k) || v.includes(k) || strippedT.includes(k))) {
+          michelinDinnerDays.add(di);
+        }
+      }
+    }
+
+    const michelinCount = michelinDinnerDays.size;
+    const requiredCount = isLuminaryTrip ? (totalDays >= 7 ? 3 : totalDays >= 5 ? 2 : 1) : 0;
+
+    if (isLuminaryTrip && michelinCount < requiredCount) {
+      console.warn(`[MICHELIN INJECTION] Only ${michelinCount} Michelin dinners found, need ${requiredCount} for Luminary ${totalDays}-day trip. Attempting injection.`);
+
+      // Michelin fallbacks by city
+      const MICHELIN_FALLBACKS: Record<string, Array<{ name: string; address: string; stars: number; price: number }>> = {
+        'paris': [
+          { name: 'Septime', address: '80 Rue de Charonne, 11e', stars: 1, price: 150 },
+          { name: 'Kei', address: '5 Rue Coq Héron, 1er', stars: 2, price: 220 },
+          { name: 'Le Cinq', address: '31 Av. George V, 8e', stars: 3, price: 320 },
+          { name: 'Frenchie', address: '5 Rue du Nil, 2e', stars: 1, price: 140 },
+          { name: 'David Toutain', address: '29 Rue Surcouf, 7e', stars: 1, price: 160 },
+        ],
+        'rome': [
+          { name: 'Aroma', address: '1 Via Labicana', stars: 1, price: 140 },
+          { name: 'Imàgo', address: 'Piazza Trinità dei Monti 6', stars: 1, price: 150 },
+          { name: 'La Pergola', address: 'Via Alberto Cadlolo 101', stars: 3, price: 300 },
+        ],
+        'berlin': [
+          { name: 'Horváth', address: '44 Paul-Lincke-Ufer', stars: 1, price: 140 },
+          { name: 'Facil', address: '3 Potsdamer Str.', stars: 2, price: 200 },
+          { name: 'Nobelhart & Schmutzig', address: '218 Friedrichstraße', stars: 1, price: 160 },
+        ],
+        'lisbon': [
+          { name: 'Belcanto', address: 'Largo de São Carlos 10', stars: 2, price: 200 },
+          { name: 'Alma', address: 'Rua Anchieta 15', stars: 1, price: 140 },
+          { name: 'EPUR', address: 'Largo da Academia Nacional de Belas Artes 14', stars: 1, price: 130 },
+        ],
+        'london': [
+          { name: 'Brat', address: '41 Shorting High St', stars: 1, price: 140 },
+          { name: 'Dinner by Heston Blumenthal', address: 'Mandarin Oriental, 66 Knightsbridge', stars: 2, price: 220 },
+          { name: 'Core by Clare Smyth', address: '92 Kensington Park Rd', stars: 3, price: 300 },
+        ],
+        'barcelona': [
+          { name: 'Cinc Sentits', address: 'Carrer d\'Aribau 58', stars: 1, price: 140 },
+          { name: 'Disfrutar', address: 'Carrer de Villarroel 163', stars: 3, price: 280 },
+          { name: 'ABaC', address: 'Av. del Tibidabo 1', stars: 2, price: 220 },
+        ],
+      };
+
+      const destLower = (destination || '').toLowerCase();
+      const cityKey = Object.keys(MICHELIN_FALLBACKS).find(k => destLower.includes(k));
+      const fallbacks = cityKey ? MICHELIN_FALLBACKS[cityKey] : [];
+
+      let injected = michelinCount;
+      let fallbackIdx = 0;
+
+      for (let di = 0; di < updatedDays.length && injected < requiredCount && fallbackIdx < fallbacks.length; di++) {
+        if (michelinDinnerDays.has(di)) continue;
+        const day = updatedDays[di];
+        if (!Array.isArray(day.activities)) continue;
+
+        // Find the dinner slot to replace (last DINING activity or last non-transport activity)
+        const dinnerIdx = day.activities.findIndex((a: any) => {
+          const cat = (a.category || '').toUpperCase();
+          const t = (a.title || '').toLowerCase();
+          return (cat === 'DINING' || cat === 'RESTAURANT') && /dinner/i.test(t);
+        });
+
+        if (dinnerIdx === -1) continue;
+
+        const fb = fallbacks[fallbackIdx];
+        const existing = day.activities[dinnerIdx];
+        console.warn(`[MICHELIN INJECTION] Day ${di + 1}: Replacing dinner "${existing.title}" with ${fb.stars}-star "${fb.name}"`);
+
+        // Swap in Michelin restaurant
+        existing.title = `Dinner at ${fb.name}`;
+        existing.name = fb.name;
+        if (existing.venue_name !== undefined) existing.venue_name = fb.name;
+        if (existing.location && typeof existing.location === 'object') {
+          existing.location.name = fb.name;
+          existing.location.address = fb.address;
+        }
+        existing.description = `${fb.stars}-Michelin-star dining experience at ${fb.name}.`;
+        // Set correct price
+        const minPrice = FINE_DINING_MIN_PRICE_BY_STARS[fb.stars] || 120;
+        const correctPrice = Math.max(fb.price, minPrice);
+        if (existing.cost && typeof existing.cost === 'object') existing.cost.amount = correctPrice;
+        else existing.cost = { amount: correctPrice, currency: 'EUR' };
+        if (existing.estimatedCost && typeof existing.estimatedCost === 'object') existing.estimatedCost.amount = correctPrice;
+        if (typeof existing.estimated_price_per_person === 'number') existing.estimated_price_per_person = correctPrice;
+        if (typeof existing.price === 'number') existing.price = correctPrice;
+
+        injected++;
+        fallbackIdx++;
+      }
+
+      if (injected < requiredCount) {
+        console.warn(`[MICHELIN INJECTION] Could only inject ${injected}/${requiredCount} Michelin dinners (no suitable dinner slots or city not in fallback map)`);
+      }
+    } else if (!isLuminaryTrip && michelinCount === 0) {
       console.warn(`[MICHELIN INCLUSION] No Michelin restaurants found on a ${totalDays}-day ${destination} trip. Consider adding at least one starred dinner.`);
     }
   }

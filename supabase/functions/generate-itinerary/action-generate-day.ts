@@ -36,6 +36,7 @@ import {
   enforceMichelinPriceFloor,
   enforceBarNightcapPriceCap,
   enforceCasualVenuePriceCap,
+  enforceVenueTypePriceCap,
 } from './sanitization.ts';
 import {
   EXCHANGE_RATES_TO_USD,
@@ -1367,6 +1368,7 @@ export async function handleGenerateDay(
       for (const act of generatedDay.activities) {
         enforceBarNightcapPriceCap(act, 'GENERATE_DAY_FINAL');
         enforceCasualVenuePriceCap(act, 'GENERATE_DAY_FINAL');
+        enforceVenueTypePriceCap(act, 'GENERATE_DAY_FINAL');
         enforceMichelinPriceFloor(act, 'GENERATE_DAY_FINAL');
       }
     }
