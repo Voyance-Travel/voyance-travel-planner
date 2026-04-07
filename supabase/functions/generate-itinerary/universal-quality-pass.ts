@@ -97,6 +97,7 @@ export async function universalQualityPass(
       apiKey,
       lockedActivities || [],
       dayTitle,
+      diningConfig,
     );
   }
 
