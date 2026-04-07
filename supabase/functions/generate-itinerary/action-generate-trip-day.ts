@@ -8,6 +8,7 @@
  */
 
 import { corsHeaders } from './action-types.ts';
+import { parseTimeToMinutes } from './flight-hotel-context.ts';
 import { GenerationTimer } from './generation-timer.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
@@ -946,6 +947,31 @@ async function _handleGenerateTripDayInner(
       }
     } catch (pipelineErr) {
       console.warn('[generate-trip-day] Pipeline validate/repair failed (non-blocking):', pipelineErr);
+    }
+  }
+
+  // DEPARTURE-DAY SAFETY NET: strip activities after departure - 3h buffer
+  if (isLastDay && depTime24 && dayResult?.activities?.length > 0) {
+    const departureMins = parseTimeToMinutes(depTime24) || 0;
+    const latestAllowed = departureMins - 180; // 3 hours before departure
+    if (latestAllowed > 0) {
+      const before = dayResult.activities.length;
+      dayResult.activities = dayResult.activities.filter((activity: any) => {
+        const cat = ((activity.category || '') as string).toUpperCase();
+        const title = ((activity.title || '') as string).toLowerCase();
+        if (cat === 'TRANSPORT' || cat === 'FLIGHT' || /departure|heading home/i.test(title)) return true;
+        if (cat === 'STAY' && /check.?out/i.test(title)) return true;
+
+        const startMinutes = parseTimeToMinutes(activity.startTime || activity.start_time || '');
+        if (startMinutes > 0 && startMinutes > latestAllowed) {
+          console.warn(`[DEPARTURE-FIX] Removed "${activity.title}" at ${activity.startTime || activity.start_time} — after departure - 3h buffer`);
+          return false;
+        }
+        return true;
+      });
+      if (dayResult.activities.length < before) {
+        console.log(`[generate-trip-day] Departure safety net removed ${before - dayResult.activities.length} activities`);
+      }
     }
   }
 
