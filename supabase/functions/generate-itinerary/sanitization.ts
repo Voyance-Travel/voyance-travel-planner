@@ -415,6 +415,15 @@ export function enforceMichelinPriceFloor(activity: Record<string, any>, logPref
 
   // Build combined text for matching
   const venueName = (activity.venue_name || activity.restaurant?.name || '').toLowerCase();
+
+  // Guard: skip venues explicitly catalogued as casual — they should never get Michelin floors
+  for (const key of Object.keys(KNOWN_CASUAL_VENUES)) {
+    if (title.includes(key) || venueName.includes(key)) {
+      console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" is in KNOWN_CASUAL_VENUES — skipping Michelin floor`);
+      return false;
+    }
+  }
+
   const combined = [title, venueName, (activity.description || '').toLowerCase(), (activity.restaurant?.description || '').toLowerCase()].join(' ');
 
   // Strategy 1: Match against explicit star map
@@ -436,6 +445,14 @@ export function enforceMichelinPriceFloor(activity: Record<string, any>, logPref
       starRating = stars;
       break;
     }
+  }
+
+  // Guard: casual venue types (bistro, trattoria, etc.) should only get Michelin pricing
+  // if they are explicitly listed in KNOWN_FINE_DINING_STARS (Strategy 1 match)
+  const CASUAL_TYPE_GUARD = /\b(bistro|brasserie|trattoria|osteria|pizzeria|taverna|izakaya|taqueria|cr[eê]perie|kebab|deli|ramen)\b/i;
+  if (!matchedKey && (CASUAL_TYPE_GUARD.test(title) || CASUAL_TYPE_GUARD.test(venueName))) {
+    console.log(`MICHELIN FLOOR SKIP [${logPrefix}]: "${activity.title}" matches casual venue type pattern — skipping keyword-based Michelin floor`);
+    return false;
   }
 
   // Strategy 2: Fall back to Michelin keywords in text
