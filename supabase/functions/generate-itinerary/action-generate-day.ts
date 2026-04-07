@@ -207,7 +207,7 @@ function getRandomFallbackRestaurant(
   return available[Math.floor(Math.random() * available.length)];
 }
 
-
+export async function handleGenerateDay(
   supabase: any,
   userId: string,
   params: Record<string, any>
