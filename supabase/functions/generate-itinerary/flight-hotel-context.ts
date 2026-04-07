@@ -487,3 +487,73 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
     return { context: '' };
   }
 }
+
+// =============================================================================
+// Arrival / Departure Timing Enforcement — shared, reusable functions
+// =============================================================================
+
+const TRANSPORT_CATS = ['TRANSPORT', 'TRAVEL', 'FLIGHT', 'TRANSIT'];
+
+/**
+ * Filter out activities that start before arrival + 2h buffer.
+ * Preserves transport, flight, transit, and check-in activities.
+ */
+export function enforceArrivalTiming(activities: any[], arrivalTime24: string): any[] {
+  const arrivalMins = parseTimeToMinutes(arrivalTime24) || 0;
+  if (arrivalMins <= 0) return activities;
+
+  const earliestAllowed = arrivalMins + 120; // 2 hours after landing
+  const before = activities.length;
+
+  const filtered = activities.filter((a: any) => {
+    const cat = ((a.category || '') as string).toUpperCase();
+    if (TRANSPORT_CATS.includes(cat)) return true;
+    if ((cat === 'STAY' || cat === 'ACCOMMODATION') && /check.?in/i.test(a.title || '')) return true;
+    if (/arrival|landing|airport/i.test(a.title || '')) return true;
+
+    const actMins = parseTimeToMinutes(a.startTime || a.start_time || '') || 0;
+    if (actMins > 0 && actMins < earliestAllowed) {
+      console.warn(`[ARRIVAL] Removed "${a.title}" at ${a.startTime || a.start_time} — before arrival + 2h (${arrivalTime24} + 2h = ${minutesToHHMM(earliestAllowed)})`);
+      return false;
+    }
+    return true;
+  });
+
+  if (filtered.length < before) {
+    console.log(`[enforceArrivalTiming] Removed ${before - filtered.length} activities before arrival buffer`);
+  }
+  return filtered;
+}
+
+/**
+ * Filter out activities that start after departure - 3h buffer.
+ * Preserves transport, flight, transit, departure, and check-out activities.
+ */
+export function enforceDepartureTiming(activities: any[], departureTime24: string): any[] {
+  const departureMins = parseTimeToMinutes(departureTime24) || 0;
+  if (departureMins <= 0) return activities;
+
+  const latestAllowed = departureMins - 180; // 3 hours before departure
+  if (latestAllowed <= 0) return activities;
+
+  const before = activities.length;
+
+  const filtered = activities.filter((a: any) => {
+    const cat = ((a.category || '') as string).toUpperCase();
+    if (TRANSPORT_CATS.includes(cat)) return true;
+    if ((cat === 'STAY' || cat === 'ACCOMMODATION') && /check.?out/i.test(a.title || '')) return true;
+    if (/departure|heading home|airport/i.test(a.title || '')) return true;
+
+    const actMins = parseTimeToMinutes(a.startTime || a.start_time || '') || 0;
+    if (actMins > 0 && actMins > latestAllowed) {
+      console.warn(`[DEPARTURE] Removed "${a.title}" at ${a.startTime || a.start_time} — after departure - 3h (${departureTime24} - 3h = ${minutesToHHMM(latestAllowed)})`);
+      return false;
+    }
+    return true;
+  });
+
+  if (filtered.length < before) {
+    console.log(`[enforceDepartureTiming] Removed ${before - filtered.length} activities after departure buffer`);
+  }
+  return filtered;
+}

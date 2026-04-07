@@ -58,6 +58,8 @@ import {
   addMinutesToHHMM,
   normalizeTo24h,
   getFlightHotelContext,
+  enforceArrivalTiming,
+  enforceDepartureTiming,
 } from './flight-hotel-context.ts';
 import {
   validateGeneratedDay,
@@ -781,49 +783,10 @@ export async function handleGenerateDay(
       const _departureTime24 = (flightContext as any)?.returnDepartureTime24 as string | undefined;
 
       if (isFirstDay && _arrivalTime24) {
-        const arrivalMins = parseTimeToMinutes(_arrivalTime24) || 0;
-        const earliestAllowed = arrivalMins + 120; // 2 hours after landing
-        const before = normalizedActivities.length;
-        normalizedActivities = normalizedActivities.filter((a: any) => {
-          const cat = ((a.category || '') as string).toUpperCase();
-          if (['TRANSPORT', 'TRAVEL', 'FLIGHT', 'TRANSIT'].includes(cat)) return true;
-          if (cat === 'STAY' || cat === 'ACCOMMODATION') {
-            if (/check.?in/i.test(a.title || '')) return true;
-          }
-          const actMins = parseTimeToMinutes(a.startTime || '') || 0;
-          if (actMins > 0 && actMins < earliestAllowed) {
-            console.warn(`ARRIVAL TIMING: Removed "${a.title}" at ${a.startTime} — before arrival buffer (${_arrivalTime24} + 2h = ${minutesToHHMM(earliestAllowed)})`);
-            return false;
-          }
-          return true;
-        });
-        if (normalizedActivities.length < before) {
-          console.log(`[generate-day] Arrival timing filter removed ${before - normalizedActivities.length} activities`);
-        }
+        normalizedActivities = enforceArrivalTiming(normalizedActivities, _arrivalTime24);
       }
-
       if (isLastDay && _departureTime24) {
-        const departureMins = parseTimeToMinutes(_departureTime24) || 0;
-        const latestAllowed = departureMins - 180; // 3 hours before departure (international buffer)
-        if (latestAllowed > 0) {
-          const before = normalizedActivities.length;
-          normalizedActivities = normalizedActivities.filter((a: any) => {
-            const cat = ((a.category || '') as string).toUpperCase();
-            if (['TRANSPORT', 'TRAVEL', 'FLIGHT', 'TRANSIT'].includes(cat)) return true;
-            if (cat === 'STAY' || cat === 'ACCOMMODATION') {
-              if (/check.?out/i.test(a.title || '')) return true;
-            }
-            const actMins = parseTimeToMinutes(a.startTime || '') || 0;
-            if (actMins > 0 && actMins > latestAllowed) {
-              console.warn(`DEPARTURE TIMING: Removed "${a.title}" at ${a.startTime} — after departure buffer (${_departureTime24} - 3h = ${minutesToHHMM(latestAllowed)})`);
-              return false;
-            }
-            return true;
-          });
-          if (normalizedActivities.length < before) {
-            console.log(`[generate-day] Departure timing filter removed ${before - normalizedActivities.length} activities`);
-          }
-        }
+        normalizedActivities = enforceDepartureTiming(normalizedActivities, _departureTime24);
       }
     }
 
