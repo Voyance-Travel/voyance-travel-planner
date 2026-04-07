@@ -25,6 +25,7 @@ import {
   enforceMichelinPriceFloor,
 } from './sanitization.ts';
 import { normalizeVenueName, venueNamesMatch } from './generation-utils.ts';
+import { type DiningConfig } from './dining-config.ts';
 
 // =============================================================================
 // OPTIONS INTERFACE
@@ -44,6 +45,7 @@ export interface UniversalQualityOptions {
   apiKey?: string;
   lockedActivities?: any[];
   usedRestaurants?: string[];
+  diningConfig?: DiningConfig;
 }
 
 // Categories to skip for cross-day venue dedup (these repeat legitimately)
@@ -62,7 +64,7 @@ export async function universalQualityPass(
   const {
     city, country, tripType, dayIndex, totalDays,
     usedVenueNames, arrivalTime, departureTime,
-    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants,
+    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants, diningConfig,
   } = options;
 
   const label = `QUALITY_PASS_D${dayIndex + 1}`;
@@ -95,6 +97,7 @@ export async function universalQualityPass(
       apiKey,
       lockedActivities || [],
       dayTitle,
+      diningConfig,
     );
   }
 

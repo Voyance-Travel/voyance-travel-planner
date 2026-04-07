@@ -60,6 +60,7 @@ import {
   buildFullPromptGuidanceAsync,
   getArchetypeDefinition,
 } from '../archetype-data.ts';
+import { getDiningConfig, buildDiningPromptBlock } from '../dining-config.ts';
 import {
   buildTripTypePromptSection,
 } from '../trip-type-modifiers.ts';
@@ -667,6 +668,9 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
   }
 
   const archetypeContext = getFullArchetypeContext(primaryArchetype, resolvedDestination, effectiveBudgetTier, effectiveTraitScores);
+  const archetypeTier = archetypeContext.definition.category || 'Explorer';
+  const diningConfig = getDiningConfig(archetypeTier, archetypeContext.definition.identity || primaryArchetype);
+  console.log(`[compile-prompt] Dining DNA: tier=${archetypeTier}, policy=${diningConfig.michelinPolicy}, style=${diningConfig.diningStyle.substring(0, 60)}...`);
   const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;
   const minActivitiesFromArchetype = archetypeContext.definition.dayStructure.minScheduledActivities
     || Math.max(3, Math.ceil(maxActivitiesFromArchetype * 0.6));
@@ -869,40 +873,7 @@ DINING RULES — CRITICAL:
 - Include meals as specified by the day's meal policy (see timing instructions above) — each a real named restaurant with price
 - Each lunch and dinner recommendation should include 1 ALTERNATIVE option in its "tips" field
 - ONLY recommend restaurants and dining spots with 4+ star ratings - no low-quality or poorly-reviewed venues
-${(() => {
-  const tt = (tripType || '').toLowerCase();
-  const isLuminary = tt === 'luminary' || tt === 'luxury';
-  const isBudget = tt === 'budget' || tt === 'backpacker';
-  const days = totalDays || 1;
-
-  if (isBudget) {
-    return `MICHELIN DINING: Do NOT include Michelin-starred restaurants on budget trips. Focus on authentic local eateries and street food.`;
-  }
-
-  if (isLuminary && days >= 3) {
-    const minCount = days >= 7 ? 3 : days >= 5 ? 2 : 1;
-
-    return `LUMINARY DINNER GUIDANCE (MANDATORY):
-This is a Luminary (luxury) trip. For at least ${minCount} dinner(s) across the full ${days}-day trip, suggest a Michelin-starred restaurant or equivalent top-tier fine dining restaurant that genuinely exists in ${destination || 'the destination'}.
-- Price these at the restaurant's real tasting menu price (usually €120-350 per person for starred restaurants)
-- Include the real address
-- Only suggest restaurants you are confident actually exist and hold the star rating
-- If you are unsure about Michelin status in this city, suggest the most acclaimed fine dining restaurant you know of
-- Spread Michelin dinners across different days (never two starred dinners on the same day)
-- Price Michelin restaurants CORRECTLY: 1-star €120-180/pp, 2-star €180-280/pp, 3-star €250-400/pp
-- It is BETTER to include a correctly-priced Michelin restaurant than to avoid all Michelin restaurants
-- Do NOT remove Michelin restaurants to avoid pricing issues — price them correctly instead`;
-  }
-
-  if (days >= 3) {
-    return `MICHELIN DINING INCLUSION (optional but encouraged for Explorer trips):
-- Trips of 3+ days: consider including 1-2 Michelin-starred dinners for variety
-- It is BETTER to include a correctly-priced Michelin restaurant than to avoid all Michelin restaurants
-- Price them correctly: 1-star €120-180/pp, 2-star €180-280/pp, 3-star €250-400/pp`;
-  }
-
-  return '';
-})()}
+${buildDiningPromptBlock(diningConfig, totalDays || 1, destination || '')}
 - Every dining activity MUST have a real, specific restaurant name and address — NEVER use "the destination", the city name, or "get a restaurant recommendation" as a venue
 
 RESTAURANT NAMING RULES — CRITICAL (ABSOLUTE RULE — NO PLACEHOLDER RESTAURANTS):

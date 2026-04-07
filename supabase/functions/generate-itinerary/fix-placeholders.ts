@@ -3,6 +3,8 @@
  * Shared by universal-quality-pass.ts and action-generate-day.ts.
  */
 
+import { type DiningConfig } from './dining-config.ts';
+
 // =============================================================================
 // FALLBACK RESTAURANT DATABASE — Rich city-aware venue pool for placeholder replacement
 // =============================================================================
@@ -234,52 +236,76 @@ export async function generateFallbackRestaurant(
   tripType?: string,
   dayTheme?: string,
   neighborhood?: string,
+  diningConfig?: DiningConfig,
 ): Promise<FallbackRestaurant | null> {
   const blocklist = Array.from(usedNames).slice(0, 20).join(', ');
 
-  const priceGuidance: Record<string, Record<string, string>> = {
-    Luminary: {
-      breakfast: '€25-60 per person',
-      lunch: '€40-80 per person',
-      dinner: '€60-200 per person (Michelin-starred options welcome)',
-      drinks: '€20-50 per person',
-    },
-    Explorer: {
-      breakfast: '€10-30 per person',
-      lunch: '€20-50 per person',
-      dinner: '€30-80 per person',
-      drinks: '€15-35 per person',
-    },
-    Budget: {
-      breakfast: '€5-15 per person',
-      lunch: '€8-25 per person',
-      dinner: '€15-40 per person',
-      drinks: '€8-20 per person',
-    },
-  };
+  // If we have a DNA-aware dining config, use its price ranges and style
+  let priceRange: string;
+  let styleDesc: string;
 
-  const styleDescriptions: Record<string, string> = {
-    Luminary: 'luxury, refined, memorable dining experiences',
-    Explorer: 'authentic, local favorites, quality over price',
-    Budget: 'affordable, good value, local gems',
-  };
+  if (diningConfig) {
+    const pr = diningConfig.priceRange[mealType] || diningConfig.priceRange.dinner;
+    priceRange = `€${pr[0]}-${pr[1]} per person`;
+    styleDesc = diningConfig.diningStyle;
+  } else {
+    // Legacy fallback
+    const priceGuidance: Record<string, Record<string, string>> = {
+      Luminary: {
+        breakfast: '€25-60 per person',
+        lunch: '€40-80 per person',
+        dinner: '€60-200 per person (Michelin-starred options welcome)',
+        drinks: '€20-50 per person',
+      },
+      Explorer: {
+        breakfast: '€10-30 per person',
+        lunch: '€20-50 per person',
+        dinner: '€30-80 per person',
+        drinks: '€15-35 per person',
+      },
+      Budget: {
+        breakfast: '€5-15 per person',
+        lunch: '€8-25 per person',
+        dinner: '€15-40 per person',
+        drinks: '€8-20 per person',
+      },
+    };
 
-  const effectiveTripType = tripType || 'Explorer';
-  const prices = priceGuidance[effectiveTripType] || priceGuidance.Explorer;
+    const styleDescriptions: Record<string, string> = {
+      Luminary: 'luxury, refined, memorable dining experiences',
+      Explorer: 'authentic, local favorites, quality over price',
+      Budget: 'affordable, good value, local gems',
+    };
+
+    const effectiveTripType = tripType || 'Explorer';
+    const prices = priceGuidance[effectiveTripType] || priceGuidance.Explorer;
+    priceRange = prices[mealType] || prices.lunch;
+    styleDesc = styleDescriptions[effectiveTripType] || styleDescriptions.Explorer;
+  }
+
+  const locationStr = country ? `${city}, ${country}` : city;
   const priceRange = prices[mealType] || prices.lunch;
   const styleDesc = styleDescriptions[effectiveTripType] || styleDescriptions.Explorer;
   const locationStr = country ? `${city}, ${country}` : city;
 
+  const avoidStr = diningConfig?.avoidPatterns?.length ? `\n- AVOID these dining types: ${diningConfig.avoidPatterns.join(', ')}` : '';
+  const michelinHint = diningConfig?.michelinPolicy === 'required' && mealType === 'dinner'
+    ? '\n- Consider Michelin-starred restaurants if appropriate'
+    : diningConfig?.michelinPolicy === 'discouraged' && mealType === 'dinner'
+      ? '\n- Do NOT suggest Michelin-starred restaurants'
+      : '';
+
   const promptParts = [
     `You are a restaurant expert for ${locationStr}. Suggest ONE real, currently operating ${mealType} restaurant.`,
-    `- Trip style: ${effectiveTripType} (${styleDesc})`,
+    `- Dining style: ${styleDesc}`,
     `- Price range: ${priceRange}`,
     neighborhood ? `- Preferably in or near: ${neighborhood}` : null,
     dayTheme ? `- Day theme: ${dayTheme}` : null,
-    mealType === 'dinner' && effectiveTripType === 'Luminary' ? '- Consider Michelin-starred restaurants if appropriate' : null,
+    michelinHint || null,
     mealType === 'drinks' ? '- Suggest a bar, wine bar, cocktail lounge, or similar venue' : null,
     `- Must be a REAL place with a REAL street address`,
     `- Pick a well-reviewed local favorite, not a tourist trap`,
+    avoidStr || null,
     `- DO NOT suggest: ${blocklist || 'none'}`,
   ].filter(Boolean);
 
@@ -360,6 +386,7 @@ export async function fixPlaceholdersForDay(
   apiKey: string,
   lockedActivities: any[],
   dayTitle?: string,
+  diningConfig?: DiningConfig,
 ): Promise<void> {
   const destinationLower = (city || '').toLowerCase().trim();
   const destinationCity = destinationLower.split(',')[0].trim();
@@ -436,6 +463,8 @@ export async function fixPlaceholdersForDay(
         country || undefined,
         tripType || undefined,
         generatedDayTheme,
+        undefined,
+        diningConfig,
       );
       if (aiRestaurant) {
         applyFallbackToActivity(slot.activityRef, aiRestaurant, slot.mealType, usedVenueNamesInDay);
