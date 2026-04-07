@@ -801,10 +801,15 @@ export function enforceRequiredMealsFinalGuard(
   currency: string = 'USD',
   dayMode: string = 'unknown',
   fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [],
+  options?: { earliestTimeMins?: number; latestTimeMins?: number },
 ): MealGuardResult {
   if (requiredMeals.length === 0) {
     return { activities, injectedMeals: [], alreadyCompliant: true };
   }
+
+  // Timing window: if provided, skip meals that fall outside the available window
+  const earliestMins = options?.earliestTimeMins ?? 0;     // default: midnight
+  const latestMins = options?.latestTimeMins ?? 24 * 60;   // default: end of day
 
   // Pre-filter: remove any chain restaurants from fallbackVenues
   const cleanFallbackVenues = fallbackVenues.filter(v => !isChainRestaurant(v.name));
