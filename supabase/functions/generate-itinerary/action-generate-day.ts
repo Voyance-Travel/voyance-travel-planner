@@ -240,8 +240,132 @@ function applyFallbackToActivity(
 }
 
 // =============================================================================
-// AI MICRO-CALL: Generate a real restaurant for any city
+// ORCHESTRATOR: Detect and fill all placeholder dining activities for a day
 // =============================================================================
+const PLACEHOLDER_TITLE_PATTERNS = [
+  /^(breakfast|lunch|dinner|meal|brunch)\s+(at\s+)?a\s+/i,
+  /^(breakfast|lunch|dinner|meal|brunch)\s+(at\s+)?the\s+/i,
+  /^(breakfast|lunch|dinner)\s+at\s+(a\s+)?(local|nearby|neighborhood|traditional|typical|popular|cozy|charming)/i,
+  /at a (bistro|brasserie|café|cafe|boulangerie|trattoria|osteria|taverna|izakaya|tapas bar|pub|diner|restaurant|eatery|food stall|canteen|pizzeria|ramen shop|noodle shop|sushi bar|beer hall|wine bar|gastro)/i,
+  /get a restaurant recommendation/i,
+];
+const PLACEHOLDER_VENUE_PATTERNS = [
+  /^the destination$/i,
+  /^the city$/i,
+  /^(city|town) center$/i,
+  /^downtown$/i,
+  /^near(by)?\s+(the\s+)?hotel$/i,
+  /^your hotel$/i,
+  /get a restaurant recommendation/i,
+  /^.{0,3}$/,
+];
+
+interface PlaceholderSlot {
+  activityRef: any;
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
+}
+
+async function fixPlaceholdersForDay(
+  activities: any[],
+  city: string,
+  country: string,
+  tripType: string,
+  dayIndex: number,
+  usedRestaurants: string[],
+  budgetTier: string,
+  apiKey: string,
+  lockedActivities: any[],
+  dayTitle?: string,
+): Promise<void> {
+  const destinationLower = (city || '').toLowerCase().trim();
+  const destinationCity = destinationLower.split(',')[0].trim();
+
+  const usedVenueNamesInDay = new Set<string>();
+  // Seed with locked dining venue names
+  for (const locked of lockedActivities) {
+    const lCat = (locked.category || '').toLowerCase();
+    if (lCat === 'dining' || lCat === 'restaurant') {
+      const lName = (locked.location?.name || locked.title || '').toLowerCase();
+      if (lName) usedVenueNamesInDay.add(lName);
+    }
+  }
+  // Seed with usedRestaurants passed from orchestrator
+  const usedList: string[] = Array.isArray(usedRestaurants) ? usedRestaurants : [];
+  for (const u of usedList) {
+    if (u) usedVenueNamesInDay.add(u.toLowerCase());
+  }
+
+  const placeholderSlots: PlaceholderSlot[] = [];
+
+  for (const activity of activities) {
+    const category = ((activity as any).category || '').toLowerCase();
+    if (category !== 'dining' && category !== 'restaurant') continue;
+
+    const title = ((activity as any).title || '').trim();
+    const venueName = ((activity as any).location?.name || (activity as any).venue_name || '').trim();
+    const description = ((activity as any).description || '').trim();
+
+    const isPlaceholderTitle = PLACEHOLDER_TITLE_PATTERNS.some(p => p.test(title));
+    const isPlaceholderVenue = PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venueName))
+      || (destinationCity.length > 2 && venueName.toLowerCase() === destinationCity);
+    const hasRecommendationCTA = /get a restaurant recommendation/i.test(description);
+
+    if (isPlaceholderTitle || isPlaceholderVenue || hasRecommendationCTA) {
+      console.error(`[QUALITY] Day ${dayIndex}: PLACEHOLDER DETECTED: "${title}" at "${venueName}" — replacing`);
+
+      const startTimeStr = (activity as any).startTime || '12:00';
+      const hourMatch = startTimeStr.match(/^(\d{1,2})/);
+      const hour24 = hourMatch ? parseInt(hourMatch[1], 10) : 12;
+
+      let mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
+      if (hour24 < 11) mealType = 'breakfast';
+      else if (hour24 < 16) mealType = 'lunch';
+      else if (hour24 < 21) mealType = 'dinner';
+      else mealType = 'drinks';
+
+      // Fast path: try hardcoded fallback first (free, instant)
+      const fallback = getRandomFallbackRestaurant(city, mealType, usedVenueNamesInDay);
+      if (fallback) {
+        applyFallbackToActivity(activity, fallback, mealType, usedVenueNamesInDay);
+      } else {
+        placeholderSlots.push({ activityRef: activity, mealType });
+      }
+    }
+  }
+
+  if (placeholderSlots.length === 0) {
+    console.log(`[QUALITY] Day ${dayIndex}: No placeholders detected ✓`);
+    return;
+  }
+
+  console.warn(`[QUALITY] Day ${dayIndex}: ${placeholderSlots.length} placeholder(s) need AI fallback for "${city}"`);
+  const generatedDayTheme = dayTitle || undefined;
+
+  for (const slot of placeholderSlots) {
+    try {
+      const aiRestaurant = await generateFallbackRestaurant(
+        city,
+        slot.mealType,
+        budgetTier,
+        apiKey,
+        usedVenueNamesInDay,
+        country || undefined,
+        tripType || undefined,
+        generatedDayTheme,
+      );
+      if (aiRestaurant) {
+        applyFallbackToActivity(slot.activityRef, aiRestaurant, slot.mealType, usedVenueNamesInDay);
+        console.log(`[QUALITY] Replaced placeholder with: "${slot.activityRef.title}" (€${aiRestaurant.price || '?'}/pp)`);
+      } else {
+        console.error(`[QUALITY] Failed to fill ${slot.mealType} slot at day ${dayIndex}`);
+      }
+    } catch (err) {
+      console.warn(`[QUALITY] AI fallback failed for ${slot.mealType} in ${city}:`, err);
+    }
+  }
+}
+
+
 const RESTAURANT_SUGGESTION_TOOL = {
   type: "function" as const,
   function: {
