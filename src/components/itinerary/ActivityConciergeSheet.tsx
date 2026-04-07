@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Sparkles, Send, MapPin, DollarSign, Bookmark } from 'lucide-react';
+import { Sparkles, Send, MapPin, DollarSign, Bookmark } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
