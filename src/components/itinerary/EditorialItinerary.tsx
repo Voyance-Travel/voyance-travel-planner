@@ -159,7 +159,8 @@ import { SmartFinishBanner } from './SmartFinishBanner';
 import { InterCityTransportEditor } from './InterCityTransportEditor';
 import { useUpdateCityTransport } from '@/hooks/useTripCities';
 
-import ActivityConciergeSheet from '@/components/itinerary/ActivityConciergeSheet';
+import ActivityConciergeSheet, { type AISavedNote } from '@/components/itinerary/ActivityConciergeSheet';
+import { AISavedNotes } from '@/components/itinerary/AISavedNotes';
 
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 import SortableFlightLegCards from './SortableFlightLegCards';
