@@ -9747,6 +9747,7 @@ function DayCard({
                           isCleanPreview={isCleanPreview}
                           onPhotoResolved={onPhotoResolved}
                           isManualMode={isManualMode}
+                          onOpenConcierge={handleOpenConcierge}
                         />
                       </div>
                     </div>
