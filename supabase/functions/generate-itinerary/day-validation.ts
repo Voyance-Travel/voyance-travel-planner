@@ -960,10 +960,10 @@ export function enforceRequiredMealsFinalGuard(
     `MISSING=[${missing.join(',')}] — injecting ${fallbackVenues.length > 0 ? 'REAL VENUE' : 'destination-aware'} fallback meals (dayMode=${dayMode})`
   );
 
-  const fallbackTimes: Record<RequiredMeal, { start: string; end: string; cost: number }> = {
-    breakfast: { start: '08:30', end: '09:15', cost: 12 },
-    lunch:     { start: '12:30', end: '13:30', cost: 18 },
-    dinner:    { start: '19:00', end: '20:15', cost: 30 },
+  const fallbackTimes: Record<RequiredMeal, { start: string; end: string; cost: number; startMins: number }> = {
+    breakfast: { start: '08:30', end: '09:15', cost: 12, startMins: 510 },
+    lunch:     { start: '12:30', end: '13:30', cost: 18, startMins: 750 },
+    dinner:    { start: '19:00', end: '20:15', cost: 30, startMins: 1140 },
   };
 
   // Track which venue names have been used to avoid duplicates within this guard call
