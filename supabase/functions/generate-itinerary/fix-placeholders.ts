@@ -463,6 +463,8 @@ export async function fixPlaceholdersForDay(
         country || undefined,
         tripType || undefined,
         generatedDayTheme,
+        undefined,
+        diningConfig,
       );
       if (aiRestaurant) {
         applyFallbackToActivity(slot.activityRef, aiRestaurant, slot.mealType, usedVenueNamesInDay);
