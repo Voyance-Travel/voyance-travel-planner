@@ -200,6 +200,27 @@ export const PLACEHOLDER_VENUE_PATTERNS = [
   /^.{0,3}$/,
 ];
 
+/**
+ * Universal placeholder meal detection.
+ * Returns true if the activity looks like a generic/placeholder dining entry.
+ */
+export function isPlaceholderMeal(activity: any, cityName: string): boolean {
+  const category = (activity.category || '').toUpperCase();
+  if (category !== 'DINING' && category !== 'RESTAURANT') return false;
+
+  const title = (activity.title || '').trim();
+  const venue = (activity.location?.name || activity.venue_name || '').trim();
+  const description = (activity.description || '').trim();
+
+  if (PLACEHOLDER_TITLE_PATTERNS.some(p => p.test(title))) return true;
+  if (cityName.length > 2 && venue.toLowerCase() === cityName.toLowerCase()) return true;
+  if (PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venue))) return true;
+  if (/get a restaurant recommendation/i.test(description)) return true;
+  if (/get a restaurant recommendation/i.test(venue)) return true;
+
+  return false;
+}
+
 interface PlaceholderSlot {
   activityRef: any;
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
