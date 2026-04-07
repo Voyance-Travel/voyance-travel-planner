@@ -634,6 +634,31 @@ export async function handleGenerateDay(
       
       console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
     }
+
+    // =========================================================================
+    // TIME OVERLAP FIXER — shift overlapping activities forward
+    // =========================================================================
+    {
+      normalizedActivities.sort((a: any, b: any) => {
+        const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+        const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+        return aM - bM;
+      });
+      for (let i = 1; i < normalizedActivities.length; i++) {
+        const prev = normalizedActivities[i - 1] as any;
+        const curr = normalizedActivities[i] as any;
+        const prevEnd = parseTimeToMinutes(prev.endTime || '') ?? 0;
+        const currStart = parseTimeToMinutes(curr.startTime || '') ?? 0;
+        if (prevEnd > 0 && currStart > 0 && currStart < prevEnd) {
+          const newStart = prevEnd + 15;
+          const duration = (parseTimeToMinutes(curr.endTime || '') ?? (currStart + 60)) - currStart;
+          console.warn(`TIME OVERLAP: "${prev.title}" ends ${prev.endTime} but "${curr.title}" starts ${curr.startTime}. Shifting to ${minutesToHHMM(newStart)}`);
+          curr.startTime = minutesToHHMM(newStart);
+          curr.endTime = minutesToHHMM(newStart + Math.max(duration, 30));
+        }
+      }
+    }
+
     // =======================================================================
     // ENRICHMENT + OPENING HOURS: Extracted to pipeline/enrich-day.ts (Phase 6)
     // =======================================================================
