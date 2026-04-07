@@ -110,29 +110,97 @@ export function extractRestaurantVenueName(title: string): string {
 // =============================================================================
 
 // =============================================================================
+// VENUE ALIAS MAP — bilingual / variant canonical resolution
+// =============================================================================
+
+const VENUE_ALIASES: Record<string, string> = {
+  'tuileries garden': 'tuileries',
+  'jardin des tuileries': 'tuileries',
+  'tuileries': 'tuileries',
+  'champs elysees': 'champs-elysees',
+  'avenue des champs elysees': 'champs-elysees',
+  'champs-elysees': 'champs-elysees',
+  'sacre coeur': 'sacre-coeur',
+  'sacre-coeur basilica': 'sacre-coeur',
+  'basilique du sacre coeur': 'sacre-coeur',
+  'eiffel tower': 'eiffel-tower',
+  'tour eiffel': 'eiffel-tower',
+  'notre dame': 'notre-dame',
+  'notre-dame cathedral': 'notre-dame',
+  'cathedrale notre-dame': 'notre-dame',
+  'arc de triomphe': 'arc-de-triomphe',
+  "arc de triomphe de l'etoile": 'arc-de-triomphe',
+  'luxembourg garden': 'luxembourg',
+  'jardin du luxembourg': 'luxembourg',
+  'luxembourg gardens': 'luxembourg',
+  'palais royal': 'palais-royal',
+  'palais-royal gardens': 'palais-royal',
+  'jardin du palais royal': 'palais-royal',
+  'champ de mars': 'champ-de-mars',
+  'parc du champ de mars': 'champ-de-mars',
+  "musee d'orsay": 'orsay',
+  'orsay museum': 'orsay',
+  'musee du louvre': 'louvre',
+  'louvre museum': 'louvre',
+  'the louvre': 'louvre',
+  'palace of versailles': 'versailles',
+  'chateau de versailles': 'versailles',
+  'versailles palace': 'versailles',
+  'place de la concorde': 'concorde',
+  'pont alexandre iii': 'pont-alexandre-iii',
+  'pont alexandre': 'pont-alexandre-iii',
+  'ile saint louis': 'ile-saint-louis',
+  'ile saint-louis': 'ile-saint-louis',
+  'ile de la cite': 'ile-de-la-cite',
+  'montmartre': 'montmartre',
+  'place du tertre': 'place-du-tertre',
+};
+
+/**
+ * Resolve a normalized venue name to its canonical alias key.
+ * Checks exact match first, then substring containment against alias keys.
+ */
+export function resolveVenueAlias(name: string): string | null {
+  if (!name) return null;
+  // Exact match
+  if (VENUE_ALIASES[name]) return VENUE_ALIASES[name];
+  // Substring: if the name contains an alias key (or vice versa)
+  for (const [key, canonical] of Object.entries(VENUE_ALIASES)) {
+    if (name.includes(key) || key.includes(name)) return canonical;
+  }
+  return null;
+}
+
+// =============================================================================
 // FUZZY VENUE NAME MATCHING
 // =============================================================================
 
 /**
- * Check whether two normalized venue names refer to the same restaurant.
+ * Check whether two normalized venue names refer to the same place.
  * Returns true if:
  *  - exact match, OR
- *  - one name contains the other (e.g. "time out market" vs "time out market lisboa"), OR
- *  - word-overlap ≥ 80 % of the shorter name's words
+ *  - both resolve to the same canonical alias, OR
+ *  - one name contains the other, OR
+ *  - word-overlap ≥ threshold (50% for ≤2-word names, 80% for longer)
  *
  * Both inputs MUST already be normalizeVenueName'd / extractRestaurantVenueName'd.
  */
 export function venueNamesMatch(a: string, b: string): boolean {
   if (!a || !b) return false;
   if (a === b) return true;
+  // Alias resolution — catches bilingual name pairs
+  const aliasA = resolveVenueAlias(a);
+  const aliasB = resolveVenueAlias(b);
+  if (aliasA && aliasB && aliasA === aliasB) return true;
   // Substring containment — handles city-suffix variants
   if (a.includes(b) || b.includes(a)) return true;
-  // Word-overlap for slight variations
+  // Word-overlap with adaptive threshold
   const wordsA = new Set(a.split(/\s+/));
   const wordsB = new Set(b.split(/\s+/));
   const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
   const smaller = Math.min(wordsA.size, wordsB.size);
-  return smaller > 0 && intersection / smaller >= 0.8;
+  const threshold = smaller <= 2 ? 0.5 : 0.8;
+  return smaller > 0 && intersection / smaller >= threshold;
 }
 
 /**
