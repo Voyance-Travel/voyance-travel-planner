@@ -20,3 +20,5 @@ export { TransportComparisonCard } from './TransportComparisonCard';
 export { InterCityTransportCard } from './InterCityTransportCard';
 export { DayActionToolbar } from './DayActionToolbar';
 export { NewMemberSuggestionsCard } from './NewMemberSuggestionsCard';
+export { AISavedNotes } from './AISavedNotes';
+export type { AISavedNote } from './ActivityConciergeSheet';

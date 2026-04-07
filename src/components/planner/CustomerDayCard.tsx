@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { 
@@ -20,7 +20,8 @@ import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import ActivityAlternativesDrawer from './ActivityAlternativesDrawer';
 import { useVersionHistory } from '@/hooks/useVersionHistory';
-import ActivityConciergeSheet from '@/components/itinerary/ActivityConciergeSheet';
+import ActivityConciergeSheet, { type AISavedNote } from '@/components/itinerary/ActivityConciergeSheet';
+import { AISavedNotes } from '@/components/itinerary/AISavedNotes';
 
 interface CustomerDayCardProps {
   day: DayItinerary;
@@ -37,6 +38,8 @@ interface CustomerDayCardProps {
   totalDays?: number;
   travelers?: number;
   currency?: string;
+  onSaveAINote?: (activityId: string, note: AISavedNote) => void;
+  onDeleteAINote?: (activityId: string, noteId: string) => void;
 }
 
 const activityTypeStyles: Record<string, { bg: string; text: string; border: string }> = {
@@ -64,11 +67,19 @@ export default function CustomerDayCard({
   totalDays,
   travelers,
   currency,
+  onSaveAINote,
+  onDeleteAINote,
 }: CustomerDayCardProps) {
   const [isExpanded, setIsExpanded] = useState(dayIndex < 2);
   const [selectedActivityForSwap, setSelectedActivityForSwap] = useState<ItineraryActivity | null>(null);
   const [hoveredActivity, setHoveredActivity] = useState<string | null>(null);
   const [conciergeActivity, setConciergeActivity] = useState<ItineraryActivity | null>(null);
+
+  const conciergeSavedNoteContents = useMemo(() => {
+    if (!conciergeActivity) return new Set<string>();
+    const notes: AISavedNote[] = (conciergeActivity as any).aiNotes || [];
+    return new Set(notes.map((n) => n.content));
+  }, [conciergeActivity]);
 
   // Version history for undo
   const { canUndoDay, isUndoing, handleUndo } = useVersionHistory({
@@ -313,6 +324,13 @@ export default function CustomerDayCard({
                                 </Badge>
                               )}
                             </div>
+                            {/* AI Saved Notes */}
+                            {(activity as any).aiNotes && (activity as any).aiNotes.length > 0 && (
+                              <AISavedNotes
+                                notes={(activity as any).aiNotes}
+                                onDeleteNote={onDeleteAINote ? (noteId) => onDeleteAINote(activity.id, noteId) : undefined}
+                              />
+                            )}
                           </div>
                         </div>
                       </motion.div>
@@ -375,6 +393,8 @@ export default function CustomerDayCard({
           onActivitySwap={onActivitySwap ? (activityId, newData) => {
             onActivitySwap(activityId, newData as unknown as ItineraryActivity);
           } : undefined}
+          onSaveNote={onSaveAINote}
+          savedNoteContents={conciergeSavedNoteContents}
         />
       )}
     </>

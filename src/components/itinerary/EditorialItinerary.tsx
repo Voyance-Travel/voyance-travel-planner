@@ -159,7 +159,8 @@ import { SmartFinishBanner } from './SmartFinishBanner';
 import { InterCityTransportEditor } from './InterCityTransportEditor';
 import { useUpdateCityTransport } from '@/hooks/useTripCities';
 
-import ActivityConciergeSheet from '@/components/itinerary/ActivityConciergeSheet';
+import ActivityConciergeSheet, { type AISavedNote } from '@/components/itinerary/ActivityConciergeSheet';
+import { AISavedNotes } from '@/components/itinerary/AISavedNotes';
 
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 import SortableFlightLegCards from './SortableFlightLegCards';
@@ -270,6 +271,8 @@ export interface EditorialActivity {
   };
   /** Placeholder activity that needs a real recommendation */
   needsRefinement?: boolean;
+  /** Saved AI concierge notes */
+  aiNotes?: import('./ActivityConciergeSheet').AISavedNote[];
 }
 
 export interface TransportOption {
@@ -2406,6 +2409,39 @@ export function EditorialItinerary({
     setConciergeNextActivity(next?.title);
     setConciergeOpen(true);
   }, [days]);
+
+  // AI Note save/delete handlers
+  const handleSaveAINote = useCallback((activityId: string, note: AISavedNote) => {
+    setDays(prev => prev.map(day => ({
+      ...day,
+      activities: day.activities.map(act => {
+        if (act.id !== activityId) return act;
+        const existing = act.aiNotes || [];
+        // Dedup by content
+        if (existing.some(n => n.content === note.content)) return act;
+        return { ...act, aiNotes: [...existing, note] };
+      }),
+    })));
+    setHasChanges(true);
+  }, []);
+
+  const handleDeleteAINote = useCallback((activityId: string, noteId: string) => {
+    setDays(prev => prev.map(day => ({
+      ...day,
+      activities: day.activities.map(act => {
+        if (act.id !== activityId) return act;
+        return { ...act, aiNotes: (act.aiNotes || []).filter(n => n.id !== noteId) };
+      }),
+    })));
+    setHasChanges(true);
+  }, []);
+
+  // Build saved note content set for current concierge activity
+  const conciergeSavedNoteContents = useMemo(() => {
+    if (!conciergeActivity) return new Set<string>();
+    const notes = conciergeActivity.aiNotes || [];
+    return new Set(notes.map(n => n.content));
+  }, [conciergeActivity]);
 
   const [reviewsDrawerOpen, setReviewsDrawerOpen] = useState(false);
   const [reviewsTarget, setReviewsTarget] = useState<{ 
@@ -6376,6 +6412,7 @@ export function EditorialItinerary({
                           onPhotoResolved={reportPhoto}
                           isManualMode={isManualMode}
                           onOpenConcierge={handleOpenConcierge}
+                          onDeleteAINote={handleDeleteAINote}
                         />
                       )}
                     </>
@@ -7641,6 +7678,8 @@ export function EditorialItinerary({
           travelers={travelers}
           currency={destinationInfo?.currency || 'USD'}
           hotelName={hotelSelection?.name}
+          onSaveNote={handleSaveAINote}
+          savedNoteContents={conciergeSavedNoteContents}
         />
       )}
 
@@ -9235,6 +9274,8 @@ interface DayCardProps {
    isManualMode?: boolean;
    /** Handler to open AI concierge for an activity */
    onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
+   /** Handler to delete an AI saved note */
+   onDeleteAINote?: (activityId: string, noteId: string) => void;
 }
 
 function DayCard({
@@ -9298,6 +9339,7 @@ function DayCard({
   onPhotoResolved,
   isManualMode = false,
   onOpenConcierge,
+  onDeleteAINote,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -9804,6 +9846,7 @@ function DayCard({
                           onPhotoResolved={onPhotoResolved}
                           isManualMode={isManualMode}
                           onOpenConcierge={onOpenConcierge}
+                          onDeleteAINote={onDeleteAINote}
                         />
                       </div>
                     </div>
@@ -9853,6 +9896,7 @@ function DayCard({
                           onPhotoResolved={onPhotoResolved}
                           isManualMode={isManualMode}
                           onOpenConcierge={onOpenConcierge}
+                          onDeleteAINote={onDeleteAINote}
                         />
                     </div>
                     {/* Compact transit gap indicator between activities */}
@@ -10095,6 +10139,8 @@ interface ActivityRowProps {
     isManualMode?: boolean;
     /** Handler to open AI concierge sheet */
     onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
+    /** Handler to delete an AI saved note from an activity */
+    onDeleteAINote?: (activityId: string, noteId: string) => void;
 }
 
 function ActivityRow({
@@ -10141,6 +10187,7 @@ function ActivityRow({
   onPhotoResolved,
   isManualMode = false,
   onOpenConcierge,
+  onDeleteAINote,
 }: ActivityRowProps) {
   const [showProposeReplacement, setShowProposeReplacement] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -10558,6 +10605,13 @@ function ActivityRow({
                 <VoyanceInsight tip={sanitizeActivityText(activity.tips)} />
               )}
             </div>
+          )}
+          {/* AI Saved Notes */}
+          {activity.aiNotes && activity.aiNotes.length > 0 && !isDowntime && !isTransport && (
+            <AISavedNotes
+              notes={activity.aiNotes}
+              onDeleteNote={isEditable && onDeleteAINote ? (noteId) => onDeleteAINote(activity.id, noteId) : undefined}
+            />
           )}
           {/* Mobile action buttons */}
           {!isPreview && (

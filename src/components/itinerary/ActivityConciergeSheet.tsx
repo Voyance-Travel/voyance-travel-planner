@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Sparkles, Send, MapPin, DollarSign } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Sparkles, Send, MapPin, DollarSign, Bookmark } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,13 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useActivityConcierge, type ConciergeMessage, type AlternativeSuggestion } from '@/hooks/useActivityConcierge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+export interface AISavedNote {
+  id: string;
+  content: string;
+  savedAt: string;
+  query?: string;
+}
 
 interface ActivityConciergeSheetProps {
   open: boolean;
@@ -48,6 +55,8 @@ interface ActivityConciergeSheetProps {
   currency?: string;
   hotelName?: string;
   onActivitySwap?: (activityId: string, newActivity: Record<string, unknown>) => void;
+  onSaveNote?: (activityId: string, note: AISavedNote) => void;
+  savedNoteContents?: Set<string>;
 }
 
 const CHIPS_BY_CATEGORY: Record<string, string[]> = {
@@ -98,6 +107,8 @@ export default function ActivityConciergeSheet({
   travelers = 1,
   currency = 'USD',
   onActivitySwap,
+  onSaveNote,
+  savedNoteContents,
 }: ActivityConciergeSheetProps) {
   const isMobile = useIsMobile();
   const [input, setInput] = useState('');
@@ -227,6 +238,35 @@ export default function ActivityConciergeSheet({
     });
   };
 
+  const handleSaveNote = useCallback((msgIndex: number) => {
+    if (!onSaveNote) return;
+    const msg = messages[msgIndex];
+    if (!msg || msg.role !== 'assistant') return;
+
+    // Find the preceding user message as context
+    let query: string | undefined;
+    for (let i = msgIndex - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        query = messages[i].content;
+        break;
+      }
+    }
+
+    const note: AISavedNote = {
+      id: crypto.randomUUID(),
+      content: msg.content,
+      savedAt: new Date().toISOString(),
+      query,
+    };
+
+    onSaveNote(activity.id, note);
+    toast('Note saved to card', { duration: 2000, className: 'companion-toast' });
+  }, [onSaveNote, messages, activity.id]);
+
+  const isNoteSaved = useCallback((content: string) => {
+    return savedNoteContents?.has(content) ?? false;
+  }, [savedNoteContents]);
+
   const sheetSide = isMobile ? 'bottom' as const : 'right' as const;
 
   return (
@@ -287,9 +327,28 @@ export default function ActivityConciergeSheet({
                   )}
                 >
                   {msg.role === 'assistant' ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ul]:ml-4">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    </div>
+                    <>
+                      <div className="prose prose-sm dark:prose-invert max-w-none [&>p]:mb-2 [&>ul]:mb-2 [&>ul]:ml-4">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                      {onSaveNote && (
+                        <div className="flex justify-end mt-1">
+                          <button
+                            onClick={() => handleSaveNote(i)}
+                            disabled={isNoteSaved(msg.content)}
+                            className={cn(
+                              'p-1 rounded transition-colors',
+                              isNoteSaved(msg.content)
+                                ? 'text-primary cursor-default'
+                                : 'text-muted-foreground hover:text-primary'
+                            )}
+                            title={isNoteSaved(msg.content) ? 'Saved' : 'Save note to card'}
+                          >
+                            <Bookmark className={cn('w-3.5 h-3.5', isNoteSaved(msg.content) && 'fill-current')} />
+                          </button>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p>{msg.content}</p>
                   )}
