@@ -523,7 +523,7 @@ const FREE_VENUE_PATTERNS = [
   /\bplaza\b/i, /\bmirador\b/i, /\bparque\b/i, /\bjard[ií]n\b/i,
   // English
   /\bsquare\b/i, /\bviewpoint\b/i, /\blookout\b/i, /\bgarden(?:s)?\b/i,
-  /\bpark\b/i, /\bwaterfront\b/i, /\briverside\b/i, /\bpromenade\b/i,
+  /\bpark\b/i, /\bparc\b/i, /\bwaterfront\b/i, /\briverside\b/i, /\bpromenade\b/i,
   /\bboardwalk\b/i, /\bpier\b/i, /\bbeach\b/i,
   /\bneighborhood\s+(?:walk|stroll|explore)\b/i,
   /\bdistrict\s+(?:walk|stroll|explore)\b/i,
@@ -534,6 +534,17 @@ const FREE_VENUE_PATTERNS = [
   /\bjardin\b/i, /\bplace\s+\w/i, /\besplanade\b/i,
   // Italian
   /\bpiazza\b/i, /\bgiardino\b/i,
+  // Bridges
+  /\bpont\s+\w+\b/i, /\bbridge\b/i,
+  // Free-entry religious sites
+  /\bbasilique\b/i, /\bcath[eé]drale\b/i, /\b[eé]glise\b/i, /\bchurch\b/i,
+  /\bbasilica\b/i, /\bcathedral\b/i,
+  // Paris-specific free venues
+  /\bchamps.?[eé]lys[eé]es\b/i, /\bmontmartre\b/i, /\bsacr[eé].?c[oœ]ur\b/i,
+  /\btuileries\b/i, /\bchamp\s+de\s+mars\b/i, /\bpalais.?royal.*garden\b/i,
+  /\b[iî]le\s+saint.?louis\b/i,
+  // Walking patterns
+  /\bseine.*walk|walk.*seine\b/i, /\bneighborhood\s+walk\b/i,
   // Common free venue types
   /\bpublic\s+(?:square|garden|park|space)\b/i,
   /\bfree\s+(?:attraction|venue|entry)\b/i,
@@ -546,7 +557,7 @@ const PAID_OVERRIDE_PATTERNS = [
   // Dining / bars
   /\b(?:breakfast|brunch|lunch|dinner|restaurant|café|cafe|coffee|bar|bistro|tapas|food|cocktail|nightcap)\b/i,
   // Ticketed attractions
-  /\b(?:museum|monastery|palace|palácio|castle|castelo|tower|torre|aquarium|zoo|show|concert|theater|theatre|ticket|admission|entrance|gallery)\b/i,
+  /\b(?:museum|mus[eé]e|monastery|palace|palácio|castle|castelo|tower|torre|aquarium|zoo|show|concert|theater|theatre|ticket|admission|entrance|gallery|galerie|orangerie)\b/i,
   // Wellness
   /\b(?:spa|wellness|massage|treatment|hammam|thermal|sauna)\b/i,
   // Transport
