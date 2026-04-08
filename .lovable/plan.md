@@ -1,124 +1,90 @@
 
+This is actually 3 separate issues, not one shared failure.
 
-# Fix: Transport Card Misalignment and Back-to-Back Hotel Travel
+## What I found
 
-## Problem
-1. **Transport cards are off by one position** — e.g., "Travel to Louvre" appears before "Café Breakfast" instead of before the Louvre activity
-2. **Back-to-back hotel travel cards** — two consecutive "Travel to Your Hotel" cards appear in the itinerary
+1. **Manual paste 500 (`parse-trip-input`)**
+   - This is a real backend 500, not a browser/CORS problem.
+   - `src/components/planner/ManualTripPasteEntry.tsx` currently shows only a generic toast when the function returns non-2xx.
+   - `supabase/functions/parse-trip-input/index.ts` wraps most failures into a generic 500, so the client loses the real cause.
+   - I could not confirm the exact parse-stage failure from recent logs, which means the next fix should focus on **making the failure diagnosable and user-visible**.
 
-## Root Cause
-The repair pipeline in `repair-day.ts` builds transport cards correctly in the `repairBookends` function (step 9), but then step 13 (TIME_OVERLAP CASCADE, line 2252) **sorts all activities by startTime**. This sort can displace transport cards from their intended neighbors. After the sort, transport destinations no longer match the actual next activity.
+2. **“Multi city seems stuck”**
+   - I confirmed the backend failure from logs on a recent failed trip:
+     - `ReferenceError: isFirstDay is not defined`
+     - file: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+   - Root cause: values like `isFirstDay`, `isLastDay`, `arrTime24`, and `depTime24` are defined inside the pipeline block, but referenced again later in the universal quality pass after that scope ends.
+   - Result: day 1 can partially save, then the chain crashes and the trip is marked `failed`.
 
-Additionally, the transport consolidation (step 4c) only runs inside `repairBookends`, so any transport cards created or shuffled by later steps (dedup passes, time-sort) are never consolidated.
+3. **`<circle> attribute cx/cy: Expected length, "undefined"`**
+   - This looks like a separate frontend animation bug.
+   - Most likely source: `src/components/planner/shared/GenerationAnimation.tsx`
+   - That component animates SVG circles with Framer Motion; some circles do not start with fully stable numeric SVG attrs, which can produce the `cx/cy undefined` warnings during mount/animation.
+   - This is noisy, but it does **not** appear to be the cause of the backend generation failure.
 
-## Solution
-Add a **final transport coherence pass** at the end of `repairDay()`, right before the return statement (after step 14, ~line 2546). This pass:
+## Plan
 
-1. **Rewrites misaligned transport cards** — for each transport card, checks if its destination matches the next non-transport activity. If not, rewrites title/location/fromLocation to correctly bridge prev→next neighbors.
-2. **Merges consecutive transport cards** — if two transports end up adjacent (e.g., two hotel-bound transports), merge them into one.
-3. **Removes redundant transports** — if a transport goes from location A to location A (same place), remove it.
+### 1) Fix the confirmed multi-city generation crash
+**File:** `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
 
-### Implementation detail
+- Hoist the day-context variables so they are available everywhere after generation:
+  - first/last day flags
+  - arrival/departure times
+  - departure transport type
+- Replace the out-of-scope references in the universal quality pass with the hoisted values.
+- Check the rest of the file for any other post-block references using the inner-scoped names.
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** — insert after step 14 (line ~2545), before the return statement:
+### 2) Surface the real backend failure instead of a generic “stuck” message
+**File:** `src/hooks/useGenerationPoller.ts`
 
-```typescript
-// --- 15. FINAL TRANSPORT COHERENCE PASS ---
-// After all repairs (including time-sort), transport cards may no longer
-// bridge their actual neighbors. Rewrite destinations and merge duplicates.
-{
-  const isTransportFinal = (a: any) => {
-    const c = (a.category || '').toLowerCase();
-    return c === 'transport' || c === 'transportation';
-  };
+- When trip status is `failed`, use:
+  - `metadata.generation_error` first
+  - then `metadata.chain_error` as fallback
+- This will expose the actual backend crash reason instead of collapsing into a vague failure state.
 
-  // 15a. Rewrite each transport to match actual prev→next neighbors
-  for (let i = 0; i < activities.length; i++) {
-    if (!isTransportFinal(activities[i])) continue;
-    const transport = activities[i];
+Optional follow-up if needed:
+**File:** `src/components/itinerary/ItineraryGenerator.tsx`
+- Keep the suppression behavior, but log/display the improved poller error text.
 
-    let prevReal: any = null;
-    for (let j = i - 1; j >= 0; j--) {
-      if (!isTransportFinal(activities[j])) { prevReal = activities[j]; break; }
-    }
-    let nextReal: any = null;
-    for (let j = i + 1; j < activities.length; j++) {
-      if (!isTransportFinal(activities[j])) { nextReal = activities[j]; break; }
-    }
-    if (!nextReal) continue;
+### 3) Make `parse-trip-input` failures understandable
+**Files:**
+- `supabase/functions/parse-trip-input/index.ts`
+- `src/components/planner/ManualTripPasteEntry.tsx`
 
-    const transportDest = (transport.location?.name || '').toLowerCase();
-    const nextLoc = (nextReal.location?.name || nextReal.title || '').toLowerCase();
+**Backend changes**
+- Split the function into explicit failure stages:
+  - request validation
+  - AI gateway request
+  - AI gateway response parse
+  - tool-call extraction
+  - `JSON.parse(toolCall.function.arguments)`
+  - post-processing/sanitization
+- Return structured JSON like:
+  - `error`
+  - `stage`
+  - maybe a short `details` string
+- Keep logs stage-specific so future 500s are traceable.
 
-    if (transportDest && nextLoc && !isSameOrContainedLocation(transportDest, nextLoc, hotelName)) {
-      const fromName = prevReal?.location?.name || prevReal?.title || 'previous location';
-      const toName = nextReal.location?.name || sanitizeTransitDestination(nextReal.title || '');
-      transport.title = `Travel to ${toName}`;
-      transport.description = `Transit from ${fromName} to ${toName}.`;
-      transport.location = { name: toName, address: nextReal.location?.address || '' };
-      transport.fromLocation = { name: fromName, address: prevReal?.location?.address || '' };
-      // Re-estimate duration with coordinates
-      const fromCoords = prevReal ? getActivityCoords(prevReal) : hotelCoordinates || null;
-      const toCoords = getActivityCoords(nextReal);
-      if (fromCoords && toCoords) {
-        const est = estimateTransit(fromCoords, toCoords, resolvedDestination);
-        transport.durationMinutes = est.durationMinutes;
-        transport.endTime = addMinutesToHHMM(transport.startTime, est.durationMinutes);
-        transport.cost = { amount: est.costAmount, currency: 'USD' };
-        if (transport.transportation) {
-          transport.transportation = { method: est.method, duration: `${est.durationMinutes} min` };
-        }
-      }
-      repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'final_transport_realign', before: transportDest, after: toName });
-    }
-  }
+**Frontend changes**
+- Parse the function error body from the returned function error instead of always showing “Failed to parse your input.”
+- Show a more specific toast/message when possible.
 
-  // 15b. Merge consecutive transport cards
-  let merged = true;
-  while (merged) {
-    merged = false;
-    for (let i = 0; i < activities.length - 1; i++) {
-      if (isTransportFinal(activities[i]) && isTransportFinal(activities[i + 1])) {
-        // Keep the second (closer to destination), remove first
-        const first = activities[i];
-        const second = activities[i + 1];
-        second.startTime = first.startTime || second.startTime;
-        // Find actual endpoints for re-estimation
-        let prevReal: any = null;
-        for (let j = i - 1; j >= 0; j--) {
-          if (!isTransportFinal(activities[j])) { prevReal = activities[j]; break; }
-        }
-        const fromName = prevReal?.location?.name || first.fromLocation?.name || 'previous location';
-        second.fromLocation = { name: fromName, address: '' };
-        second.description = `Transit from ${fromName} to ${second.location?.name || 'destination'}.`;
-        activities.splice(i, 1);
-        repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'final_merge_consecutive_transport', before: first.title, after: second.title });
-        merged = true;
-        break;
-      }
-    }
-  }
+### 4) Remove the SVG warning noise
+**File:** `src/components/planner/shared/GenerationAnimation.tsx`
 
-  // 15c. Remove self-referencing transports (from A to A)
-  activities = activities.filter((act, i) => {
-    if (!isTransportFinal(act)) return true;
-    const from = (act.fromLocation?.name || '').toLowerCase();
-    const to = (act.location?.name || '').toLowerCase();
-    if (from && to && isSameOrContainedLocation(from, to, hotelName)) {
-      repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'removed_self_referencing_transport', before: act.title });
-      return false;
-    }
-    return true;
-  });
-}
-```
+- Ensure every animated `<motion.circle>` has concrete numeric `cx` and `cy` values on first render.
+- For the particle/orbit animation, prefer animating transforms or provide explicit initial attrs so the DOM never sees `undefined`.
+- This should eliminate the repeated console spam.
 
-## Files to modify
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add step 15 (final transport coherence pass) after step 14
+## Files to update
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- `src/hooks/useGenerationPoller.ts`
+- `supabase/functions/parse-trip-input/index.ts`
+- `src/components/planner/ManualTripPasteEntry.tsx`
+- `src/components/planner/shared/GenerationAnimation.tsx`
 
-## What this does NOT change
-- No changes to timing, durations, or activity ordering
-- No changes to non-transport activities
-- No new files created
-- Existing transport logic untouched — this is an additive final safety net
-
+## Expected outcome
+- Multi-city generation stops failing on day 1 from the `isFirstDay` reference bug.
+- Failed trips show the real backend reason.
+- Manual paste 500s become diagnosable and much easier to fix.
+- The SVG `cx/cy undefined` console errors go away.
