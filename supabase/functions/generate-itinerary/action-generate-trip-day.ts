@@ -793,12 +793,37 @@ async function _handleGenerateTripDayInner(
     : undefined;
   const savedArrTime24Hoisted = _arrTime24Raw ? _normalizeTo24h(_arrTime24Raw) : undefined;
 
+  // Multi-city fallback: pull departure time from trip_cities transport_details for last day
+  let _multiCityDepTime: string | undefined;
+  let _multiCityTransportType: string | undefined;
+  if (_isLastDay && isMultiCity) {
+    try {
+      // The "departure from destination" transport is on the NEXT city after the last (i.e., home)
+      // or the transport_details of the last city entry with departing info
+      const { data: lastCityTransport } = await supabase
+        .from('trip_cities')
+        .select('transport_type, transport_details')
+        .eq('trip_id', tripId)
+        .order('city_order', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastCityTransport) {
+        const td = lastCityTransport.transport_details as Record<string, any> | null;
+        _multiCityDepTime = td?.departureTime || td?.departure_time || undefined;
+        _multiCityTransportType = lastCityTransport.transport_type || undefined;
+      }
+    } catch (e) {
+      console.warn('[generate-trip-day] Could not load multi-city departure info:', e);
+    }
+  }
+
   const _depTime24Raw = _isLastDay
     ? (_flightSel.returnDepartureTime24
       || _flightSel.returnDepartureTime
       || _nestedRet?.departure?.time
       || _nestedRet?.departureTime
       || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0 ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time : undefined)
+      || _multiCityDepTime
       || undefined)
     : undefined;
   const savedDepTime24Hoisted = _depTime24Raw ? _normalizeTo24h(_depTime24Raw) : undefined;
@@ -818,6 +843,7 @@ async function _handleGenerateTripDayInner(
             return undefined;
           })()
         : undefined)
+      || _multiCityTransportType
       || undefined)
     : undefined;
 
