@@ -1114,6 +1114,31 @@ If you need a museum, choose a DIFFERENT museum. If you need a landmark, choose 
 "Louvre Museum" and "Louvre Museum Exploration" are the SAME venue — do NOT repeat.`;
 })()}
 
+UNIVERSAL QUALITY RULES (applies to ALL cities worldwide):
+
+1. REAL RESTAURANTS ONLY: Every restaurant MUST be a real, currently operating restaurant you are confident exists. Include the full street address with a number (e.g. "226 Rue de Rivoli, 75001 Paris"). If you are not confident a restaurant exists, do NOT include it. Fewer dining activities are better than fake ones.
+
+2. LOCAL CUISINE FIRST: At least 70% of restaurants should serve the destination country's cuisine. Paris = French bistros and brasseries. Tokyo = Japanese izakayas and sushi bars. Barcelona = Spanish tapas bars. Do NOT default to Italian restaurants in non-Italian cities.
+
+3. PRICE REALITY — base prices on what restaurants ACTUALLY cost in that city:
+   - Street food / casual café: €8-20 per person
+   - Mid-range bistro / trattoria / izakaya: €25-55 per person
+   - Upscale restaurant: €60-100 per person
+   - Fine dining / Michelin: €100-250 per person
+   Adjust for cost of living. A casual Paris bistro is €30-45, not €85. A Tokyo ramen shop is ¥1000-1500, not ¥5000.
+
+4. MEAL TIMING BY CULTURE — schedule meals at times locals actually eat:
+   - France/UK/Germany: Lunch 12:00-14:00, Dinner 19:00-21:00
+   - Spain/Argentina: Lunch 13:30-15:30, Dinner 21:00-23:00
+   - Japan: Lunch 11:30-13:30, Dinner 18:00-20:00
+   - Morocco/Middle East: Lunch 12:30-14:30, Dinner 20:00-22:00
+   - USA/Canada: Lunch 11:30-13:30, Dinner 18:00-20:30
+
+5. ADDRESSES MUST BE SPECIFIC: "the destination" is NOT an address. "Paris, France" is NOT an address. Every venue needs a street name and number.
+
+6. NO SAME ACTIVITY TYPE ON CONSECUTIVE DAYS: If yesterday had a spa, today must not. If yesterday had a museum morning, today should start differently. Vary the rhythm.
+
+7. DEPARTURE DAY: On the last day of the trip, do NOT schedule activities that start within 3 hours of a flight departure or 2 hours of a train departure. The last day should be light — morning checkout, one breakfast, maybe a short walk, then head to the station/airport.
 
 ${(() => {
   if (!paramRestaurantPool || !Array.isArray(paramRestaurantPool) || paramRestaurantPool.length === 0) return '';
