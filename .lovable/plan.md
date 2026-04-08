@@ -1,35 +1,67 @@
 
+What this error actually means
 
-## Minimum Activity Duration Enforcement
+- This is most likely not a real “CORS configuration” problem.
+- The edge function is crashing at runtime, and because the request is cross-origin (`travelwithvoyance.com` -> function host), the browser surfaces the failed 500 as a CORS-style error.
+- The strongest evidence is in the function logs:  
+  `[generate-day] Error: TypeError: (act.address || act.location || "").trim is not a function`
 
-### The Problem
-Activities get squeezed to absurdly short durations (e.g., 5-minute jazz show) when placed near end-of-day hotel returns.
+Root cause I found
 
-### The Fix (2 files)
+- In `supabase/functions/generate-itinerary/action-generate-day.ts`, the post-processing filters assume `address`/`location` are strings and call `.trim()` directly.
+- But some AI-generated activities are arriving with object-shaped `address` or `location` values, so `.trim()` throws.
+- The current codebase still has the risky patterns in:
+  - `action-generate-day.ts`
+    - hallucination filter
+    - filler activity filter
+  - `action-generate-trip-day.ts`
+    - same two filters
+- The deployed log points to line 320 in an older compiled version; in the current source, the equivalent risky blocks are the filters that do:
+  - `(act.address || ...).trim()`
+  - `(act.address || act.location || '').trim()`
 
-Add a minimum duration enforcement block **before** the timing overlap fixer in both generation files. This way, durations are corrected first, then any new overlaps created by extending durations get resolved by the existing overlap repair.
+Why the retries happen
 
-#### 1. `action-generate-trip-day.ts` — Insert before line 1193 (before "TIMING OVERLAP SAFETY NET")
+- The frontend regeneration flow retries Day 1 after each 500.
+- Since the same bad activity shape hits the same `.trim()` crash every time, each retry fails the same way.
+- `repairTripCosts error: FunctionsFetchError` is likely a downstream symptom of the same edge-function failure path, not the primary bug.
 
-- Define category-based minimums (`dining: 45`, `explore: 45`, `activity: 60`, `wellness: 60`, `nightlife: 75`)
-- Define keyword-based minimums (jazz/concert/show → 90, museum/gallery → 60, dinner → 60, spa/hammam → 75, lunch → 45, breakfast → 30)
-- Loop through `dayResult.activities`: compute current duration, determine minimum, extend `endTime` if too short (capped at midnight), or shift `startTime` earlier if extending would pass midnight
-- Uses existing `_toMin` / `_toTime` helpers (move their declaration above this block)
+Implementation plan
 
-#### 2. `action-generate-day.ts` — Insert before line 520 (before "TIME OVERLAP FIXER")
+1. Harden address/location normalization in `action-generate-day.ts`
+   - Replace direct `.trim()` calls with a safe string extractor.
+   - Support:
+     - plain strings
+     - `{ address }` objects
+     - `{ name }` objects
+     - null/undefined
+   - Use the normalized string in both the hallucination filter and filler filter.
 
-Same logic on `normalizedActivities`, using existing `parseTimeToMinutes` / `minutesToHHMM` helpers.
+2. Apply the same hardening in `action-generate-trip-day.ts`
+   - Fix the identical risky `.trim()` patterns there too.
+   - This is important because the day-chaining flow also runs these filters and can hit the same crash.
 
-### Execution Order (both files)
-1. Hallucination filter (68A)
-2. Filler activity filter (68D)
-3. Departure day timing (68B)
-4. Wellness limiter (68C)
-5. **Minimum duration enforcement (68G)** ← new
-6. Timing overlap repair (68E)
-7. Duplicate hotel return removal (68F)
+3. Do not start with CORS config changes
+   - `index.ts` already handles `OPTIONS` and adds CORS headers on normal error responses.
+   - Based on the logs, the first fix should be the runtime exception, not origin allowlisting.
 
-### Files Changed
-1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-2. `supabase/functions/generate-itinerary/action-generate-day.ts`
+Technical details
 
+- Safe helper approach:
+  - derive a string from `act.address`, `act.location.address`, `act.location.name`, or string `act.location`
+  - only then call `.trim()`
+- This should be reused consistently in both files so mixed payload shapes do not crash filtering.
+- After this fix, the browser should stop showing the misleading CORS error for this failure path because the function should no longer explode mid-generation.
+
+Files to update
+
+- `supabase/functions/generate-itinerary/action-generate-day.ts`
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+
+Verification
+
+- Regenerate the same trip/day from `travelwithvoyance.com`.
+- Confirm the browser no longer shows the CORS/500 retry loop.
+- Confirm edge logs no longer show `.trim is not a function`.
+- Confirm Day 1 advances past post-processing and returns JSON successfully.
+- If a CORS error still appears after the runtime fix, then investigate true platform-level CORS behavior separately — but the current evidence points to the crash above as the real issue.
