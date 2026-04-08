@@ -848,6 +848,7 @@ async function _handleGenerateTripDayInner(
       /^the .+ (restaurant|kitchen|cafe|bistro|bar|grill|house|place|spot|table|corner)$/i,
       /^(restaurant|cafe|bistro|bar) (de |du |del |della |des |di )/i,
       /^(local|traditional|authentic|hidden|secret|cozy|charming|quaint) /i,
+      /\b(paradise|heaven|delight|oasis|haven|nirvana)\b/i,
     ];
     const FAKE_ADDRESS_PATTERNS = [
       /the destination/i, /your destination/i, /the city/i,
