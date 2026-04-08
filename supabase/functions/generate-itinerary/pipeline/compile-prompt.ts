@@ -1234,6 +1234,8 @@ CRITICAL REMINDERS:
 6. ${isFullDay ? 'PRICES: Every meal, every ticket, every taxi must have a price. estimatedCost.amount = 0 for free activities. No blanks.' : ''}
 7. NEVER repeat a restaurant across different days. Each day MUST use completely different restaurants for every meal. Variety is essential — travelers do not want to eat at the same place twice.
 8. For BREAKFAST specifically: NEVER repeat the same breakfast venue on consecutive days. ${destination || 'This destination'} has hundreds of excellent breakfast spots — there is NO reason to repeat any restaurant. If you find yourself choosing a restaurant from the blocklist above, STOP and pick a completely different one.
+9. ACTIVITY COUNT CHECK: Every day must have minimum 3 paid activities + 2 free activities. If your output has fewer, you are under-generating. Add more.
+10. MORNING GAP CHECK: If there is nothing between breakfast (8-9am) and lunch (12-1pm), you left a 3-hour gap. Fill it with at least 1 paid activity + 1 free activity.
 
 ${'='.repeat(70)}
 🧠 VOYANCE INTELLIGENCE FIELDS — MANDATORY FOR EVERY ACTIVITY

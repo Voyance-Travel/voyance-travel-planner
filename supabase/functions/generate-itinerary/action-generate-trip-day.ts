@@ -838,17 +838,25 @@ async function _handleGenerateTripDayInner(
       'el rincón', 'la esquina', 'mercado central restaurant',
       'the local kitchen', 'the hidden gem', 'the secret garden',
       'authentic taste', 'local flavors', 'traditional house',
+      'tokyo kitchen', 'sushi paradise', 'le petit bistro', 'la maison',
+      'chez pierre', 'brasserie centrale', 'the local spot',
+      'hidden gem restaurant', 'authentic kitchen',
+      'sunset terrace', 'rooftop bar and grill',
     ];
     // Universal pattern-based detection: catch AI-generated generic names
     const GENERIC_RESTAURANT_PATTERNS = [
       /^the .+ (restaurant|kitchen|cafe|bistro|bar|grill|house|place|spot|table|corner)$/i,
       /^(restaurant|cafe|bistro|bar) (de |du |del |della |des |di )/i,
       /^(local|traditional|authentic|hidden|secret|cozy|charming|quaint) /i,
+      /\b(paradise|heaven|delight|oasis|haven|nirvana)\b/i,
     ];
     const FAKE_ADDRESS_PATTERNS = [
       /the destination/i, /your destination/i, /the city/i,
       /the restaurant/i, /the venue/i, /city center/i, /downtown/i,
       /^[a-z\s'-]+,?\s*[a-z\s'-]*$/i,
+      /^tokyo$/i, /^barcelona$/i, /^amsterdam$/i, /^lisbon$/i, /^bangkok$/i,
+      /^marrakech$/i, /^buenos aires$/i, /^new york$/i, /^dubai$/i, /^sydney$/i,
+      /^[a-z\s]+,?\s*(morocco|portugal|thailand|netherlands|argentina|australia|brazil|mexico|turkey|greece|croatia|czech republic|austria|hungary|poland|ireland|scotland|switzerland|belgium|norway|sweden|denmark|egypt|india|south korea|vietnam|colombia|peru|chile|south africa|kenya|singapore|malaysia|indonesia|philippines|new zealand|canada|united states|usa)$/i,
     ];
     const beforeFilter = dayResult.activities.length;
     dayResult.activities = dayResult.activities.filter((act: any) => {
@@ -2029,6 +2037,20 @@ async function _handleGenerateTripDayInner(
           { name: 'Rijks', neighborhood: 'Museumkwartier', address: 'Museumstraat 2, 1071 XX Amsterdam' },
         ],
       },
+      'casablanca': {
+        breakfast: [
+          { name: 'La Sqala', neighborhood: 'Old Medina', address: 'Blvd des Almohades, Casablanca' },
+          { name: 'Café Basmane', neighborhood: 'Centre', address: 'Rue Mohammed El Qorri, Casablanca' },
+        ],
+        lunch: [
+          { name: "Rick's Café", neighborhood: 'Old Medina', address: '248 Blvd Sour Jdid, Casablanca' },
+          { name: 'Le Cabestan', neighborhood: 'Ain Diab', address: '90 Blvd de la Corniche, Casablanca' },
+        ],
+        dinner: [
+          { name: 'La Bodega', neighborhood: 'Centre', address: '129 Rue Allal Ben Abdellah, Casablanca' },
+          { name: 'Le Port de Pêche', neighborhood: 'Port', address: 'Port de Casablanca, Casablanca' },
+        ],
+      },
     };
 
     // Detect meal type from title
@@ -2048,11 +2070,12 @@ async function _handleGenerateTripDayInner(
       'berlin': ['berlin'],
       'rome': ['roma', 'rom'],
       'london': ['londres'],
-      'tokyo': ['tōkyō', 'tokio'],
-      'buenos aires': ['bsas'],
+      'tokyo': ['tōkyō', 'tokio', '東京'],
+      'buenos aires': ['bsas', 'ブエノスアイレス'],
       'marrakech': ['marrakesh', 'مراكش'],
-      'bangkok': ['krung thep'],
+      'bangkok': ['krung thep', 'กรุงเทพ', 'กรุงเทพมหานคร'],
       'amsterdam': ['a\'dam'],
+      'casablanca': ['الدار البيضاء', 'casa'],
     };
 
     // Resolve city key for fallback lookup
