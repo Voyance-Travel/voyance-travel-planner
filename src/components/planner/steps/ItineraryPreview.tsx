@@ -316,6 +316,9 @@ export default function ItineraryPreview({
       if (data.mustDoActivities) {
         metadataUpdates.mustDoActivities = data.mustDoActivities;
       }
+      if (data.perDayActivities && data.perDayActivities.length > 0) {
+        metadataUpdates.perDayActivities = data.perDayActivities;
+      }
       if (data.isFirstTimeVisitor !== undefined) {
         metadataUpdates.isFirstTimeVisitor = data.isFirstTimeVisitor;
       }
