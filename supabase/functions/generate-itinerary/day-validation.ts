@@ -1014,8 +1014,8 @@ export function enforceRequiredMealsFinalGuard(
     // TRY 2: Use hardcoded fallback DB from fix-placeholders.ts (real named venues)
     if (!venueName) {
       try {
-        const usedNames = [...usedVenueNamesForInjection];
-        const fallback = getRandomFallbackRestaurant(destination, mealType, usedNames);
+        const usedNamesSet = new Set<string>(usedVenueNamesForInjection);
+        const fallback = getRandomFallbackRestaurant(destination, mealType, usedNamesSet);
         if (fallback) {
           venueName = `${label} at ${fallback.name}`;
           venueAddress = fallback.address || destination;
