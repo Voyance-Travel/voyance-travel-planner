@@ -1,27 +1,31 @@
 
 
-## Fix Timing Overlaps — Final Safety Net
+## Remove Duplicate Hotel Returns
 
 ### The Problem
-Activities can overlap (e.g., spa 5:55–7:25 PM, dinner 7:00 PM) because the repair pipeline runs before the universal quality pass, and the quality pass can re-introduce timing conflicts without fixing them.
+Two consecutive "Return to Your Hotel" activities appear on the same day — one categorized as Activity/Wellness, the other as Stay. Only one is needed.
 
-### Analysis
-- `action-generate-day.ts` already has an inline TIME OVERLAP FIXER (lines 520–542) that runs after the quality pass.
-- `action-generate-trip-day.ts` does NOT have this — it relies solely on `repair-day.ts` (step 13), which runs BEFORE the universal quality pass and restaurant dedup. Any timing changes made after the repair pipeline are unguarded.
+### The Fix (2 files)
 
-### The Fix (1 file)
+#### 1. `action-generate-trip-day.ts` — After timing overlap fixer (~line 1212), before stage logger flush
 
-#### `action-generate-trip-day.ts` — Add timing overlap fixer after universal quality pass (~line 1191)
+Insert a dedup block that walks activities backward. If two consecutive activities both match hotel-return titles (`return to your hotel`, `return to hotel`, `back to your hotel`), remove the non-Stay version. If neither is Stay, remove the second one.
 
-Insert the same overlap repair block that `action-generate-day.ts` already uses. Place it right after the universal quality pass completes (after line 1191), before the stage logger flush:
+#### 2. `action-generate-day.ts` — After time overlap fixer (~line 542), before enrichment
 
-- Sort activities by start time
-- Walk the sorted list; if activity N starts before activity N-1 ends, shift N forward to `prevEnd + 15` minutes
-- Preserve activity duration when shifting
-- Log each shift
+Same dedup block on `normalizedActivities`.
 
-This mirrors the existing pattern in `action-generate-day.ts` lines 520–542 and acts as a final safety net after all other processing.
+### Logic
+
+```
+for i from (length - 2) down to 0:
+  if activities[i] AND activities[i+1] are both hotel returns:
+    keep the one with category === 'stay'
+    splice out the other
+    log removal
+```
 
 ### Files Changed
-1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — add inline timing overlap fixer after universal quality pass
+1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+2. `supabase/functions/generate-itinerary/action-generate-day.ts`
 
