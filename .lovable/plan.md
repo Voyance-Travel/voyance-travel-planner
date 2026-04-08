@@ -1,33 +1,36 @@
 
 
-## Departure Day Timing: Transport-Aware Buffer
+## Spa/Wellness Limiter — 3 Changes
 
 ### The Problem
-
-`enforceDepartureTiming()` in `flight-hotel-context.ts` hardcodes a 3-hour buffer (`departureMins - 180`) for all departure types. For a train departing at 12:43, this means nothing after 09:43 — but lunch was still injected at 12:30 because somewhere `depTime24` wasn't propagated, or the meal guard re-injected it afterward (same pattern as the breakfast-before-flight bug we just fixed).
-
-The existing `enforceDepartureTiming` is called from `universalQualityPass` (Step 2) and should already catch this. Two possible failure modes: (a) `depTime24` is `undefined` because train departures aren't stored in `flight_selection` the same way flights are, or (b) the meal guard runs AFTER the quality pass and re-injects lunch (the same bug we just fixed for breakfast).
+AI generates spa/wellness on 3+ consecutive days, totaling €590. No trip needs that many spa sessions.
 
 ### The Fix (2 files)
 
-#### 1. Make `enforceDepartureTiming` transport-aware (flight-hotel-context.ts)
-Add an optional `transportType` parameter. Use 120 min buffer for trains, 180 min for flights (default).
+#### 1. Gather wellness history from previous days (`action-generate-trip-day.ts`, ~line 408)
+After `previousActivities` and `usedVenues` are built from `existingDays`, scan `existingDays` for wellness activities and build `previousWellnessDays: number[]`. Construct a `wellnessInstruction` string:
+- If 2+ wellness days exist → "Do NOT add any more spa/wellness"
+- If yesterday had wellness → "Yesterday had wellness, do NOT add today"  
+- Otherwise → "No spa/wellness yet" or list which days had it
 
+Pass `wellnessInstruction` as a new field in the `generate-day` request body (alongside `previousDayActivities`, `usedVenues`, etc.).
+
+#### 2. Inject wellness rule into AI prompt (`pipeline/compile-prompt.ts`, ~line 1060)
+Extract `wellnessInstruction` from `params`. Insert a `WELLNESS & SPA RULES` block into the user prompt near the existing dedup/venue rules section:
 ```
-enforceDepartureTiming(activities, departureTime24, transportType?: string)
-  → buffer = transportType includes 'train' ? 120 : 180
+WELLNESS & SPA RULES:
+- Maximum 2 spa or wellness activities across the entire trip
+- NEVER put spa/wellness on two consecutive days
+- [dynamic wellnessInstruction from previous days]
 ```
 
-#### 2. Pass transport type through the quality pass (action-generate-trip-day.ts + universal-quality-pass.ts)
-- Extract the departure transport type from `flight_selection` (check `flightSel.return?.type`, `flightSel.returnTransportType`, or infer from title/category of departure activities)
-- Add `departureTransportType?: string` to the quality pass options
-- Forward it to `enforceDepartureTiming`
-
-#### 3. Ensure meal guard respects departure buffer (already partially fixed)
-In the previous fix, we passed `latestTimeMins` to the meal guard. Verify that `latestTimeMins` is computed from `depTime24 - buffer` and that the buffer accounts for train vs flight. If the meal guard's `latestTimeMins` doesn't match the departure filter, lunch can still be injected after the cutoff.
+#### 3. Post-generation enforcement (`action-generate-trip-day.ts`, ~line 789, after hallucination filter)
+After the hallucination filter block, add an inline wellness limiter using the same `existingDays` data:
+- Detect wellness via category `'wellness'` or regex `/spa|hammam|wellness|massage|hydrotherapy|rejuvenation|thermal|sauna/i` on title/description
+- If `previousWellnessDays.length >= 2` OR yesterday had wellness → filter out all wellness activities from `dayResult.activities`
+- Log removed activities
 
 ### Files Changed
-1. `supabase/functions/generate-itinerary/flight-hotel-context.ts` — make `enforceDepartureTiming` accept transport type, use 2h buffer for trains
-2. `supabase/functions/generate-itinerary/universal-quality-pass.ts` — pass `departureTransportType` to `enforceDepartureTiming`
-3. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — extract and forward departure transport type from `flight_selection`
+1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — build wellness history, pass to prompt, post-generation filter
+2. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add wellness rules block to AI prompt
 
