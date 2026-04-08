@@ -838,6 +838,10 @@ async function _handleGenerateTripDayInner(
       'el rincón', 'la esquina', 'mercado central restaurant',
       'the local kitchen', 'the hidden gem', 'the secret garden',
       'authentic taste', 'local flavors', 'traditional house',
+      'tokyo kitchen', 'sushi paradise', 'le petit bistro', 'la maison',
+      'chez pierre', 'brasserie centrale', 'the local spot',
+      'hidden gem restaurant', 'authentic kitchen',
+      'sunset terrace', 'rooftop bar and grill',
     ];
     // Universal pattern-based detection: catch AI-generated generic names
     const GENERIC_RESTAURANT_PATTERNS = [
