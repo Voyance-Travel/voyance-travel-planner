@@ -1086,6 +1086,7 @@ async function _handleGenerateTripDayInner(
       usedVenueNames: usedVenueSet,
       arrivalTime: isFirstDay ? arrTime24 : undefined,
       departureTime: isLastDay ? depTime24 : undefined,
+      departureTransportType: isLastDay ? departureTransportType : undefined,
       dayTitle: dayResult?.theme || dayResult?.title,
       budgetTier: budgetTier || 'moderate',
       apiKey: Deno.env.get("LOVABLE_API_KEY") || undefined,
