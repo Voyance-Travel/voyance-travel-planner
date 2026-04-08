@@ -415,7 +415,7 @@ async function _handleGenerateTripDayInner(
       const cat = (act.category || '').toUpperCase();
       if (['STAY', 'TRANSPORT', 'TRAVEL', 'LOGISTICS', 'FLIGHT', 'ACCOMMODATION'].includes(cat)) continue;
       // Collect from ALL venue-bearing fields for broad coverage
-      const locName = (act.location?.name || '').trim();
+      const locName = (act.location && typeof act.location === 'object' ? String(act.location.name || '') : '').trim();
       const venueName = (act.venue_name || '').trim();
       const titleName = (act.title || '').trim();
       if (locName && locName.length > 3 && !/your hotel/i.test(locName)) usedVenues.push(locName);
@@ -802,7 +802,8 @@ async function _handleGenerateTripDayInner(
           return false;
         }
       }
-      const address = (act.address || (act.location && typeof act.location === 'object' ? act.location.address : '') || '').trim();
+      const rawHAddr = act.address || act.location;
+      const address = (typeof rawHAddr === 'string' ? rawHAddr : (rawHAddr && typeof rawHAddr === 'object' ? (String(rawHAddr.address || rawHAddr.name || '')) : '')).trim();
       if (!address || address.length < 10) {
         console.log(`[HALLUCINATION FILTER] Removed restaurant with no real address: ${name} (address: "${address}")`);
         return false;
