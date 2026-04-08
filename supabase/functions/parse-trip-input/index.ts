@@ -413,24 +413,56 @@ serve(async (req) => {
       }
       const errorText = await response.text();
       console.error("AI gateway error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "Failed to parse trip input" }), {
-        status: 500,
+      return new Response(JSON.stringify({
+        error: "AI service error — please try again",
+        stage: "ai_gateway",
+        details: `Status ${response.status}`,
+      }), {
+        status: 502,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const result = await response.json();
+    let result: any;
+    try {
+      result = await response.json();
+    } catch (jsonErr) {
+      console.error("AI response JSON parse error:", jsonErr);
+      return new Response(JSON.stringify({
+        error: "AI returned an invalid response — please try again",
+        stage: "ai_response_parse",
+      }), {
+        status: 502,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const toolCall = result.choices?.[0]?.message?.tool_calls?.[0];
 
     if (!toolCall?.function?.arguments) {
-      console.error("No tool call in response:", JSON.stringify(result));
-      return new Response(JSON.stringify({ error: "Failed to extract structured data from input" }), {
-        status: 500,
+      console.error("No tool call in response:", JSON.stringify(result).slice(0, 500));
+      return new Response(JSON.stringify({
+        error: "Could not extract structured data from your input — try reformatting",
+        stage: "tool_call_extraction",
+      }), {
+        status: 422,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    let parsed = JSON.parse(toolCall.function.arguments);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(toolCall.function.arguments);
+    } catch (parseErr) {
+      console.error("Tool call arguments JSON parse error:", parseErr, toolCall.function.arguments?.slice(0, 300));
+      return new Response(JSON.stringify({
+        error: "AI returned malformed data — please try again",
+        stage: "arguments_parse",
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // --- CJK / schema-leak sanitization ---
     // AI models sometimes inject Chinese characters or leak schema field names
@@ -800,7 +832,10 @@ serve(async (req) => {
     });
   } catch (err) {
     console.error("parse-trip-input error:", err);
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }), {
+    return new Response(JSON.stringify({
+      error: err instanceof Error ? err.message : "Unknown error",
+      stage: "unexpected",
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
