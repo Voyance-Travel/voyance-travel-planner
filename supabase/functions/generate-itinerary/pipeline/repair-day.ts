@@ -387,6 +387,55 @@ function getActivityCoords(act: any): { lat: number; lng: number } | null {
   return null;
 }
 
+// =============================================================================
+// TRANSIT LABEL GENERATION
+// =============================================================================
+
+/** Generate a mode-aware transit label from the actual next activity */
+function generateTransitLabel(nextActivity: any, mode: string): string {
+  const destination = nextActivity?.location?.name
+    || nextActivity?.venue_name
+    || sanitizeTransitDestination(nextActivity?.title || '')
+    || 'next venue';
+
+  switch (mode) {
+    case 'walking':
+      return `Walk to ${destination}`;
+    case 'taxi':
+      return `Taxi to ${destination}`;
+    default:
+      return `Travel to ${destination}`;
+  }
+}
+
+// =============================================================================
+// MISSING-COORDINATE FALLBACK
+// =============================================================================
+
+/** Extract a 5-digit postal code from an address string */
+function extractPostalCode(address: string): string | null {
+  const match = address.match(/\b(\d{5})\b/);
+  return match ? match[1] : null;
+}
+
+/** Estimate transit minutes when coordinates are missing */
+function getDefaultTransitMinutes(fromActivity: any, toActivity: any): number {
+  // Same venue → minimal transfer
+  const fromName = (fromActivity?.location?.name || '').toLowerCase().trim();
+  const toName = (toActivity?.location?.name || '').toLowerCase().trim();
+  if (fromName && toName && fromName === toName) return 3;
+
+  // Same postal code → same area
+  const fromAddr = fromActivity?.location?.address || fromActivity?.address || '';
+  const toAddr = toActivity?.location?.address || toActivity?.address || '';
+  const fromZip = extractPostalCode(fromAddr);
+  const toZip = extractPostalCode(toAddr);
+  if (fromZip && toZip && fromZip === toZip) return 10;
+
+  // Default: assume moderate city transit
+  return 15;
+}
+
 export interface RepairDayResult {
   day: StrictDayMinimal;
   repairs: RepairAction[];
