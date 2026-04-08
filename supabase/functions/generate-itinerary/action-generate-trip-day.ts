@@ -970,6 +970,52 @@ async function _handleGenerateTripDayInner(
     console.log(`[generate-trip-day] Post-processing complete for day ${dayNumber}`);
   }
 
+  // ── SHARED FLIGHT TIMING — hoisted so terminal cleanup can access ──
+  const _flightSel = (tripCheck?.flight_selection as Record<string, any>) || {};
+  const _nestedDep = _flightSel.departure as Record<string, any> | undefined;
+  const _nestedRet = _flightSel.return as Record<string, any> | undefined;
+  const _isFirstDay = dayNumber === 1;
+  const _isLastDay = dayNumber >= totalDays;
+
+  const { normalizeTo24h: _normalizeTo24h } = await import('./flight-hotel-context.ts');
+  const _arrTime24Raw = _isFirstDay
+    ? (_flightSel.arrivalTime24
+      || _flightSel.arrivalTime
+      || _flightSel.outbound?.arrivalTime
+      || _nestedDep?.arrival?.time
+      || _flightSel.legs?.[0]?.arrival?.time
+      || undefined)
+    : undefined;
+  const savedArrTime24Hoisted = _arrTime24Raw ? _normalizeTo24h(_arrTime24Raw) : undefined;
+
+  const _depTime24Raw = _isLastDay
+    ? (_flightSel.returnDepartureTime24
+      || _flightSel.returnDepartureTime
+      || _nestedRet?.departure?.time
+      || _nestedRet?.departureTime
+      || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0 ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time : undefined)
+      || undefined)
+    : undefined;
+  const savedDepTime24Hoisted = _depTime24Raw ? _normalizeTo24h(_depTime24Raw) : undefined;
+
+  // Detect departure transport type (train vs flight) for buffer sizing
+  const departureTransportType: string | undefined = _isLastDay
+    ? (_nestedRet?.type as string
+      || _flightSel.returnTransportType as string
+      || (_nestedRet?.flightNumber && /train|tgv|eurostar|thalys|ice|rail/i.test(_nestedRet.flightNumber as string) ? 'train' : undefined)
+      || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0
+        ? (() => {
+            const lastLeg = _flightSel.legs[_flightSel.legs.length - 1];
+            const depLeg = _flightSel.legs.find((l: any) => l.isDestinationDeparture) || lastLeg;
+            if (depLeg?.type) return depLeg.type as string;
+            if (/train|tgv|eurostar|thalys|ice|rail/i.test(depLeg?.flightNumber || '')) return 'train';
+            if (/train|rail/i.test(depLeg?.airline || '')) return 'train';
+            return undefined;
+          })()
+        : undefined)
+      || undefined)
+    : undefined;
+
   // ── PIPELINE VALIDATE + REPAIR (same guarantees as single-day path) ──
   {
     try {
@@ -978,50 +1024,18 @@ async function _handleGenerateTripDayInner(
       const { deriveMealPolicy } = await import('./meal-policy.ts');
       const { normalizeTo24h } = await import('./flight-hotel-context.ts');
 
-      const flightSel = (tripCheck?.flight_selection as Record<string, any>) || {};
-      const isFirstDay = dayNumber === 1;
-      const isLastDay = dayNumber >= totalDays;
+      const flightSel = _flightSel;
+      const isFirstDay = _isFirstDay;
+      const isLastDay = _isLastDay;
 
-      // Extract arrival/departure times — check all known flight_selection shapes
-      const nestedDep = flightSel.departure as Record<string, any> | undefined;
-      const nestedRet = flightSel.return as Record<string, any> | undefined;
-      const arrTime24Raw = isFirstDay
-        ? (flightSel.arrivalTime24
-          || flightSel.arrivalTime
-          || flightSel.outbound?.arrivalTime
-          || nestedDep?.arrival?.time
-          || flightSel.legs?.[0]?.arrival?.time
-          || undefined)
-        : undefined;
-      const arrTime24 = arrTime24Raw ? normalizeTo24h(arrTime24Raw) : undefined;
+      // Use hoisted values
+      const nestedDep = _nestedDep;
+      const nestedRet = _nestedRet;
+      const arrTime24Raw = _arrTime24Raw;
+      const arrTime24 = savedArrTime24Hoisted;
 
-      const depTime24Raw = isLastDay
-        ? (flightSel.returnDepartureTime24
-          || flightSel.returnDepartureTime
-          || nestedRet?.departure?.time
-          || nestedRet?.departureTime
-          || (Array.isArray(flightSel.legs) && flightSel.legs.length > 0 ? flightSel.legs[flightSel.legs.length - 1]?.departure?.time : undefined)
-          || undefined)
-        : undefined;
-      const depTime24 = depTime24Raw ? normalizeTo24h(depTime24Raw) : undefined;
-
-      // Detect departure transport type (train vs flight) for buffer sizing
-      const departureTransportType: string | undefined = isLastDay
-        ? (nestedRet?.type as string
-          || flightSel.returnTransportType as string
-          || (nestedRet?.flightNumber && /train|tgv|eurostar|thalys|ice|rail/i.test(nestedRet.flightNumber as string) ? 'train' : undefined)
-          || (Array.isArray(flightSel.legs) && flightSel.legs.length > 0
-            ? (() => {
-                const lastLeg = flightSel.legs[flightSel.legs.length - 1];
-                const depLeg = flightSel.legs.find((l: any) => l.isDestinationDeparture) || lastLeg;
-                if (depLeg?.type) return depLeg.type as string;
-                if (/train|tgv|eurostar|thalys|ice|rail/i.test(depLeg?.flightNumber || '')) return 'train';
-                if (/train|rail/i.test(depLeg?.airline || '')) return 'train';
-                return undefined;
-              })()
-            : undefined)
-          || undefined)
-        : undefined;
+      const depTime24Raw = _depTime24Raw;
+      const depTime24 = savedDepTime24Hoisted;
 
       if (isFirstDay) console.log(`[generate-trip-day] Day ${dayNumber} arrival time: ${arrTime24 || 'NONE'} (raw: ${arrTime24Raw || 'none found'})`);
       if (isLastDay) console.log(`[generate-trip-day] Day ${dayNumber} departure time: ${depTime24 || 'NONE'} (raw: ${depTime24Raw || 'none found'}) transportType: ${departureTransportType || 'flight'}`);
