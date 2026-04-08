@@ -527,6 +527,14 @@ export async function handleGenerateDay(
     // handled exclusively by pipeline/repair-day.ts to prevent cascading shifts.
     // The 68G inline blocks were removed to fix the AM/PM timing collapse bug.
 
+    // === TITLE CLEANUP: Fix orphaned articles like "The of Light" ===
+    if (generatedDay?.title) {
+      generatedDay.title = generatedDay.title
+        .replace(/\bThe\s+of\s+/g, 'The City of ')
+        .replace(/\bA\s+of\s+/g, 'A Day of ')
+        .trim();
+    }
+
     // === DUPLICATE HOTEL RETURN REMOVAL ===
     if (normalizedActivities.length >= 2) {
       for (let i = normalizedActivities.length - 2; i >= 0; i--) {
