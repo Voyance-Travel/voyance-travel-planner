@@ -1001,7 +1001,7 @@ export function enforceRequiredMealsFinalGuard(
 
     if (venue) {
       venueName = venue.name;
-      venueAddress = venue.address || destination;
+      venueAddress = venue.address || `${venue.name}, ${destination}`;
       venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
       usedVenueNamesForInjection.add(venue.name.toLowerCase());
       usedRealVenue = true;
