@@ -785,6 +785,7 @@ async function _handleGenerateTripDayInner(
       'casa del gusto', 'casa nostra', 'cucina del mercato',
       'ristorante vecchia', 'tavola calda', 'cantina verde',
       'enoteca del corso', 'bar luminoso', 'bar centrale',
+      'table du quartier',
     ];
     const FAKE_ADDRESS_PATTERNS = [
       /^the destination$/i, /^your destination$/i, /^the city$/i,
