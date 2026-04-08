@@ -339,6 +339,7 @@ export async function handleGenerateDay(
     // =========================================================================
     {
       const BLOCKED_RESTAURANT_NAMES = [
+        // Known European hallucinations
         'trattoria del corso', 'café lumière', 'cafe lumiere',
         'ristorante della piazza', 'la belle époque bistro',
         'ristorante la luna', 'osteria del porto', 'osteria della sera',
@@ -346,6 +347,18 @@ export async function handleGenerateDay(
         'casa del gusto', 'casa nostra', 'cucina del mercato',
         'ristorante vecchia', 'tavola calda', 'cantina verde',
         'enoteca del corso', 'bar luminoso', 'bar centrale',
+        'table du quartier', 'bistrot du marché',
+        // Known Asian/Latin/African hallucinations
+        'sakura house', 'golden dragon', 'jade palace', 'riad des épices',
+        'el rincón', 'la esquina', 'mercado central restaurant',
+        'the local kitchen', 'the hidden gem', 'the secret garden',
+        'authentic taste', 'local flavors', 'traditional house',
+      ];
+      // Universal pattern-based detection: catch AI-generated generic names
+      const GENERIC_RESTAURANT_PATTERNS = [
+        /^the .+ (restaurant|kitchen|cafe|bistro|bar|grill|house|place|spot|table|corner)$/i,
+        /^(restaurant|cafe|bistro|bar) (de |du |del |della |des |di )/i,
+        /^(local|traditional|authentic|hidden|secret|cozy|charming|quaint) /i,
       ];
       const FAKE_ADDRESS_PATTERNS = [
         /the destination/i, /your destination/i, /the city/i,
@@ -360,6 +373,13 @@ export async function handleGenerateDay(
         for (const blocked of BLOCKED_RESTAURANT_NAMES) {
           if (name.includes(blocked)) {
             console.log(`[HALLUCINATION FILTER] Removed blocked restaurant: ${name}`);
+            return false;
+          }
+        }
+        // Pattern-based generic name detection
+        for (const pattern of GENERIC_RESTAURANT_PATTERNS) {
+          if (pattern.test(name)) {
+            console.log(`[HALLUCINATION FILTER] Removed generic-pattern restaurant: ${name}`);
             return false;
           }
         }
