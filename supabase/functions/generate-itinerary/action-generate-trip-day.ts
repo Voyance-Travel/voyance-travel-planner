@@ -802,7 +802,8 @@ async function _handleGenerateTripDayInner(
           return false;
         }
       }
-      const address = (act.address || (act.location && typeof act.location === 'object' ? act.location.address : '') || '').trim();
+      const rawHAddr = act.address || act.location;
+      const address = (typeof rawHAddr === 'string' ? rawHAddr : (rawHAddr && typeof rawHAddr === 'object' ? (String(rawHAddr.address || rawHAddr.name || '')) : '')).trim();
       if (!address || address.length < 10) {
         console.log(`[HALLUCINATION FILTER] Removed restaurant with no real address: ${name} (address: "${address}")`);
         return false;
