@@ -267,7 +267,7 @@ export function terminalCleanup(
 ): any[] {
   if (!activities || activities.length === 0) return activities;
 
-  const { arrivalTime24, departureTime24, city, dayNumber, isFirstDay, isLastDay } = options;
+  const { arrivalTime24, departureTime24, departureTransportType, city, dayNumber, isFirstDay, isLastDay } = options;
   const label = `TERMINAL_D${dayNumber || '?'}`;
   let removed = 0;
 
