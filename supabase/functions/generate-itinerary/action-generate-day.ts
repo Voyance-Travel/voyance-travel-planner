@@ -428,29 +428,33 @@ export async function handleGenerateDay(
     }
 
     // =========================================================================
+    // SHARED FLIGHT TIMING — hoisted so all post-processing blocks can access
+    // =========================================================================
+    const _arrivalTime24 = (flightContext as any)?.arrivalTime24 as string | undefined;
+    const _departureTime24 = (flightContext as any)?.returnDepartureTime24 as string | undefined;
+
+    // Extract departure transport type from rawFlightSelection
+    const _rawFlight = (flightContext as any)?.rawFlightSelection as Record<string, any> | undefined;
+    const _departureTransportType: string | undefined = isLastDay && _rawFlight
+      ? (_rawFlight.return?.type as string
+        || _rawFlight.returnTransportType as string
+        || (Array.isArray(_rawFlight.legs) && _rawFlight.legs.length > 0
+          ? (() => {
+              const lastLeg = _rawFlight.legs[_rawFlight.legs.length - 1];
+              const depLeg = _rawFlight.legs.find((l: any) => l.isDestinationDeparture) || lastLeg;
+              if (depLeg?.type) return depLeg.type as string;
+              if (/train|tgv|eurostar|thalys|ice|rail/i.test(depLeg?.flightNumber || '')) return 'train';
+              if (/train|rail/i.test(depLeg?.airline || '')) return 'train';
+              return undefined;
+            })()
+          : undefined)
+        || undefined)
+      : undefined;
+
+    // =========================================================================
     // UNIVERSAL QUALITY PASS — placeholder fix, timing, pricing, dedup
     // =========================================================================
     {
-      const _arrivalTime24 = (flightContext as any)?.arrivalTime24 as string | undefined;
-      const _departureTime24 = (flightContext as any)?.returnDepartureTime24 as string | undefined;
-
-      // Extract departure transport type from rawFlightSelection
-      const _rawFlight = (flightContext as any)?.rawFlightSelection as Record<string, any> | undefined;
-      const _departureTransportType: string | undefined = isLastDay && _rawFlight
-        ? (_rawFlight.return?.type as string
-          || _rawFlight.returnTransportType as string
-          || (Array.isArray(_rawFlight.legs) && _rawFlight.legs.length > 0
-            ? (() => {
-                const lastLeg = _rawFlight.legs[_rawFlight.legs.length - 1];
-                const depLeg = _rawFlight.legs.find((l: any) => l.isDestinationDeparture) || lastLeg;
-                if (depLeg?.type) return depLeg.type as string;
-                if (/train|tgv|eurostar|thalys|ice|rail/i.test(depLeg?.flightNumber || '')) return 'train';
-                if (/train|rail/i.test(depLeg?.airline || '')) return 'train';
-                return undefined;
-              })()
-            : undefined)
-          || undefined)
-        : undefined;
 
       const { universalQualityPass } = await import('./universal-quality-pass.ts');
       normalizedActivities = await universalQualityPass(normalizedActivities, {
