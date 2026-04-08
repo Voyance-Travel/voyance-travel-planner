@@ -1211,6 +1211,27 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // === DUPLICATE HOTEL RETURN REMOVAL ===
+  if (dayResult.activities?.length >= 2) {
+    for (let i = dayResult.activities.length - 2; i >= 0; i--) {
+      const curr = dayResult.activities[i];
+      const next = dayResult.activities[i + 1];
+      const currTitle = (curr.title || '').toLowerCase();
+      const nextTitle = (next.title || '').toLowerCase();
+      const currIsHotelReturn = currTitle.includes('return to your hotel') || currTitle.includes('return to hotel') || currTitle.includes('back to your hotel');
+      const nextIsHotelReturn = nextTitle.includes('return to your hotel') || nextTitle.includes('return to hotel') || nextTitle.includes('back to your hotel');
+      if (currIsHotelReturn && nextIsHotelReturn) {
+        if ((curr.category || '').toLowerCase() === 'stay') {
+          console.log(`[DEDUP] Removed duplicate hotel return: "${next.title}" (${next.category})`);
+          dayResult.activities.splice(i + 1, 1);
+        } else {
+          console.log(`[DEDUP] Removed duplicate hotel return: "${curr.title}" (${curr.category})`);
+          dayResult.activities.splice(i, 1);
+        }
+      }
+    }
+  }
+
   // Flush stage logger (non-blocking, non-fatal)
   try {
     await stageLogger.flush();
