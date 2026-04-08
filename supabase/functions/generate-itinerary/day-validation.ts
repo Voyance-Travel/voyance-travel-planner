@@ -1034,6 +1034,7 @@ export function enforceRequiredMealsFinalGuard(
       const pick = unused.length > 0 ? unused[Math.floor(Math.random() * unused.length)] : templates[0];
       if (pick) {
         venueName = `${label} at ${pick}`;
+        venueAddress = `${pick}, ${destination}`;
         venueDescription = `${label} at ${pick} — a local spot worth trying`;
         usedVenueNamesForInjection.add(pick.toLowerCase());
         console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Using GENERIC TEMPLATE "${pick}" for ${mealType}`);
@@ -1045,6 +1046,7 @@ export function enforceRequiredMealsFinalGuard(
           dinner: 'Restaurant Le Jardin',
         };
         venueName = `${label} at ${emergencyNames[mealType]}`;
+        venueAddress = `${emergencyNames[mealType]}, ${destination}`;
         venueDescription = `${label} at a local favorite`;
         console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Emergency fallback for ${mealType}: "${venueName}"`);
       }
