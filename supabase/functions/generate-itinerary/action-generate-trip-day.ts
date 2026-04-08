@@ -1190,6 +1190,27 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── TIMING OVERLAP SAFETY NET (runs after universal quality pass) ──
+  if (dayResult?.activities?.length > 1) {
+    const _toMin = (t: string) => { const m = t?.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0; };
+    const _toTime = (m: number) => { const h = Math.floor(m / 60) % 24; return `${h}:${(m % 60).toString().padStart(2, '0')}`; };
+
+    dayResult.activities.sort((a: any, b: any) => _toMin(a.startTime) - _toMin(b.startTime));
+
+    for (let i = 1; i < dayResult.activities.length; i++) {
+      const prevEnd = _toMin(dayResult.activities[i - 1].endTime);
+      const currStart = _toMin(dayResult.activities[i].startTime);
+      if (currStart < prevEnd) {
+        const buffer = 15;
+        const newStart = prevEnd + buffer;
+        const duration = _toMin(dayResult.activities[i].endTime) - currStart;
+        console.log(`[TIMING FIX] Shifted "${dayResult.activities[i].title}" from ${dayResult.activities[i].startTime} to ${_toTime(newStart)} (overlapped "${dayResult.activities[i - 1].title}")`);
+        dayResult.activities[i].startTime = _toTime(newStart);
+        dayResult.activities[i].endTime = _toTime(newStart + duration);
+      }
+    }
+  }
+
   // Flush stage logger (non-blocking, non-fatal)
   try {
     await stageLogger.flush();
