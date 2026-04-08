@@ -125,6 +125,8 @@ export function MustSeeLandmarkPicker({
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -4 }}
                             onClick={() => toggleLandmark(landmark.name)}
+                            aria-pressed={isSelected}
+                            data-selected={isSelected}
                             className={cn(
                               'flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-lg border transition-colors duration-150',
                               isSelected
