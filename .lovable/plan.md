@@ -1,56 +1,67 @@
 
 
-# Preserve User-Specified Activities in Just Tell Us Flow
+# Fix Transit Time Calculation & Labels
 
 ## Problem
-When users paste a detailed day-by-day itinerary, the system flattens everything into a single `mustDoActivities` string, losing day structure. This causes activities on wrong days, user-specified restaurants being replaced, and non-tourist activities being dropped.
+Transit estimates in `repair-day.ts` use raw haversine (straight-line) distance, producing unrealistically short walking times. The walking threshold is too generous, transit labels get stale after reordering, and missing coordinates cause transit cards to be skipped entirely.
 
 ## Changes
 
-### 1. Add `perDayActivities` to chat-trip-planner tool schema
-**File: `supabase/functions/chat-trip-planner/index.ts`**
+### 1. Add city walking factor & lower walk threshold in `estimateTransit()`
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (~line 336-367)
 
-- Add `perDayActivities` field to the `extract_trip_details` tool parameters (after `mustDoActivities`, ~line 356):
-  ```typescript
-  perDayActivities: {
-    type: "array",
-    description: "When the user provides a day-by-day plan, extract activities organized BY DAY...",
-    items: { type: "object", properties: { dayNumber: { type: "number" }, activities: { type: "string" } }, required: ["dayNumber", "activities"] }
-  }
-  ```
-- Add the "CRITICAL — DAY-LEVEL EXTRACTION" instruction block to the system prompt, inside the existing PRE-PLANNED ITINERARY HANDLING section (~line 171), with all 7 rules about preserving user structure
+- Add `CITY_WALK_FACTOR = 1.4` constant — multiplies haversine distance to approximate real street-level routing
+- Lower the walking threshold from `1200m` to `800m` haversine (≈1.1km actual, ≈14 min walk)
+- Apply `adjustedDist = dist * CITY_WALK_FACTOR` in walking and transit duration calculations
+- Taxi calculation stays on raw distance (road routing is closer to straight-line at scale)
 
-### 2. Add `perDayActivities` to TripDetails type + metadata persistence
-**File: `src/components/planner/TripChatPlanner.tsx`**
+```typescript
+const CITY_WALK_FACTOR = 1.4;
+const adjustedDist = dist * CITY_WALK_FACTOR;
+const MAX_COMFORTABLE_WALK_METERS = 800;
 
-- Add `perDayActivities?: Array<{ dayNumber: number; activities: string }>` to the `TripDetails` interface (~line 63)
+if (dist <= MAX_COMFORTABLE_WALK_METERS) {
+  const dur = Math.max(3, Math.ceil(adjustedDist / 80));
+  result = { durationMinutes: dur, method: 'walking', ... };
+} else if (dist <= 8000) {
+  const dur = Math.max(8, Math.ceil(adjustedDist / 500) + 5);
+  result = { durationMinutes: dur, method: 'transit', ... };
+} else {
+  // Taxi unchanged (uses raw dist)
+}
+```
 
-**File: `src/components/planner/steps/ItineraryPreview.tsx`**
+### 2. Add missing-coordinate fallback for transit injection
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-- Add persistence of `data.perDayActivities` to trip metadata alongside `mustDoActivities` (~line 316)
+- Add `getDefaultTransitMinutes()` helper with postal-code and same-venue awareness
+- Add `extractPostalCode()` helper
+- In `makeTransCard()` (~line 910) and the gap-injection loop (~line 3211), use the fallback when coords are missing instead of defaulting to a hardcoded 15 min or skipping
+- Log fallback usage with `[TRANSIT-FALLBACK]`
 
-### 3. Use per-day activities in prompt compilation
-**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`**
+### 3. Add transit label regeneration helper
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
 
-- At ~line 213, before the existing `mustDoActivitiesRaw` processing, check for `metadata?.perDayActivities`
-- If the current `dayNumber` has a matching entry, inject a `USER-SPECIFIED ACTIVITIES FOR THIS DAY (MANDATORY)` prompt section with strict rules (use exact restaurants, don't substitute, fill gaps only)
-- If `perDayActivities` has an entry for this day, skip the generic `mustDoActivitiesRaw` parsing for this day — the per-day data is more precise
-- Fall through to existing `mustDoActivities` behavior for days without per-day entries or for non-structured inputs
+- Add `generateTransitLabel(nextActivity, mode)` helper that picks the destination name from `location.name`, `venue_name`, or `title`
+- Use mode-specific labels: "Walk to X", "Travel to X", "Taxi to X"
+- Apply this helper in all existing label-generation sites (makeTransCard, rewrite blocks at ~lines 2588, 3158, 3250, 3328) for consistency
+- No behavioral change — just centralizes label logic and ensures mode-aware labels
 
-### 4. Protect user-specified venues from hallucination filters
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+### 4. Add AI transit estimation guidance to prompt
+**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** (~line 1261)
 
-- Before the hallucination filter (~line 888), build a `Set<string>` of user-specified venue names by parsing the current day's `perDayActivities` entry
-- Extract names from patterns like "at Jnane Tamsna", "Dinner Comptoir Darna", etc.
-- In the filter loop, skip (return `true`) any activity whose name matches a user-specified venue
-- Access `perDayActivities` from the trip metadata already available in the function context
+- Add items 11-12 to CRITICAL REMINDERS:
+  - Transit reality check (different neighborhoods = 10-15 min minimum)
+  - Transit label must name the actual next venue
+- Add a TRANSIT TIME ESTIMATION GUIDE block near the existing transit instructions (~line 863) with distance-based minimums
 
 ### 5. Deploy
-- Deploy `chat-trip-planner` and `generate-itinerary` edge functions
+- Deploy `generate-itinerary` edge function
 
 ## What's NOT changed
-- Existing `mustDoActivities` field and all its processing (kept as fallback)
-- Existing hallucination filters (still run, just skip user-specified venues)
-- Single City, Multi-City, and Build Myself flows (unaffected)
-- No database changes needed — `perDayActivities` lives in existing JSONB `metadata` column
+- Taxi calculations (reasonable as-is)
+- Inter-city transit logic
+- Activity generation or reordering logic
+- Database schema or API contracts
+- Google Maps/Places API calls
 
