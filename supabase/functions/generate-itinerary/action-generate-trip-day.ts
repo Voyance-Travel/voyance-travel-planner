@@ -2037,6 +2037,20 @@ async function _handleGenerateTripDayInner(
           { name: 'Rijks', neighborhood: 'Museumkwartier', address: 'Museumstraat 2, 1071 XX Amsterdam' },
         ],
       },
+      'casablanca': {
+        breakfast: [
+          { name: 'La Sqala', neighborhood: 'Old Medina', address: 'Blvd des Almohades, Casablanca' },
+          { name: 'Café Basmane', neighborhood: 'Centre', address: 'Rue Mohammed El Qorri, Casablanca' },
+        ],
+        lunch: [
+          { name: "Rick's Café", neighborhood: 'Old Medina', address: '248 Blvd Sour Jdid, Casablanca' },
+          { name: 'Le Cabestan', neighborhood: 'Ain Diab', address: '90 Blvd de la Corniche, Casablanca' },
+        ],
+        dinner: [
+          { name: 'La Bodega', neighborhood: 'Centre', address: '129 Rue Allal Ben Abdellah, Casablanca' },
+          { name: 'Le Port de Pêche', neighborhood: 'Port', address: 'Port de Casablanca, Casablanca' },
+        ],
+      },
     };
 
     // Detect meal type from title
