@@ -92,7 +92,18 @@ export function ManualTripPasteEntry({ }: ManualTripPasteEntryProps = {}) {
 
       if (error) {
         console.error('[ManualPaste] Parse error:', error);
-        toast.error('Failed to parse your input. Please try again.');
+        // Try to extract structured error from FunctionsHttpError context
+        let errorMsg = 'Failed to parse your input. Please try again.';
+        try {
+          if (error && typeof error === 'object' && 'context' in error) {
+            const ctx = (error as any).context;
+            if (ctx?.body) {
+              const body = typeof ctx.body === 'string' ? JSON.parse(ctx.body) : ctx.body;
+              if (body?.error) errorMsg = body.error;
+            }
+          }
+        } catch { /* use default message */ }
+        toast.error(errorMsg);
         setIsParsing(false);
         return;
       }

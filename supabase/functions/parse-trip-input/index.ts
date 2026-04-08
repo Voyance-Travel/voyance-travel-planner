@@ -832,7 +832,10 @@ serve(async (req) => {
     });
   } catch (err) {
     console.error("parse-trip-input error:", err);
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }), {
+    return new Response(JSON.stringify({
+      error: err instanceof Error ? err.message : "Unknown error",
+      stage: "unexpected",
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

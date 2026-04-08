@@ -241,7 +241,9 @@ export function useGenerationPoller({
 
         stalledFiredRef.current = false;
         autoResumeCountRef.current = 0;
-        const genError = (meta.generation_error as string) || 'Generation failed';
+        const genError = (meta.generation_error as string)
+          || (meta.chain_error as string)
+          || 'Generation failed';
         setState({ status: 'failed', completedDays, totalDays, progress, error: genError, partialDays, generatedDaysList: daysList, currentCity });
         // Dedupe: only fire onFailed once per unique error message
         if (lastFailedErrorRef.current !== genError) {

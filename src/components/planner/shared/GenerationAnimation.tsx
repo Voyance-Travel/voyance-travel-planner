@@ -111,13 +111,14 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
               cxFrames.push(100 + dot.radius * Math.cos(angle));
               cyFrames.push(100 + dot.radius * Math.sin(angle));
             }
+            const initialCx = 100 + dot.radius * Math.cos(dot.startAngle * (Math.PI / 180));
+            const initialCy = 100 + dot.radius * Math.sin(dot.startAngle * (Math.PI / 180));
             return (
               <motion.circle
                 key={i}
-                cx={cxFrames[0]}
-                cy={cyFrames[0]}
                 r={dot.size}
                 className="fill-primary/50"
+                initial={{ cx: initialCx, cy: initialCy }}
                 animate={{ cx: cxFrames, cy: cyFrames }}
                 transition={{
                   duration: dot.duration,
