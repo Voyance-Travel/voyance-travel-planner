@@ -3227,7 +3227,8 @@ function repairBookends(
       const toName = nextNonTransport.location?.name || sanitizeTransitDestination(nextNonTransport.title || '');
       const oldTitle = transport.title;
 
-      transport.title = `Travel to ${toName}`;
+      const transportMethod = transport.transportation?.method || 'transit';
+      transport.title = generateTransitLabel(nextNonTransport, transportMethod);
       transport.description = `Transit from ${fromName} to ${toName}.`;
       transport.location = { name: toName, address: '' };
       transport.fromLocation = { name: fromName, address: '' };
