@@ -348,7 +348,7 @@ export async function handleGenerateDay(
         'enoteca del corso', 'bar luminoso', 'bar centrale',
       ];
       const FAKE_ADDRESS_PATTERNS = [
-        /^the destination$/i, /^your destination$/i, /^the city$/i,
+        /the destination/i, /your destination/i, /the city/i,
         /^paris$/i, /^rome$/i, /^berlin$/i, /^tokyo$/i, /^london$/i,
         /^[a-z\s]+,?\s*(france|italy|germany|japan|spain|uk)?$/i,
       ];
