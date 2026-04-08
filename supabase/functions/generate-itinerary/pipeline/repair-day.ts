@@ -214,7 +214,7 @@ const FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackVenue[]>> = {
       { name: 'Bouillon Chartier', neighborhood: 'Grands Boulevards', address: '7 R. du Faubourg Montmartre, Paris', price: 20, description: 'Historic bouillon from 1896. Traditional French dishes at remarkable prices.' },
       { name: 'Le Bouillon Pigalle', neighborhood: 'Pigalle', address: '22 Bd de Clichy, Paris', price: 25, description: 'Neo-bouillon revival with stunning Belle Époque interior.' },
       { name: 'Les Philosophes', neighborhood: 'Marais', address: '28 R. Vieille du Temple, Paris', price: 28, description: 'Classic Marais bistro terrace. Good steak tartare and croque monsieur.' },
-      { name: 'Pink Mamma', neighborhood: 'Oberkampf', address: '20bis R. de Douai, Paris', price: 30, description: 'Four-story Italian trattoria with Neapolitan pizza and handmade pasta.' },
+      { name: 'Bouillon Racine', neighborhood: 'Saint-Germain', address: '3 R. Racine, Paris', price: 25, description: 'Art Nouveau gem serving classic bouillon-style French comfort food.' },
       { name: 'Robert et Louise', neighborhood: 'Marais', address: '64 R. Vieille du Temple, Paris', price: 35, description: 'Fireplace-grilled meats in a medieval-style Marais dining room.' },
       { name: 'Bofinger', neighborhood: 'Bastille', address: '5-7 R. de la Bastille, Paris', price: 40, description: 'Art Nouveau brasserie with stunning stained glass dome. Classic Alsatian fare.' },
       { name: 'Le Comptoir du Relais', neighborhood: 'Saint-Germain', address: '9 Carrefour de l\'Odéon, Paris', price: 55, description: 'Yves Camdeborde\'s legendary bistro. Masterclass in French comfort food.' },

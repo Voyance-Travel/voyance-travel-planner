@@ -767,7 +767,7 @@ const KNOWN_CASUAL_VENUES: Record<string, number> = {
   'bouillon julien': 35,
   "le relais de l'entrecôte": 55,
   "le relais de l'entrecote": 55,
-  'pink mamma': 40,
+  'bouillon racine': 25,
   'breizh café': 35,
   'breizh cafe': 35,
 };

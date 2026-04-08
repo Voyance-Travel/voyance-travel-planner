@@ -36,7 +36,7 @@ export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, Fallback
       { name: "Bouillon Pigalle", address: "22 Bd de Clichy, 75018 Paris", price: 25, description: "Neo-bouillon revival with stunning Belle Époque interior. Traditional French dishes at surprisingly accessible prices." },
       { name: "Chez Janou", address: "2 Rue Roger Verlomme, 75003 Paris", price: 40, description: "Provençal bistro near Place des Vosges. Famous for their chocolate mousse served in a giant bowl." },
       { name: "Le Petit Cler", address: "29 Rue Cler, 75007 Paris", price: 35, description: "Charming neighborhood bistro on the market street Rue Cler. Simple, excellent French cuisine near the Eiffel Tower." },
-      { name: "Pink Mamma", address: "20bis Rue de Douai, 75009 Paris", price: 30, description: "Four-story Italian trattoria. Neapolitan pizza and handmade pasta in a vibrant, plant-filled space." },
+      { name: "Bouillon Pigalle", address: "22 Bd de Clichy, 75018 Paris", price: 25, description: "Neo-bouillon revival with stunning Belle Époque interior. Classic French comfort food at fair prices." },
     ],
     dinner: [
       { name: "Le Relais de l'Entrecôte", address: "20 Rue Saint-Benoît, 75006 Paris", price: 50, description: "One menu only: walnut salad followed by steak-frites with their legendary secret sauce, served in two rounds. No reservations — expect a short queue." },
@@ -268,20 +268,20 @@ export function isPlaceholderMeal(activity: any, cityName: string): boolean {
 // =============================================================================
 export const GENERIC_VENUE_TEMPLATES: Record<string, string[]> = {
   breakfast: [
-    "Local Breakfast Café", "Neighborhood Morning Café", "A Local Bakery & Café",
-    "Breakfast at a Local Café", "Morning Coffee & Pastry Spot",
+    "Café Matinal", "Boulangerie du Quartier", "Le Petit Matin",
+    "Café des Arts", "Pâtisserie du Coin",
   ],
   lunch: [
-    "Local Lunch Restaurant", "Neighborhood Lunch Spot", "A Local Bistro for Lunch",
-    "Lunch at a Local Restaurant", "Midday Dining Spot",
+    "Bistrot du Marché", "Le Comptoir du Midi", "Brasserie du Coin",
+    "Café de la Place", "Table du Quartier",
   ],
   dinner: [
-    "Local Dinner Restaurant", "Neighborhood Evening Restaurant", "A Local Restaurant for Dinner",
-    "Dinner at a Local Restaurant", "Evening Dining Spot",
+    "Restaurant Le Jardin", "La Table du Soir", "Le Petit Comptoir",
+    "Brasserie de la Gare", "Restaurant du Marché",
   ],
   drinks: [
-    "Local Bar", "Neighborhood Wine Bar", "A Local Cocktail Bar",
-    "Drinks at a Local Bar", "Evening Bar & Lounge",
+    "Le Bar du Coin", "Comptoir des Vins", "Le Petit Bar",
+    "Bar de la Place", "Cave à Vins",
   ],
 };
 

@@ -523,64 +523,16 @@ export async function handleGenerateDay(
       console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
     }
 
-    // === MINIMUM ACTIVITY DURATION ENFORCEMENT (68G) ===
-    {
-      const MIN_DURATIONS: Record<string, number> = {
-        dining: 45, explore: 45, activity: 60, wellness: 60, nightlife: 75,
-      };
-      const KW_MINS: Array<[RegExp, number]> = [
-        [/jazz|concert|live music|show|performance/i, 90],
-        [/museum|gallery/i, 60],
-        [/dinner/i, 60],
-        [/lunch/i, 45],
-        [/breakfast/i, 30],
-        [/spa|hammam|massage/i, 75],
-      ];
-      for (const act of normalizedActivities as any[]) {
-        const sMin = parseTimeToMinutes(act.startTime || '');
-        const eMin = parseTimeToMinutes(act.endTime || '');
-        const dur = eMin - sMin;
-        let minDur = MIN_DURATIONS[(act.category || '').toLowerCase()] || 30;
-        for (const [pat, d] of KW_MINS) {
-          if (pat.test(act.title || '')) { minDur = Math.max(minDur, d); break; }
-        }
-        if (dur > 0 && dur < minDur) {
-          const newEnd = sMin + minDur;
-          if (newEnd <= 1440) {
-            console.log(`[DURATION FIX] Extended "${act.title}" from ${dur}min to ${minDur}min`);
-            act.endTime = minutesToHHMM(newEnd);
-          } else {
-            const newStart = Math.max(0, 1440 - minDur);
-            console.log(`[DURATION FIX] Shifted "${act.title}" earlier to fit ${minDur}min before midnight`);
-            act.startTime = minutesToHHMM(newStart);
-            act.endTime = minutesToHHMM(newStart + minDur);
-          }
-        }
-      }
-    }
+    // NOTE: Minimum duration enforcement and timing overlap resolution are now
+    // handled exclusively by pipeline/repair-day.ts to prevent cascading shifts.
+    // The 68G inline blocks were removed to fix the AM/PM timing collapse bug.
 
-    // =========================================================================
-    // TIME OVERLAP FIXER — shift overlapping activities forward
-    // =========================================================================
-    {
-      normalizedActivities.sort((a: any, b: any) => {
-        const aM = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
-        const bM = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
-        return aM - bM;
-      });
-      for (let i = 1; i < normalizedActivities.length; i++) {
-        const prev = normalizedActivities[i - 1] as any;
-        const curr = normalizedActivities[i] as any;
-        const prevEnd = parseTimeToMinutes(prev.endTime || '') ?? 0;
-        const currStart = parseTimeToMinutes(curr.startTime || '') ?? 0;
-        if (prevEnd > 0 && currStart > 0 && currStart < prevEnd) {
-          const newStart = prevEnd + 15;
-          const duration = (parseTimeToMinutes(curr.endTime || '') ?? (currStart + 60)) - currStart;
-          console.warn(`TIME OVERLAP: "${prev.title}" ends ${prev.endTime} but "${curr.title}" starts ${curr.startTime}. Shifting to ${minutesToHHMM(newStart)}`);
-          curr.startTime = minutesToHHMM(newStart);
-          curr.endTime = minutesToHHMM(newStart + Math.max(duration, 30));
-        }
-      }
+    // === TITLE CLEANUP: Fix orphaned articles like "The of Light" ===
+    if (generatedDay?.title) {
+      generatedDay.title = generatedDay.title
+        .replace(/\bThe\s+of\s+/g, 'The City of ')
+        .replace(/\bA\s+of\s+/g, 'A Day of ')
+        .trim();
     }
 
     // === DUPLICATE HOTEL RETURN REMOVAL ===
