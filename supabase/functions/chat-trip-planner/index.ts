@@ -102,9 +102,10 @@ MULTI-CITY DETECTION — CRITICAL (FAILURE TO FOLLOW = BROKEN TRIP):
 - NEVER put the route in additionalNotes instead of cities[]. The cities array is the ONLY field the system reads for multi-city routing.
 - If the user doesn't specify nights per city, distribute evenly: total_days minus (num_cities - 1) travel days, divided among cities.
 - Single-city trips: set cities to an empty array [].
-- ALWAYS include BOTH the "destination" summary AND the "cities" array. Example for "London and Paris, 10 days":
+- ALWAYS include BOTH the "destination" summary AND the "cities" array. Example for "London and Paris, 10 days, staying at The Ritz in London and Le Meurice in Paris":
   destination: "London, Paris"
-  cities: [{name: "London", country: "United Kingdom", nights: 4}, {name: "Paris", country: "France", nights: 5}]
+  cities: [{name: "London", country: "United Kingdom", nights: 4, hotelName: "The Ritz London"}, {name: "Paris", country: "France", nights: 5, hotelName: "Le Meurice"}]
+- When the user has MULTIPLE hotels in the SAME city, list them in the hotelName field with date ranges: hotelName: "Mandarin Oriental (Apr 10-11), Radisson Blu (Apr 11-15)"
 
 SELF-CHECK BEFORE CALLING THE TOOL:
 Before you call extract_trip_details, run this mental checklist:
