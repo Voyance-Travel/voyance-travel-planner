@@ -1210,6 +1210,15 @@ async function _handleGenerateTripDayInner(
   // handled exclusively by pipeline/repair-day.ts to prevent cascading shifts.
   // The 68G inline blocks were removed to fix the AM/PM timing collapse bug.
 
+  // === TITLE CLEANUP: Fix orphaned articles like "The of Light" ===
+  if (dayResult?.title) {
+    // Fix "The of X" → "The City of X", "A Day of X" patterns with missing nouns
+    dayResult.title = dayResult.title
+      .replace(/\bThe\s+of\s+/g, 'The City of ')
+      .replace(/\bA\s+of\s+/g, 'A Day of ')
+      .trim();
+  }
+
   // === POST-REPAIR: Collapse consecutive transport cards (safety net) ===
   if (dayResult?.activities?.length >= 2) {
     const transportRe = /^travel\s+to\b|^transit\s+to\b|^transfer\s+to\b|^drive\s+to\b|^ride\s+to\b/i;
