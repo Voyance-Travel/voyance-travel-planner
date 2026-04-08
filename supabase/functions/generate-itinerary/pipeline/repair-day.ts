@@ -2544,6 +2544,92 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 15. FINAL TRANSPORT COHERENCE PASS ---
+  // After all repairs (including time-sort), transport cards may no longer
+  // bridge their actual neighbors. Rewrite destinations and merge duplicates.
+  {
+    const isTransportFinal = (a: any) => {
+      const c = (a.category || '').toLowerCase();
+      return c === 'transport' || c === 'transportation';
+    };
+
+    // 15a. Rewrite each transport to match actual prev→next neighbors
+    for (let i = 0; i < activities.length; i++) {
+      if (!isTransportFinal(activities[i])) continue;
+      const transport = activities[i];
+
+      let prevReal: any = null;
+      for (let j = i - 1; j >= 0; j--) {
+        if (!isTransportFinal(activities[j])) { prevReal = activities[j]; break; }
+      }
+      let nextReal: any = null;
+      for (let j = i + 1; j < activities.length; j++) {
+        if (!isTransportFinal(activities[j])) { nextReal = activities[j]; break; }
+      }
+      if (!nextReal) continue;
+
+      const transportDest = (transport.location?.name || '').toLowerCase();
+      const nextLoc = (nextReal.location?.name || nextReal.title || '').toLowerCase();
+
+      if (transportDest && nextLoc && !isSameOrContainedLocation(transportDest, nextLoc, hotelName)) {
+        const fromName = prevReal?.location?.name || prevReal?.title || 'previous location';
+        const toName = nextReal.location?.name || sanitizeTransitDestination(nextReal.title || '');
+        transport.title = `Travel to ${toName}`;
+        transport.description = `Transit from ${fromName} to ${toName}.`;
+        transport.location = { name: toName, address: nextReal.location?.address || '' };
+        transport.fromLocation = { name: fromName, address: prevReal?.location?.address || '' };
+        const fromCoords = prevReal ? getActivityCoords(prevReal) : hotelCoordinates || null;
+        const toCoords = getActivityCoords(nextReal);
+        if (fromCoords && toCoords) {
+          const est = estimateTransit(fromCoords, toCoords, resolvedDestination);
+          transport.durationMinutes = est.durationMinutes;
+          transport.endTime = addMinutesToHHMM(transport.startTime, est.durationMinutes);
+          transport.cost = { amount: est.costAmount, currency: 'USD' };
+          if (transport.transportation) {
+            transport.transportation = { method: est.method, duration: `${est.durationMinutes} min` };
+          }
+        }
+        repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'final_transport_realign', before: transportDest, after: toName });
+      }
+    }
+
+    // 15b. Merge consecutive transport cards
+    let merged = true;
+    while (merged) {
+      merged = false;
+      for (let i = 0; i < activities.length - 1; i++) {
+        if (isTransportFinal(activities[i]) && isTransportFinal(activities[i + 1])) {
+          const first = activities[i];
+          const second = activities[i + 1];
+          second.startTime = first.startTime || second.startTime;
+          let prevReal: any = null;
+          for (let j = i - 1; j >= 0; j--) {
+            if (!isTransportFinal(activities[j])) { prevReal = activities[j]; break; }
+          }
+          const fromName = prevReal?.location?.name || first.fromLocation?.name || 'previous location';
+          second.fromLocation = { name: fromName, address: '' };
+          second.description = `Transit from ${fromName} to ${second.location?.name || 'destination'}.`;
+          activities.splice(i, 1);
+          repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'final_merge_consecutive_transport', before: first.title, after: second.title });
+          merged = true;
+          break;
+        }
+      }
+    }
+
+    // 15c. Remove self-referencing transports (from A to A)
+    activities = activities.filter((act) => {
+      if (!isTransportFinal(act)) return true;
+      const from = (act.fromLocation?.name || '').toLowerCase();
+      const to = (act.location?.name || '').toLowerCase();
+      if (from && to && isSameOrContainedLocation(from, to, hotelName)) {
+        repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'removed_self_referencing_transport', before: act.title });
+        return false;
+      }
+      return true;
+    });
+  }
+
   return {
     day: { ...input.day, activities },
     repairs,
