@@ -517,6 +517,42 @@ export async function handleGenerateDay(
       console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
     }
 
+    // === MINIMUM ACTIVITY DURATION ENFORCEMENT (68G) ===
+    {
+      const MIN_DURATIONS: Record<string, number> = {
+        dining: 45, explore: 45, activity: 60, wellness: 60, nightlife: 75,
+      };
+      const KW_MINS: Array<[RegExp, number]> = [
+        [/jazz|concert|live music|show|performance/i, 90],
+        [/museum|gallery/i, 60],
+        [/dinner/i, 60],
+        [/lunch/i, 45],
+        [/breakfast/i, 30],
+        [/spa|hammam|massage/i, 75],
+      ];
+      for (const act of normalizedActivities as any[]) {
+        const sMin = parseTimeToMinutes(act.startTime || '');
+        const eMin = parseTimeToMinutes(act.endTime || '');
+        const dur = eMin - sMin;
+        let minDur = MIN_DURATIONS[(act.category || '').toLowerCase()] || 30;
+        for (const [pat, d] of KW_MINS) {
+          if (pat.test(act.title || '')) { minDur = Math.max(minDur, d); break; }
+        }
+        if (dur > 0 && dur < minDur) {
+          const newEnd = sMin + minDur;
+          if (newEnd <= 1440) {
+            console.log(`[DURATION FIX] Extended "${act.title}" from ${dur}min to ${minDur}min`);
+            act.endTime = minutesToHHMM(newEnd);
+          } else {
+            const newStart = Math.max(0, 1440 - minDur);
+            console.log(`[DURATION FIX] Shifted "${act.title}" earlier to fit ${minDur}min before midnight`);
+            act.startTime = minutesToHHMM(newStart);
+            act.endTime = minutesToHHMM(newStart + minDur);
+          }
+        }
+      }
+    }
+
     // =========================================================================
     // TIME OVERLAP FIXER — shift overlapping activities forward
     // =========================================================================

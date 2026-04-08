@@ -1190,6 +1190,46 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // === MINIMUM ACTIVITY DURATION ENFORCEMENT (68G) ===
+  if (dayResult?.activities?.length > 0) {
+    const __toMin = (t: string) => { const m = t?.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0; };
+    const __toTime = (m: number) => { const h = Math.floor(m / 60) % 24; return `${h}:${(m % 60).toString().padStart(2, '0')}`; };
+
+    const MIN_DURATIONS: Record<string, number> = {
+      dining: 45, explore: 45, activity: 60, wellness: 60, nightlife: 75,
+    };
+    const KW_MINS: Array<[RegExp, number]> = [
+      [/jazz|concert|live music|show|performance/i, 90],
+      [/museum|gallery/i, 60],
+      [/dinner/i, 60],
+      [/lunch/i, 45],
+      [/breakfast/i, 30],
+      [/spa|hammam|massage/i, 75],
+    ];
+
+    for (const act of dayResult.activities) {
+      const sMin = __toMin(act.startTime);
+      const eMin = __toMin(act.endTime);
+      const dur = eMin - sMin;
+      let minDur = MIN_DURATIONS[(act.category || '').toLowerCase()] || 30;
+      for (const [pat, d] of KW_MINS) {
+        if (pat.test(act.title || '')) { minDur = Math.max(minDur, d); break; }
+      }
+      if (dur > 0 && dur < minDur) {
+        const newEnd = sMin + minDur;
+        if (newEnd <= 1440) {
+          console.log(`[DURATION FIX] Extended "${act.title}" from ${dur}min to ${minDur}min`);
+          act.endTime = __toTime(newEnd);
+        } else {
+          const newStart = Math.max(0, 1440 - minDur);
+          console.log(`[DURATION FIX] Shifted "${act.title}" earlier to fit ${minDur}min before midnight`);
+          act.startTime = __toTime(newStart);
+          act.endTime = __toTime(newStart + minDur);
+        }
+      }
+    }
+  }
+
   // ── TIMING OVERLAP SAFETY NET (runs after universal quality pass) ──
   if (dayResult?.activities?.length > 1) {
     const _toMin = (t: string) => { const m = t?.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0; };
