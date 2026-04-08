@@ -986,7 +986,7 @@ export function enforceRequiredMealsFinalGuard(
 
     // TRY 1: Use a real venue from fallbackVenues
     let venueName: string | null = null;
-    let venueAddress: string = destination;
+    let venueAddress: string = '';
     let venueDescription: string = '';
     let usedRealVenue = false;
 
@@ -1001,7 +1001,7 @@ export function enforceRequiredMealsFinalGuard(
 
     if (venue) {
       venueName = venue.name;
-      venueAddress = venue.address || destination;
+      venueAddress = venue.address || `${venue.name}, ${destination}`;
       venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
       usedVenueNamesForInjection.add(venue.name.toLowerCase());
       usedRealVenue = true;
@@ -1018,7 +1018,7 @@ export function enforceRequiredMealsFinalGuard(
         const fallback = getRandomFallbackRestaurant(destination, mealType, usedNamesSet);
         if (fallback) {
           venueName = `${label} at ${fallback.name}`;
-          venueAddress = fallback.address || destination;
+          venueAddress = fallback.address || `${fallback.name}, ${destination}`;
           venueDescription = fallback.description || `${label} at ${fallback.name}`;
           usedVenueNamesForInjection.add(fallback.name.toLowerCase());
           usedRealVenue = true;
@@ -1034,6 +1034,7 @@ export function enforceRequiredMealsFinalGuard(
       const pick = unused.length > 0 ? unused[Math.floor(Math.random() * unused.length)] : templates[0];
       if (pick) {
         venueName = `${label} at ${pick}`;
+        venueAddress = `${pick}, ${destination}`;
         venueDescription = `${label} at ${pick} — a local spot worth trying`;
         usedVenueNamesForInjection.add(pick.toLowerCase());
         console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Using GENERIC TEMPLATE "${pick}" for ${mealType}`);
@@ -1045,6 +1046,7 @@ export function enforceRequiredMealsFinalGuard(
           dinner: 'Restaurant Le Jardin',
         };
         venueName = `${label} at ${emergencyNames[mealType]}`;
+        venueAddress = `${emergencyNames[mealType]}, ${destination}`;
         venueDescription = `${label} at a local favorite`;
         console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Emergency fallback for ${mealType}: "${venueName}"`);
       }
