@@ -36,7 +36,7 @@ export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, Fallback
       { name: "Bouillon Pigalle", address: "22 Bd de Clichy, 75018 Paris", price: 25, description: "Neo-bouillon revival with stunning Belle Époque interior. Traditional French dishes at surprisingly accessible prices." },
       { name: "Chez Janou", address: "2 Rue Roger Verlomme, 75003 Paris", price: 40, description: "Provençal bistro near Place des Vosges. Famous for their chocolate mousse served in a giant bowl." },
       { name: "Le Petit Cler", address: "29 Rue Cler, 75007 Paris", price: 35, description: "Charming neighborhood bistro on the market street Rue Cler. Simple, excellent French cuisine near the Eiffel Tower." },
-      { name: "Pink Mamma", address: "20bis Rue de Douai, 75009 Paris", price: 30, description: "Four-story Italian trattoria. Neapolitan pizza and handmade pasta in a vibrant, plant-filled space." },
+      { name: "Bouillon Pigalle", address: "22 Bd de Clichy, 75018 Paris", price: 25, description: "Neo-bouillon revival with stunning Belle Époque interior. Classic French comfort food at fair prices." },
     ],
     dinner: [
       { name: "Le Relais de l'Entrecôte", address: "20 Rue Saint-Benoît, 75006 Paris", price: 50, description: "One menu only: walnut salad followed by steak-frites with their legendary secret sauce, served in two rounds. No reservations — expect a short queue." },

@@ -894,7 +894,7 @@ ${(() => {
   const cityLower = (destination || '').toLowerCase().trim();
   if (cityLower.includes('paris')) return `- For Paris, use REAL restaurants like:
   BREAKFAST: Café de Flore, Angelina, Stohrer, Du Pain et des Idées, Claus, Ladurée, Carette, Holybelly, Boot Café, Ob-La-Di
-  LUNCH: Le Comptoir du Relais, Bouillon Chartier, Chez Janou, Les Philosophes, Pink Mamma, Bofinger, Robert et Louise, Le Bouillon Pigalle, Petit Bon
+  LUNCH: Le Comptoir du Relais, Bouillon Chartier, Chez Janou, Les Philosophes, Bouillon Pigalle, Bofinger, Robert et Louise, Le Bouillon Racine, Petit Bon
   DINNER: Sacré Fleur, Le Train Bleu, Brasserie Lipp, Le Relais de l'Entrecôte, Drouant, Le Voltaire, Chez Georges, Frenchie Bar à Vins
   ⚠️ NEVER use these as dinner: Petit Bon (tea sandwiches/lunch only), Angelina (tearoom/breakfast/snack only), Stohrer (patisserie/breakfast only), Ladurée (tearoom/breakfast only)`;
   if (cityLower.includes('berlin')) return `- For Berlin, use REAL restaurants like:
