@@ -445,11 +445,14 @@ ${resolvedTransportModes.length > 0 ? `- USER'S PREFERRED MODES: ${resolvedTrans
 - For walks <5 min: note in the tips of the preceding activity
 - Always include: mode, duration, cost (free for walking), and route/line for public transit
 
-ACTIVITY MIX:
-- Minimum 3 PAID activities (museums, tours, attractions with ticket prices)
-- Minimum 2 FREE activities (parks, viewpoints, walks, markets, street art)
+ACTIVITY MIX — NON-NEGOTIABLE MINIMUMS:
+- A full day MUST have at least 5 non-dining, non-transport activities total
+- At least 2 PAID activities (museums, tours, attractions with ticket prices)
+- At least 2 FREE activities (parks, viewpoints, walks, markets, street art)
+- At least 1 evening activity after dinner (bar, show, jazz, night walk)
 - Place free activities between paid ones to prevent fatigue
 - Include at least 1 coffee/snack opportunity between long gaps
+- SELF-CHECK: Count your non-dining activities. If there are fewer than 4, you have NOT met the minimum. Add more before responding.
 
 EVENING REQUIREMENT:
 - The day does NOT end at dinner. Include at least 1 post-dinner suggestion:
