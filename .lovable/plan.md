@@ -1,51 +1,42 @@
 
 Diagnosis
 
-- This is still most likely a runtime crash, not a true CORS configuration problem.
-- The latest backend log shows:
-  `TypeError: (act.address || act.location || "").trim is not a function`
-- The current source explains why the 500 is still happening:
-  - `supabase/functions/generate-itinerary/action-generate-day.ts` still has an unsafe hallucination-filter line that calls `.trim()` on `act.address` before confirming it is a string.
-  - `supabase/functions/generate-itinerary/action-generate-trip-day.ts` has the same unsafe pattern.
-- The filler filters were already partially hardened, so the earlier fix was incomplete. The remaining crash point is the hallucination filter.
-- Because the function throws before it finishes a normal response, the browser surfaces the failure as a misleading CORS-style error.
+- This is another runtime crash, not a primary CORS configuration issue.
+- The latest edge logs point to: `ReferenceError: _departureTransportType is not defined` in `action-generate-day.ts`.
+- In the current source, `_departureTransportType` is declared inside the temporary universal-quality-pass block, then referenced later by the meal guard and terminal cleanup, so it is out of scope.
+- `action-generate-trip-day.ts` has the same latent scoping bug: `arrTime24`, `depTime24`, and `departureTransportType` are declared inside the validate/repair block but reused later by the universal quality pass and terminal cleanup.
+- That runtime failure is what the browser is surfacing as repeated 500s plus a misleading CORS error.
 
 Implementation plan
 
-1. Harden the hallucination filter in `action-generate-day.ts`
-   - Replace the direct address `.trim()` logic with safe normalization.
-   - Support:
-     - string `act.address`
-     - object `act.address.address`
-     - object `act.address.name`
-     - string `act.location`
-     - object `act.location.address`
-     - object `act.location.name`
-     - empty fallback
+1. Fix `action-generate-day.ts`
+   - Hoist departure transport detection into a shared variable that lives for the full handler once `flightContext` is available.
+   - Reuse that same variable in:
+     - universal quality pass
+     - meal guard departure-buffer logic
+     - terminal cleanup
+   - Keep the existing train-vs-flight detection logic unchanged to minimize behavior changes.
 
-2. Apply the same hardening in `action-generate-trip-day.ts`
-   - Keep both generation paths consistent so single-day regeneration and chained trip generation cannot fail on the same payload shape.
+2. Fix `action-generate-trip-day.ts`
+   - Hoist `arrTime24`, `depTime24`, and `departureTransportType` so they are defined outside the current validate/repair block and remain available to all later post-processing steps.
+   - Reuse them in:
+     - validate/repair input
+     - universal quality pass
+     - final per-day terminal cleanup loop
 
-3. Normalize both filters consistently
-   - While touching the code, reuse the same address extraction approach in hallucination and filler filtering within each file so future AI payload shape changes do not reintroduce this bug.
-   - Do not start with CORS header changes; fix the exception path first.
+3. Do not start with CORS/header changes
+   - The edge function already has CORS handling in `index.ts` and shared response helpers.
+   - The priority is removing the scope error that is causing the 500.
 
 Files to update
 
 - `supabase/functions/generate-itinerary/action-generate-day.ts`
 - `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
 
-Technical details
-
-- The core bug is that `act.address` can be truthy but non-string, so `(...).trim()` throws.
-- The safe flow should be:
-  - extract a string value from `address` or `location`
-  - default to `''`
-  - only then call `.trim()`
-
 Verification
 
-- Regenerate the failing day again.
-- Confirm the request no longer returns 500 and the retry loop stops.
-- Confirm backend logs no longer show `.trim is not a function`.
-- If a CORS message still appears after this runtime fix, then inspect the response headers separately as a second step.
+- Re-run the same Day 1 regeneration flow.
+- Confirm the request returns 200 instead of 500.
+- Confirm retries stop after the first successful response.
+- Confirm edge logs no longer show `_departureTransportType is not defined`.
+- If a CORS message still appears after this runtime fix, inspect actual response headers separately.
