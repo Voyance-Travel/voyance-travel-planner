@@ -1,23 +1,46 @@
 
 
-# Fix Transit Row Alignment on Desktop
+# Fix: Filter Dining Activities with Placeholder Addresses
 
 ## Problem
-Transit indicator rows (`TransitGapIndicator` and `TransitModePicker`) are flush-left on desktop while activity cards have a time column (96px) + thumbnail column (96px) = 192px left offset. This makes the transit rows visually misaligned — they should start at the same left edge as the activity card content.
+Dining activities with fake addresses like "the destination" survive into the final itinerary. This happens in two places:
+1. The AI generates restaurants with placeholder addresses
+2. The meal guard fallback system (`day-validation.ts`) injects emergency venues using `destination` (e.g., "Paris, France") as the address
 
-## Solution
-Add `sm:pl-[12rem]` (192px = 2 × 96px) left padding to both transit components on desktop so they align with the content column of activity cards.
+## What already exists
+There's already a hallucination filter at lines 340-383 in `action-generate-day.ts` that checks for fake addresses with `address.length < 10`. But fallback venues like "Bistrot du Marché" get injected **after** this filter by the meal guard (line ~1277), bypassing it entirely.
+
+## Plan
+
+### 1. Add the user's filter as a final guard in `action-generate-day.ts`
+Place the exact filter the user specified **after** the meal guard fires (around line 1280, after `generatedDay.activities = mealGuardResult.activities`). This catches both AI-generated fakes AND meal-guard-injected fakes:
+
+```typescript
+// Strip dining with placeholder addresses (post-meal-guard)
+normalizedActivities = normalizedActivities.filter(activity => {
+  if (activity.category !== 'dining') return true;
+  const address = (activity.address || '').trim().toLowerCase();
+  if (
+    address === 'the destination' ||
+    address === 'your destination' ||
+    address === 'the city' ||
+    address === '' ||
+    address.length < 8
+  ) {
+    console.log(`[CLEANUP] Removed dining with placeholder address: "${activity.title}" (address: "${address}")`);
+    return false;
+  }
+  return true;
+});
+generatedDay.activities = normalizedActivities;
+```
+
+The address field needs to be extracted from `activity.location.address` (the actual schema), not `activity.address` directly. I'll adapt the extraction to match the object shape.
+
+### 2. Fix the root cause in `day-validation.ts`
+The meal guard at line 989 initializes `venueAddress = destination` and lines 1004/1021 fall back to `destination` when no real address exists. Change these to use a proper placeholder that won't pass as a real address, or skip injection entirely when no real venue with a real address is available.
 
 ### Files to modify
-
-**1. `src/components/itinerary/TransitModePicker.tsx`** (~line 316)
-- Change the outer row div from `px-3 sm:px-4` to `px-3 sm:pl-[12.5rem] sm:pr-4` so the transit row content starts after the time+thumbnail columns on desktop.
-
-**2. `src/components/itinerary/TransitGapIndicator.tsx`** (~line 394)
-- Same change: update the tappable transit row from `px-3 sm:px-4` to `px-3 sm:pl-[12.5rem] sm:pr-4`.
-
-**3. `src/components/itinerary/EditorialItinerary.tsx`** (~line 9941)
-- Also align the "Add activity" button row between activities, which currently uses `flex justify-center` without accounting for the time+thumbnail offset.
-
-The 12.5rem value accounts for 2 × `w-24` (6rem each = 12rem) plus the 0.5rem of internal padding/border, matching the content column start.
+- `supabase/functions/generate-itinerary/action-generate-day.ts` — add final placeholder-address filter after meal guard
+- `supabase/functions/generate-itinerary/day-validation.ts` — stop using `destination` as a fake address for injected meals
 
