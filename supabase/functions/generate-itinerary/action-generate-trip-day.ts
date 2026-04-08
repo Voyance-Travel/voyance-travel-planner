@@ -1267,6 +1267,28 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // === POST-REPAIR: Collapse consecutive transport cards (safety net) ===
+  if (dayResult?.activities?.length >= 2) {
+    const transportRe = /^travel\s+to\b|^transit\s+to\b|^transfer\s+to\b|^drive\s+to\b|^ride\s+to\b/i;
+    let collapsed = 0;
+    for (let i = dayResult.activities.length - 2; i >= 0; i--) {
+      const curr = dayResult.activities[i];
+      const next = dayResult.activities[i + 1];
+      const currCat = (curr.category || curr.type || '').toLowerCase();
+      const nextCat = (next.category || next.type || '').toLowerCase();
+      const currIsTransport = currCat === 'transport' || currCat === 'travel' || transportRe.test(curr.title || '');
+      const nextIsTransport = nextCat === 'transport' || nextCat === 'travel' || transportRe.test(next.title || '');
+      if (currIsTransport && nextIsTransport) {
+        console.log(`[post-repair] Collapsing consecutive transports: "${curr.title}" + "${next.title}"`);
+        dayResult.activities.splice(i, 1);
+        collapsed++;
+      }
+    }
+    if (collapsed > 0) {
+      console.log(`[post-repair] Collapsed ${collapsed} consecutive transport card(s)`);
+    }
+  }
+
   // === DUPLICATE HOTEL RETURN REMOVAL ===
   if (dayResult.activities?.length >= 2) {
     for (let i = dayResult.activities.length - 2; i >= 0; i--) {

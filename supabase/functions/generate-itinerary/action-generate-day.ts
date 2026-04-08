@@ -1122,6 +1122,31 @@ export async function handleGenerateDay(
     }
 
     // =======================================================================
+    // POST-REPAIR: Collapse consecutive transport cards (safety net)
+    // =======================================================================
+    if (normalizedActivities.length >= 2) {
+      const transportRe = /^travel\s+to\b|^transit\s+to\b|^transfer\s+to\b|^drive\s+to\b|^ride\s+to\b/i;
+      let collapsed = 0;
+      for (let i = normalizedActivities.length - 2; i >= 0; i--) {
+        const curr = normalizedActivities[i];
+        const next = normalizedActivities[i + 1];
+        const currCat = (curr.category || curr.type || '').toLowerCase();
+        const nextCat = (next.category || next.type || '').toLowerCase();
+        const currIsTransport = currCat === 'transport' || currCat === 'travel' || transportRe.test(curr.title || '');
+        const nextIsTransport = nextCat === 'transport' || nextCat === 'travel' || transportRe.test(next.title || '');
+        if (currIsTransport && nextIsTransport) {
+          console.log(`[post-repair] Collapsing consecutive transports: "${curr.title}" + "${next.title}"`);
+          normalizedActivities.splice(i, 1);
+          collapsed++;
+        }
+      }
+      if (collapsed > 0) {
+        generatedDay.activities = normalizedActivities;
+        console.log(`[post-repair] Collapsed ${collapsed} consecutive transport card(s)`);
+      }
+    }
+
+    // =======================================================================
     // PERSIST: Day upsert, activity insert, UUID mapping, version save
     // Extracted to pipeline/persist-day.ts (Phase 5)
     // =======================================================================

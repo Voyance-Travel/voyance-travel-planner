@@ -3126,7 +3126,7 @@ export async function finalSaveItinerary(
           const isPaidExp = (act as any).booking_required ||
             /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico)\b/i.test(allActivityText);
 
-          if (ALWAYS_FREE_VENUE_PATTERNS.test(allActivityText) && !isPaidExp) {
+          if (ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test(allActivityText)) && !isPaidExp) {
             console.log(`[Phase 4] FREE VENUE CHECK: "${(act as any).title}" — zeroing cost`);
             costRows.push({
               trip_id: tripId,

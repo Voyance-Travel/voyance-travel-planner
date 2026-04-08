@@ -293,13 +293,19 @@ export function terminalCleanup(
   }
 
   // ── 1b. Deduplicate "Return to Hotel" entries — keep only the LAST one ──
+  // Also recategorize mismatched hotel returns so repairBookends sees them correctly
   {
     const hotelReturnRe = /return\s+to\s+(your\s+)?hotel|back\s+to\s+(the\s+)?hotel|hotel\s+return/i;
     const returnIndices: number[] = [];
     for (let i = 0; i < activities.length; i++) {
       const title = (activities[i].title || '').trim();
-      const cat = (activities[i].category || '').toLowerCase();
-      if (cat === 'accommodation' && hotelReturnRe.test(title)) {
+      if (hotelReturnRe.test(title)) {
+        // Recategorize mismatched hotel returns so downstream passes treat them correctly
+        const cat = (activities[i].category || '').toLowerCase();
+        if (cat !== 'accommodation' && cat !== 'stay') {
+          console.log(`[${label}] Recategorized hotel return "${title}" from "${cat}" to "accommodation"`);
+          (activities[i] as any).category = 'accommodation';
+        }
         returnIndices.push(i);
       }
     }

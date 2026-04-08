@@ -4,59 +4,59 @@ import { checkAndApplyFreeVenue, enforceMarketDiningCap, ALWAYS_FREE_VENUE_PATTE
 // ─── Tier 1 pattern matching ───
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes miradouro", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Miradouro da Graça"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Miradouro da Graça")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes praça", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Praça do Comércio"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Praça do Comércio")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes jardim", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Jardim Botânico"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Jardim Botânico")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes park", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Hyde Park"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Hyde Park")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes pont (bridge)", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Pont Neuf"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Pont Neuf")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes bridge", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Tower Bridge Walk"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Tower Bridge Walk")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes basilique", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Basilique du Sacré-Cœur"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Basilique du Sacré-Cœur")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes église", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Église Saint-Sulpice"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Église Saint-Sulpice")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes champs-élysées", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Stroll along the Champs-Élysées"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Stroll along the Champs-Élysées")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes montmartre", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Explore Montmartre"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Explore Montmartre")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes sacré-cœur", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Visit Sacré-Cœur"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Visit Sacré-Cœur")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes tuileries", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Tuileries Garden"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Tuileries Garden")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes champ de mars", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Champ de Mars"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Champ de Mars")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes île saint-louis", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Walk on Île Saint-Louis"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Walk on Île Saint-Louis")), true);
 });
 
 // ─── checkAndApplyFreeVenue function tests ───
@@ -227,71 +227,71 @@ Deno.test("checkAndApplyFreeVenue does NOT zero galerie", () => {
 // ─── New universal patterns ───
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes campo (Italian square)", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Campo de' Fiori"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Campo de' Fiori")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes platz (German square)", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Alexanderplatz"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Alexanderplatz")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes seafront", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Walk along the Seafront"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Walk along the Seafront")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes corniche", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Corniche Promenade"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Corniche Promenade")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes monument", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("War Monument"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("War Monument")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes fountain/fontaine", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Fontaine des Innocents"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Fontaine des Innocents")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes statue", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Statue of Liberty viewpoint"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Statue of Liberty viewpoint")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes mosque", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Blue Mosque"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Blue Mosque")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes temple", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Sensō-ji Temple"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Sensō-ji Temple")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes synagogue", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Great Synagogue"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Great Synagogue")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes souk", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Souk el-Attarine"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Souk el-Attarine")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes puente (Spanish bridge)", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Puente Nuevo"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Puente Nuevo")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes brücke (German bridge)", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Oberbaumbrücke"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Oberbaumbrücke")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes overlook", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Scenic Overlook"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Scenic Overlook")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes belvedere", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Belvedere viewpoint"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Belvedere viewpoint")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes market", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Borough Market"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Borough Market")), true);
 });
 
 Deno.test("ALWAYS_FREE_VENUE_PATTERNS includes mercato", () => {
-  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.test("Mercato Centrale"), true);
+  assertEquals(ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test("Mercato Centrale")), true);
 });
 
 // ─── checkAndApplyFreeVenue with new patterns ───

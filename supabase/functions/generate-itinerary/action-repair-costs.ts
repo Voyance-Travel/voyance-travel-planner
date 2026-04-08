@@ -135,7 +135,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       const isPaidExperience = activity.booking_required ||
         /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico)\b/i.test(allText);
 
-      if (ALWAYS_FREE_VENUE_PATTERNS.test(allText) && !isPaidExperience) {
+      if (ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test(allText)) && !isPaidExperience) {
         console.log(`[repair-trip-costs] FREE VENUE CHECK: "${title}" — forcing $0`);
         rows.push({
           trip_id: tripId,
