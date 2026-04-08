@@ -2048,6 +2048,11 @@ async function _handleGenerateTripDayInner(
       'berlin': ['berlin'],
       'rome': ['roma', 'rom'],
       'london': ['londres'],
+      'tokyo': ['tōkyō', 'tokio'],
+      'buenos aires': ['bsas'],
+      'marrakech': ['marrakesh', 'مراكش'],
+      'bangkok': ['krung thep'],
+      'amsterdam': ['a\'dam'],
     };
 
     // Resolve city key for fallback lookup
