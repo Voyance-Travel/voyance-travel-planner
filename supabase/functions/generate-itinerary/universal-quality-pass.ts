@@ -240,6 +240,8 @@ export interface TerminalCleanupOptions {
   arrivalTime24?: string;
   /** 24h departure time (last day only), e.g. "18:30" */
   departureTime24?: string;
+  /** Transport type for departure (train, flight, etc.) — controls buffer */
+  departureTransportType?: string;
   /** City name for placeholder replacement context */
   city?: string;
   /** Day number (1-based) */
