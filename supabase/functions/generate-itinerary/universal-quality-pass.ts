@@ -43,6 +43,7 @@ export interface UniversalQualityOptions {
   usedVenueNames: Set<string>;
   arrivalTime?: string;    // HH:MM 24h, day 0 only
   departureTime?: string;  // HH:MM 24h, last day only
+  departureTransportType?: string; // 'train', 'flight', etc. — controls buffer size
   dayTitle?: string;
   budgetTier?: string;
   apiKey?: string;
