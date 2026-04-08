@@ -1175,7 +1175,9 @@ export async function handleGenerateDay(
       const _arrTime24 = (flightContext as any)?.arrivalTime24 as string | undefined;
       const _depTime24 = (flightContext as any)?.returnDepartureTime24 as string | undefined;
       const arrMinsForGuard = isFirstDay && _arrTime24 ? (() => { const m = _arrTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : undefined; })() : undefined;
-      const depMinsForGuard = isLastDay && _depTime24 ? (() => { const m = _depTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - 180 : undefined; })() : undefined;
+      const _isTrain = _departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(_departureTransportType);
+      const _depBufferMins = _isTrain ? 120 : 180;
+      const depMinsForGuard = isLastDay && _depTime24 ? (() => { const m = _depTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - _depBufferMins : undefined; })() : undefined;
 
       mealGuardResult = enforceRequiredMealsFinalGuard(
         generatedDay.activities || [],
