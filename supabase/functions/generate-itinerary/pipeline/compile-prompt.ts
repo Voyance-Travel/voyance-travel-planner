@@ -210,7 +210,31 @@ export async function compilePrompt(
   const isSmartFinish = metadata?.smartFinishMode === true || (metadata?.smartFinishSource || '').toString().includes('manual_builder');
   const smartFinishRequested = !!metadata?.smartFinishRequestedAt || isSmartFinish;
 
-  if (mustDoActivitiesRaw.trim()) {
+  // ═══════════════════════════════════════════════════════════════════════
+  // PER-DAY ACTIVITIES (structured day-level user plan) — takes priority
+  // ═══════════════════════════════════════════════════════════════════════
+  const perDayActivities = metadata?.perDayActivities as Array<{ dayNumber: number; activities: string }> | undefined;
+  const currentDayActivities = perDayActivities?.find(d => d.dayNumber === dayNumber);
+
+  if (currentDayActivities) {
+    mustDoPrompt = `
+## 🚨 USER-SPECIFIED ACTIVITIES FOR DAY ${dayNumber} (MANDATORY — DO NOT CHANGE)
+
+The traveler has personally planned these activities for today. You MUST follow this schedule:
+${currentDayActivities.activities}
+
+RULES FOR USER-SPECIFIED ACTIVITIES:
+- Use these EXACT restaurants, venues, and times. Do not substitute.
+- If a restaurant name is given (e.g., "Dinner at Jnane Tamsna 7PM"), use THAT restaurant at THAT time.
+- If an activity is "TBD" (e.g., "Dinner TBD"), YOU choose a real local restaurant.
+- If a time block is work-related (Company Visit, Presentation, Volunteering, Orientation), create it as an ACTIVITY with the exact times. Do NOT replace it with tourist activities.
+- Fill gaps between user-specified activities with appropriate activities matching the traveler's DNA.
+- Do NOT add meals the user didn't specify. If they said "Breakfast" and "Dinner" but no lunch, there is no lunch.
+- Hotel transfers are activities too. "4PM Transfer to Radisson Blu" = create a transit/check-in activity.
+- Do NOT inject activities from other cities. Only plan for the current city: ${resolvedDestination}.
+`;
+    console.log(`[compile-prompt] Using perDayActivities for Day ${dayNumber}: ${currentDayActivities.activities.substring(0, 100)}...`);
+  } else if (mustDoActivitiesRaw.trim()) {
     const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
     const mustDoAnalysis = parseMustDoInput(mustDoActivitiesRaw, destination, forceAllMust, preferences?.startDate || date?.split('T')[0], totalDays);
     if (mustDoAnalysis.length > 0) {

@@ -182,6 +182,26 @@ When a user pastes a DETAILED itinerary (with specific times, venues, restaurant
 9. If the plan spans multiple cities, ALWAYS populate the cities array with all cities, nights, and hotels.
 10. NEVER refuse to generate. The user chose "Just Tell Us" because they want a VOYANCE trip built from their plan. Always call the tool.
 
+CRITICAL — DAY-LEVEL EXTRACTION:
+When a user provides activities organized by day (e.g., "April 10: breakfast, pool... April 11: transfer to Radisson..."), you MUST use the perDayActivities array, NOT just mustDoActivities.
+
+For each day the user described, create one entry in perDayActivities with:
+- dayNumber: the sequential day number (1, 2, 3...)
+- activities: ALL activities for that day as a comma-separated string WITH times
+
+This preserves day-level structure so the generator puts activities on the CORRECT day.
+
+RULES FOR perDayActivities:
+1. Include EVERYTHING the user specified — restaurants, hotels, meetings, presentations, volunteering, pool time, spa, drinks, ALL of it.
+2. Include "TBD" items (e.g., "Evening Dinner TBD") — the generator will fill those in.
+3. Include hotel transfers (e.g., "4PM Late checkout Mandarin Oriental, 4PM Transfer to Radisson Blu, 4:30PM Check-in Radisson Blu")
+4. Include work events exactly as stated (e.g., "9AM-11:30AM Company Visit, 1:30PM-3:30PM Volunteering")
+5. Do NOT rename, reinterpret, or upgrade user activities. "Pool" means pool, not "Rose Garden Stroll."
+6. Do NOT add activities the user didn't mention for that day.
+7. Do NOT move activities between days. If the user said "Day 2: Dinner Le Bistro Arabe 9:15PM" it goes in dayNumber 2, period.
+
+IMPORTANT: When perDayActivities is populated, ALSO populate mustDoActivities as a flat fallback string with all venue names. Both fields should be filled.
+
 CRITICAL TEMPORAL MAPPING RULES:
 - When the user says "both days" or "every day" for an event, create a SEPARATE full_day_event constraint for EACH day it applies to, with explicit day numbers in the "day" field.
 - When the user references a day of the week (e.g., "Friday night", "Saturday morning"), calculate which trip day number that corresponds to based on the start date, and set the "day" field accordingly.
@@ -450,6 +470,24 @@ serve(async (req) => {
                           },
                         },
                         required: ["name", "nights"],
+                      },
+                    },
+                    perDayActivities: {
+                      type: "array",
+                      description: "When the user provides a day-by-day plan, extract activities organized BY DAY. Each entry represents one day's scheduled activities in order. Use this INSTEAD OF (in addition to) mustDoActivities when the user provides day-level structure like 'Day 1: breakfast, pool... Day 2: transfer, dinner at X'. This preserves which activities belong to which day.",
+                      items: {
+                        type: "object",
+                        properties: {
+                          dayNumber: {
+                            type: "number",
+                            description: "Which day of the trip (1, 2, 3, etc.)"
+                          },
+                          activities: {
+                            type: "string",
+                            description: "Comma-separated list of that day's activities with times. Example: '6:30AM Breakfast, 9AM-11:30AM Company Visit, 11:30AM-1PM Lunch, 1:30PM-3:30PM Volunteering, 7PM-10PM Dinner at Jnane Tamsna'"
+                          }
+                        },
+                        required: ["dayNumber", "activities"]
                       },
                     },
                   },

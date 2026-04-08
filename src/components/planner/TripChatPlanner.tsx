@@ -61,6 +61,8 @@ export interface TripDetails {
   interestCategories?: string[];
   /** Day number of a special celebration (birthday, anniversary, etc.) */
   celebrationDay?: number;
+  /** Per-day activity structure for preserving user's day-by-day plans */
+  perDayActivities?: Array<{ dayNumber: number; activities: string }>;
 }
 
 interface ChatMessage {

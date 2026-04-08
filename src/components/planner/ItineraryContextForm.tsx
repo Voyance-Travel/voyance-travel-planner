@@ -27,6 +27,7 @@ export interface ItineraryContextData {
   childrenAges?: number[]; // Ages of children if traveling with kids
   preBookedCommitments?: PreBookedCommitment[]; // Fixed events that can't be moved
   mustDoActivities?: string; // User's must-do list as comma-separated string
+  perDayActivities?: Array<{ dayNumber: number; activities: string }>; // Per-day structured activities from Just Tell Us
 }
 
 interface ItineraryContextFormProps {

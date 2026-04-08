@@ -847,6 +847,35 @@ async function _handleGenerateTripDayInner(
       || undefined)
     : undefined;
 
+  // ── BUILD USER-SPECIFIED VENUE NAMES SET (protect from hallucination filter) ──
+  const userSpecifiedNames = new Set<string>();
+  {
+    const perDayActs = (tripMeta.perDayActivities as Array<{ dayNumber: number; activities: string }>) || [];
+    const currentDaySpec = perDayActs.find((d: any) => d.dayNumber === dayNumber);
+    if (currentDaySpec) {
+      // Extract venue names from patterns like "at Jnane Tamsna", "Dinner Comptoir Darna", "Lunch at El Fenn"
+      const nameMatches = currentDaySpec.activities.match(/(?:at |at: )([^,]+)/gi);
+      if (nameMatches) {
+        nameMatches.forEach((m: string) => {
+          const name = m.replace(/^(?:at |at: )/i, '').trim().toLowerCase();
+          if (name.length > 2) userSpecifiedNames.add(name);
+        });
+      }
+      // Also extract venue names after meal keywords: "Dinner Jnane Tamsna", "Breakfast Mandarin Oriental"
+      const mealMatches = currentDaySpec.activities.match(/(?:breakfast|lunch|dinner|brunch)\s+(?:at\s+)?([^,]+)/gi);
+      if (mealMatches) {
+        mealMatches.forEach((m: string) => {
+          const name = m.replace(/^(?:breakfast|lunch|dinner|brunch)\s+(?:at\s+)?/i, '').trim().toLowerCase();
+          // Skip time-only matches like "7PM" or "TBD"
+          if (name.length > 2 && !/^\d|^tbd$/i.test(name)) userSpecifiedNames.add(name);
+        });
+      }
+      if (userSpecifiedNames.size > 0) {
+        console.log(`[HALLUCINATION FILTER] User-specified venues for Day ${dayNumber} (protected):`, [...userSpecifiedNames]);
+      }
+    }
+  }
+
   // ── HALLUCINATION FILTER — remove known fake restaurants and dining with bogus addresses ──
   if (Array.isArray(dayResult?.activities)) {
     const BLOCKED_RESTAURANT_NAMES = [
@@ -889,6 +918,15 @@ async function _handleGenerateTripDayInner(
       const cat = (act.category || '').toLowerCase();
       if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') return true;
       const name = (act.venueName || act.title || '').toLowerCase().trim();
+      // Skip filter for user-specified venues
+      if (userSpecifiedNames.size > 0) {
+        for (const userVenue of userSpecifiedNames) {
+          if (name.includes(userVenue) || userVenue.includes(name)) {
+            console.log(`[HALLUCINATION FILTER] Skipping user-specified venue: ${name}`);
+            return true;
+          }
+        }
+      }
       for (const blocked of BLOCKED_RESTAURANT_NAMES) {
         if (name.includes(blocked)) {
           console.log(`[HALLUCINATION FILTER] Removed blocked restaurant: ${name}`);
