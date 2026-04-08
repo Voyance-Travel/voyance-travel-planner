@@ -2649,7 +2649,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       if (transportDest && nextLoc && !isSameOrContainedLocation(transportDest, nextLoc, hotelName)) {
         const fromName = prevReal?.location?.name || prevReal?.title || 'previous location';
         const toName = nextReal.location?.name || sanitizeTransitDestination(nextReal.title || '');
-        transport.title = `Travel to ${toName}`;
+        const method = transport.transportation?.method || 'transit';
+        transport.title = generateTransitLabel(nextReal, method);
         transport.description = `Transit from ${fromName} to ${toName}.`;
         transport.location = { name: toName, address: nextReal.location?.address || '' };
         transport.fromLocation = { name: fromName, address: prevReal?.location?.address || '' };
