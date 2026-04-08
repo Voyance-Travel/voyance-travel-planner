@@ -55,41 +55,38 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
 
           {/* Pulse rings */}
           <motion.circle
-            cx="100" cy="100"
+            cx={100} cy={100} r={52}
             className="fill-none stroke-primary/15"
             strokeWidth="1"
-            initial={{ r: 52, opacity: 0.4 }}
             animate={{ r: [52, 72], opacity: [0.4, 0] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: 'easeOut' }}
           />
           <motion.circle
-            cx="100" cy="100"
+            cx={100} cy={100} r={52}
             className="fill-none stroke-primary/10"
             strokeWidth="1"
-            initial={{ r: 52, opacity: 0.3 }}
             animate={{ r: [52, 80], opacity: [0.3, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeOut', delay: 0.8 }}
           />
 
           {/* Background glow */}
           <motion.circle
-            cx="100" cy="100"
+            cx={100} cy={100} r={48}
             className="fill-primary/5"
-            initial={{ r: 48, opacity: 0.06 }}
             animate={{ r: [48, 52, 48], opacity: [0.06, 0.12, 0.06] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           />
 
           {/* Progress ring track */}
           <circle
-            cx="100" cy="100" r="52"
+            cx={100} cy={100} r={52}
             className="fill-none stroke-muted/40"
             strokeWidth="3"
           />
 
           {/* Progress ring fill — gradient */}
           <motion.circle
-            cx="100" cy="100" r="52"
+            cx={100} cy={100} r={52}
             fill="none"
             stroke="url(#progressGradient)"
             strokeWidth="3.5"
@@ -116,9 +113,10 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
             return (
               <motion.circle
                 key={i}
+                cx={initialCx}
+                cy={initialCy}
                 r={dot.size}
                 className="fill-primary/50"
-                initial={{ cx: initialCx, cy: initialCy }}
                 animate={{ cx: cxFrames, cy: cyFrames }}
                 transition={{
                   duration: dot.duration,
@@ -138,8 +136,9 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
               <motion.circle
                 key={`p-${i}`}
                 cx={cx}
+                cy={cy}
+                r={1}
                 className="fill-primary/30"
-                initial={{ cy, opacity: 0, r: 1 }}
                 animate={{
                   cy: [cy, cy - 12, cy],
                   opacity: [0, 0.7, 0],

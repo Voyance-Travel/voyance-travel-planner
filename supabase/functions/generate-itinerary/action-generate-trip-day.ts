@@ -775,6 +775,52 @@ async function _handleGenerateTripDayInner(
   }
   dayResult!.dayNumber = dayNumber;
 
+  // ── SHARED FLIGHT TIMING — hoisted so ALL cleanup filters can access ──
+  const _flightSel = (tripCheck?.flight_selection as Record<string, any>) || {};
+  const _nestedDep = _flightSel.departure as Record<string, any> | undefined;
+  const _nestedRet = _flightSel.return as Record<string, any> | undefined;
+  const _isFirstDay = dayNumber === 1;
+  const _isLastDay = dayNumber >= totalDays;
+
+  const { normalizeTo24h: _normalizeTo24h } = await import('./flight-hotel-context.ts');
+  const _arrTime24Raw = _isFirstDay
+    ? (_flightSel.arrivalTime24
+      || _flightSel.arrivalTime
+      || _flightSel.outbound?.arrivalTime
+      || _nestedDep?.arrival?.time
+      || _flightSel.legs?.[0]?.arrival?.time
+      || undefined)
+    : undefined;
+  const savedArrTime24Hoisted = _arrTime24Raw ? _normalizeTo24h(_arrTime24Raw) : undefined;
+
+  const _depTime24Raw = _isLastDay
+    ? (_flightSel.returnDepartureTime24
+      || _flightSel.returnDepartureTime
+      || _nestedRet?.departure?.time
+      || _nestedRet?.departureTime
+      || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0 ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time : undefined)
+      || undefined)
+    : undefined;
+  const savedDepTime24Hoisted = _depTime24Raw ? _normalizeTo24h(_depTime24Raw) : undefined;
+
+  // Detect departure transport type (train vs flight) for buffer sizing
+  const departureTransportType: string | undefined = _isLastDay
+    ? (_nestedRet?.type as string
+      || _flightSel.returnTransportType as string
+      || (_nestedRet?.flightNumber && /train|tgv|eurostar|thalys|ice|rail/i.test(_nestedRet.flightNumber as string) ? 'train' : undefined)
+      || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0
+        ? (() => {
+            const lastLeg = _flightSel.legs[_flightSel.legs.length - 1];
+            const depLeg = _flightSel.legs.find((l: any) => l.isDestinationDeparture) || lastLeg;
+            if (depLeg?.type) return depLeg.type as string;
+            if (/train|tgv|eurostar|thalys|ice|rail/i.test(depLeg?.flightNumber || '')) return 'train';
+            if (/train|rail/i.test(depLeg?.airline || '')) return 'train';
+            return undefined;
+          })()
+        : undefined)
+      || undefined)
+    : undefined;
+
   // ── HALLUCINATION FILTER — remove known fake restaurants and dining with bogus addresses ──
   if (Array.isArray(dayResult?.activities)) {
     const BLOCKED_RESTAURANT_NAMES = [
@@ -1028,52 +1074,6 @@ async function _handleGenerateTripDayInner(
 
     console.log(`[generate-trip-day] Post-processing complete for day ${dayNumber}`);
   }
-
-  // ── SHARED FLIGHT TIMING — hoisted so terminal cleanup can access ──
-  const _flightSel = (tripCheck?.flight_selection as Record<string, any>) || {};
-  const _nestedDep = _flightSel.departure as Record<string, any> | undefined;
-  const _nestedRet = _flightSel.return as Record<string, any> | undefined;
-  const _isFirstDay = dayNumber === 1;
-  const _isLastDay = dayNumber >= totalDays;
-
-  const { normalizeTo24h: _normalizeTo24h } = await import('./flight-hotel-context.ts');
-  const _arrTime24Raw = _isFirstDay
-    ? (_flightSel.arrivalTime24
-      || _flightSel.arrivalTime
-      || _flightSel.outbound?.arrivalTime
-      || _nestedDep?.arrival?.time
-      || _flightSel.legs?.[0]?.arrival?.time
-      || undefined)
-    : undefined;
-  const savedArrTime24Hoisted = _arrTime24Raw ? _normalizeTo24h(_arrTime24Raw) : undefined;
-
-  const _depTime24Raw = _isLastDay
-    ? (_flightSel.returnDepartureTime24
-      || _flightSel.returnDepartureTime
-      || _nestedRet?.departure?.time
-      || _nestedRet?.departureTime
-      || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0 ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time : undefined)
-      || undefined)
-    : undefined;
-  const savedDepTime24Hoisted = _depTime24Raw ? _normalizeTo24h(_depTime24Raw) : undefined;
-
-  // Detect departure transport type (train vs flight) for buffer sizing
-  const departureTransportType: string | undefined = _isLastDay
-    ? (_nestedRet?.type as string
-      || _flightSel.returnTransportType as string
-      || (_nestedRet?.flightNumber && /train|tgv|eurostar|thalys|ice|rail/i.test(_nestedRet.flightNumber as string) ? 'train' : undefined)
-      || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0
-        ? (() => {
-            const lastLeg = _flightSel.legs[_flightSel.legs.length - 1];
-            const depLeg = _flightSel.legs.find((l: any) => l.isDestinationDeparture) || lastLeg;
-            if (depLeg?.type) return depLeg.type as string;
-            if (/train|tgv|eurostar|thalys|ice|rail/i.test(depLeg?.flightNumber || '')) return 'train';
-            if (/train|rail/i.test(depLeg?.airline || '')) return 'train';
-            return undefined;
-          })()
-        : undefined)
-      || undefined)
-    : undefined;
 
   // ── PIPELINE VALIDATE + REPAIR (same guarantees as single-day path) ──
   {
