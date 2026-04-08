@@ -66,7 +66,7 @@ export async function universalQualityPass(
 ): Promise<any[]> {
   const {
     city, country, dnaTier, dnaArchetype, dayIndex, totalDays,
-    usedVenueNames, arrivalTime, departureTime,
+    usedVenueNames, arrivalTime, departureTime, departureTransportType,
     dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants,
   } = options;
 
