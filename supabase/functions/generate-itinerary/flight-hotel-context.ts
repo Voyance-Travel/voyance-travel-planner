@@ -270,7 +270,7 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
               const normalized = normalizeTo24h(intelTime);
               if (normalized) {
                 earliestFirstActivity = normalized;
-                const arrivalDt = (firstDest.arrivalDatetime || (firstDest as any).arrival_datetime) as string | null;
+                const arrivalDt = (firstDest!.arrivalDatetime || (firstDest as any).arrival_datetime) as string | null;
                 if (arrivalDt?.includes('T')) {
                   const actualTime = arrivalDt.split('T')[1]?.substring(0, 5);
                   if (actualTime) {
