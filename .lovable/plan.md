@@ -1,36 +1,25 @@
 
 
-## Spa/Wellness Limiter — 3 Changes
+## Kill Filler/Placeholder Activities
 
 ### The Problem
-AI generates spa/wellness on 3+ consecutive days, totaling €590. No trip needs that many spa sessions.
+AI generates fake "filler" activities like "End of Day Reflection in Central Paris" with city-level addresses and nonzero prices. These are not real activities.
 
-### The Fix (2 files)
+### The Fix (2 files, inline filters)
 
-#### 1. Gather wellness history from previous days (`action-generate-trip-day.ts`, ~line 408)
-After `previousActivities` and `usedVenues` are built from `existingDays`, scan `existingDays` for wellness activities and build `previousWellnessDays: number[]`. Construct a `wellnessInstruction` string:
-- If 2+ wellness days exist → "Do NOT add any more spa/wellness"
-- If yesterday had wellness → "Yesterday had wellness, do NOT add today"  
-- Otherwise → "No spa/wellness yet" or list which days had it
+Add a **filler activity filter** immediately after the existing hallucination filter in both generation files. Same pattern — inline block, no new files.
 
-Pass `wellnessInstruction` as a new field in the `generate-day` request body (alongside `previousDayActivities`, `usedVenues`, etc.).
+#### 1. `action-generate-trip-day.ts` (~line 821, right after hallucination filter closing brace)
 
-#### 2. Inject wellness rule into AI prompt (`pipeline/compile-prompt.ts`, ~line 1060)
-Extract `wellnessInstruction` from `params`. Insert a `WELLNESS & SPA RULES` block into the user prompt near the existing dedup/venue rules section:
-```
-WELLNESS & SPA RULES:
-- Maximum 2 spa or wellness activities across the entire trip
-- NEVER put spa/wellness on two consecutive days
-- [dynamic wellnessInstruction from previous days]
-```
+Insert a new filter block:
+- **Title patterns**: Strip activities matching known filler patterns (`/end of day reflection/i`, `/rest and reflect/i`, `/evening.*reflection/i`, `/day.*reflection/i`, `/quiet.*reflection/i`, `/final.*moment/i`, etc.)
+- **Paid activities with city-only addresses**: For any activity with `price > 0` (checking `act.cost?.amount` or `act.estimatedCost?.amount`), verify the address contains a real street indicator (`/\d+\s+\w|rue|avenue|boulevard|place|quai|passage|street|road/i`). If the address is just a city name (`/^[a-z\s\-']+,?\s*(france|italy|germany|japan|spain|uk|usa)?$/i`) or is under 30 chars with no street indicator, remove it.
 
-#### 3. Post-generation enforcement (`action-generate-trip-day.ts`, ~line 789, after hallucination filter)
-After the hallucination filter block, add an inline wellness limiter using the same `existingDays` data:
-- Detect wellness via category `'wellness'` or regex `/spa|hammam|wellness|massage|hydrotherapy|rejuvenation|thermal|sauna/i` on title/description
-- If `previousWellnessDays.length >= 2` OR yesterday had wellness → filter out all wellness activities from `dayResult.activities`
-- Log removed activities
+#### 2. `action-generate-day.ts` (~line 382, right after hallucination filter closing brace)
+
+Same filter block on `normalizedActivities`.
 
 ### Files Changed
-1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — build wellness history, pass to prompt, post-generation filter
-2. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — add wellness rules block to AI prompt
+1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — add filler filter after hallucination filter
+2. `supabase/functions/generate-itinerary/action-generate-day.ts` — add same filler filter after hallucination filter
 
