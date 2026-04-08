@@ -383,17 +383,26 @@ export async function handleGenerateDay(
             return false;
           }
         }
+        // Check ALL location-related fields for fake addresses, not just address
         const rawHAddr = act.address || act.location;
-        const address = (typeof rawHAddr === 'string' ? rawHAddr : (rawHAddr && typeof rawHAddr === 'object' ? (String(rawHAddr.address || rawHAddr.name || '')) : '')).trim();
-        if (!address || address.length < 10) {
-          console.log(`[HALLUCINATION FILTER] Removed restaurant with no real address: ${name} (address: "${address}")`);
+        const addressFromRaw = (typeof rawHAddr === 'string' ? rawHAddr : (rawHAddr && typeof rawHAddr === 'object' ? (String(rawHAddr.address || rawHAddr.name || '')) : '')).trim();
+        const fieldsToCheck = [
+          addressFromRaw,
+          typeof act.location === 'object' ? (act.location?.address || '') : '',
+          typeof act.location === 'object' ? (act.location?.name || '') : '',
+          act.venue_name || '',
+        ].map((f: string) => f.trim()).filter((f: string) => f.length > 0);
+        const bestAddress = fieldsToCheck.find((f: string) => f.length >= 10) || '';
+        if (!bestAddress) {
+          console.log(`[HALLUCINATION FILTER] Removed restaurant with no real address: ${name} (fields: ${JSON.stringify(fieldsToCheck)})`);
           return false;
         }
-        for (const pattern of FAKE_ADDRESS_PATTERNS) {
-          if (pattern.test(address)) {
-            console.log(`[HALLUCINATION FILTER] Removed restaurant with placeholder address: ${name} (address: "${address}")`);
-            return false;
-          }
+        const hasHallucinatedAddress = fieldsToCheck.some((field: string) =>
+          FAKE_ADDRESS_PATTERNS.some(pattern => pattern.test(field))
+        );
+        if (hasHallucinatedAddress) {
+          console.log(`[HALLUCINATION FILTER] Removed restaurant with placeholder address: ${name} (fields: ${JSON.stringify(fieldsToCheck)})`);
+          return false;
         }
         return true;
       });

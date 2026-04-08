@@ -330,6 +330,9 @@ interface TransitEstimateResult {
   distanceMeters: number;
 }
 
+/** Max same-city transit time — catches absurd AI-hallucinated durations (e.g. 242 min within Paris) */
+const MAX_SAME_CITY_TRANSIT_MINUTES = 60;
+
 function estimateTransit(
   fromCoords: { lat: number; lng: number },
   toCoords: { lat: number; lng: number },
@@ -338,20 +341,29 @@ function estimateTransit(
   const dist = haversineDistanceMeters(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng);
   const tier = getCityTier(city);
 
+  let result: TransitEstimateResult;
   if (dist <= 1200) {
     // Walking
     const dur = Math.max(3, Math.ceil(dist / 80)); // ~5 km/h
-    return { durationMinutes: dur, method: 'walking', costAmount: 0, distanceMeters: dist };
+    result = { durationMinutes: dur, method: 'walking', costAmount: 0, distanceMeters: dist };
   } else if (dist <= 8000) {
     // Transit
     const dur = Math.max(5, Math.ceil(dist / 500) + 5);
-    return { durationMinutes: dur, method: 'transit', costAmount: Math.round(tier.transitFlat * 100) / 100, distanceMeters: dist };
+    result = { durationMinutes: dur, method: 'transit', costAmount: Math.round(tier.transitFlat * 100) / 100, distanceMeters: dist };
   } else {
     // Taxi
     const dur = Math.max(5, Math.ceil(dist / 400) + 3);
     const cost = tier.taxiBase + (dist / 1000) * tier.taxiPerKm;
-    return { durationMinutes: dur, method: 'taxi', costAmount: Math.round(cost * 100) / 100, distanceMeters: dist };
+    result = { durationMinutes: dur, method: 'taxi', costAmount: Math.round(cost * 100) / 100, distanceMeters: dist };
   }
+
+  // Cap absurd same-city transit durations
+  if (result.durationMinutes > MAX_SAME_CITY_TRANSIT_MINUTES) {
+    console.log(`[TRANSIT-SANITY] Capping ${result.durationMinutes}min transit in ${city || 'unknown city'} → ${MAX_SAME_CITY_TRANSIT_MINUTES}min (dist: ${Math.round(dist)}m)`);
+    result.durationMinutes = MAX_SAME_CITY_TRANSIT_MINUTES;
+  }
+
+  return result;
 }
 
 /** Extract coordinates from an activity (if enriched) */
