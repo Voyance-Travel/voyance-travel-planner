@@ -820,6 +820,50 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── FILLER ACTIVITY FILTER ──
+  {
+    const FILLER_TITLE_PATTERNS = [
+      /end of day reflection/i,
+      /reflection in.*district/i,
+      /central.*district.*arrival/i,
+      /rest and reflect/i,
+      /final.*moment.*reflection/i,
+      /evening.*reflection/i,
+      /day.*reflection/i,
+      /quiet.*reflection.*at/i,
+    ];
+    const STREET_INDICATOR = /\d+\s+\w|rue|avenue|boulevard|place|quai|passage|street|road|via|piazza|platz|strasse|calle/i;
+    const CITY_ONLY = /^[a-z\s\-']+,?\s*(france|italy|germany|japan|spain|uk|usa|england|portugal|greece|turkey|morocco|thailand|mexico|canada|australia)?$/i;
+
+    const beforeFiller = dayResult.activities.length;
+    dayResult.activities = dayResult.activities.filter((act: any) => {
+      const title = (act.title || '').trim();
+      const address = (act.address || act.location || '').trim();
+      const price = act.cost?.amount || act.estimatedCost?.amount || act.price || 0;
+
+      for (const pattern of FILLER_TITLE_PATTERNS) {
+        if (pattern.test(title)) {
+          console.log(`[FILLER FILTER] Removed filler activity: "${title}"`);
+          return false;
+        }
+      }
+
+      if (price > 0 && address) {
+        const hasStreet = STREET_INDICATOR.test(address);
+        const isCityOnly = CITY_ONLY.test(address);
+        if (isCityOnly || (!hasStreet && address.length < 30)) {
+          console.log(`[FILLER FILTER] Removed paid activity with no real address: "${title}" at "${address}" (price: ${price})`);
+          return false;
+        }
+      }
+
+      return true;
+    });
+    if (dayResult.activities.length < beforeFiller) {
+      console.log(`[FILLER FILTER] Day ${dayNumber}: removed ${beforeFiller - dayResult.activities.length} filler activities`);
+    }
+  }
+
   // ── WELLNESS LIMITER: post-generation enforcement ──
   if (wellnessAtLimit || yesterdayHadWellness) {
     const beforeWellness = dayResult.activities.length;
