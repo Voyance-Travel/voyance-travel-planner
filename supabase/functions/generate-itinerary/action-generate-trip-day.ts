@@ -793,12 +793,37 @@ async function _handleGenerateTripDayInner(
     : undefined;
   const savedArrTime24Hoisted = _arrTime24Raw ? _normalizeTo24h(_arrTime24Raw) : undefined;
 
+  // Multi-city fallback: pull departure time from trip_cities transport_details for last day
+  let _multiCityDepTime: string | undefined;
+  let _multiCityTransportType: string | undefined;
+  if (_isLastDay && isMultiCity) {
+    try {
+      // The "departure from destination" transport is on the NEXT city after the last (i.e., home)
+      // or the transport_details of the last city entry with departing info
+      const { data: lastCityTransport } = await supabase
+        .from('trip_cities')
+        .select('transport_type, transport_details')
+        .eq('trip_id', tripId)
+        .order('city_order', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastCityTransport) {
+        const td = lastCityTransport.transport_details as Record<string, any> | null;
+        _multiCityDepTime = td?.departureTime || td?.departure_time || undefined;
+        _multiCityTransportType = lastCityTransport.transport_type || undefined;
+      }
+    } catch (e) {
+      console.warn('[generate-trip-day] Could not load multi-city departure info:', e);
+    }
+  }
+
   const _depTime24Raw = _isLastDay
     ? (_flightSel.returnDepartureTime24
       || _flightSel.returnDepartureTime
       || _nestedRet?.departure?.time
       || _nestedRet?.departureTime
       || (Array.isArray(_flightSel.legs) && _flightSel.legs.length > 0 ? _flightSel.legs[_flightSel.legs.length - 1]?.departure?.time : undefined)
+      || _multiCityDepTime
       || undefined)
     : undefined;
   const savedDepTime24Hoisted = _depTime24Raw ? _normalizeTo24h(_depTime24Raw) : undefined;
@@ -818,6 +843,7 @@ async function _handleGenerateTripDayInner(
             return undefined;
           })()
         : undefined)
+      || _multiCityTransportType
       || undefined)
     : undefined;
 
@@ -876,17 +902,27 @@ async function _handleGenerateTripDayInner(
           return false;
         }
       }
+      // Check ALL location-related fields for fake addresses, not just address
       const rawHAddr = act.address || act.location;
-      const address = (typeof rawHAddr === 'string' ? rawHAddr : (rawHAddr && typeof rawHAddr === 'object' ? (String(rawHAddr.address || rawHAddr.name || '')) : '')).trim();
-      if (!address || address.length < 10) {
-        console.log(`[HALLUCINATION FILTER] Removed restaurant with no real address: ${name} (address: "${address}")`);
+      const addressFromRaw = (typeof rawHAddr === 'string' ? rawHAddr : (rawHAddr && typeof rawHAddr === 'object' ? (String(rawHAddr.address || rawHAddr.name || '')) : '')).trim();
+      const fieldsToCheck = [
+        addressFromRaw,
+        typeof act.location === 'object' ? (act.location?.address || '') : '',
+        typeof act.location === 'object' ? (act.location?.name || '') : '',
+        act.venue_name || '',
+      ].map((f: string) => f.trim()).filter((f: string) => f.length > 0);
+      // Require at least one non-empty field with 10+ chars
+      const bestAddress = fieldsToCheck.find((f: string) => f.length >= 10) || '';
+      if (!bestAddress) {
+        console.log(`[HALLUCINATION FILTER] Removed restaurant with no real address: ${name} (fields: ${JSON.stringify(fieldsToCheck)})`);
         return false;
       }
-      for (const pattern of FAKE_ADDRESS_PATTERNS) {
-        if (pattern.test(address)) {
-          console.log(`[HALLUCINATION FILTER] Removed restaurant with placeholder address: ${name} (address: "${address}")`);
-          return false;
-        }
+      const hasHallucinatedAddress = fieldsToCheck.some((field: string) =>
+        FAKE_ADDRESS_PATTERNS.some(pattern => pattern.test(field))
+      );
+      if (hasHallucinatedAddress) {
+        console.log(`[HALLUCINATION FILTER] Removed restaurant with placeholder address: ${name} (fields: ${JSON.stringify(fieldsToCheck)})`);
+        return false;
       }
       return true;
     });
