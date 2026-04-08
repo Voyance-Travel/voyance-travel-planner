@@ -428,7 +428,7 @@ ${dayMealPolicy.requiredMeals.includes('breakfast') ? (breakfastHotelName ? ((is
 2. TRANSIT between every pair of consecutive activities (category: "transport")
    - Include mode (${resolvedTransportModes.length > 0 ? resolvedTransportModes.join('/') : 'walk/taxi/metro/bus'}), duration, cost, route details
    - 10+ minute walks or any paid transit = separate activity entry
-3. MORNING ACTIVITIES — At least 1 paid + 1 free activity
+3. MORNING ACTIVITIES (MANDATORY 9:00 AM - 12:30 PM) — You MUST schedule at least 2 activities between breakfast and lunch. This is the MOST IMPORTANT part of the day. Examples: museum visit, landmark tour, market walk, neighborhood exploration, gallery, viewpoint, garden, historic site. A day with NO morning activities is a FAILED itinerary.
 ${dayMealPolicy.requiredMeals.includes('lunch') ? '4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips' : ''}
 5. AFTERNOON ACTIVITIES — At least 1-2 paid + 1 free activity  
 ${flightContext.hotelName ? `6. HOTEL RETURN (REQUIRED) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30 min. Every full day MUST include a hotel return between afternoon activities and dinner. This MUST be a separate activity card with dedicated time, not just a transport entry. Include a preceding transport card to get back to the hotel.` : ''}
