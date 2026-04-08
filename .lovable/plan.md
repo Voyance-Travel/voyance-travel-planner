@@ -1,25 +1,27 @@
 
 
-## Kill Filler/Placeholder Activities
+## Fix Timing Overlaps — Final Safety Net
 
 ### The Problem
-AI generates fake "filler" activities like "End of Day Reflection in Central Paris" with city-level addresses and nonzero prices. These are not real activities.
+Activities can overlap (e.g., spa 5:55–7:25 PM, dinner 7:00 PM) because the repair pipeline runs before the universal quality pass, and the quality pass can re-introduce timing conflicts without fixing them.
 
-### The Fix (2 files, inline filters)
+### Analysis
+- `action-generate-day.ts` already has an inline TIME OVERLAP FIXER (lines 520–542) that runs after the quality pass.
+- `action-generate-trip-day.ts` does NOT have this — it relies solely on `repair-day.ts` (step 13), which runs BEFORE the universal quality pass and restaurant dedup. Any timing changes made after the repair pipeline are unguarded.
 
-Add a **filler activity filter** immediately after the existing hallucination filter in both generation files. Same pattern — inline block, no new files.
+### The Fix (1 file)
 
-#### 1. `action-generate-trip-day.ts` (~line 821, right after hallucination filter closing brace)
+#### `action-generate-trip-day.ts` — Add timing overlap fixer after universal quality pass (~line 1191)
 
-Insert a new filter block:
-- **Title patterns**: Strip activities matching known filler patterns (`/end of day reflection/i`, `/rest and reflect/i`, `/evening.*reflection/i`, `/day.*reflection/i`, `/quiet.*reflection/i`, `/final.*moment/i`, etc.)
-- **Paid activities with city-only addresses**: For any activity with `price > 0` (checking `act.cost?.amount` or `act.estimatedCost?.amount`), verify the address contains a real street indicator (`/\d+\s+\w|rue|avenue|boulevard|place|quai|passage|street|road/i`). If the address is just a city name (`/^[a-z\s\-']+,?\s*(france|italy|germany|japan|spain|uk|usa)?$/i`) or is under 30 chars with no street indicator, remove it.
+Insert the same overlap repair block that `action-generate-day.ts` already uses. Place it right after the universal quality pass completes (after line 1191), before the stage logger flush:
 
-#### 2. `action-generate-day.ts` (~line 382, right after hallucination filter closing brace)
+- Sort activities by start time
+- Walk the sorted list; if activity N starts before activity N-1 ends, shift N forward to `prevEnd + 15` minutes
+- Preserve activity duration when shifting
+- Log each shift
 
-Same filter block on `normalizedActivities`.
+This mirrors the existing pattern in `action-generate-day.ts` lines 520–542 and acts as a final safety net after all other processing.
 
 ### Files Changed
-1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — add filler filter after hallucination filter
-2. `supabase/functions/generate-itinerary/action-generate-day.ts` — add same filler filter after hallucination filter
+1. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — add inline timing overlap fixer after universal quality pass
 
