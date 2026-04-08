@@ -1959,6 +1959,76 @@ async function _handleGenerateTripDayInner(
           { name: 'The Palomar', neighborhood: 'Soho', address: '34 Rupert St, London W1D 6DN' },
         ],
       },
+      'tokyo': {
+        breakfast: [
+          { name: 'Tsukiji Tamura', neighborhood: 'Tsukiji', address: '2-12-11 Tsukiji, Chuo City, Tokyo 104-0045' },
+          { name: 'Bills Omotesando', neighborhood: 'Omotesando', address: '4-6-10 Jingumae, Shibuya City, Tokyo 150-0001' },
+        ],
+        lunch: [
+          { name: 'Afuri Ramen', neighborhood: 'Ebisu', address: '1-1-7 Ebisu, Shibuya City, Tokyo 150-0013' },
+          { name: 'Tonkatsu Maisen', neighborhood: 'Omotesando', address: '4-8-5 Jingumae, Shibuya City, Tokyo 150-0001' },
+        ],
+        dinner: [
+          { name: 'Gonpachi Nishiazabu', neighborhood: 'Nishiazabu', address: '1-13-11 Nishiazabu, Minato City, Tokyo 106-0031' },
+          { name: 'Ukai Toriyama', neighborhood: 'Hachioji', address: '3426 Minami-Asakawa, Hachioji, Tokyo 193-0846' },
+        ],
+      },
+      'buenos aires': {
+        breakfast: [
+          { name: 'Cuervo Café', neighborhood: 'Palermo', address: 'Thames 1701, C1414 CABA, Argentina' },
+          { name: 'Ninina Bakery', neighborhood: 'Palermo', address: 'Gorriti 4738, C1414 CABA, Argentina' },
+        ],
+        lunch: [
+          { name: 'El Sanjuanino', neighborhood: 'Recoleta', address: 'Posadas 1515, C1112 CABA, Argentina' },
+          { name: 'Don Julio', neighborhood: 'Palermo', address: 'Guatemala 4699, C1425 CABA, Argentina' },
+        ],
+        dinner: [
+          { name: 'Proper', neighborhood: 'Palermo', address: 'Av. Dorrego 1940, C1414 CABA, Argentina' },
+          { name: 'Paraje Arévalo', neighborhood: 'Palermo', address: 'Arévalo 1496, C1414 CABA, Argentina' },
+        ],
+      },
+      'marrakech': {
+        breakfast: [
+          { name: 'Café des Épices', neighborhood: 'Medina', address: '75 Rahba Lakdima, Marrakech 40000, Morocco' },
+          { name: 'NOMAD', neighborhood: 'Medina', address: '1 Derb Aarjane, Marrakech 40000, Morocco' },
+        ],
+        lunch: [
+          { name: 'Le Jardin', neighborhood: 'Medina', address: '32 Souk Sidi Abdelaziz, Marrakech 40000, Morocco' },
+          { name: 'Dar Zellij', neighborhood: 'Medina', address: '1 Kaasour Sidi Ben Slimane, Marrakech 40000, Morocco' },
+        ],
+        dinner: [
+          { name: 'Al Fassia', neighborhood: 'Guéliz', address: '55 Bd Mohammed Zerktouni, Marrakech 40000, Morocco' },
+          { name: 'La Mamounia Le Marocain', neighborhood: 'Medina', address: 'Avenue Bab Jdid, Marrakech 40040, Morocco' },
+        ],
+      },
+      'bangkok': {
+        breakfast: [
+          { name: 'Roast Coffee', neighborhood: 'Thonglor', address: 'The Commons, 335 Soi Thonglor 17, Bangkok 10110' },
+          { name: 'Broccoli Revolution', neighborhood: 'Sukhumvit', address: '899 Sukhumvit Rd, Bangkok 10110' },
+        ],
+        lunch: [
+          { name: 'Jay Fai', neighborhood: 'Old Town', address: '327 Maha Chai Rd, Bangkok 10200' },
+          { name: 'Supanniga Eating Room', neighborhood: 'Thonglor', address: '160/11 Soi Sukhumvit 55, Bangkok 10110' },
+        ],
+        dinner: [
+          { name: 'Bo.lan', neighborhood: 'Sukhumvit', address: '24 Soi Sukhumvit 53, Bangkok 10110' },
+          { name: 'Gaggan Anand', neighborhood: 'Lumpini', address: '68/1 Soi Langsuan, Bangkok 10330' },
+        ],
+      },
+      'amsterdam': {
+        breakfast: [
+          { name: 'Bakers & Roasters', neighborhood: 'De Pijp', address: 'Eerste Jacob van Campenstraat 54, 1072 BD Amsterdam' },
+          { name: 'The Breakfast Club', neighborhood: 'De Pijp', address: 'Bellamystraat 2, 1053 BG Amsterdam' },
+        ],
+        lunch: [
+          { name: 'Foodhallen', neighborhood: 'Oud-West', address: 'Bellamyplein 51, 1053 AT Amsterdam' },
+          { name: 'Pluk', neighborhood: 'Nine Streets', address: 'Reestraat 19, 1016 DL Amsterdam' },
+        ],
+        dinner: [
+          { name: 'Restaurant Bak', neighborhood: 'Noord', address: 'Van Diemenstraat 408, 1013 CR Amsterdam' },
+          { name: 'Rijks', neighborhood: 'Museumkwartier', address: 'Museumstraat 2, 1071 XX Amsterdam' },
+        ],
+      },
     };
 
     // Detect meal type from title
