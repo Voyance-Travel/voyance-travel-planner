@@ -979,7 +979,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       if (title.includes('dinner') && (cat.includes('dining') || cat.includes('food') || cat.includes('restaurant'))) {
         dinnerIdx = i;
       }
-      if (NIGHTCAP_KW.test(activities[i].title || '')) {
+      if (NIGHTCAP_KW.test(activities[i].title || '') || cat === 'nightlife' || cat === 'bar') {
         nightcapIdx = i;
       }
     }
