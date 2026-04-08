@@ -86,8 +86,8 @@ export async function universalQualityPass(
 
   // ── Step 2: Departure timing (last day only) ──
   if (dayIndex === totalDays - 1 && departureTime) {
-    result = enforceDepartureTiming(result, departureTime);
-    console.log(`[QUALITY] After departure filter: ${result.length} activities`);
+    result = enforceDepartureTiming(result, departureTime, departureTransportType);
+    console.log(`[QUALITY] After departure filter: ${result.length} activities (transport: ${departureTransportType || 'flight'})`);
   }
 
   // ── Step 3: Cross-day venue dedup (before placeholder fixing — no point fixing a dupe) ──
