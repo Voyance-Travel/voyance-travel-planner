@@ -1395,6 +1395,7 @@ async function _handleGenerateTripDayInner(
       terminalCleanup(updatedDays[i].activities, {
         arrivalTime24: isFirstDayLoop ? savedArrivalTime24 : undefined,
         departureTime24: isLastDayLoop ? savedDepartureTime24 : undefined,
+        departureTransportType: isLastDayLoop ? departureTransportType : undefined,
         city: d.city || cityInfo?.cityName || destination,
         dayNumber: dn,
         isFirstDay: isFirstDayLoop,
