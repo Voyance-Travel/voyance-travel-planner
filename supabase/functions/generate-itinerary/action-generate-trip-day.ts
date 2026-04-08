@@ -854,6 +854,9 @@ async function _handleGenerateTripDayInner(
       /the destination/i, /your destination/i, /the city/i,
       /the restaurant/i, /the venue/i, /city center/i, /downtown/i,
       /^[a-z\s'-]+,?\s*[a-z\s'-]*$/i,
+      /^tokyo$/i, /^barcelona$/i, /^amsterdam$/i, /^lisbon$/i, /^bangkok$/i,
+      /^marrakech$/i, /^buenos aires$/i, /^new york$/i, /^dubai$/i, /^sydney$/i,
+      /^[a-z\s]+,?\s*(morocco|portugal|thailand|netherlands|argentina|australia|brazil|mexico|turkey|greece|croatia|czech republic|austria|hungary|poland|ireland|scotland|switzerland|belgium|norway|sweden|denmark|egypt|india|south korea|vietnam|colombia|peru|chile|south africa|kenya|singapore|malaysia|indonesia|philippines|new zealand|canada|united states|usa)$/i,
     ];
     const beforeFilter = dayResult.activities.length;
     dayResult.activities = dayResult.activities.filter((act: any) => {
