@@ -1061,6 +1061,16 @@ ${additionalNotesPrompt}
 ${mustHavesConstraintPrompt}
 ${preBookedCommitmentsPrompt}
 ${(() => {
+  const wi = params.wellnessInstruction;
+  if (!wi) return '';
+  return `
+WELLNESS & SPA RULES:
+- Maximum 2 spa or wellness activities across the ENTIRE trip
+- NEVER put spa/wellness on two consecutive days
+- ${wi}
+`;
+})()}
+${(() => {
   if (!previousDayActivities?.length) return '';
   const mustDoList = (paramMustDoActivities || '').split(',').map((s: string) => s.trim()).filter(Boolean);
   const recurring: string[] = [];

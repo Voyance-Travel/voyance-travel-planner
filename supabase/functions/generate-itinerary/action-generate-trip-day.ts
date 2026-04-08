@@ -820,6 +820,21 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── WELLNESS LIMITER: post-generation enforcement ──
+  if (wellnessAtLimit || yesterdayHadWellness) {
+    const beforeWellness = dayResult.activities.length;
+    dayResult.activities = dayResult.activities.filter((a: any) => {
+      if (isWellnessActivity(a)) {
+        console.log(`[WELLNESS LIMITER] Removed "${a.title}" — ${wellnessAtLimit ? 'trip limit (2) reached' : 'consecutive day with yesterday'}`);
+        return false;
+      }
+      return true;
+    });
+    if (dayResult.activities.length < beforeWellness) {
+      console.log(`[WELLNESS LIMITER] Day ${dayNumber}: removed ${beforeWellness - dayResult.activities.length} wellness activities`);
+    }
+  }
+
   // ── POST-PROCESSING: sanitize, strip phantoms, fix forward refs, clean generic titles ──
   {
     const preSanitizeCount = Array.isArray(dayResult?.activities) ? dayResult.activities.length : 0;
