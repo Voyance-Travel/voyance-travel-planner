@@ -333,6 +333,19 @@ interface TransitEstimateResult {
 /** Max same-city transit time — catches absurd AI-hallucinated durations (e.g. 242 min within Paris) */
 const MAX_SAME_CITY_TRANSIT_MINUTES = 60;
 
+/**
+ * City walking factor: haversine gives straight-line distance, but real city
+ * walking is 1.3–1.6× longer due to street grids, bridges, crossings, etc.
+ * 1.4 is a conservative average validated against Paris, Tokyo, NYC.
+ */
+const CITY_WALK_FACTOR = 1.4;
+
+/**
+ * Max comfortable haversine distance for walking (~800m straight-line ≈ 1.1km actual ≈ 14 min).
+ * Beyond this, suggest public transit instead.
+ */
+const MAX_COMFORTABLE_WALK_METERS = 800;
+
 function estimateTransit(
   fromCoords: { lat: number; lng: number },
   toCoords: { lat: number; lng: number },
@@ -340,18 +353,19 @@ function estimateTransit(
 ): TransitEstimateResult {
   const dist = haversineDistanceMeters(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng);
   const tier = getCityTier(city);
+  const adjustedDist = dist * CITY_WALK_FACTOR;
 
   let result: TransitEstimateResult;
-  if (dist <= 1200) {
-    // Walking
-    const dur = Math.max(3, Math.ceil(dist / 80)); // ~5 km/h
+  if (dist <= MAX_COMFORTABLE_WALK_METERS) {
+    // Walking — use adjusted distance for realistic duration
+    const dur = Math.max(3, Math.ceil(adjustedDist / 80)); // ~5 km/h on adjusted distance
     result = { durationMinutes: dur, method: 'walking', costAmount: 0, distanceMeters: dist };
   } else if (dist <= 8000) {
-    // Transit
-    const dur = Math.max(5, Math.ceil(dist / 500) + 5);
+    // Public transit — adjusted distance accounts for routing overhead
+    const dur = Math.max(8, Math.ceil(adjustedDist / 500) + 5);
     result = { durationMinutes: dur, method: 'transit', costAmount: Math.round(tier.transitFlat * 100) / 100, distanceMeters: dist };
   } else {
-    // Taxi
+    // Taxi — raw distance is acceptable (road routing closer to straight-line at scale)
     const dur = Math.max(5, Math.ceil(dist / 400) + 3);
     const cost = tier.taxiBase + (dist / 1000) * tier.taxiPerKm;
     result = { durationMinutes: dur, method: 'taxi', costAmount: Math.round(cost * 100) / 100, distanceMeters: dist };
@@ -371,6 +385,55 @@ function getActivityCoords(act: any): { lat: number; lng: number } | null {
   const c = act?.location?.coordinates;
   if (c && typeof c.lat === 'number' && typeof c.lng === 'number') return c;
   return null;
+}
+
+// =============================================================================
+// TRANSIT LABEL GENERATION
+// =============================================================================
+
+/** Generate a mode-aware transit label from the actual next activity */
+function generateTransitLabel(nextActivity: any, mode: string): string {
+  const destination = nextActivity?.location?.name
+    || nextActivity?.venue_name
+    || sanitizeTransitDestination(nextActivity?.title || '')
+    || 'next venue';
+
+  switch (mode) {
+    case 'walking':
+      return `Walk to ${destination}`;
+    case 'taxi':
+      return `Taxi to ${destination}`;
+    default:
+      return `Travel to ${destination}`;
+  }
+}
+
+// =============================================================================
+// MISSING-COORDINATE FALLBACK
+// =============================================================================
+
+/** Extract a 5-digit postal code from an address string */
+function extractPostalCode(address: string): string | null {
+  const match = address.match(/\b(\d{5})\b/);
+  return match ? match[1] : null;
+}
+
+/** Estimate transit minutes when coordinates are missing */
+function getDefaultTransitMinutes(fromActivity: any, toActivity: any): number {
+  // Same venue → minimal transfer
+  const fromName = (fromActivity?.location?.name || '').toLowerCase().trim();
+  const toName = (toActivity?.location?.name || '').toLowerCase().trim();
+  if (fromName && toName && fromName === toName) return 3;
+
+  // Same postal code → same area
+  const fromAddr = fromActivity?.location?.address || fromActivity?.address || '';
+  const toAddr = toActivity?.location?.address || toActivity?.address || '';
+  const fromZip = extractPostalCode(fromAddr);
+  const toZip = extractPostalCode(toAddr);
+  if (fromZip && toZip && fromZip === toZip) return 10;
+
+  // Default: assume moderate city transit
+  return 15;
 }
 
 export interface RepairDayResult {
@@ -2108,7 +2171,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const et = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
         postDedup.push({
           id: `transport-postdedup-${i}-${Date.now()}`,
-          title: `Travel to ${next.location?.name || sanitizeTransitDestination(next.title || '') || 'next venue'}`,
+          title: generateTransitLabel(next, method),
           description: `From ${curr.location?.name || curr.title || 'previous venue'} to ${next.location?.name || sanitizeTransitDestination(next.title || '') || 'next venue'}`,
           category: 'transport',
           startTime: st,
@@ -2586,7 +2649,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       if (transportDest && nextLoc && !isSameOrContainedLocation(transportDest, nextLoc, hotelName)) {
         const fromName = prevReal?.location?.name || prevReal?.title || 'previous location';
         const toName = nextReal.location?.name || sanitizeTransitDestination(nextReal.title || '');
-        transport.title = `Travel to ${toName}`;
+        const method = transport.transportation?.method || 'transit';
+        transport.title = generateTransitLabel(nextReal, method);
         transport.description = `Transit from ${fromName} to ${toName}.`;
         transport.location = { name: toName, address: nextReal.location?.address || '' };
         transport.fromLocation = { name: fromName, address: prevReal?.location?.address || '' };
@@ -2923,11 +2987,19 @@ function repairBookends(
       dur = est.durationMinutes;
       method = est.method;
       costAmount = est.costAmount;
+    } else {
+      // Fallback when coordinates are missing
+      dur = getDefaultTransitMinutes(fromAct, toAct);
+      method = dur <= 10 ? 'walking' : 'transit';
+      console.log(`[TRANSIT-FALLBACK] No coords for "${from}" → "${to}", using ${dur}min default`);
     }
+
+    // Use mode-aware label derived from actual destination activity
+    const label = toAct ? generateTransitLabel(toAct, method) : `Travel to ${to}`;
 
     return {
       id: `transport-gap-${dayNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      title: `Travel to ${to}`, category: 'transport',
+      title: label, category: 'transport',
       description: `Transit from ${from} to ${to}.`,
       startTime: st, endTime: offset(st, dur), durationMinutes: dur,
       location: { name: to, address: '' },
@@ -3155,7 +3227,8 @@ function repairBookends(
       const toName = nextNonTransport.location?.name || sanitizeTransitDestination(nextNonTransport.title || '');
       const oldTitle = transport.title;
 
-      transport.title = `Travel to ${toName}`;
+      const transportMethod = transport.transportation?.method || 'transit';
+      transport.title = generateTransitLabel(nextNonTransport, transportMethod);
       transport.description = `Transit from ${fromName} to ${toName}.`;
       transport.location = { name: toName, address: '' };
       transport.fromLocation = { name: fromName, address: '' };

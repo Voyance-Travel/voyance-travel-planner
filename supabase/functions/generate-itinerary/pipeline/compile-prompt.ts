@@ -861,6 +861,14 @@ General Requirements:
   • Free activities: basis = "flat", amount = 0.
   This ensures the UI can calculate accurate group totals: per_person costs × travelers, flat costs as-is.
 - Account for REALISTIC travel time between activities — if two places are in different neighborhoods, leave 30-60 min gap (not 15 min). Only use 15 min gaps for locations within walking distance. Travel time and rest/settling buffers are SEPARATE — add both.
+TRANSIT TIME ESTIMATION GUIDE (use these as minimums, not maximums):
+- Same building/venue: 3-5 min
+- Same block/street (under 200m): 5-7 min
+- Same neighborhood (200m-800m): 8-15 min walk
+- Adjacent neighborhoods (800m-2km): 15-25 min (suggest metro/transit)
+- Cross-city (2km+): 20-40 min (metro/taxi required)
+- To/from airport: 45-90 min depending on city
+NEVER output "5 min walk" between locations in different neighborhoods or arrondissements. If unsure of the distance, estimate 15 min as a safe default for same-city travel.
 - NEVER schedule zero-gap transitions. Every activity needs settling/buffer time ON TOP of travel: +5 min after walking, +10 min for taxi pickup/dropoff, +10 min for restaurant seating, +15 min for hotel check-in, +10 min for museum entry (ticket queue, bag check). Show this naturally: "Arrive ~6:30 PM. Check in, freshen up. Ready by 7:30 PM."
 - Include TRANSIT between every pair of consecutive activities as separate entries with category "transport" (mode, duration, cost, route/line info). Walks under 5 min can be noted in tips instead.
 - TRANSPORT PRICING — BE SPECIFIC BY MODE:
@@ -1260,6 +1268,8 @@ CRITICAL REMINDERS:
 8. For BREAKFAST specifically: NEVER repeat the same breakfast venue on consecutive days. ${destination || 'This destination'} has hundreds of excellent breakfast spots — there is NO reason to repeat any restaurant. If you find yourself choosing a restaurant from the blocklist above, STOP and pick a completely different one.
 9. ACTIVITY COUNT CHECK: Every day must have minimum 3 paid activities + 2 free activities. If your output has fewer, you are under-generating. Add more.
 10. MORNING GAP CHECK: If there is nothing between breakfast (8-9am) and lunch (12-1pm), you left a 3-hour gap. Fill it with at least 1 paid activity + 1 free activity.
+11. TRANSIT REALITY CHECK: Do NOT use "5 min walk" as a default. Actually think about the distance between locations. Different arrondissements/neighborhoods = minimum 10-15 min. Same street/block = 3-5 min. Cross-city = 20-30 min.
+12. TRANSIT LABELS: The transit activity title MUST name the NEXT activity's venue. "Travel to [next venue name]" or "Walk to [next venue name]". Never use a venue name that isn't the immediate next stop.
 
 ${'='.repeat(70)}
 🧠 VOYANCE INTELLIGENCE FIELDS — MANDATORY FOR EVERY ACTIVITY
