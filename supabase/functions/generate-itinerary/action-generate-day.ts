@@ -1300,6 +1300,24 @@ export async function handleGenerateDay(
         });
         normalizedActivities = generatedDay.activities;
       }
+
+      // ── POST-GUARD CLEANUP: Strip dining with placeholder addresses ──
+      normalizedActivities = normalizedActivities.filter((activity: any) => {
+        if (activity.category !== 'dining') return true;
+        const address = (activity.location?.address || activity.address || '').trim().toLowerCase();
+        if (
+          address === 'the destination' ||
+          address === 'your destination' ||
+          address === 'the city' ||
+          address === '' ||
+          address.length < 8
+        ) {
+          console.log(`[CLEANUP] Removed dining with placeholder address: "${activity.title}" (address: "${address}")`);
+          return false;
+        }
+        return true;
+      });
+      generatedDay.activities = normalizedActivities;
     }
 
     // End post-processing phase and write progress

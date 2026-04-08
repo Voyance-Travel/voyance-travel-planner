@@ -986,7 +986,7 @@ export function enforceRequiredMealsFinalGuard(
 
     // TRY 1: Use a real venue from fallbackVenues
     let venueName: string | null = null;
-    let venueAddress: string = destination;
+    let venueAddress: string = '';
     let venueDescription: string = '';
     let usedRealVenue = false;
 
