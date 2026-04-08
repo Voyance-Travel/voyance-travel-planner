@@ -333,6 +333,19 @@ interface TransitEstimateResult {
 /** Max same-city transit time — catches absurd AI-hallucinated durations (e.g. 242 min within Paris) */
 const MAX_SAME_CITY_TRANSIT_MINUTES = 60;
 
+/**
+ * City walking factor: haversine gives straight-line distance, but real city
+ * walking is 1.3–1.6× longer due to street grids, bridges, crossings, etc.
+ * 1.4 is a conservative average validated against Paris, Tokyo, NYC.
+ */
+const CITY_WALK_FACTOR = 1.4;
+
+/**
+ * Max comfortable haversine distance for walking (~800m straight-line ≈ 1.1km actual ≈ 14 min).
+ * Beyond this, suggest public transit instead.
+ */
+const MAX_COMFORTABLE_WALK_METERS = 800;
+
 function estimateTransit(
   fromCoords: { lat: number; lng: number },
   toCoords: { lat: number; lng: number },
@@ -340,18 +353,19 @@ function estimateTransit(
 ): TransitEstimateResult {
   const dist = haversineDistanceMeters(fromCoords.lat, fromCoords.lng, toCoords.lat, toCoords.lng);
   const tier = getCityTier(city);
+  const adjustedDist = dist * CITY_WALK_FACTOR;
 
   let result: TransitEstimateResult;
-  if (dist <= 1200) {
-    // Walking
-    const dur = Math.max(3, Math.ceil(dist / 80)); // ~5 km/h
+  if (dist <= MAX_COMFORTABLE_WALK_METERS) {
+    // Walking — use adjusted distance for realistic duration
+    const dur = Math.max(3, Math.ceil(adjustedDist / 80)); // ~5 km/h on adjusted distance
     result = { durationMinutes: dur, method: 'walking', costAmount: 0, distanceMeters: dist };
   } else if (dist <= 8000) {
-    // Transit
-    const dur = Math.max(5, Math.ceil(dist / 500) + 5);
+    // Public transit — adjusted distance accounts for routing overhead
+    const dur = Math.max(8, Math.ceil(adjustedDist / 500) + 5);
     result = { durationMinutes: dur, method: 'transit', costAmount: Math.round(tier.transitFlat * 100) / 100, distanceMeters: dist };
   } else {
-    // Taxi
+    // Taxi — raw distance is acceptable (road routing closer to straight-line at scale)
     const dur = Math.max(5, Math.ceil(dist / 400) + 3);
     const cost = tier.taxiBase + (dist / 1000) * tier.taxiPerKm;
     result = { durationMinutes: dur, method: 'taxi', costAmount: Math.round(cost * 100) / 100, distanceMeters: dist };
