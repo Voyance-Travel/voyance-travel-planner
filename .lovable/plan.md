@@ -1,26 +1,33 @@
 
 
-## Kill Hallucinated Restaurants
+## Departure Day Timing: Transport-Aware Buffer
 
-### Root Cause
+### The Problem
 
-"Trattoria del Corso" and "Café Lumière" aren't AI hallucinations — they're **hardcoded fallback templates** in `fix-placeholders.ts` (lines 269-297). The `GENERIC_VENUE_TEMPLATES` pool is used when the nuclear sweep can't find a real replacement. These fake names get injected with no real address, then survive all downstream guards.
+`enforceDepartureTiming()` in `flight-hotel-context.ts` hardcodes a 3-hour buffer (`departureMins - 180`) for all departure types. For a train departing at 12:43, this means nothing after 09:43 — but lunch was still injected at 12:30 because somewhere `depTime24` wasn't propagated, or the meal guard re-injected it afterward (same pattern as the breakfast-before-flight bug we just fixed).
 
-### Fix (3 changes, 2 files)
+The existing `enforceDepartureTiming` is called from `universalQualityPass` (Step 2) and should already catch this. Two possible failure modes: (a) `depTime24` is `undefined` because train departures aren't stored in `flight_selection` the same way flights are, or (b) the meal guard runs AFTER the quality pass and re-injects lunch (the same bug we just fixed for breakfast).
 
-#### 1. Remove fake names from GENERIC_VENUE_TEMPLATES (fix-placeholders.ts)
-Replace the entire template pool with names that are obviously generic/descriptive rather than plausible-sounding fake restaurant names. Use format like "Local Breakfast Café", "Neighborhood Lunch Spot", "Evening Restaurant" — names that clearly signal "placeholder" so the AI or user knows to replace them, OR better yet, remove the template pool entirely and have the nuclear sweep use a structured format like `"[Meal] at a Local [Cuisine] Restaurant"` which is already handled by downstream placeholder detection.
+### The Fix (2 files)
 
-#### 2. Add hallucination filter after AI parse in action-generate-trip-day.ts (~line 748)
-Insert the user's filter code right after `dayResult` is set and before sanitization (line 746). This catches AI-generated fakes before any other processing:
-- Block known fake names (trattoria del corso, café lumière, etc.)
-- Block dining with missing/fake addresses (< 10 chars, "the destination", bare city names)
+#### 1. Make `enforceDepartureTiming` transport-aware (flight-hotel-context.ts)
+Add an optional `transportType` parameter. Use 120 min buffer for trains, 180 min for flights (default).
 
-#### 3. Add same filter in action-generate-day.ts (~line 287)
-Insert after `normalizedActivities` is created from `generatedDay.activities.map(...)`, before the quality pass.
+```
+enforceDepartureTiming(activities, departureTime24, transportType?: string)
+  → buffer = transportType includes 'train' ? 120 : 180
+```
+
+#### 2. Pass transport type through the quality pass (action-generate-trip-day.ts + universal-quality-pass.ts)
+- Extract the departure transport type from `flight_selection` (check `flightSel.return?.type`, `flightSel.returnTransportType`, or infer from title/category of departure activities)
+- Add `departureTransportType?: string` to the quality pass options
+- Forward it to `enforceDepartureTiming`
+
+#### 3. Ensure meal guard respects departure buffer (already partially fixed)
+In the previous fix, we passed `latestTimeMins` to the meal guard. Verify that `latestTimeMins` is computed from `depTime24 - buffer` and that the buffer accounts for train vs flight. If the meal guard's `latestTimeMins` doesn't match the departure filter, lunch can still be injected after the cutoff.
 
 ### Files Changed
-1. `supabase/functions/generate-itinerary/fix-placeholders.ts` — remove fake restaurant names from GENERIC_VENUE_TEMPLATES, replace with clearly-labeled generic format
-2. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — add inline hallucination filter after AI parse
-3. `supabase/functions/generate-itinerary/action-generate-day.ts` — add same inline hallucination filter after normalization
+1. `supabase/functions/generate-itinerary/flight-hotel-context.ts` — make `enforceDepartureTiming` accept transport type, use 2h buffer for trains
+2. `supabase/functions/generate-itinerary/universal-quality-pass.ts` — pass `departureTransportType` to `enforceDepartureTiming`
+3. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — extract and forward departure transport type from `flight_selection`
 
