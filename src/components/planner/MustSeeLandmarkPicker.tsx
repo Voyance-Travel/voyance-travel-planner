@@ -63,11 +63,11 @@ export function MustSeeLandmarkPicker({
   }, [cities.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleLandmark = (name: string) => {
-    onSelectedLandmarksChange(
-      selectedLandmarks.includes(name)
-        ? selectedLandmarks.filter(l => l !== name)
-        : [...selectedLandmarks, name]
-    );
+    const isCurrentlySelected = selectedLandmarks.includes(name);
+    const updated = isCurrentlySelected
+      ? selectedLandmarks.filter(l => l !== name)
+      : [...selectedLandmarks, name];
+    onSelectedLandmarksChange(updated);
   };
 
   const addCustomItem = () => {
