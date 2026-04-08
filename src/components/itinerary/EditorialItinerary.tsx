@@ -9757,21 +9757,34 @@ function DayCard({
                   if (isInterCityTransport && travelMeta) {
                     if (isCleanPreview) return null;
 
-                    const TransportIcon = travelMeta.transportName?.toLowerCase() === 'flight' ? Plane
-                      : travelMeta.transportName?.toLowerCase() === 'train' ? Train
-                      : travelMeta.transportName?.toLowerCase() === 'bus' ? Bus
-                      : travelMeta.transportName?.toLowerCase() === 'ferry' ? Ship
-                      : Car;
-
                     const isFinalDeparture = !!(activityToRender as any).__syntheticFinalDeparture;
                     return (
-                      <InterCityTransportCard
-                        key={activityToRender.id}
-                        title={activityToRender.title || ''}
-                        travelMeta={travelMeta}
-                        variant={isFinalDeparture ? 'final' : 'default'}
-                        className="mx-3 sm:mx-4 sm:pl-[12rem] my-1"
-                      />
+                      <div key={activityToRender.id} className="transition-all duration-300">
+                        {/* Mobile: Card wrapper with timeline */}
+                        <div className="sm:hidden relative py-2 pl-7 pr-2">
+                          {/* Timeline line */}
+                          <div className={cn(
+                            "absolute left-3 top-0 bottom-0 w-0.5 bg-primary/15",
+                            activityIndex === 0 && "top-5",
+                            isLastActivity && "bottom-5"
+                          )} />
+                          {/* Timeline dot */}
+                          <div className="absolute left-[7px] top-5 w-3 h-3 rounded-full border-2 border-primary bg-background z-10 shadow-sm" />
+                          <InterCityTransportCard
+                            title={activityToRender.title || ''}
+                            travelMeta={travelMeta}
+                            variant={isFinalDeparture ? 'final' : 'default'}
+                          />
+                        </div>
+                        {/* Desktop: flat layout matching activity rows */}
+                        <div className="hidden sm:block">
+                          <InterCityTransportCard
+                            title={activityToRender.title || ''}
+                            travelMeta={travelMeta}
+                            variant={isFinalDeparture ? 'final' : 'default'}
+                          />
+                        </div>
+                      </div>
                     );
                   }
 
