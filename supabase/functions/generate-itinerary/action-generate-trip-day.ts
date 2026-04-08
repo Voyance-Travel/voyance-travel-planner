@@ -882,7 +882,65 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // ── POST-PROCESSING: sanitize, strip phantoms, fix forward refs, clean generic titles ──
+  // ── DEPARTURE DAY CUTOFF — remove activities too close to departure ──
+  if (_isLastDay && savedDepTime24Hoisted && Array.isArray(dayResult?.activities)) {
+    const depMatch = savedDepTime24Hoisted.match(/(\d{1,2}):(\d{2})/);
+    if (depMatch) {
+      const depMinutes = parseInt(depMatch[1]) * 60 + parseInt(depMatch[2]);
+      const transportType = (departureTransportType || 'flight').toLowerCase();
+      const bufferMin = transportType.includes('train') ? 120 : 180;
+      const cutoff = depMinutes - bufferMin;
+      const beforeDep = dayResult.activities.length;
+      dayResult.activities = dayResult.activities.filter((act: any) => {
+        const title = (act.title || '').toLowerCase();
+        if (title.includes('checkout') || title.includes('check-out') || title.includes('heading home') || title.includes('departure') || title.includes('transfer to') || title.includes('airport') || title.includes('station')) {
+          return true;
+        }
+        const startMatch = (act.startTime || '').match(/(\d{1,2}):(\d{2})/);
+        if (!startMatch) return true;
+        const startMin = parseInt(startMatch[1]) * 60 + parseInt(startMatch[2]);
+        if (startMin >= cutoff) {
+          console.log(`[DEPARTURE CUTOFF] Removed activity too close to departure: "${act.title}" at ${act.startTime} (cutoff: ${Math.floor(cutoff/60)}:${String(cutoff%60).padStart(2,'0')})`);
+          return false;
+        }
+        return true;
+      });
+      if (dayResult.activities.length < beforeDep) {
+        console.log(`[DEPARTURE CUTOFF] Day ${dayNumber}: removed ${beforeDep - dayResult.activities.length} activities after cutoff`);
+      }
+    }
+  }
+
+  // ── CROSS-DAY VENUE DEDUP SAFETY NET — remove non-dining activities that repeat a previous day's venue ──
+  if (usedVenues.length > 0 && Array.isArray(dayResult?.activities)) {
+    const normalizeVenue = (s: string) => s.toLowerCase().replace(/[''`]/g, "'").replace(/\s+/g, ' ').trim();
+    const prevVenuesNorm = usedVenues.map(normalizeVenue);
+    const beforeVenueDedup = dayResult.activities.length;
+    dayResult.activities = dayResult.activities.filter((act: any) => {
+      const cat = (act.category || '').toLowerCase();
+      if (cat === 'dining' || cat === 'restaurant' || cat === 'food') return true; // dining has its own dedup
+      if (cat === 'accommodation' || cat === 'transport' || cat === 'logistics') return true;
+      const vName = normalizeVenue(act.venueName || act.title || '');
+      const locName = normalizeVenue(
+        typeof act.location === 'object' ? (act.location?.name || '') : ''
+      );
+      const isDuplicate = prevVenuesNorm.some(prev => {
+        if (prev.length < 4) return false;
+        return vName.includes(prev) || prev.includes(vName) ||
+               (locName && (locName.includes(prev) || prev.includes(locName)));
+      });
+      if (isDuplicate) {
+        console.log(`[VENUE DEDUP FILTER] Removed cross-day duplicate: "${act.title}" (already visited on a previous day)`);
+        return false;
+      }
+      return true;
+    });
+    if (dayResult.activities.length < beforeVenueDedup) {
+      console.log(`[VENUE DEDUP FILTER] Day ${dayNumber}: removed ${beforeVenueDedup - dayResult.activities.length} cross-day duplicate venues`);
+    }
+  }
+
+
   {
     const preSanitizeCount = Array.isArray(dayResult?.activities) ? dayResult.activities.length : 0;
     console.log(`[generate-trip-day] Day ${dayNumber} pre-sanitize activity count: ${preSanitizeCount}`);
