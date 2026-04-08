@@ -1318,6 +1318,34 @@ export async function handleGenerateDay(
         return true;
       });
       generatedDay.activities = normalizedActivities;
+
+      // ── POST-GUARD CLEANUP: Remove activities too close to departure on last day ──
+      if (isLastDay && _departureTime24) {
+        const depMatch = _departureTime24.match(/(\d{1,2}):(\d{2})/);
+        if (depMatch) {
+          const depMinutes = parseInt(depMatch[1]) * 60 + parseInt(depMatch[2]);
+          const _isTrainDep = _departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(_departureTransportType);
+          const bufferMin = _isTrainDep ? 120 : 180;
+          const cutoff = depMinutes - bufferMin;
+
+          normalizedActivities = normalizedActivities.filter((activity: any) => {
+            const title = (activity.title || '').toLowerCase();
+            if (title.includes('checkout') || title.includes('check-out') || title.includes('heading home') || title.includes('departure') || title.includes('transfer to') || title.includes('travel to')) {
+              return true;
+            }
+            const startTime = activity.startTime || activity.start_time || '';
+            const startMatch = startTime.match(/(\d{1,2}):(\d{2})/);
+            if (!startMatch) return true;
+            const startMin = parseInt(startMatch[1]) * 60 + parseInt(startMatch[2]);
+            if (startMin >= cutoff) {
+              console.log(`[CLEANUP] Removed activity too close to departure: "${activity.title}" at ${startTime} (cutoff: ${Math.floor(cutoff/60)}:${String(cutoff%60).padStart(2,'0')})`);
+              return false;
+            }
+            return true;
+          });
+          generatedDay.activities = normalizedActivities;
+        }
+      }
     }
 
     // End post-processing phase and write progress
