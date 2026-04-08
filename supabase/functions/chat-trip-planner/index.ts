@@ -472,6 +472,24 @@ serve(async (req) => {
                         required: ["name", "nights"],
                       },
                     },
+                    perDayActivities: {
+                      type: "array",
+                      description: "When the user provides a day-by-day plan, extract activities organized BY DAY. Each entry represents one day's scheduled activities in order. Use this INSTEAD OF (in addition to) mustDoActivities when the user provides day-level structure like 'Day 1: breakfast, pool... Day 2: transfer, dinner at X'. This preserves which activities belong to which day.",
+                      items: {
+                        type: "object",
+                        properties: {
+                          dayNumber: {
+                            type: "number",
+                            description: "Which day of the trip (1, 2, 3, etc.)"
+                          },
+                          activities: {
+                            type: "string",
+                            description: "Comma-separated list of that day's activities with times. Example: '6:30AM Breakfast, 9AM-11:30AM Company Visit, 11:30AM-1PM Lunch, 1:30PM-3:30PM Volunteering, 7PM-10PM Dinner at Jnane Tamsna'"
+                          }
+                        },
+                        required: ["dayNumber", "activities"]
+                      },
+                    },
                   },
                   required: ["destination", "startDate", "endDate", "travelers", "cities"],
                 },
