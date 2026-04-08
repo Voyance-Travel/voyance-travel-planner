@@ -227,8 +227,54 @@ export async function universalQualityPass(
     }
   }
 
+  // ── Step 10: Timing Overlap Resolution ──
+  // Iterate chronologically; if activity N starts before N-1 ends, shift N forward
+  {
+    // Sort by startTime first
+    result.sort((a: any, b: any) => {
+      const ta = parseTimeMins(a.startTime || a.start_time || '') ?? 99999;
+      const tb = parseTimeMins(b.startTime || b.start_time || '') ?? 99999;
+      return ta - tb;
+    });
+
+    const TRAVEL_BUFFER = 15; // 15 minutes between activities
+    let overlapFixes = 0;
+    for (let i = 1; i < result.length; i++) {
+      const prev = result[i - 1];
+      const curr = result[i];
+      const prevEnd = parseTimeMins(prev.endTime || prev.end_time || '') ?? null;
+      const currStart = parseTimeMins(curr.startTime || curr.start_time || '') ?? null;
+
+      if (prevEnd === null || currStart === null) continue;
+
+      const requiredStart = prevEnd + TRAVEL_BUFFER;
+      if (currStart < prevEnd) {
+        // Overlap detected — shift current activity forward
+        const duration = (parseTimeMins(curr.endTime || curr.end_time || '') ?? (currStart + 60)) - currStart;
+        const newStart = requiredStart;
+        const newEnd = newStart + duration;
+        console.log(`[QUALITY] OVERLAP_FIX: "${curr.title}" (${curr.startTime}) overlaps "${prev.title}" end (${prev.endTime}) — shifting to ${minutesToTime(newStart)}`);
+        curr.startTime = minutesToTime(newStart);
+        if (curr.start_time) curr.start_time = minutesToTime(newStart);
+        curr.endTime = minutesToTime(newEnd);
+        if (curr.end_time) curr.end_time = minutesToTime(newEnd);
+        overlapFixes++;
+      }
+    }
+    if (overlapFixes > 0) {
+      console.log(`[QUALITY] Fixed ${overlapFixes} timing overlap(s) on Day ${dayIndex + 1}`);
+    }
+  }
+
   console.log(`[QUALITY] Day ${dayIndex + 1} complete: ${result.length} activities ======\n`);
   return result;
+}
+
+/** Convert minutes to HH:MM format */
+function minutesToTime(mins: number): string {
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 // =============================================================================
