@@ -838,7 +838,8 @@ async function _handleGenerateTripDayInner(
     const beforeFiller = dayResult.activities.length;
     dayResult.activities = dayResult.activities.filter((act: any) => {
       const title = (act.title || '').trim();
-      const address = (act.address || act.location || '').trim();
+      const rawAddr = act.address || act.location;
+      const address = (typeof rawAddr === 'string' ? rawAddr : (rawAddr && typeof rawAddr === 'object' ? (rawAddr.address || rawAddr.name || '') : '')).trim();
       const price = act.cost?.amount || act.estimatedCost?.amount || act.price || 0;
 
       for (const pattern of FILLER_TITLE_PATTERNS) {
