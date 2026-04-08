@@ -969,7 +969,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
 
   // --- 5a-post. NIGHTCAP SEQUENCING: move nightcap/cocktail before dinner to after dinner ---
   {
-    const NIGHTCAP_KW = /\b(nightcap|after[- ]dinner|evening cocktail|digestif)\b/i;
+    const NIGHTCAP_KW = /\b(nightcap|after[- ]dinner|evening cocktail|cocktail|digestif|speakeasy)\b/i;
     let dinnerIdx = -1;
     let nightcapIdx = -1;
 
