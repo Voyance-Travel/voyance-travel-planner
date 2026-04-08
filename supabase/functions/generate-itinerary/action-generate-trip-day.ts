@@ -435,6 +435,37 @@ async function _handleGenerateTripDayInner(
     console.log(`[generate-trip-day] usedVenues (${usedVenues.length}): ${usedVenues.slice(0, 10).join(', ')}${usedVenues.length > 10 ? '...' : ''}`);
   }
 
+  // ── WELLNESS LIMITER: gather spa/wellness history from previous days ──
+  const WELLNESS_KEYWORDS = /spa|hammam|wellness|massage|hydrotherapy|rejuvenation|thermal|sauna/i;
+  const isWellnessActivity = (act: any) => {
+    return (act.category || '').toLowerCase() === 'wellness' ||
+      (act.category || '').toLowerCase() === 'relaxation' ||
+      WELLNESS_KEYWORDS.test(act.title || '') ||
+      WELLNESS_KEYWORDS.test(act.description || '');
+  };
+  const previousWellnessDays: number[] = [];
+  for (let i = 0; i < existingDays.length; i++) {
+    const day = existingDays[i];
+    if (day?.activities?.some((a: any) => isWellnessActivity(a))) {
+      previousWellnessDays.push(i + 1); // 1-indexed day number
+    }
+  }
+  const yesterdayHadWellness = previousWellnessDays.includes(dayNumber - 1);
+  const wellnessAtLimit = previousWellnessDays.length >= 2;
+  let wellnessInstruction = '';
+  if (wellnessAtLimit) {
+    wellnessInstruction = 'This trip already has 2 spa/wellness activities. Do NOT add any more spa, wellness, massage, hammam, or similar activities.';
+  } else if (yesterdayHadWellness) {
+    wellnessInstruction = `Yesterday (Day ${dayNumber - 1}) already had a spa/wellness activity. Do NOT add spa or wellness today — never on consecutive days.`;
+  } else if (previousWellnessDays.length > 0) {
+    wellnessInstruction = `Previous days with spa/wellness: Day ${previousWellnessDays.join(', Day ')}. Maximum 2 allowed for the entire trip.`;
+  } else {
+    wellnessInstruction = 'No spa/wellness activities yet on this trip. Up to 2 are allowed across the entire trip, never on consecutive days.';
+  }
+  if (previousWellnessDays.length > 0) {
+    console.log(`[generate-trip-day] Wellness history: days [${previousWellnessDays.join(', ')}], limit=${wellnessAtLimit}, yesterday=${yesterdayHadWellness}`);
+  }
+
   // Update heartbeat AND timeout sentinel before generating
   {
     const hbMeta = (tripCheck.metadata as Record<string, unknown>) || {};
@@ -523,6 +554,7 @@ async function _handleGenerateTripDayInner(
             restaurantPool: restaurantPool.length > 0 ? restaurantPool : undefined,
             usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
             usedVenues: usedVenues.length > 0 ? usedVenues : undefined,
+            wellnessInstruction: wellnessInstruction || undefined,
             generationLogId: generationLogId || timer.getLogId(),
           }),
         });
@@ -785,6 +817,21 @@ async function _handleGenerateTripDayInner(
     });
     if (dayResult.activities.length < beforeFilter) {
       console.log(`[HALLUCINATION FILTER] Day ${dayNumber}: removed ${beforeFilter - dayResult.activities.length} fake restaurants`);
+    }
+  }
+
+  // ── WELLNESS LIMITER: post-generation enforcement ──
+  if (wellnessAtLimit || yesterdayHadWellness) {
+    const beforeWellness = dayResult.activities.length;
+    dayResult.activities = dayResult.activities.filter((a: any) => {
+      if (isWellnessActivity(a)) {
+        console.log(`[WELLNESS LIMITER] Removed "${a.title}" — ${wellnessAtLimit ? 'trip limit (2) reached' : 'consecutive day with yesterday'}`);
+        return false;
+      }
+      return true;
+    });
+    if (dayResult.activities.length < beforeWellness) {
+      console.log(`[WELLNESS LIMITER] Day ${dayNumber}: removed ${beforeWellness - dayResult.activities.length} wellness activities`);
     }
   }
 
