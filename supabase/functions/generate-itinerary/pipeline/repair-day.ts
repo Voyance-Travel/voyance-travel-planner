@@ -571,15 +571,42 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     repairs.push({ code: FAILURE_CODES.CHRONOLOGY, action: 'sorted_by_time' });
   }
 
-  // --- DAWN GUARD: shift pre-6AM activities forward on non-arrival days ---
+  // --- SPILLOVER STRIP: remove end-of-previous-day activities that bled into this day ---
+  if (!isFirstDay) {
+    const SPILLOVER_LIMIT = 3 * 60; // 03:00 = 180 minutes
+    const SPILLOVER_RE = /return\s+to\s+(your\s+)?hotel|back\s+to\s+(the\s+)?hotel|travel\s+to\s+(your\s+)?hotel|nightcap|digestif|after[- ]dinner/i;
+    const beforeSpillover = activities.length;
+    const spilloverFiltered = activities.filter((act: any) => {
+      if (lockedIds.has(act.id)) return true;
+      const mins = parseTimeToMinutes(act.startTime || '') ?? null;
+      if (mins === null || mins >= SPILLOVER_LIMIT) return true;
+      const title = (act.title || '');
+      const cat = (act.category || '').toLowerCase();
+      if (SPILLOVER_RE.test(title) || cat === 'accommodation' || cat === 'stay') {
+        console.log(`[Repair] SPILLOVER_STRIP: removing "${title}" at ${act.startTime} (previous-day spillover)`);
+        return false;
+      }
+      return true;
+    });
+    if (spilloverFiltered.length < beforeSpillover) {
+      activities.length = 0;
+      activities.push(...spilloverFiltered);
+      repairs.push({
+        code: FAILURE_CODES.CHRONOLOGY,
+        action: `spillover_stripped_${beforeSpillover - spilloverFiltered.length}_activities`,
+      });
+    }
+  }
+
+  // --- DAWN GUARD (split-shift): rebase only pre-dawn activities, leave post-dawn untouched ---
   {
     const DAWN_LIMIT = 6 * 60; // 06:00 = 360 minutes
     const earliestAllowed = input.earliestStart
       ? (parseTimeToMinutes(input.earliestStart) ?? 8 * 60)
       : 8 * 60; // default 08:00
 
-    // Find the earliest non-flight/transport activity
-    const preDawnActivities: number[] = [];
+    // Partition into pre-dawn and post-dawn clusters
+    const preDawnIndices: number[] = [];
     for (let i = 0; i < activities.length; i++) {
       const act = activities[i];
       const mins = parseTimeToMinutes(act.startTime || '') ?? null;
@@ -595,23 +622,26 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       // Skip locked activities
       if (lockedIds.has(act.id)) continue;
 
-      preDawnActivities.push(i);
+      preDawnIndices.push(i);
     }
 
-    if (preDawnActivities.length > 0) {
-      // Find the earliest pre-dawn time to compute offset
+    if (preDawnIndices.length > 0) {
+      // Find the earliest pre-dawn time
       let earliestPreDawn = Infinity;
-      for (const idx of preDawnActivities) {
+      for (const idx of preDawnIndices) {
         const mins = parseTimeToMinutes(activities[idx].startTime || '') ?? Infinity;
         if (mins < earliestPreDawn) earliestPreDawn = mins;
       }
 
       const shiftAmount = Math.max(0, earliestAllowed - earliestPreDawn);
       if (shiftAmount > 0) {
-        console.log(`[Repair] DAWN_GUARD: ${preDawnActivities.length} activities before 6:00 AM — shifting ALL activities forward by ${shiftAmount} min (earliest was ${earliestPreDawn} min, target ${earliestAllowed} min)`);
+        console.log(`[Repair] DAWN_GUARD (split-shift): ${preDawnIndices.length} activities before 6:00 AM — shifting ONLY pre-dawn cluster by ${shiftAmount} min`);
 
-        // Shift ALL activities forward by the same offset to preserve relative spacing
-        for (const act of activities) {
+        // Shift ONLY pre-dawn activities, leave post-dawn untouched
+        const preDawnSet = new Set(preDawnIndices);
+        for (let i = 0; i < activities.length; i++) {
+          if (!preDawnSet.has(i)) continue;
+          const act = activities[i];
           const startMins = parseTimeToMinutes(act.startTime || '') ?? null;
           const endMins = parseTimeToMinutes(act.endTime || '') ?? null;
           if (startMins !== null) {
@@ -622,9 +652,16 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           }
         }
 
+        // Re-sort by startTime after shifting to maintain chronological order
+        activities.sort((a: any, b: any) => {
+          const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+          const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+          return ta - tb;
+        });
+
         repairs.push({
           code: FAILURE_CODES.CHRONOLOGY,
-          action: `dawn_guard_shifted_${preDawnActivities.length}_activities_by_${shiftAmount}min`,
+          action: `dawn_guard_split_shifted_${preDawnIndices.length}_predawn_by_${shiftAmount}min`,
         });
       }
     }
