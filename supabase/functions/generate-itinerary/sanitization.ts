@@ -759,6 +759,8 @@ const KNOWN_CASUAL_VENUES: Record<string, number> = {
   'le moulin de la galette': 50,
   'le consulat': 40,
   'la maison rose': 45,
+  'sacré fleur': 50,
+  'sacre fleur': 50,
 
   // Other commonly overpriced Paris venues
   'le petit journal': 50,
