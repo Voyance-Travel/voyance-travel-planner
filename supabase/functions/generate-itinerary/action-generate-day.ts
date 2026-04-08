@@ -349,8 +349,8 @@ export async function handleGenerateDay(
       ];
       const FAKE_ADDRESS_PATTERNS = [
         /the destination/i, /your destination/i, /the city/i,
-        /^paris$/i, /^rome$/i, /^berlin$/i, /^tokyo$/i, /^london$/i,
-        /^[a-z\s]+,?\s*(france|italy|germany|japan|spain|uk)?$/i,
+        /the restaurant/i, /the venue/i, /city center/i, /downtown/i,
+        /^[a-z\s'-]+,?\s*[a-z\s'-]*$/i,
       ];
       const beforeFilter = normalizedActivities.length;
       normalizedActivities = normalizedActivities.filter((act: any) => {
