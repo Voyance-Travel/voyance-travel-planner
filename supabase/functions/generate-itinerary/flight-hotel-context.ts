@@ -295,7 +295,7 @@ export async function getFlightHotelContext(supabase: any, tripId: string): Prom
           }
           const lastDest = schedule.find((d: any) => d.isLastDestination || d.is_last_destination);
           if (lastDest?.availableUntil || (lastDest as any)?.available_until) {
-            const intelUntil = ((lastDest.availableUntil || (lastDest as any).available_until) as string);
+            const intelUntil = ((lastDest!.availableUntil || (lastDest as any).available_until) as string);
             const untilTime = intelUntil.includes('T') ? intelUntil.split('T')[1]?.substring(0, 5) : intelUntil;
             if (untilTime) {
               const normalized = normalizeTo24h(untilTime);
