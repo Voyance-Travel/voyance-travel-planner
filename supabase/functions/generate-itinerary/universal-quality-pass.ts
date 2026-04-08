@@ -346,7 +346,9 @@ export function terminalCleanup(
   if (isLastDay && departureTime24) {
     const depMins = parseTimeMins(departureTime24);
     if (depMins !== null) {
-      const latestEnd = depMins - 180; // 3h buffer
+      const isTrain = departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(departureTransportType);
+      const bufferMins = isTrain ? 120 : 180;
+      const latestEnd = depMins - bufferMins;
       if (latestEnd > 0) {
         const result: any[] = [];
         for (const act of activities) {
