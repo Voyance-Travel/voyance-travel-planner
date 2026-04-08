@@ -2171,7 +2171,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         const et = `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
         postDedup.push({
           id: `transport-postdedup-${i}-${Date.now()}`,
-          title: `Travel to ${next.location?.name || sanitizeTransitDestination(next.title || '') || 'next venue'}`,
+          title: generateTransitLabel(next, method),
           description: `From ${curr.location?.name || curr.title || 'previous venue'} to ${next.location?.name || sanitizeTransitDestination(next.title || '') || 'next venue'}`,
           category: 'transport',
           startTime: st,
