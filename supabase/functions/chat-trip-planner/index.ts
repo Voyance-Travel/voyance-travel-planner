@@ -414,7 +414,7 @@ serve(async (req) => {
                     cities: {
                       type: "array",
                       description:
-                        "REQUIRED for multi-city trips. Ordered list of cities with estimated nights. If user mentions 2+ cities, this MUST be populated — without it only the first city gets planned. For single-city trips, use an empty array [].",
+                        "REQUIRED for multi-city trips. Ordered list of cities with estimated nights and hotel details. If user mentions 2+ cities, this MUST be populated — without it only the first city gets planned. For single-city trips, use an empty array [].",
                       items: {
                         type: "object",
                         properties: {
@@ -429,6 +429,10 @@ serve(async (req) => {
                           nights: {
                             type: "number",
                             description: "Number of nights in this city",
+                          },
+                          hotelName: {
+                            type: "string",
+                            description: "Hotel name for this city if mentioned. For multiple hotels in the same city, list them comma-separated with date ranges: 'Mandarin Oriental (Apr 10-11), Radisson Blu (Apr 11-15)'",
                           },
                         },
                         required: ["name", "nights"],
