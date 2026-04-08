@@ -1208,6 +1208,7 @@ export async function handleGenerateDay(
         terminalCleanup(generatedDay.activities, {
           arrivalTime24: _arrivalForCleanup,
           departureTime24: _departureForCleanup,
+          departureTransportType: _departureTransportType,
           city: resolvedDestination || destination,
           dayNumber,
           isFirstDay,
