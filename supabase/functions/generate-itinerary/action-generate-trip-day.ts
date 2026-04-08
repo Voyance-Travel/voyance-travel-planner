@@ -554,6 +554,7 @@ async function _handleGenerateTripDayInner(
             restaurantPool: restaurantPool.length > 0 ? restaurantPool : undefined,
             usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
             usedVenues: usedVenues.length > 0 ? usedVenues : undefined,
+            wellnessInstruction: wellnessInstruction || undefined,
             generationLogId: generationLogId || timer.getLogId(),
           }),
         });
