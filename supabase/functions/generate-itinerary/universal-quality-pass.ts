@@ -43,6 +43,7 @@ export interface UniversalQualityOptions {
   usedVenueNames: Set<string>;
   arrivalTime?: string;    // HH:MM 24h, day 0 only
   departureTime?: string;  // HH:MM 24h, last day only
+  departureTransportType?: string; // 'train', 'flight', etc. — controls buffer size
   dayTitle?: string;
   budgetTier?: string;
   apiKey?: string;
@@ -65,7 +66,7 @@ export async function universalQualityPass(
 ): Promise<any[]> {
   const {
     city, country, dnaTier, dnaArchetype, dayIndex, totalDays,
-    usedVenueNames, arrivalTime, departureTime,
+    usedVenueNames, arrivalTime, departureTime, departureTransportType,
     dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants,
   } = options;
 
@@ -85,8 +86,8 @@ export async function universalQualityPass(
 
   // ── Step 2: Departure timing (last day only) ──
   if (dayIndex === totalDays - 1 && departureTime) {
-    result = enforceDepartureTiming(result, departureTime);
-    console.log(`[QUALITY] After departure filter: ${result.length} activities`);
+    result = enforceDepartureTiming(result, departureTime, departureTransportType);
+    console.log(`[QUALITY] After departure filter: ${result.length} activities (transport: ${departureTransportType || 'flight'})`);
   }
 
   // ── Step 3: Cross-day venue dedup (before placeholder fixing — no point fixing a dupe) ──
@@ -239,6 +240,8 @@ export interface TerminalCleanupOptions {
   arrivalTime24?: string;
   /** 24h departure time (last day only), e.g. "18:30" */
   departureTime24?: string;
+  /** Transport type for departure (train, flight, etc.) — controls buffer */
+  departureTransportType?: string;
   /** City name for placeholder replacement context */
   city?: string;
   /** Day number (1-based) */
@@ -264,7 +267,7 @@ export function terminalCleanup(
 ): any[] {
   if (!activities || activities.length === 0) return activities;
 
-  const { arrivalTime24, departureTime24, city, dayNumber, isFirstDay, isLastDay } = options;
+  const { arrivalTime24, departureTime24, departureTransportType, city, dayNumber, isFirstDay, isLastDay } = options;
   const label = `TERMINAL_D${dayNumber || '?'}`;
   let removed = 0;
 
@@ -343,7 +346,9 @@ export function terminalCleanup(
   if (isLastDay && departureTime24) {
     const depMins = parseTimeMins(departureTime24);
     if (depMins !== null) {
-      const latestEnd = depMins - 180; // 3h buffer
+      const isTrain = departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(departureTransportType);
+      const bufferMins = isTrain ? 120 : 180;
+      const latestEnd = depMins - bufferMins;
       if (latestEnd > 0) {
         const result: any[] = [];
         for (const act of activities) {

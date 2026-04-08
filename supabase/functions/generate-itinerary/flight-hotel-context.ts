@@ -526,14 +526,17 @@ export function enforceArrivalTiming(activities: any[], arrivalTime24: string): 
 }
 
 /**
- * Filter out activities that start after departure - 3h buffer.
+ * Filter out activities that start after departure - buffer.
+ * Buffer: 120 min for trains, 180 min for flights (default).
  * Preserves transport, flight, transit, departure, and check-out activities.
  */
-export function enforceDepartureTiming(activities: any[], departureTime24: string): any[] {
+export function enforceDepartureTiming(activities: any[], departureTime24: string, transportType?: string): any[] {
   const departureMins = parseTimeToMinutes(departureTime24) || 0;
   if (departureMins <= 0) return activities;
 
-  const latestAllowed = departureMins - 180; // 3 hours before departure
+  const isTrain = transportType && /train|rail|eurostar|tgv|thalys/i.test(transportType);
+  const bufferMins = isTrain ? 120 : 180;
+  const latestAllowed = departureMins - bufferMins;
   if (latestAllowed <= 0) return activities;
 
   const before = activities.length;
@@ -542,18 +545,18 @@ export function enforceDepartureTiming(activities: any[], departureTime24: strin
     const cat = ((a.category || '') as string).toUpperCase();
     if (TRANSPORT_CATS.includes(cat)) return true;
     if ((cat === 'STAY' || cat === 'ACCOMMODATION') && /check.?out/i.test(a.title || '')) return true;
-    if (/departure|heading home|airport/i.test(a.title || '')) return true;
+    if (/departure|heading home|airport|station/i.test(a.title || '')) return true;
 
     const actMins = parseTimeToMinutes(a.startTime || a.start_time || '') || 0;
     if (actMins > 0 && actMins > latestAllowed) {
-      console.warn(`[DEPARTURE] Removed "${a.title}" at ${a.startTime || a.start_time} — after departure - 3h (${departureTime24} - 3h = ${minutesToHHMM(latestAllowed)})`);
+      console.warn(`[DEPARTURE] Removed "${a.title}" at ${a.startTime || a.start_time} — after departure - ${bufferMins / 60}h (${departureTime24} - ${bufferMins / 60}h = ${minutesToHHMM(latestAllowed)}) [transport: ${transportType || 'flight'}]`);
       return false;
     }
     return true;
   });
 
   if (filtered.length < before) {
-    console.log(`[enforceDepartureTiming] Removed ${before - filtered.length} activities after departure buffer`);
+    console.log(`[enforceDepartureTiming] Removed ${before - filtered.length} activities after departure buffer (${bufferMins}min for ${transportType || 'flight'})`);
   }
   return filtered;
 }

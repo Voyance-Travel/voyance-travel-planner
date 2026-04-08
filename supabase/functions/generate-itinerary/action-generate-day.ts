@@ -388,6 +388,24 @@ export async function handleGenerateDay(
       const _arrivalTime24 = (flightContext as any)?.arrivalTime24 as string | undefined;
       const _departureTime24 = (flightContext as any)?.returnDepartureTime24 as string | undefined;
 
+      // Extract departure transport type from rawFlightSelection
+      const _rawFlight = (flightContext as any)?.rawFlightSelection as Record<string, any> | undefined;
+      const _departureTransportType: string | undefined = isLastDay && _rawFlight
+        ? (_rawFlight.return?.type as string
+          || _rawFlight.returnTransportType as string
+          || (Array.isArray(_rawFlight.legs) && _rawFlight.legs.length > 0
+            ? (() => {
+                const lastLeg = _rawFlight.legs[_rawFlight.legs.length - 1];
+                const depLeg = _rawFlight.legs.find((l: any) => l.isDestinationDeparture) || lastLeg;
+                if (depLeg?.type) return depLeg.type as string;
+                if (/train|tgv|eurostar|thalys|ice|rail/i.test(depLeg?.flightNumber || '')) return 'train';
+                if (/train|rail/i.test(depLeg?.airline || '')) return 'train';
+                return undefined;
+              })()
+            : undefined)
+          || undefined)
+        : undefined;
+
       const { universalQualityPass } = await import('./universal-quality-pass.ts');
       normalizedActivities = await universalQualityPass(normalizedActivities, {
         city: destination,
@@ -399,6 +417,7 @@ export async function handleGenerateDay(
         usedVenueNames: new Set<string>(),
         arrivalTime: isFirstDay ? _arrivalTime24 : undefined,
         departureTime: isLastDay ? _departureTime24 : undefined,
+        departureTransportType: _departureTransportType,
         dayTitle: generatedDay?.theme || generatedDay?.title || `Day ${dayNumber}`,
         budgetTier: budgetTier || 'moderate',
         apiKey: LOVABLE_API_KEY,
@@ -1156,7 +1175,9 @@ export async function handleGenerateDay(
       const _arrTime24 = (flightContext as any)?.arrivalTime24 as string | undefined;
       const _depTime24 = (flightContext as any)?.returnDepartureTime24 as string | undefined;
       const arrMinsForGuard = isFirstDay && _arrTime24 ? (() => { const m = _arrTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : undefined; })() : undefined;
-      const depMinsForGuard = isLastDay && _depTime24 ? (() => { const m = _depTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - 180 : undefined; })() : undefined;
+      const _isTrain = _departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(_departureTransportType);
+      const _depBufferMins = _isTrain ? 120 : 180;
+      const depMinsForGuard = isLastDay && _depTime24 ? (() => { const m = _depTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - _depBufferMins : undefined; })() : undefined;
 
       mealGuardResult = enforceRequiredMealsFinalGuard(
         generatedDay.activities || [],
@@ -1187,6 +1208,7 @@ export async function handleGenerateDay(
         terminalCleanup(generatedDay.activities, {
           arrivalTime24: _arrivalForCleanup,
           departureTime24: _departureForCleanup,
+          departureTransportType: _departureTransportType,
           city: resolvedDestination || destination,
           dayNumber,
           isFirstDay,
