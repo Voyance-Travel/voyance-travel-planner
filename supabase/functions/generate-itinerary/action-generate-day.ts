@@ -541,6 +541,27 @@ export async function handleGenerateDay(
       }
     }
 
+    // === DUPLICATE HOTEL RETURN REMOVAL ===
+    if (normalizedActivities.length >= 2) {
+      for (let i = normalizedActivities.length - 2; i >= 0; i--) {
+        const curr = normalizedActivities[i] as any;
+        const next = normalizedActivities[i + 1] as any;
+        const currTitle = (curr.title || '').toLowerCase();
+        const nextTitle = (next.title || '').toLowerCase();
+        const currIsHotelReturn = currTitle.includes('return to your hotel') || currTitle.includes('return to hotel') || currTitle.includes('back to your hotel');
+        const nextIsHotelReturn = nextTitle.includes('return to your hotel') || nextTitle.includes('return to hotel') || nextTitle.includes('back to your hotel');
+        if (currIsHotelReturn && nextIsHotelReturn) {
+          if ((curr.category || '').toLowerCase() === 'stay') {
+            console.log(`[DEDUP] Removed duplicate hotel return: "${next.title}" (${next.category})`);
+            normalizedActivities.splice(i + 1, 1);
+          } else {
+            console.log(`[DEDUP] Removed duplicate hotel return: "${curr.title}" (${curr.category})`);
+            normalizedActivities.splice(i, 1);
+          }
+        }
+      }
+    }
+
     // =======================================================================
     // ENRICHMENT + OPENING HOURS: Extracted to pipeline/enrich-day.ts (Phase 6)
     // =======================================================================
