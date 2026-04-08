@@ -2986,11 +2986,19 @@ function repairBookends(
       dur = est.durationMinutes;
       method = est.method;
       costAmount = est.costAmount;
+    } else {
+      // Fallback when coordinates are missing
+      dur = getDefaultTransitMinutes(fromAct, toAct);
+      method = dur <= 10 ? 'walking' : 'transit';
+      console.log(`[TRANSIT-FALLBACK] No coords for "${from}" → "${to}", using ${dur}min default`);
     }
+
+    // Use mode-aware label derived from actual destination activity
+    const label = toAct ? generateTransitLabel(toAct, method) : `Travel to ${to}`;
 
     return {
       id: `transport-gap-${dayNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      title: `Travel to ${to}`, category: 'transport',
+      title: label, category: 'transport',
       description: `Transit from ${from} to ${to}.`,
       startTime: st, endTime: offset(st, dur), durationMinutes: dur,
       location: { name: to, address: '' },
