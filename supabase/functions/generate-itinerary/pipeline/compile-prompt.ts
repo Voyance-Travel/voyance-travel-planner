@@ -428,9 +428,9 @@ ${dayMealPolicy.requiredMeals.includes('breakfast') ? (breakfastHotelName ? ((is
 2. TRANSIT between every pair of consecutive activities (category: "transport")
    - Include mode (${resolvedTransportModes.length > 0 ? resolvedTransportModes.join('/') : 'walk/taxi/metro/bus'}), duration, cost, route details
    - 10+ minute walks or any paid transit = separate activity entry
-3. MORNING ACTIVITIES — At least 1 paid + 1 free activity
+3. MORNING ACTIVITIES (MANDATORY 9:00 AM - 12:30 PM) — You MUST schedule at least 2 activities between breakfast and lunch. This is the MOST IMPORTANT part of the day. Examples: museum visit, landmark tour, market walk, neighborhood exploration, gallery, viewpoint, garden, historic site. A day with NO morning activities is a FAILED itinerary.
 ${dayMealPolicy.requiredMeals.includes('lunch') ? '4. LUNCH (category: "dining") — Restaurant near previous location, ~price, 1 alternative in tips' : ''}
-5. AFTERNOON ACTIVITIES — At least 1-2 paid + 1 free activity  
+5. AFTERNOON ACTIVITIES (MANDATORY 2:00 PM - 5:00 PM) — You MUST schedule at least 1-2 activities between lunch and the hotel return. Examples: museum, shopping street, park, boat ride, neighborhood walk, cultural site.  
 ${flightContext.hotelName ? `6. HOTEL RETURN (REQUIRED) — "Freshen up at [EXACT Hotel Name]" with category "accommodation", duration 30 min. Every full day MUST include a hotel return between afternoon activities and dinner. This MUST be a separate activity card with dedicated time, not just a transport entry. Include a preceding transport card to get back to the hotel.` : ''}
 ${dayMealPolicy.requiredMeals.includes('dinner') ? '7. DINNER (category: "dining") — Restaurant, price range, dress code, reservation needed?, 1 alternative in tips' : ''}
 8. EVENING/NIGHTLIFE — Bar, jazz club, night market, show, rooftop, dessert spot (at least 1 suggestion). Use category: "dining" for bars, lounges, and cocktail venues. Use category: "activity" for shows, clubs, and entertainment. NEVER use "wellness", "nightlife", or "relaxation" as a category for bars/lounges.
@@ -445,11 +445,14 @@ ${resolvedTransportModes.length > 0 ? `- USER'S PREFERRED MODES: ${resolvedTrans
 - For walks <5 min: note in the tips of the preceding activity
 - Always include: mode, duration, cost (free for walking), and route/line for public transit
 
-ACTIVITY MIX:
-- Minimum 3 PAID activities (museums, tours, attractions with ticket prices)
-- Minimum 2 FREE activities (parks, viewpoints, walks, markets, street art)
+ACTIVITY MIX — NON-NEGOTIABLE MINIMUMS:
+- A full day MUST have at least 5 non-dining, non-transport activities total
+- At least 2 PAID activities (museums, tours, attractions with ticket prices)
+- At least 2 FREE activities (parks, viewpoints, walks, markets, street art)
+- At least 1 evening activity after dinner (bar, show, jazz, night walk)
 - Place free activities between paid ones to prevent fatigue
 - Include at least 1 coffee/snack opportunity between long gaps
+- SELF-CHECK: Count your non-dining activities. If there are fewer than 4, you have NOT met the minimum. Add more before responding.
 
 EVENING REQUIREMENT:
 - The day does NOT end at dinner. Include at least 1 post-dinner suggestion:

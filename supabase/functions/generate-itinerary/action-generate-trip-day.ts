@@ -986,6 +986,20 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── ACTIVITY COUNT VALIDATION — warn if too few real activities ──
+  if (Array.isArray(dayResult?.activities)) {
+    const realActivities = dayResult.activities.filter((act: any) => {
+      const cat = (act.category || '').toLowerCase();
+      if (['dining', 'restaurant', 'food', 'transport', 'logistics', 'accommodation', 'stay'].includes(cat)) return false;
+      const title = (act.title || '').toLowerCase();
+      if (title.includes('arrival flight') || title.includes('checkout') || title.includes('check-out') || title.includes('return to') || title.includes('freshen up') || title.includes('heading home') || title.includes('departure')) return false;
+      return true;
+    });
+    if (realActivities.length < 2 && !_isLastDay && !_isFirstDay) {
+      console.warn(`[ACTIVITY COUNT WARNING] Day ${dayNumber} has only ${realActivities.length} real activities (excluding dining/transport/hotel). Expected at least 2-3 for a full day. Activities found: ${realActivities.map((a: any) => a.title).join(', ')}`);
+    }
+  }
+
 
   {
     const preSanitizeCount = Array.isArray(dayResult?.activities) ? dayResult.activities.length : 0;
