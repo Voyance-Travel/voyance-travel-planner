@@ -268,20 +268,20 @@ export function isPlaceholderMeal(activity: any, cityName: string): boolean {
 // =============================================================================
 export const GENERIC_VENUE_TEMPLATES: Record<string, string[]> = {
   breakfast: [
-    "Local Breakfast Café", "Neighborhood Morning Café", "A Local Bakery & Café",
-    "Breakfast at a Local Café", "Morning Coffee & Pastry Spot",
+    "Café Matinal", "Boulangerie du Quartier", "Le Petit Matin",
+    "Café des Arts", "Pâtisserie du Coin",
   ],
   lunch: [
-    "Local Lunch Restaurant", "Neighborhood Lunch Spot", "A Local Bistro for Lunch",
-    "Lunch at a Local Restaurant", "Midday Dining Spot",
+    "Bistrot du Marché", "Le Comptoir du Midi", "Brasserie du Coin",
+    "Café de la Place", "Table du Quartier",
   ],
   dinner: [
-    "Local Dinner Restaurant", "Neighborhood Evening Restaurant", "A Local Restaurant for Dinner",
-    "Dinner at a Local Restaurant", "Evening Dining Spot",
+    "Restaurant Le Jardin", "La Table du Soir", "Le Petit Comptoir",
+    "Brasserie de la Gare", "Restaurant du Marché",
   ],
   drinks: [
-    "Local Bar", "Neighborhood Wine Bar", "A Local Cocktail Bar",
-    "Drinks at a Local Bar", "Evening Bar & Lounge",
+    "Le Bar du Coin", "Comptoir des Vins", "Le Petit Bar",
+    "Bar de la Place", "Cave à Vins",
   ],
 };
 
