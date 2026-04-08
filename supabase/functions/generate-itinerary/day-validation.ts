@@ -1018,7 +1018,7 @@ export function enforceRequiredMealsFinalGuard(
         const fallback = getRandomFallbackRestaurant(destination, mealType, usedNamesSet);
         if (fallback) {
           venueName = `${label} at ${fallback.name}`;
-          venueAddress = fallback.address || destination;
+          venueAddress = fallback.address || `${fallback.name}, ${destination}`;
           venueDescription = fallback.description || `${label} at ${fallback.name}`;
           usedVenueNamesForInjection.add(fallback.name.toLowerCase());
           usedRealVenue = true;
