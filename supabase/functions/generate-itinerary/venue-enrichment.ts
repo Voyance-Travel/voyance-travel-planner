@@ -26,6 +26,26 @@ const TIGHT_RADIUS_DESTINATIONS: Record<string, number> = {
 const DEFAULT_HOTEL_RADIUS_KM = 15;
 
 // =============================================================================
+// VENUE NAME OVERLAP — Detect mismatched Places API results
+// =============================================================================
+
+/** Returns word-overlap ratio (0..1) between original and enriched venue names */
+function computeNameOverlap(original: string, enriched: string): number {
+  const normalize = (s: string) => s.toLowerCase().replace(/[''`´]/g, "'").replace(/[^a-z0-9\s'éèêëàâäùûüôöîïçñ]/g, ' ').trim();
+  const toWords = (s: string) => normalize(s).split(/\s+/).filter(w => w.length > 2);
+
+  const origWords = toWords(original);
+  const enrichWords = toWords(enriched);
+
+  if (origWords.length === 0) return 1; // no words to compare, allow
+
+  const matches = origWords.filter(ow =>
+    enrichWords.some(ew => ew.includes(ow) || ow.includes(ew))
+  );
+  return matches.length / origWords.length;
+}
+
+// =============================================================================
 // DESTINATION CENTER CACHE (module-level singleton)
 // =============================================================================
 
@@ -275,11 +295,20 @@ export async function verifyVenueWithGooglePlaces(
       return mapping[priceLevel] ?? 2;
     };
 
-    console.log(`[Stage 4] ✅ Verified venue: ${venueName} → ${place.displayName?.text || 'Unknown'}`);
+    // Name mismatch guard — reduce confidence if Places returned a different venue
+    const enrichedDisplayName = place.displayName?.text || '';
+    const nameOverlap = computeNameOverlap(venueName, enrichedDisplayName);
+    let confidence = 0.95;
+    if (nameOverlap < 0.3) {
+      confidence = 0.3;
+      console.log(`[Stage 4] ⚠️ [VENUE-MISMATCH] "${venueName}" → "${enrichedDisplayName}" overlap=${(nameOverlap * 100).toFixed(0)}% — reducing confidence to 0.3`);
+    } else {
+      console.log(`[Stage 4] ✅ Verified venue: ${venueName} → ${enrichedDisplayName}`);
+    }
 
     return {
       isValid: true,
-      confidence: 0.95,
+      confidence,
       placeId: place.id,
       formattedAddress: place.formattedAddress,
       coordinates: place.location
@@ -637,8 +666,19 @@ export async function enrichActivity(
       enriched.bookingRequired = true;
     }
 
-    // Apply venue verification data
+    // Apply venue verification data (with name mismatch guard)
     if (venueData) {
+      // Protect the venue name from being overwritten by a mismatched Places result
+      if (venueData.confidence !== undefined && venueData.confidence < 0.5) {
+        // Low-confidence match — preserve original name, still use coords/address
+        const originalName = activity.title || (activity as any).venue_name || '';
+        console.log(`[Stage 4] [VENUE-MISMATCH] Preserving original name "${originalName}" (confidence=${venueData.confidence})`);
+        // Ensure location.name stays as original
+        if (enriched.location) {
+          enriched.location.name = enriched.location.name || originalName;
+        }
+      }
+
       if (venueData.coordinates) {
         enriched.location = {
           ...enriched.location,
