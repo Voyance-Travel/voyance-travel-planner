@@ -1,44 +1,72 @@
 
+Do I know what the issue is? Yes.
 
-# Fix: Smart Finish 504 Timeout + Chat CORS Failures
+What’s actually happening
+- The CORS header itself is not the core problem. Both `chat-trip-planner` and `generate-itinerary` already define browser CORS headers, and `verify_jwt = false` is already set in config. The “CORS” errors are most likely failure-path symptoms.
+- The real auth clue is in the logs: repeated `bad_jwt` / `token contains an invalid number of segments` on `/user`. That means some requests are reaching the backend with a malformed or stale access token.
+- Smart Finish still has a frontend/backend mismatch: the backend now waits up to 5 minutes, but `SmartFinishBanner.tsx` still gives up after `40 x 5s` and some recovery paths still use `8 x 3s`. So the UI can declare failure while the backend is still working.
+- `[OfflineCache] Storage full...` is secondary, but caching full trip payloads in localStorage is risky because auth persistence also uses localStorage.
+- The browser “message channel closed” errors are extension noise, not the app.
+- The `<circle ... "undefined">` errors are a separate SVG animation issue, likely from animated circles in loading/progress UI.
 
-## Two Separate Issues
+Implementation plan
 
-### Issue 1: Smart Finish fails because `enrich-manual-trip` prematurely marks the trip as failed
+1. Stabilize auth before edge calls
+- Add a shared client helper around session retrieval in `src/lib/authSessionGuard.ts` that:
+  - uses the guarded session path,
+  - verifies the token shape before use,
+  - forces one refresh if the token is missing, expired, or malformed.
+- Use that helper in:
+  - `src/components/planner/TripChatPlanner.tsx`
+  - `src/hooks/useItineraryGeneration.ts`
 
-**Root cause**: When `enrich-manual-trip` calls `generate-itinerary`, the gateway enforces a ~150s timeout and returns 504. The background handler in `enrich-manual-trip` catches the 504, tries a brief recovery poll (8 checks × 3s = 24s), and when generation isn't done yet, throws an error that writes `smartFinishFailed: true` + `smartFinishStatus: "failed"` to the trip metadata. Meanwhile, the generation chain is still running fine (days 2-4 complete), but when day 5 starts, `tripCheck` query fails (returns null), stopping the chain. The failure metadata write likely interferes with the ongoing generation.
+2. Add one-time auth recovery + retry for the failing flows
+- In `TripChatPlanner.tsx`, if the request hits `401`, `Failed to fetch`, or a connection-style failure:
+  - refresh the session once,
+  - retry once,
+  - then show a clean user-facing error.
+- In `useItineraryGeneration.ts`, retry the initial `generate-itinerary` start call once after auth recovery instead of failing immediately.
 
-**Fix**: Increase the recovery poll window after a 504 timeout to give the chain enough time to finish. A 5-day trip takes ~3-4 minutes; the current 24s poll is far too short.
+3. Align Smart Finish polling with the backend window
+- Update `src/components/itinerary/SmartFinishBanner.tsx` so every Smart Finish polling path matches the backend recovery window:
+  - main polling: `60 checks x 5s`
+  - fallback/recovery polling: also use the long window
+- Do not refund or mark failure until that full window is exhausted.
+- Prefer checking `smartFinishStatus` plus completion/failure timestamps, not only the boolean flags.
 
-**File**: `supabase/functions/enrich-manual-trip/index.ts`
-- In `runGenerationInBackground`, change the timeout recovery from `waitForGenerationCompletionAfterTimeout` (8 checks × 3s) to use `pollForCompletion`-style logic with ~60 checks × 5s (5 minutes total), matching the client-side polling window
-- Also set `itinerary_status: 'generating'` on the trip BEFORE calling `generate-itinerary`, as a safety net (currently only `generate-trip` action sets it, but if there's a race, having it pre-set prevents the chain from stopping)
+4. Harden the edge functions against malformed tokens
+- In:
+  - `supabase/functions/chat-trip-planner/index.ts`
+  - `supabase/functions/generate-itinerary/index.ts`
+- Add an early token sanity check before calling `auth.getUser(token)`.
+- If the token is obviously invalid, return a structured `401` JSON response with CORS headers immediately.
+- Add concise logs that distinguish:
+  - invalid token
+  - auth failure
+  - upstream AI/generation failure
+  - cold-start/boot-path failure
 
-### Issue 2: Chat CORS error from production domain
+5. Reduce localStorage pressure
+- In `src/hooks/useOfflineItinerary.ts`, stop caching oversized full-trip rows.
+- Cache only lightweight trip data, or strip heavy `itinerary_data` / bulky metadata before save.
+- This should remove the quota warning and reduce auth persistence instability.
 
-**Root cause**: The edge function returns 401 consistently (user auth fails). The CORS headers are in all response paths, but the error manifests as a CORS block. This happens when the Supabase gateway itself rejects the request before it reaches the function — specifically when the function crashes during import or early initialization on certain cold starts. The function imports `../_shared/traveler-dna.ts` which itself imports `npm:@supabase/supabase-js@2.90.1`. If there's a version mismatch or import failure on a specific isolate, the function crashes with no CORS headers.
+6. Clean up the SVG warning separately
+- Audit `src/components/planner/shared/GenerationAnimation.tsx` and similar progress-ring components.
+- Replace fragile animated `cx/cy/r` attribute animation with transform-based animation or guaranteed numeric values so no `<circle>` attribute becomes `undefined`.
 
-**Fix**: Wrap the `fetchTravelerDNA` call in a more defensive try/catch (already exists but the import itself could fail), and redeploy the function. Additionally, the auth is failing (all requests return 401) — need to verify the auth flow and add better error logging.
+Verification
+- Chat works on the published site without “CORS” / `Failed to fetch`.
+- Auth logs stop showing malformed JWT errors for these flows.
+- Smart Finish can run longer than 200s without the UI timing out early.
+- LocalStorage quota warnings become rare or disappear.
+- The `<circle>` console errors are gone during loading animations.
 
-**File**: `supabase/functions/chat-trip-planner/index.ts`
-- Move the `traveler-dna` import to be dynamic (lazy `await import()`) inside the try block so a broken import doesn't crash the entire function
-- Redeploy the function
-
-### Steps
-
-1. **Update `enrich-manual-trip/index.ts`**:
-   - Before calling `generate-itinerary`, set `itinerary_status: 'generating'` on the trip
-   - Increase the 504 timeout recovery poll from 24s to 5 minutes (60 checks × 5s)
-
-2. **Update `chat-trip-planner/index.ts`**:
-   - Make the `traveler-dna` import dynamic/lazy inside the try block
-   - Add more defensive error handling around the DNA fetch
-
-3. **Redeploy both functions**: `enrich-manual-trip` and `chat-trip-planner`
-
-### Technical Details
-
-- **Smart Finish timeline**: Generation takes ~3-4 min for 5 days. Current 504 recovery window is only 24s — needs to be ~5 min
-- **Chat auth**: All recent calls return 401. The `getUser(token)` call works but may be rejecting expired tokens. The CORS error is a symptom of the gateway, not the function code
-- **Files changed**: `supabase/functions/enrich-manual-trip/index.ts`, `supabase/functions/chat-trip-planner/index.ts`
-
+Files likely touched
+- `src/components/planner/TripChatPlanner.tsx`
+- `src/hooks/useItineraryGeneration.ts`
+- `src/components/itinerary/SmartFinishBanner.tsx`
+- `src/lib/authSessionGuard.ts`
+- `src/hooks/useOfflineItinerary.ts`
+- `supabase/functions/chat-trip-planner/index.ts`
+- `supabase/functions/generate-itinerary/index.ts`
