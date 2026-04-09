@@ -556,6 +556,8 @@ async function _handleGenerateTripDayInner(
             usedVenues: usedVenues.length > 0 ? usedVenues : undefined,
             wellnessInstruction: wellnessInstruction || undefined,
             generationLogId: generationLogId || timer.getLogId(),
+            mustDoActivities: (tripMeta.mustDoActivities as string) || '',
+            perDayActivities: (tripMeta.perDayActivities as any[]) || [],
           }),
         });
       } finally {
