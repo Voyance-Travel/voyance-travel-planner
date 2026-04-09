@@ -583,7 +583,7 @@ export function ItineraryGenerator({
 
     const { data: tripRow } = await supabase
       .from('trips')
-      .select('journey_id, journey_order, journey_total_legs')
+      .select('journey_id, journey_order, journey_total_legs, metadata')
       .eq('id', tripId)
       .single();
 
@@ -702,6 +702,7 @@ export function ItineraryGenerator({
 
         // Use server-side generation — fire and poll
         try {
+        const tripMeta = (tripRow?.metadata as Record<string, unknown>) || {};
           await startServerGeneration({
             tripId,
             destination,
@@ -716,6 +717,8 @@ export function ItineraryGenerator({
             creditsCharged: gateResult.creditsCharged,
             requestedDays: totalRequestedDays,
             isFirstTrip: gateResult.isFirstTrip ?? false,
+            mustDoActivities: (tripMeta.mustDoActivities as string) || '',
+            perDayActivities: (tripMeta.perDayActivities as any[]) || [],
           });
           // Server acknowledged — start polling for completion
           setServerGenActive(true);

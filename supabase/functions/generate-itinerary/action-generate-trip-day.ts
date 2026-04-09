@@ -556,8 +556,8 @@ async function _handleGenerateTripDayInner(
             usedVenues: usedVenues.length > 0 ? usedVenues : undefined,
             wellnessInstruction: wellnessInstruction || undefined,
             generationLogId: generationLogId || timer.getLogId(),
-            mustDoActivities: (tripMeta.mustDoActivities as string) || '',
-            perDayActivities: (tripMeta.perDayActivities as any[]) || [],
+            mustDoActivities: params.mustDoActivities || (tripMeta.mustDoActivities as string) || '',
+            perDayActivities: params.perDayActivities || (tripMeta.perDayActivities as any[]) || [],
           }),
         });
       } finally {
@@ -2513,6 +2513,8 @@ async function _handleGenerateTripDayInner(
       generationRunId,
       isFirstTrip: isFirstTrip || false,
       generationLogId: generationLogId || timer.getLogId(),
+      mustDoActivities: params.mustDoActivities || (tripMeta.mustDoActivities as string) || '',
+      perDayActivities: params.perDayActivities || (tripMeta.perDayActivities as any[]) || [],
     });
 
     const maxRetries = 3;
