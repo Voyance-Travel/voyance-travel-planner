@@ -1,29 +1,45 @@
 
 
-## Plan: Delete All Ashton's Trips
+# Fix Transit Hallucination — "Travel to A" and "Travel to B"
 
-**User**: Ashton Lightfoot (ashtonlaurenn@gmail.com, ID: `b7868fe8-36f5-48ce-81e1-758fa79aafde`)
+## Root Cause
 
-**Action**: Permanently delete all 33+ trips and associated data from the following tables (in dependency order):
+CRITICAL REMINDERS item 13 in `compile-prompt.ts` (line 1273) says:
+> "Activity **B** cannot start before Activity **A** ends."
 
-1. `trip_photos` — photos linked to her trips
-2. `trip_notes` — trip notes
-3. `trip_learnings` — trip learnings
-4. `trip_go_back_list` — go-back-list items
-5. `trip_feedback_responses` — feedback responses
-6. `trip_departure_summaries` — departure summaries
-7. `trip_day_summaries` — day summaries
-8. `trip_rental_cars` — rental cars
-9. `trip_notifications` — notifications
-10. `trip_payments` — payments
-11. `trip_collaborators` — collaborators
-12. `trip_members` — trip members
-13. `trip_activities` — all activities
-14. `trip_hotels` — hotel bookings
-15. `trip_flights` — flight bookings
-16. `trips` — the trip records themselves
+The AI sometimes interprets "A" and "B" as literal activity/venue names and generates transit cards titled "Travel to A" or "Walk to B". There is no guard in the repair pipeline to catch these single-letter or placeholder destinations.
 
-All deletions will be filtered by `user_id = 'b7868fe8-36f5-48ce-81e1-758fa79aafde'`.
+## Changes
 
-**Technical approach**: Use the database insert tool to run DELETE statements against each table in order, clearing child records before the parent `trips` table.
+### 1. Reword prompt to avoid abstract "A" / "B" labels
+**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** (line 1273)
+
+Change item 13 from:
+> "Activity B cannot start before Activity A ends..."
+
+To:
+> "The NEXT activity cannot start before the PREVIOUS activity ends..."
+
+This eliminates the source of the "A" and "B" hallucination.
+
+### 2. Add placeholder destination guard in `repair-day.ts`
+
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+
+Add a helper function `isPlaceholderDestination(name)` that returns true for:
+- Single-letter names (e.g., "A", "B", "C")
+- Known generic placeholders ("next venue", "destination", "previous location", "next stop", "Activity A", "Activity B")
+
+Then update `generateTransitLabel` (~line 395) to skip placeholder names when building the transit title — if the resolved destination is a placeholder, fall back to the next available field (venue_name, title) and log a `[TRANSIT-PLACEHOLDER]` warning.
+
+Also add a sweep pass (after the existing transport title sync in step 15a, ~line 2658) that catches any remaining transit cards whose title ends with a placeholder destination and rewrites them using the actual next non-transport activity's name.
+
+### 3. Deploy
+- Deploy `generate-itinerary` edge function
+
+## What's NOT Changed
+- Transit calculation math or duration estimates
+- Activity generation or selection
+- Database schema
+- Other prompt items (items 14-16 are unaffected)
 
