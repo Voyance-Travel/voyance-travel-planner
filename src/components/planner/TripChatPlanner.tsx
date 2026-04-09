@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/integrations/supabase/client';
+import { getValidAccessToken } from '@/lib/authSessionGuard';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
 import { TripConfirmCard, type InterCityTransportMode } from './TripConfirmCard';
 import { resolveCities, type NormalizedCity } from '@/utils/cityNormalization';
@@ -164,26 +165,40 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
     let isToolCall = false;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const accessToken = await getValidAccessToken();
+      if (!accessToken) {
         throw new Error('Please sign in to use the trip planner.');
       }
 
-      const controller = new AbortController();
-      const fetchTimeout = setTimeout(() => controller.abort(), 60000);
-      const resp = await fetch(CHAT_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({
-          messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(fetchTimeout);
+      const doFetch = async (token: string) => {
+        const controller = new AbortController();
+        const fetchTimeout = setTimeout(() => controller.abort(), 60000);
+        const resp = await fetch(CHAT_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({
+            messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(fetchTimeout);
+        return resp;
+      };
+
+      let resp = await doFetch(accessToken);
+
+      // One-time retry on auth failure: refresh token and try again
+      if (resp.status === 401) {
+        console.warn('[TripChat] 401 — refreshing token and retrying');
+        const retryToken = await getValidAccessToken();
+        if (retryToken && retryToken !== accessToken) {
+          resp = await doFetch(retryToken);
+        }
+      }
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));

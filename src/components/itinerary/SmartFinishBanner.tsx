@@ -151,8 +151,8 @@ export function SmartFinishBanner({
   }, [tripId]);
 
   const waitForSmartFinishCompletion = useCallback(async (source: string): Promise<boolean> => {
-    const CHECKS = 8;
-    const INTERVAL_MS = 3000;
+    const CHECKS = 60;
+    const INTERVAL_MS = 5000;
 
     for (let i = 1; i <= CHECKS; i++) {
       await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
@@ -169,7 +169,7 @@ export function SmartFinishBanner({
   /**
    * Poll trips.metadata until smartFinishCompleted or smartFinishFailed.
    */
-  const pollForCompletion = async (source: string, maxChecks = 40, intervalMs = 5000): Promise<{ success: boolean; data?: any }> => {
+  const pollForCompletion = async (source: string, maxChecks = 60, intervalMs = 5000): Promise<{ success: boolean; data?: any }> => {
     for (let i = 1; i <= maxChecks; i++) {
       await new Promise((r) => setTimeout(r, intervalMs));
       const { data, error } = await supabase
@@ -218,7 +218,7 @@ export function SmartFinishBanner({
         const errorMsg = data?.error || error?.message || 'Unknown error';
         console.error(`[SmartFinish ${source}] Kickoff failed:`, errorMsg);
         // Still check if backend completed despite the error
-        const recovered = await pollForCompletion(source, 8, 3000);
+        const recovered = await pollForCompletion(source, 60, 5000);
         if (recovered.success) { setIsGenerating(false); return recovered; }
 
         await issueGuaranteedRefund(source, errorMsg);
@@ -244,7 +244,7 @@ export function SmartFinishBanner({
       return result;
     } catch (err: unknown) {
       console.error(`[SmartFinish ${source}] Exception:`, err);
-      const recovered = await pollForCompletion(source, 8, 3000);
+      const recovered = await pollForCompletion(source, 60, 5000);
       if (recovered.success) { setIsGenerating(false); return recovered; }
 
       await issueGuaranteedRefund(source, err instanceof Error ? err.message : String(err));
