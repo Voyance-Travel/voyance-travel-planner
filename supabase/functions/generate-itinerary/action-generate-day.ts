@@ -182,6 +182,7 @@ export async function handleGenerateDay(
     isSmartFinish, smartFinishRequested,
     metadata, mustDoActivitiesRaw: mustDoActivities,
     preferenceContext, dayConstraints,
+    lockedCards,
   } = prompt;
   flightContext = prompt.flightContext;
 
