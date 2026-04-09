@@ -391,12 +391,43 @@ function getActivityCoords(act: any): { lat: number; lng: number } | null {
 // TRANSIT LABEL GENERATION
 // =============================================================================
 
+/** Check if a destination name is a placeholder or hallucinated single-letter name */
+function isPlaceholderDestination(name: string): boolean {
+  if (!name) return true;
+  const trimmed = name.trim();
+  // Single letter (A, B, C, etc.)
+  if (/^[A-Za-z]$/.test(trimmed)) return true;
+  // Known generic placeholders
+  const placeholders = [
+    'next venue', 'next stop', 'next location', 'next activity',
+    'previous location', 'previous venue', 'destination',
+    'activity a', 'activity b', 'activity c',
+    'venue a', 'venue b', 'venue c',
+    'location a', 'location b', 'location c',
+    'point a', 'point b', 'point c',
+  ];
+  return placeholders.includes(trimmed.toLowerCase());
+}
+
 /** Generate a mode-aware transit label from the actual next activity */
 function generateTransitLabel(nextActivity: any, mode: string): string {
-  const destination = nextActivity?.location?.name
-    || nextActivity?.venue_name
-    || sanitizeTransitDestination(nextActivity?.title || '')
-    || 'next venue';
+  // Try each field, skipping placeholders
+  const candidates = [
+    nextActivity?.location?.name,
+    nextActivity?.venue_name,
+    sanitizeTransitDestination(nextActivity?.title || ''),
+  ];
+  let destination = 'next venue';
+  for (const c of candidates) {
+    if (c && !isPlaceholderDestination(c)) {
+      destination = c;
+      break;
+    }
+  }
+  if (isPlaceholderDestination(destination) && destination !== 'next venue') {
+    console.warn(`[TRANSIT-PLACEHOLDER] Skipping placeholder destination "${destination}" for transit label`);
+    destination = 'next venue';
+  }
 
   switch (mode) {
     case 'walking':
@@ -2693,6 +2724,35 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           }
         }
         repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'final_transport_realign', before: transportDest, after: toName });
+      }
+    }
+
+    // 15a-bis. Sweep for placeholder transit destinations (e.g., "Travel to A", "Walk to B")
+    for (let i = 0; i < activities.length; i++) {
+      if (!isTransportFinal(activities[i])) continue;
+      const transport = activities[i];
+      const title = transport.title || '';
+      // Extract destination from "Travel to X", "Walk to X", "Taxi to X"
+      const destMatch = title.match(/^(?:Travel|Walk|Taxi|Drive|Bus|Metro|Ride)\s+to\s+(.+)$/i);
+      if (!destMatch) continue;
+      const extractedDest = destMatch[1].trim();
+      if (!isPlaceholderDestination(extractedDest)) continue;
+
+      // Find the actual next non-transport activity
+      let nextReal: any = null;
+      for (let j = i + 1; j < activities.length; j++) {
+        if (!isTransportFinal(activities[j])) { nextReal = activities[j]; break; }
+      }
+      if (!nextReal) continue;
+
+      const realName = nextReal.location?.name || nextReal.venue_name || sanitizeTransitDestination(nextReal.title || '');
+      if (realName && !isPlaceholderDestination(realName)) {
+        const method = transport.transportation?.method || 'transit';
+        const oldTitle = transport.title;
+        transport.title = generateTransitLabel(nextReal, method);
+        transport.location = { name: realName, address: nextReal.location?.address || '' };
+        console.warn(`[TRANSIT-PLACEHOLDER] Rewrote "${oldTitle}" → "${transport.title}"`);
+        repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'placeholder_transit_rewrite', before: oldTitle, after: transport.title });
       }
     }
 
