@@ -49,17 +49,28 @@ async function checkRateLimit(
 async function validateAuth(req: Request, supabase: any): Promise<{ userId: string } | null> {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
+    console.warn('[generate-itinerary] Missing or invalid Authorization header');
     return null;
   }
   
   const token = authHeader.replace('Bearer ', '');
+
+  // Early token sanity check — reject obviously malformed tokens
+  const tokenParts = token.split('.');
+  if (tokenParts.length !== 3 || tokenParts.some((p: string) => p.length === 0)) {
+    console.warn('[generate-itinerary] Malformed JWT — invalid segment count:', tokenParts.length);
+    return null;
+  }
+
   try {
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data?.user) {
+      console.warn('[generate-itinerary] Auth getUser failed:', error?.message);
       return null;
     }
     return { userId: data.user.id };
-  } catch {
+  } catch (err) {
+    console.error('[generate-itinerary] Auth exception:', err);
     return null;
   }
 }
