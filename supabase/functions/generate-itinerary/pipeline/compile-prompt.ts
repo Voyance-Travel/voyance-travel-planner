@@ -301,6 +301,7 @@ export async function compilePrompt(
   // ═══════════════════════════════════════════════════════════════════════
   let mustDoPrompt = '';
   let mustDoEventItems: ScheduledMustDo[] = [];
+  let lockedCardsForDay: LockedCard[] = [];
   let metadata: Record<string, unknown> | null = null;
   if (tripId) {
     const { data: tripMeta } = await supabase
