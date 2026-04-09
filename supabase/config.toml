@@ -69,8 +69,6 @@ project_id = "jsxplunjjvxuejeouwob"
     verify_jwt = false
   [functions.enrich-destinations]
     verify_jwt = false
-  [functions.enrich-itinerary]
-    verify_jwt = false
   [functions.enrich-manual-trip]
     verify_jwt = false
   [functions.enrich-preferences]
@@ -228,4 +226,12 @@ project_id = "jsxplunjjvxuejeouwob"
   [functions.validate-iap-receipt]
     verify_jwt = false
   [functions.enrich-destination]
+    verify_jwt = false
+  [functions.activity-concierge]
+    verify_jwt = false
+  [functions.generation-canary]
+    verify_jwt = false
+  [functions.moderate-guide-content]
+    verify_jwt = false
+  [functions.send-push]
     verify_jwt = false
