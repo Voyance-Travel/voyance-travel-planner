@@ -1,72 +1,49 @@
 
-Do I know what the issue is? Yes.
 
-What’s actually happening
-- The CORS header itself is not the core problem. Both `chat-trip-planner` and `generate-itinerary` already define browser CORS headers, and `verify_jwt = false` is already set in config. The “CORS” errors are most likely failure-path symptoms.
-- The real auth clue is in the logs: repeated `bad_jwt` / `token contains an invalid number of segments` on `/user`. That means some requests are reaching the backend with a malformed or stale access token.
-- Smart Finish still has a frontend/backend mismatch: the backend now waits up to 5 minutes, but `SmartFinishBanner.tsx` still gives up after `40 x 5s` and some recovery paths still use `8 x 3s`. So the UI can declare failure while the backend is still working.
-- `[OfflineCache] Storage full...` is secondary, but caching full trip payloads in localStorage is risky because auth persistence also uses localStorage.
-- The browser “message channel closed” errors are extension noise, not the app.
-- The `<circle ... "undefined">` errors are a separate SVG animation issue, likely from animated circles in loading/progress UI.
+# Fix: Ensure User Activities Reliably Reach Generation Pipeline
 
-Implementation plan
+## Analysis
 
-1. Stabilize auth before edge calls
-- Add a shared client helper around session retrieval in `src/lib/authSessionGuard.ts` that:
-  - uses the guarded session path,
-  - verifies the token shape before use,
-  - forces one refresh if the token is missing, expired, or malformed.
-- Use that helper in:
-  - `src/components/planner/TripChatPlanner.tsx`
-  - `src/hooks/useItineraryGeneration.ts`
+The data flow is **partially working** through the metadata fallback path:
+- `Start.tsx` (chat path) saves `mustDoActivities` and `perDayActivities` to trip metadata ✅
+- `compile-prompt.ts` reads from metadata as fallback when params are empty ✅
 
-2. Add one-time auth recovery + retry for the failing flows
-- In `TripChatPlanner.tsx`, if the request hits `401`, `Failed to fetch`, or a connection-style failure:
-  - refresh the session once,
-  - retry once,
-  - then show a clean user-facing error.
-- In `useItineraryGeneration.ts`, retry the initial `generate-itinerary` start call once after auth recovery instead of failing immediately.
+However, there are reliability gaps worth closing:
 
-3. Align Smart Finish polling with the backend window
-- Update `src/components/itinerary/SmartFinishBanner.tsx` so every Smart Finish polling path matches the backend recovery window:
-  - main polling: `60 checks x 5s`
-  - fallback/recovery polling: also use the long window
-- Do not refund or mark failure until that full window is exhausted.
-- Prefer checking `smartFinishStatus` plus completion/failure timestamps, not only the boolean flags.
+1. **`TripPlannerContext.saveTrip()`** (form path, line 288) does NOT include `mustDoActivities`/`perDayActivities` in metadata. The form path relies on `ItineraryPreview.tsx` doing a separate metadata update later — but if the user skips the context form or it fails, the data is lost.
 
-4. Harden the edge functions against malformed tokens
-- In:
-  - `supabase/functions/chat-trip-planner/index.ts`
-  - `supabase/functions/generate-itinerary/index.ts`
-- Add an early token sanity check before calling `auth.getUser(token)`.
-- If the token is obviously invalid, return a structured `401` JSON response with CORS headers immediately.
-- Add concise logs that distinguish:
-  - invalid token
-  - auth failure
-  - upstream AI/generation failure
-  - cold-start/boot-path failure
+2. **Client-side generation path** (`useItineraryGeneration.ts` line 252) doesn't pass these fields. If metadata read fails or is stale, generation gets nothing.
 
-5. Reduce localStorage pressure
-- In `src/hooks/useOfflineItinerary.ts`, stop caching oversized full-trip rows.
-- Cache only lightweight trip data, or strip heavy `itinerary_data` / bulky metadata before save.
-- This should remove the quota warning and reduce auth persistence instability.
+3. **Server-side chain** (`action-generate-trip-day.ts` line 530) also doesn't pass them to `generate-day`. It relies entirely on `compile-prompt.ts` re-reading metadata from DB — which works but adds an extra DB query and creates a single point of failure.
 
-6. Clean up the SVG warning separately
-- Audit `src/components/planner/shared/GenerationAnimation.tsx` and similar progress-ring components.
-- Replace fragile animated `cx/cy/r` attribute animation with transform-based animation or guaranteed numeric values so no `<circle>` attribute becomes `undefined`.
+4. **`TripDetails` interface** in `useItineraryGeneration.ts` (line 106) doesn't include these fields, so callers can't pass them even if they wanted to.
 
-Verification
-- Chat works on the published site without “CORS” / `Failed to fetch`.
-- Auth logs stop showing malformed JWT errors for these flows.
-- Smart Finish can run longer than 200s without the UI timing out early.
-- LocalStorage quota warnings become rare or disappear.
-- The `<circle>` console errors are gone during loading animations.
+## Changes
 
-Files likely touched
-- `src/components/planner/TripChatPlanner.tsx`
-- `src/hooks/useItineraryGeneration.ts`
-- `src/components/itinerary/SmartFinishBanner.tsx`
-- `src/lib/authSessionGuard.ts`
-- `src/hooks/useOfflineItinerary.ts`
-- `supabase/functions/chat-trip-planner/index.ts`
-- `supabase/functions/generate-itinerary/index.ts`
+### 1. Add fields to `TripPlannerContext.tsx` saveTrip() metadata (line ~288)
+Add `mustDoActivities` and `perDayActivities` from `state.basics` to the metadata object. Also add these optional fields to the `TripBasics` interface.
+
+### 2. Extend `TripDetails` interface in `useItineraryGeneration.ts`
+Add optional `mustDoActivities` and `perDayActivities` fields.
+
+### 3. Pass fields in client-side generation call (line ~252)
+Add `mustDoActivities` and `perDayActivities` from the trip object to the `generate-day` body.
+
+### 4. Pass fields in server generation call (line ~483)
+Add both fields to the `generate-trip` body in `startServerGeneration()`.
+
+### 5. Pass fields in server chain body (`action-generate-trip-day.ts` line ~530)
+Add `mustDoActivities` and `perDayActivities` from `tripMeta` to the `generate-day` call body, so `compile-prompt.ts` gets them as params (faster, more reliable than re-querying DB).
+
+### 6. Add diagnostic logging
+- `TripPlannerContext.tsx` saveTrip(): log presence of mustDo/perDay
+- `useItineraryGeneration.ts`: log before generation call
+- `action-generate-trip-day.ts`: log what was read from metadata and passed to generate-day
+
+### 7. Redeploy `generate-itinerary` edge function
+
+## Files Changed
+- `src/contexts/TripPlannerContext.tsx` — metadata + TripBasics interface
+- `src/hooks/useItineraryGeneration.ts` — TripDetails interface + generation bodies
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — pass-through params + logging
+
