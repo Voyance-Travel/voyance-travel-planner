@@ -1,45 +1,67 @@
 
 
-# Fix Transit Hallucination — "Travel to A" and "Travel to B"
+# Lock / Enhance / Verify Lock for User-Specified Activities
 
-## Root Cause
+## Problem
+When users provide detailed day-by-day itineraries in "Just Tell Us" with exact times, venues, and restaurants, the generation pipeline can drift, rename, reorder, or drop their content through AI generation, hallucination filters, cross-day dedup, sanitization, and enrichment.
 
-CRITICAL REMINDERS item 13 in `compile-prompt.ts` (line 1273) says:
-> "Activity **B** cannot start before Activity **A** ends."
+## Current State
+- `perDayActivities` is parsed and injected as a prompt instruction (compile-prompt.ts lines 219-235) telling the AI to "follow this schedule"
+- `userSpecifiedNames` set (action-generate-trip-day.ts lines 851-876) protects user venues from the hallucination filter
+- `enrich-day.ts` already skips `isLocked` activities (line 42)
+- But: the AI still generates ALL activities (including user-specified ones), so drift happens. Post-processing filters (filler, wellness, dedup, sanitization) can also modify or remove them.
 
-The AI sometimes interprets "A" and "B" as literal activity/venue names and generates transit cards titled "Travel to A" or "Walk to B". There is no guard in the repair pipeline to catch these single-letter or placeholder destinations.
+## Plan
 
-## Changes
+### 1. Add `lockedCards` field to `CompiledPrompt` interface
+**File: `compile-prompt.ts`** — Add `lockedCards: any[]` to the `CompiledPrompt` interface so locked cards flow from prompt compilation to the orchestrator.
 
-### 1. Reword prompt to avoid abstract "A" / "B" labels
-**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** (line 1273)
+### 2. Build locked cards from `perDayActivities` (LOCK phase)
+**File: `compile-prompt.ts`** — Add helper functions `parseUserActivities()`, `normalizeTime()`, `detectCategory()`, and `findTimeGaps()` near the top. In the `perDayActivities` block (lines 219-235):
+- Parse user text into structured locked activity cards with `locked: true` and `lockedSource` preserving the original text
+- TBD entries remain as AI hints, not locked
+- Build a "PRE-FILLED TIMELINE" showing the AI what's locked, and "OPEN TIME GAPS" for what the AI should fill
+- Store locked cards on the returned `CompiledPrompt`
 
-Change item 13 from:
-> "Activity B cannot start before Activity A ends..."
+### 3. Inject locked cards after AI generation (merge)
+**File: `action-generate-trip-day.ts`** — After the AI response is parsed (~line 880 area, after hallucination filter):
+- Add `mergeLockedCards()` function that inserts locked cards into the activity list, discarding any AI-generated activities that overlap locked time slots
+- Read `lockedCards` from the compiled prompt context
 
-To:
-> "The NEXT activity cannot start before the PREVIOUS activity ends..."
+### 4. Skip locked cards in ALL post-processing filters
+**File: `action-generate-trip-day.ts`** — Add `if (activity.locked) continue/return true` guards in:
+- Hallucination filter (line 917) — already partially protected via `userSpecifiedNames`, but locked flag is more robust
+- Filler activity filter (~line 988)
+- Wellness limiter (~line 1020)
+- Cross-day venue dedup (~line 1066)
+- Cross-day restaurant dedup (~line 1306)
+- Departure day cutoff (~line 1041)
 
-This eliminates the source of the "A" and "B" hallucination.
+### 5. Enrichment: geocode-only for locked cards
+**File: `enrich-day.ts`** — Already skips `isLocked` activities. Add similar handling for `locked` flag: attempt geocoding for transit calculation but never overwrite name, title, or address.
 
-### 2. Add placeholder destination guard in `repair-day.ts`
+### 6. Verify lock integrity (VERIFY phase)
+**File: `action-generate-trip-day.ts`** — Add `verifyLockedCards()` as the absolute last step before the save block (~line 1447):
+- Compare final activities against original locked cards by `lockedSource`
+- Restore any dropped locked cards
+- Fix any title, time, or venue name drift
+- Re-sort by start time
 
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+### 7. Deploy
+Deploy `generate-itinerary` edge function.
 
-Add a helper function `isPlaceholderDestination(name)` that returns true for:
-- Single-letter names (e.g., "A", "B", "C")
-- Known generic placeholders ("next venue", "destination", "previous location", "next stop", "Activity A", "Activity B")
+## Technical Details
 
-Then update `generateTransitLabel` (~line 395) to skip placeholder names when building the transit title — if the resolved destination is a placeholder, fall back to the next available field (venue_name, title) and log a `[TRANSIT-PLACEHOLDER]` warning.
-
-Also add a sweep pass (after the existing transport title sync in step 15a, ~line 2658) that catches any remaining transit cards whose title ends with a placeholder destination and rewrites them using the actual next non-transport activity's name.
-
-### 3. Deploy
-- Deploy `generate-itinerary` edge function
+- **Locked flag**: `locked: true` + `lockedSource: string` on activity objects (not a schema change — these are JSONB fields within `itinerary_data`)
+- **Time parsing**: Handles "9AM", "9:00AM", "9AM-11:30AM" formats via regex
+- **Category detection**: Title-keyword-based (breakfast → dining, museum → explore, meeting → activity, etc.)
+- **Gap detection**: Compares locked time slots to find open windows for AI to fill
+- **Merge strategy**: Locked cards take priority; AI activities overlapping locked time slots are discarded with `[LOCKED-SKIP]` logging
 
 ## What's NOT Changed
-- Transit calculation math or duration estimates
-- Activity generation or selection
+- Chat-trip-planner's `perDayActivities` extraction (Prompt 82)
+- `mustDoActivities` fallback for non-structured inputs
+- Single City / Multi-City / Build Myself flows
 - Database schema
-- Other prompt items (items 14-16 are unaffected)
+- Transit calculation or duration logic
 
