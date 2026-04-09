@@ -555,6 +555,67 @@ export async function handleGenerateDay(
       console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
     }
 
+    // === MERGE LOCKED CARDS from perDayActivities (LOCK phase) ===
+    if (lockedCards.length > 0) {
+      const beforeMerge = normalizedActivities.length;
+      // Remove AI activities overlapping locked card time slots
+      normalizedActivities = normalizedActivities.filter((act: any) => {
+        if (act.isLocked || act.locked) return true; // keep existing locked
+        const actStart = parseTimeToMinutes(act.startTime || '00:00');
+        const actEnd = parseTimeToMinutes(act.endTime || '23:59');
+        if (actStart === null || actEnd === null) return true;
+        for (const lc of lockedCards) {
+          if (!lc.start_time) continue;
+          const lcStart = parseTimeToMinutes(lc.start_time);
+          const lcEnd = lc.end_time ? parseTimeToMinutes(lc.end_time) : (lcStart !== null ? lcStart + 60 : null);
+          if (lcStart === null || lcEnd === null) continue;
+          if (actStart < lcEnd && actEnd > lcStart) {
+            console.log(`[LOCKED-SKIP] AI activity "${act.title}" at ${act.startTime} overlaps locked card "${lc.title}" — discarded`);
+            return false;
+          }
+        }
+        return true;
+      });
+
+      // Semantic dedup: remove AI activities that duplicate locked card titles
+      normalizedActivities = normalizedActivities.filter((act: any) => {
+        if (act.locked) return true;
+        const genTitle = (act.title || '').toLowerCase();
+        for (const lc of lockedCards) {
+          const lcTitle = lc.title.toLowerCase();
+          if (genTitle.includes(lcTitle) || lcTitle.includes(genTitle)) return false;
+        }
+        return true;
+      });
+
+      // Convert locked cards to activity format and inject
+      const lockedAsActivities = lockedCards.map((lc, idx) => ({
+        id: `day${dayNumber}-locked-${idx}-${Date.now()}`,
+        title: lc.title,
+        name: lc.title,
+        startTime: lc.start_time || undefined,
+        endTime: lc.end_time || undefined,
+        category: lc.category,
+        venue_name: lc.venue_name,
+        location: lc.venue_name ? { name: lc.venue_name, address: '' } : undefined,
+        cost: { amount: 0, currency: 'USD' },
+        locked: true,
+        lockedSource: lc.lockedSource,
+        isLocked: false, // isLocked is for UI regeneration locks; locked is for pipeline protection
+        durationMinutes: lc.start_time && lc.end_time ? calculateDuration(lc.start_time, lc.end_time) : 60,
+      }));
+
+      normalizedActivities = [...normalizedActivities, ...lockedAsActivities];
+      normalizedActivities.sort((a: any, b: any) => {
+        const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+        const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+        return aTime - bTime;
+      });
+
+      const skipped = beforeMerge - (normalizedActivities.length - lockedAsActivities.length);
+      console.log(`[generate-day] LOCK MERGE: Injected ${lockedAsActivities.length} locked cards, discarded ${skipped} overlapping AI activities`);
+    }
+
     // NOTE: Minimum duration enforcement and timing overlap resolution are now
     // handled exclusively by pipeline/repair-day.ts to prevent cascading shifts.
     // The 68G inline blocks were removed to fix the AM/PM timing collapse bug.
