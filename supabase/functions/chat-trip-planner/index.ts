@@ -1,6 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-import { fetchTravelerDNA, buildCompactDNASummary } from "../_shared/traveler-dna.ts";
+// traveler-dna is imported dynamically to prevent cold-start crashes
+let fetchTravelerDNA: any = null;
+let buildCompactDNASummary: any = null;
+async function loadTravelerDNA() {
+  if (!fetchTravelerDNA) {
+    try {
+      const mod = await import("../_shared/traveler-dna.ts");
+      fetchTravelerDNA = mod.fetchTravelerDNA;
+      buildCompactDNASummary = mod.buildCompactDNASummary;
+    } catch (err) {
+      console.error("[chat-trip-planner] Failed to load traveler-dna module:", err);
+    }
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -251,11 +264,12 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Fetch traveler DNA for personalized chat
+    // Fetch traveler DNA for personalized chat (dynamic import)
     let personalizationContext = '';
     try {
+      await loadTravelerDNA();
       const userId = user.id;
-      if (userId) {
+      if (userId && fetchTravelerDNA) {
         const dnaResult = await fetchTravelerDNA(supabase, userId);
         if (dnaResult.hasData) {
           const summary = buildCompactDNASummary(dnaResult.dna);
