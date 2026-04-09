@@ -395,9 +395,12 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
       }
     } catch (err: any) {
       console.error('Chat error:', err);
+      const msg = err.name === 'AbortError'
+        ? 'The request timed out. Please try again.'
+        : (err.message || 'Please try again.');
       setMessages(prev => [
         ...prev,
-        { role: 'assistant', content: `Sorry, something went wrong. ${err.message || 'Please try again.'}` },
+        { role: 'assistant', content: `Sorry, something went wrong. ${msg}` },
       ]);
     } finally {
       setIsStreaming(false);

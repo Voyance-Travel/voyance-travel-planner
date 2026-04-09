@@ -505,6 +505,7 @@ serve(async (req) => {
       }
     );
 
+    console.log("[chat-trip-planner] AI gateway response status:", response.status);
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(
