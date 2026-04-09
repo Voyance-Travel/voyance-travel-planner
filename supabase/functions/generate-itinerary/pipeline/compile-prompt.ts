@@ -117,10 +117,12 @@ export interface CompiledPrompt {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function normalizeTimeStr(raw: string): string | null {
-  const match = raw.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  // Strip leading tilde/approx markers
+  const cleaned = raw.trim().replace(/^[~≈]\s*/, '');
+  const match = cleaned.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
   if (!match) {
-    const h24 = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
-    if (h24) return raw.trim();
+    const h24 = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+    if (h24) return cleaned;
     return null;
   }
   let hour = parseInt(match[1]);
@@ -133,28 +135,72 @@ function normalizeTimeStr(raw: string): string | null {
 
 function detectActivityCategory(text: string): string {
   const lower = text.toLowerCase();
+  // Transit
+  if (/\b(flight|depart|land|airport|lounge|train|transfer|arrive)\b/i.test(lower)) return 'transit';
+  // Dining
   if (/breakfast|brunch/i.test(lower)) return 'dining';
   if (/lunch|dinner|supper/i.test(lower)) return 'dining';
-  if (/hotel|check.?in|check.?out|transfer to/i.test(lower)) return 'accommodation';
+  if (/\b(drinks?|cocktail|wine\b(?!\s*tasting)|bar|coffee)\b/i.test(lower)) return 'dining';
+  // Accommodation
+  if (/hotel|check.?in|check.?out/i.test(lower)) return 'accommodation';
+  // Explore
+  if (/museum|gallery|tour|visit|mosque/i.test(lower)) return 'explore';
+  // Activity
   if (/spa|wellness|hammam|massage/i.test(lower)) return 'activity';
-  if (/museum|gallery|tour|visit/i.test(lower)) return 'explore';
-  if (/meeting|presentation|orientation|company|conference|workshop/i.test(lower)) return 'activity';
+  if (/meeting|presentation|orientation|company|conference|workshop|session|panel/i.test(lower)) return 'activity';
   if (/pool|beach|relax/i.test(lower)) return 'activity';
   if (/shopping|market|souk|bazaar/i.test(lower)) return 'activity';
+  if (/wine\s*tasting|volunteering/i.test(lower)) return 'activity';
+  if (/\b(wake|get ready|freshen)\b/i.test(lower)) return 'activity';
   return 'activity';
+}
+
+/** Known activity words that precede a venue name after a dash separator */
+const VENUE_PREFIX_WORDS = /^(dinner|lunch|breakfast|brunch|spa|transfer|drinks?|cocktails?|check.?in|wine\s*(?:bar|tasting)?)\b/i;
+
+function extractVenueName(activityText: string): string | null {
+  // Pattern 1: "at Venue" or "@ Venue"
+  const atMatch = activityText.match(/(?:\bat\b|\b@)\s+(.+)$/i);
+  if (atMatch) return atMatch[1].trim();
+
+  // Pattern 2: "Dinner - Venue Name" (dash-separated after a known activity word)
+  const dashMatch = activityText.match(/^(.+?)\s*-\s*(.+)$/);
+  if (dashMatch && VENUE_PREFIX_WORDS.test(dashMatch[1].trim())) {
+    const venue = dashMatch[2].trim();
+    // Avoid returning sub-descriptions like time qualifiers
+    if (venue && !/^\d/.test(venue)) return venue;
+  }
+
+  return null;
+}
+
+/** Map vague period words to approximate 24h start times */
+function vagueTimeToStart(period: string): string | null {
+  switch (period.toLowerCase()) {
+    case 'morning': return '08:00';
+    case 'afternoon': return '14:00';
+    case 'evening': return '18:00';
+    case 'night': return '21:00';
+    case 'day': return '10:00';
+    default: return null;
+  }
 }
 
 function parseUserActivities(dayActivitiesString: string, dayNumber: number): LockedCard[] {
   const lockedCards: LockedCard[] = [];
-  // Split by comma, respecting time-prefixed entries
-  const entries = dayActivitiesString.split(/,\s*(?=\d{1,2}(?::\d{2})?\s*(?:AM|PM)|[A-Z])/i);
+
+  // Normalize en-dashes and em-dashes to hyphens for consistent regex matching
+  const normalized = dayActivitiesString.replace(/[–—]/g, '-');
+
+  // Split by comma, respecting time-prefixed entries and vague period entries
+  const entries = normalized.split(/,\s*(?=~?\d{1,2}(?::\d{2})?\s*(?:AM|PM)|[A-Z])/i);
 
   for (const entry of entries) {
     const trimmed = entry.trim();
     if (!trimmed) continue;
 
-    // Parse time: "9:00AM Activity Name" or "9AM-11:30AM Activity Name"
-    const timeMatch = trimmed.match(/^(\d{1,2}(?::\d{2})?\s*(?:AM|PM))\s*(?:-\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)))?\s+(.+)$/i);
+    // Parse time: "9:00AM Activity" or "~7:15 AM Activity" or "9AM-11:30AM Activity"
+    const timeMatch = trimmed.match(/^~?\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM))\s*(?:-\s*~?\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)))?\s*-?\s+(.+)$/i);
 
     let startTime: string | null = null;
     let endTime: string | null = null;
@@ -164,14 +210,22 @@ function parseUserActivities(dayActivitiesString: string, dayNumber: number): Lo
       startTime = normalizeTimeStr(timeMatch[1]);
       endTime = timeMatch[2] ? normalizeTimeStr(timeMatch[2]) : null;
       activityText = timeMatch[3].trim();
+      // Strip leading dash from activity text if present
+      activityText = activityText.replace(/^-\s*/, '');
+    } else {
+      // Check for vague period prefix: "Morning - Breakfast", "Night - Pool"
+      const vagueMatch = trimmed.match(/^(Morning|Afternoon|Evening|Night|Day)\s*-\s*(.+)$/i);
+      if (vagueMatch) {
+        startTime = vagueTimeToStart(vagueMatch[1]);
+        activityText = vagueMatch[2].trim();
+      }
     }
 
     // TBD entries handled by AI, not locked
     if (/\bTBD\b|to be determined|choose|pick\b/i.test(activityText)) continue;
 
     const category = detectActivityCategory(activityText);
-    const venueMatch = activityText.match(/(?:at |@ )(.+)$/i);
-    const venueName = venueMatch ? venueMatch[1].trim() : null;
+    const venueName = extractVenueName(activityText);
 
     lockedCards.push({
       title: activityText,
