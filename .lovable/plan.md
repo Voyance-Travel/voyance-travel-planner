@@ -1,52 +1,32 @@
 
 
-# Fix: "trip is not defined" in Smart Finish Background Generation
+# Fix: "Build It Myself" Trips Not Appearing
 
 ## Root Cause
 
-In `supabase/functions/enrich-manual-trip/index.ts`, the `runGenerationInBackground` function (line 162) references `trip.destination`, `trip.start_date`, etc. (lines 189-196) when building the request body for `generate-itinerary`. But `trip` is not passed as a parameter to this function — it only exists in the main `serve` handler scope (line 423). This causes a `ReferenceError: trip is not defined` at runtime, which gets stored in `metadata.smartFinishError` and surfaced to the user.
+The `parse-trip-input` edge function has **never been deployed**. When a user pastes their research in the "Build Myself" tab and clicks "Organize My Trip," the app calls `supabase.functions.invoke('parse-trip-input')`, which returns an error because the function doesn't exist on the server. The trip creation never completes, so no `manual_paste` trips exist in the database (confirmed: zero records with `creation_source='manual_paste'`).
 
 ## Fix
 
-**File: `supabase/functions/enrich-manual-trip/index.ts`**
+**Deploy the `parse-trip-input` edge function.** The code already exists at `supabase/functions/parse-trip-input/index.ts`. It just needs to be deployed so the "Build Myself" flow can actually parse user input and create trips.
 
-Add a trip fetch at the start of `runGenerationInBackground`, before the `generate-itinerary` call:
+### Steps
 
-```ts
-async function runGenerationInBackground(
-  supabaseUrl: string,
-  supabaseServiceKey: string,
-  authHeader: string,
-  tripId: string,
-  userId: string,
-  updatedMetadata: any,
-  pendingChargeId: string | null,
-  baselineTripUpdatedAt?: string | null,
-) {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+1. **Deploy `parse-trip-input`** — Use the edge function deployment tool to push the existing function code to production.
 
-  try {
-    console.log(`[enrich-manual-trip:bg] Starting generate-itinerary for trip ${tripId}`);
+2. **Verify the function uses correct AI model** — The function likely calls an AI model to parse pasted text into structured trip data. Confirm it uses Lovable AI gateway or has the required API keys configured.
 
-    // Fetch trip data — needed for generate-itinerary request body
-    const { data: trip, error: tripErr } = await supabase
-      .from("trips")
-      .select("destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city")
-      .eq("id", tripId)
-      .single();
+3. **Test end-to-end** — After deployment, verify:
+   - Pasting text in "Build Myself" tab triggers parsing successfully
+   - The parsed result shows in the review step
+   - Confirming creates a trip in the database with `creation_source='manual_paste'`
+   - The new trip appears on the My Trips dashboard
 
-    if (tripErr || !trip) {
-      throw new Error(`Failed to fetch trip for background generation: ${tripErr?.message || 'not found'}`);
-    }
+### Technical Details
 
-    let generateData: any = null;
-    // ... rest unchanged, trip.destination etc. now resolves correctly
-```
-
-This is a one-location fix — add a trip fetch query right after creating the supabase client in the background function, before the existing code references `trip.*` fields.
-
-## Technical Details
-- Single file change: `supabase/functions/enrich-manual-trip/index.ts`
-- The `trip` variable was in the outer `serve` handler scope but closures don't capture it since `runGenerationInBackground` is called via `waitUntil` / fire-and-forget after the response is sent
-- No schema changes needed
+- **File**: `supabase/functions/parse-trip-input/index.ts` (843 lines, already written)
+- **Consumer**: `src/components/planner/ManualTripPasteEntry.tsx` line 89 — `supabase.functions.invoke('parse-trip-input')`
+- **Trip creation**: `src/utils/createTripFromParsed.ts` — inserts with `creation_source: 'manual_paste'`
+- **No code changes needed** — only deployment of the existing edge function
+- **Dashboard display**: Already works — `TripDashboard.tsx` fetches all owned trips without filtering by `creation_source`
 
