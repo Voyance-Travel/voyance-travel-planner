@@ -1270,6 +1270,8 @@ CRITICAL REMINDERS:
 10. MORNING GAP CHECK: If there is nothing between breakfast (8-9am) and lunch (12-1pm), you left a 3-hour gap. Fill it with at least 1 paid activity + 1 free activity.
 11. TRANSIT REALITY CHECK: Do NOT use "5 min walk" as a default. Actually think about the distance between locations. Different arrondissements/neighborhoods = minimum 10-15 min. Same street/block = 3-5 min. Cross-city = 20-30 min.
 12. TRANSIT LABELS: The transit activity title MUST name the NEXT activity's venue. "Travel to [next venue name]" or "Walk to [next venue name]". Never use a venue name that isn't the immediate next stop.
+13. TIME OVERLAP CHECK: Activity B cannot start before Activity A ends. If you insert a "freshen up at hotel" before dinner, calculate: hotel_arrival_time + freshen_duration + transit_to_restaurant = dinner_start. Work BACKWARDS from dinner reservation time.
+14. HOTEL ROUND-TRIP MATH: Going back to the hotel before dinner requires: transit TO hotel + time AT hotel (20-30 min) + transit FROM hotel to restaurant. All three must fit between the previous activity's end and dinner start. If they don't fit, SKIP the hotel visit entirely.
 
 ${'='.repeat(70)}
 🧠 VOYANCE INTELLIGENCE FIELDS — MANDATORY FOR EVERY ACTIVITY

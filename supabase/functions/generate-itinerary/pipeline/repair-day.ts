@@ -3505,6 +3505,36 @@ function repairBookends(
       }
     }
 
+    // === FINAL SEQUENTIAL ENFORCEMENT ===
+    // Safety net: catch any overlaps introduced by bookend repairs, transit injection, etc.
+    for (let i = 1; i < deduped.length; i++) {
+      const prev = deduped[i - 1];
+      const curr = deduped[i];
+      const prevEndMin = parseTimeToMinutes(prev.endTime);
+      const currStartMin = parseTimeToMinutes(curr.startTime);
+      if (prevEndMin != null && currStartMin != null && currStartMin < prevEndMin) {
+        const overlap = prevEndMin - currStartMin;
+        // Push current (and all subsequent) forward by the overlap
+        for (let j = i; j < deduped.length; j++) {
+          const a = deduped[j];
+          const sMin = parseTimeToMinutes(a.startTime);
+          const eMin = parseTimeToMinutes(a.endTime);
+          if (sMin != null) {
+            const dur = (eMin != null) ? eMin - sMin : 0;
+            a.startTime = minutesToHHMM(sMin + overlap);
+            if (eMin != null) a.endTime = minutesToHHMM(sMin + overlap + dur);
+          }
+        }
+        console.log(`[TIME-FIX] Pushed "${curr.title}" forward ${overlap}min (was overlapping with "${prev.title}")`);
+        repairs.push({
+          code: FAILURE_CODES.TIME_OVERLAP,
+          action: 'sequential_enforcement_push',
+          before: `${curr.title} started at ${minutesToHHMM(currStartMin)}`,
+          after: `pushed to ${curr.startTime}`,
+        });
+      }
+    }
+
     return { activities: deduped, repairs };
   }
 }
