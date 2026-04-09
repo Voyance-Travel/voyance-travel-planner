@@ -1,32 +1,21 @@
 
 
-# Fix: "Build It Myself" Trips Not Appearing
+# Deploy 4 Undeployed Edge Functions
 
-## Root Cause
+## What
 
-The `parse-trip-input` edge function has **never been deployed**. When a user pastes their research in the "Build Myself" tab and clicks "Organize My Trip," the app calls `supabase.functions.invoke('parse-trip-input')`, which returns an error because the function doesn't exist on the server. The trip creation never completes, so no `manual_paste` trips exist in the database (confirmed: zero records with `creation_source='manual_paste'`).
+Deploy the 4 edge functions that exist in code but are missing from `supabase/config.toml`:
 
-## Fix
+1. **`activity-concierge`** — Activity recommendations
+2. **`generation-canary`** — Pipeline health check
+3. **`moderate-guide-content`** — Content moderation for guides
+4. **`send-push`** — Push notification delivery
 
-**Deploy the `parse-trip-input` edge function.** The code already exists at `supabase/functions/parse-trip-input/index.ts`. It just needs to be deployed so the "Build Myself" flow can actually parse user input and create trips.
+Also clean up the stale `enrich-itinerary` config entry (no matching code exists).
 
-### Steps
+## Steps
 
-1. **Deploy `parse-trip-input`** — Use the edge function deployment tool to push the existing function code to production.
-
-2. **Verify the function uses correct AI model** — The function likely calls an AI model to parse pasted text into structured trip data. Confirm it uses Lovable AI gateway or has the required API keys configured.
-
-3. **Test end-to-end** — After deployment, verify:
-   - Pasting text in "Build Myself" tab triggers parsing successfully
-   - The parsed result shows in the review step
-   - Confirming creates a trip in the database with `creation_source='manual_paste'`
-   - The new trip appears on the My Trips dashboard
-
-### Technical Details
-
-- **File**: `supabase/functions/parse-trip-input/index.ts` (843 lines, already written)
-- **Consumer**: `src/components/planner/ManualTripPasteEntry.tsx` line 89 — `supabase.functions.invoke('parse-trip-input')`
-- **Trip creation**: `src/utils/createTripFromParsed.ts` — inserts with `creation_source: 'manual_paste'`
-- **No code changes needed** — only deployment of the existing edge function
-- **Dashboard display**: Already works — `TripDashboard.tsx` fetches all owned trips without filtering by `creation_source`
+1. Add config entries for all 4 functions in `supabase/config.toml` with `verify_jwt = false`
+2. Remove the stale `[functions.enrich-itinerary]` entry
+3. Deploy all 4 functions
 
