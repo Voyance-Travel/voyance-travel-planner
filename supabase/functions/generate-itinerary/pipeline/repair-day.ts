@@ -2727,6 +2727,35 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
     }
 
+    // 15a-bis. Sweep for placeholder transit destinations (e.g., "Travel to A", "Walk to B")
+    for (let i = 0; i < activities.length; i++) {
+      if (!isTransportFinal(activities[i])) continue;
+      const transport = activities[i];
+      const title = transport.title || '';
+      // Extract destination from "Travel to X", "Walk to X", "Taxi to X"
+      const destMatch = title.match(/^(?:Travel|Walk|Taxi|Drive|Bus|Metro|Ride)\s+to\s+(.+)$/i);
+      if (!destMatch) continue;
+      const extractedDest = destMatch[1].trim();
+      if (!isPlaceholderDestination(extractedDest)) continue;
+
+      // Find the actual next non-transport activity
+      let nextReal: any = null;
+      for (let j = i + 1; j < activities.length; j++) {
+        if (!isTransportFinal(activities[j])) { nextReal = activities[j]; break; }
+      }
+      if (!nextReal) continue;
+
+      const realName = nextReal.location?.name || nextReal.venue_name || sanitizeTransitDestination(nextReal.title || '');
+      if (realName && !isPlaceholderDestination(realName)) {
+        const method = transport.transportation?.method || 'transit';
+        const oldTitle = transport.title;
+        transport.title = generateTransitLabel(nextReal, method);
+        transport.location = { name: realName, address: nextReal.location?.address || '' };
+        console.warn(`[TRANSIT-PLACEHOLDER] Rewrote "${oldTitle}" → "${transport.title}"`);
+        repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'placeholder_transit_rewrite', before: oldTitle, after: transport.title });
+      }
+    }
+
     // 15b. Merge consecutive transport cards
     let merged = true;
     while (merged) {
