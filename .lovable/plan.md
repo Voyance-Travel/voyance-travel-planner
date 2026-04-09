@@ -1,59 +1,39 @@
 
 
-# Fix: White Page When Generating an Active-Date Trip
+# Fix: `perDayActivities` Dropped During Trip Creation
 
 ## Root Cause
 
-When navigating to `/trip/${id}?generate=true` from "Just Tell Us", TripDetail checks if the trip falls within the current date window (start_date <= today <= end_date). Since this trip starts today (April 9), the redirect at line 2136 fires **before** the auto-generate useEffect can trigger:
-
-```
-if ((isLiveTrip || isInDateWindow) && searchParams.get('edit') !== 'true') {
-    return <Navigate to={`/trip/${trip.id}/active`} replace />;
-}
-```
-
-This sends the user to `/trip/${id}/active` (ActiveTrip page) with no itinerary data — the white page. When they click "Edit" there, they go to `/trip/${id}?edit=true` which loads TripDetail but **without** `?generate=true`, so no auto-generation happens.
+The chat-trip-planner AI correctly extracts `perDayActivities` (your entire day-by-day itinerary). The `TripChatPlanner` component passes it to `Start.tsx` via `onDetailsExtracted`. But in `Start.tsx` at **line 2978**, where the trip's `metadata` object is built, **`perDayActivities` is never included**. The generation engine then reads `metadata.perDayActivities`, finds nothing, and generates everything from scratch — ignoring all your locked activities.
 
 ## Fix
 
-**File: `src/pages/TripDetail.tsx` (~line 2136)**
+**File: `src/pages/Start.tsx` (~line 2986)**
 
-Add two additional bypass conditions to the date-window redirect:
-1. Skip redirect when `?generate=true` is in the URL (generation needs to trigger first)
-2. Skip redirect when the trip has no itinerary data yet (nothing to show on ActiveTrip)
+Add `perDayActivities` to the metadata object, right alongside `mustDoActivities`:
 
-Change the condition from:
 ```ts
-if ((isLiveTrip || isInDateWindow) && searchParams.get('edit') !== 'true') {
-```
-to:
-```ts
-if ((isLiveTrip || isInDateWindow) 
-    && searchParams.get('edit') !== 'true' 
-    && !shouldAutoGenerate 
-    && !isServerGenerating
-    && hasItineraryData(trip)) {
-```
-
-This ensures:
-- Trips with `?generate=true` stay on TripDetail to trigger generation
-- Trips currently generating stay on TripDetail to show progress
-- Trips with no itinerary data don't redirect to an empty ActiveTrip page
-- Once generation completes and itinerary data exists, the redirect works normally
-
-**File: `src/pages/ItineraryView.tsx`**
-
-Apply the same fix — skip the active redirect if itinerary_data is empty:
-```ts
-if ((isActive || inDateWindow) && hasItineraryData) {
-    return <Navigate to={`/trip/${id}/active`} replace />;
-}
+return {
+  mustDoActivities: mustDo,
+  additionalNotes: details.additionalNotes || null,
+  flightDetails: details.flightDetails || null,
+  userConstraints: details.userConstraints || null,
+  pacing: details.pacing || 'balanced',
+  isFirstTimeVisitor: details.isFirstTimeVisitor ?? true,
+  interestCategories: details.interestCategories?.length ? details.interestCategories : null,
+  celebrationDay: details.celebrationDay || null,
+  generationRules,
+  perDayActivities: details.perDayActivities || null,  // ← ADD THIS LINE
+  source: 'chat_planner',
+  lastUpdated: new Date().toISOString(),
+};
 ```
 
-## Technical Details
+That's it — one line. The entire Lock → Enhance → Verify pipeline already works correctly; it just never receives the data.
 
-- `shouldAutoGenerate` is already defined as `searchParams.get('generate') === 'true'` (line 113)
-- `isServerGenerating` is already computed (line 218)
-- `hasItineraryData(trip)` already exists as a helper function (line 887)
-- No new state, no schema changes, no edge function changes
+## Impact
+- All ~90+ activities from the user's day-by-day itinerary will be locked and preserved
+- TBD slots will still be filled by the AI
+- Time gaps will still get appropriate gap-fill activities
+- No edge function changes needed — the backend already reads `metadata.perDayActivities`
 
