@@ -1042,6 +1042,7 @@ async function _handleGenerateTripDayInner(
       const cutoff = depMinutes - bufferMin;
       const beforeDep = dayResult.activities.length;
       dayResult.activities = dayResult.activities.filter((act: any) => {
+        if (act.locked) return true; // Never filter locked user-specified activities
         const title = (act.title || '').toLowerCase();
         if (title.includes('checkout') || title.includes('check-out') || title.includes('heading home') || title.includes('departure') || title.includes('transfer to') || title.includes('airport') || title.includes('station')) {
           return true;
