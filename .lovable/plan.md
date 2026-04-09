@@ -1,55 +1,52 @@
 
-What I found
 
-- I checked the latest Just Tell Us trip records from today.
-- The newest chat-created trip is storing a very large flat `mustDoActivities` list, but `perDayActivities` is still missing.
-- For long multi-city trips, the app then splits the trip into journey legs. During that split, only flat must-dos are carried forward, and generic items that do not mention a city get dumped into leg 1.
-- That means the generator never receives the real day-by-day locked plan for each leg, so it falls back to inventing activities.
+# Fix: "trip is not defined" in Smart Finish Background Generation
 
-Root cause
+## Root Cause
 
-1. The structured day-by-day extraction is still not reliably making it into `perDayActivities`.
-2. Even if it does, `splitJourneyIfNeeded.ts` currently does not preserve `perDayActivities` when creating journey legs.
-3. The current leg-splitting logic filters `mustDoActivities` by city-name matching, which breaks pasted itineraries because entries like “Breakfast”, “Pool”, “Meet”, “Session”, etc. do not contain city names.
+In `supabase/functions/enrich-manual-trip/index.ts`, the `runGenerationInBackground` function (line 162) references `trip.destination`, `trip.start_date`, etc. (lines 189-196) when building the request body for `generate-itinerary`. But `trip` is not passed as a parameter to this function — it only exists in the main `serve` handler scope (line 423). This causes a `ReferenceError: trip is not defined` at runtime, which gets stored in `metadata.smartFinishError` and surfaced to the user.
 
-Plan
+## Fix
 
-1. Harden Just Tell Us extraction at the source
-   - Add a deterministic fallback parser in `supabase/functions/chat-trip-planner/index.ts`.
-   - If the AI tool response omits `perDayActivities` but the pasted text clearly has dated/day headings, build `perDayActivities` directly from the user’s text instead of trusting the model output.
-   - Keep `mustDoActivities` only as a secondary fallback.
+**File: `supabase/functions/enrich-manual-trip/index.ts`**
 
-2. Add a fail-safe before generation
-   - In `src/components/planner/TripChatPlanner.tsx` and/or `TripConfirmCard.tsx`, show how many structured days were captured.
-   - If the user pasted a day-by-day itinerary but `perDayActivities` is empty, block “Confirm & Generate” and prompt for correction instead of silently continuing.
+Add a trip fetch at the start of `runGenerationInBackground`, before the `generate-itinerary` call:
 
-3. Preserve structured days through trip creation and splitting
-   - Keep `perDayActivities` on the original trip in `src/pages/Start.tsx` (this part is already in place).
-   - Update `src/utils/splitJourneyIfNeeded.ts` to carry `perDayActivities` into each split leg, filtered to that leg’s day range and renumbered relative to the leg.
-   - Build each leg’s `mustDoActivities` from that leg’s own `perDayActivities` instead of city keyword filtering.
+```ts
+async function runGenerationInBackground(
+  supabaseUrl: string,
+  supabaseServiceKey: string,
+  authHeader: string,
+  tripId: string,
+  userId: string,
+  updatedMetadata: any,
+  pendingChargeId: string | null,
+  baselineTripUpdatedAt?: string | null,
+) {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-4. Remove the current multi-city corruption path
-   - Stop assigning all “unassigned” generic must-dos to the first leg.
-   - Only use the current city-name filtering as a legacy fallback for older trips that truly do not have structured day data.
+  try {
+    console.log(`[enrich-manual-trip:bg] Starting generate-itinerary for trip ${tripId}`);
 
-5. Add generation guardrails
-   - In the generation preflight (`generate-itinerary` path), detect chat-planner trips/journey legs that are missing `perDayActivities`.
-   - Refuse to do a free-form build in that case and surface a clear error/log instead of generating a made-up itinerary.
+    // Fetch trip data — needed for generate-itinerary request body
+    const { data: trip, error: tripErr } = await supabase
+      .from("trips")
+      .select("destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city")
+      .eq("id", tripId)
+      .single();
 
-6. Verify against your exact pasted itinerary
-   - Confirm the original trip stores a full `perDayActivities` array.
-   - Confirm each journey leg stores only its own days.
-   - Confirm generation logs show locked cards being applied.
-   - Confirm Marrakech/Casablanca/Lisbon entries are preserved exactly, with AI only filling `TBD` or open gaps.
+    if (tripErr || !trip) {
+      throw new Error(`Failed to fetch trip for background generation: ${tripErr?.message || 'not found'}`);
+    }
 
-Technical details
+    let generateData: any = null;
+    // ... rest unchanged, trip.destination etc. now resolves correctly
+```
 
-- Main files:
-  - `supabase/functions/chat-trip-planner/index.ts`
-  - `src/components/planner/TripChatPlanner.tsx`
-  - `src/components/planner/TripConfirmCard.tsx`
-  - `src/pages/Start.tsx`
-  - `src/utils/splitJourneyIfNeeded.ts`
-  - `supabase/functions/generate-itinerary/action-generate-trip.ts` or `pipeline/compile-prompt.ts`
-- No database changes are needed.
-- The lock/merge/verify generation pipeline itself looks correct; the real failure is that the structured day-by-day plan is being lost before it reaches that pipeline.
+This is a one-location fix — add a trip fetch query right after creating the supabase client in the background function, before the existing code references `trip.*` fields.
+
+## Technical Details
+- Single file change: `supabase/functions/enrich-manual-trip/index.ts`
+- The `trip` variable was in the outer `serve` handler scope but closures don't capture it since `runGenerationInBackground` is called via `waitUntil` / fire-and-forget after the response is sent
+- No schema changes needed
+
