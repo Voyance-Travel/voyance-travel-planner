@@ -114,6 +114,8 @@ interface TripDetails {
   budgetTier?: string;
   userId?: string;
   isMultiCity?: boolean;
+  mustDoActivities?: string;
+  perDayActivities?: Array<{ dayNumber: number; activities: string }>;
 }
 
 // =============================================================================
@@ -268,6 +270,8 @@ export function useItineraryGeneration() {
                 transitionFrom: cityInfo?.transitionFrom,
                 transitionTo: cityInfo?.transitionTo,
                 transitionMode: cityInfo?.transportType,
+                mustDoActivities: trip.mustDoActivities || '',
+                perDayActivities: trip.perDayActivities || [],
               },
             });
 
@@ -496,6 +500,8 @@ export function useItineraryGeneration() {
         creditsCharged: trip.creditsCharged || 0,
         requestedDays: trip.requestedDays || totalDays,
         isFirstTrip: trip.isFirstTrip || false,
+        mustDoActivities: trip.mustDoActivities || '',
+        perDayActivities: trip.perDayActivities || [],
       },
     });
 

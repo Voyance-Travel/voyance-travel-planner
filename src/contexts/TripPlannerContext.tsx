@@ -77,6 +77,9 @@ export interface TripBasics {
   isMultiCity?: boolean;
   destinations?: TripDestination[];
   interCityTransports?: InterCityTransport[];
+  // User-specified activities from chat extraction
+  mustDoActivities?: string;
+  perDayActivities?: Array<{ dayNumber: number; activities: string }>;
 }
 
 export interface FlightSelection {
@@ -291,6 +294,8 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
             lastUpdated: new Date().toISOString(),
             anonymous: !user,
             rentalCar: state.basics.rentalCar || null,
+            mustDoActivities: state.basics.mustDoActivities || '',
+            perDayActivities: state.basics.perDayActivities || [],
           })
         ),
       };
