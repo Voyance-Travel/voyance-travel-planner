@@ -430,6 +430,7 @@ export async function handleGenerateDay(
 
       const beforeFiller = normalizedActivities.length;
       normalizedActivities = normalizedActivities.filter((act: any) => {
+        if (act.locked) return true; // Never filter locked user-specified activities
         const title = (act.title || '').trim();
         const rawAddr = act.address || act.location;
         const address = (typeof rawAddr === 'string' ? rawAddr : (rawAddr && typeof rawAddr === 'object' ? (rawAddr.address || rawAddr.name || '') : '')).trim();
