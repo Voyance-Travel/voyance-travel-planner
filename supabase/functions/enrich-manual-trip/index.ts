@@ -174,6 +174,17 @@ async function runGenerationInBackground(
   try {
     console.log(`[enrich-manual-trip:bg] Starting generate-itinerary for trip ${tripId}`);
 
+    // Fetch trip data — needed for generate-itinerary request body
+    const { data: trip, error: tripErr } = await supabase
+      .from("trips")
+      .select("destination, destination_country, start_date, end_date, travelers, trip_type, budget_tier, is_multi_city")
+      .eq("id", tripId)
+      .maybeSingle();
+
+    if (tripErr || !trip) {
+      throw new Error(`Failed to fetch trip for background generation: ${tripErr?.message || 'not found'}`);
+    }
+
     let generateData: any = null;
 
     const generateResponse = await fetch(`${supabaseUrl}/functions/v1/generate-itinerary`, {
