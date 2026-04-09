@@ -1,50 +1,48 @@
 
 
-# Fix Scheduling Overlaps & Hotel Round-Trip Time Math
+# Fix Minimum Activity Durations, Dead Gaps & Venue Name Preservation
 
 ## Problem
-Activities overlap because: (1) the overlap cascade runs before bookend repairs inject new activities, and (2) hotel freshen-up insertion doesn't account for round-trip transit time.
+1. Museum visits get 30-min slots (should be 60+ min). The existing minimum duration enforcement (line 2456) only covers dining at 60min and sightseeing at 30min — it doesn't have museum/wellness-specific minimums or title-based detection.
+2. Large dead gaps (3+ hours) between activities go unfilled.
+3. Venue names can get overwritten with wrong Google Places matches.
 
 ## Changes
 
-### 1. Fix mid-day hotel freshen-up insertion with transit math
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (~line 3133-3144)
+### 1. Enhance minimum duration enforcement in `repair-day.ts`
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (~line 2456-2481)
 
-The current code inserts a freshen-up card 15 min after the previous activity ends, ignoring transit to/from the hotel. Replace with proper round-trip calculation:
+Replace the existing `13b. MINIMUM DURATION ENFORCEMENT` block with enhanced category + title-keyword logic:
 
-- Calculate transit from previous activity to hotel using `estimateTransit()` (or `getDefaultTransitMinutes()` fallback)
-- Calculate transit from hotel to dinner using `estimateTransit()` (or fallback)
-- Work backwards from dinner start: `freshenEnd = dinnerStart - hotelToDinnerTransit`, `freshenStart = freshenEnd - 30` (freshen duration), `mustLeaveBy = freshenStart - prevToHotelTransit`
-- Only insert if `mustLeaveBy >= prevActivityEnd` — otherwise skip the freshen-up (not enough time)
-- Use calculated times for the transport card and accommodation card instead of hardcoded `offset(prevEnd, 15)`
+- Add title-based detection: if title contains "museum"/"musée" → 60min, "gallery"/"galerie" → 45min, "spa"/"hammam"/"wellness" → 60min
+- Expand category map: `cultural` → 60min (was grouped with sightseeing at 30min), `wellness` → 60min
+- Keep existing: dining/food/restaurant → 60min, activity/sightseeing/entertainment → 30min
+- The overlap cascade after (lines 2484-2501) and late-activity drop (lines 2503+) remain unchanged
 
-### 2. Add final sequential enforcement pass after bookend repairs
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (~line 3470, just before `return { activities: deduped, repairs }`)
+### 2. Add dead-gap and duration prompt rules in `compile-prompt.ts`
+**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** (~line 1274)
 
-Add a final overlap sweep on the `deduped` array that catches any overlaps introduced by bookend repairs (hotel returns, transit injection, consolidation):
+Add items 15-16 to CRITICAL REMINDERS:
+- Item 15: NO DEAD GAPS OVER 90 MINUTES — fill with extended activities or add café/park/shopping filler
+- Item 16: MINIMUM ACTIVITY DURATIONS — museum/cultural = 60min, spa = 60min, meals = 45min, breakfast = 30min, nothing under 30min
 
-```
-for each consecutive pair in deduped:
-  if curr.startTime < prev.endTime:
-    push curr (and all subsequent) forward by the overlap amount
-    log repair
-```
+### 3. Add venue name mismatch guard in `venue-enrichment.ts`
+**File: `supabase/functions/generate-itinerary/venue-enrichment.ts`** (~line 640, inside `enrichActivity`)
 
-This is intentionally simple — it's a safety net, not the primary repair. It runs after ALL other processing.
+Add a `shouldPreserveOriginalName()` check before applying any venue data that could affect the name. Even though the current code doesn't explicitly overwrite `location.name`, add a defensive guard:
+- Add `shouldUseEnrichedName(original, enriched)` function using word-overlap ratio (< 30% overlap = mismatch)
+- Before the venue data application block, if `venueData.formattedName` or display name exists, check overlap with original title/venue_name
+- If mismatch detected, log `[VENUE-MISMATCH]` and ensure `location.name` stays as the original
+- Still apply coordinates, address, rating, etc. from the enrichment (just protect the name)
 
-### 3. Add CRITICAL REMINDERS 13-14 to prompt
-**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** (~line 1272)
-
-Add after item 12:
-- Item 13: TIME OVERLAP CHECK — Activity B cannot start before Activity A ends. Hotel freshen-up requires: transit TO hotel + time AT hotel + transit FROM hotel to restaurant, all fitting before dinner start.
-- Item 14: HOTEL ROUND-TRIP MATH — If the three components don't fit between previous activity end and dinner start, skip the hotel visit.
+Also add the guard in `verifyVenueWithGooglePlaces()` (~line 240): if the Google Places `displayName.text` has < 30% word overlap with the queried `venueName`, reduce confidence to 0.3 and log the mismatch. This prevents bad matches from propagating.
 
 ### 4. Deploy
 - Deploy `generate-itinerary` edge function
 
 ## What's NOT changed
-- Existing overlap cascade logic (step 13) — still runs, catches early overlaps
-- Activity generation or reordering logic
-- Transit calculation (that's Prompt 83)
+- Transit calculations (Prompt 83)
+- Scheduling overlap logic (Prompt 84)
+- Activity generation or selection
 - Database schema
 
