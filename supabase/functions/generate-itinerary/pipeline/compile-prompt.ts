@@ -1346,7 +1346,10 @@ WELLNESS & SPA RULES:
 })()}
 ${(() => {
   if (!previousDayActivities?.length) return '';
-  const mustDoList = (paramMustDoActivities || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+  const mustDoList = (Array.isArray(paramMustDoActivities)
+    ? paramMustDoActivities
+    : (typeof paramMustDoActivities === 'string' ? paramMustDoActivities : '').split(',')
+  ).map((s: string) => String(s).trim()).filter(Boolean);
   const recurring: string[] = [];
   const nonRecurring: string[] = [];
   for (const prev of previousDayActivities) {
