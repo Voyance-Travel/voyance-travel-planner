@@ -169,6 +169,8 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
         throw new Error('Please sign in to use the trip planner.');
       }
 
+      const controller = new AbortController();
+      const fetchTimeout = setTimeout(() => controller.abort(), 60000);
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
@@ -179,7 +181,9 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
         body: JSON.stringify({
           messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
         }),
+        signal: controller.signal,
       });
+      clearTimeout(fetchTimeout);
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));

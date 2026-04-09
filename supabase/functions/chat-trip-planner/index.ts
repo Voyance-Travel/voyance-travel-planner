@@ -237,13 +237,15 @@ serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
+      console.error("[chat-trip-planner] Auth failed:", userError?.message);
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    console.log("[chat-trip-planner] Authenticated user:", user.id);
 
     const { messages } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -252,7 +254,7 @@ serve(async (req) => {
     // Fetch traveler DNA for personalized chat
     let personalizationContext = '';
     try {
-      const userId = claimsData.claims.sub as string;
+      const userId = user.id;
       if (userId) {
         const dnaResult = await fetchTravelerDNA(supabase, userId);
         if (dnaResult.hasData) {
@@ -280,6 +282,7 @@ serve(async (req) => {
       console.warn("Failed to fetch traveler DNA:", err);
     }
 
+    console.log("[chat-trip-planner] Calling AI gateway with", messages.length, "messages");
     const response = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
