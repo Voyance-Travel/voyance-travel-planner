@@ -53,11 +53,15 @@ function saveCache(cache: OfflineCache): void {
   }
 }
 
-/** Cache a trip for offline use */
+/** Cache a trip for offline use — strips heavy data to avoid localStorage quota issues */
 export function cacheTrip(trip: Trip): void {
   const cache = getCache();
+  // Strip heavy fields to reduce localStorage pressure
+  const lightweight = { ...trip } as any;
+  delete lightweight.itinerary_data;
+  delete lightweight.metadata;
   cache.trips[trip.id] = {
-    trip,
+    trip: lightweight as Trip,
     cachedAt: new Date().toISOString(),
   };
   saveCache(cache);

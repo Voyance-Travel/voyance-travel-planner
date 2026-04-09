@@ -26,9 +26,39 @@ const PARTICLES = [
   { angle: 330, distance: 84, delay: 2.5, duration: 2.6 },
 ];
 
+// Pre-compute orbiting dot keyframes to avoid undefined values during render
+function computeOrbitKeyframes(dot: typeof ORBITING_DOTS[0]) {
+  const steps = 80;
+  const cxFrames: number[] = [];
+  const cyFrames: number[] = [];
+  for (let s = 0; s <= steps; s++) {
+    const angle = (dot.startAngle + (s / steps) * 360) * (Math.PI / 180);
+    cxFrames.push(100 + dot.radius * Math.cos(angle));
+    cyFrames.push(100 + dot.radius * Math.sin(angle));
+  }
+  const initialCx = cxFrames[0];
+  const initialCy = cyFrames[0];
+  return { cxFrames, cyFrames, initialCx, initialCy };
+}
+
+const PRECOMPUTED_DOTS = ORBITING_DOTS.map(dot => ({
+  ...dot,
+  ...computeOrbitKeyframes(dot),
+}));
+
+// Pre-compute particle positions
+const PRECOMPUTED_PARTICLES = PARTICLES.map(p => {
+  const rad = (p.angle * Math.PI) / 180;
+  return {
+    ...p,
+    cx: 100 + p.distance * Math.cos(rad),
+    cy: 100 + p.distance * Math.sin(rad),
+  };
+});
+
 export function GenerationAnimation({ progress = 0, className }: GenerationAnimationProps) {
   const circumference = 2 * Math.PI * 52;
-  const strokeOffset = circumference - (circumference * progress) / 100;
+  const strokeOffset = circumference - (circumference * Math.max(0, Math.min(100, progress))) / 100;
 
   return (
     <div className={className}>
@@ -98,61 +128,44 @@ export function GenerationAnimation({ progress = 0, className }: GenerationAnima
             filter="url(#glow)"
           />
 
-          {/* Orbiting dots */}
-          {ORBITING_DOTS.map((dot, i) => {
-            const steps = 80;
-            const cxFrames: number[] = [];
-            const cyFrames: number[] = [];
-            for (let s = 0; s <= steps; s++) {
-              const angle = (dot.startAngle + (s / steps) * 360) * (Math.PI / 180);
-              cxFrames.push(100 + dot.radius * Math.cos(angle));
-              cyFrames.push(100 + dot.radius * Math.sin(angle));
-            }
-            const initialCx = 100 + dot.radius * Math.cos(dot.startAngle * (Math.PI / 180));
-            const initialCy = 100 + dot.radius * Math.sin(dot.startAngle * (Math.PI / 180));
-            return (
-              <motion.circle
-                key={i}
-                cx={initialCx}
-                cy={initialCy}
-                r={dot.size}
-                className="fill-primary/50"
-                animate={{ cx: cxFrames, cy: cyFrames }}
-                transition={{
-                  duration: dot.duration,
-                  repeat: Infinity,
-                  ease: 'linear',
-                }}
-              />
-            );
-          })}
+          {/* Orbiting dots — using pre-computed keyframes */}
+          {PRECOMPUTED_DOTS.map((dot, i) => (
+            <motion.circle
+              key={i}
+              cx={dot.initialCx}
+              cy={dot.initialCy}
+              r={dot.size}
+              className="fill-primary/50"
+              animate={{ cx: dot.cxFrames, cy: dot.cyFrames }}
+              transition={{
+                duration: dot.duration,
+                repeat: Infinity,
+                ease: 'linear',
+              }}
+            />
+          ))}
 
-          {/* Floating particles */}
-          {PARTICLES.map((p, i) => {
-            const rad = (p.angle * Math.PI) / 180;
-            const cx = 100 + p.distance * Math.cos(rad);
-            const cy = 100 + p.distance * Math.sin(rad);
-            return (
-              <motion.circle
-                key={`p-${i}`}
-                cx={cx}
-                cy={cy}
-                r={1}
-                className="fill-primary/30"
-                animate={{
-                  cy: [cy, cy - 12, cy],
-                  opacity: [0, 0.7, 0],
-                  r: [1, 2, 1],
-                }}
-                transition={{
-                  duration: p.duration,
-                  repeat: Infinity,
-                  delay: p.delay,
-                  ease: 'easeInOut',
-                }}
-              />
-            );
-          })}
+          {/* Floating particles — using pre-computed positions */}
+          {PRECOMPUTED_PARTICLES.map((p, i) => (
+            <motion.circle
+              key={`p-${i}`}
+              cx={p.cx}
+              cy={p.cy}
+              r={1}
+              className="fill-primary/30"
+              animate={{
+                cy: [p.cy, p.cy - 12, p.cy],
+                opacity: [0, 0.7, 0],
+                r: [1, 2, 1],
+              }}
+              transition={{
+                duration: p.duration,
+                repeat: Infinity,
+                delay: p.delay,
+                ease: 'easeInOut',
+              }}
+            />
+          ))}
         </svg>
 
         {/* Center icon — breathing sparkle */}

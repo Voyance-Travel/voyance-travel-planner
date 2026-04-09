@@ -22,6 +22,44 @@ let _getSessionInFlight: Promise<{ data: any; error: any }> | null = null;
 let _lastRefreshAt = 0;
 
 /**
+ * Check if a JWT token has a valid shape (3 base64 segments).
+ */
+function isTokenWellFormed(token: string | undefined | null): boolean {
+  if (!token) return false;
+  const parts = token.split('.');
+  return parts.length === 3 && parts.every(p => p.length > 0);
+}
+
+/**
+ * Get a valid access token, refreshing if needed.
+ * Returns the token string or null if auth is unavailable.
+ */
+export async function getValidAccessToken(): Promise<string | null> {
+  const { data } = await guardedGetSession();
+  const session = data?.session;
+  const token = session?.access_token;
+
+  // If token looks good and isn't expired, return it
+  if (isTokenWellFormed(token)) {
+    // Check if token is about to expire (within 60s)
+    const expiresAt = session?.expires_at;
+    const now = Math.floor(Date.now() / 1000);
+    if (expiresAt && expiresAt > now + 60) {
+      return token;
+    }
+  }
+
+  // Token missing, malformed, or nearly expired — force refresh
+  logger.debug('[AuthGuard] Token needs refresh — forcing refreshSession');
+  const { data: refreshData, error } = await guardedRefreshSession();
+  if (error || !refreshData?.session?.access_token) {
+    logger.warn('[AuthGuard] getValidAccessToken failed after refresh');
+    return null;
+  }
+  return refreshData.session.access_token;
+}
+
+/**
  * Deduplicated, cooldown-gated refreshSession.
  * - If a refresh is already in-flight, returns its promise.
  * - If we refreshed less than REFRESH_COOLDOWN_MS ago, returns a no-op success.
