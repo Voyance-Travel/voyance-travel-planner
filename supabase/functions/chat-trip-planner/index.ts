@@ -237,8 +237,21 @@ serve(async (req) => {
     // Authenticate the user via JWT
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
+      console.warn("[chat-trip-planner] Missing or invalid Authorization header");
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+
+    // Early token sanity check — reject obviously malformed tokens before hitting auth
+    const tokenParts = token.split('.');
+    if (tokenParts.length !== 3 || tokenParts.some(p => p.length === 0)) {
+      console.warn("[chat-trip-planner] Malformed JWT — invalid segment count:", tokenParts.length);
+      return new Response(
+        JSON.stringify({ error: "Invalid token format. Please sign in again." }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -249,12 +262,11 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
       console.error("[chat-trip-planner] Auth failed:", userError?.message);
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({ error: "Session expired. Please sign in again." }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
