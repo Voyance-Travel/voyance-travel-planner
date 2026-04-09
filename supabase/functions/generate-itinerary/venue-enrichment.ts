@@ -275,11 +275,20 @@ export async function verifyVenueWithGooglePlaces(
       return mapping[priceLevel] ?? 2;
     };
 
-    console.log(`[Stage 4] ✅ Verified venue: ${venueName} → ${place.displayName?.text || 'Unknown'}`);
+    // Name mismatch guard — reduce confidence if Places returned a different venue
+    const enrichedDisplayName = place.displayName?.text || '';
+    const nameOverlap = computeNameOverlap(venueName, enrichedDisplayName);
+    let confidence = 0.95;
+    if (nameOverlap < 0.3) {
+      confidence = 0.3;
+      console.log(`[Stage 4] ⚠️ [VENUE-MISMATCH] "${venueName}" → "${enrichedDisplayName}" overlap=${(nameOverlap * 100).toFixed(0)}% — reducing confidence to 0.3`);
+    } else {
+      console.log(`[Stage 4] ✅ Verified venue: ${venueName} → ${enrichedDisplayName}`);
+    }
 
     return {
       isValid: true,
-      confidence: 0.95,
+      confidence,
       placeId: place.id,
       formattedAddress: place.formattedAddress,
       coordinates: place.location

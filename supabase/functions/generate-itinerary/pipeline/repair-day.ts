@@ -2454,21 +2454,48 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 13b. MINIMUM DURATION ENFORCEMENT ---
-  // Ensure dining activities are ≥60min, activities/sightseeing ≥30min, others ≥15min
+  // Category-aware + title-keyword-aware minimum durations
+  const MIN_DUR_BY_CATEGORY: Record<string, number> = {
+    dining: 60, food: 60, restaurant: 60,
+    cultural: 60, culture: 60, wellness: 60, spa: 60,
+    activity: 30, sightseeing: 30, entertainment: 30,
+    explore: 30, shopping: 30, nightlife: 45,
+  };
+
   for (let i = 0; i < activities.length; i++) {
     const act = activities[i];
     const cat = (act.category || '').toLowerCase();
+    const title = (act.title || '').toLowerCase();
     const startMins = parseTimeToMinutes(act.startTime || '');
     const endMins = parseTimeToMinutes(act.endTime || '');
     if (startMins === null || endMins === null) continue;
     const duration = endMins - startMins;
     if (duration <= 0) continue;
 
-    const minDur = (cat === 'dining' || cat === 'food' || cat === 'restaurant') ? 60
-      : ['activity', 'sightseeing', 'cultural', 'entertainment'].includes(cat) ? 30
-      : 0;
+    // Skip transport/hotel/stay — they have their own durations
+    if (['transport', 'transportation', 'hotel', 'stay', 'accommodation'].includes(cat)) continue;
+
+    // Title-based detection overrides category
+    let minDur = 0;
+    if (title.includes('museum') || title.includes('musée') || title.includes('palazzo') || title.includes('château')) {
+      minDur = 60;
+    } else if (title.includes('gallery') || title.includes('galerie') || title.includes('exhibition')) {
+      minDur = 45;
+    } else if (title.includes('spa') || title.includes('hammam') || title.includes('wellness') || title.includes('massage') || title.includes('thermal')) {
+      minDur = 60;
+    } else if (title.includes('breakfast') || title.includes('petit déjeuner')) {
+      minDur = 30;
+    } else if (MIN_DUR_BY_CATEGORY[cat]) {
+      minDur = MIN_DUR_BY_CATEGORY[cat];
+    }
+
+    // Absolute floor: nothing under 15min
+    if (minDur === 0 && duration < 15) {
+      minDur = 15;
+    }
 
     if (minDur > 0 && duration < minDur && !lockedIds.has(act.id)) {
+      console.log(`[DURATION-FIX] Extended "${act.title}" from ${duration}min to ${minDur}min (cat=${cat})`);
       act.endTime = minutesToHHMM(startMins + minDur);
       act.durationMinutes = minDur;
       repairs.push({
