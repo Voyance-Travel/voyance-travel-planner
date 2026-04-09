@@ -76,6 +76,17 @@ import {
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface LockedCard {
+  title: string;
+  start_time: string | null;
+  end_time: string | null;
+  category: string;
+  venue_name: string | null;
+  locked: true;
+  lockedSource: string;
+  dayNumber: number;
+}
+
 export interface CompiledPrompt {
   systemPrompt: string;
   userPrompt: string;
@@ -96,6 +107,9 @@ export interface CompiledPrompt {
   // Schema outputs (updated by compileDaySchema)
   dayConstraints: string;
   flightContext: any;
+
+  // Locked cards from perDayActivities (LOCK phase)
+  lockedCards: LockedCard[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1311,5 +1325,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     preferenceContext,
     dayConstraints,
     flightContext,
+    lockedCards: lockedCardsForDay,
   };
 }
