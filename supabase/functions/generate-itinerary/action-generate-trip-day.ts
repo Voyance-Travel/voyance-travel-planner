@@ -915,6 +915,7 @@ async function _handleGenerateTripDayInner(
     ];
     const beforeFilter = dayResult.activities.length;
     dayResult.activities = dayResult.activities.filter((act: any) => {
+      if (act.locked) return true; // Never filter locked user-specified activities
       const cat = (act.category || '').toLowerCase();
       if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') return true;
       const name = (act.venueName || act.title || '').toLowerCase().trim();
@@ -986,6 +987,7 @@ async function _handleGenerateTripDayInner(
 
     const beforeFiller = dayResult.activities.length;
     dayResult.activities = dayResult.activities.filter((act: any) => {
+      if (act.locked) return true; // Never filter locked user-specified activities
       const title = (act.title || '').trim();
       const rawAddr = act.address || act.location;
       const address = (typeof rawAddr === 'string' ? rawAddr : (rawAddr && typeof rawAddr === 'object' ? (rawAddr.address || rawAddr.name || '') : '')).trim();
@@ -1018,6 +1020,7 @@ async function _handleGenerateTripDayInner(
   if (wellnessAtLimit || yesterdayHadWellness) {
     const beforeWellness = dayResult.activities.length;
     dayResult.activities = dayResult.activities.filter((a: any) => {
+      if (a.locked) return true; // Never filter locked user-specified activities
       if (isWellnessActivity(a)) {
         console.log(`[WELLNESS LIMITER] Removed "${a.title}" — ${wellnessAtLimit ? 'trip limit (2) reached' : 'consecutive day with yesterday'}`);
         return false;
@@ -1039,6 +1042,7 @@ async function _handleGenerateTripDayInner(
       const cutoff = depMinutes - bufferMin;
       const beforeDep = dayResult.activities.length;
       dayResult.activities = dayResult.activities.filter((act: any) => {
+        if (act.locked) return true; // Never filter locked user-specified activities
         const title = (act.title || '').toLowerCase();
         if (title.includes('checkout') || title.includes('check-out') || title.includes('heading home') || title.includes('departure') || title.includes('transfer to') || title.includes('airport') || title.includes('station')) {
           return true;
@@ -1064,6 +1068,7 @@ async function _handleGenerateTripDayInner(
     const prevVenuesNorm = usedVenues.map(normalizeVenue);
     const beforeVenueDedup = dayResult.activities.length;
     dayResult.activities = dayResult.activities.filter((act: any) => {
+      if (act.locked) return true; // Never filter locked user-specified activities
       const cat = (act.category || '').toLowerCase();
       if (cat === 'dining' || cat === 'restaurant' || cat === 'food') return true; // dining has its own dedup
       if (cat === 'accommodation' || cat === 'transport' || cat === 'logistics') return true;
@@ -1305,6 +1310,7 @@ async function _handleGenerateTripDayInner(
 
     for (let i = 0; i < dayResult.activities.length; i++) {
       const act = dayResult.activities[i];
+      if (act.locked) continue; // Never replace locked user-specified activities
       const cat = (act.category || '').toLowerCase();
       const typ = (act.type || '').toLowerCase();
       const isDining = cat === 'dining' || typ === 'dining' || MEAL_RE.test(act.title || '');

@@ -76,6 +76,17 @@ import {
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface LockedCard {
+  title: string;
+  start_time: string | null;
+  end_time: string | null;
+  category: string;
+  venue_name: string | null;
+  locked: true;
+  lockedSource: string;
+  dayNumber: number;
+}
+
 export interface CompiledPrompt {
   systemPrompt: string;
   userPrompt: string;
@@ -96,11 +107,133 @@ export interface CompiledPrompt {
   // Schema outputs (updated by compileDaySchema)
   dayConstraints: string;
   flightContext: any;
+
+  // Locked cards from perDayActivities (LOCK phase)
+  lockedCards: LockedCard[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOCK PHASE HELPERS — Parse user activities into immutable locked cards
+// ─────────────────────────────────────────────────────────────────────────────
+
+function normalizeTimeStr(raw: string): string | null {
+  const match = raw.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (!match) {
+    const h24 = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (h24) return raw.trim();
+    return null;
+  }
+  let hour = parseInt(match[1]);
+  const min = match[2] ? parseInt(match[2]) : 0;
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && hour < 12) hour += 12;
+  if (period === 'AM' && hour === 12) hour = 0;
+  return `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+}
+
+function detectActivityCategory(text: string): string {
+  const lower = text.toLowerCase();
+  if (/breakfast|brunch/i.test(lower)) return 'dining';
+  if (/lunch|dinner|supper/i.test(lower)) return 'dining';
+  if (/hotel|check.?in|check.?out|transfer to/i.test(lower)) return 'accommodation';
+  if (/spa|wellness|hammam|massage/i.test(lower)) return 'activity';
+  if (/museum|gallery|tour|visit/i.test(lower)) return 'explore';
+  if (/meeting|presentation|orientation|company|conference|workshop/i.test(lower)) return 'activity';
+  if (/pool|beach|relax/i.test(lower)) return 'activity';
+  if (/shopping|market|souk|bazaar/i.test(lower)) return 'activity';
+  return 'activity';
+}
+
+function parseUserActivities(dayActivitiesString: string, dayNumber: number): LockedCard[] {
+  const lockedCards: LockedCard[] = [];
+  // Split by comma, respecting time-prefixed entries
+  const entries = dayActivitiesString.split(/,\s*(?=\d{1,2}(?::\d{2})?\s*(?:AM|PM)|[A-Z])/i);
+
+  for (const entry of entries) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+
+    // Parse time: "9:00AM Activity Name" or "9AM-11:30AM Activity Name"
+    const timeMatch = trimmed.match(/^(\d{1,2}(?::\d{2})?\s*(?:AM|PM))\s*(?:-\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)))?\s+(.+)$/i);
+
+    let startTime: string | null = null;
+    let endTime: string | null = null;
+    let activityText: string = trimmed;
+
+    if (timeMatch) {
+      startTime = normalizeTimeStr(timeMatch[1]);
+      endTime = timeMatch[2] ? normalizeTimeStr(timeMatch[2]) : null;
+      activityText = timeMatch[3].trim();
+    }
+
+    // TBD entries handled by AI, not locked
+    if (/\bTBD\b|to be determined|choose|pick\b/i.test(activityText)) continue;
+
+    const category = detectActivityCategory(activityText);
+    const venueMatch = activityText.match(/(?:at |@ )(.+)$/i);
+    const venueName = venueMatch ? venueMatch[1].trim() : null;
+
+    lockedCards.push({
+      title: activityText,
+      start_time: startTime,
+      end_time: endTime,
+      category,
+      venue_name: venueName,
+      locked: true,
+      lockedSource: trimmed,
+      dayNumber,
+    });
+  }
+
+  return lockedCards;
+}
+
+function findTimeGaps(lockedCards: LockedCard[], dayNumber: number, totalDays: number): Array<{ from: string; to: string; suggestion: string }> {
+  const gaps: Array<{ from: string; to: string; suggestion: string }> = [];
+  const sorted = lockedCards
+    .filter(c => c.start_time)
+    .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+
+  const dayStart = dayNumber === 1 ? '10:00' : '08:00';
+  const dayEnd = dayNumber === totalDays ? '18:00' : '22:00';
+
+  let cursor = dayStart;
+  for (const card of sorted) {
+    const cardStart = card.start_time!;
+    const cardEnd = card.end_time || _addTime(cardStart, 60);
+    if (cursor < cardStart) {
+      const gapMins = _timeDiffMinutes(cursor, cardStart);
+      if (gapMins >= 60) {
+        gaps.push({ from: cursor, to: cardStart, suggestion: `activity matching traveler DNA (${gapMins} min)` });
+      }
+    }
+    if (cardEnd > cursor) cursor = cardEnd;
+  }
+  if (cursor < dayEnd) {
+    const gapMins = _timeDiffMinutes(cursor, dayEnd);
+    if (gapMins >= 60) {
+      gaps.push({ from: cursor, to: dayEnd, suggestion: `activity matching traveler DNA (${gapMins} min)` });
+    }
+  }
+  return gaps;
+}
+
+function _addTime(hhmm: string, minutes: number): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const total = h * 60 + m + minutes;
+  return `${Math.floor(total / 60).toString().padStart(2, '0')}:${(total % 60).toString().padStart(2, '0')}`;
+}
+
+function _timeDiffMinutes(a: string, b: string): number {
+  const [ah, am] = a.split(':').map(Number);
+  const [bh, bm] = b.split(':').map(Number);
+  return (bh * 60 + bm) - (ah * 60 + am);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main function
 // ─────────────────────────────────────────────────────────────────────────────
+
 
 export async function compilePrompt(
   supabase: any,
@@ -168,6 +301,7 @@ export async function compilePrompt(
   // ═══════════════════════════════════════════════════════════════════════
   let mustDoPrompt = '';
   let mustDoEventItems: ScheduledMustDo[] = [];
+  let lockedCardsForDay: LockedCard[] = [];
   let metadata: Record<string, unknown> | null = null;
   if (tripId) {
     const { data: tripMeta } = await supabase
@@ -217,7 +351,57 @@ export async function compilePrompt(
   const currentDayActivities = perDayActivities?.find(d => d.dayNumber === dayNumber);
 
   if (currentDayActivities) {
-    mustDoPrompt = `
+    // === LOCK PHASE: Parse user activities into locked cards ===
+    lockedCardsForDay = parseUserActivities(currentDayActivities.activities, dayNumber);
+
+    // Extract TBD entries for AI to fill
+    const tdbEntries: string[] = [];
+    for (const entry of currentDayActivities.activities.split(/,\s*(?=\d{1,2}(?::\d{2})?\s*(?:AM|PM)|[A-Z])/i)) {
+      const t = entry.trim();
+      if (/\bTBD\b|to be determined|choose|pick\b/i.test(t)) tdbEntries.push(t);
+    }
+
+    if (lockedCardsForDay.length > 0) {
+      // Build a timeline showing the AI what's locked
+      const timeline = lockedCardsForDay
+        .filter(c => c.start_time)
+        .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''))
+        .map(c => `${c.start_time}${c.end_time ? '-' + c.end_time : ''}: [LOCKED] ${c.title}`)
+        .join('\n');
+
+      const gaps = findTimeGaps(lockedCardsForDay, dayNumber, totalDays);
+
+      mustDoPrompt = `
+## 🔒 PRE-FILLED TIMELINE FOR DAY ${dayNumber} (LOCKED — DO NOT MODIFY)
+
+The following activities are ALREADY CONFIRMED and will be inserted automatically.
+DO NOT generate activities for these time slots. DO NOT rename or modify these entries.
+
+${timeline}
+
+${tdbEntries.length > 0 ? `
+SLOTS FOR YOU TO FILL:
+${tdbEntries.map(t => `- ${t}`).join('\n')}
+` : ''}
+
+${gaps.length > 0 ? `
+OPEN TIME GAPS (generate activities for these windows only):
+${gaps.map(g => `- ${g.from} to ${g.to}: Generate ${g.suggestion}`).join('\n')}
+` : ''}
+
+RULES:
+1. Only generate activities for the gaps and TBD slots listed above.
+2. Do NOT generate activities that overlap with any [LOCKED] time slot.
+3. Do NOT generate duplicates of locked activities.
+4. Transit between locked activities will be calculated automatically — you do not need to generate transit cards adjacent to locked activities.
+5. Match the traveler's DNA for gap-filling activities.
+6. Do NOT add meals the user didn't specify. If they said "Breakfast" and "Dinner" but no lunch, there is no lunch.
+7. Do NOT inject activities from other cities. Only plan for the current city: ${resolvedDestination}.
+`;
+      console.log(`[compile-prompt] LOCK PHASE: ${lockedCardsForDay.length} locked cards for Day ${dayNumber}, ${gaps.length} gaps, ${tdbEntries.length} TBD slots`);
+    } else {
+      // No parseable locked cards, fall back to original prompt style
+      mustDoPrompt = `
 ## 🚨 USER-SPECIFIED ACTIVITIES FOR DAY ${dayNumber} (MANDATORY — DO NOT CHANGE)
 
 The traveler has personally planned these activities for today. You MUST follow this schedule:
@@ -233,6 +417,7 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
 - Hotel transfers are activities too. "4PM Transfer to Radisson Blu" = create a transit/check-in activity.
 - Do NOT inject activities from other cities. Only plan for the current city: ${resolvedDestination}.
 `;
+    }
     console.log(`[compile-prompt] Using perDayActivities for Day ${dayNumber}: ${currentDayActivities.activities.substring(0, 100)}...`);
   } else if (mustDoActivitiesRaw.trim()) {
     const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
@@ -1311,5 +1496,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     preferenceContext,
     dayConstraints,
     flightContext,
+    lockedCards: lockedCardsForDay,
   };
 }

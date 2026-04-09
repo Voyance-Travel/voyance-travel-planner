@@ -72,7 +72,7 @@ import { compileDayFacts } from './pipeline/compile-day-facts.ts';
 import type { LockedActivity } from './pipeline/types.ts';
 import { validateDay, type ValidateDayInput } from './pipeline/validate-day.ts';
 import { repairDay, type RepairDayInput } from './pipeline/repair-day.ts';
-import { compilePrompt } from './pipeline/compile-prompt.ts';
+import { compilePrompt, type LockedCard } from './pipeline/compile-prompt.ts';
 import { persistDay } from './pipeline/persist-day.ts';
 import { callAI, AICallError } from './pipeline/ai-call.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
@@ -182,6 +182,7 @@ export async function handleGenerateDay(
     isSmartFinish, smartFinishRequested,
     metadata, mustDoActivitiesRaw: mustDoActivities,
     preferenceContext, dayConstraints,
+    lockedCards,
   } = prompt;
   flightContext = prompt.flightContext;
 
@@ -367,6 +368,7 @@ export async function handleGenerateDay(
       ];
       const beforeFilter = normalizedActivities.length;
       normalizedActivities = normalizedActivities.filter((act: any) => {
+        if (act.locked) return true; // Never filter locked user-specified activities
         const cat = (act.category || '').toLowerCase();
         if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') return true;
         const name = (act.venueName || act.title || '').toLowerCase().trim();
@@ -428,6 +430,7 @@ export async function handleGenerateDay(
 
       const beforeFiller = normalizedActivities.length;
       normalizedActivities = normalizedActivities.filter((act: any) => {
+        if (act.locked) return true; // Never filter locked user-specified activities
         const title = (act.title || '').trim();
         const rawAddr = act.address || act.location;
         const address = (typeof rawAddr === 'string' ? rawAddr : (rawAddr && typeof rawAddr === 'object' ? (rawAddr.address || rawAddr.name || '') : '')).trim();
@@ -550,6 +553,67 @@ export async function handleGenerateDay(
       });
       
       console.log(`[generate-day] Merged ${lockedActivities.length} locked activities, final count: ${normalizedActivities.length}`);
+    }
+
+    // === MERGE LOCKED CARDS from perDayActivities (LOCK phase) ===
+    if (lockedCards.length > 0) {
+      const beforeMerge = normalizedActivities.length;
+      // Remove AI activities overlapping locked card time slots
+      normalizedActivities = normalizedActivities.filter((act: any) => {
+        if (act.isLocked || act.locked) return true; // keep existing locked
+        const actStart = parseTimeToMinutes(act.startTime || '00:00');
+        const actEnd = parseTimeToMinutes(act.endTime || '23:59');
+        if (actStart === null || actEnd === null) return true;
+        for (const lc of lockedCards) {
+          if (!lc.start_time) continue;
+          const lcStart = parseTimeToMinutes(lc.start_time);
+          const lcEnd = lc.end_time ? parseTimeToMinutes(lc.end_time) : (lcStart !== null ? lcStart + 60 : null);
+          if (lcStart === null || lcEnd === null) continue;
+          if (actStart < lcEnd && actEnd > lcStart) {
+            console.log(`[LOCKED-SKIP] AI activity "${act.title}" at ${act.startTime} overlaps locked card "${lc.title}" — discarded`);
+            return false;
+          }
+        }
+        return true;
+      });
+
+      // Semantic dedup: remove AI activities that duplicate locked card titles
+      normalizedActivities = normalizedActivities.filter((act: any) => {
+        if (act.locked) return true;
+        const genTitle = (act.title || '').toLowerCase();
+        for (const lc of lockedCards) {
+          const lcTitle = lc.title.toLowerCase();
+          if (genTitle.includes(lcTitle) || lcTitle.includes(genTitle)) return false;
+        }
+        return true;
+      });
+
+      // Convert locked cards to activity format and inject
+      const lockedAsActivities = lockedCards.map((lc, idx) => ({
+        id: `day${dayNumber}-locked-${idx}-${Date.now()}`,
+        title: lc.title,
+        name: lc.title,
+        startTime: lc.start_time || undefined,
+        endTime: lc.end_time || undefined,
+        category: lc.category,
+        venue_name: lc.venue_name,
+        location: lc.venue_name ? { name: lc.venue_name, address: '' } : undefined,
+        cost: { amount: 0, currency: 'USD' },
+        locked: true,
+        lockedSource: lc.lockedSource,
+        isLocked: false, // isLocked is for UI regeneration locks; locked is for pipeline protection
+        durationMinutes: lc.start_time && lc.end_time ? calculateDuration(lc.start_time, lc.end_time) : 60,
+      }));
+
+      normalizedActivities = [...normalizedActivities, ...lockedAsActivities];
+      normalizedActivities.sort((a: any, b: any) => {
+        const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+        const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+        return aTime - bTime;
+      });
+
+      const skipped = beforeMerge - (normalizedActivities.length - lockedAsActivities.length);
+      console.log(`[generate-day] LOCK MERGE: Injected ${lockedAsActivities.length} locked cards, discarded ${skipped} overlapping AI activities`);
     }
 
     // NOTE: Minimum duration enforcement and timing overlap resolution are now
@@ -1128,7 +1192,44 @@ export async function handleGenerateDay(
     }
 
     // =======================================================================
-    // PERSIST: Day upsert, activity insert, UUID mapping, version save
+    // VERIFY LOCK INTEGRITY — Restore any locked cards that were dropped/modified
+    // =======================================================================
+    if (lockedCards.length > 0) {
+      for (const lc of lockedCards) {
+        const match = normalizedActivities.find((a: any) => a.locked && a.lockedSource === lc.lockedSource);
+        if (!match) {
+          console.log(`[LOCK-RESTORE] Restoring dropped locked card: "${lc.title}" at ${lc.start_time}`);
+          normalizedActivities.push({
+            id: `day${dayNumber}-restored-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            title: lc.title, name: lc.title,
+            startTime: lc.start_time || undefined, endTime: lc.end_time || undefined,
+            category: lc.category, venue_name: lc.venue_name,
+            location: lc.venue_name ? { name: lc.venue_name, address: '' } : undefined,
+            cost: { amount: 0, currency: 'USD' },
+            locked: true, lockedSource: lc.lockedSource,
+            durationMinutes: lc.start_time && lc.end_time ? calculateDuration(lc.start_time, lc.end_time) : 60,
+          });
+        } else {
+          if (match.title !== lc.title) {
+            console.log(`[LOCK-RESTORE] Title drift: "${match.title}" → "${lc.title}"`);
+            match.title = lc.title; match.name = lc.title;
+          }
+          if (lc.start_time && match.startTime !== lc.start_time) {
+            console.log(`[LOCK-RESTORE] Time drift: ${match.startTime} → ${lc.start_time}`);
+            match.startTime = lc.start_time;
+            if (lc.end_time) match.endTime = lc.end_time;
+          }
+        }
+      }
+      normalizedActivities.sort((a: any, b: any) => {
+        const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+        const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+        return aTime - bTime;
+      });
+      generatedDay.activities = normalizedActivities;
+      console.log(`[generate-day] VERIFY LOCK: All ${lockedCards.length} locked cards verified`);
+    }
+
     // Extracted to pipeline/persist-day.ts (Phase 5)
     // =======================================================================
     if (tripId) {
