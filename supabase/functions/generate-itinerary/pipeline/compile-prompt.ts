@@ -113,8 +113,127 @@ export interface CompiledPrompt {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LOCK PHASE HELPERS — Parse user activities into immutable locked cards
+// ─────────────────────────────────────────────────────────────────────────────
+
+function normalizeTimeStr(raw: string): string | null {
+  const match = raw.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (!match) {
+    const h24 = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (h24) return raw.trim();
+    return null;
+  }
+  let hour = parseInt(match[1]);
+  const min = match[2] ? parseInt(match[2]) : 0;
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && hour < 12) hour += 12;
+  if (period === 'AM' && hour === 12) hour = 0;
+  return `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+}
+
+function detectActivityCategory(text: string): string {
+  const lower = text.toLowerCase();
+  if (/breakfast|brunch/i.test(lower)) return 'dining';
+  if (/lunch|dinner|supper/i.test(lower)) return 'dining';
+  if (/hotel|check.?in|check.?out|transfer to/i.test(lower)) return 'accommodation';
+  if (/spa|wellness|hammam|massage/i.test(lower)) return 'activity';
+  if (/museum|gallery|tour|visit/i.test(lower)) return 'explore';
+  if (/meeting|presentation|orientation|company|conference|workshop/i.test(lower)) return 'activity';
+  if (/pool|beach|relax/i.test(lower)) return 'activity';
+  if (/shopping|market|souk|bazaar/i.test(lower)) return 'activity';
+  return 'activity';
+}
+
+function parseUserActivities(dayActivitiesString: string, dayNumber: number): LockedCard[] {
+  const lockedCards: LockedCard[] = [];
+  // Split by comma, respecting time-prefixed entries
+  const entries = dayActivitiesString.split(/,\s*(?=\d{1,2}(?::\d{2})?\s*(?:AM|PM)|[A-Z])/i);
+
+  for (const entry of entries) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+
+    // Parse time: "9:00AM Activity Name" or "9AM-11:30AM Activity Name"
+    const timeMatch = trimmed.match(/^(\d{1,2}(?::\d{2})?\s*(?:AM|PM))\s*(?:-\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)))?\s+(.+)$/i);
+
+    let startTime: string | null = null;
+    let endTime: string | null = null;
+    let activityText: string = trimmed;
+
+    if (timeMatch) {
+      startTime = normalizeTimeStr(timeMatch[1]);
+      endTime = timeMatch[2] ? normalizeTimeStr(timeMatch[2]) : null;
+      activityText = timeMatch[3].trim();
+    }
+
+    // TBD entries handled by AI, not locked
+    if (/\bTBD\b|to be determined|choose|pick\b/i.test(activityText)) continue;
+
+    const category = detectActivityCategory(activityText);
+    const venueMatch = activityText.match(/(?:at |@ )(.+)$/i);
+    const venueName = venueMatch ? venueMatch[1].trim() : null;
+
+    lockedCards.push({
+      title: activityText,
+      start_time: startTime,
+      end_time: endTime,
+      category,
+      venue_name: venueName,
+      locked: true,
+      lockedSource: trimmed,
+      dayNumber,
+    });
+  }
+
+  return lockedCards;
+}
+
+function findTimeGaps(lockedCards: LockedCard[], dayNumber: number, totalDays: number): Array<{ from: string; to: string; suggestion: string }> {
+  const gaps: Array<{ from: string; to: string; suggestion: string }> = [];
+  const sorted = lockedCards
+    .filter(c => c.start_time)
+    .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+
+  const dayStart = dayNumber === 1 ? '10:00' : '08:00';
+  const dayEnd = dayNumber === totalDays ? '18:00' : '22:00';
+
+  let cursor = dayStart;
+  for (const card of sorted) {
+    const cardStart = card.start_time!;
+    const cardEnd = card.end_time || _addTime(cardStart, 60);
+    if (cursor < cardStart) {
+      const gapMins = _timeDiffMinutes(cursor, cardStart);
+      if (gapMins >= 60) {
+        gaps.push({ from: cursor, to: cardStart, suggestion: `activity matching traveler DNA (${gapMins} min)` });
+      }
+    }
+    if (cardEnd > cursor) cursor = cardEnd;
+  }
+  if (cursor < dayEnd) {
+    const gapMins = _timeDiffMinutes(cursor, dayEnd);
+    if (gapMins >= 60) {
+      gaps.push({ from: cursor, to: dayEnd, suggestion: `activity matching traveler DNA (${gapMins} min)` });
+    }
+  }
+  return gaps;
+}
+
+function _addTime(hhmm: string, minutes: number): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const total = h * 60 + m + minutes;
+  return `${Math.floor(total / 60).toString().padStart(2, '0')}:${(total % 60).toString().padStart(2, '0')}`;
+}
+
+function _timeDiffMinutes(a: string, b: string): number {
+  const [ah, am] = a.split(':').map(Number);
+  const [bh, bm] = b.split(':').map(Number);
+  return (bh * 60 + bm) - (ah * 60 + am);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main function
 // ─────────────────────────────────────────────────────────────────────────────
+
 
 export async function compilePrompt(
   supabase: any,
