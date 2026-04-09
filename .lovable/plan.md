@@ -1,67 +1,50 @@
 
 
-# Fix Transit Time Calculation & Labels
+# Fix Scheduling Overlaps & Hotel Round-Trip Time Math
 
 ## Problem
-Transit estimates in `repair-day.ts` use raw haversine (straight-line) distance, producing unrealistically short walking times. The walking threshold is too generous, transit labels get stale after reordering, and missing coordinates cause transit cards to be skipped entirely.
+Activities overlap because: (1) the overlap cascade runs before bookend repairs inject new activities, and (2) hotel freshen-up insertion doesn't account for round-trip transit time.
 
 ## Changes
 
-### 1. Add city walking factor & lower walk threshold in `estimateTransit()`
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (~line 336-367)
+### 1. Fix mid-day hotel freshen-up insertion with transit math
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (~line 3133-3144)
 
-- Add `CITY_WALK_FACTOR = 1.4` constant — multiplies haversine distance to approximate real street-level routing
-- Lower the walking threshold from `1200m` to `800m` haversine (≈1.1km actual, ≈14 min walk)
-- Apply `adjustedDist = dist * CITY_WALK_FACTOR` in walking and transit duration calculations
-- Taxi calculation stays on raw distance (road routing is closer to straight-line at scale)
+The current code inserts a freshen-up card 15 min after the previous activity ends, ignoring transit to/from the hotel. Replace with proper round-trip calculation:
 
-```typescript
-const CITY_WALK_FACTOR = 1.4;
-const adjustedDist = dist * CITY_WALK_FACTOR;
-const MAX_COMFORTABLE_WALK_METERS = 800;
+- Calculate transit from previous activity to hotel using `estimateTransit()` (or `getDefaultTransitMinutes()` fallback)
+- Calculate transit from hotel to dinner using `estimateTransit()` (or fallback)
+- Work backwards from dinner start: `freshenEnd = dinnerStart - hotelToDinnerTransit`, `freshenStart = freshenEnd - 30` (freshen duration), `mustLeaveBy = freshenStart - prevToHotelTransit`
+- Only insert if `mustLeaveBy >= prevActivityEnd` — otherwise skip the freshen-up (not enough time)
+- Use calculated times for the transport card and accommodation card instead of hardcoded `offset(prevEnd, 15)`
 
-if (dist <= MAX_COMFORTABLE_WALK_METERS) {
-  const dur = Math.max(3, Math.ceil(adjustedDist / 80));
-  result = { durationMinutes: dur, method: 'walking', ... };
-} else if (dist <= 8000) {
-  const dur = Math.max(8, Math.ceil(adjustedDist / 500) + 5);
-  result = { durationMinutes: dur, method: 'transit', ... };
-} else {
-  // Taxi unchanged (uses raw dist)
-}
+### 2. Add final sequential enforcement pass after bookend repairs
+**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`** (~line 3470, just before `return { activities: deduped, repairs }`)
+
+Add a final overlap sweep on the `deduped` array that catches any overlaps introduced by bookend repairs (hotel returns, transit injection, consolidation):
+
+```
+for each consecutive pair in deduped:
+  if curr.startTime < prev.endTime:
+    push curr (and all subsequent) forward by the overlap amount
+    log repair
 ```
 
-### 2. Add missing-coordinate fallback for transit injection
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+This is intentionally simple — it's a safety net, not the primary repair. It runs after ALL other processing.
 
-- Add `getDefaultTransitMinutes()` helper with postal-code and same-venue awareness
-- Add `extractPostalCode()` helper
-- In `makeTransCard()` (~line 910) and the gap-injection loop (~line 3211), use the fallback when coords are missing instead of defaulting to a hardcoded 15 min or skipping
-- Log fallback usage with `[TRANSIT-FALLBACK]`
+### 3. Add CRITICAL REMINDERS 13-14 to prompt
+**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** (~line 1272)
 
-### 3. Add transit label regeneration helper
-**File: `supabase/functions/generate-itinerary/pipeline/repair-day.ts`**
+Add after item 12:
+- Item 13: TIME OVERLAP CHECK — Activity B cannot start before Activity A ends. Hotel freshen-up requires: transit TO hotel + time AT hotel + transit FROM hotel to restaurant, all fitting before dinner start.
+- Item 14: HOTEL ROUND-TRIP MATH — If the three components don't fit between previous activity end and dinner start, skip the hotel visit.
 
-- Add `generateTransitLabel(nextActivity, mode)` helper that picks the destination name from `location.name`, `venue_name`, or `title`
-- Use mode-specific labels: "Walk to X", "Travel to X", "Taxi to X"
-- Apply this helper in all existing label-generation sites (makeTransCard, rewrite blocks at ~lines 2588, 3158, 3250, 3328) for consistency
-- No behavioral change — just centralizes label logic and ensures mode-aware labels
-
-### 4. Add AI transit estimation guidance to prompt
-**File: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`** (~line 1261)
-
-- Add items 11-12 to CRITICAL REMINDERS:
-  - Transit reality check (different neighborhoods = 10-15 min minimum)
-  - Transit label must name the actual next venue
-- Add a TRANSIT TIME ESTIMATION GUIDE block near the existing transit instructions (~line 863) with distance-based minimums
-
-### 5. Deploy
+### 4. Deploy
 - Deploy `generate-itinerary` edge function
 
 ## What's NOT changed
-- Taxi calculations (reasonable as-is)
-- Inter-city transit logic
+- Existing overlap cascade logic (step 13) — still runs, catches early overlaps
 - Activity generation or reordering logic
-- Database schema or API contracts
-- Google Maps/Places API calls
+- Transit calculation (that's Prompt 83)
+- Database schema
 
