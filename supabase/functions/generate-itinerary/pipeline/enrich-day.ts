@@ -39,8 +39,8 @@ async function enrichActivities(
   hotelCoordinates?: { lat: number; lng: number },
 ): Promise<any[]> {
   // Only enrich unlocked (newly generated) activities
-  const activitiesToEnrich = activities.filter((a: any) => !a.isLocked);
-  const alreadyEnriched = activities.filter((a: any) => a.isLocked);
+  const activitiesToEnrich = activities.filter((a: any) => !a.isLocked && !a.locked);
+  const alreadyEnriched = activities.filter((a: any) => a.isLocked || a.locked);
 
   if (activitiesToEnrich.length === 0 || !googleMapsApiKey) {
     if (!googleMapsApiKey) {

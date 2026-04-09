@@ -1192,7 +1192,44 @@ export async function handleGenerateDay(
     }
 
     // =======================================================================
-    // PERSIST: Day upsert, activity insert, UUID mapping, version save
+    // VERIFY LOCK INTEGRITY — Restore any locked cards that were dropped/modified
+    // =======================================================================
+    if (lockedCards.length > 0) {
+      for (const lc of lockedCards) {
+        const match = normalizedActivities.find((a: any) => a.locked && a.lockedSource === lc.lockedSource);
+        if (!match) {
+          console.log(`[LOCK-RESTORE] Restoring dropped locked card: "${lc.title}" at ${lc.start_time}`);
+          normalizedActivities.push({
+            id: `day${dayNumber}-restored-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            title: lc.title, name: lc.title,
+            startTime: lc.start_time || undefined, endTime: lc.end_time || undefined,
+            category: lc.category, venue_name: lc.venue_name,
+            location: lc.venue_name ? { name: lc.venue_name, address: '' } : undefined,
+            cost: { amount: 0, currency: 'USD' },
+            locked: true, lockedSource: lc.lockedSource,
+            durationMinutes: lc.start_time && lc.end_time ? calculateDuration(lc.start_time, lc.end_time) : 60,
+          });
+        } else {
+          if (match.title !== lc.title) {
+            console.log(`[LOCK-RESTORE] Title drift: "${match.title}" → "${lc.title}"`);
+            match.title = lc.title; match.name = lc.title;
+          }
+          if (lc.start_time && match.startTime !== lc.start_time) {
+            console.log(`[LOCK-RESTORE] Time drift: ${match.startTime} → ${lc.start_time}`);
+            match.startTime = lc.start_time;
+            if (lc.end_time) match.endTime = lc.end_time;
+          }
+        }
+      }
+      normalizedActivities.sort((a: any, b: any) => {
+        const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+        const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+        return aTime - bTime;
+      });
+      generatedDay.activities = normalizedActivities;
+      console.log(`[generate-day] VERIFY LOCK: All ${lockedCards.length} locked cards verified`);
+    }
+
     // Extracted to pipeline/persist-day.ts (Phase 5)
     // =======================================================================
     if (tripId) {
