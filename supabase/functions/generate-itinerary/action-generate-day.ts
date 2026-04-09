@@ -1078,7 +1078,10 @@ export async function handleGenerateDay(
         // Gather avoid list and dietary restrictions from profile
         const pipelineAvoidList = profile?.avoidList || [];
         const pipelineDietaryRestrictions = profile?.dietaryRestrictions || [];
-        const mustDoList = (paramMustDoActivities || '').split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
+        const mustDoList = (Array.isArray(paramMustDoActivities)
+          ? paramMustDoActivities
+          : (typeof paramMustDoActivities === 'string' ? paramMustDoActivities : '').split(/[,\n]/)
+        ).map((s: string) => String(s).trim()).filter(Boolean);
 
         // --- Use unified hotel resolution from compile-day-facts (single source of truth) ---
         const resolvedRepairHotelName = resolvedHotelOverride?.name || (flightContext as any).hotelName || paramHotelName || undefined;
