@@ -3137,11 +3137,46 @@ function repairBookends(
           for (let j = dinnerIdx - 1; j > lunchIdx; j--) {
             if (!isTransport(activities[j])) { insertIdx = j + 1; break; }
           }
-          const prevEnd = activities[insertIdx - 1]?.endTime || '16:00';
-          const transportCard = makeTransCard(activities[insertIdx - 1]?.location?.name || 'venue', hotelName, prevEnd, activities[insertIdx - 1], null);
-          const accomCard = makeAccomCard('Freshen up at', offset(prevEnd, 15), 30);
-          activities.splice(insertIdx, 0, transportCard, accomCard);
-          repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
+          const prevAct = activities[insertIdx - 1];
+          const dinner = activities[dinnerIdx];
+          const prevEnd = prevAct?.endTime || '16:00';
+          const prevEndMin = parseTimeToMinutes(prevEnd) ?? 960;
+          const dinnerStartMin = parseTimeToMinutes(dinner?.startTime || '19:00') ?? 1140;
+
+          // Calculate round-trip transit: prev → hotel → dinner
+          const prevCoords = getActivityCoords(prevAct);
+          const dinnerCoords = getActivityCoords(dinner);
+
+          let prevToHotelMin = 15;
+          if (prevCoords && hotelCoordinates) {
+            prevToHotelMin = estimateTransit(prevCoords, hotelCoordinates, resolvedDestination).durationMinutes;
+          } else if (prevAct && hotelName) {
+            prevToHotelMin = getDefaultTransitMinutes(prevAct, { location: { name: hotelName } });
+          }
+
+          let hotelToDinnerMin = 15;
+          if (hotelCoordinates && dinnerCoords) {
+            hotelToDinnerMin = estimateTransit(hotelCoordinates, dinnerCoords, resolvedDestination).durationMinutes;
+          } else if (dinner) {
+            hotelToDinnerMin = getDefaultTransitMinutes({ location: { name: hotelName } }, dinner);
+          }
+
+          const freshenDuration = 30;
+          // Work backwards from dinner: freshenEnd = dinnerStart - hotelToDinner
+          const freshenEnd = dinnerStartMin - hotelToDinnerMin;
+          const freshenStart = freshenEnd - freshenDuration;
+          const mustLeaveBy = freshenStart - prevToHotelMin;
+
+          if (mustLeaveBy >= prevEndMin) {
+            // Enough time for hotel round-trip
+            const transportCard = makeTransCard(prevAct?.location?.name || 'venue', hotelName, prevEnd, prevAct, null);
+            const accomCard = makeAccomCard('Freshen up at', minutesToHHMM(freshenStart), freshenDuration);
+            activities.splice(insertIdx, 0, transportCard, accomCard);
+            repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_midday_hotel_return' });
+            console.log(`[HOTEL-FRESHEN] Inserted freshen-up ${minutesToHHMM(freshenStart)}-${minutesToHHMM(freshenEnd)}, transit: ${prevToHotelMin}+${hotelToDinnerMin}min`);
+          } else {
+            console.log(`[HOTEL-SKIP] Not enough time for hotel round-trip before dinner at ${dinner?.startTime} (need ${prevToHotelMin}+${freshenDuration}+${hotelToDinnerMin}min, have ${dinnerStartMin - prevEndMin}min)`);
+          }
         }
       }
     }
