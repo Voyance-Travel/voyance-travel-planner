@@ -1647,6 +1647,7 @@ export function sanitizeGeneratedDay(day: any, dayNumber: number, destination?: 
     const beforeCount = day.activities.length;
 
     day.activities = day.activities.filter((act: any) => {
+      if (act.isLocked || act.locked) return true; // Never remove locked user-specified activities
       const isDining = (act.category || '').toLowerCase() === 'dining' ||
         (act.type || '').toLowerCase() === 'dining' ||
         DINING_RE.test(act.title || '');
