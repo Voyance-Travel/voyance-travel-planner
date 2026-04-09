@@ -264,11 +264,12 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Fetch traveler DNA for personalized chat
+    // Fetch traveler DNA for personalized chat (dynamic import)
     let personalizationContext = '';
     try {
+      await loadTravelerDNA();
       const userId = user.id;
-      if (userId) {
+      if (userId && fetchTravelerDNA) {
         const dnaResult = await fetchTravelerDNA(supabase, userId);
         if (dnaResult.hasData) {
           const summary = buildCompactDNASummary(dnaResult.dna);
