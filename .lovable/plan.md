@@ -1,49 +1,52 @@
 
 
-# Fix: Ensure User Activities Reliably Reach Generation Pipeline
+# Fix: Complete the Activity Data Flow (Remaining Gaps)
 
-## Analysis
+The previous implementation added fields to interfaces, `saveTrip()`, and the hook's invoke bodies. However, three concrete gaps remain that prevent the "belt and suspenders" approach from working:
 
-The data flow is **partially working** through the metadata fallback path:
-- `Start.tsx` (chat path) saves `mustDoActivities` and `perDayActivities` to trip metadata ✅
-- `compile-prompt.ts` reads from metadata as fallback when params are empty ✅
+## Gap 1: `ItineraryGenerator.tsx` doesn't pass activity fields to `startServerGeneration()`
 
-However, there are reliability gaps worth closing:
+**File**: `src/components/itinerary/ItineraryGenerator.tsx` (lines 705-719)
 
-1. **`TripPlannerContext.saveTrip()`** (form path, line 288) does NOT include `mustDoActivities`/`perDayActivities` in metadata. The form path relies on `ItineraryPreview.tsx` doing a separate metadata update later — but if the user skips the context form or it fails, the data is lost.
+The component calls `startServerGeneration()` with trip details but omits `mustDoActivities` and `perDayActivities`. Even though the hook accepts them, they arrive as `undefined`.
 
-2. **Client-side generation path** (`useItineraryGeneration.ts` line 252) doesn't pass these fields. If metadata read fails or is stale, generation gets nothing.
+**Fix**: The component already has access to trip metadata (it loads the trip from DB). Add `mustDoActivities` and `perDayActivities` from the trip's metadata to the `startServerGeneration()` call. This requires reading them from the trip record's metadata where Start.tsx saved them.
 
-3. **Server-side chain** (`action-generate-trip-day.ts` line 530) also doesn't pass them to `generate-day`. It relies entirely on `compile-prompt.ts` re-reading metadata from DB — which works but adds an extra DB query and creates a single point of failure.
+## Gap 2: `action-generate-trip.ts` doesn't forward activity fields in chain body
 
-4. **`TripDetails` interface** in `useItineraryGeneration.ts` (line 106) doesn't include these fields, so callers can't pass them even if they wanted to.
+**File**: `supabase/functions/generate-itinerary/action-generate-trip.ts` (lines 667-686)
 
-## Changes
+When `generate-trip` chains to `generate-trip-day`, the chain body doesn't include `mustDoActivities` or `perDayActivities`. So even if the client sent them, they're dropped.
 
-### 1. Add fields to `TripPlannerContext.tsx` saveTrip() metadata (line ~288)
-Add `mustDoActivities` and `perDayActivities` from `state.basics` to the metadata object. Also add these optional fields to the `TripBasics` interface.
+**Fix**: Not needed — `action-generate-trip-day.ts` reads these from `tripMeta` (DB), which is authoritative. But for robustness, we should also read from `params` as fallback.
 
-### 2. Extend `TripDetails` interface in `useItineraryGeneration.ts`
-Add optional `mustDoActivities` and `perDayActivities` fields.
+## Gap 3: `action-generate-trip-day.ts` reads only from `tripMeta`, not `params`
 
-### 3. Pass fields in client-side generation call (line ~252)
-Add `mustDoActivities` and `perDayActivities` from the trip object to the `generate-day` body.
+**File**: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (line 559-560)
 
-### 4. Pass fields in server generation call (line ~483)
-Add both fields to the `generate-trip` body in `startServerGeneration()`.
+Currently: `mustDoActivities: (tripMeta.mustDoActivities as string) || ''`
 
-### 5. Pass fields in server chain body (`action-generate-trip-day.ts` line ~530)
-Add `mustDoActivities` and `perDayActivities` from `tripMeta` to the `generate-day` call body, so `compile-prompt.ts` gets them as params (faster, more reliable than re-querying DB).
+Should be: `params.mustDoActivities || tripMeta.mustDoActivities || ''` — so direct client params take priority, with metadata as fallback.
 
-### 6. Add diagnostic logging
-- `TripPlannerContext.tsx` saveTrip(): log presence of mustDo/perDay
-- `useItineraryGeneration.ts`: log before generation call
-- `action-generate-trip-day.ts`: log what was read from metadata and passed to generate-day
+## Gap 4: Self-chain in `action-generate-trip-day.ts` also drops the fields
 
-### 7. Redeploy `generate-itinerary` edge function
+**File**: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (lines 2497-2516)
 
-## Files Changed
-- `src/contexts/TripPlannerContext.tsx` — metadata + TripBasics interface
-- `src/hooks/useItineraryGeneration.ts` — TripDetails interface + generation bodies
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — pass-through params + logging
+The chain body for next-day generation doesn't include these fields. Not critical since each day re-reads `tripMeta`, but for consistency.
+
+## Implementation
+
+### 1. `src/components/itinerary/ItineraryGenerator.tsx`
+- Find where the trip data is loaded (likely from DB or props)
+- Pass `mustDoActivities` and `perDayActivities` from trip metadata to `startServerGeneration()` call at line ~705
+
+### 2. `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- Line ~559: Change to read from `params` first, then `tripMeta` fallback
+- Add diagnostic log showing source of activity data
+
+### 3. Redeploy `generate-itinerary` edge function
+
+### Files Changed
+- `src/components/itinerary/ItineraryGenerator.tsx`
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
 
