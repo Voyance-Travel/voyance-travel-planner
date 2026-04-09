@@ -391,12 +391,43 @@ function getActivityCoords(act: any): { lat: number; lng: number } | null {
 // TRANSIT LABEL GENERATION
 // =============================================================================
 
+/** Check if a destination name is a placeholder or hallucinated single-letter name */
+function isPlaceholderDestination(name: string): boolean {
+  if (!name) return true;
+  const trimmed = name.trim();
+  // Single letter (A, B, C, etc.)
+  if (/^[A-Za-z]$/.test(trimmed)) return true;
+  // Known generic placeholders
+  const placeholders = [
+    'next venue', 'next stop', 'next location', 'next activity',
+    'previous location', 'previous venue', 'destination',
+    'activity a', 'activity b', 'activity c',
+    'venue a', 'venue b', 'venue c',
+    'location a', 'location b', 'location c',
+    'point a', 'point b', 'point c',
+  ];
+  return placeholders.includes(trimmed.toLowerCase());
+}
+
 /** Generate a mode-aware transit label from the actual next activity */
 function generateTransitLabel(nextActivity: any, mode: string): string {
-  const destination = nextActivity?.location?.name
-    || nextActivity?.venue_name
-    || sanitizeTransitDestination(nextActivity?.title || '')
-    || 'next venue';
+  // Try each field, skipping placeholders
+  const candidates = [
+    nextActivity?.location?.name,
+    nextActivity?.venue_name,
+    sanitizeTransitDestination(nextActivity?.title || ''),
+  ];
+  let destination = 'next venue';
+  for (const c of candidates) {
+    if (c && !isPlaceholderDestination(c)) {
+      destination = c;
+      break;
+    }
+  }
+  if (isPlaceholderDestination(destination) && destination !== 'next venue') {
+    console.warn(`[TRANSIT-PLACEHOLDER] Skipping placeholder destination "${destination}" for transit label`);
+    destination = 'next venue';
+  }
 
   switch (mode) {
     case 'walking':
