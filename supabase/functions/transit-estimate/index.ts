@@ -280,7 +280,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Fetch walking and driving in parallel; only add transit if distance > 800m
-    const shouldFetchTransit = fallbackDistance === null || fallbackDistance > 800;
+    const shouldFetchTransit = fallbackDistance === null || fallbackDistance > 1200;
 
     const promises = [
       fetchGoogleRoute(origin, destination, 'WALK', apiKey, city),
