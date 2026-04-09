@@ -1,52 +1,31 @@
 
+# Universal Activity Locking — Fix Plan
 
-# Fix: Complete the Activity Data Flow (Remaining Gaps)
+## Summary
+The backend pipeline already has extensive locked-activity support (compile-day-facts loads them, compile-prompt injects them, repair-day skips them, enrich-day skips them, persist-day saves them). However, there are critical gaps on both the frontend (activities never get marked locked) and backend (locked activities aren't passed through to key post-processing steps).
 
-The previous implementation added fields to interfaces, `saveTrip()`, and the hook's invoke bodies. However, three concrete gaps remain that prevent the "belt and suspenders" approach from working:
+## Changes
 
-## Gap 1: `ItineraryGenerator.tsx` doesn't pass activity fields to `startServerGeneration()`
+### 1. Frontend: Mark user-created activities as locked
+**File: `src/components/itinerary/EditorialItinerary.tsx`**
+- `handleAddActivity` (~line 4832): Change `isLocked: false` to `isLocked: true`
+- `handleUpdateActivity` (~line 5055): Add `isLocked: true` to the merged update so any user edit locks the activity
+- `DiscoverDrawer` `onAddActivity` handler (~line 7284): Ensure activities added from Discover get `isLocked: true`
 
-**File**: `src/components/itinerary/ItineraryGenerator.tsx` (lines 705-719)
+### 2. Backend: Pass locked activities to repair and quality pass
+**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
 
-The component calls `startServerGeneration()` with trip details but omits `mustDoActivities` and `perDayActivities`. Even though the hook accepts them, they arrive as `undefined`.
+The locked activities are already loaded by `compile-day-facts` and available in the facts object, but `repairDay()` and `universalQualityPass()` both receive `lockedActivities: []`. Fix both call sites (~lines 1284 and 1382) to pass the actual locked activities from the compiled facts.
 
-**Fix**: The component already has access to trip metadata (it loads the trip from DB). Add `mustDoActivities` and `perDayActivities` from the trip's metadata to the `startServerGeneration()` call. This requires reading them from the trip record's metadata where Start.tsx saved them.
+Also: at the top of the post-generation sanitization block (~line 1649 in sanitization.ts), add a locked check so restaurant dedup never removes locked activities.
 
-## Gap 2: `action-generate-trip.ts` doesn't forward activity fields in chain body
+### 3. Backend: Sanitization locked guard
+**File: `supabase/functions/generate-itinerary/sanitization.ts`**
+- In the restaurant repeat removal filter (~line 1649): Add `if (act.isLocked || act.locked) return true;` before the repeat check so user-specified restaurants survive dedup.
 
-**File**: `supabase/functions/generate-itinerary/action-generate-trip.ts` (lines 667-686)
+### 4. Redeploy `generate-itinerary` edge function
 
-When `generate-trip` chains to `generate-trip-day`, the chain body doesn't include `mustDoActivities` or `perDayActivities`. So even if the client sent them, they're dropped.
-
-**Fix**: Not needed — `action-generate-trip-day.ts` reads these from `tripMeta` (DB), which is authoritative. But for robustness, we should also read from `params` as fallback.
-
-## Gap 3: `action-generate-trip-day.ts` reads only from `tripMeta`, not `params`
-
-**File**: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (line 559-560)
-
-Currently: `mustDoActivities: (tripMeta.mustDoActivities as string) || ''`
-
-Should be: `params.mustDoActivities || tripMeta.mustDoActivities || ''` — so direct client params take priority, with metadata as fallback.
-
-## Gap 4: Self-chain in `action-generate-trip-day.ts` also drops the fields
-
-**File**: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (lines 2497-2516)
-
-The chain body for next-day generation doesn't include these fields. Not critical since each day re-reads `tripMeta`, but for consistency.
-
-## Implementation
-
-### 1. `src/components/itinerary/ItineraryGenerator.tsx`
-- Find where the trip data is loaded (likely from DB or props)
-- Pass `mustDoActivities` and `perDayActivities` from trip metadata to `startServerGeneration()` call at line ~705
-
-### 2. `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-- Line ~559: Change to read from `params` first, then `tripMeta` fallback
-- Add diagnostic log showing source of activity data
-
-### 3. Redeploy `generate-itinerary` edge function
-
-### Files Changed
-- `src/components/itinerary/ItineraryGenerator.tsx`
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-
+### Files changed
+- `src/components/itinerary/EditorialItinerary.tsx` (3 small edits)
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (2 lines: pass locked activities)
+- `supabase/functions/generate-itinerary/sanitization.ts` (1 line: guard)
