@@ -666,8 +666,19 @@ export async function enrichActivity(
       enriched.bookingRequired = true;
     }
 
-    // Apply venue verification data
+    // Apply venue verification data (with name mismatch guard)
     if (venueData) {
+      // Protect the venue name from being overwritten by a mismatched Places result
+      if (venueData.confidence !== undefined && venueData.confidence < 0.5) {
+        // Low-confidence match — preserve original name, still use coords/address
+        const originalName = activity.title || (activity as any).venue_name || '';
+        console.log(`[Stage 4] [VENUE-MISMATCH] Preserving original name "${originalName}" (confidence=${venueData.confidence})`);
+        // Ensure location.name stays as original
+        if (enriched.location) {
+          enriched.location.name = enriched.location.name || originalName;
+        }
+      }
+
       if (venueData.coordinates) {
         enriched.location = {
           ...enriched.location,
