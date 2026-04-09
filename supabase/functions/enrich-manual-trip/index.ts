@@ -123,7 +123,7 @@ async function waitForGenerationCompletionAfterTimeout(
   tripId: string,
   baselineTripUpdatedAt?: string | null,
 ): Promise<boolean> {
-  const MAX_CHECKS = 18;
+  const MAX_CHECKS = 60;
   const INTERVAL_MS = 5000;
   const baselineTs = baselineTripUpdatedAt ? Date.parse(baselineTripUpdatedAt) : 0;
 
@@ -173,6 +173,15 @@ async function runGenerationInBackground(
 
   try {
     console.log(`[enrich-manual-trip:bg] Starting generate-itinerary for trip ${tripId}`);
+
+    // Pre-set itinerary_status to 'generating' so the chain doesn't get interrupted
+    const { error: statusErr } = await supabase
+      .from("trips")
+      .update({ itinerary_status: "generating" })
+      .eq("id", tripId);
+    if (statusErr) {
+      console.warn(`[enrich-manual-trip:bg] Failed to pre-set itinerary_status:`, statusErr.message);
+    }
 
     // Fetch trip data — needed for generate-itinerary request body
     const { data: trip, error: tripErr } = await supabase
