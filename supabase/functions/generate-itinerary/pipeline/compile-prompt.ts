@@ -351,7 +351,57 @@ export async function compilePrompt(
   const currentDayActivities = perDayActivities?.find(d => d.dayNumber === dayNumber);
 
   if (currentDayActivities) {
-    mustDoPrompt = `
+    // === LOCK PHASE: Parse user activities into locked cards ===
+    lockedCardsForDay = parseUserActivities(currentDayActivities.activities, dayNumber);
+
+    // Extract TBD entries for AI to fill
+    const tdbEntries: string[] = [];
+    for (const entry of currentDayActivities.activities.split(/,\s*(?=\d{1,2}(?::\d{2})?\s*(?:AM|PM)|[A-Z])/i)) {
+      const t = entry.trim();
+      if (/\bTBD\b|to be determined|choose|pick\b/i.test(t)) tdbEntries.push(t);
+    }
+
+    if (lockedCardsForDay.length > 0) {
+      // Build a timeline showing the AI what's locked
+      const timeline = lockedCardsForDay
+        .filter(c => c.start_time)
+        .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''))
+        .map(c => `${c.start_time}${c.end_time ? '-' + c.end_time : ''}: [LOCKED] ${c.title}`)
+        .join('\n');
+
+      const gaps = findTimeGaps(lockedCardsForDay, dayNumber, totalDays);
+
+      mustDoPrompt = `
+## 🔒 PRE-FILLED TIMELINE FOR DAY ${dayNumber} (LOCKED — DO NOT MODIFY)
+
+The following activities are ALREADY CONFIRMED and will be inserted automatically.
+DO NOT generate activities for these time slots. DO NOT rename or modify these entries.
+
+${timeline}
+
+${tdbEntries.length > 0 ? `
+SLOTS FOR YOU TO FILL:
+${tdbEntries.map(t => `- ${t}`).join('\n')}
+` : ''}
+
+${gaps.length > 0 ? `
+OPEN TIME GAPS (generate activities for these windows only):
+${gaps.map(g => `- ${g.from} to ${g.to}: Generate ${g.suggestion}`).join('\n')}
+` : ''}
+
+RULES:
+1. Only generate activities for the gaps and TBD slots listed above.
+2. Do NOT generate activities that overlap with any [LOCKED] time slot.
+3. Do NOT generate duplicates of locked activities.
+4. Transit between locked activities will be calculated automatically — you do not need to generate transit cards adjacent to locked activities.
+5. Match the traveler's DNA for gap-filling activities.
+6. Do NOT add meals the user didn't specify. If they said "Breakfast" and "Dinner" but no lunch, there is no lunch.
+7. Do NOT inject activities from other cities. Only plan for the current city: ${resolvedDestination}.
+`;
+      console.log(`[compile-prompt] LOCK PHASE: ${lockedCardsForDay.length} locked cards for Day ${dayNumber}, ${gaps.length} gaps, ${tdbEntries.length} TBD slots`);
+    } else {
+      // No parseable locked cards, fall back to original prompt style
+      mustDoPrompt = `
 ## 🚨 USER-SPECIFIED ACTIVITIES FOR DAY ${dayNumber} (MANDATORY — DO NOT CHANGE)
 
 The traveler has personally planned these activities for today. You MUST follow this schedule:
@@ -367,6 +417,7 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
 - Hotel transfers are activities too. "4PM Transfer to Radisson Blu" = create a transit/check-in activity.
 - Do NOT inject activities from other cities. Only plan for the current city: ${resolvedDestination}.
 `;
+    }
     console.log(`[compile-prompt] Using perDayActivities for Day ${dayNumber}: ${currentDayActivities.activities.substring(0, 100)}...`);
   } else if (mustDoActivitiesRaw.trim()) {
     const forceAllMust = !!isSmartFinish || !!smartFinishRequested;
