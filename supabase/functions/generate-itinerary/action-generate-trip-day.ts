@@ -1281,7 +1281,7 @@ async function _handleGenerateTripDayInner(
         hotelName: cityInfo?.hotelName || tripHotelName || undefined,
         hotelAddress: cityInfo?.hotelAddress || tripHotelAddress || '',
         hasHotel: true,
-        lockedActivities: [],
+        lockedActivities: lockedActivitiesForDay,
         isTransitionDay: isTransition,
         isMultiCity: isMultiCity || false,
         isLastDayInCity,
@@ -1379,7 +1379,7 @@ async function _handleGenerateTripDayInner(
       dayTitle: dayResult?.theme || dayResult?.title,
       budgetTier: budgetTier || 'moderate',
       apiKey: Deno.env.get("LOVABLE_API_KEY") || undefined,
-      lockedActivities: [],
+      lockedActivities: lockedActivitiesForDay,
       usedRestaurants: usedRestaurants,
     });
     // Sync usedVenues back from the Set for subsequent days

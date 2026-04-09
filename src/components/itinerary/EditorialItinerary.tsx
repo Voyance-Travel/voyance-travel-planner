@@ -4829,7 +4829,7 @@ export function EditorialItinerary({
       bookingRequired: activity.bookingRequired || false,
       rating: activity.rating,
       tags: activity.tags || [],
-      isLocked: false,
+      isLocked: true,
     };
 
     // Compute insertion and preview outside setDays
@@ -5060,6 +5060,7 @@ export function EditorialItinerary({
         return {
           ...activity,
           ...updates,
+          isLocked: true,
           time: updates.startTime || activity.startTime || activity.time,
         };
       });
