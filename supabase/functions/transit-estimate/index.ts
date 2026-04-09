@@ -131,10 +131,20 @@ function haversineDistance(a: LatLng, b: LatLng): number {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
+/**
+ * City walk factor: haversine gives straight-line distance, but real city
+ * walking is 1.3–1.6× longer due to street grids, bridges, crossings, etc.
+ */
+const CITY_WALK_FACTOR = 1.4;
+
 function heuristicEstimates(distMeters: number, city?: string): TransitEstimate[] {
-  const walkMinutes = Math.ceil(distMeters / 80); // ~5km/h
-  const transitMinutes = Math.max(5, Math.ceil(distMeters / 500) + 5);
-  const taxiMinutes = Math.max(3, Math.ceil(distMeters / 400));
+  const adjustedDist = distMeters * CITY_WALK_FACTOR;
+  // Walking: ~5km/h = ~83m/min on adjusted distance
+  const walkMinutes = Math.max(3, Math.ceil(adjustedDist / 83));
+  // Transit: ~400m/min adjusted + 7min avg wait/station access
+  const transitMinutes = Math.max(10, Math.ceil(adjustedDist / 400) + 7);
+  // Taxi: ~500m/min adjusted + 4min hail/pickup
+  const taxiMinutes = Math.max(8, Math.ceil(adjustedDist / 500) + 4);
   const distText = metersToText(distMeters);
 
   const results: TransitEstimate[] = [];
@@ -146,10 +156,10 @@ function heuristicEstimates(distMeters: number, city?: string): TransitEstimate[
     distance: distText,
     distanceMeters: distMeters,
     estimatedCost: null,
-    recommended: walkMinutes <= 15,
+    recommended: walkMinutes <= 20,
   });
 
-  if (walkMinutes > 10) {
+  if (walkMinutes > 12) {
     results.push({
       method: 'transit',
       duration: `${transitMinutes} min`,
@@ -157,11 +167,11 @@ function heuristicEstimates(distMeters: number, city?: string): TransitEstimate[
       distance: distText,
       distanceMeters: distMeters,
       estimatedCost: computeCityAwareCost(distMeters, 'TRANSIT', city),
-      recommended: walkMinutes > 15 && distMeters < 15000,
+      recommended: walkMinutes > 20 && distMeters < 15000,
     });
   }
 
-  if (walkMinutes > 15) {
+  if (walkMinutes > 20) {
     results.push({
       method: 'taxi',
       duration: `${taxiMinutes} min`,

@@ -341,10 +341,10 @@ const MAX_SAME_CITY_TRANSIT_MINUTES = 60;
 const CITY_WALK_FACTOR = 1.4;
 
 /**
- * Max comfortable haversine distance for walking (~800m straight-line ≈ 1.1km actual ≈ 14 min).
+ * Max comfortable haversine distance for walking (~1200m straight-line ≈ 1.7km actual ≈ 20 min).
  * Beyond this, suggest public transit instead.
  */
-const MAX_COMFORTABLE_WALK_METERS = 800;
+const MAX_COMFORTABLE_WALK_METERS = 1200;
 
 function estimateTransit(
   fromCoords: { lat: number; lng: number },
@@ -357,17 +357,17 @@ function estimateTransit(
 
   let result: TransitEstimateResult;
   if (dist <= MAX_COMFORTABLE_WALK_METERS) {
-    // Walking — use adjusted distance for realistic duration
-    const dur = Math.max(3, Math.ceil(adjustedDist / 80)); // ~5 km/h on adjusted distance
+    // Walking — use adjusted distance at ~5 km/h (~83m/min)
+    const dur = Math.max(3, Math.ceil(adjustedDist / 83));
     result = { durationMinutes: dur, method: 'walking', costAmount: 0, distanceMeters: dist };
   } else if (dist <= 8000) {
-    // Public transit — adjusted distance accounts for routing overhead
-    const dur = Math.max(8, Math.ceil(adjustedDist / 500) + 5);
+    // Public transit — travel speed ~400m/min adjusted + 7min avg wait/access time
+    const dur = Math.max(10, Math.ceil(adjustedDist / 400) + 7);
     result = { durationMinutes: dur, method: 'transit', costAmount: Math.round(tier.transitFlat * 100) / 100, distanceMeters: dist };
   } else {
-    // Taxi — raw distance is acceptable (road routing closer to straight-line at scale)
-    const dur = Math.max(5, Math.ceil(dist / 400) + 3);
-    const cost = tier.taxiBase + (dist / 1000) * tier.taxiPerKm;
+    // Taxi — apply walk factor for road routing, ~500m/min avg city speed + 4min hail/pickup
+    const dur = Math.max(8, Math.ceil(adjustedDist / 500) + 4);
+    const cost = tier.taxiBase + (adjustedDist / 1000) * tier.taxiPerKm;
     result = { durationMinutes: dur, method: 'taxi', costAmount: Math.round(cost * 100) / 100, distanceMeters: dist };
   }
 
