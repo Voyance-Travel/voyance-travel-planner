@@ -1,31 +1,66 @@
 
-# Universal Activity Locking — Fix Plan
+Diagnosis
 
-## Summary
-The backend pipeline already has extensive locked-activity support (compile-day-facts loads them, compile-prompt injects them, repair-day skips them, enrich-day skips them, persist-day saves them). However, there are critical gaps on both the frontend (activities never get marked locked) and backend (locked activities aren't passed through to key post-processing steps).
+- The repeated error `A listener indicated an asynchronous response...` is almost certainly browser-extension/runtime noise, not the root app bug.
+- The real failure is this chain:
+  1. frontend calls `generate-itinerary`
+  2. day generation reaches Day 5
+  3. edge function throws `TypeError: (paramMustDoActivities || "").split is not a function`
+  4. browser surfaces that failed cross-origin request as a CORS error
+- So the CORS message is a symptom of the server crash, not the primary cause.
 
-## Changes
+Confirmed root cause in this codebase
 
-### 1. Frontend: Mark user-created activities as locked
-**File: `src/components/itinerary/EditorialItinerary.tsx`**
-- `handleAddActivity` (~line 4832): Change `isLocked: false` to `isLocked: true`
-- `handleUpdateActivity` (~line 5055): Add `isLocked: true` to the merged update so any user edit locks the activity
-- `DiscoverDrawer` `onAddActivity` handler (~line 7284): Ensure activities added from Discover get `isLocked: true`
+- `mustDoActivities` is inconsistent across flows:
+  - `src/pages/Start.tsx` stores it as an array in metadata
+  - `src/contexts/TripPlannerContext.tsx` stores it as a string
+  - `src/components/itinerary/ItineraryGenerator.tsx` forwards `tripMeta.mustDoActivities` with a string cast, but arrays still pass through at runtime
+- The backend still assumes `mustDoActivities` is always a string in multiple places:
+  - `supabase/functions/generate-itinerary/action-generate-day.ts` line using `(paramMustDoActivities || '').split(/[,\n]/)`
+  - `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` line using `(paramMustDoActivities || '').split(',')`
+- `compile-prompt.ts` already has a safe normalization earlier (`requestMustDoText`), but later falls back to the unsafe raw param again.
 
-### 2. Backend: Pass locked activities to repair and quality pass
-**File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`**
+Implementation plan
 
-The locked activities are already loaded by `compile-day-facts` and available in the facts object, but `repairDay()` and `universalQualityPass()` both receive `lockedActivities: []`. Fix both call sites (~lines 1284 and 1382) to pass the actual locked activities from the compiled facts.
+1. Standardize `mustDoActivities` handling
+- Pick one canonical shape for the generation pipeline.
+- Best approach: accept `string | string[] | null` at inputs, then normalize immediately to:
+  - `mustDoText: string`
+  - `mustDoList: string[]`
 
-Also: at the top of the post-generation sanitization block (~line 1649 in sanitization.ts), add a locked check so restaurant dedup never removes locked activities.
+2. Harden the backend first
+- Add a small shared normalizer inside the generation pipeline or `action-generate-day.ts`.
+- Replace every raw `.split(...)` on `paramMustDoActivities` with the normalized value.
+- Specifically update:
+  - `supabase/functions/generate-itinerary/action-generate-day.ts`
+  - `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
 
-### 3. Backend: Sanitization locked guard
-**File: `supabase/functions/generate-itinerary/sanitization.ts`**
-- In the restaurant repeat removal filter (~line 1649): Add `if (act.isLocked || act.locked) return true;` before the repeat check so user-specified restaurants survive dedup.
+3. Normalize frontend payloads too
+- In `src/components/itinerary/ItineraryGenerator.tsx`, stop forwarding metadata with a misleading string cast.
+- In `src/hooks/useItineraryGeneration.ts`, keep the same shape consistently when invoking the edge function.
+- This avoids future regressions even if backend is hardened.
 
-### 4. Redeploy `generate-itinerary` edge function
+4. Preserve shape through server chaining
+- Review `generate-trip -> generate-trip-day -> generate-day` chaining and make sure the normalized value is forwarded consistently instead of depending on mixed metadata shapes.
 
-### Files changed
-- `src/components/itinerary/EditorialItinerary.tsx` (3 small edits)
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (2 lines: pass locked activities)
-- `supabase/functions/generate-itinerary/sanitization.ts` (1 line: guard)
+5. Add targeted diagnostics
+- Log the incoming type of `mustDoActivities` at the start of day generation.
+- Log whether it arrived as string vs array before prompt compilation.
+- Remove these logs after verification.
+
+6. Redeploy and verify
+- Redeploy `generate-itinerary`.
+- Verify from the published domain that:
+  - Day 5 no longer throws 500
+  - the browser no longer shows the CORS failure for this request
+  - must-do activities still appear in prompt generation
+
+Technical details
+
+- Likely offending paths:
+  - `src/pages/Start.tsx` saves arrays
+  - `src/components/itinerary/ItineraryGenerator.tsx` forwards metadata without true normalization
+  - `supabase/functions/generate-itinerary/action-generate-day.ts` assumes string
+  - `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` partially normalizes, then regresses
+- No database schema change is needed.
+- This is primarily a runtime type-safety bug in the generation pipeline.
