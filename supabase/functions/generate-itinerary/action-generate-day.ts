@@ -368,6 +368,7 @@ export async function handleGenerateDay(
       ];
       const beforeFilter = normalizedActivities.length;
       normalizedActivities = normalizedActivities.filter((act: any) => {
+        if (act.locked) return true; // Never filter locked user-specified activities
         const cat = (act.category || '').toLowerCase();
         if (cat !== 'dining' && cat !== 'restaurant' && cat !== 'food') return true;
         const name = (act.venueName || act.title || '').toLowerCase().trim();
