@@ -109,9 +109,13 @@ export async function splitJourneyIfNeeded(
   const totalLegs = destinations.length;
   const metadata = (originalTrip.metadata as Record<string, unknown>) || {};
 
+  // Extract perDayActivities for day-range filtering per leg
+  const allPerDayActivities = (metadata.perDayActivities as Array<{ dayNumber: number; activities: string }>) || [];
+
   // Build leg rows
   const legInserts: any[] = [];
   let currentDate = startDate;
+  let dayOffset = 0; // Track cumulative day offset for perDayActivities filtering
 
   for (let i = 0; i < destinations.length; i++) {
     const dest = destinations[i];
@@ -122,30 +126,45 @@ export async function splitJourneyIfNeeded(
     // Transport info for this leg (from previous city)
     const transport = i > 0 ? transports[i - 1] : null;
 
-    // Filter must-do activities for this city (best-effort keyword match)
-    const allMustDos: string[] = (metadata.mustDoActivities as string[]) || [];
-    const cityMustDos = allMustDos.filter(activity => {
-      const lower = activity.toLowerCase();
-      const cityLower = dest.city.toLowerCase();
-      // Keep activity if it mentions this city, or if we can't determine which city it belongs to
-      return lower.includes(cityLower);
-    });
-    // Activities that don't match any specific city get added to the first leg
-    const unassignedMustDos = i === 0
-      ? allMustDos.filter(activity => {
-          const lower = activity.toLowerCase();
-          return !cities.some(c => lower.includes(c.toLowerCase()));
-        })
-      : [];
-    const legMustDos = [...cityMustDos, ...unassignedMustDos];
+    // === perDayActivities-aware splitting ===
+    // Filter perDayActivities to this leg's day range and renumber relative to leg start
+    const legStartDay = dayOffset + 1; // 1-indexed
+    const legEndDay = dayOffset + nights + 1; // inclusive of departure day
+    const legPerDayActivities = allPerDayActivities
+      .filter(d => d.dayNumber >= legStartDay && d.dayNumber < legEndDay)
+      .map(d => ({ dayNumber: d.dayNumber - dayOffset, activities: d.activities }));
+
+    // Build must-do activities from perDayActivities if available, else use legacy city-name filtering
+    let legMustDos: string[];
+    if (legPerDayActivities.length > 0) {
+      // Build mustDoActivities from this leg's structured day data
+      legMustDos = legPerDayActivities.flatMap(d =>
+        d.activities.split(/,\s*/).map(a => `Day ${d.dayNumber} ${a.trim()}`).filter(Boolean)
+      );
+    } else {
+      // Legacy fallback: city-name keyword matching
+      const allMustDos: string[] = (metadata.mustDoActivities as string[]) || [];
+      const cityMustDos = allMustDos.filter(activity => {
+        const lower = activity.toLowerCase();
+        const cityLower = dest.city.toLowerCase();
+        return lower.includes(cityLower);
+      });
+      // Only first leg gets unassigned generic activities (legacy behavior)
+      const unassignedMustDos = i === 0
+        ? allMustDos.filter(activity => {
+            const lower = activity.toLowerCase();
+            return !cities.some(c => lower.includes(c.toLowerCase()));
+          })
+        : [];
+      legMustDos = [...cityMustDos, ...unassignedMustDos];
+    }
 
     const legMetadata: Record<string, unknown> = {
       ...metadata,
       mustDoActivities: legMustDos.length > 0 ? legMustDos : null,
+      perDayActivities: legPerDayActivities.length > 0 ? legPerDayActivities : null,
       splitFromTrip: originalTripId,
       journeyLeg: i + 1,
-      // Note: generation rules, constraints, dietary, pacing, transportation_preferences
-      // are already propagated via the ...metadata spread above (camelCase keys)
     };
 
     // First-time visitor per city
@@ -153,6 +172,8 @@ export async function splitJourneyIfNeeded(
     if (firstTimePerCity && dest.city in firstTimePerCity) {
       legMetadata.isFirstTimeVisitor = firstTimePerCity[dest.city];
     }
+
+    dayOffset += nights; // Advance for next leg
 
     const legName = `${journeyName}: ${dest.city}`;
 
