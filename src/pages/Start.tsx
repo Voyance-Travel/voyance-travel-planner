@@ -2985,6 +2985,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                                 interestCategories: details.interestCategories?.length ? details.interestCategories : null,
                                 celebrationDay: details.celebrationDay || null,
                                 generationRules,
+                                perDayActivities: details.perDayActivities || null,
                                 source: 'chat_planner',
                                 lastUpdated: new Date().toISOString(),
                               };
