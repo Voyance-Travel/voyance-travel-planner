@@ -878,6 +878,13 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // ── EXTRACT LOCKED ACTIVITIES from existing itinerary for this day ──
+  const existingDayForLocked = existingDays.find((d: any) => d?.dayNumber === dayNumber);
+  const lockedActivitiesForDay = (existingDayForLocked?.activities || []).filter((a: any) => a.locked || a.isLocked);
+  if (lockedActivitiesForDay.length > 0) {
+    console.log(`[generate-trip-day] Found ${lockedActivitiesForDay.length} locked activities for day ${dayNumber}: ${lockedActivitiesForDay.map((a: any) => a.title).join(', ')}`);
+  }
+
   // ── HALLUCINATION FILTER — remove known fake restaurants and dining with bogus addresses ──
   if (Array.isArray(dayResult?.activities)) {
     const BLOCKED_RESTAURANT_NAMES = [
