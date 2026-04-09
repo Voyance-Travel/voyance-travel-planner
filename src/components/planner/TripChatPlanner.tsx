@@ -338,6 +338,20 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
           // Normalize multi-city using shared utility (single source of truth)
           details = normalizeMultiCity(details);
 
+          // === CRITICAL FALLBACK: Build perDayActivities from mustDoActivities ===
+          // The AI model frequently omits perDayActivities even when the user provides
+          // a day-by-day itinerary. When mustDoActivities contains "Day N" patterns,
+          // deterministically parse it into structured perDayActivities.
+          if (
+            (!details.perDayActivities || details.perDayActivities.length === 0) &&
+            details.mustDoActivities
+          ) {
+            const parsed = buildPerDayActivitiesFromMustDo(details.mustDoActivities);
+            if (parsed.length > 0) {
+              details.perDayActivities = parsed;
+              console.log(`[TripChatPlanner] Fallback parser built ${parsed.length} perDayActivities from mustDoActivities`);
+            }
+          }
           // Validate required fields before triggering generation
           const hasDest = !!details.destination?.trim();
           const hasDates = !!details.startDate && !!details.endDate;

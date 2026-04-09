@@ -91,6 +91,12 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, tran
     rows.push({ icon: <Sparkles className="h-3.5 w-3.5" />, label: 'Trip type', value: details.tripType });
   }
 
+  // Show structured day count if perDayActivities exists
+  const structuredDayCount = details.perDayActivities?.length || 0;
+  if (structuredDayCount > 0) {
+    rows.push({ icon: <CheckCircle2 className="h-3.5 w-3.5" />, label: 'Locked days', value: `${structuredDayCount} day${structuredDayCount !== 1 ? 's' : ''} of your itinerary captured` });
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
