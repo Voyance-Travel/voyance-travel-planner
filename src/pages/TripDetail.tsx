@@ -2133,7 +2133,11 @@ export default function TripDetail() {
     return start <= today && end >= today;
   })();
 
-  if ((isLiveTrip || isInDateWindow) && searchParams.get('edit') !== 'true') {
+  if ((isLiveTrip || isInDateWindow) 
+    && searchParams.get('edit') !== 'true' 
+    && !shouldAutoGenerate 
+    && !isServerGenerating
+    && hasItineraryData(trip)) {
     return <Navigate to={`/trip/${trip.id}/active`} replace />;
   }
   // Detect past trips for read-only mode and hiding Travel Intel
