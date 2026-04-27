@@ -490,6 +490,53 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   let activities: any[] = [...(input.day.activities || [])];
   const lockedIds = new Set(lockedActivities.map(l => l.id));
 
+  // --- 0. DAYTIME-ONLY VENUE GUARD (wildlife, zoos, parks, gardens, museums) ---
+  // These venues close in the late afternoon/evening. AI sometimes schedules them at night.
+  // Move any matching activity that STARTS after 18:00 into the morning (08:30 default).
+  const DAYTIME_ONLY_PATTERNS = /\b(?:panda|zoo|safari|aquarium|botanical garden|wildlife|sanctuary|national park|nature reserve|forbidden city|palace museum|temple|shrine|cathedral|basilica|monastery|observation deck|viewing platform|gardens?)\b/i;
+  const DAYTIME_ONLY_CATEGORIES = new Set(['nature', 'wildlife', 'outdoor', 'sightseeing', 'culture', 'history']);
+  for (let i = 0; i < activities.length; i++) {
+    const a = activities[i];
+    if (lockedIds.has(a?.id)) continue;
+    const startTime: string = a?.startTime || a?.start_time || '';
+    const m = startTime.match(/(\d{1,2}):(\d{2})/);
+    if (!m) continue;
+    const startMin = parseInt(m[1]) * 60 + parseInt(m[2]);
+    if (startMin < 18 * 60) continue; // Started before 18:00 — fine
+    const title = String(a?.title || a?.name || '');
+    const cat = String(a?.category || a?.type || '').toLowerCase();
+    const matchesText = DAYTIME_ONLY_PATTERNS.test(title);
+    const matchesCat = DAYTIME_ONLY_CATEGORIES.has(cat);
+    // Skip "dining" / "nightlife" — those are fine at night
+    if (cat === 'dining' || cat === 'nightlife' || cat === 'accommodation' || cat === 'transport') continue;
+    if (!matchesText && !matchesCat) continue;
+    // Move to morning (08:30 - 11:00 by default; preserve duration if computable)
+    const endTime: string = a?.endTime || a?.end_time || '';
+    const em = endTime.match(/(\d{1,2}):(\d{2})/);
+    let durationMin = 90;
+    if (em) {
+      const endMin = parseInt(em[1]) * 60 + parseInt(em[2]);
+      const diff = endMin - startMin;
+      if (diff > 0 && diff < 600) durationMin = diff;
+    }
+    const newStart = 8 * 60 + 30;
+    const newEnd = newStart + durationMin;
+    const fmt = (mm: number) => `${String(Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}`;
+    const oldStart = startTime;
+    a.startTime = fmt(newStart);
+    a.start_time = a.startTime;
+    a.endTime = fmt(newEnd);
+    a.end_time = a.endTime;
+    repairs.push({
+      code: FAILURE_CODES.MISSING_SLOT,
+      action: 'moved_daytime_venue_from_evening_to_morning',
+      before: `${title} @ ${oldStart}`,
+      after: `${title} @ ${a.startTime}`,
+    });
+    console.log(`[repair-day] DAYTIME GUARD: moved "${title}" from ${oldStart} to ${a.startTime} (closes by 18:00)`);
+  }
+
+
   // Group validations by code for efficient dispatch
   const byCode = new Map<FailureCode, ValidationResult[]>();
   for (const vr of validationResults) {
