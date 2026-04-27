@@ -1560,7 +1560,11 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 8. HOTEL CHECKOUT GUARANTEE (last day, last day in city — NOT hotel change, handled above) ---
-  const needsCheckout = !isHotelChange && (isLastDay || (isLastDayInCity && !isTransitionDay));
+  // CRITICAL: only fire on a true city-departure day. If the next day's city is the SAME city,
+  // we are still mid-stay and MUST NOT inject a checkout (would orphan a "checkout" mid-trip).
+  const _intoSameCity = isLastDayInCity && (input as any).nextLegCity
+    && String((input as any).nextLegCity).toLowerCase().trim() === String(resolvedDestination || '').toLowerCase().trim();
+  const needsCheckout = !isHotelChange && !_intoSameCity && (isLastDay || (isLastDayInCity && !isTransitionDay));
   if (needsCheckout && activities.length > 0) {
     const hasCheckout = activities.some((a: any) => {
       const t = (a.title || a.name || '').toLowerCase();
