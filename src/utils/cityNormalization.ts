@@ -126,6 +126,7 @@ export function resolveCities(
     cities?: Array<{ name: string; country?: string; nights?: number; transportFromPrevious?: string }>;
     destination?: string;
     additionalNotes?: string;
+    mustDoActivities?: string;
     startDate?: string;
     endDate?: string;
   },
@@ -133,6 +134,22 @@ export function resolveCities(
   endDate: Date,
 ): NormalizedCity[] {
   const totalNights = Math.max(1, differenceInDays(endDate, startDate));
+
+  // Sniff a transport keyword from any free-text field — used as a backfill
+  // when the AI didn't set transportFromPrevious on the cities.
+  const freeText = [
+    String(details?.destination || ''),
+    String(details?.additionalNotes || ''),
+    String(details?.mustDoActivities || ''),
+  ].join(' ').toLowerCase();
+  const sniffTransport = (): InterCityTransport | undefined => {
+    if (/\btrain(s|ing)?\b|\brail\b|\beurail\b|\bhigh[- ]?speed rail\b/.test(freeText)) return 'train';
+    if (/\bferry|\bferries|\bcruise\b|\bboat\b/.test(freeText)) return 'ferry';
+    if (/\bbus(es)?\b|\bcoach\b/.test(freeText)) return 'bus';
+    if (/\bdrive|\bdriving\b|\brental car\b|\brent a car\b|\broad trip\b/.test(freeText)) return 'car';
+    if (/\bfly(ing)?\b|\bflight(s)?\b|\bplane\b|\bairplane\b/.test(freeText)) return 'flight';
+    return undefined;
+  };
 
   const VALID_TRANSPORTS: InterCityTransport[] = ['flight', 'train', 'bus', 'car', 'ferry'];
   const normalizeTransport = (v: unknown): InterCityTransport | undefined => {
