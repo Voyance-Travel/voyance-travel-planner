@@ -497,6 +497,11 @@ serve(async (req) => {
                             type: "string",
                             description: "Hotel name for this city if mentioned. For multiple hotels in the same city, list them comma-separated with date ranges: 'Mandarin Oriental (Apr 10-11), Radisson Blu (Apr 11-15)'",
                           },
+                          transportFromPrevious: {
+                            type: "string",
+                            enum: ["flight", "train", "bus", "car", "ferry"],
+                            description: "How the traveler gets to THIS city from the previous city in the route. Omit for the FIRST city. Infer from user statements like 'we'll take the train', 'driving between cities', 'flying to', 'ferry across', 'bus to'. If the user says 'train through Europe' or 'we'll train between cities', set this to 'train' on EVERY city after the first. Never silently drop a stated transport mode. If the user did not state a mode at all, omit this field and the system will pick a sensible default.",
+                          },
                         },
                         required: ["name", "nights"],
                       },
