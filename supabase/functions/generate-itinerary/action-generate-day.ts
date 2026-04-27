@@ -1452,18 +1452,29 @@ export async function handleGenerateDay(
       });
       generatedDay.activities = normalizedActivities;
 
-      // ── POST-GUARD CLEANUP: Remove activities too close to departure on last day ──
-      if (isLastDay && _departureTime24) {
-        const depMatch = _departureTime24.match(/(\d{1,2}):(\d{2})/);
+      // ── POST-GUARD CLEANUP: Remove activities too close to departure ──
+      // Fires for: (a) final-day flight/train, (b) inter-city departure (last day in city)
+      const _interCityDepTime: string | undefined = (() => {
+        if (isLastDay) return undefined; // handled by main path below
+        if (!resolvedIsLastDayInCity || !resolvedNextLegTransport) return undefined;
+        const td: any = resolvedNextLegTransportDetails || {};
+        return td.departureTime || td.departure_time || td.startTime || td.start_time || undefined;
+      })();
+      const _cleanupDepTime = _departureTime24 || _interCityDepTime;
+      const _cleanupDepTransport = _departureTransportType
+        || (resolvedNextLegTransport && resolvedNextLegTransport !== 'none' ? resolvedNextLegTransport : undefined);
+
+      if (_cleanupDepTime) {
+        const depMatch = _cleanupDepTime.match(/(\d{1,2}):(\d{2})/);
         if (depMatch) {
           const depMinutes = parseInt(depMatch[1]) * 60 + parseInt(depMatch[2]);
-          const _isTrainDep = _departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(_departureTransportType);
+          const _isTrainDep = _cleanupDepTransport && /train|rail|eurostar|tgv|thalys/i.test(_cleanupDepTransport);
           const bufferMin = _isTrainDep ? 120 : 180;
           const cutoff = depMinutes - bufferMin;
 
           normalizedActivities = normalizedActivities.filter((activity: any) => {
             const title = (activity.title || '').toLowerCase();
-            if (title.includes('checkout') || title.includes('check-out') || title.includes('heading home') || title.includes('departure') || title.includes('transfer to') || title.includes('travel to')) {
+            if (title.includes('checkout') || title.includes('check-out') || title.includes('heading home') || title.includes('departure') || title.includes('transfer to') || title.includes('travel to') || title.includes('train to') || title.includes('flight to')) {
               return true;
             }
             const startTime = activity.startTime || activity.start_time || '';
@@ -1471,7 +1482,7 @@ export async function handleGenerateDay(
             if (!startMatch) return true;
             const startMin = parseInt(startMatch[1]) * 60 + parseInt(startMatch[2]);
             if (startMin >= cutoff) {
-              console.log(`[CLEANUP] Removed activity too close to departure: "${activity.title}" at ${startTime} (cutoff: ${Math.floor(cutoff/60)}:${String(cutoff%60).padStart(2,'0')})`);
+              console.log(`[CLEANUP] Removed activity too close to ${_isTrainDep ? 'train' : 'flight'} departure: "${activity.title}" at ${startTime} (cutoff: ${Math.floor(cutoff/60)}:${String(cutoff%60).padStart(2,'0')})`);
               return false;
             }
             return true;
