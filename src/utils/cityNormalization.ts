@@ -180,6 +180,21 @@ export function resolveCities(
       .filter((c) => c.name.length > 1 && !isRegionNotCity(c.name) && !looksLikeAirportCode(c.name));
 
     if (normalized.length > 1) {
+      // Backfill: if NO city has an AI-supplied transport mode, sniff the user's
+      // free text for one and apply it to every city after the first. This
+      // prevents user-stated modes (e.g. "we'll take the train") from being
+      // silently dropped when the model omits transportFromPrevious.
+      const anyTransportSet = normalized.slice(1).some((c) => !!c.transportFromPrevious);
+      if (!anyTransportSet) {
+        const sniffed = sniffTransport();
+        if (sniffed) {
+          logger.info('[cityNormalization] Backfilled transportFromPrevious from free text:', sniffed);
+          for (let i = 1; i < normalized.length; i++) {
+            normalized[i].transportFromPrevious = sniffed;
+          }
+        }
+      }
+
       const allNightsValid = normalized.every(
         (c) => Number.isFinite(c.nights) && c.nights > 0,
       );
