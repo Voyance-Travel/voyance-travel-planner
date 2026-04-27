@@ -7,10 +7,14 @@
 import { differenceInDays } from 'date-fns';
 import logger from '@/lib/logger';
 
+export type InterCityTransport = 'flight' | 'train' | 'bus' | 'car' | 'ferry';
+
 export interface NormalizedCity {
   name: string;
   country?: string;
   nights: number;
+  /** How the traveler arrives at THIS city from the previous one. Undefined for the first city. */
+  transportFromPrevious?: InterCityTransport;
 }
 
 // Countries / regions that should NOT be treated as a second city
@@ -119,9 +123,10 @@ const WEAK_SEPARATOR_PATTERN = /\s*(?:→|->|–>|=>|\bthen\b|\band\b|&|,)\s*/i;
  */
 export function resolveCities(
   details: {
-    cities?: Array<{ name: string; country?: string; nights?: number }>;
+    cities?: Array<{ name: string; country?: string; nights?: number; transportFromPrevious?: string }>;
     destination?: string;
     additionalNotes?: string;
+    mustDoActivities?: string;
     startDate?: string;
     endDate?: string;
   },
@@ -129,6 +134,37 @@ export function resolveCities(
   endDate: Date,
 ): NormalizedCity[] {
   const totalNights = Math.max(1, differenceInDays(endDate, startDate));
+
+  // Sniff a transport keyword from any free-text field — used as a backfill
+  // when the AI didn't set transportFromPrevious on the cities.
+  const freeText = [
+    String(details?.destination || ''),
+    String(details?.additionalNotes || ''),
+    String(details?.mustDoActivities || ''),
+  ].join(' ').toLowerCase();
+  const sniffTransport = (): InterCityTransport | undefined => {
+    if (/\btrain(s|ing)?\b|\brail\b|\beurail\b|\bhigh[- ]?speed rail\b/.test(freeText)) return 'train';
+    if (/\bferry|\bferries|\bcruise\b|\bboat\b/.test(freeText)) return 'ferry';
+    if (/\bbus(es)?\b|\bcoach\b/.test(freeText)) return 'bus';
+    if (/\bdrive|\bdriving\b|\brental car\b|\brent a car\b|\broad trip\b/.test(freeText)) return 'car';
+    if (/\bfly(ing)?\b|\bflight(s)?\b|\bplane\b|\bairplane\b/.test(freeText)) return 'flight';
+    return undefined;
+  };
+
+  const VALID_TRANSPORTS: InterCityTransport[] = ['flight', 'train', 'bus', 'car', 'ferry'];
+  const normalizeTransport = (v: unknown): InterCityTransport | undefined => {
+    if (!v) return undefined;
+    const s = String(v).toLowerCase().trim();
+    // Map common synonyms
+    const mapped =
+      s === 'fly' || s === 'plane' || s === 'airplane' ? 'flight' :
+      s === 'rail' ? 'train' :
+      s === 'drive' || s === 'driving' || s === 'rental' || s === 'rental car' ? 'car' :
+      s === 'coach' ? 'bus' :
+      s === 'boat' || s === 'cruise' ? 'ferry' :
+      s;
+    return (VALID_TRANSPORTS as string[]).includes(mapped) ? (mapped as InterCityTransport) : undefined;
+  };
 
   // ── 1. Authoritative: AI-populated cities[] ──
   const rawCities = Array.isArray(details?.cities) ? details.cities : [];
@@ -139,10 +175,26 @@ export function resolveCities(
         name: cleanCandidate(String(c?.name || '')),
         country: c?.country ? String(c.country) : undefined,
         nights: Number(c?.nights),
+        transportFromPrevious: normalizeTransport(c?.transportFromPrevious),
       }))
       .filter((c) => c.name.length > 1 && !isRegionNotCity(c.name) && !looksLikeAirportCode(c.name));
 
     if (normalized.length > 1) {
+      // Backfill: if NO city has an AI-supplied transport mode, sniff the user's
+      // free text for one and apply it to every city after the first. This
+      // prevents user-stated modes (e.g. "we'll take the train") from being
+      // silently dropped when the model omits transportFromPrevious.
+      const anyTransportSet = normalized.slice(1).some((c) => !!c.transportFromPrevious);
+      if (!anyTransportSet) {
+        const sniffed = sniffTransport();
+        if (sniffed) {
+          logger.info('[cityNormalization] Backfilled transportFromPrevious from free text:', sniffed);
+          for (let i = 1; i < normalized.length; i++) {
+            normalized[i].transportFromPrevious = sniffed;
+          }
+        }
+      }
+
       const allNightsValid = normalized.every(
         (c) => Number.isFinite(c.nights) && c.nights > 0,
       );
@@ -162,6 +214,7 @@ export function resolveCities(
       return distributed.map((c, i) => ({
         ...c,
         country: normalized[i]?.country,
+        transportFromPrevious: normalized[i]?.transportFromPrevious,
       }));
     }
   }

@@ -3014,7 +3014,11 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                               generation_status: 'pending',
                               days_generated: 0,
                               days_total: (city.nights || 1) + 1, // Inclusive day count: nights + 1
-                              transport_type: idx > 0 ? (details.cityTransports?.[idx - 1] || null) : null,
+                              transport_type: idx > 0
+                                ? ((chatCities[idx] as any)?.transportFromPrevious
+                                   || (details as any).cityTransports?.[idx - 1]
+                                   || null)
+                                : null,
                             };
                           });
                           const { error: citiesErr } = await supabase.from('trip_cities').insert(cityRows as any[]);
