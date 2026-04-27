@@ -26,8 +26,35 @@ const COUNTRY_HINTS = new Set([
   'south korea', 'korea', 'australia', 'new zealand', 'greece', 'turkey', 'morocco',
   'egypt', 'uae', 'india', 'indonesia', 'singapore', 'malaysia', 'ireland',
   'czech republic', 'hungary', 'poland', 'brazil', 'argentina', 'colombia',
-  'peru', 'chile', 'south africa', 'philippines', 'taiwan', 'hong kong',
+  'peru', 'chile', 'south africa', 'philippines', 'taiwan',
 ]);
+
+// City-states / city-territories that are valid CITIES, never to be filtered as regions.
+// (Listed here for clarity — these are the ones to allow even if they appear country-like.)
+const CITY_STATE_HINTS = new Set([
+  'hong kong', 'singapore', 'monaco', 'vatican city', 'macau', 'macao',
+]);
+
+// Common typos / phonetic misspellings of major cities → canonical English name.
+// Applied early in cleanCandidate so the rest of the pipeline sees the correct name.
+const CITY_TYPO_MAP: Record<string, string> = {
+  'hing kong': 'Hong Kong',
+  'hon kong': 'Hong Kong',
+  'hongkong': 'Hong Kong',
+  'being': 'Beijing',
+  'bejing': 'Beijing',
+  'beiging': 'Beijing',
+  'tokio': 'Tokyo',
+  'tokyio': 'Tokyo',
+  'singapor': 'Singapore',
+  'sinapore': 'Singapore',
+  'shangai': 'Shanghai',
+  'shangahi': 'Shanghai',
+  'chendu': 'Chengdu',
+  'chendgu': 'Chengdu',
+  'bangkock': 'Bangkok',
+  'bankok': 'Bangkok',
+};
 
 // US states & territories that should NOT be treated as standalone cities
 const STATE_HINTS = new Set([
