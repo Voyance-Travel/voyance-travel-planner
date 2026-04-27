@@ -1079,6 +1079,33 @@ function sanitizeAddress(address: string): string {
     /\b([A-Za-zÀ-ÿ]{3,}),\s*\1\b/g,
     '$1'
   );
+
+  // ── EMPTY PARENTHESES STRIP ──
+  // "Yu's Family Kitchen ()" → "Yu's Family Kitchen"
+  result = result.replace(/\s*\(\s*\)/g, '').replace(/\s*\[\s*\]/g, '').replace(/\s{2,}/g, ' ').trim();
+
+  // ── LANDMARK NAME COMPLETER ──
+  // The AI sometimes truncates well-known multi-word landmarks (e.g. "Forbidden" → "Forbidden City").
+  // Apply only when the truncated form appears as a standalone word/phrase, not as part of a longer correct name.
+  const LANDMARK_COMPLETIONS: Array<[RegExp, string]> = [
+    [/\bForbidden(?!\s+(?:City|Palace))\b/g, 'Forbidden City'],
+    [/\bThe Forbidden\b(?!\s+(?:City|Palace))/g, 'The Forbidden City'],
+    [/\bGreat Wall\b(?!\s+of)/g, 'Great Wall of China'],
+    [/\bTiananmen\b(?!\s+(?:Square|Gate))/g, 'Tiananmen Square'],
+    [/\bTemple of\b(?=\s*[,.\s]*$)/g, 'Temple of Heaven'],
+    [/\bSummer\s*$/g, 'Summer Palace'],
+    [/\bPalace Museum\b(?!\s)/g, 'Palace Museum (Forbidden City)'],
+  ];
+  for (const [re, repl] of LANDMARK_COMPLETIONS) {
+    if (re.test(result)) {
+      const before = result;
+      result = result.replace(re, repl);
+      if (before !== result) {
+        console.warn(`[sanitize] Landmark completed: "${before}" → "${result}"`);
+      }
+    }
+  }
+
   return result;
 }
 
