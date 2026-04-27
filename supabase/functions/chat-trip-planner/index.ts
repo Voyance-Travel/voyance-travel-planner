@@ -119,6 +119,7 @@ MULTI-CITY DETECTION — CRITICAL (FAILURE TO FOLLOW = BROKEN TRIP):
   destination: "London, Paris"
   cities: [{name: "London", country: "United Kingdom", nights: 4, hotelName: "The Ritz London"}, {name: "Paris", country: "France", nights: 5, hotelName: "Le Meurice"}]
 - When the user has MULTIPLE hotels in the SAME city, list them in the hotelName field with date ranges: hotelName: "Mandarin Oriental (Apr 10-11), Radisson Blu (Apr 11-15)"
+- INTER-CITY TRANSPORT — CRITICAL: If the user mentions ANY mode of transport between cities ("we'll take the train", "driving between cities", "flying", "ferry across", "bus to"), you MUST set transportFromPrevious on every applicable city in cities[] (every city EXCEPT the first). If the user says something general like "train through Europe" or "we'll train between cities", apply "train" to every city after the first. Never silently drop a stated transport mode — it determines whether the system schedules a flight, train, bus, car, or ferry leg. Allowed values: flight, train, bus, car, ferry. Omit only if the user truly did not state a mode.
 
 SELF-CHECK BEFORE CALLING THE TOOL:
 Before you call extract_trip_details, run this mental checklist:
