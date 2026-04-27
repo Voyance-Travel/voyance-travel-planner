@@ -1285,15 +1285,19 @@ async function _handleGenerateTripDayInner(
         dayNumber, isFirstDay, isLastDay,
         arrivalTime24: arrTime24,
         returnDepartureTime24: depTime24,
-        hotelName: cityInfo?.hotelName || tripHotelName || undefined,
-        hotelAddress: cityInfo?.hotelAddress || tripHotelAddress || '',
-        hasHotel: true,
+        hotelName: cityInfo?.hotelName || (isMultiCity ? undefined : tripHotelName) || undefined,
+        hotelAddress: cityInfo?.hotelAddress || (isMultiCity ? '' : (tripHotelAddress || '')),
+        hasHotel: !!(cityInfo?.hotelName || (!isMultiCity && tripHotelName)),
         lockedActivities: lockedActivitiesForDay,
         isTransitionDay: isTransition,
         isMultiCity: isMultiCity || false,
         isLastDayInCity,
         resolvedDestination: cityInfo?.cityName || destination,
-        hotelOverride: (cityInfo?.hotelName || tripHotelName) ? { name: cityInfo?.hotelName || tripHotelName!, address: cityInfo?.hotelAddress || tripHotelAddress || '' } : undefined,
+        hotelOverride: cityInfo?.hotelName
+          ? { name: cityInfo.hotelName, address: cityInfo.hotelAddress || '' }
+          : (!isMultiCity && tripHotelName)
+            ? { name: tripHotelName, address: tripHotelAddress || '' }
+            : undefined,
         isHotelChange: cityInfo?.isHotelChange || tripIsHotelChange,
         previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
         previousHotelAddress: (cityInfo as any)?.previousHotelAddress || tripPreviousHotelAddress,
