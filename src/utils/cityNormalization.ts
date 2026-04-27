@@ -82,6 +82,8 @@ const STATE_HINTS = new Set([
 /** Check if a candidate is a region/state/country rather than a city */
 function isRegionNotCity(name: string): boolean {
   const lower = name.toLowerCase().trim();
+  // City-states are explicitly cities, even when they share a name with a country.
+  if (CITY_STATE_HINTS.has(lower)) return false;
   return COUNTRY_HINTS.has(lower) || STATE_HINTS.has(lower);
 }
 
@@ -107,9 +109,16 @@ function looksLikeCityName(candidate: string): boolean {
   return !words.some((w) => DESCRIPTIVE_TERMS.has(w.toLowerCase()));
 }
 
+/** Apply common typo corrections (case-insensitive). Returns canonical name when matched. */
+function applyTypoCorrection(value: string): string {
+  const lower = value.toLowerCase().trim();
+  if (CITY_TYPO_MAP[lower]) return CITY_TYPO_MAP[lower];
+  return value;
+}
+
 /** Remove filler words, brackets, trailing punctuation from a candidate city name */
 function cleanCandidate(value: string): string {
-  return value
+  const cleaned = value
     .replace(/^route:\s*/i, '')
     .replace(
       /\b(?:flying|fly|into|out\s+of|arrive(?:ing)?|depart(?:ing)?|return(?:ing)?|next|then|visit(?:ing)?|stay(?:ing)?|go(?:ing)?|head(?:ing)?)\b/gi,
@@ -119,6 +128,7 @@ function cleanCandidate(value: string): string {
     .replace(/[.;:!?]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+  return applyTypoCorrection(cleaned);
 }
 
 /** Evenly distribute total trip nights across N cities */
