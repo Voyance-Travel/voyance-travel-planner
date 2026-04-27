@@ -123,7 +123,7 @@ const WEAK_SEPARATOR_PATTERN = /\s*(?:→|->|–>|=>|\bthen\b|\band\b|&|,)\s*/i;
  */
 export function resolveCities(
   details: {
-    cities?: Array<{ name: string; country?: string; nights?: number }>;
+    cities?: Array<{ name: string; country?: string; nights?: number; transportFromPrevious?: string }>;
     destination?: string;
     additionalNotes?: string;
     startDate?: string;
@@ -134,6 +134,21 @@ export function resolveCities(
 ): NormalizedCity[] {
   const totalNights = Math.max(1, differenceInDays(endDate, startDate));
 
+  const VALID_TRANSPORTS: InterCityTransport[] = ['flight', 'train', 'bus', 'car', 'ferry'];
+  const normalizeTransport = (v: unknown): InterCityTransport | undefined => {
+    if (!v) return undefined;
+    const s = String(v).toLowerCase().trim();
+    // Map common synonyms
+    const mapped =
+      s === 'fly' || s === 'plane' || s === 'airplane' ? 'flight' :
+      s === 'rail' ? 'train' :
+      s === 'drive' || s === 'driving' || s === 'rental' || s === 'rental car' ? 'car' :
+      s === 'coach' ? 'bus' :
+      s === 'boat' || s === 'cruise' ? 'ferry' :
+      s;
+    return (VALID_TRANSPORTS as string[]).includes(mapped) ? (mapped as InterCityTransport) : undefined;
+  };
+
   // ── 1. Authoritative: AI-populated cities[] ──
   const rawCities = Array.isArray(details?.cities) ? details.cities : [];
 
@@ -143,6 +158,7 @@ export function resolveCities(
         name: cleanCandidate(String(c?.name || '')),
         country: c?.country ? String(c.country) : undefined,
         nights: Number(c?.nights),
+        transportFromPrevious: normalizeTransport(c?.transportFromPrevious),
       }))
       .filter((c) => c.name.length > 1 && !isRegionNotCity(c.name) && !looksLikeAirportCode(c.name));
 
@@ -166,6 +182,7 @@ export function resolveCities(
       return distributed.map((c, i) => ({
         ...c,
         country: normalized[i]?.country,
+        transportFromPrevious: normalized[i]?.transportFromPrevious,
       }));
     }
   }
