@@ -7,10 +7,14 @@
 import { differenceInDays } from 'date-fns';
 import logger from '@/lib/logger';
 
+export type InterCityTransport = 'flight' | 'train' | 'bus' | 'car' | 'ferry';
+
 export interface NormalizedCity {
   name: string;
   country?: string;
   nights: number;
+  /** How the traveler arrives at THIS city from the previous one. Undefined for the first city. */
+  transportFromPrevious?: InterCityTransport;
 }
 
 // Countries / regions that should NOT be treated as a second city
