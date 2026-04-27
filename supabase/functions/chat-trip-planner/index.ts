@@ -79,9 +79,11 @@ The mustDoActivities field should contain a RICH, DETAILED summary of everything
 
 LANGUAGE & OUTPUT QUALITY — MANDATORY:
 - ALL output MUST be in clean, fluent, correctly spelled English. Double-check spelling of common words.
-- For non-Latin-script destinations (China, Japan, Korea, Thailand, Arabic countries, Russia), ALWAYS use standard English transliterations or well-known English names. Examples: "Beijing" not "北京", "Chongqing" not "重庆", "Shinjuku" not "新宿".
+- For non-Latin-script destinations (China, Japan, Korea, Thailand, Arabic countries, Russia), ALWAYS use standard English transliterations or well-known English names. Examples: "Beijing" not "北京", "Chongqing" not "重慆", "Shinjuku" not "新宿".
 - NEVER output Chinese characters, Japanese kanji/kana, Korean hangul, Cyrillic, Thai, or Arabic script in ANY field.
 - NEVER produce garbled, corrupted, or nonsensical text fragments. If uncertain about a word, use a simpler synonym.
+- SILENTLY CORRECT obvious user typos for major cities. Examples: "Hing Kong" → "Hong Kong", "Being" → "Beijing", "Tokio" → "Tokyo", "Shangai" → "Shanghai", "Bankok" → "Bangkok". Never echo a misspelled city back into destination, cities[].name, or hotelName — always emit the canonical English spelling.
+- CITY-STATES ARE CITIES: "Hong Kong", "Singapore", "Monaco", "Vatican City", and "Macau" are CITIES — when the user mentions them as a stop, ALWAYS include them in cities[] with nights. Never treat them as a "country only" reference and drop them from cities[].
 - Proofread your response before sending — no misspellings, no sentence fragments, no gibberish.
 
 PERSONALIZATION:
