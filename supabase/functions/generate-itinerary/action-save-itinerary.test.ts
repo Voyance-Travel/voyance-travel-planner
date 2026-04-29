@@ -63,7 +63,11 @@ Deno.test("applyAnchorsWin: matching activity gets lock reaffirmed", () => {
 // 3. Anchor present + activity dropped by AI cleanup → re-injected
 // ----------------------------------------------------------------------------
 Deno.test("applyAnchorsWin: dropped anchor is re-injected with correct fields", () => {
-  const days = [day(2, [act({ title: "Generic walk" })])];
+  // Day 2 anchor → days array must have entries for day 1 and day 2
+  const days = [
+    day(1, [act({ title: "Day 1 walk" })]),
+    day(2, [act({ title: "Generic walk" })]),
+  ];
   const anchors = [{
     dayNumber: 2,
     title: "Sukiyabashi Jiro",
@@ -77,7 +81,7 @@ Deno.test("applyAnchorsWin: dropped anchor is re-injected with correct fields", 
   const result = applyAnchorsWin(days, anchors);
   assertEquals(result.restored, 1);
   assertEquals(result.reaffirmed, 0);
-  const injected = result.days[0].activities.find((a: any) => a.title === "Sukiyabashi Jiro");
+  const injected = result.days[1].activities.find((a: any) => a.title === "Sukiyabashi Jiro");
   assert(injected, "anchor should be injected");
   assertEquals(injected.locked, true);
   assertEquals(injected.isLocked, true);
