@@ -160,21 +160,33 @@ function parseMustDoEntry(entry: string, source: UserAnchorSource): UserAnchor |
   const text = dayMatch ? dayMatch[2].trim() : trimmed;
   if (!text) return null;
 
-  const timeRange = text.match(/(\d{1,2}(?::\d{2})?\s*(?:AM|PM))(?:\s*[-–]\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)))?/i);
+  // Reuse the per-day leading-time parser so titles match across sources
+  // (e.g. "7:30 PM - Dinner at TRB Hutong" → title "Dinner at TRB Hutong").
   let startTime: string | undefined;
   let endTime: string | undefined;
-  if (timeRange) {
-    startTime = normalizeTimeStr(timeRange[1]);
-    if (timeRange[2]) endTime = normalizeTimeStr(timeRange[2]);
+  let title = text;
+  const lead = text.match(
+    /^~?\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM))\s*(?:-\s*~?\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)))?\s*-?\s+(.+)$/i,
+  );
+  if (lead) {
+    startTime = normalizeTimeStr(lead[1]);
+    endTime = lead[2] ? normalizeTimeStr(lead[2]) : undefined;
+    title = lead[3].replace(/^-\s*/, '').trim();
+  } else {
+    const inline = text.match(/(\d{1,2}(?::\d{2})?\s*(?:AM|PM))(?:\s*[-–]\s*(\d{1,2}(?::\d{2})?\s*(?:AM|PM)))?/i);
+    if (inline) {
+      startTime = normalizeTimeStr(inline[1]);
+      if (inline[2]) endTime = normalizeTimeStr(inline[2]);
+    }
   }
 
   return {
     dayNumber,
-    title: text,
+    title,
     startTime,
     endTime,
-    category: detectCategory(text),
-    venueName: extractVenue(text),
+    category: detectCategory(title),
+    venueName: extractVenue(title),
     lockedSource: trimmed,
     source,
     raw: trimmed,
