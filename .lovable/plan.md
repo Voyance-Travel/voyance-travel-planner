@@ -1,120 +1,147 @@
 ## Diagnosis
 
-The core issue is that **Just Tell Us captures specific details, but only some of them become hard locks**. Several parts of the flow still treat user specifics as suggestions, and later generation/repair steps can overwrite them.
+The issue keeps recurring because “things the user told us” are not treated as a single canonical source of truth.
 
-What I found:
+Right now they are split across several soft paths:
 
-1. **Extraction is prompt-based and fragile**
-   - `chat-trip-planner` asks the AI to fill `mustDoActivities`, `userConstraints`, and `perDayActivities`.
-   - If the AI extracts a specific restaurant/activity only into `mustDoActivities`, it is handled as a must-do prompt, not a guaranteed locked card.
+- `metadata.mustDoActivities` is mostly used as prompt text, so the AI can satisfy it, move it, partially include it, or miss it.
+- `metadata.perDayActivities` is converted to locked cards in `generate-day`, but the server-side chained `generate-trip-day` path only passes it through to `generate-day`; it does not itself maintain a canonical lock set across all later cleanup/save phases.
+- Manual/Build It Myself parsed activities are saved as normal activities, not universally marked locked.
+- The normalized table sync currently preserves `isLocked`, but not `locked`, so some pipeline-created locked items can lose their locked status when synced.
+- Fresh generation can clear existing itinerary rows before re-seeding the user’s core inputs, so the system has no durable “user anchors must win” layer to restore from.
 
-2. **The confirmation UI hides most of the actual detail**
-   - `TripConfirmCard` shows a summary and “Locked days: N days captured,” but not the actual per-day locked items.
-   - So the user can confirm without seeing whether the system truly captured the specifics correctly.
-
-3. **`perDayActivities` is the only route that creates immutable locked cards**
-   - `compile-prompt.ts` parses `metadata.perDayActivities` into `lockedCards`.
-   - Those locked cards are later merged back into generated activities and protected from overlap/removal.
-   - But if a user says specifics without clean day/time formatting, those items may stay in `mustDoActivities` only and can be replaced, moved, or softened.
-
-4. **Locked card persistence has a flag mismatch**
-   - Generated locked cards are marked `locked: true`, but `persist-day.ts` only saves `is_locked: act.isLocked || false`.
-   - That means Just Tell Us locked cards can be saved to the normalized activities table as not locked. This weakens later protection/regeneration behavior.
-
-5. **Final cleanup happens after persistence**
-   - The flow persists the day around `action-generate-day.ts` line ~1240, then runs the final meal guard and departure cleanup after that.
-   - So final changes may exist in the JSON response but not be reflected in normalized persisted rows, and post-persist cleanup can still remove things without a final lock-integrity pass.
-
-6. **Transport selector defaults to flight in the UI**
-   - Even when extraction includes `transportFromPrevious`, `TripChatPlanner` initializes all inter-city transports to `flight`, which can override the extracted train/bus/car/ferry intent unless the user manually changes it.
+So the real fix is not another prompt tweak. We need an architectural lock layer: every user-provided concrete item becomes a durable locked anchor before generation starts, and every generator/save path must re-apply those anchors as the final authority.
 
 ## Plan
 
-### 1. Make “specific user input” become locked anchors by default
-Update the Just Tell Us extraction/persistence path so anything the user specifically names is converted into structured lock data, not just prompt text.
+### 1. Create a canonical “user anchors” builder
+Add a shared utility used by both frontend and backend generation paths to normalize user input into structured locked anchors.
 
-- Add a deterministic normalization helper for chat-extracted details.
-- Inputs:
-  - `details.perDayActivities`
-  - `details.mustDoActivities`
-  - `details.userConstraints`
-- Output:
-  - expanded `perDayActivities` whenever day references exist
-  - a new `lockedUserRequests` metadata array for named venues/events without a clear day
+It will convert these into anchor records:
 
-Behavior:
-- If the user says “Day 2 dinner at X,” that becomes a locked Day 2 item.
-- If the user says “we must visit pandas,” that becomes a mandatory anchor, not a replaceable suggestion.
-- If no day/time is known, it remains unscheduled but marked as user-specified and must be placed once.
+- Just Tell Us `perDayActivities`
+- Just Tell Us `mustDoActivities`
+- Single-city “must do” free text
+- Multi-city must-dos and selected landmarks
+- Build It Myself / pasted parsed itinerary activities
+- Existing locked/manual itinerary activities
 
-### 2. Strengthen the backend prompt compiler to consume request-level per-day data
-In `compile-prompt.ts`, currently `perDayActivities` is read from trip metadata only.
+Each anchor will include, where available:
 
-Change it to prefer:
-1. `params.perDayActivities`
-2. then `metadata.perDayActivities`
+- `dayNumber`
+- `title`
+- `startTime`
+- `endTime`
+- `category`
+- `venueName/location`
+- `source` (`chat`, `manual_paste`, `single_city`, `multi_city`, `edited`, `pinned`)
+- `locked: true`
+- `isLocked: true`
+- stable `lockedSource` / fingerprint
 
-This makes the day-generation call resilient even if metadata shape or frontend casting is imperfect.
+This gives the system one representation of “the user explicitly asked for this.”
 
-### 3. Fix locked-card persistence
-In `persist-day.ts`, save an activity as locked if either flag is true:
+### 2. Persist anchors at trip creation, not only during generation
+When a trip is created from any entry flow, store the computed anchors immediately in trip metadata, for example:
 
-```ts
-is_locked: act.isLocked || act.locked || false
+```text
+metadata.userAnchors = [ ...canonical locked anchors... ]
+metadata.mustDoActivities = existing text/list fallback
+metadata.perDayActivities = existing day-level fallback
 ```
 
-Also preserve `lockedSource`/lock metadata in the activity payload if the schema supports metadata-like fields; if not, keep it in itinerary JSON and use `is_locked` for database protection.
+Update these creation paths:
 
-### 4. Add a final post-cleanup lock integrity pass
-Move or repeat the lock verification after all late guards:
+- `src/pages/Start.tsx` chat path
+- `src/pages/Start.tsx` single-city/multi-city form path
+- `src/utils/createTripFromParsed.ts` Build It Myself/manual paste path
 
-- meal final guard
-- terminal cleanup
-- placeholder dining cleanup
-- departure-buffer cleanup
+For manual paste, the actual itinerary activities should also be marked `locked: true` and `isLocked: true` from the start.
 
-This ensures locked user-provided cards cannot be removed by final cleanup. If a final guard creates a conflict, the AI-generated/fallback activity should be removed, not the user’s locked item.
+### 3. Make backend generation load anchors from the trip before doing anything else
+Update backend generation so anchors are loaded from `metadata.userAnchors` at the start of each day.
 
-### 5. Persist only after the final itinerary shape is complete
-Ensure final normalized activities are persisted after all cleanup and lock verification. The database should reflect the exact itinerary returned to the UI.
+Affected paths:
 
-This fixes the “it showed one thing / saved another thing” class of overwrite bugs.
-
-### 6. Respect extracted inter-city transport in the confirmation UI
-In `TripChatPlanner`, initialize `cityTransports` from extracted city data first:
-
-- `details.cities[i + 1].transportFromPrevious`
-- fallback to `details.cityTransports[i]`
-- only default to `flight` when nothing was specified
-
-This prevents “I said train, but the city breakdown defaults to flight.”
-
-### 7. Make the confirmation card show what is actually locked
-Update `TripConfirmCard` to show a compact “Captured specifics” section:
-
-- per-day locked items, if present
-- must-do anchors, if present
-- transport modes between cities
-
-This lets the user catch extraction misses before generation.
-
-### 8. Add defensive tests/fixtures for Just Tell Us preservation
-Add focused tests or lightweight fixtures for:
-
-- Day-specific restaurant stays on the correct day
-- Time-specific event keeps exact time
-- Multi-city train remains train in confirm and persistence
-- Locked cards persist with `is_locked = true`
-- Final cleanup does not remove locked items
-
-## Files to update
-
-- `src/components/planner/TripChatPlanner.tsx`
-- `src/components/planner/TripConfirmCard.tsx`
-- `src/pages/Start.tsx`
-- `src/utils/buildPerDayActivitiesFromMustDo.ts` or a new shared chat-intent normalizer
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
 - `supabase/functions/generate-itinerary/action-generate-day.ts`
-- `supabase/functions/generate-itinerary/pipeline/persist-day.ts`
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
 
-No database migration is expected unless we decide to add a dedicated lock metadata column. The main fix is to treat existing user-specific data as immutable throughout the current pipeline.
+Behavior:
+
+- The prompt still sees the anchors as locked context.
+- The generator injects the anchors directly into the itinerary output.
+- Any AI-created item overlapping an anchor is removed or shifted.
+- The anchor wins over AI recommendations, restaurant deduping, filler removal, wellness limits, departure cleanup, meal repair, and final save cleanup.
+
+### 4. Add a final “anchors overwrite everything” pass
+Add a reusable final pass that runs immediately before persistence in both generation paths.
+
+It will:
+
+- Reinsert any missing anchor for that day.
+- Restore title/time/category if any cleanup changed it.
+- Remove duplicate generated activities that conflict with anchors.
+- Sort the final day after anchor restoration.
+- Mark restored items with both `locked: true` and `isLocked: true`.
+
+This pass should run after meal guards, repair, terminal cleanup, deduping, and departure-buffer cleanup, because those are the places that currently undo user intent.
+
+### 5. Fix persistence and sync so locks do not get stripped
+Update persistence/sync code so any lock flag survives all storage formats.
+
+Specifically:
+
+- `pipeline/persist-day.ts` should continue writing `is_locked` from `act.isLocked || act.locked`.
+- `action-sync-tables.ts` should write `is_locked` from `a.isLocked || a.locked`, not just `a.isLocked`.
+- JSON itinerary data should preserve both `locked` and `isLocked` for user anchors.
+- Version history should save anchor-restored activities after final restoration, not before.
+
+### 6. Protect anchors during full-trip fresh generation and resume
+Update `generate-trip` / `generate-trip-day` so a fresh generation can clear AI-generated days, but cannot lose the canonical anchors.
+
+Behavior:
+
+- Before clearing itinerary rows, read and preserve `metadata.userAnchors`.
+- Each day in the self-chained generator gets its day-specific anchors.
+- Resume generation reloads anchors from metadata, not from partially generated itinerary state.
+- Failed/partial regeneration can still recreate missing anchor cards from metadata.
+
+### 7. Make Build It Myself content non-negotiable
+For Build It Myself/manual paste:
+
+- Parsed activities become locked by default.
+- Smart Finish/enrichment can enhance around them, but not replace/delete/rename them.
+- Option groups can still be curated, but the selected/kept item becomes locked after import.
+- Any later “regenerate day” must treat those imported items like manually pinned cards.
+
+### 8. Add user-visible confirmation of captured locked anchors
+Update confirmation UI so users can see what was captured as protected before generation.
+
+Existing `TripConfirmCard` already shows some captured per-day activities; expand this so all flows can show:
+
+```text
+Locked into your trip:
+- Day 1: Panda visit, 10:00
+- Day 2: Train to Beijing, 16:00
+- Day 4: Dinner at TRB Hutong, 19:30
+```
+
+This makes expectations explicit and helps users catch extraction mistakes before credits/actions are used.
+
+### 9. Add targeted regression checks
+Add focused tests or lightweight validation fixtures for the cases that keep breaking:
+
+- Just Tell Us single-city with specific restaurant/time.
+- Just Tell Us multi-city with city-specific anchors and transport.
+- Must-do from the form path.
+- Build It Myself pasted day-by-day itinerary.
+- Regenerate day preserves anchors.
+- Resume generation preserves anchors.
+- Table sync preserves `locked`/`isLocked`.
+
+## Expected result
+
+After this change, user-provided concrete itinerary details become the source of truth from step one.
+
+The AI can still improve the itinerary, fill gaps, add meals, repair timing, and enrich details, but it cannot silently throw away, rename, move, or overwrite the user’s stated core items. If there is a conflict, the user anchor wins and everything else adapts around it.

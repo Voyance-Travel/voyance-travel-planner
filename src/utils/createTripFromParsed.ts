@@ -8,6 +8,7 @@ import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import type { ParsedTripInput, ParsedActivity, ParsedDay } from '@/types/parsedTrip';
 import { sanitizeAIOutput } from '@/utils/textSanitizer';
 import { normalizeTimeTo24h } from '@/utils/timeFormat';
+import { buildUserAnchors, type UserAnchor } from '@/utils/userAnchors';
 
 interface ItineraryActivity {
   id: string;
@@ -77,6 +78,17 @@ function activityToItinerary(activity: ParsedActivity, isSelected: boolean): Iti
     venue: null,
     bookingRequired: activity.bookingRequired || false,
     source: 'parsed',
+    // Manual paste / Build It Myself items are user-told content — lock them
+    // so AI/cleanup never silently drops, renames, or moves them.
+    locked: true,
+    isLocked: true,
+    lockedSource: `manual_paste:${activity.name}`,
+    anchorSource: 'manual_paste',
+  } as ItineraryActivity & {
+    locked: boolean;
+    isLocked: boolean;
+    lockedSource: string;
+    anchorSource: string;
   };
 }
 
@@ -219,22 +231,41 @@ export async function createTripFromParsed(
         itinerary_data: itineraryData as any,
         // Manual trips: unlock ALL days — user's own content is free
         unlocked_day_count: parsed.days.length,
-        metadata: {
-          source: 'manual_paste',
-          currency: tripCurrency,
-          lastUpdated: new Date().toISOString(),
-          // Persist parsed preferences so generation engine can access them
-          ...(parsed.preferences ? {
-            userConstraints: {
-              dietary: parsed.preferences.dietary || [],
-              avoid: parsed.preferences.avoid || [],
-              focus: parsed.preferences.focus || [],
-              pace: parsed.preferences.pace || undefined,
-              budgetLevel: parsed.preferences.budgetLevel || undefined,
-            },
-            rawPreferenceText: parsed.preferences.rawPreferenceText || undefined,
-          } : {}),
-        },
+        metadata: (() => {
+          // Treat every parsed activity as a user anchor.
+          const userAnchors: UserAnchor[] = [];
+          for (const day of parsed.days || []) {
+            for (const activity of (day.activities || [])) {
+              if (activity.isOption && activity.optionGroup) continue; // skip alternates
+              userAnchors.push({
+                dayNumber: day.dayNumber,
+                title: activity.name,
+                startTime: normalizeTimeTo24h(activity.time) || activity.time || undefined,
+                category: mapCategory(activity.category),
+                venueName: activity.location || undefined,
+                lockedSource: `manual_paste:${activity.name}`,
+                source: 'manual_paste',
+                raw: activity.name,
+              });
+            }
+          }
+          return {
+            source: 'manual_paste',
+            currency: tripCurrency,
+            userAnchors: userAnchors.length > 0 ? userAnchors : null,
+            lastUpdated: new Date().toISOString(),
+            ...(parsed.preferences ? {
+              userConstraints: {
+                dietary: parsed.preferences.dietary || [],
+                avoid: parsed.preferences.avoid || [],
+                focus: parsed.preferences.focus || [],
+                pace: parsed.preferences.pace || undefined,
+                budgetLevel: parsed.preferences.budgetLevel || undefined,
+              },
+              rawPreferenceText: parsed.preferences.rawPreferenceText || undefined,
+            } : {}),
+          };
+        })() as any,
       })
       .select('id')
       .single();
