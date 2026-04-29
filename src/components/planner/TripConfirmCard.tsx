@@ -97,6 +97,10 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, tran
     rows.push({ icon: <CheckCircle2 className="h-3.5 w-3.5" />, label: 'Locked days', value: `${structuredDayCount} day${structuredDayCount !== 1 ? 's' : ''} of your itinerary captured` });
   }
 
+  // Per-day captured details — show user exactly what we extracted so they
+  // can catch extraction misses BEFORE generation overwrites their intent.
+  const perDay = details.perDayActivities || [];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
