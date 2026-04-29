@@ -40,11 +40,18 @@ Deno.test("deriveBudgetIntent: high tier + frugal trait detects conflict", () =>
 });
 
 Deno.test("deriveBudgetIntent: low tier + luxury-seeking comfort detects conflict", () => {
-  // budget tier + comfort=+8 (luxury seeker) is contradictory and IS flagged.
-  // Note: low-tier + splurge budget trait is currently NOT flagged as conflict —
-  // the conflict matrix only covers tier-vs-comfort and high-tier-vs-frugal.
   const intent = deriveBudgetIntent("budget", 0, 8);
   assertEquals(intent.conflict, true);
+});
+
+Deno.test("deriveBudgetIntent: low tier + splurge budget trait detects conflict", () => {
+  // Aspirational budget traveler — was previously unflagged. Patched to surface conflict.
+  const intent = deriveBudgetIntent("budget", -8, 0);
+  assertEquals(intent.conflict, true);
+  assert(
+    typeof intent.conflictDetails === "string" &&
+      intent.conflictDetails.toLowerCase().includes("splurge"),
+  );
 });
 
 Deno.test("deriveBudgetIntent: aligned tier + traits reports no conflict", () => {

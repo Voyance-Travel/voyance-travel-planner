@@ -150,44 +150,76 @@ export function matchDietaryRule(restriction: string): DietaryRule | null {
   if (!restriction || restriction.trim().length === 0) return null;
   
   const normalized = restriction.toLowerCase().trim()
+    .replace(/^i'?m /, '')              // "i'm allergic to..."
+    .replace(/^i (have|am) (a |an )?/, '') // "i have a peanut allergy"
+    .replace(/^a /, '')                 // "a peanut allergy"
+    .replace(/allergic to /g, '')       // anywhere, not just prefix
+    .replace(/intolerant to /g, '')
+    .replace(/ allergy$/, '')           // "peanut allergy" (with space)
+    .replace(/allergy$/, '')
+    .replace(/ intolerance$/, '')
+    .replace(/intolerance$/, '')
     .replace(/-free$/, '')
     .replace(/_free$/, '')
     .replace(/ free$/, '')
     .replace(/^no /, '')
     .replace(/^no-/, '')
-    .replace(/allergy$/, '')
-    .replace(/allergic to /, '')
-    .replace(/intolerant to /, '')
-    .replace(/intolerance$/, '');
+    .trim();
   
   // Direct match
   if (DIETARY_RULES[normalized]) return DIETARY_RULES[normalized];
   
   // Check with -free suffix
   if (DIETARY_RULES[`${normalized}-free`]) return DIETARY_RULES[`${normalized}-free`];
-  
-  // Fuzzy match - check if normalized includes key or vice versa
-  for (const [key, rule] of Object.entries(DIETARY_RULES)) {
-    if (normalized.includes(key) || key.includes(normalized)) {
-      return rule;
-    }
+
+  // Singularized direct/-free match (e.g. "peanuts" → "peanut" → "peanut-free")
+  const singular = normalized.replace(/s$/, '');
+  if (singular !== normalized) {
+    if (DIETARY_RULES[singular]) return DIETARY_RULES[singular];
+    if (DIETARY_RULES[`${singular}-free`]) return DIETARY_RULES[`${singular}-free`];
   }
-  
-  // Common alternative names
-  const aliases: Record<string, string> = {
+
+  // Allergen / canonical aliases — checked BEFORE permissive substring loop
+  // so canonical matches win over loose substring hits.
+  const allergenAliases: Record<string, string> = {
+    'peanut': 'peanut-free',
+    'peanuts': 'peanut-free',
+    'tree nut': 'nut-free',
+    'tree nuts': 'nut-free',
+    'nut': 'nut-free',
+    'nuts': 'nut-free',
+    'shellfish': 'shellfish-free',
+    'fish': 'fish-free',
+    'egg': 'egg-free',
+    'eggs': 'egg-free',
+    'soy': 'soy-free',
+    'wheat': 'gluten-free',
+    'gluten': 'gluten-free',
+    'dairy': 'dairy-free',
+    'milk': 'dairy-free',
     'lactose': 'dairy-free',
     'lactose intolerant': 'dairy-free',
     'celiac': 'gluten-free',
     'coeliac': 'gluten-free',
     'plant-based': 'vegan',
+    'plant based': 'vegan',
     'no meat': 'vegetarian',
     'muslim': 'halal',
     'jewish': 'kosher',
   };
-  
-  for (const [alias, key] of Object.entries(aliases)) {
+  if (allergenAliases[normalized] && DIETARY_RULES[allergenAliases[normalized]]) {
+    return DIETARY_RULES[allergenAliases[normalized]];
+  }
+  for (const [alias, key] of Object.entries(allergenAliases)) {
     if (normalized.includes(alias)) {
       return DIETARY_RULES[key] || null;
+    }
+  }
+  
+  // Fuzzy match - check if normalized includes key or vice versa (last resort)
+  for (const [key, rule] of Object.entries(DIETARY_RULES)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      return rule;
     }
   }
   

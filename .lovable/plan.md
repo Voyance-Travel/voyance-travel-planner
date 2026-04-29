@@ -1,38 +1,132 @@
-## Tier 1 + 2 + 3 test coverage
+# Patch 3 Product Gaps Surfaced by Tests
 
-Add **9 focused test files** covering the highest-risk untested logic in `generate-itinerary`. All tests are pure-function tests (no network, no DB) and run via Deno's built-in test runner alongside the existing edge function suite.
+Three real behaviors in the generation pipeline are too permissive or incomplete. Tests currently pin them to the wrong behavior — we'll fix the logic, then tighten the tests.
 
-I've already written every test against the **real exported signatures** of each module — no guessing, no mocks of internal helpers. The full source is queued and ready to drop in.
+---
 
-## Files
+## 1. Budget Conflict Detection (`budget-constraints.ts`)
 
-| # | File | Tests | What it locks down |
-|---|---|---|---|
-| 1 | `supabase/functions/generate-itinerary/day-validation.test.ts` | 12 | `isChainRestaurant`, `filterChainRestaurants`, `detectMealSlots` — the gate that decides if a generated day is acceptable. Includes the "drinks-only != dinner" memory rule and "structural transit cards don't count as meals" |
-| 2 | `supabase/functions/generate-itinerary/fix-placeholders.test.ts` | 14 | `PLACEHOLDER_TITLE_PATTERNS`, `PLACEHOLDER_VENUE_PATTERNS`, `isPlaceholderMeal`, `applyFallbackToActivity`, `GENERIC_VENUE_TEMPLATES` — backs the "no generic names" rule |
-| 3 | `supabase/functions/generate-itinerary/auto-route-optimizer.test.ts` | 10 | `isTimeFixed`, `autoOptimizeDayRoute` — directly verifies that **locked, booking-required, and meal/transport activities never move during route optimization**. Critical for the Universal Locking Protocol |
-| 4 | `supabase/functions/generate-itinerary/dietary-rules.test.ts` | 13 | `matchDietaryRule` (incl. aliases: lactose→dairy-free, celiac→gluten-free, muslim→halal), `expandDietaryAvoidList`, `getMaxDietarySeverity` — allergy safety |
-| 5 | `supabase/functions/generate-itinerary/budget-constraints.test.ts` | 12 | `deriveBudgetIntent` (tier normalization, conflict detection between tier and traits), `buildBudgetConstraintsBlock`, `buildSkipListPrompt` |
-| 6 | `supabase/functions/generate-itinerary/geographic-coherence.test.ts` | 12 | `haversineDistance`, `estimateTravelMinutes` (walk vs transit, short-hop fallback), `generateGeohash` (stability + neighborhood prefix sharing), `assignToZone`, `getCuratedZones` |
-| 7 | `supabase/functions/generate-itinerary/jet-lag-calculator.test.ts` | 12 | `resolveTimezone` (IANA format, case-insensitive), `calculateTimezoneOffset` (eastward/westward direction, absolute hoursDiff), `calculateJetLagImpact` (sensitivity bands) |
+**Gap:** `deriveBudgetIntent` flags `(highTier + frugal)` and `(lowTier + luxurySeeker)` but misses two symmetrical cases:
+- `lowTier + splurge` (budget tier traveler with strong splurge appetite)
+- `highTier + budgetConscious` (already partially covered, keep it)
 
-That's **85 new tests** in 7 files. Brings the project total from **285 → 370 tests**.
+**Why it matters:** A budget-tier user with a splurge trait gets categorized as plain `splurge_forward` with no conflict warning — the AI then generates expensive activities that bust the tier ceiling.
 
-## What I deliberately skipped
+**Fix (lines 119–131):** Add a 4th branch:
+```ts
+} else if (isLowTier && isSplurge) {
+  conflict = true;
+  conflictDetails = `Budget tier with strong splurge trait (${budget}) - aspirational budget traveler, prioritize 1-2 high-ROI splurges`;
+}
+```
 
-- **`action-save-itinerary.ts` anchors-win merge** — the merge function is private and tightly coupled to the action handler. Already covered by the HTTP-surface integration tests (`save-itinerary: no auth → 401, never 500`) and by the `_shared/user-anchors.test.ts` we already shipped.
-- **Frontend hotel/cost utilities** — those are display layers; bugs surface visually and the existing `cost-estimation.test.ts` + `trip-pricing.test.ts` already pin the math.
-- **AI-calling functions inside `fix-placeholders.ts`** (`generateFallbackRestaurant`, `fillPlaceholderSlot`, `fixPlaceholdersForDay`) — these hit Lovable AI Gateway; integration territory, not unit-test territory.
+**Test update** (`budget-constraints.test.ts`): Flip the "low tier + splurge" assertion from `conflict === false` to `conflict === true` with the expected detail string.
+
+---
+
+## 2. Dietary Fuzzy Matching (`dietary-rules.ts`)
+
+**Gap:** `matchDietaryRule` strips `"allergic to "` only as an exact prefix. Inputs like `"I'm allergic to peanuts"` or `"peanut allergy"` fall through:
+- `"peanut allergy"` → strips trailing `"allergy"` → `"peanut "` (trailing space) → no match
+- `"allergic to peanuts"` → prefix match works, becomes `"peanuts"` → but `"peanuts"` ≠ `"peanut-free"` key, and substring loop misses it (no key contains `"peanuts"`)
+
+**Fix (lines 152–162):** Strengthen the normalization pipeline:
+```ts
+const normalized = restriction.toLowerCase().trim()
+  .replace(/^i'?m /, '')           // "i'm allergic to..."
+  .replace(/^i (have|am) /, '')    // "i have a peanut allergy"
+  .replace(/^a /, '')               // "a peanut allergy"
+  .replace(/allergic to /g, '')    // anywhere, not just prefix
+  .replace(/intolerant to /g, '')
+  .replace(/ allergy$/, '')        // "peanut allergy" (with space)
+  .replace(/allergy$/, '')
+  .replace(/ intolerance$/, '')
+  .replace(/intolerance$/, '')
+  .replace(/-free$/, '')
+  .replace(/_free$/, '')
+  .replace(/ free$/, '')
+  .replace(/^no /, '')
+  .replace(/^no-/, '')
+  .replace(/s$/, '')                // singularize: "peanuts" → "peanut"
+  .trim();
+```
+
+Also add a singular→canonical alias map for common allergens so `"peanut"` resolves to the `peanut-free` rule, `"shellfish"` → `shellfish-free`, etc.:
+```ts
+const allergenAliases: Record<string, string> = {
+  'peanut': 'peanut-free',
+  'tree nut': 'nut-free',
+  'nut': 'nut-free',
+  'shellfish': 'shellfish-free',
+  'fish': 'fish-free',
+  'egg': 'egg-free',
+  'soy': 'soy-free',
+  'wheat': 'gluten-free',
+  'gluten': 'gluten-free',
+  'dairy': 'dairy-free',
+  'milk': 'dairy-free',
+};
+if (allergenAliases[normalized]) return DIETARY_RULES[allergenAliases[normalized]];
+```
+
+Insert this lookup **before** the substring fuzzy loop so canonical matches win over loose substring hits.
+
+**Test update** (`dietary-rules.test.ts`): Convert the documented-gap tests to positive assertions:
+- `matchDietaryRule("allergic to peanuts")` → `peanut-free` rule
+- `matchDietaryRule("peanut allergy")` → `peanut-free` rule
+- `matchDietaryRule("I'm lactose intolerant")` → `dairy-free` rule
+
+---
+
+## 3. Timezone Strict Matching (`jet-lag-calculator.ts`)
+
+**Gap:** `resolveTimezone` falls back to `normalized.includes(city) || city.includes(normalized)` against every key. Short keys like `"la"`, `"dc"`, `"nyc"` substring-match unrelated input (`"unmappedcityname"` contains `"dc"` → returns `America/New_York`).
+
+**Fix (lines 184–189):** Replace permissive substring with **whole-word** matching, plus require a minimum key length for the reverse direction:
+```ts
+// Whole-word match only (e.g., "New York City" → matches "new york",
+// but "unmappedcityname" does NOT match "dc")
+const tokens = normalized.split(/[\s,.\-_/]+/).filter(Boolean);
+const tokenSet = new Set(tokens);
+
+for (const [city, tz] of Object.entries(CITY_TIMEZONE_MAP)) {
+  // Forward: every token of city key appears as a whole token in input
+  const cityTokens = city.split(/\s+/);
+  if (cityTokens.every(t => tokenSet.has(t))) return tz;
+  // Reverse: input is a strict substring of multi-word city key (e.g. "york" → "new york")
+  // but only allow this for keys with ≥2 words AND input length ≥ 4 chars
+  if (cityTokens.length >= 2 && normalized.length >= 4 && city.includes(normalized)) {
+    return tz;
+  }
+}
+return null;
+```
+
+**Test update** (`jet-lag-calculator.test.ts`): Restore the original strict assertion:
+```ts
+assertEquals(resolveTimezone("qqqxxxzzzunmappedcityname"), null);
+```
+Also add a positive coverage test: `resolveTimezone("New York City")` still returns `America/New_York`.
+
+---
 
 ## Verification
 
-After files are created I'll run both suites in parallel:
-- `bunx vitest run` (frontend, must stay 192/192)
-- `supabase--test_edge_functions` for `generate-itinerary` (must go from current 95 → 180 passing)
+1. Run edge-function suite: `deno test --allow-env --allow-net --allow-read supabase/functions/generate-itinerary/`
+2. Run frontend suite: `bunx vitest run`
+3. Confirm 373+ tests still pass with the updated assertions reflecting the corrected behavior.
 
-If any test fails it means the code under test has a real defect — I'll surface it rather than weaken the assertion. No skipping or `Deno.test.ignore`.
+## Files Changed
 
-## Out of scope
+- `supabase/functions/generate-itinerary/budget-constraints.ts` (add 4th conflict branch)
+- `supabase/functions/generate-itinerary/budget-constraints.test.ts` (flip assertion)
+- `supabase/functions/generate-itinerary/dietary-rules.ts` (normalization + allergen aliases)
+- `supabase/functions/generate-itinerary/dietary-rules.test.ts` (positive fuzzy assertions)
+- `supabase/functions/generate-itinerary/jet-lag-calculator.ts` (whole-word matching)
+- `supabase/functions/generate-itinerary/jet-lag-calculator.test.ts` (strict null + new positive test)
 
-- The `[ANCHOR-TRACE]` live trip — separate workstream, untouched.
-- Adding tests to other edge functions (`itinerary-chat`, `optimize-itinerary`, `enrich-manual-trip`, etc.) — Tier 4 candidates for a future loop.
+## Out of Scope
+
+- Production-grade NLP for dietary input (use a real allergen taxonomy library)
+- Full IANA timezone database (current static map is fine for top destinations)
+- AI-prompt changes to surface the new `lowTier + splurge` conflict in user-facing copy — handled by existing `conflictDetails` plumbing
