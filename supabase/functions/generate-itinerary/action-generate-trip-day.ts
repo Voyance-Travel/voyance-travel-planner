@@ -340,6 +340,28 @@ async function _handleGenerateTripDayInner(
 
   // ── RESTAURANT POOL: Load pre-generated pool from trip metadata ───
   const tripMeta = (tripCheck.metadata as Record<string, unknown>) || {};
+
+  // [ANCHOR-TRACE] Checkpoint 3b: backend trip-day handler — params vs metadata vs anchors
+  try {
+    const paramMd = ((params as any).mustDoActivities || '').toString();
+    const paramPd = (params as any).perDayActivities || [];
+    const metaMd = (tripMeta.mustDoActivities as string) || '';
+    const metaPd = (tripMeta.perDayActivities as any[]) || [];
+    const anchors = (tripMeta.userAnchors as any[]) || [];
+    const mdSource = paramMd ? 'params' : (metaMd ? 'metadata' : 'none');
+    const pdSource = (Array.isArray(paramPd) && paramPd.length) ? 'params' : ((Array.isArray(metaPd) && metaPd.length) ? 'metadata' : 'none');
+    console.log('[ANCHOR-TRACE] generate-trip-day entry', JSON.stringify({
+      tripId,
+      paramMustDoLen: paramMd.length,
+      paramPerDayCount: Array.isArray(paramPd) ? paramPd.length : 0,
+      metaMustDoLen: metaMd.length,
+      metaPerDayCount: Array.isArray(metaPd) ? metaPd.length : 0,
+      userAnchorsCount: Array.isArray(anchors) ? anchors.length : 0,
+      mustDoSource: mdSource,
+      perDaySource: pdSource,
+    }));
+  } catch (_e) { /* trace-only */ }
+
   const restaurantPoolByCity: Record<string, any[]> = (tripMeta.restaurant_pool as any) || {};
   const usedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
   // === RESTAURANT DEDUP DEBUG ===
