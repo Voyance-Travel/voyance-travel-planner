@@ -334,7 +334,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       ? (tripMeta!.userAnchors as Array<Record<string, any>>)
       : [];
     if (userAnchors.length > 0 && itineraryDays.length > 0) {
-      const result = applyAnchorsWin(itineraryDays, userAnchors);
+      const result = sharedApplyAnchorsWin(itineraryDays, userAnchors);
       itineraryDays = result.days;
       (itinerary as any).days = itineraryDays;
       if (result.restored > 0) {
