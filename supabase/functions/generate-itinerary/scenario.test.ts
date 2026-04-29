@@ -102,7 +102,7 @@ Deno.test("scenario [paris-budget-vegetarian]: Meal Rules — three meals on ful
 Deno.test("scenario [paris-budget-vegetarian]: Dietary — zero meat/fish/shellfish in titles", () => {
   expectDietaryCompliant(
     parisBudgetVegetarian.day.activities,
-    parisBudgetVegetarian.dietaryRestrictions,
+    [...parisBudgetVegetarian.dietaryRestrictions],
     parisBudgetVegetarian.scenario,
   );
 });
