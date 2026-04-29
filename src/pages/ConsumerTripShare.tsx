@@ -143,7 +143,7 @@ export default function ConsumerTripShare() {
   return (
     <>
       <Head
-        title={`${trip.name || trip.destination || 'Trip'} — Voyance`}
+        title={`${trip.name || trip.destination || 'Trip'} - Voyance`}
         description={`Check out this trip to ${trip.destination || 'an amazing destination'}`}
       />
 

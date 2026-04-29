@@ -19,8 +19,12 @@ export const ALWAYS_FREE_VENUE_PATTERNS: RegExp[] = [
   /\b(garden|jardin|garten|giardino|jardim|park|parc|parque|tuin)\b/i,
   // Public squares and plazas
   /\b(plaza|piazza|place\s|platz|praça|praca|square|largo|campo|plein)\b/i,
+  // German `platz` glued onto place names (Alexanderplatz, Potsdamerplatz) — \b fails after a letter run
+  /platz(?![\p{L}])/iu,
   // Bridges
   /\b(pont\s|bridge|puente|ponte|br[üu]cke|brug)\b/i,
+  // German `brücke` glued onto place names (Oberbaumbrücke) — \b is unreliable around `ü`
+  /br[üu]cke(?![\p{L}])/iu,
   // Waterfront walks
   /\b(promenade|esplanade|boardwalk|waterfront|riverside|riverbank|seafront|canal\s+walk|corniche|malec[oó]n|lungomare|lakefront)\b/i,
   // Walks and strolls
@@ -29,6 +33,8 @@ export const ALWAYS_FREE_VENUE_PATTERNS: RegExp[] = [
   /\b(viewpoint|miradouro|miradouros|mirador|outlook|overlook|belvedere|vista|panoram\w*)\b/i,
   // Religious sites (usually free entry)
   /\b(church|[eé]glise|chiesa|kirche|iglesia|igreja|cathedral|cath[eé]drale|cattedrale|kathedrale|dom|basilica|basilique|basilika|mosque|mosqu[eé]e|moschee|temple|shrine|synagogue|pagoda)\b/i,
+  // Unicode-aware match for `église` / `Église` — \b is unreliable when the word starts with `é`/`É`
+  /(?:^|[^\p{L}])[eé]glise(?![\p{L}])/iu,
   // Markets (entry free, food priced separately)
   /\b(market|march[eé]|mercato|markt|mercado|feira|bazar|bazaar|souk)\b/i,
   // Monuments and memorials
@@ -39,6 +45,8 @@ export const ALWAYS_FREE_VENUE_PATTERNS: RegExp[] = [
   /\b(paseo)\b/i,
   // Paris-specific free venues
   /\b(champs.?[eé]lys[eé]es|montmartre|sacr[eé].?c[oœ]ur|tuileries|champ\s+de\s+mars|palais.?royal.*garden|seine.*walk|walk.*seine|[iî]le\s+saint.?louis)\b/i,
+  // Unicode-aware fallback for `Île Saint-Louis` / `île saint-louis` — \b is unreliable when starting with `Î`/`î`
+  /(?:^|[^\p{L}])[iî]le\s+saint.?louis(?![\p{L}])/iu,
 ];
 
 /** Tier 2: free only when description says "free" or price is in phantom range */

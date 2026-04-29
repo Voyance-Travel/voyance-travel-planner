@@ -293,7 +293,7 @@ export function ReferralShareModal({
               <Users className="h-4 w-4" />
               Invite friends
             </label>
-            <p className="text-xs text-muted-foreground">This link works for everyone — share it with your whole group</p>
+            <p className="text-xs text-muted-foreground">This link works for everyone - share it with your whole group</p>
             <div className="flex gap-2">
               <div className="flex-1 flex flex-wrap items-center gap-1 min-h-[40px] rounded-md border border-input bg-background px-3 py-1.5 focus-within:ring-2 focus-within:ring-ring">
                 {friendEmails.map(email => (

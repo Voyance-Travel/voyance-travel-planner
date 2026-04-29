@@ -1,72 +1,66 @@
-## Live trace: do user activities reach generation?
+## Test suite status
 
-We already shipped Prompt 87's fixes plus the stronger `userAnchors` layer. Code-level wiring is verified. To prove it end-to-end on a real trip, I'll add a single tagged trace at three checkpoints, run a trip, and read the logs.
+End-to-end run: **280 of 285 tests pass**, across frontend (vitest), the new `user-anchors` tests, and the full `generate-itinerary` edge function suite. All anchor-flow, locking, meal-policy, auth, CORS, multi-city, race-condition, and database trigger tests are green.
 
-### What I'll add (temporary, removable in one pass)
+Five failures remain. All are pre-existing and unrelated to the user-anchor / universal-locking work. This plan fixes them so the suite goes fully green.
 
-A unique `[ANCHOR-TRACE]` prefix at three points, so we can grep both the browser console and edge logs and see the data flow in order.
+## Failures
 
-**1. `src/contexts/TripPlannerContext.tsx` — `saveTrip()` (~line 297)**
-Right before the upsert payload is built, log:
-- `mustDoActivities` length and first 100 chars
-- `perDayActivities` count and `[dayNumber, firstChars]` summary
-- count of `userAnchors` if present in metadata
+**Frontend (1 test file, but 4 string violations):**
 
-**2. `src/hooks/useItineraryGeneration.ts` — `generateItineraryProgressive()` (~line 273) and `startServerGeneration()` (~line 503)**
-Right before each `supabase.functions.invoke('generate-itinerary', …)`, log:
-- `trip.mustDoActivities` length
-- `trip.perDayActivities` count
-- the dayNumber being generated (per-day path) so we can match against backend logs
+`src/test/noEmDashes.test.ts` — guards against em-dashes in user-facing copy. Currently catches:
 
-**3. `supabase/functions/generate-itinerary/action-generate-trip-day.ts` and `action-generate-day.ts`**
-At the entry of each handler, log:
-- `params.mustDoActivities` length
-- `params.perDayActivities` count
-- `tripMeta.userAnchors` count
-- which source won the `params || tripMeta` merge
+- `src/components/itinerary/ActivityConciergeSheet.tsx:281` — `{actTitle} — AI Concierge` (sr-only title)
+- `src/components/post-trip/ShareTripCard.tsx:238` — share-link helper text
+- `src/components/referral/ReferralShareModal.tsx:296` — same copy as above
+- `src/pages/ConsumerTripShare.tsx:146` — page `<title>`
 
-All logs share the prefix `[ANCHOR-TRACE]` so we can pull them with one grep.
+**Edge functions (4 tests):**
 
-### How we run the test
+`supabase/functions/generate-itinerary/sanitization_free_venue_test.ts` — `ALWAYS_FREE_VENUE_PATTERNS` regexes don't match the diacritic/non-Latin forms. The patterns are evidently using ASCII `\b` word boundaries (which don't fire across `é`, `ü`, etc.) or are missing the literal accented character entirely.
 
-1. I deploy the two edge functions.
-2. You go through "Just Tell Us" with a sample like the Hong Kong/Chengdu/Beijing trip — include explicit per-day items (e.g. "Day 2 7:30 PM Dinner at TRB Hutong", "Day 1 morning panda visit").
-3. Hit Confirm & Generate.
-4. I pull:
-   - browser console: `[ANCHOR-TRACE]` from `code--read_console_logs`
-   - edge logs: `[ANCHOR-TRACE]` from `supabase--edge_function_logs` for both `generate-itinerary` invocations.
-5. We compare the four checkpoints. If any one shows empty/zero while earlier ones had data, that's the break.
+Failing inputs:
+- `"Église Saint-Sulpice"` → expect match on `église`
+- `"Walk on Île Saint-Louis"` → expect match on `île saint-louis`
+- `"Alexanderplatz"` → expect match on `platz`
+- (German bridge) `"…brücke"` → expect match on `brücke`
 
-### Decision tree from the trace
+## Fixes
 
-```text
-Save shows data?  ──no──► break is in chat→state hand-off (Start.tsx onChatDetailsExtracted)
-       │ yes
-       ▼
-Invoke shows data? ──no──► break is in trip object construction in the hook
-       │ yes
-       ▼
-Backend params has data?  ──no──► break is in supabase.functions.invoke serialization
-       │ yes
-       ▼
-Backend lockedCards > 0? ──no──► break is in compile-prompt.ts perDayActivities parsing
-       │ yes
-       ▼
-Anchors-win restored items? ──yes──► AI is dropping them; lockedCards reinjection working
-                            ──no──► AI honoring them or restoration logic has a bug
-```
+### 1. Em-dashes (4 string edits)
 
-### After the trace
+Replace `—` with a normal `-` (or restructure to avoid the dash). Matches the project's already-established no-em-dash rule.
 
-- If everything flows correctly: I remove all `[ANCHOR-TRACE]` logs in one cleanup pass and we know the system is working — any remaining "AI overwrote my stuff" reports become a prompt-quality issue, not a data-flow issue.
-- If we find a break: I fix it at the exact checkpoint, redeploy, retrace, then clean up.
+| File:line | New text |
+|---|---|
+| `ActivityConciergeSheet.tsx:281` | `{actTitle} - AI Concierge` |
+| `ShareTripCard.tsx:238` | `This link works for everyone - share it with your whole group` |
+| `ReferralShareModal.tsx:296` | same as above |
+| `ConsumerTripShare.tsx:146` | `` `${trip.name || trip.destination || 'Trip'} - Voyance` `` |
 
-### Files touched (all reversible)
+### 2. Free-venue diacritic patterns
 
-- `src/contexts/TripPlannerContext.tsx` — 1 console.log in saveTrip
-- `src/hooks/useItineraryGeneration.ts` — 2 console.logs (per-day + server paths)
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — 1 entry log
-- `supabase/functions/generate-itinerary/action-generate-day.ts` — 1 entry log
-- Deploy: `generate-itinerary`
+In `supabase/functions/generate-itinerary/sanitization.ts`, fix `ALWAYS_FREE_VENUE_PATTERNS` so it matches accented forms:
 
-No behavior changes. Pure observability.
+- For `église`: pattern must contain literal `église` (with accent) and use a Unicode-safe boundary. Use `/(^|[^\p{L}])église([^\p{L}]|$)/iu` instead of `/\béglise\b/i`. The `u` flag plus `\p{L}` letter class is required because `\b` treats `é` as a word-char boundary incorrectly with mixed letters and diacritics.
+- For `île saint-louis`: same approach — `/(^|[^\p{L}])île\s+saint-louis([^\p{L}]|$)/iu`.
+- For `platz` and `brücke`: these need substring matches because they appear glued onto place names (`Alexanderplatz`, `Oberbaumbrücke`). Patterns: `/platz\b/iu` and `/brücke\b/iu` — drop the leading `\b` so they match inside compounds.
+
+Implementation choice: rewrite each affected entry in the array to use the `u` flag and `\p{L}`-based boundaries. Don't touch entries that are already passing.
+
+### 3. Verify
+
+After edits, re-run the full suite (`bunx vitest run` and the deno test set) and confirm 285/285 green. Then briefly redeploy generate-itinerary so the sanitization fix lands in the live edge function.
+
+## Out of scope
+
+- The `[ANCHOR-TRACE]` live-trip trace is still pending and unaffected by these fixes; we'll run it after.
+- No schema changes, no new tests added, no behavior changes to anchor/locking logic.
+
+## Files touched
+
+- `src/components/itinerary/ActivityConciergeSheet.tsx`
+- `src/components/post-trip/ShareTripCard.tsx`
+- `src/components/referral/ReferralShareModal.tsx`
+- `src/pages/ConsumerTripShare.tsx`
+- `supabase/functions/generate-itinerary/sanitization.ts`
