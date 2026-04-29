@@ -137,6 +137,8 @@ Deno.test("applyAnchorsWin: fingerprint match prevents duplication", () => {
 // ----------------------------------------------------------------------------
 Deno.test("applyAnchorsWin: fuzzy title match reaffirms, does not duplicate", () => {
   const days = [
+    day(1, [act({ title: "Day 1" })]),
+    day(2, [act({ title: "Day 2" })]),
     day(3, [
       act({ title: "Dinner at Sukiyabashi Jiro", category: "dining", startTime: "19:00" }),
     ]),
@@ -147,8 +149,8 @@ Deno.test("applyAnchorsWin: fuzzy title match reaffirms, does not duplicate", ()
   const result = applyAnchorsWin(days, anchors);
   assertEquals(result.restored, 0);
   assertEquals(result.reaffirmed, 1);
-  assertEquals(result.days[2 /* index for day 3 */]?.activities?.length ?? result.days[0].activities.length, 1);
-  const a = result.days[0].activities[0];
+  assertEquals(result.days[2].activities.length, 1, "must not duplicate");
+  const a = result.days[2].activities[0];
   assertEquals(a.locked, true);
   assertEquals(a.isLocked, true);
 });
