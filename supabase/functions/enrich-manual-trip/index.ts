@@ -527,11 +527,54 @@ serve(async (req) => {
     const researchContext = buildResearchContext(itinerary);
     console.log(`[enrich-manual-trip] Research context built: ${researchContext.length} chars, ${itinerary.days.length} days`);
 
-    // --- Write research context into trip metadata so generate-itinerary picks it up ---
+    // --- Build structured userAnchors so generate-itinerary's anchor guard
+    //     treats every parsed activity as a hard invariant (not just prompt
+    //     context the AI can drift from). Mirrors createTripFromParsed.ts. ---
+    const derivedAnchors: Array<Record<string, any>> = [];
+    const seenAnchorKeys = new Set<string>();
+    const existingAnchors = Array.isArray((trip.metadata as any)?.userAnchors)
+      ? ((trip.metadata as any).userAnchors as Array<Record<string, any>>)
+      : [];
+    for (const a of existingAnchors) {
+      const key = `${a.dayNumber}|${a.lockedSource || ''}|${(a.title || '').toLowerCase().trim()}`;
+      if (!seenAnchorKeys.has(key)) {
+        seenAnchorKeys.add(key);
+        derivedAnchors.push(a);
+      }
+    }
+    for (const day of (itinerary.days || [])) {
+      const dayNumber = day?.dayNumber || day?.day;
+      if (!dayNumber) continue;
+      for (const act of (day?.activities || [])) {
+        if (act?.isOption && act?.optionGroup) continue;
+        const title = (act?.title || act?.name || '').toString().trim();
+        if (!title) continue;
+        // Skip pure cost/price annotations and generic placeholders
+        if (/^[~≈]?\s*[€$£¥₹]?\s*\d+[\d.,]*\s*(?:\/?\s*(?:pp|person|pax|each|per\s*person))?\s*[€$£¥₹]?\s*$/i.test(title)) continue;
+        const lockedSource = act?.lockedSource || `manual_paste:${title}`;
+        const key = `${dayNumber}|${lockedSource}|${title.toLowerCase()}`;
+        if (seenAnchorKeys.has(key)) continue;
+        seenAnchorKeys.add(key);
+        derivedAnchors.push({
+          dayNumber,
+          title,
+          startTime: act?.startTime || act?.start_time || undefined,
+          endTime: act?.endTime || act?.end_time || undefined,
+          category: act?.category || 'activity',
+          venueName: act?.location?.name || act?.venue_name || undefined,
+          lockedSource,
+          source: act?.anchorSource || 'manual_paste',
+        });
+      }
+    }
+    console.log(`[enrich-manual-trip] Built ${derivedAnchors.length} userAnchors for Smart Finish protection`);
+
+    // --- Write research context + anchors into trip metadata so generate-itinerary picks them up ---
     const existingMetadata = (trip.metadata as any) || {};
     const updatedMetadata = {
       ...existingMetadata,
       mustDoActivities: researchContext,
+      userAnchors: derivedAnchors,
       smartFinishSource: "manual_builder_standard",
       smartFinishMode: true, // Explicit boolean — generate-itinerary uses this as primary detection
       smartFinishRequestedAt: new Date().toISOString(),
