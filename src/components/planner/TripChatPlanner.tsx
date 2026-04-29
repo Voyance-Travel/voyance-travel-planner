@@ -399,9 +399,23 @@ export function TripChatPlanner({ onDetailsExtracted, className }: TripChatPlann
               setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
             }
             setExtractedDetails(details);
-            // Initialize transport defaults (one per city gap)
+            // Initialize transport defaults from extracted intent first.
+            // Priority: cityTransports[i] → cities[i+1].transportFromPrevious → 'flight'.
             if (details.cities && details.cities.length > 1) {
-              setCityTransports(new Array(details.cities.length - 1).fill('flight'));
+              const legCount = details.cities.length - 1;
+              const extractedLegs = Array.isArray((details as any).cityTransports)
+                ? (details as any).cityTransports
+                : [];
+              const initial: InterCityTransportMode[] = Array.from({ length: legCount }, (_, i) => {
+                const fromExtracted = extractedLegs[i];
+                const fromCity = (details.cities![i + 1] as any)?.transportFromPrevious;
+                const candidate = (fromExtracted || fromCity || 'flight') as string;
+                const allowed: InterCityTransportMode[] = ['flight', 'train', 'bus', 'car', 'ferry'];
+                return (allowed.includes(candidate as InterCityTransportMode)
+                  ? candidate
+                  : 'flight') as InterCityTransportMode;
+              });
+              setCityTransports(initial);
             }
           }
         } catch (e) {
