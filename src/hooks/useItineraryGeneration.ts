@@ -498,6 +498,19 @@ export function useItineraryGeneration() {
       status: 'generating',
     });
 
+    // [ANCHOR-TRACE] Checkpoint 2b: server-side trip-level invoke body
+    try {
+      const md = (trip.mustDoActivities || '').toString();
+      const pd = (trip as any).perDayActivities || [];
+      console.log('[ANCHOR-TRACE] invoke generate-trip', {
+        tripId: trip.tripId,
+        mustDoLen: md.length,
+        mustDoPreview: md.slice(0, 100),
+        perDayCount: pd.length,
+        perDaySummary: pd.slice(0, 8).map((d: any) => ({ d: d?.dayNumber, t: (d?.activities || '').slice(0, 60) })),
+      });
+    } catch (_e) { /* trace-only */ }
+
     const { data, error } = await supabase.functions.invoke('generate-itinerary', {
       body: {
         action: 'generate-trip',
@@ -518,6 +531,7 @@ export function useItineraryGeneration() {
         perDayActivities: trip.perDayActivities || [],
       },
     });
+
 
     if (error) {
       const errMsg = error.message || String(error);
