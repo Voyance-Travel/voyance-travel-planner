@@ -175,15 +175,25 @@ export function resolveTimezone(cityName: string): string | null {
   if (!cityName) return null;
   
   const normalized = cityName.toLowerCase().trim();
+  if (!normalized) return null;
   
   // Direct lookup
   if (CITY_TIMEZONE_MAP[normalized]) {
     return CITY_TIMEZONE_MAP[normalized];
   }
   
-  // Partial match (e.g., "New York City" -> "new york")
+  // Whole-word match only — prevents short keys like 'la', 'dc', 'nyc'
+  // from substring-matching unrelated input (e.g. "unmappedcityname" contains "dc").
+  const tokens = normalized.split(/[\s,.\-_/]+/).filter(Boolean);
+  const tokenSet = new Set(tokens);
+
   for (const [city, tz] of Object.entries(CITY_TIMEZONE_MAP)) {
-    if (normalized.includes(city) || city.includes(normalized)) {
+    const cityTokens = city.split(/\s+/);
+    // Forward: every token of the city key appears as a whole token in input.
+    if (cityTokens.every(t => tokenSet.has(t))) return tz;
+    // Reverse: input is a strict substring of a multi-word key (e.g. "york" → "new york").
+    // Only allowed for ≥2-word keys AND input length ≥ 4 chars to avoid 'la'/'dc' false positives.
+    if (cityTokens.length >= 2 && normalized.length >= 4 && city.includes(normalized)) {
       return tz;
     }
   }
