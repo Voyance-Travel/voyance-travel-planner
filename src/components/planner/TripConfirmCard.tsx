@@ -153,6 +153,25 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, tran
       )}
 
 
+      {/* Per-day captured specifics — surfaced so user can verify before generating */}
+      {perDay.length > 0 && (
+        <div className="rounded-lg bg-muted/40 p-2 space-y-1">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3" />
+            What we'll lock per day
+          </p>
+          {perDay.slice(0, 8).map((d) => (
+            <div key={d.dayNumber} className="text-[11px] leading-snug">
+              <span className="font-medium text-foreground">Day {d.dayNumber}: </span>
+              <span className="text-muted-foreground">{d.activities}</span>
+            </div>
+          ))}
+          {perDay.length > 8 && (
+            <p className="text-[10px] text-muted-foreground italic">+ {perDay.length - 8} more day{perDay.length - 8 !== 1 ? 's' : ''}…</p>
+          )}
+        </div>
+      )}
+
       {details.additionalNotes && (
         <div className="text-xs text-muted-foreground italic line-clamp-2">
           {details.additionalNotes}
