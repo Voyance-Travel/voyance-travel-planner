@@ -77,6 +77,17 @@ function activityToItinerary(activity: ParsedActivity, isSelected: boolean): Iti
     venue: null,
     bookingRequired: activity.bookingRequired || false,
     source: 'parsed',
+    // Manual paste / Build It Myself items are user-told content — lock them
+    // so AI/cleanup never silently drops, renames, or moves them.
+    locked: true,
+    isLocked: true,
+    lockedSource: `manual_paste:${activity.name}`,
+    anchorSource: 'manual_paste',
+  } as ItineraryActivity & {
+    locked: boolean;
+    isLocked: boolean;
+    lockedSource: string;
+    anchorSource: string;
   };
 }
 
