@@ -251,6 +251,19 @@ export function useItineraryGeneration() {
               console.log(`[useItineraryGeneration] 🚆 Day ${dayNum} is TRANSITION: ${cityInfo.transitionFrom} → ${cityInfo.transitionTo} via ${cityInfo.transportType}`);
             }
             
+            // [ANCHOR-TRACE] Checkpoint 2a: per-day invoke body
+            try {
+              const md = (trip.mustDoActivities || '').toString();
+              const pd = (trip as any).perDayActivities || [];
+              console.log('[ANCHOR-TRACE] invoke generate-day', {
+                dayNumber: dayNum,
+                mustDoLen: md.length,
+                mustDoPreview: md.slice(0, 100),
+                perDayCount: pd.length,
+                perDayForThisDay: pd.find((d: any) => d?.dayNumber === dayNum)?.activities?.slice(0, 80) || null,
+              });
+            } catch (_e) { /* trace-only */ }
+
             const invokePromise = supabase.functions.invoke('generate-itinerary', {
               body: {
                 action: 'generate-day',
@@ -274,6 +287,7 @@ export function useItineraryGeneration() {
                 perDayActivities: trip.perDayActivities || [],
               },
             });
+
 
             // 180-second timeout per day (complex destinations need more time)
             const timeoutPromise = new Promise<never>((_, reject) =>
