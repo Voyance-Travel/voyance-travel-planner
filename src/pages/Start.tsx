@@ -53,6 +53,7 @@ import { GenerationRules, type GenerationRule } from '@/components/planner/Gener
 import { ManualTripPasteEntry } from '@/components/planner/ManualTripPasteEntry';
 import { TripCostEstimate } from '@/components/planner/TripCostEstimate';
 import { resolveCities } from '@/utils/cityNormalization';
+import { buildUserAnchors } from '@/utils/userAnchors';
 import logger from '@/lib/logger';
 
 // Types
@@ -2459,22 +2460,28 @@ export default function Start() {
           creation_source: isMultiCity ? 'multi_city' : 'single_city',
           status: 'draft',
           owner_plan_tier: ownerPlanTier,
-          metadata: ({
-            isFirstTimeVisitor,
-            firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
-            mustDoActivities: [
+          metadata: (() => {
+            const formMustDoList = [
               ...selectedLandmarks,
               ...customMustDos,
               ...(mustDoActivities ? [mustDoActivities] : []),
-            ].filter(Boolean).length > 0
-              ? [...selectedLandmarks, ...customMustDos, ...(mustDoActivities ? [mustDoActivities] : [])]
-              : null,
-            interestCategories: selectedCategories.length > 0 ? selectedCategories : null,
-            generationRules: generationRules.length > 0 ? generationRules : null,
-            celebrationDay: celebrationDay || null,
-            pacing: pacing || 'balanced',
-            lastUpdated: new Date().toISOString(),
-          }) as any,
+            ].filter(Boolean);
+            const userAnchors = buildUserAnchors({
+              mustDoActivities: formMustDoList.length > 0 ? formMustDoList : null,
+              source: isMultiCity ? 'multi_city' : 'single_city',
+            });
+            return ({
+              isFirstTimeVisitor,
+              firstTimePerCity: isMultiCity && Object.keys(firstTimePerCity).length > 0 ? firstTimePerCity : null,
+              mustDoActivities: formMustDoList.length > 0 ? formMustDoList : null,
+              interestCategories: selectedCategories.length > 0 ? selectedCategories : null,
+              generationRules: generationRules.length > 0 ? generationRules : null,
+              celebrationDay: celebrationDay || null,
+              pacing: pacing || 'balanced',
+              userAnchors: userAnchors.length > 0 ? userAnchors : null,
+              lastUpdated: new Date().toISOString(),
+            });
+          })() as any,
         })
         .select('id')
         .single();
