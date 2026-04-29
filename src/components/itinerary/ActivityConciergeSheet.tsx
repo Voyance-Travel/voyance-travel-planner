@@ -278,7 +278,7 @@ export default function ActivityConciergeSheet({
           isMobile ? 'h-[85vh] rounded-t-2xl' : 'w-[420px] sm:max-w-[420px]'
         )}
       >
-        <SheetTitle className="sr-only">{actTitle} — AI Concierge</SheetTitle>
+        <SheetTitle className="sr-only">{actTitle} - AI Concierge</SheetTitle>
         {/* Header */}
         <div className="flex items-start gap-3 p-4 border-b border-border bg-muted/30">
           {imageUrl && (

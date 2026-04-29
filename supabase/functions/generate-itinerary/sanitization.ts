@@ -18,17 +18,20 @@ export const ALWAYS_FREE_VENUE_PATTERNS: RegExp[] = [
   // Parks and gardens (multilingual)
   /\b(garden|jardin|garten|giardino|jardim|park|parc|parque|tuin)\b/i,
   // Public squares and plazas
-  /\b(plaza|piazza|place\s|platz|praça|praca|square|largo|campo|plein)\b/i,
-  // Bridges
-  /\b(pont\s|bridge|puente|ponte|br[üu]cke|brug)\b/i,
+  // Public squares and plazas — `platz` matches glued forms like Alexanderplatz (no leading boundary)
+  /(?:^|[^\p{L}])(plaza|piazza|place\s|praça|praca|square|largo|campo|plein)(?![\p{L}])/iu,
+  /platz(?![\p{L}])/iu,
+  // Bridges — `brücke` matches glued forms like Oberbaumbrücke
+  /(?:^|[^\p{L}])(pont\s|bridge|puente|ponte|brug)(?![\p{L}])/iu,
+  /br[üu]cke(?![\p{L}])/iu,
   // Waterfront walks
   /\b(promenade|esplanade|boardwalk|waterfront|riverside|riverbank|seafront|canal\s+walk|corniche|malec[oó]n|lungomare|lakefront)\b/i,
   // Walks and strolls
   /\b(neighborhood\s+walk|stroll|wander|walking\s+tour|evening\s+(?:walk|stroll)|morning\s+(?:walk|stroll)|historic\s+walk)\b/i,
   // Viewpoints (not observation decks)
   /\b(viewpoint|miradouro|miradouros|mirador|outlook|overlook|belvedere|vista|panoram\w*)\b/i,
-  // Religious sites (usually free entry)
-  /\b(church|[eé]glise|chiesa|kirche|iglesia|igreja|cathedral|cath[eé]drale|cattedrale|kathedrale|dom|basilica|basilique|basilika|mosque|mosqu[eé]e|moschee|temple|shrine|synagogue|pagoda)\b/i,
+  // Religious sites — Unicode-aware boundaries so `Église` and `cathédrale` match
+  /(?:^|[^\p{L}])(church|[eé]glise|chiesa|kirche|iglesia|igreja|cathedral|cath[eé]drale|cattedrale|kathedrale|dom|basilica|basilique|basilika|mosque|mosqu[eé]e|moschee|temple|shrine|synagogue|pagoda)(?![\p{L}])/iu,
   // Markets (entry free, food priced separately)
   /\b(market|march[eé]|mercato|markt|mercado|feira|bazar|bazaar|souk)\b/i,
   // Monuments and memorials
@@ -37,8 +40,8 @@ export const ALWAYS_FREE_VENUE_PATTERNS: RegExp[] = [
   /\b(district|neighborhood|neighbourhood|bairro|quarter|old\s+town|bookstore|bookshop|livraria|library|biblioteca)\b/i,
   // Paseo
   /\b(paseo)\b/i,
-  // Paris-specific free venues
-  /\b(champs.?[eé]lys[eé]es|montmartre|sacr[eé].?c[oœ]ur|tuileries|champ\s+de\s+mars|palais.?royal.*garden|seine.*walk|walk.*seine|[iî]le\s+saint.?louis)\b/i,
+  // Paris-specific free venues — Unicode-aware so `Île Saint-Louis` matches
+  /(?:^|[^\p{L}])(champs.?[eé]lys[eé]es|montmartre|sacr[eé].?c[oœ]ur|tuileries|champ\s+de\s+mars|palais.?royal.*garden|seine.*walk|walk.*seine|[iî]le\s+saint.?louis)(?![\p{L}])/iu,
 ];
 
 /** Tier 2: free only when description says "free" or price is in phantom range */
