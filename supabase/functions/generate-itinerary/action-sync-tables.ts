@@ -105,7 +105,7 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
         start_time?: string; end_time?: string; durationMinutes?: number;
         location?: { name?: string; address?: string };
         cost?: { amount: number; currency: string };
-        isLocked?: boolean; tags?: string[]; bookingRequired?: boolean;
+        isLocked?: boolean; locked?: boolean; tags?: string[]; bookingRequired?: boolean;
         booking_required?: boolean; tips?: string; photos?: unknown;
         walking_distance?: string; walking_time?: string;
         transportation?: unknown; rating?: unknown; website?: string;
@@ -132,7 +132,9 @@ export async function handleSyncItineraryTables(ctx: ActionContext): Promise<Res
         location: a.location || null,
         cost: a.cost || null,
         tags: a.tags || null,
-        is_locked: a.isLocked || false,
+        // Preserve EITHER locked flag — pipeline uses `locked`, UI uses `isLocked`,
+        // and either should make this row immune to AI overwrites.
+        is_locked: !!(a.isLocked || a.locked),
         booking_required: a.bookingRequired || a.booking_required || false,
         tips: a.tips || null,
         photos: a.photos || null,
