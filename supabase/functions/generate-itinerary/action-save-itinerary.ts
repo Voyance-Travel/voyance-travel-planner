@@ -6,6 +6,10 @@
 import { type ActionContext, okJson, errorJson } from './action-types.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
+import { applyAnchorsWin as sharedApplyAnchorsWin } from './anchor-guard.ts';
+
+// Re-export for backwards compatibility (tests + other modules import from this file)
+export { applyAnchorsWin } from './anchor-guard.ts';
 
 /** After a leg finishes generating, check if there's a queued next leg and kick it off. */
 export async function triggerNextJourneyLeg(supabase: any, tripId: string): Promise<void> {
@@ -126,94 +130,8 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
   });
 }
 
-/**
- * ANCHORS-WIN FINAL PASS (pure, testable).
- *
- * Restores any user-provided anchors (from chat / form / multi-city /
- * manual paste) that earlier cleanup steps may have dropped, renamed,
- * or moved. User intent always wins over AI cleanup.
- *
- * Returns a NEW array of days (input is not mutated at the top level,
- * though existing activity objects within matched days ARE mutated for
- * lock reaffirmation — matching production behavior).
- */
-export function applyAnchorsWin(
-  itineraryDays: any[],
-  userAnchors: Array<Record<string, any>>
-): { days: any[]; restored: number; reaffirmed: number } {
-  if (!Array.isArray(itineraryDays) || itineraryDays.length === 0) {
-    return { days: itineraryDays || [], restored: 0, reaffirmed: 0 };
-  }
-  if (!Array.isArray(userAnchors) || userAnchors.length === 0) {
-    return { days: itineraryDays, restored: 0, reaffirmed: 0 };
-  }
-
-  const days = itineraryDays.map((d) => ({ ...d, activities: Array.isArray(d.activities) ? [...d.activities] : [] }));
-  let restored = 0;
-  let reaffirmed = 0;
-
-  const fingerprint = (a: any) =>
-    `${a.lockedSource || ''}|${(a.title || a.name || '').toLowerCase().trim()}`;
-
-  for (const anchor of userAnchors) {
-    const targetDayNum = (anchor.dayNumber as number) || 0;
-    if (targetDayNum < 1 || targetDayNum > days.length) continue;
-    const day = days[targetDayNum - 1];
-    if (!day || !Array.isArray(day.activities)) continue;
-    const anchorFp = fingerprint(anchor);
-    const existing = day.activities.find((a: any) => {
-      if ((a.locked || a.isLocked) && fingerprint(a) === anchorFp) return true;
-      const aTitle = (a.title || a.name || '').toLowerCase();
-      const lockTitle = (anchor.title || '').toLowerCase();
-      return lockTitle && aTitle && (aTitle.includes(lockTitle) || lockTitle.includes(aTitle));
-    });
-    if (!existing) {
-      day.activities.push({
-        id: `anchor-restore-d${targetDayNum}-${restored}-${Date.now()}`,
-        title: anchor.title,
-        name: anchor.title,
-        startTime: anchor.startTime || undefined,
-        endTime: anchor.endTime || undefined,
-        category: anchor.category || 'activity',
-        venue_name: anchor.venueName || undefined,
-        location: anchor.venueName ? { name: anchor.venueName, address: '' } : undefined,
-        cost: { amount: 0, currency: 'USD' },
-        locked: true,
-        isLocked: true,
-        lockedSource: anchor.lockedSource,
-        anchorSource: anchor.source,
-        durationMinutes: 60,
-      });
-      restored++;
-    } else {
-      // Reaffirm lock + restore drifted title/time
-      existing.locked = true;
-      existing.isLocked = true;
-      if (anchor.title && existing.title !== anchor.title) {
-        existing.title = anchor.title;
-        existing.name = anchor.title;
-      }
-      if (anchor.startTime && existing.startTime !== anchor.startTime) {
-        existing.startTime = anchor.startTime;
-        if (anchor.endTime) existing.endTime = anchor.endTime;
-      }
-      reaffirmed++;
-    }
-  }
-
-  if (restored > 0) {
-    // Re-sort each day after restoration
-    for (const d of days) {
-      if (Array.isArray(d.activities)) {
-        d.activities.sort((a: any, b: any) =>
-          parseTimeToMinutes(a.startTime || a.start_time) - parseTimeToMinutes(b.startTime || b.start_time)
-        );
-      }
-    }
-  }
-
-  return { days, restored, reaffirmed };
-}
+// `applyAnchorsWin` lives in ./anchor-guard.ts and is re-exported at the top
+// of this file for backwards compatibility with existing imports/tests.
 
 
 export async function handleSaveItinerary(ctx: ActionContext): Promise<Response> {
@@ -416,7 +334,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       ? (tripMeta!.userAnchors as Array<Record<string, any>>)
       : [];
     if (userAnchors.length > 0 && itineraryDays.length > 0) {
-      const result = applyAnchorsWin(itineraryDays, userAnchors);
+      const result = sharedApplyAnchorsWin(itineraryDays, userAnchors);
       itineraryDays = result.days;
       (itinerary as any).days = itineraryDays;
       if (result.restored > 0) {
