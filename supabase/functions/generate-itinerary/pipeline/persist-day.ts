@@ -62,7 +62,7 @@ function makeActivityRow(
     location: act.location || null,
     cost: act.cost || null,
     tags: act.tags || null,
-    is_locked: act.isLocked || false,
+    is_locked: !!(act.isLocked || act.locked) || false,
     booking_required: act.bookingRequired || false,
     tips: act.tips || null,
     photos: act.photos || null,

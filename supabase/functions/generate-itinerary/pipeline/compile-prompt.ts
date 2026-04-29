@@ -400,8 +400,14 @@ export async function compilePrompt(
 
   // ═══════════════════════════════════════════════════════════════════════
   // PER-DAY ACTIVITIES (structured day-level user plan) — takes priority
+  // Prefer request-level (params) over metadata so chat-extracted intent
+  // is honored even if metadata write was lossy.
   // ═══════════════════════════════════════════════════════════════════════
-  const perDayActivities = metadata?.perDayActivities as Array<{ dayNumber: number; activities: string }> | undefined;
+  const paramPerDayActivities = (params as any)?.perDayActivities as Array<{ dayNumber: number; activities: string }> | undefined;
+  const metaPerDayActivities = metadata?.perDayActivities as Array<{ dayNumber: number; activities: string }> | undefined;
+  const perDayActivities = (Array.isArray(paramPerDayActivities) && paramPerDayActivities.length > 0)
+    ? paramPerDayActivities
+    : metaPerDayActivities;
   const currentDayActivities = perDayActivities?.find(d => d.dayNumber === dayNumber);
 
   if (currentDayActivities) {
