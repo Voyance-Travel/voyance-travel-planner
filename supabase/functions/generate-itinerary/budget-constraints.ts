@@ -128,6 +128,9 @@ export function deriveBudgetIntent(
   } else if (isHighTier && isBudgetConscious) {
     conflict = true;
     conflictDetails = `Premium tier with budget-conscious comfort (${comfort}) - unusual combination`;
+  } else if (isLowTier && isSplurge) {
+    conflict = true;
+    conflictDetails = `Budget tier with strong splurge trait (${budget}) - aspirational budget traveler, prioritize 1-2 high-ROI splurges`;
   }
 
   let spendStyle: SpendStyle;
