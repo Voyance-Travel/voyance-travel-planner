@@ -180,6 +180,26 @@ export async function handleGenerateTrip(
   // If starting fresh (not resume), clear existing days to prevent duplicates
   if (!isResume) {
     const existingItData = (currentTrip?.itinerary_data as Record<string, unknown>) || {};
+    const existingDays = Array.isArray((existingItData as any).days) ? (existingItData as any).days : [];
+
+    // ── ANCHOR HARVEST (pre-wipe) ──────────────────────────────────────
+    // Before we destructively clear itinerary_data.days, scan for any
+    // user-locked activities (manual paste, chat, edited, pinned) and
+    // merge them into metadata.userAnchors so the regeneration chain can
+    // restore them via applyAnchorsWin at every persistence boundary.
+    try {
+      const existingAnchors = Array.isArray((existingMeta as any).userAnchors)
+        ? ((existingMeta as any).userAnchors as Array<Record<string, any>>)
+        : [];
+      const harvested = harvestAnchorsFromDays(existingDays, existingAnchors);
+      if (harvested.length !== existingAnchors.length) {
+        console.log(`[generate-trip] 🔒 Anchor harvest: ${existingAnchors.length} existing → ${harvested.length} after scanning ${existingDays.length} days`);
+      }
+      (updatePayload.metadata as Record<string, unknown>).userAnchors = harvested;
+    } catch (harvestErr) {
+      console.warn('[generate-trip] Anchor harvest failed (non-blocking):', harvestErr);
+    }
+
     updatePayload.itinerary_data = { ...existingItData, days: [], status: 'generating' };
     console.log(`[generate-trip] Clearing existing itinerary_data.days for fresh generation`);
     
