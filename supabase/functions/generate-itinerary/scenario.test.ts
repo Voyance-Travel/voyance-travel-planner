@@ -71,7 +71,7 @@ Deno.test("scenario [tokyo-luxury-locked]: Universal Locking — locked Sukiyaba
 Deno.test("scenario [tokyo-luxury-locked]: Dietary — no peanut/satay/thai in any title", () => {
   expectDietaryCompliant(
     tokyoLuxuryLocked.day.activities,
-    tokyoLuxuryLocked.dietaryRestrictions,
+    [...tokyoLuxuryLocked.dietaryRestrictions],
     tokyoLuxuryLocked.scenario,
   );
 });
