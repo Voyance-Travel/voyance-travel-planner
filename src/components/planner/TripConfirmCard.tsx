@@ -97,6 +97,10 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, tran
     rows.push({ icon: <CheckCircle2 className="h-3.5 w-3.5" />, label: 'Locked days', value: `${structuredDayCount} day${structuredDayCount !== 1 ? 's' : ''} of your itinerary captured` });
   }
 
+  // Per-day captured details — show user exactly what we extracted so they
+  // can catch extraction misses BEFORE generation overwrites their intent.
+  const perDay = details.perDayActivities || [];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -148,6 +152,25 @@ export function TripConfirmCard({ details, onConfirm, onEdit, isGenerating, tran
         </div>
       )}
 
+
+      {/* Per-day captured specifics — surfaced so user can verify before generating */}
+      {perDay.length > 0 && (
+        <div className="rounded-lg bg-muted/40 p-2 space-y-1">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3" />
+            What we'll lock per day
+          </p>
+          {perDay.slice(0, 8).map((d) => (
+            <div key={d.dayNumber} className="text-[11px] leading-snug">
+              <span className="font-medium text-foreground">Day {d.dayNumber}: </span>
+              <span className="text-muted-foreground">{d.activities}</span>
+            </div>
+          ))}
+          {perDay.length > 8 && (
+            <p className="text-[10px] text-muted-foreground italic">+ {perDay.length - 8} more day{perDay.length - 8 !== 1 ? 's' : ''}…</p>
+          )}
+        </div>
+      )}
 
       {details.additionalNotes && (
         <div className="text-xs text-muted-foreground italic line-clamp-2">

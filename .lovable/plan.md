@@ -1,76 +1,120 @@
 ## Diagnosis
 
-User did "Just Tell Us" for Hong Kong → Chengdu → Beijing trip. Got 15 issues, traceable to 6 root causes:
+The core issue is that **Just Tell Us captures specific details, but only some of them become hard locks**. Several parts of the flow still treat user specifics as suggestions, and later generation/repair steps can overwrite them.
 
-### Root cause 1: Hong Kong silently dropped from cities[]
-`src/utils/cityNormalization.ts` line 29 lists `'hong kong'` in `COUNTRY_HINTS`. The filter at line 180 drops any city where `isRegionNotCity(name)` is true — so "Hong Kong" is filtered out as a country even when the AI correctly puts it in `cities[]`. The user's typo "Hing Kong" likely also failed AI extraction.
+What I found:
 
-### Root cause 2: Hotel address shows "Chengdu" on Beijing days
-In `action-generate-trip-day.ts` the `dayCityMap` is built from `trip_cities`, and `cityInfo.hotelName` / `cityInfo.hotelAddress` are passed as `hotelOverride`. Need to verify `dayCityMap` build (lines ~296-328) actually populates `hotelName`/`hotelAddress` per row from `trip_cities.hotel_selection`. If the second-city hotel wasn't entered in the chat, `hotelOverride` falls back to the trip-level hotel (Chengdu), and "Return to Hotel" inherits that address.
+1. **Extraction is prompt-based and fragile**
+   - `chat-trip-planner` asks the AI to fill `mustDoActivities`, `userConstraints`, and `perDayActivities`.
+   - If the AI extracts a specific restaurant/activity only into `mustDoActivities`, it is handled as a must-do prompt, not a guaranteed locked card.
 
-### Root cause 3: Panda visit at 10:45 PM
-No operating-hours guard for `nature` / wildlife / zoo categories. The repair pipeline only enforces operating hours for museums and dining. Need a category-aware late-time guard for nature/wildlife/outdoor activities (cap end time ≤ 18:00 or move to morning).
+2. **The confirmation UI hides most of the actual detail**
+   - `TripConfirmCard` shows a summary and “Locked days: N days captured,” but not the actual per-day locked items.
+   - So the user can confirm without seeing whether the system truly captured the specifics correctly.
 
-### Root cause 4: Train 7:30 PM + dinner 7:00 PM same evening
-The "departure buffer cleanup" (`action-generate-day.ts` line 1456) only fires when `isLastDay && _departureTime24` (final flight). For inter-city train/flight on `isLastDayInCity`, the same cleanup doesn't run. Need to extend the post-guard cleanup to inter-city departures using `nextLegTransport` + `transport_details.departureTime`.
+3. **`perDayActivities` is the only route that creates immutable locked cards**
+   - `compile-prompt.ts` parses `metadata.perDayActivities` into `lockedCards`.
+   - Those locked cards are later merged back into generated activities and protected from overlap/removal.
+   - But if a user says specifics without clean day/time formatting, those items may stay in `mustDoActivities` only and can be replaced, moved, or softened.
 
-### Root cause 5: Mid-day "Checkout from Hotel" on Day 4 in Beijing
-Beijing has 4 nights (Days 3–6). Day 4 is purely intra-city, yet a checkout appears. Possible causes: (a) `dayCityMap` mis-aligns Beijing days because of Hong Kong drop earlier, OR (b) the repair-day "CHECKOUT GUARANTEE" block (`repair-day.ts` line 1562) is firing when `isLastDayInCity` is true but the next city in the map is actually the same city (off-by-one in `dayCityMap![dayNumber]` boundary check). After fixing root cause 1, re-verify the boundary math.
+4. **Locked card persistence has a flag mismatch**
+   - Generated locked cards are marked `locked: true`, but `persist-day.ts` only saves `is_locked: act.isLocked || false`.
+   - That means Just Tell Us locked cards can be saved to the normalized activities table as not locked. This weakens later protection/regeneration behavior.
 
-### Root cause 6: TRB Hutong / Bottega repeated across days
-The `usedRestaurants` deduplication chain works within a city but the lunch-at-Bottega-three-times pattern suggests sanitizer's repeat detection is matching only on EXACT name (not substring/normalized). Also, the AI re-emits the same venue when prompt context lists it as "previously used" but doesn't have enough Beijing alternatives in `restaurantPool`. Tighten repeat detection + add a hard rule in compile-prompt that no restaurant may appear more than once per city.
+5. **Final cleanup happens after persistence**
+   - The flow persists the day around `action-generate-day.ts` line ~1240, then runs the final meal guard and departure cleanup after that.
+   - So final changes may exist in the JSON response but not be reflected in normalized persisted rows, and post-persist cleanup can still remove things without a final lock-integrity pass.
 
-### Root cause 7: Text quality — "Forbidden", "Yu's Family Kitchen ()", "Hing Kong"
-- Empty parentheses: sanitizer should strip `\s*\(\s*\)` from titles/locations.
-- Truncated proper nouns: add a known-name completer for landmark words ("Forbidden" → "Forbidden City", "Tiananmen" → "Tiananmen Square", etc.) — or detect a one-word title that's a known partial and reject/fix.
-- "Hing Kong" → "Hong Kong" autocorrect in the chat-trip-planner system prompt's spell-check section, plus add a small typo map in city normalization.
-
----
+6. **Transport selector defaults to flight in the UI**
+   - Even when extraction includes `transportFromPrevious`, `TripChatPlanner` initializes all inter-city transports to `flight`, which can override the extracted train/bus/car/ferry intent unless the user manually changes it.
 
 ## Plan
 
-### 1. `src/utils/cityNormalization.ts`
-- Remove `'hong kong'` from `COUNTRY_HINTS`. It's a city, not a country, in this context. (Singapore is already absent and works.) If needed, keep a separate "city-states" set that is allowed.
-- Add typo map: `'hing kong' → 'Hong Kong'`, `'being' → 'Beijing'`, applied in `cleanCandidate`.
+### 1. Make “specific user input” become locked anchors by default
+Update the Just Tell Us extraction/persistence path so anything the user specifically names is converted into structured lock data, not just prompt text.
 
-### 2. `supabase/functions/chat-trip-planner/index.ts`
-- Strengthen system prompt: "If the user obviously misspells a major city (e.g. 'Hing Kong', 'Being', 'Tokio'), silently correct to the standard English name in destination, cities[].name, and hotelName."
-- Reinforce: "Hong Kong, Singapore, Monaco, Vatican City are CITIES — always include them in cities[] with nights, never treat as 'country only'."
+- Add a deterministic normalization helper for chat-extracted details.
+- Inputs:
+  - `details.perDayActivities`
+  - `details.mustDoActivities`
+  - `details.userConstraints`
+- Output:
+  - expanded `perDayActivities` whenever day references exist
+  - a new `lockedUserRequests` metadata array for named venues/events without a clear day
 
-### 3. `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-- In the `dayCityMap` builder (~lines 296-328), confirm `hotelName` and `hotelAddress` are read from `trip_cities.hotel_selection` (jsonb) per row and never fall back to the previous row's hotel. Log when missing.
-- For days where `cityInfo.hotelName` is missing, do NOT fall back to `tripHotelName`/`tripHotelAddress` — instead pass `hotelOverride` as undefined so the prompt instructs the AI to use neutral wording (no hard-coded Chengdu address bleeding into Beijing days).
+Behavior:
+- If the user says “Day 2 dinner at X,” that becomes a locked Day 2 item.
+- If the user says “we must visit pandas,” that becomes a mandatory anchor, not a replaceable suggestion.
+- If no day/time is known, it remains unscheduled but marked as user-specified and must be placed once.
 
-### 4. `supabase/functions/generate-itinerary/action-generate-day.ts` — departure buffer cleanup
-- Extend the existing post-guard cleanup at line 1456 to also fire when `isLastDayInCity && nextLegTransport` is set and a `transport_details.departureTime` is known. Remove any meal/activity scheduled within the buffer window before train/flight departure.
+### 2. Strengthen the backend prompt compiler to consume request-level per-day data
+In `compile-prompt.ts`, currently `perDayActivities` is read from trip metadata only.
 
-### 5. `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — wildlife/nature guard
-- Add new rule: activities with `category` in `{nature, wildlife, outdoor, zoo, animal}` OR title containing `panda|zoo|safari|aquarium|botanical garden` must end by 18:00. If scheduled later, move to next morning slot (08:30–11:00). Mirror the museum guard pattern.
+Change it to prefer:
+1. `params.perDayActivities`
+2. then `metadata.perDayActivities`
 
-### 6. `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — checkout guarantee scope
-- Tighten line 1563 condition: `needsCheckout = !isHotelChange && (isLastDay || (isLastDayInCity && !isTransitionDay && nextCityName !== currentCityName))`. Add explicit same-city compare to prevent false positive on intra-city days.
+This makes the day-generation call resilient even if metadata shape or frontend casting is imperfect.
 
-### 7. `supabase/functions/generate-itinerary/sanitization.ts` — name/text quality
-- Strip empty parentheses: `.replace(/\s*\(\s*\)/g, '')`.
-- Add landmark name completer for common truncations: `Forbidden` → `Forbidden City`, `Great Wall` → `Great Wall of China` (only when standalone title), `Temple of Heaven` etc. Drive from a small known-landmarks map.
-- Tighten cross-day repeat detection: normalize venue names (lowercase, strip punctuation, drop generic words like "restaurant"/"cafe") before comparing against `usedRestaurants`. If a duplicate is detected and a `restaurantPool` alternative exists, swap it during sanitize.
+### 3. Fix locked-card persistence
+In `persist-day.ts`, save an activity as locked if either flag is true:
 
-### 8. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — anti-repeat rule
-- Add a hard rule in the per-day prompt: "Do NOT use any restaurant listed in PREVIOUSLY USED RESTAURANTS. Each Beijing/Chengdu/Hong Kong restaurant may appear AT MOST ONCE in the entire trip." Surface `usedRestaurants` already passed to the function more prominently.
+```ts
+is_locked: act.isLocked || act.locked || false
+```
 
----
+Also preserve `lockedSource`/lock metadata in the activity payload if the schema supports metadata-like fields; if not, keep it in itinerary JSON and use `is_locked` for database protection.
 
-## Files to be edited
-1. `src/utils/cityNormalization.ts`
-2. `supabase/functions/chat-trip-planner/index.ts`
-3. `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-4. `supabase/functions/generate-itinerary/action-generate-day.ts`
-5. `supabase/functions/generate-itinerary/pipeline/repair-day.ts`
-6. `supabase/functions/generate-itinerary/sanitization.ts`
-7. `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+### 4. Add a final post-cleanup lock integrity pass
+Move or repeat the lock verification after all late guards:
 
-No DB migrations. Edge functions auto-deploy.
+- meal final guard
+- terminal cleanup
+- placeholder dining cleanup
+- departure-buffer cleanup
 
-## Out of scope
-- Spa-on-Beijing-days (#15) — falls under interest-distribution; better addressed in a later pass on personalization spread across multi-city. Will note in code but not block fix shipment.
-- Trip length mismatch (5 vs 6 days) — that's user-typed description vs computed dates; not a bug.
+This ensures locked user-provided cards cannot be removed by final cleanup. If a final guard creates a conflict, the AI-generated/fallback activity should be removed, not the user’s locked item.
+
+### 5. Persist only after the final itinerary shape is complete
+Ensure final normalized activities are persisted after all cleanup and lock verification. The database should reflect the exact itinerary returned to the UI.
+
+This fixes the “it showed one thing / saved another thing” class of overwrite bugs.
+
+### 6. Respect extracted inter-city transport in the confirmation UI
+In `TripChatPlanner`, initialize `cityTransports` from extracted city data first:
+
+- `details.cities[i + 1].transportFromPrevious`
+- fallback to `details.cityTransports[i]`
+- only default to `flight` when nothing was specified
+
+This prevents “I said train, but the city breakdown defaults to flight.”
+
+### 7. Make the confirmation card show what is actually locked
+Update `TripConfirmCard` to show a compact “Captured specifics” section:
+
+- per-day locked items, if present
+- must-do anchors, if present
+- transport modes between cities
+
+This lets the user catch extraction misses before generation.
+
+### 8. Add defensive tests/fixtures for Just Tell Us preservation
+Add focused tests or lightweight fixtures for:
+
+- Day-specific restaurant stays on the correct day
+- Time-specific event keeps exact time
+- Multi-city train remains train in confirm and persistence
+- Locked cards persist with `is_locked = true`
+- Final cleanup does not remove locked items
+
+## Files to update
+
+- `src/components/planner/TripChatPlanner.tsx`
+- `src/components/planner/TripConfirmCard.tsx`
+- `src/pages/Start.tsx`
+- `src/utils/buildPerDayActivitiesFromMustDo.ts` or a new shared chat-intent normalizer
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+- `supabase/functions/generate-itinerary/action-generate-day.ts`
+- `supabase/functions/generate-itinerary/pipeline/persist-day.ts`
+
+No database migration is expected unless we decide to add a dedicated lock metadata column. The main fix is to treat existing user-specific data as immutable throughout the current pipeline.
