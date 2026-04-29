@@ -126,6 +126,96 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
   });
 }
 
+/**
+ * ANCHORS-WIN FINAL PASS (pure, testable).
+ *
+ * Restores any user-provided anchors (from chat / form / multi-city /
+ * manual paste) that earlier cleanup steps may have dropped, renamed,
+ * or moved. User intent always wins over AI cleanup.
+ *
+ * Returns a NEW array of days (input is not mutated at the top level,
+ * though existing activity objects within matched days ARE mutated for
+ * lock reaffirmation — matching production behavior).
+ */
+export function applyAnchorsWin(
+  itineraryDays: any[],
+  userAnchors: Array<Record<string, any>>
+): { days: any[]; restored: number; reaffirmed: number } {
+  if (!Array.isArray(itineraryDays) || itineraryDays.length === 0) {
+    return { days: itineraryDays || [], restored: 0, reaffirmed: 0 };
+  }
+  if (!Array.isArray(userAnchors) || userAnchors.length === 0) {
+    return { days: itineraryDays, restored: 0, reaffirmed: 0 };
+  }
+
+  const days = itineraryDays.map((d) => ({ ...d, activities: Array.isArray(d.activities) ? [...d.activities] : [] }));
+  let restored = 0;
+  let reaffirmed = 0;
+
+  const fingerprint = (a: any) =>
+    `${a.lockedSource || ''}|${(a.title || a.name || '').toLowerCase().trim()}`;
+
+  for (const anchor of userAnchors) {
+    const targetDayNum = (anchor.dayNumber as number) || 0;
+    if (targetDayNum < 1 || targetDayNum > days.length) continue;
+    const day = days[targetDayNum - 1];
+    if (!day || !Array.isArray(day.activities)) continue;
+    const anchorFp = fingerprint(anchor);
+    const existing = day.activities.find((a: any) => {
+      if ((a.locked || a.isLocked) && fingerprint(a) === anchorFp) return true;
+      const aTitle = (a.title || a.name || '').toLowerCase();
+      const lockTitle = (anchor.title || '').toLowerCase();
+      return lockTitle && aTitle && (aTitle.includes(lockTitle) || lockTitle.includes(aTitle));
+    });
+    if (!existing) {
+      day.activities.push({
+        id: `anchor-restore-d${targetDayNum}-${restored}-${Date.now()}`,
+        title: anchor.title,
+        name: anchor.title,
+        startTime: anchor.startTime || undefined,
+        endTime: anchor.endTime || undefined,
+        category: anchor.category || 'activity',
+        venue_name: anchor.venueName || undefined,
+        location: anchor.venueName ? { name: anchor.venueName, address: '' } : undefined,
+        cost: { amount: 0, currency: 'USD' },
+        locked: true,
+        isLocked: true,
+        lockedSource: anchor.lockedSource,
+        anchorSource: anchor.source,
+        durationMinutes: 60,
+      });
+      restored++;
+    } else {
+      // Reaffirm lock + restore drifted title/time
+      existing.locked = true;
+      existing.isLocked = true;
+      if (anchor.title && existing.title !== anchor.title) {
+        existing.title = anchor.title;
+        existing.name = anchor.title;
+      }
+      if (anchor.startTime && existing.startTime !== anchor.startTime) {
+        existing.startTime = anchor.startTime;
+        if (anchor.endTime) existing.endTime = anchor.endTime;
+      }
+      reaffirmed++;
+    }
+  }
+
+  if (restored > 0) {
+    // Re-sort each day after restoration
+    for (const d of days) {
+      if (Array.isArray(d.activities)) {
+        d.activities.sort((a: any, b: any) =>
+          parseTimeToMinutes(a.startTime || a.start_time) - parseTimeToMinutes(b.startTime || b.start_time)
+        );
+      }
+    }
+  }
+
+  return { days, restored, reaffirmed };
+}
+
+
 export async function handleSaveItinerary(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
   const { tripId, itinerary } = params;
@@ -318,72 +408,19 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   }
 
   // ── STEP 2.5: ANCHORS-WIN FINAL PASS ─────────────────────────────
-  // Restore any user-provided anchors (from chat / form / multi-city /
-  // manual paste) that earlier cleanup steps may have dropped, renamed,
-  // or moved. User intent always wins over AI cleanup.
+  // Restore any user-provided anchors that earlier cleanup steps may have
+  // dropped, renamed, or moved. User intent always wins over AI cleanup.
   try {
     const tripMeta = (trip as any).metadata as Record<string, unknown> | null;
     const userAnchors = Array.isArray(tripMeta?.userAnchors)
       ? (tripMeta!.userAnchors as Array<Record<string, any>>)
       : [];
     if (userAnchors.length > 0 && itineraryDays.length > 0) {
-      let restored = 0;
-      const fingerprint = (a: any) =>
-        `${a.lockedSource || ''}|${(a.title || a.name || '').toLowerCase().trim()}`;
-      for (const anchor of userAnchors) {
-        const targetDayNum = (anchor.dayNumber as number) || 0;
-        if (targetDayNum < 1 || targetDayNum > itineraryDays.length) continue;
-        const day = itineraryDays[targetDayNum - 1];
-        if (!day || !Array.isArray(day.activities)) continue;
-        const anchorFp = fingerprint(anchor);
-        const existing = day.activities.find((a: any) => {
-          if ((a.locked || a.isLocked) && fingerprint(a) === anchorFp) return true;
-          const aTitle = (a.title || a.name || '').toLowerCase();
-          const lockTitle = (anchor.title || '').toLowerCase();
-          return lockTitle && aTitle && (aTitle.includes(lockTitle) || lockTitle.includes(aTitle));
-        });
-        if (!existing) {
-          day.activities.push({
-            id: `anchor-restore-d${targetDayNum}-${restored}-${Date.now()}`,
-            title: anchor.title,
-            name: anchor.title,
-            startTime: anchor.startTime || undefined,
-            endTime: anchor.endTime || undefined,
-            category: anchor.category || 'activity',
-            venue_name: anchor.venueName || undefined,
-            location: anchor.venueName ? { name: anchor.venueName, address: '' } : undefined,
-            cost: { amount: 0, currency: 'USD' },
-            locked: true,
-            isLocked: true,
-            lockedSource: anchor.lockedSource,
-            anchorSource: anchor.source,
-            durationMinutes: 60,
-          });
-          restored++;
-          console.warn(`[save-itinerary] 🔒 ANCHOR RESTORE: re-injected "${anchor.title}" on day ${targetDayNum}`);
-        } else {
-          // Reaffirm lock + restore drifted title/time
-          existing.locked = true;
-          existing.isLocked = true;
-          if (anchor.title && existing.title !== anchor.title) {
-            existing.title = anchor.title;
-            existing.name = anchor.title;
-          }
-          if (anchor.startTime && existing.startTime !== anchor.startTime) {
-            existing.startTime = anchor.startTime;
-            if (anchor.endTime) existing.endTime = anchor.endTime;
-          }
-        }
-      }
-      if (restored > 0) {
-        // Re-sort each day after restoration
-        for (const d of itineraryDays) {
-          if (Array.isArray(d.activities)) {
-            d.activities.sort((a: any, b: any) => parseTimeToMinutes(a.startTime || a.start_time) - parseTimeToMinutes(b.startTime || b.start_time));
-          }
-        }
-        (itinerary as any).days = itineraryDays;
-        console.log(`[save-itinerary] Anchors-win: restored ${restored} anchor(s) before save`);
+      const result = applyAnchorsWin(itineraryDays, userAnchors);
+      itineraryDays = result.days;
+      (itinerary as any).days = itineraryDays;
+      if (result.restored > 0) {
+        console.log(`[save-itinerary] Anchors-win: restored ${result.restored} anchor(s), reaffirmed ${result.reaffirmed} before save`);
       }
     }
   } catch (anchorErr) {

@@ -1,132 +1,113 @@
-# Patch 3 Product Gaps Surfaced by Tests
+# Scenario Coverage: Anchor-Merge + Golden-Fixture Tests
 
-Three real behaviors in the generation pipeline are too permissive or incomplete. Tests currently pin them to the wrong behavior — we'll fix the logic, then tighten the tests.
+We have 376 unit tests proving each rule works in isolation. This plan adds **scenario tests** that prove the rules **compose correctly** — the gap that lets a "luxury Tokyo trip with peanut allergy + locked sushi reservation" silently break.
 
----
-
-## 1. Budget Conflict Detection (`budget-constraints.ts`)
-
-**Gap:** `deriveBudgetIntent` flags `(highTier + frugal)` and `(lowTier + luxurySeeker)` but misses two symmetrical cases:
-- `lowTier + splurge` (budget tier traveler with strong splurge appetite)
-- `highTier + budgetConscious` (already partially covered, keep it)
-
-**Why it matters:** A budget-tier user with a splurge trait gets categorized as plain `splurge_forward` with no conflict warning — the AI then generates expensive activities that bust the tier ceiling.
-
-**Fix (lines 119–131):** Add a 4th branch:
-```ts
-} else if (isLowTier && isSplurge) {
-  conflict = true;
-  conflictDetails = `Budget tier with strong splurge trait (${budget}) - aspirational budget traveler, prioritize 1-2 high-ROI splurges`;
-}
-```
-
-**Test update** (`budget-constraints.test.ts`): Flip the "low tier + splurge" assertion from `conflict === false` to `conflict === true` with the expected detail string.
+Two test layers, both pure (no AI calls, no DB, no network):
 
 ---
 
-## 2. Dietary Fuzzy Matching (`dietary-rules.ts`)
+## Layer 1: Anchor-Merge Test Suite
 
-**Gap:** `matchDietaryRule` strips `"allergic to "` only as an exact prefix. Inputs like `"I'm allergic to peanuts"` or `"peanut allergy"` fall through:
-- `"peanut allergy"` → strips trailing `"allergy"` → `"peanut "` (trailing space) → no match
-- `"allergic to peanuts"` → prefix match works, becomes `"peanuts"` → but `"peanuts"` ≠ `"peanut-free"` key, and substring loop misses it (no key contains `"peanuts"`)
+**Target:** `action-save-itinerary.ts` — the "anchors-win final pass" (lines 320-391). The single most critical untested module: it's the last gate before persistence and enforces the **Universal Locking Protocol**.
 
-**Fix (lines 152–162):** Strengthen the normalization pipeline:
+**Refactor first (small, safe):** Extract the anchor-restore loop into a pure helper exported from the same file:
+
 ```ts
-const normalized = restriction.toLowerCase().trim()
-  .replace(/^i'?m /, '')           // "i'm allergic to..."
-  .replace(/^i (have|am) /, '')    // "i have a peanut allergy"
-  .replace(/^a /, '')               // "a peanut allergy"
-  .replace(/allergic to /g, '')    // anywhere, not just prefix
-  .replace(/intolerant to /g, '')
-  .replace(/ allergy$/, '')        // "peanut allergy" (with space)
-  .replace(/allergy$/, '')
-  .replace(/ intolerance$/, '')
-  .replace(/intolerance$/, '')
-  .replace(/-free$/, '')
-  .replace(/_free$/, '')
-  .replace(/ free$/, '')
-  .replace(/^no /, '')
-  .replace(/^no-/, '')
-  .replace(/s$/, '')                // singularize: "peanuts" → "peanut"
-  .trim();
+export function applyAnchorsWin(
+  itineraryDays: any[],
+  userAnchors: Array<Record<string, any>>
+): { days: any[]; restored: number; reaffirmed: number };
 ```
 
-Also add a singular→canonical alias map for common allergens so `"peanut"` resolves to the `peanut-free` rule, `"shellfish"` → `shellfish-free`, etc.:
-```ts
-const allergenAliases: Record<string, string> = {
-  'peanut': 'peanut-free',
-  'tree nut': 'nut-free',
-  'nut': 'nut-free',
-  'shellfish': 'shellfish-free',
-  'fish': 'fish-free',
-  'egg': 'egg-free',
-  'soy': 'soy-free',
-  'wheat': 'gluten-free',
-  'gluten': 'gluten-free',
-  'dairy': 'dairy-free',
-  'milk': 'dairy-free',
-};
-if (allergenAliases[normalized]) return DIETARY_RULES[allergenAliases[normalized]];
-```
+The handler keeps calling it; tests call it directly. No DB, no Supabase client.
 
-Insert this lookup **before** the substring fuzzy loop so canonical matches win over loose substring hits.
+**New file:** `supabase/functions/generate-itinerary/action-save-itinerary.test.ts`
 
-**Test update** (`dietary-rules.test.ts`): Convert the documented-gap tests to positive assertions:
-- `matchDietaryRule("allergic to peanuts")` → `peanut-free` rule
-- `matchDietaryRule("peanut allergy")` → `peanut-free` rule
-- `matchDietaryRule("I'm lactose intolerant")` → `dairy-free` rule
+**Test cases (8):**
+1. **No anchors** → days returned unchanged, restored=0
+2. **Anchor present + matching activity exists** → existing activity gets `locked=true`, title/time restored if drifted
+3. **Anchor present + activity dropped by AI cleanup** → re-injected with correct day, title, time, `lockedSource`
+4. **Anchor with `dayNumber` out of range** → silently skipped, no crash
+5. **Fingerprint match (lockedSource + title)** → reaffirms lock without duplicating
+6. **Fuzzy title match (anchor "Sukiyabashi Jiro" matches activity "Dinner at Sukiyabashi Jiro")** → reaffirms, doesn't duplicate
+7. **Multiple anchors across multiple days** → each restored on correct day, activities re-sorted by `startTime` after restoration
+8. **Drifted title + drifted time** → both restored to anchor values, lock reaffirmed
 
 ---
 
-## 3. Timezone Strict Matching (`jet-lag-calculator.ts`)
+## Layer 2: Golden-Fixture Scenario Tests
 
-**Gap:** `resolveTimezone` falls back to `normalized.includes(city) || city.includes(normalized)` against every key. Short keys like `"la"`, `"dc"`, `"nyc"` substring-match unrelated input (`"unmappedcityname"` contains `"dc"` → returns `America/New_York`).
+**Target:** Compose the validation + repair stack against realistic full-day inputs to prove rules don't conflict when stacked.
 
-**Fix (lines 184–189):** Replace permissive substring with **whole-word** matching, plus require a minimum key length for the reverse direction:
-```ts
-// Whole-word match only (e.g., "New York City" → matches "new york",
-// but "unmappedcityname" does NOT match "dc")
-const tokens = normalized.split(/[\s,.\-_/]+/).filter(Boolean);
-const tokenSet = new Set(tokens);
+**Approach:** Build 5 hand-crafted day fixtures (each ~10-15 activities, realistic) representing the most common production shapes. Run `validateDay()` from `pipeline/validate-day.ts` against each fixture and assert specific outcomes per Core memory rules.
 
-for (const [city, tz] of Object.entries(CITY_TIMEZONE_MAP)) {
-  // Forward: every token of city key appears as a whole token in input
-  const cityTokens = city.split(/\s+/);
-  if (cityTokens.every(t => tokenSet.has(t))) return tz;
-  // Reverse: input is a strict substring of multi-word city key (e.g. "york" → "new york")
-  // but only allow this for keys with ≥2 words AND input length ≥ 4 chars
-  if (cityTokens.length >= 2 && normalized.length >= 4 && city.includes(normalized)) {
-    return tz;
-  }
-}
-return null;
-```
+**New directory:** `supabase/functions/generate-itinerary/__fixtures__/`
+- `tokyo-luxury-locked.ts`     — luxury, peanut allergy, 2 locked dinners, full day
+- `paris-budget-vegetarian.ts` — budget tier, vegetarian, dense schedule
+- `rome-arrival-day.ts`        — flight arrival 14:00, hotel check-in, first-night dinner only
+- `lisbon-departure-day.ts`    — flight 19:00 dep → 180m buffer, no late activities
+- `barcelona-multicity.ts`     — middle leg, hotel-change day, train transit
 
-**Test update** (`jet-lag-calculator.test.ts`): Restore the original strict assertion:
-```ts
-assertEquals(resolveTimezone("qqqxxxzzzunmappedcityname"), null);
-```
-Also add a positive coverage test: `resolveTimezone("New York City")` still returns `America/New_York`.
+**New file:** `supabase/functions/generate-itinerary/scenario.test.ts`
+
+Each fixture exports a typed `ScenarioFixture { input: ValidateDayInput; expectations: { ... } }` so the test runner can iterate uniformly.
+
+**Test cases (5 scenarios × 5-7 assertions = ~30 tests):**
+
+For every fixture, assert against the **Core memory rules**:
+- **Meal Rules:** exactly one dinner ≥ 18:00, 3 meals on full days, no chain restaurants
+- **Universal Locking:** every `isLocked=true` activity in input survives validation with no `MUTATION_OF_LOCKED` failure code
+- **Density Protocol:** no dead gaps > 90m flagged on full days; min 3 paid + 2 free
+- **Logistics Protocol:** no activities scheduled within 180m flight / 120m train departure buffer
+- **Dietary Enforcement:** no `avoidIngredients`/`avoidCuisines` from active dietary rules appear in titles/venues
+- **Cost Integrity:** no activity has AI-estimated price (all have either `cost.amount` from `cost_reference` or `cost.amount=0`)
+- **Believable Human Day:** mandatory midday hotel touch-back, explicit "Return to Hotel" after last non-stay activity (where applicable)
+
+Specific per-scenario asserts:
+- **Tokyo luxury:** locked sushi dinner survives + no peanut/satay/thai cuisine in any activity + at least 1 Michelin-tier dinner present
+- **Paris budget vegetarian:** zero `avoidCuisines` (steakhouse/bbq) + zero `avoidIngredients` (meat/fish) + dense 5+ activity day passes
+- **Rome arrival:** no activities before 15:30 (90m post-arrival buffer), exactly 1 dinner, no breakfast required
+- **Lisbon departure:** no activity starts after 16:00 (19:00 - 180m), no dinner required, "Return to Hotel" before transfer
+- **Barcelona multi-city:** hotel-change handled (old hotel checkout < new hotel check-in), train buffer respected
 
 ---
 
-## Verification
+## Technical Details
 
-1. Run edge-function suite: `deno test --allow-env --allow-net --allow-read supabase/functions/generate-itinerary/`
-2. Run frontend suite: `bunx vitest run`
-3. Confirm 373+ tests still pass with the updated assertions reflecting the corrected behavior.
+**Stack:**
+- Deno test runner (same as existing edge-function suite)
+- Pure imports, no Supabase client, no fetch, no env vars
+- Fixtures are TypeScript files (not JSON) so we get type-checking against `ValidateDayInput` and `Activity`
+- Helper `assertions.ts` co-located with fixtures for shared predicates: `expectExactlyOneDinner`, `expectNoChainRestaurants`, `expectLockedSurvived`, etc.
 
-## Files Changed
+**File layout:**
+```text
+supabase/functions/generate-itinerary/
+├── action-save-itinerary.ts         (extract applyAnchorsWin)
+├── action-save-itinerary.test.ts    (NEW — 8 tests)
+├── scenario.test.ts                  (NEW — ~30 tests)
+└── __fixtures__/
+    ├── assertions.ts                 (shared assertion helpers)
+    ├── tokyo-luxury-locked.ts
+    ├── paris-budget-vegetarian.ts
+    ├── rome-arrival-day.ts
+    ├── lisbon-departure-day.ts
+    └── barcelona-multicity.ts
+```
 
-- `supabase/functions/generate-itinerary/budget-constraints.ts` (add 4th conflict branch)
-- `supabase/functions/generate-itinerary/budget-constraints.test.ts` (flip assertion)
-- `supabase/functions/generate-itinerary/dietary-rules.ts` (normalization + allergen aliases)
-- `supabase/functions/generate-itinerary/dietary-rules.test.ts` (positive fuzzy assertions)
-- `supabase/functions/generate-itinerary/jet-lag-calculator.ts` (whole-word matching)
-- `supabase/functions/generate-itinerary/jet-lag-calculator.test.ts` (strict null + new positive test)
+**Verification:**
+1. `deno test --allow-env --allow-net --allow-read supabase/functions/generate-itinerary/`
+2. `bunx vitest run`
+3. Target: ~414 total tests passing (376 + 8 anchor + 30 scenario)
 
 ## Out of Scope
 
-- Production-grade NLP for dietary input (use a real allergen taxonomy library)
-- Full IANA timezone database (current static map is fine for top destinations)
-- AI-prompt changes to surface the new `lowTier + splurge` conflict in user-facing copy — handled by existing `conflictDetails` plumbing
+- Live HTTP smoke tests (would need credits + .env, low ROI vs. fixtures)
+- AI prompt-output tests (non-deterministic, separate concern)
+- Frontend rendering of itinerary days (covered by component tests in a separate effort)
+- Mocking the Supabase client end-to-end through `handleSaveItinerary` (the refactor lets us skip this — we test the pure helper)
+
+## Risks
+
+- **Refactor risk:** Extracting `applyAnchorsWin` from `handleSaveItinerary` must preserve identical behavior. Mitigation: the function is already self-contained inside a try/catch block — extraction is a copy-paste with explicit param threading.
+- **Fixture drift:** As rules evolve, fixtures will need updates. Mitigation: each assertion references the exact Core memory rule it enforces, making intentional changes traceable.
