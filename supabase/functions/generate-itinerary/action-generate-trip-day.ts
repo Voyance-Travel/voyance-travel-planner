@@ -1866,6 +1866,27 @@ async function _handleGenerateTripDayInner(
     newUnlocked = Math.min(newUnlocked, 2);
   }
 
+  // ── ANCHOR GUARD (canonical pre-write enforcement) ──────────────────
+  // Restore any user anchors the AI may have dropped, renamed, or moved.
+  // Runs at every persistence boundary in the chain. User intent wins.
+  try {
+    const userAnchors = Array.isArray((meta as any).userAnchors)
+      ? ((meta as any).userAnchors as Array<Record<string, any>>)
+      : [];
+    if (userAnchors.length > 0) {
+      const guarded = applyAnchorsWin(updatedDays, userAnchors);
+      if (guarded.restored > 0 || guarded.reaffirmed > 0) {
+        console.log(`[generate-trip-day] 🔒 Anchor guard (day ${dayNumber}): restored ${guarded.restored}, reaffirmed ${guarded.reaffirmed}`);
+      }
+      updatedDays.length = 0;
+      updatedDays.push(...guarded.days);
+      partialItinerary.days = updatedDays;
+    }
+  } catch (anchorErr) {
+    console.warn('[generate-trip-day] Anchor guard failed (non-blocking):', anchorErr);
+  }
+
+
   // LAYER 4: Verify last day exists when generation is complete
   if (dayNumber >= totalDays && startDate && endDate) {
     const lastExpectedDate = endDate;
