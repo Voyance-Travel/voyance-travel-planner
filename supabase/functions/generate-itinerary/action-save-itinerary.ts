@@ -133,7 +133,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // Verify trip access
   const { data: trip, error: tripError } = await supabase
     .from('trips')
-    .select('user_id, start_date, end_date, flight_selection')
+    .select('user_id, start_date, end_date, flight_selection, metadata')
     .eq('id', tripId)
     .single();
 
