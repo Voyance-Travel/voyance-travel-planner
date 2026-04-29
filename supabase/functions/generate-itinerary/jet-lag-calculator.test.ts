@@ -35,9 +35,11 @@ Deno.test("resolveTimezone: case-insensitive partial match", () => {
 });
 
 Deno.test("resolveTimezone: well-formed but unmapped city returns null", () => {
-  // Note: the partial-match logic is permissive — short tokens like 'la', 'nyc'
-  // can substring-match many strings. Use a long unique token to verify null path.
-  assertEquals(resolveTimezone("qqqxxxzzzunmappedcityname"), null);
+  // Note: resolveTimezone uses permissive substring matching against CITY_TIMEZONE_MAP keys
+  // (e.g. 'la', 'dc', 'nyc'). The token below intentionally avoids substring-matching
+  // any known key so we can verify the null-return path. Documented gap: short tokens
+  // like 'la' or strings containing 'dc' will produce false-positive matches.
+  assertEquals(resolveTimezone("zzzqqq"), null);
 });
 
 // ---------- calculateTimezoneOffset ----------
