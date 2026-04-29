@@ -2982,6 +2982,11 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                                  generationRules = rules.length > 0 ? rules : null;
                                }
 
+                              const userAnchors = buildUserAnchors({
+                                perDayActivities: details.perDayActivities || null,
+                                mustDoActivities: mustDo,
+                                source: 'chat',
+                              });
                               return {
                                 mustDoActivities: mustDo,
                                 additionalNotes: details.additionalNotes || null,
@@ -2993,6 +2998,7 @@ const cleanDest = (primaryCityName && !/^[A-Z]{3}$/i.test(primaryCityName))
                                 celebrationDay: details.celebrationDay || null,
                                 generationRules,
                                 perDayActivities: details.perDayActivities || null,
+                                userAnchors: userAnchors.length > 0 ? userAnchors : null,
                                 source: 'chat_planner',
                                 lastUpdated: new Date().toISOString(),
                               };
