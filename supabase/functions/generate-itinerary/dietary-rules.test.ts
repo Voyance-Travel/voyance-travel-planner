@@ -35,12 +35,19 @@ Deno.test("matchDietaryRule: 'no X' phrasing normalization", () => {
 });
 
 Deno.test("matchDietaryRule: explicit '-free' forms always match", () => {
-  // Documented happy path: callers should pass canonical forms like "peanut-free".
-  // Free-form phrases like "allergic to peanuts" do NOT currently match
-  // (known limitation in the fuzzy matcher).
   assert(matchDietaryRule("peanut-free") !== null);
   assert(matchDietaryRule("shellfish-free") !== null);
   assert(matchDietaryRule("nut-free") !== null);
+});
+
+Deno.test("matchDietaryRule: free-form allergy phrasing matches canonical rules", () => {
+  // Patched: free-form input now resolves to canonical rules.
+  assertEquals(matchDietaryRule("allergic to peanuts"), DIETARY_RULES["peanut-free"]);
+  assertEquals(matchDietaryRule("peanut allergy"), DIETARY_RULES["peanut-free"]);
+  assertEquals(matchDietaryRule("I'm allergic to peanuts"), DIETARY_RULES["peanut-free"]);
+  assertEquals(matchDietaryRule("I have a peanut allergy"), DIETARY_RULES["peanut-free"]);
+  assertEquals(matchDietaryRule("shellfish allergy"), DIETARY_RULES["shellfish-free"]);
+  assertEquals(matchDietaryRule("I'm lactose intolerant"), DIETARY_RULES["dairy-free"]);
 });
 
 Deno.test("matchDietaryRule: aliases (lactose → dairy-free, celiac → gluten-free)", () => {
