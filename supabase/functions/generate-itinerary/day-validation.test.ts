@@ -48,10 +48,11 @@ Deno.test("filterChainRestaurants: removes chains, keeps independents", () => {
     { title: "Dinner at Septime", venue_name: "Septime", category: "DINING" },
     { title: "Coffee at Café de Flore", venue_name: "Café de Flore", category: "DINING" },
   ];
-  const result = filterChainRestaurants(acts as any);
-  assertEquals(result.length, 2);
+  const { filtered, removedChains } = filterChainRestaurants(acts as any);
+  assertEquals(filtered.length, 2);
+  assertEquals(removedChains.length, 1);
   assertEquals(
-    result.every((a: any) => !a.venue_name.toLowerCase().includes(sampleChain)),
+    filtered.every((a: any) => !a.venue_name.toLowerCase().includes(sampleChain)),
     true,
   );
 });
@@ -61,8 +62,9 @@ Deno.test("filterChainRestaurants: non-dining activities pass through unchanged"
     { title: "Visit Louvre", venue_name: "Louvre", category: "MUSEUM" },
     { title: "Walk Seine", venue_name: "Seine", category: "EXPLORE" },
   ];
-  const result = filterChainRestaurants(acts as any);
-  assertEquals(result.length, 2);
+  const { filtered, removedChains } = filterChainRestaurants(acts as any);
+  assertEquals(filtered.length, 2);
+  assertEquals(removedChains.length, 0);
 });
 
 // ---------- detectMealSlots ----------

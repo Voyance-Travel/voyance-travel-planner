@@ -118,7 +118,7 @@ Deno.test("applyFallbackToActivity: rewrites title, venue, location, cost", () =
 
 Deno.test("applyFallbackToActivity: clamps price to dining config range", () => {
   const activity: any = { title: "Lunch", location: null, cost: { amount: 0 } };
-  const fallback = { name: "X", address: "Y", price: 200 };
+  const fallback = { name: "X", address: "Y", description: "test", price: 200 };
   const used = new Set<string>();
   const diningConfig: any = { priceRange: { lunch: [10, 40] } };
 
