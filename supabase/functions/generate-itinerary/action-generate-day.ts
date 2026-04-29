@@ -1492,6 +1492,58 @@ export async function handleGenerateDay(
       }
     }
 
+    // =======================================================================
+    // FINAL LOCK INTEGRITY PASS — Restore any locked card removed by late
+    // cleanup steps (meal guard, terminal cleanup, dining-address cleanup,
+    // departure-buffer cleanup). User-specified anchors must NEVER be lost.
+    // Then re-persist so the DB matches the response.
+    // =======================================================================
+    if (lockedCards.length > 0) {
+      let restored = 0;
+      for (const lc of lockedCards) {
+        const exists = normalizedActivities.find(
+          (a: any) => (a.locked || a.isLocked) && a.lockedSource === lc.lockedSource
+        );
+        if (!exists) {
+          restored++;
+          console.log(`[FINAL-LOCK-RESTORE] Re-injecting dropped locked card: "${lc.title}" at ${lc.start_time}`);
+          normalizedActivities.push({
+            id: `day${dayNumber}-final-locked-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            title: lc.title, name: lc.title,
+            startTime: lc.start_time || undefined, endTime: lc.end_time || undefined,
+            category: lc.category, venue_name: lc.venue_name,
+            location: lc.venue_name ? { name: lc.venue_name, address: '' } : undefined,
+            cost: { amount: 0, currency: 'USD' },
+            locked: true, isLocked: true, lockedSource: lc.lockedSource,
+            durationMinutes: lc.start_time && lc.end_time ? calculateDuration(lc.start_time, lc.end_time) : 60,
+          });
+        }
+      }
+      if (restored > 0) {
+        normalizedActivities.sort((a: any, b: any) => {
+          const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
+          const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
+          return aTime - bTime;
+        });
+        generatedDay.activities = normalizedActivities;
+
+        // Re-persist so the DB matches the post-cleanup, lock-verified result.
+        if (tripId) {
+          try {
+            await persistDay({
+              supabase, tripId, dayNumber, date, generatedDay, normalizedActivities,
+              action: paramAction, profile,
+              resolvedIsTransitionDay, resolvedTransitionFrom, resolvedTransitionTo,
+              resolvedTransportMode, resolvedDestination,
+            });
+            console.log(`[FINAL-LOCK-RESTORE] Re-persisted day ${dayNumber} after restoring ${restored} locked card(s)`);
+          } catch (rePersistErr) {
+            console.error('[FINAL-LOCK-RESTORE] Re-persist error:', rePersistErr);
+          }
+        }
+      }
+    }
+
     // End post-processing phase and write progress
     if (innerTimer) {
       innerTimer.endPhase(`post_processing_day_${dayNumber}`);
