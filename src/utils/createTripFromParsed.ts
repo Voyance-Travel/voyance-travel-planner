@@ -265,7 +265,7 @@ export async function createTripFromParsed(
               rawPreferenceText: parsed.preferences.rawPreferenceText || undefined,
             } : {}),
           };
-        })(),
+        })() as any,
       })
       .select('id')
       .single();
