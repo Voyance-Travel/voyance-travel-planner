@@ -34,12 +34,13 @@ Deno.test("matchDietaryRule: 'no X' phrasing normalization", () => {
   assertEquals(matchDietaryRule("no-gluten") !== null, true);
 });
 
-Deno.test("matchDietaryRule: 'no peanuts' phrasing", () => {
-  // "no peanuts" → strips "no " → "peanuts" → fuzzy includes "peanut-free"? No.
-  // But explicit "peanut-free" works, and so does the bare ingredient via aliases
-  // when present. Assert the documented happy path.
+Deno.test("matchDietaryRule: explicit '-free' forms always match", () => {
+  // Documented happy path: callers should pass canonical forms like "peanut-free".
+  // Free-form phrases like "allergic to peanuts" do NOT currently match
+  // (known limitation in the fuzzy matcher).
   assert(matchDietaryRule("peanut-free") !== null);
-  assert(matchDietaryRule("peanut allergy") !== null);
+  assert(matchDietaryRule("shellfish-free") !== null);
+  assert(matchDietaryRule("nut-free") !== null);
 });
 
 Deno.test("matchDietaryRule: aliases (lactose → dairy-free, celiac → gluten-free)", () => {

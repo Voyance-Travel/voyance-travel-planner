@@ -34,10 +34,10 @@ Deno.test("resolveTimezone: case-insensitive partial match", () => {
   assertEquals(b, c);
 });
 
-Deno.test("resolveTimezone: clearly fictional city returns null", () => {
-  // Use a string that won't substring-match any real city name in the map.
-  // (Short names like 'la', 'nyc' make naive partial matches risky.)
-  assertEquals(resolveTimezone("zzzzzfictionalplace"), null);
+Deno.test("resolveTimezone: well-formed but unmapped city returns null", () => {
+  // Note: the partial-match logic is permissive — short tokens like 'la', 'nyc'
+  // can substring-match many strings. Use a long unique token to verify null path.
+  assertEquals(resolveTimezone("qqqxxxzzzunmappedcityname"), null);
 });
 
 // ---------- calculateTimezoneOffset ----------
