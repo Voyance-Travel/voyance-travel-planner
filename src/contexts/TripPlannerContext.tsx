@@ -300,6 +300,19 @@ export function TripPlannerProvider({ children }: { children: ReactNode }) {
         ),
       };
 
+      // [ANCHOR-TRACE] Checkpoint 1: saveTrip — what's in state.basics?
+      try {
+        const md = (state.basics.mustDoActivities || '').toString();
+        const pd = state.basics.perDayActivities || [];
+        console.log('[ANCHOR-TRACE] saveTrip', {
+          mustDoLen: md.length,
+          mustDoPreview: md.slice(0, 100),
+          perDayCount: pd.length,
+          perDaySummary: pd.slice(0, 8).map((d: any) => ({ d: d?.dayNumber, t: (d?.activities || '').slice(0, 60) })),
+        });
+      } catch (_e) { /* trace-only */ }
+
+
       let tripId = state.tripId;
 
       // Anonymous user: save to localStorage so the flow can continue

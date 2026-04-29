@@ -105,6 +105,19 @@ export async function handleGenerateDay(
     hotelOverride: paramHotelOverride, isFirstDayInCity: paramIsFirstDayInCity, isLastDayInCity: paramIsLastDayInCity,
     restaurantPool: paramRestaurantPool, usedRestaurants: paramUsedRestaurants, generationLogId: paramGenerationLogId,
     hotelName: paramHotelName, action: paramAction } = params;
+
+  // [ANCHOR-TRACE] Checkpoint 3a: backend generate-day handler entry
+  try {
+    const md = (paramMustDoActivities || '').toString();
+    const pd = (params as any).perDayActivities || [];
+    console.log('[ANCHOR-TRACE] generate-day entry', JSON.stringify({
+      tripId, dayNumber,
+      mustDoLen: md.length,
+      mustDoPreview: md.slice(0, 100),
+      perDayCount: Array.isArray(pd) ? pd.length : 0,
+      perDayForThisDay: Array.isArray(pd) ? (pd.find((d: any) => d?.dayNumber === dayNumber)?.activities?.slice(0, 80) || null) : null,
+    }));
+  } catch (_e) { /* trace-only */ }
   
   // userId comes from the function parameter (authenticated user ID)
   // Security guard: if request body includes userId that differs from auth token, log and reject
