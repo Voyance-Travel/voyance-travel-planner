@@ -9,6 +9,7 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import type { CostTracker } from "./cost-tracker.ts";
 
 const BUCKET_NAME = 'trip-photos';
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -23,7 +24,12 @@ interface PhotoCacheResult {
 }
 
 /**
- * Get a cached photo URL from Supabase Storage, or download and cache it
+ * Get a cached photo URL from Supabase Storage, or download and cache it.
+ *
+ * Pass a `costTracker` whenever possible — every cache MISS triggers a Google
+ * Places photo download (one billable `places_photo` SKU). Without a tracker,
+ * the download still happens but the cost is silently lost from our internal
+ * accounting (this is the historical bug behind under-reported Google spend).
  */
 export async function getCachedPhotoUrl(
   entityType: 'restaurant' | 'hotel' | 'activity' | 'destination',
@@ -33,7 +39,8 @@ export async function getCachedPhotoUrl(
     destination?: string;
     placeName?: string;
     placeId?: string;
-  }
+  },
+  costTracker?: CostTracker,
 ): Promise<PhotoCacheResult> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false }
