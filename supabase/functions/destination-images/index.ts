@@ -501,7 +501,7 @@ async function getGooglePlacesPhoto(
       const photoResource = photos[photoIndex].name;
 
       // Download to Supabase Storage via the central photo cache.
-      // Using the resource-based helper keeps `googleapis.com` out of feature code.
+      // Using the resource-based helper keeps direct Google URLs out of feature code.
       const cacheResult = await getCachedPlacesPhotoByResource(
         entityType,
         best.place.id,
@@ -820,7 +820,7 @@ function shouldPersistInCuratedCache(image: DestinationImage): boolean {
   const lower = image.url.toLowerCase();
 
   // Never cache transient/sensitive URLs.
-  // Use the shared predicate so we don't sprinkle `googleapis.com` literals
+  // Use the shared predicate so we don't sprinkle Google host literals
   // across the codebase (the lint guard treats those as untracked-fetch risks).
   if (isGoogleBillableUrl(image.url)) return false;
   if (lower.includes('x-amz-signature=')) return false;
