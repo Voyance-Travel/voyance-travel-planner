@@ -1202,21 +1202,35 @@ export default function TripDetail() {
             }
           }
 
-          // ── SELF-HEAL: Detect days that exist but have no real activities ("Unplanned") ──
-          // Instead of destructive auto-regeneration, try restoring from version history first.
-          if (expectedTotal > 0 && actualDays >= expectedTotal && !emptyDayHealAttemptedRef.current) {
+          // ── SELF-HEAL: Detect days that are unplanned ("empty" or missing entirely) ──
+          // Fires whenever generation is no longer running, regardless of whether
+          // actualDays reached expectedTotal. Previously this was gated on
+          // `actualDays >= expectedTotal`, which meant trips that ended early
+          // (e.g. 23/25 days produced) silently left days 24 & 25 unplanned forever.
+          const generationFinished =
+            tripData?.itinerary_status !== 'generating' &&
+            tripData?.itinerary_status !== 'queued';
+
+          if (expectedTotal > 0 && generationFinished && !emptyDayHealAttemptedRef.current) {
             const daysList = (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>;
+            const presentDayNumbers = new Set<number>();
             const emptyDayNumbers: number[] = [];
             for (const day of daysList) {
-              const acts = Array.isArray(day.activities) ? day.activities : [];
-              if (acts.length === 0 && day.dayNumber) {
-                emptyDayNumbers.push(day.dayNumber);
+              if (day.dayNumber) {
+                presentDayNumbers.add(day.dayNumber);
+                const acts = Array.isArray(day.activities) ? day.activities : [];
+                if (acts.length === 0) emptyDayNumbers.push(day.dayNumber);
               }
             }
+            // Days that should exist but are missing entirely from the array
+            for (let n = 1; n <= expectedTotal; n++) {
+              if (!presentDayNumbers.has(n)) emptyDayNumbers.push(n);
+            }
+            emptyDayNumbers.sort((a, b) => a - b);
 
             if (emptyDayNumbers.length > 0 && emptyDayNumbers.length < expectedTotal) {
               emptyDayHealAttemptedRef.current = true;
-              console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} days have no activities (days: ${emptyDayNumbers.join(', ')}). Attempting version-history restore first.`);
+              console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} unplanned days (days: ${emptyDayNumbers.join(', ')}). Attempting version-history restore first.`);
 
               setTimeout(async () => {
                 try {
