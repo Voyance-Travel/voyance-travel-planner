@@ -1,65 +1,55 @@
 ## Diagnosis
 
-The user sees only 2 days of weather forecast for a 6-day trip. This is a real data bug in `supabase/functions/weather/index.ts`, not a frontend issue.
+Sharing is still corrupted because the app currently has two different share systems, and the main itinerary Share button is still using the collaborator-invite flow by default.
 
-### Root cause
+What I found:
+- The generated invite link for the recent Paris trip is valid: `/invite/4qO9QB7CSOjh` loads the invite page correctly.
+- But that link is not a seamless trip share. It asks the recipient to sign in/create an account and “join” the trip.
+- The true read-only public share route is `/trip-share/:token`, but the current itinerary Share modal does not expose or enable that flow. It only shows “Invite to Collaborate.”
+- The trip currently has `share_enabled=false` and no public share token, so a public share URL would show “Trip Not Found or sharing is disabled.”
+- There is a newer `TripShareModal` with both “Public Link” and “Invite to Collaborate,” but the main itinerary page is not using it. Instead, `EditorialItinerary.tsx` has its own older share dialog.
+- `TripRecap.tsx` also shares `window.location.href`, which is not a valid public share link for recipients.
 
-Apple WeatherKit's `forecastDaily` only returns ~10 days **from today**. The function filters those days to `dayDate >= tripStart` (line 211-217). When the trip starts ~8 days from now and runs 6 days (so days 8-13), WeatherKit's window covers days 0-9 → only 2 days overlap → the function returns 2 forecast entries and never falls through to Open-Meteo (which covers 16 days and could cover the full trip).
+## Fix Plan
 
-There's also a hidden second bug at lines 220-223: when zero days overlap (trip starts 11+ days out), it silently substitutes "first N days from today" — wrong dates entirely, but the function still reports `source: 'weatherkit'` as if successful.
+### 1. Make public read-only sharing the primary share action
+- Update the main itinerary Share button in `EditorialItinerary.tsx` so it uses the unified `TripShareModal` instead of the older embedded collaborator-only dialog.
+- In that modal, make the “Public Link” the default/primary path: anyone with the link can view the itinerary without signing in.
+- Keep “Invite to Collaborate” available, but label it clearly as the edit/join flow.
 
-The frontend (`src/components/itinerary/WeatherForecast.tsx` line 94) correctly requests `days: tripDays`. The bug is purely in the edge function.
+### 2. Auto-create a working public link when the user shares
+- Add a shared helper for consumer public share links, e.g. `getOrCreatePublicTripShareLink(tripId)`.
+- The helper will:
+  - Check the trip’s existing `share_enabled` / `share_token`.
+  - If missing or disabled, call `toggle_consumer_trip_share(tripId, true)`.
+  - Return a canonical `https://travelwithvoyance.com/trip-share/{token}` link.
+- Use this helper in all consumer “Share Trip” surfaces instead of copying the current private URL.
 
-## Fix
+### 3. Repair Trip Recap sharing
+- Replace both `TripRecap.tsx` share handlers that currently use `window.location.href`.
+- They should generate/copy/native-share the public `/trip-share/:token` link.
+- Optionally reuse `ShareTripCard` or the unified share modal if that fits cleanly, but the key behavior is that recipients get a working public link.
 
-One file: `supabase/functions/weather/index.ts`.
+### 4. Fix stale/empty link behavior in the unified share modal
+- Ensure Copy / native share / WhatsApp / X never fire with an empty link.
+- If the public link is enabled but not loaded yet, create/load it before sharing.
+- Show a loading/disabled state while the link is being created.
+- Surface backend reasons like `not_authenticated`, `not_owner`, or `trip_not_found` with useful messages instead of generic “Failed to update sharing.”
 
-### 1. Stop silently substituting wrong dates in `fetchWeatherKit`
+### 5. Keep collaboration separate and explicit
+- Keep `/invite/:token` for adding collaborators only.
+- Adjust copy in the share UI so users understand:
+  - “Public link” = view-only, no sign-in required.
+  - “Invite collaborators” = recipient signs in and joins the trip.
+- Avoid naming the collaborator link “share link” in user-facing UI.
 
-Replace the fall-through at lines 220-223. When WeatherKit returns zero overlapping days for the trip, return `null` so the main handler can try Open-Meteo. Today this masks the failure.
+### 6. Verify end-to-end
+- Use the recent Paris trip as the test case.
+- Generate a public share link from the app.
+- Open the resulting `/trip-share/:token` URL as an unauthenticated visitor and confirm it loads the 6-day itinerary.
+- Confirm `/invite/:token` still works separately for collaborator joining.
+- Check console/network for RPC errors and confirm no “Trip Not Found or sharing disabled” on a freshly shared trip.
 
-### 2. Supplement WeatherKit with Open-Meteo when WeatherKit returns a partial result
+## Expected Result
 
-In the main handler (lines 433-457), after WeatherKit succeeds:
-
-- If `weather.forecast.length >= days` → use as-is (current behavior).
-- Else → call Open-Meteo for the **trip start date + days** window. Take Open-Meteo's days that aren't covered by WeatherKit (date-based merge, WeatherKit wins for overlapping days because it's higher-quality), append until total = `days`.
-- If Open-Meteo also can't cover the tail (`daysUntilTrip + days > 16`), fill remaining slots from `generateFallbackForecast` so the UI always renders `days` entries that match the trip's actual dates.
-
-Mark `source`:
-- `'weatherkit'` if all days came from WeatherKit
-- `'open-meteo'` if mixed or all Open-Meteo
-- `'fallback'` only if no real data at all
-
-### 3. Add a coverage log line
-
-```
-[Weather] coverage for "<destination>": weatherkit=<n>, open-meteo=<m>, fallback=<k>, requested=<days>, tripStart=<date>
-```
-
-So we can audit in production whether real data is reaching trips.
-
-### 4. (Optional, low risk) Remove `forecast_days` cap risk in `fetchOpenMeteo`
-
-Line 281: `Math.min(daysUntilTrip + days, 16)`. This is correct as-is, but I'll keep `forecast_days` strictly within Open-Meteo's documented max (16) and add a guard: if `daysUntilTrip + days > 16`, request `forecast_days=16` and log how many trip days were uncovered.
-
-## Verification
-
-After deploy:
-
-1. Curl `weather` with `{ destination: "Paris", startDate: "<8 days from today>", days: 6 }`. Expect `weather.forecast.length === 6` with dates matching the trip range, not today's range.
-2. Curl with `startDate: "<14 days from today>", days: 6`. Expect 6 forecast entries, source `'open-meteo'` (or mixed), dates correct.
-3. Curl with `startDate: "<25 days from today>", days: 6`. Expect 6 entries, source `'fallback'` (or mixed), dates correct.
-4. Pull the function logs to confirm the new coverage line prints.
-
-If the user can share which trip ID showed only 2 days, I'll also re-run that specific case post-fix.
-
-## Files changed
-
-- `supabase/functions/weather/index.ts` — only file touched.
-
-## Out of scope
-
-- React component refactor (already correct).
-- Caching weather results in DB (separate cost-optimization conversation).
-- Per-day weather context inside the AI prompt — that's a different consumer; this fix focuses on the user-facing forecast card.
+When the user clicks Share, the app produces a public read-only itinerary URL that works immediately for anyone. Collaborator invites remain available, but they no longer hijack normal sharing or force recipients through sign-up just to view the trip.
