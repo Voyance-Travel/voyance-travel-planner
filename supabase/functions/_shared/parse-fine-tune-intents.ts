@@ -83,8 +83,10 @@ function inferKind(text: string): string {
 }
 
 function extractTime(text: string): string | undefined {
+  // Strip leading "Day N" so it doesn't get matched as a time
+  const cleaned = text.replace(/\bDay\s+\d+\b/i, '');
   // 7pm, 7:30pm, 19:00, 7 pm, 8:15 PM
-  const m = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
+  const m = cleaned.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
   if (!m) return undefined;
   let hour = parseInt(m[1], 10);
   const min = m[2] ? parseInt(m[2], 10) : 0;
