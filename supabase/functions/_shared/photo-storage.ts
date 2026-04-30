@@ -9,7 +9,8 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-import type { CostTracker } from "./cost-tracker.ts";
+import { type CostTracker, trackCost } from "./cost-tracker.ts";
+import { isGoogleBillableUrl } from "./is-google-billable.ts";
 
 const BUCKET_NAME = 'trip-photos';
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
