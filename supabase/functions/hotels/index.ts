@@ -464,12 +464,15 @@ async function searchHotels(params: HotelSearchParams & { skipCache?: boolean })
           for (let i = 0; i < Math.min(place.photos.length, 3); i++) {
             try {
               const photo = place.photos[i];
-              const googlePhotoUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxHeightPx=800&maxWidthPx=1200&key=${GOOGLE_MAPS_API_KEY}`;
-              const cacheResult = await getCachedPhotoUrl(
+              const cacheResult = await getCachedPlacesPhotoByResource(
                 'hotel',
                 `${place.id}-${i}`,
-                googlePhotoUrl,
-                { destination: cityName, placeName: hotelName, placeId: place.id }
+                photo.name,
+                {
+                  maxHeightPx: 800,
+                  maxWidthPx: 1200,
+                  metadata: { destination: cityName, placeName: hotelName, placeId: place.id },
+                },
               );
               photos.push(cacheResult.url);
             } catch (e) {
