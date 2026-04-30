@@ -347,45 +347,106 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     console.warn('[save-itinerary] Anchor restore failed (non-blocking):', anchorErr);
   }
 
-  // ── STEP 2.6: DAY TRUTH LEDGER CHECK ─────────────────────────────
-  // Builds a per-day ledger (user intent + prior-day "alreadyDone" + closures)
-  // and removes any AI-inserted activity that violates it. User-locked items
-  // are never touched; this only deletes unauthorized repeats and known
-  // closed-day venues. Result: even if a future AI step misbehaves, the
-  // user's stated truth survives at the persistence boundary.
+  // ── STEP 2.6: DAY TRUTH LEDGER / DAY BRIEF CHECK ─────────────────
+  // Builds a per-day ledger (user intent + prior-day "alreadyDone" + closures
+  // + soft fine-tune & assistant intents + forward-state) and:
+  //   - removes any AI-inserted activity that violates closures or repeats prior-day items;
+  //   - inserts a placeholder for missing 'must' user intents so the user can see them;
+  //   - flags vibe-clashes (e.g. two splurge dinners back-to-back).
+  // User-locked items are never touched.
   try {
     const tripMeta = (trip as any).metadata as Record<string, unknown> | null;
     const userAnchors = Array.isArray(tripMeta?.userAnchors)
       ? (tripMeta!.userAnchors as Array<Record<string, any>>)
       : [];
+    const recordedIntents = Array.isArray((tripMeta as any)?.userIntents)
+      ? ((tripMeta as any).userIntents as Array<Record<string, any>>)
+      : [];
+    const additionalNotes = ((tripMeta as any)?.additionalNotes as string) || '';
 
     if (itineraryDays.length > 0) {
       // Determine country from trip data (best effort)
       const { data: tripCountryRow } = await supabase
         .from('trips')
-        .select('destination, destination_country')
+        .select('destination, destination_country, start_date, preferences')
         .eq('id', tripId)
         .single();
       const tripCountry = (tripCountryRow as any)?.destination_country || '';
+      const tripStartFromDb = (tripCountryRow as any)?.start_date || tripStartDate;
+      const prefs = (tripCountryRow as any)?.preferences as Record<string, any> | null;
+
+      // Parse fine-tune notes once for the whole trip
+      let parsedFineTune: { perDay: Array<Record<string, any>>; tripWide: string[] } = { perDay: [], tripWide: [] };
+      try {
+        if (additionalNotes.trim()) {
+          const { parseFineTuneIntoDailyIntents } = await import('../_shared/parse-fine-tune-intents.ts');
+          parsedFineTune = parseFineTuneIntoDailyIntents({
+            notes: additionalNotes,
+            tripStartDate: tripStartFromDb,
+            totalDays: itineraryDays.length,
+          });
+        }
+      } catch (e) {
+        console.warn('[save-itinerary] Fine-tune parse failed (non-blocking):', e);
+      }
 
       // Build prior-day activity list once (titles only, with their dayNumber)
-      const allPriorActivities: Array<{ title: string; dayNumber: number }> = [];
+      const allActivities: Array<{ title: string; dayNumber: number; category?: string; startTime?: string }> = [];
       for (const d of itineraryDays) {
         const dn = (d.dayNumber as number) || 0;
         if (!dn) continue;
         for (const a of (d.activities || [])) {
           const t = (a.title || a.name || '').trim();
-          if (t) allPriorActivities.push({ title: t, dayNumber: dn });
+          if (t) allActivities.push({ title: t, dayNumber: dn, category: a.category, startTime: a.startTime });
         }
       }
 
       const ledgers: DayLedger[] = itineraryDays.map((d: any) => {
         const dn = (d.dayNumber as number) || 0;
         const dayAnchors = userAnchors.filter((a) => Number(a.dayNumber) === dn);
-        const priorOnly = allPriorActivities.filter((p) => p.dayNumber < dn);
+
+        // Soft intents for THIS day from fine-tune + assistant
+        const extraIntents: Array<Record<string, any>> = [];
+        for (const p of parsedFineTune.perDay) {
+          if (Number(p.dayNumber) !== dn) continue;
+          extraIntents.push({
+            title: p.title,
+            startTime: p.startTime,
+            kind: p.kind,
+            source: 'fine_tune',
+            priority: p.priority,
+            raw: p.raw,
+          });
+        }
+        for (const ri of recordedIntents) {
+          if (Number(ri.dayNumber) !== dn) continue;
+          if (!ri.title || typeof ri.title !== 'string') continue;
+          extraIntents.push({
+            title: ri.title,
+            startTime: ri.startTime,
+            kind: ri.kind || 'activity',
+            source: ri.source || 'assistant',
+            priority: ri.priority === 'must' ? 'must' : 'should',
+            raw: ri.raw || ri.title,
+          });
+        }
+
+        const priorOnly = allActivities.filter((p) => p.dayNumber < dn);
+        const forwardOnly = allActivities.filter((p) => p.dayNumber > dn && p.dayNumber <= dn + 2);
+
+        const userConstraints: Record<string, any> = {};
+        const dietary = (prefs as any)?.dietaryRestrictions
+          || (prefs as any)?.dietary
+          || (tripMeta as any)?.dietaryRestrictions;
+        if (Array.isArray(dietary) && dietary.length > 0) userConstraints.dietary = dietary.filter(Boolean);
+        else if (typeof dietary === 'string' && dietary.trim()) userConstraints.dietary = [dietary.trim()];
+        const mobility = (prefs as any)?.mobility || (tripMeta as any)?.mobility;
+        if (mobility && typeof mobility === 'string') userConstraints.mobility = mobility;
+        if (parsedFineTune.tripWide.length > 0) userConstraints.tripWideNotes = parsedFineTune.tripWide;
+
         return buildDayLedger({
           dayNumber: dn,
-          date: d.date || (tripStartDate ? deriveDateFromStartDate(tripStartDate, dn) : ''),
+          date: d.date || (tripStartFromDb ? deriveDateFromStartDate(tripStartFromDb, dn) : ''),
           city: d.city || d.destination || (tripCountryRow as any)?.destination || '',
           country: tripCountry,
           hardFacts: {
@@ -395,12 +456,20 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           },
           anchors: dayAnchors,
           priorDayActivities: priorOnly,
+          extraIntents,
+          forwardActivities: forwardOnly.map((f) => ({
+            dayNumber: f.dayNumber,
+            title: f.title,
+            category: f.category,
+            startTime: f.startTime,
+          })),
+          userConstraints: Object.keys(userConstraints).length > 0 ? userConstraints : undefined,
         });
       });
 
       const lc = ledgerCheck(itineraryDays, ledgers);
-      if (lc.removed > 0 || lc.warnings.length > 0) {
-        console.log(`[save-itinerary] 🧭 Day Truth Ledger: removed ${lc.removed}, warnings ${lc.warnings.length}`);
+      if (lc.removed > 0 || lc.inserted > 0 || lc.warnings.length > 0) {
+        console.log(`[save-itinerary] 🧭 Day Brief: removed ${lc.removed}, inserted ${lc.inserted} placeholder(s), warnings ${lc.warnings.length}`);
         for (const w of lc.warnings.slice(0, 20)) {
           console.log(`[save-itinerary]   • [day ${w.dayNumber}] ${w.kind}: ${w.detail}`);
         }
@@ -412,7 +481,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       (itinerary as any).dayLedgers = ledgers;
     }
   } catch (ledgerErr) {
-    console.warn('[save-itinerary] Day Truth Ledger check failed (non-blocking):', ledgerErr);
+    console.warn('[save-itinerary] Day Brief check failed (non-blocking):', ledgerErr);
   }
 
   // ── STEP 3: PERSIST TO trips.itinerary_data ─────────────────────
