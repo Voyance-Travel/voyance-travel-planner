@@ -720,7 +720,7 @@ export function ItineraryAssistant({
                                   </div>
                                 </div>
                                 
-                                {isPending && approvalMode && (
+                                {isPending && (approvalMode || action.type === 'propose_change') && (
                                   <div className="flex gap-2 mt-3">
                                     <Button
                                       size="sm"
