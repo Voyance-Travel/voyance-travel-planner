@@ -200,6 +200,7 @@ serve(async (req) => {
 
     console.log(`[route-details] Returning ${formattedSteps.length} steps, ${totalDuration}`);
 
+    await costTracker.save();
     return new Response(JSON.stringify({
       steps: formattedSteps,
       summary: summaryParts.join(' → '),
