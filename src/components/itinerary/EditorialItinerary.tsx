@@ -7907,7 +7907,14 @@ export function EditorialItinerary({
         </DialogContent>
       </Dialog>
 
-      {/* Regenerate Confirmation Dialog */}
+      {/* Quick share modal — public read-only link first, collaborator invite secondary */}
+      <TripShareModal
+        isOpen={showQuickShareModal}
+        onClose={() => setShowQuickShareModal(false)}
+        tripId={tripId}
+        tripName={`Trip to ${destination}`}
+        destination={destination}
+      />
       <Dialog open={showRegenerateConfirm} onOpenChange={setShowRegenerateConfirm}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
