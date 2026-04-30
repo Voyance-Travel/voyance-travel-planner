@@ -722,6 +722,12 @@ ${itineraryDescription}
       confidence: string;
       scope: string;
     }> = [];
+    // ADVISORY GATE — if the user did not use an edit verb and is not confirming a
+    // prior proposal, mutation tool calls are converted into propose_change cards.
+    const hasEditVerb = EDIT_VERB_PATTERN.test(lastUserMessage);
+    const isConfirmation = CONFIRMATION_PATTERN.test(lastUserMessage) && lastAssistantProposedChange(messages);
+    const allowMutations = hasEditVerb || isConfirmation;
+    log("Advisory gate", { hasEditVerb, isConfirmation, allowMutations });
 
     for (const toolCall of toolCalls) {
       const fnName = toolCall.function?.name;
@@ -740,6 +746,12 @@ ${itineraryDescription}
           confidence: args.confidence,
           scope: args.scope || 'trip_only',
         });
+      } else if (fnName === "answer_question") {
+        // No structural change — just telemetry.
+        log('Answer question', { topic: args.topic, summary: args.answer_summary });
+      } else if (fnName === "propose_change") {
+        // Pass through as a non-mutating action card.
+        actions.push({ type: 'propose_change', params: args });
       } else if (fnName === "record_user_intent") {
         // Persist to trips.metadata.userIntents IMMEDIATELY so the next
         // regeneration of any kind picks it up. This is free (no AI work).
@@ -788,14 +800,28 @@ ${itineraryDescription}
         } catch (intentErr) {
           log('Failed to record user intent', { error: String(intentErr) });
         }
+      } else if (MUTATION_TOOLS.has(fnName)) {
+        if (allowMutations) {
+          actions.push({ type: fnName, params: args });
+        } else {
+          // Convert to propose_change so the user can opt in.
+          log('Gated mutation tool — converting to propose_change', { fnName });
+          const targetDay = typeof args.target_day === 'number' ? args.target_day : Number(args.target_day) || 1;
+          const summary = (args.reason as string) || (args.new_focus as string) || `Proposed change to Day ${targetDay}`;
+          actions.push({
+            type: 'propose_change',
+            params: {
+              target_day: targetDay,
+              summary,
+              would_call: fnName,
+              would_call_args: args,
+            },
+          });
+        }
       } else {
-        actions.push({
-          type: fnName,
-          params: args,
-        });
+        actions.push({ type: fnName, params: args });
       }
     }
-
     // Save customization request if authenticated and there are actions
     if (userId && actions.length > 0) {
       const serviceSupabase = createClient(
