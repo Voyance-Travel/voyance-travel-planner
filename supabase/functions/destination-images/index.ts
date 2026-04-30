@@ -1446,7 +1446,7 @@ async function fetchImageTiered(
     }, {
       onConflict: 'entity_type,entity_key,destination'
     });
-    console.log(`[Images] ⛔ Stored negative cache for: "${venueName}" in ${destination} (14-day TTL)`);
+    console.log(`[Images] ⛔ Stored negative cache for: "${venueName}" in ${destination} (30-day TTL)`);
   } catch (negErr) {
     console.warn('[Images] Failed to write negative cache:', negErr);
   }
