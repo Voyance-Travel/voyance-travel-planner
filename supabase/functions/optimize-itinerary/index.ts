@@ -1363,11 +1363,13 @@ async function getGoogleTransport(
 
     const originParam = toGoogleParam(origin);
     const destParam = toGoogleParam(destination);
-    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originParam}&destinations=${destParam}&mode=${mode}&key=${mapsApiKey}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const dmRes = await googleDistanceMatrix(
+      { origins: originParam, destinations: destParam, mode: mode as any },
+      { actionType: 'optimize_itinerary', reason: `transport ${mode}: ${destinationName}` },
+    );
+    const data = dmRes.data ?? {};
 
-    if (data.status !== 'OK' || !data.rows?.[0]?.elements?.[0]) {
+    if (!dmRes.ok || data.status !== 'OK' || !data.rows?.[0]?.elements?.[0]) {
       return null;
     }
 
