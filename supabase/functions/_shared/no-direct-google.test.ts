@@ -40,6 +40,12 @@ const PENDING_MIGRATION_ALLOWLIST = new Set([
   // recommend-restaurants and fetch-reviews do the same trick for photo URLs.
   "supabase/functions/recommend-restaurants/index.ts",
   "supabase/functions/fetch-reviews/index.ts",
+  // photo-storage.ts is the photo cache layer — it intentionally fetches the
+  // Google URL passed in by callers. It records the places_photo SKU on every
+  // cache miss, so accounting is correct even though the literal fetch lives
+  // here. Do not migrate this — it would create a circular dependency with
+  // google-api.ts.
+  "supabase/functions/_shared/photo-storage.ts",
 ]);
 
 // The wrapper itself is the only file allowed to talk to googleapis.com.
