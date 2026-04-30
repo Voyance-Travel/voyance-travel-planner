@@ -43,7 +43,7 @@ Deno.test('renderDayLedgerPrompt emits fenced sections', () => {
   assert(out.includes('First day in city'));
 });
 
-Deno.test('ledgerCheck removes repeats of alreadyDone and warns on missing intent', () => {
+Deno.test('ledgerCheck removes repeats of alreadyDone and warns on missing intent', async () => {
   const ledgers = [
     buildDayLedger({
       dayNumber: 2,
@@ -65,13 +65,13 @@ Deno.test('ledgerCheck removes repeats of alreadyDone and warns on missing inten
       ],
     },
   ];
-  const res = ledgerCheck(days, ledgers);
+  const res = await ledgerCheck(days, ledgers);
   assertEquals(res.removed, 1);
   assert(res.warnings.some((w) => w.kind === 'repeat_already_done'));
   assert(res.warnings.some((w) => w.kind === 'missing_user_intent'));
 });
 
-Deno.test('ledgerCheck respects locked activities (does not remove them)', () => {
+Deno.test('ledgerCheck respects locked activities (does not remove them)', async () => {
   const ledgers = [
     buildDayLedger({
       dayNumber: 2,
@@ -86,11 +86,11 @@ Deno.test('ledgerCheck respects locked activities (does not remove them)', () =>
   const days = [
     { dayNumber: 2, activities: [{ title: 'JNcQUOI Table', locked: true, lockedSource: 'manual_paste' }] },
   ];
-  const res = ledgerCheck(days, ledgers);
+  const res = await ledgerCheck(days, ledgers);
   assertEquals(res.removed, 0);
 });
 
-Deno.test('Lisbon dinner regression: all 13 user intents survive a check', () => {
+Deno.test('Lisbon dinner regression: all 13 user intents survive a check', async () => {
   // Simulates the user's Lisbon paste — every dinner/lunch should remain locked.
   const lisbonAnchors: Array<{ day: number; title: string; time: string; kind: string }> = [
     { day: 1, title: 'JNcQUOI Table', time: '19:00', kind: 'dinner' },
@@ -130,7 +130,7 @@ Deno.test('Lisbon dinner regression: all 13 user intents survive a check', () =>
     activities: items.map((a) => ({ title: a.title, startTime: a.time, locked: true, lockedSource: 'manual_paste' })),
   }));
 
-  const res = ledgerCheck(days, ledgers);
+  const res = await ledgerCheck(days, ledgers);
   // None of the locked items should generate "missing user intent" warnings.
   assertEquals(res.warnings.filter((w) => w.kind === 'missing_user_intent').length, 0);
   // Every user-locked title should still be present in the resulting days.
@@ -163,7 +163,7 @@ Deno.test('v2: extraIntents from fine-tune surface in userIntent as soft "should
   assertEquals(ledger.userIntent[1].source, 'fine_tune');
 });
 
-Deno.test('v2: ledgerCheck inserts a placeholder when a soft must-intent is missing', () => {
+Deno.test('v2: ledgerCheck inserts a placeholder when a soft must-intent is missing', async () => {
   const ledgers = [
     buildDayLedger({
       dayNumber: 3,
@@ -178,7 +178,7 @@ Deno.test('v2: ledgerCheck inserts a placeholder when a soft must-intent is miss
     }),
   ];
   const days = [{ dayNumber: 3, activities: [{ title: 'Some random dinner', startTime: '20:00' }] }];
-  const res = ledgerCheck(days, ledgers);
+  const res = await ledgerCheck(days, ledgers);
   assertEquals(res.inserted, 1);
   assert(res.warnings.some((w) => w.kind === 'missing_user_intent_restored'));
   const placeholders = (res.days[0].activities as any[]).filter((a) => a.placeholder);
