@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { googleDistanceMatrix } from "../_shared/google-api.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -264,47 +266,42 @@ serve(async (req) => {
     const googleDest = isReturn ? origin : destination;
 
     if (GOOGLE_MAPS_API_KEY && googleOrigin && googleDest) {
+      const transferTracker = trackCost('airport_transfers', 'google_distance_matrix');
       const fetchPromises = [];
 
       // Driving
-      const drivingParams = new URLSearchParams({
-        origins: googleOrigin, destinations: googleDest,
-        mode: 'driving', departure_time: 'now', key: GOOGLE_MAPS_API_KEY,
-      });
       fetchPromises.push(
-        fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?${drivingParams}`)
-          .then(r => r.json())
-          .then(data => {
-            if (data.status === 'OK' && data.rows?.[0]?.elements?.[0]?.status === 'OK') {
-              const seconds = data.rows[0].elements[0].duration_in_traffic?.value || data.rows[0].elements[0].duration.value;
-              liveTaxiDuration = formatDuration(seconds);
-              liveTaxiMinutes = Math.round(seconds / 60);
-            }
-          })
-          .catch(() => {})
+        googleDistanceMatrix(
+          { origins: googleOrigin, destinations: googleDest, mode: 'driving', departureTime: 'now' },
+          { tracker: transferTracker, actionType: 'airport_transfers', reason: 'driving' },
+        ).then(r => {
+          const data = r.data;
+          if (data?.status === 'OK' && data.rows?.[0]?.elements?.[0]?.status === 'OK') {
+            const seconds = data.rows[0].elements[0].duration_in_traffic?.value || data.rows[0].elements[0].duration.value;
+            liveTaxiDuration = formatDuration(seconds);
+            liveTaxiMinutes = Math.round(seconds / 60);
+          }
+        }).catch(() => {})
       );
 
       // Transit
-      const transitParams = new URLSearchParams({
-        origins: googleOrigin, destinations: googleDest,
-        mode: 'transit',
-        departure_time: arrivalTime ? Math.floor(new Date(arrivalTime).getTime() / 1000).toString() : 'now',
-        key: GOOGLE_MAPS_API_KEY,
-      });
+      const transitDeparture = arrivalTime ? Math.floor(new Date(arrivalTime).getTime() / 1000).toString() : 'now';
       fetchPromises.push(
-        fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?${transitParams}`)
-          .then(r => r.json())
-          .then(data => {
-            if (data.status === 'OK' && data.rows?.[0]?.elements?.[0]?.status === 'OK') {
-              const seconds = data.rows[0].elements[0].duration.value;
-              liveTransitDuration = formatDuration(seconds);
-              liveTransitMinutes = Math.round(seconds / 60);
-            }
-          })
-          .catch(() => {})
+        googleDistanceMatrix(
+          { origins: googleOrigin, destinations: googleDest, mode: 'transit', departureTime: transitDeparture },
+          { tracker: transferTracker, actionType: 'airport_transfers', reason: 'transit' },
+        ).then(r => {
+          const data = r.data;
+          if (data?.status === 'OK' && data.rows?.[0]?.elements?.[0]?.status === 'OK') {
+            const seconds = data.rows[0].elements[0].duration.value;
+            liveTransitDuration = formatDuration(seconds);
+            liveTransitMinutes = Math.round(seconds / 60);
+          }
+        }).catch(() => {})
       );
 
       await Promise.all(fetchPromises);
+      await transferTracker.save();
     }
 
     const options: TransferOption[] = [];

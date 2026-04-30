@@ -6,6 +6,9 @@
  * Returns { estimates: { walking, transit, taxi } }
  */
 
+import { googleRoutes } from "../_shared/google-api.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -192,9 +195,11 @@ async function fetchGoogleRoute(
   travelMode: string,
   apiKey: string,
   city?: string,
+  tracker?: import("../_shared/cost-tracker.ts").CostTracker,
 ): Promise<TransitEstimate | null> {
+  // Note: apiKey kept for backwards-compat with callers; the wrapper resolves it itself.
+  void apiKey;
   try {
-    const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
     const body = {
       origin: toRoutesApiLocation(origin),
       destination: toRoutesApiLocation(destination),
@@ -203,20 +208,14 @@ async function fetchGoogleRoute(
       languageCode: 'en-US',
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
-      },
-      body: JSON.stringify(body),
-    });
+    const result = await googleRoutes(
+      { body, fieldMask: 'routes.distanceMeters,routes.duration' },
+      { tracker, actionType: 'transit_estimate', reason: `${travelMode}: ${typeof origin === 'string' ? origin : 'coords'} → ${typeof destination === 'string' ? destination : 'coords'}` },
+    );
 
-    if (!res.ok) return null;
+    if (!result.ok || !result.data) return null;
 
-    const data = await res.json();
-    const route = data?.routes?.[0];
+    const route = result.data?.routes?.[0];
     if (!route) return null;
 
     const distMeters = Number(route.distanceMeters || 0);
@@ -282,10 +281,12 @@ Deno.serve(async (req: Request) => {
     // Fetch walking and driving in parallel; only add transit if distance > 800m
     const shouldFetchTransit = fallbackDistance === null || fallbackDistance > 1200;
 
+    const costTracker = trackCost('transit_estimate', 'google_routes');
+
     const promises = [
-      fetchGoogleRoute(origin, destination, 'WALK', apiKey, city),
-      fetchGoogleRoute(origin, destination, 'DRIVE', apiKey, city),
-      ...(shouldFetchTransit ? [fetchGoogleRoute(origin, destination, 'TRANSIT', apiKey, city)] : []),
+      fetchGoogleRoute(origin, destination, 'WALK', apiKey, city, costTracker),
+      fetchGoogleRoute(origin, destination, 'DRIVE', apiKey, city, costTracker),
+      ...(shouldFetchTransit ? [fetchGoogleRoute(origin, destination, 'TRANSIT', apiKey, city, costTracker)] : []),
     ];
 
     const [walkResult, driveResult, transitResult] = await Promise.all(promises);
@@ -306,6 +307,9 @@ Deno.serve(async (req: Request) => {
       driveResult.recommended = (walkResult?.durationMinutes ?? 999) > 15 && !transitResult?.recommended;
       estimates.push(driveResult);
     }
+
+    // Persist cost tracking after all parallel calls complete
+    await costTracker.save();
 
     // Fallback to heuristics if all API calls failed
     if (estimates.length === 0 && fallbackDistance !== null) {
