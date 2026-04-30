@@ -340,7 +340,7 @@ export function TripShareModal({
         <div className="space-y-5 py-2">
           <FirstUseHint
             hintKey="share_hint_shown"
-            message="Public links let anyone view your itinerary—no sign in needed. Use 'Invite to collaborate' if you want them to edit."
+            message="Public links let anyone view your itinerary, no sign in needed. Use 'Invite to collaborate' if you want them to edit."
           />
 
           {/* Public Read-Only Link — primary share surface */}
