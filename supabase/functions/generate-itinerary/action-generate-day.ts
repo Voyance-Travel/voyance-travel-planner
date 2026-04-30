@@ -180,6 +180,25 @@ export async function handleGenerateDay(
   } = facts;
   let flightContext = facts.flightContext;
 
+  // ─── SEED `trip_day_intents` (idempotent) ───
+  // Single-day generation paths (Smart Finish, regenerate-day, assistant
+  // rewrite_day) skip prepareContext, so we re-run the seeder here. The unique
+  // index dedupes against rows already written by the full-trip path.
+  try {
+    const { data: tripRow } = await supabase
+      .from('trips')
+      .select('id, user_id, metadata, start_date')
+      .eq('id', tripId)
+      .maybeSingle();
+    if (tripRow) {
+      const { seedDayIntentsFromMetadata } = await import('../_shared/day-intents-store.ts');
+      await seedDayIntentsFromMetadata(supabase, tripRow as any, totalDays || 1, userId || null);
+    }
+  } catch (seedErr) {
+    console.warn('[generate-day] trip_day_intents seeding failed (non-blocking):', seedErr);
+  }
+
+
   // ═══════════════════════════════════════════════════════════════════════
   // COMPILED PROMPT: Preferences, trip intents, must-dos, timing, profile,
   // archetype guidance, Voyance Picks, attribution, system + user prompt.
