@@ -2344,6 +2344,8 @@ export function EditorialItinerary({
   // Credit nudge state
   const [creditNudge, setCreditNudge] = useState<{ action: keyof typeof CREDIT_COSTS } | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  // Quick public-link share modal (separate from the manage/collaborators dialog)
+  const [showQuickShareModal, setShowQuickShareModal] = useState(false);
   const [showShareGuideSheet, setShowShareGuideSheet] = useState(false);
    const [shareLink, setShareLink] = useState<string | null>(null);
    const [inviteHealth, setInviteHealth] = useState<InviteHealth | null>(null);
