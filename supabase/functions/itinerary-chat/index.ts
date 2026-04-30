@@ -794,6 +794,29 @@ ${itineraryDescription}
             .update({ metadata: { ...meta, userIntents: filtered } })
             .eq('id', itineraryContext.tripId);
 
+          // ── STRUCTURED STORAGE ─────────────────────────────────────────
+          // Also write the intent to `trip_day_intents` so the Day Brief and
+          // every backend pathway can read it as a row instead of digging
+          // through metadata. metadata.userIntents stays as a fallback for
+          // back-compat with older trips/clients.
+          try {
+            const { intentFromAssistantTool } = await import('../_shared/intent-normalizers.ts');
+            const { upsertDayIntents } = await import('../_shared/day-intents-store.ts');
+            const structured = intentFromAssistantTool({
+              dayNumber: newIntent.dayNumber,
+              title: newIntent.title,
+              kind: newIntent.kind as string,
+              priority: newIntent.priority as 'must' | 'should',
+              startTime: newIntent.startTime,
+              raw: newIntent.raw,
+            });
+            if (structured) {
+              await upsertDayIntents(serviceSupabase, itineraryContext.tripId, user.id, [structured]);
+            }
+          } catch (structErr) {
+            log('Failed to persist structured day intent (non-blocking)', { error: String(structErr) });
+          }
+
           log('Recorded user intent', { dayNumber: newIntent.dayNumber, title: newIntent.title, priority: newIntent.priority });
           // Surface the intent so the front-end can show a confirmation chip.
           actions.push({ type: 'record_user_intent', params: newIntent });
