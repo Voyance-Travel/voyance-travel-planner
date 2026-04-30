@@ -1,0 +1,1 @@
+ALTER TABLE public.itinerary_days ADD COLUMN IF NOT EXISTS day_brief jsonb;
