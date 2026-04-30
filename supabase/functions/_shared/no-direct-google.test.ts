@@ -77,7 +77,7 @@ Deno.test("no edge function calls googleapis.com directly", async () => {
 /**
  * Secondary guard — catches the *other* historical leak class:
  *
- *   getCachedPhotoUrl(...someGoogleUrl..., /* no costTracker */ )
+ *   getCachedPhotoUrl(...someGoogleUrl..., /+ no costTracker +/ )
  *
  * The photo cache now self-heals by lazily creating a tracker, but we still
  * want call sites to pass an explicit tracker so spend gets attributed to
