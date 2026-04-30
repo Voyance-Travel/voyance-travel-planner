@@ -420,6 +420,116 @@ serve(async (req) => {
         }
 
         // ========================================
+        // Group Pool Credit Purchase Fulfillment
+        //   User bought credits and routed them directly into a trip's group pool
+        //   instead of their personal balance.
+        // ========================================
+        if (metadata.type === "group_pool_credit_purchase") {
+          const userId = metadata.user_id;
+          const tripId = metadata.trip_id;
+          const creditsToAdd = parseInt(metadata.credits || "0", 10);
+          const amountCents = session.amount_total || 0;
+
+          if (!userId || !tripId || !creditsToAdd || creditsToAdd <= 0) {
+            logError("CRITICAL: group_pool_credit_purchase missing required fields", { metadata, sessionId: session.id });
+            break;
+          }
+
+          // IDEMPOTENCY — credit_ledger has unique(stripe_session_id, transaction_type)
+          const { data: existingLedger } = await supabaseAdmin
+            .from("credit_ledger")
+            .select("id")
+            .eq("stripe_session_id", session.id)
+            .eq("transaction_type", "purchase")
+            .maybeSingle();
+
+          if (existingLedger) {
+            log("Duplicate group_pool_credit_purchase, skipping", { sessionId: session.id });
+            break;
+          }
+
+          // Find or fall back to personal balance if budget gone
+          const { data: budget } = await supabaseAdmin
+            .from('group_budgets')
+            .select('id, owner_id, remaining_credits')
+            .eq('trip_id', tripId)
+            .maybeSingle();
+
+          if (!budget || budget.owner_id !== userId) {
+            // Fallback: trip deleted or ownership changed → credit personal balance so money isn't lost
+            logError("group_pool_credit_purchase: no valid budget — falling back to personal balance", {
+              tripId, userId, hasBudget: !!budget,
+            });
+
+            const expires = new Date();
+            expires.setMonth(expires.getMonth() + 12);
+            await supabaseAdmin.from('credit_purchases').insert({
+              user_id: userId,
+              credit_type: 'flex',
+              amount: creditsToAdd,
+              remaining: creditsToAdd,
+              expires_at: expires.toISOString(),
+              source: 'stripe',
+              stripe_session_id: session.id,
+            });
+            await syncBalanceCache(supabaseAdmin, userId);
+            await supabaseAdmin.from('credit_ledger').insert({
+              user_id: userId,
+              transaction_type: 'purchase',
+              action_type: 'group_pool_fallback',
+              credits_delta: creditsToAdd,
+              is_free_credit: false,
+              stripe_session_id: session.id,
+              amount_cents: amountCents,
+              trip_id: tripId,
+              notes: `Group pool purchase fell back to personal balance (no valid budget) — ${creditsToAdd} credits`,
+            });
+            log("Group-pool fallback credited to personal balance", { userId, creditsToAdd });
+            break;
+          }
+
+          // Add credits to the group pool
+          const { error: updateErr } = await supabaseAdmin
+            .from('group_budgets')
+            .update({
+              remaining_credits: budget.remaining_credits + creditsToAdd,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', budget.id);
+          if (updateErr) {
+            logError("CRITICAL: group_budgets update FAILED", JSON.stringify(updateErr));
+            throw new Error(`group_budgets update failed: ${updateErr.message}`);
+          }
+
+          // Group transaction log (negative credits_spent = added to pool, matches topup-group-budget)
+          await supabaseAdmin.from('group_budget_transactions').insert({
+            group_budget_id: budget.id,
+            user_id: userId,
+            action_type: 'topup',
+            credits_spent: -creditsToAdd,
+            was_free: false,
+          });
+
+          // Credit ledger entry (idempotency anchor; no personal balance change)
+          await supabaseAdmin.from('credit_ledger').insert({
+            user_id: userId,
+            transaction_type: 'purchase',
+            action_type: 'group_pool_purchase',
+            credits_delta: 0, // Personal balance unchanged
+            is_free_credit: false,
+            stripe_session_id: session.id,
+            amount_cents: amountCents,
+            trip_id: tripId,
+            notes: `Group pool top-up via Stripe — ${creditsToAdd} credits ($${(amountCents / 100).toFixed(2)})`,
+            metadata: { budget_id: budget.id, group_credits_added: creditsToAdd },
+          });
+
+          log("Group pool credit purchase fulfilled", {
+            userId, tripId, creditsToAdd, newRemaining: budget.remaining_credits + creditsToAdd,
+          });
+        }
+
+        // ========================================
         // Credit Top-Up Fulfillment (from add-credits function)
         // ========================================
         if (metadata.type === "credit_topup") {
