@@ -5,6 +5,7 @@ import {
   googleGeocode,
   googlePlacesTextSearch,
   googleRoutes,
+  googleDirections,
   googleDistanceMatrix,
 } from "../_shared/google-api.ts";
 
@@ -1264,11 +1265,13 @@ async function getGoogleTransport(
       if (mapsApiKey) {
         const originParam = toGoogleParam(origin);
         const destParam = toGoogleParam(destination);
-        const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${originParam}&destination=${destParam}&mode=transit&departure_time=now&key=${mapsApiKey}`;
         console.log(`[Transit] (Legacy Directions) Fetching directions for ${destinationName}`);
 
-        const directionsResponse = await fetch(directionsUrl);
-        const directionsData = await directionsResponse.json();
+        const directionsRes = await googleDirections(
+          { origin: originParam, destination: destParam, mode: 'transit', departureTime: 'now' },
+          { actionType: 'optimize_itinerary', reason: `transit-fallback: ${destinationName}` },
+        );
+        const directionsData = directionsRes.data ?? {};
 
         console.log(`[Transit] (Legacy Directions) API status: ${directionsData.status}`);
 
