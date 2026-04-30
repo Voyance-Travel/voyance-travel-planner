@@ -216,10 +216,13 @@ async function fetchWeatherKit(
       })
       .slice(0, days);
 
-    // If no forecast days match the trip dates, return null to fall back
-    if (filteredDays.length === 0 && daily.length > 0) {
-      // Use whatever forecast days are available
-      filteredDays.push(...daily.slice(0, days));
+    // If WeatherKit returns ZERO days overlapping the trip, fall through.
+    // Previously we silently substituted today's window — wrong dates, but
+    // displayed as if successful. Now the caller will try Open-Meteo (16-day
+    // window) or seasonal estimates instead.
+    if (filteredDays.length === 0) {
+      console.log('[Weather] WeatherKit returned no days overlapping trip start', startDate, '— falling through');
+      return null;
     }
 
     const conditionStr = current ? mapConditionCode(current.conditionCode) : 'Unknown';

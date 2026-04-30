@@ -1,80 +1,65 @@
-## Goal
+## Diagnosis
 
-Make the rule engine actually enforce its rules across all days, not collapse after day 1. Three concrete bugs, all in or near `supabase/functions/generate-itinerary/ledger-check.ts`, all visible in your most recent Paris generation log.
+The user sees only 2 days of weather forecast for a 6-day trip. This is a real data bug in `supabase/functions/weather/index.ts`, not a frontend issue.
 
-## Evidence (from the live log you just generated)
+### Root cause
 
-```text
-Day Brief: removed 15, inserted 0 placeholder(s), warnings 16
-[day 2] repeat: Removed "Travel to Paris Marriott Champs Elysees Hotel"
-[day 2] repeat: Removed "Freshen Up at Paris Marriott Champs Elysees Hotel"
-[day 2] repeat: Removed "Return to Paris Marriott Champs Elysees Hotel"
-[day 3..6] repeat: same three rituals, every single day
-[day 4] vibe_clash: Arpège (day 4) and Le Cinq (day 5) — warning only, nothing happens
-[day 5,6] repeat: Removed "Lunch: Girafe" (proposed twice, deleted once)
+Apple WeatherKit's `forecastDaily` only returns ~10 days **from today**. The function filters those days to `dayDate >= tripStart` (line 211-217). When the trip starts ~8 days from now and runs 6 days (so days 8-13), WeatherKit's window covers days 0-9 → only 2 days overlap → the function returns 2 forecast entries and never falls through to Open-Meteo (which covers 16 days and could cover the full trip).
+
+There's also a hidden second bug at lines 220-223: when zero days overlap (trip starts 11+ days out), it silently substitutes "first N days from today" — wrong dates entirely, but the function still reports `source: 'weatherkit'` as if successful.
+
+The frontend (`src/components/itinerary/WeatherForecast.tsx` line 94) correctly requests `days: tripDays`. The bug is purely in the edge function.
+
+## Fix
+
+One file: `supabase/functions/weather/index.ts`.
+
+### 1. Stop silently substituting wrong dates in `fetchWeatherKit`
+
+Replace the fall-through at lines 220-223. When WeatherKit returns zero overlapping days for the trip, return `null` so the main handler can try Open-Meteo. Today this masks the failure.
+
+### 2. Supplement WeatherKit with Open-Meteo when WeatherKit returns a partial result
+
+In the main handler (lines 433-457), after WeatherKit succeeds:
+
+- If `weather.forecast.length >= days` → use as-is (current behavior).
+- Else → call Open-Meteo for the **trip start date + days** window. Take Open-Meteo's days that aren't covered by WeatherKit (date-based merge, WeatherKit wins for overlapping days because it's higher-quality), append until total = `days`.
+- If Open-Meteo also can't cover the tail (`daysUntilTrip + days > 16`), fill remaining slots from `generateFallbackForecast` so the UI always renders `days` entries that match the trip's actual dates.
+
+Mark `source`:
+- `'weatherkit'` if all days came from WeatherKit
+- `'open-meteo'` if mixed or all Open-Meteo
+- `'fallback'` only if no real data at all
+
+### 3. Add a coverage log line
+
+```
+[Weather] coverage for "<destination>": weatherkit=<n>, open-meteo=<m>, fallback=<k>, requested=<days>, tripStart=<date>
 ```
 
-The AI generated the trip correctly. The dedup rule destroyed it.
+So we can audit in production whether real data is reaching trips.
 
-## Bug 1 — Daily anchors get deleted by dedup
+### 4. (Optional, low risk) Remove `forecast_days` cap risk in `fetchOpenMeteo`
 
-`ledger-check.ts` line 180-197 runs every later-day activity through `fuzzyMatch` against every prior day's titles. `fuzzyMatch` returns true on `includes`, so "Return to Marriott" on day 2 matches "Return to Marriott" on day 1 and gets removed. This violates the Core memory rule "explicit Return to Hotel after last non-stay activity" — that's per-day, not once.
-
-**Fix:** Add `isDailyAnchor()` exemption. An activity is a daily anchor if its title matches any of these patterns (case-insensitive):
-
-```text
-^(return to|travel to|taxi to|head back to|back to)\b.*\b(hotel|resort|inn|stay|accommodation)
-^(freshen up|wellness refresh|midday break|siesta|recharge)
-^(check[\- ]?(in|out)) at\b
-^(breakfast at (the )?hotel|breakfast at .*marriott|hilton|hyatt|...)
-```
-
-If `isDailyAnchor(activity)` is true, skip the repeat-already-done filter entirely. Anchor-guard already handles "did the user lock this once and we missed it" — those are the *first*-day cases, not the repeats.
-
-Also exclude activities tagged `category: 'transport' | 'transportation' | 'accommodation' | 'wellness'` from dedup when their title contains the hotel name. Hotel-anchored daily rituals are by definition repeating.
-
-## Bug 2 — Restaurant double-booking on consecutive days
-
-"Lunch: Girafe" appeared on day 5 *and* day 6 in the same generation run. The repeat-filter caught it on day 6, but the AI shouldn't have proposed it twice. The blocklist sent to the prompt is `usedRestaurants (7)` from `[generate-day]` — it's only updated *after* a day completes, so when days are generated in parallel or in the same batch, day 6's prompt never saw day 5's pick.
-
-**Fix:** In `compile-prompt.ts` (or wherever the restaurant pool is filtered), include all restaurants already proposed in *earlier days of the current generation run*, not just persisted ones. Easiest implementation: pass `prevDaysActivities` into compile-prompt and append all dining-category venue names to `blocklist` before the restaurant pool is computed. This is a 5-line change.
-
-## Bug 3 — Vibe clash is a warning only
-
-Line 223-236 logs the clash but never mutates. With Luminary archetype the rule (Core memory) is "1–3 Michelin dinners total" — back-to-back splurge dinners is exactly the failure mode that warning is designed to prevent.
-
-**Fix:** Promote `vibe_clash` from warning-only to *auto-action*. When today and tomorrow are both splurge dinners:
-
-1. If tomorrow's dinner is locked/user-pinned → leave today's, just warn.
-2. Otherwise: clear tomorrow's dinner activity (don't remove the slot — replace title with a casual placeholder marked `needsRecommendation: true` and add a warning so downstream restaurant-recommendation logic fills it). 
-
-This needs a small extension to `forwardState` so we can mutate the next-day activities array, OR we accept that vibe-clash mutation runs in a second pass over `out` (we already have all days in scope; we can mutate `day+1` directly inside the loop).
-
-I'll do the in-loop approach — when a clash is detected, mutate `out[dayIdx+1].activities` to mark the offending dinner.
-
-## Files to change
-
-- `supabase/functions/generate-itinerary/ledger-check.ts` — add `isDailyAnchor`, gate repeat filter, mutate next-day on vibe clash.
-- `supabase/functions/generate-itinerary/compile-prompt.ts` — extend blocklist to include in-run prior-day dining venues. (Need to read this file to confirm exact insertion point.)
-- New test: `supabase/functions/generate-itinerary/ledger-check.test.ts` (extend existing `day-ledger.test.ts` neighbor) covering: daily anchor survives across 6 days, restaurant dedup happens at prompt time, vibe clash mutates next day.
+Line 281: `Math.min(daysUntilTrip + days, 16)`. This is correct as-is, but I'll keep `forecast_days` strictly within Open-Meteo's documented max (16) and add a guard: if `daysUntilTrip + days > 16`, request `forecast_days=16` and log how many trip days were uncovered.
 
 ## Verification
 
-After deploy, generate a fresh 6-day Paris Luminary trip and tail `generate-itinerary` logs. Pass criteria:
+After deploy:
 
-- `Day Brief: removed 0` for hotel-anchor lines (we'll grep for `Removed "Return to`, `Removed "Travel to.*Hotel`, `Removed "Freshen Up`, `Removed "Check-in at`).
-- No `repeat_already_done` for category=transport or accommodation across days 2–6.
-- At most one splurge-dinner warning per trip, and the next-day dinner is replaced not just flagged.
-- Manual eyeball: every day has its hotel ritual.
+1. Curl `weather` with `{ destination: "Paris", startDate: "<8 days from today>", days: 6 }`. Expect `weather.forecast.length === 6` with dates matching the trip range, not today's range.
+2. Curl with `startDate: "<14 days from today>", days: 6`. Expect 6 forecast entries, source `'open-meteo'` (or mixed), dates correct.
+3. Curl with `startDate: "<25 days from today>", days: 6`. Expect 6 entries, source `'fallback'` (or mixed), dates correct.
+4. Pull the function logs to confirm the new coverage line prints.
 
-If any of those fail, I keep iterating.
+If the user can share which trip ID showed only 2 days, I'll also re-run that specific case post-fix.
+
+## Files changed
+
+- `supabase/functions/weather/index.ts` — only file touched.
 
 ## Out of scope
 
-- Re-architecting the ledger to first-class "anchor" type. The exemption pattern is good enough to ship now; full type system can come later.
-- Changing the AI prompt to stop proposing duplicate restaurants pre-emptively. The blocklist fix is sufficient and cheaper.
-- Fixing the cosmetic "Day 19 vs Day 4" labelling in the UI — that's a different defect; tell me when you want it picked up.
-
-## Memory updates
-
-New memory: `mem://technical/itinerary/daily-anchor-exemption` documenting the rule that daily-ritual activities (hotel returns, freshen-up, check-in/out, in-hotel breakfast) bypass dedup; pattern + categories included.
+- React component refactor (already correct).
+- Caching weather results in DB (separate cost-optimization conversation).
+- Per-day weather context inside the AI prompt — that's a different consumer; this fix focuses on the user-facing forecast card.
