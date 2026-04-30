@@ -2884,7 +2884,49 @@ export default function TripDetail() {
                      <GuidePromptBanner tripId={trip.id} destination={trip.destination} />
                    )}
 
-                  <ErrorBoundary>
+                   {/* Incomplete-generation recovery banner */}
+                   {incompleteDays.length > 0 && !isPreviewMode && (
+                     <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+                       <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                       <div className="flex-1 min-w-0">
+                         <p className="text-sm font-medium text-foreground">
+                           Generation ended early — {incompleteDays.length} {incompleteDays.length === 1 ? 'day is' : 'days are'} unplanned
+                         </p>
+                         <p className="text-xs text-muted-foreground mt-0.5">
+                           {incompleteDays.length === 1
+                             ? `Day ${incompleteDays[0]} didn't finish during generation.`
+                             : `Days ${incompleteDays.join(', ')} didn't finish during generation.`}
+                           {' '}You can build {incompleteDays.length === 1 ? 'it' : 'them'} now or plan {incompleteDays.length === 1 ? 'it' : 'them'} yourself.
+                         </p>
+                         <div className="flex flex-wrap gap-2 mt-3">
+                           <Button
+                             size="sm"
+                             onClick={() => {
+                               setGenerateNewDaysPrompt({
+                                 open: true,
+                                 daysAdded: incompleteDays.length,
+                                 insertPosition: 'after',
+                                 dayNumbers: incompleteDays,
+                               });
+                             }}
+                             className="gap-1.5"
+                           >
+                             <Sparkles className="h-3.5 w-3.5" />
+                             Build {incompleteDays.length === 1 ? 'this day' : `these ${incompleteDays.length} days`}
+                           </Button>
+                           <Button
+                             size="sm"
+                             variant="ghost"
+                             onClick={() => setIncompleteDays([])}
+                           >
+                             Dismiss
+                           </Button>
+                         </div>
+                       </div>
+                     </div>
+                   )}
+
+                   <ErrorBoundary>
                   <EditorialItinerary
                   tripId={trip.id}
                   destination={trip.destination}
