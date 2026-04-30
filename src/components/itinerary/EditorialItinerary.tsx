@@ -116,6 +116,7 @@ import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
 import { HelpButton } from './HelpButton';
 import { FirstUseHint } from './FirstUseHint';
 import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
+import TripShareModal from '@/components/sharing/TripShareModal';
 import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
 // InlineModifier removed — redundant with TripChat
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
@@ -2343,6 +2344,8 @@ export function EditorialItinerary({
   // Credit nudge state
   const [creditNudge, setCreditNudge] = useState<{ action: keyof typeof CREDIT_COSTS } | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  // Quick public-link share modal (separate from the manage/collaborators dialog)
+  const [showQuickShareModal, setShowQuickShareModal] = useState(false);
   const [showShareGuideSheet, setShowShareGuideSheet] = useState(false);
    const [shareLink, setShareLink] = useState<string | null>(null);
    const [inviteHealth, setInviteHealth] = useState<InviteHealth | null>(null);
@@ -5379,10 +5382,17 @@ export function EditorialItinerary({
               {/* ROW 2: Action Buttons */}
               <div className="px-4 sm:px-6 py-3 border-b border-border/50 overflow-hidden" data-tour="trip-actions">
                 <div className="flex items-center justify-center gap-3 flex-wrap">
-                  <Button variant="outline" size="sm" onClick={() => setShowShareModal(true)} className="gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowQuickShareModal(true)} className="gap-2">
                     <Share2 className="h-4 w-4" />
                     Share
                   </Button>
+
+                  {tripPermission?.isOwner && (
+                    <Button variant="ghost" size="sm" onClick={() => setShowShareModal(true)} className="gap-2 text-muted-foreground">
+                      <Users className="h-4 w-4" />
+                      Manage
+                    </Button>
+                  )}
 
                   {effectiveIsEditable && (entitlements?.can_export_pdf || smartFinishPurchased || isPaid || isManualMode) && (
                     <Button
@@ -7897,7 +7907,14 @@ export function EditorialItinerary({
         </DialogContent>
       </Dialog>
 
-      {/* Regenerate Confirmation Dialog */}
+      {/* Quick share modal — public read-only link first, collaborator invite secondary */}
+      <TripShareModal
+        isOpen={showQuickShareModal}
+        onClose={() => setShowQuickShareModal(false)}
+        tripId={tripId}
+        tripName={`Trip to ${destination}`}
+        destination={destination}
+      />
       <Dialog open={showRegenerateConfirm} onOpenChange={setShowRegenerateConfirm}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

@@ -111,17 +111,24 @@ export default function TripRecap() {
             size="sm" 
             className="text-white hover:bg-white/20"
             onClick={async () => {
+              const { getOrCreatePublicTripShareLink, getPublicShareErrorMessage } = await import('@/services/publicShareLink');
+              const result = await getOrCreatePublicTripShareLink(tripId || '');
+              if (!result.success || !result.link) {
+                toast.error(getPublicShareErrorMessage(result.reason));
+                return;
+              }
+              const link = result.link;
               if (navigator.share) {
                 try {
                   await navigator.share({
                     title: `My ${trip.destination} Trip`,
                     text: `Check out my trip to ${trip.destination}! Planned with Voyance.`,
-                    url: window.location.href,
+                    url: link,
                   });
                 } catch (e) { /* user cancelled */ }
               } else {
-                navigator.clipboard.writeText(window.location.href);
-                toast.success('Link copied!');
+                navigator.clipboard.writeText(link);
+                toast.success('Public link copied!');
               }
             }}
           >
@@ -397,17 +404,24 @@ export default function TripRecap() {
             <Button 
               className="flex-1"
               onClick={async () => {
+                const { getOrCreatePublicTripShareLink, getPublicShareErrorMessage } = await import('@/services/publicShareLink');
+                const result = await getOrCreatePublicTripShareLink(tripId || '');
+                if (!result.success || !result.link) {
+                  toast.error(getPublicShareErrorMessage(result.reason));
+                  return;
+                }
+                const link = result.link;
                 if (navigator.share) {
                   try {
                     await navigator.share({
                       title: `My ${trip.destination} Trip`,
                       text: `Check out my trip to ${trip.destination}! Planned with Voyance.`,
-                      url: window.location.href,
+                      url: link,
                     });
                   } catch (e) { /* user cancelled */ }
                 } else {
-                  navigator.clipboard.writeText(window.location.href);
-                  toast.success('Link copied!');
+                  navigator.clipboard.writeText(link);
+                  toast.success('Public link copied!');
                 }
               }}
             >
