@@ -192,9 +192,11 @@ async function fetchGoogleRoute(
   travelMode: string,
   apiKey: string,
   city?: string,
+  tracker?: import("../_shared/cost-tracker.ts").CostTracker,
 ): Promise<TransitEstimate | null> {
+  // Note: apiKey kept for backwards-compat with callers; the wrapper resolves it itself.
+  void apiKey;
   try {
-    const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
     const body = {
       origin: toRoutesApiLocation(origin),
       destination: toRoutesApiLocation(destination),
@@ -203,20 +205,14 @@ async function fetchGoogleRoute(
       languageCode: 'en-US',
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration',
-      },
-      body: JSON.stringify(body),
-    });
+    const result = await googleRoutes(
+      { body, fieldMask: 'routes.distanceMeters,routes.duration' },
+      { tracker, actionType: 'transit_estimate', reason: `${travelMode}: ${typeof origin === 'string' ? origin : 'coords'} → ${typeof destination === 'string' ? destination : 'coords'}` },
+    );
 
-    if (!res.ok) return null;
+    if (!result.ok || !result.data) return null;
 
-    const data = await res.json();
-    const route = data?.routes?.[0];
+    const route = result.data?.routes?.[0];
     if (!route) return null;
 
     const distMeters = Number(route.distanceMeters || 0);
