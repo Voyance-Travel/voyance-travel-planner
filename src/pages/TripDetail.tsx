@@ -226,6 +226,7 @@ export default function TripDetail() {
   const autoResumeAttemptedRef = useRef(false);
   const emptyDayHealAttemptedRef = useRef(false);
   const onReadyCalledRef = useRef(false);
+  const [incompleteDays, setIncompleteDays] = useState<number[]>([]);
   const [generateNewDaysPrompt, setGenerateNewDaysPrompt] = useState<{
     open: boolean;
     daysAdded: number;
