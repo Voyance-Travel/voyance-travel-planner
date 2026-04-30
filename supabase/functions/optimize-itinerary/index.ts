@@ -644,60 +644,67 @@ async function verifyVenue(
   }
 
   try {
-    const query = encodeURIComponent(`${venueName} ${destination}`);
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(destination)}&key=${apiKey}`;
-    
     // Get destination center for distance check
     let destCenter: { lat: number; lng: number } | null = null;
     try {
-      const geoRes = await fetch(url);
-      const geoData = await geoRes.json();
-      const loc = geoData.results?.[0]?.geometry?.location;
+      const geoRes = await googleGeocode(
+        { address: destination },
+        { actionType: 'optimize_itinerary', reason: `verify-venue center: ${destination}` },
+      );
+      const loc = geoRes.data?.results?.[0]?.geometry?.location;
       if (loc) destCenter = { lat: loc.lat, lng: loc.lng };
     } catch { /* ignore */ }
 
-    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`;
-    const response = await fetch(searchUrl);
-    const data = await response.json();
+    const searchRes = await googlePlacesTextSearch(
+      {
+        textQuery: `${venueName} ${destination}`,
+        fieldMask: "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.regularOpeningHours",
+        maxResultCount: 1,
+      },
+      { actionType: 'optimize_itinerary', reason: `verify-venue: ${venueName}` },
+    );
 
-    if (data.status !== 'OK' || !data.results?.[0]) {
+    if (!searchRes.ok) {
       return { isValid: false, confidence: 0 };
     }
 
-    const place = data.results[0];
+    const place = searchRes.data?.places?.[0];
+    if (!place) {
+      return { isValid: false, confidence: 0 };
+    }
+
+    const placeName: string = place.displayName?.text || '';
+    const placeLoc = place.location ? { lat: place.location.latitude, lng: place.location.longitude } : null;
 
     // Distance guard: reject venues >50km from destination
-    if (destCenter && place.geometry?.location) {
+    if (destCenter && placeLoc) {
       const R = 6371;
-      const dLat = (place.geometry.location.lat - destCenter.lat) * Math.PI / 180;
-      const dLng = (place.geometry.location.lng - destCenter.lng) * Math.PI / 180;
+      const dLat = (placeLoc.lat - destCenter.lat) * Math.PI / 180;
+      const dLng = (placeLoc.lng - destCenter.lng) * Math.PI / 180;
       const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(destCenter.lat * Math.PI / 180) * Math.cos(place.geometry.location.lat * Math.PI / 180) *
+        Math.cos(destCenter.lat * Math.PI / 180) * Math.cos(placeLoc.lat * Math.PI / 180) *
         Math.sin(dLng / 2) ** 2;
       const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       if (distKm > 50) {
-        console.log(`[venue-verification] ❌ REJECTED "${venueName}" → "${place.name}" is ${distKm.toFixed(0)}km from ${destination}`);
+        console.log(`[venue-verification] ❌ REJECTED "${venueName}" → "${placeName}" is ${distKm.toFixed(0)}km from ${destination}`);
         return { isValid: false, confidence: 0 };
       }
     }
 
-    const similarity = calculateStringSimilarity(venueName, place.name);
+    const similarity = calculateStringSimilarity(venueName, placeName);
     const ratingBoost = (place.rating || 0) >= 4.0 ? 0.1 : 0;
     const confidence = Math.min(similarity + ratingBoost, 1.0);
 
     return {
       isValid: confidence >= 0.7,
       confidence,
-      placeId: place.place_id,
-      name: place.name,
+      placeId: place.id,
+      name: placeName,
       rating: place.rating,
-      userRatingsTotal: place.user_ratings_total,
-      location: place.geometry?.location ? {
-        lat: place.geometry.location.lat,
-        lng: place.geometry.location.lng,
-      } : undefined,
-      formattedAddress: place.formatted_address,
-      openingHours: place.opening_hours?.weekday_text,
+      userRatingsTotal: place.userRatingCount,
+      location: placeLoc ?? undefined,
+      formattedAddress: place.formattedAddress,
+      openingHours: place.regularOpeningHours?.weekdayDescriptions,
     };
   } catch (error) {
     console.error(`[venue-verification] Error for ${venueName}:`, error);
