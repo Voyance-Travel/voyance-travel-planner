@@ -270,18 +270,40 @@ export async function ledgerCheck(
       });
     }
 
-    // 4) Vibe clash — flag (do not remove) if today AND a forward day are both splurge dinners
+    // 4) Vibe clash — auto-soften if today AND tomorrow are both splurge dinners.
+    //    Luminary archetype mandates 1–3 Michelin dinners total; back-to-back
+    //    is a believable-human failure mode. Mutate tomorrow's dinner to a
+    //    casual placeholder so downstream restaurant-recommendation fills it.
     if (ledger.forwardState && ledger.forwardState.length > 0) {
       const todaySplurge = day.activities.find((a: any) => isSplurgeDinner(a));
       const tomorrowSplurge = ledger.forwardState.find(
         (f) => f.dayNumber === dayNum + 1 && f.kind === 'dinner'
       );
       if (todaySplurge && tomorrowSplurge) {
-        warnings.push({
-          dayNumber: dayNum,
-          kind: 'vibe_clash',
-          detail: `Two splurge dinners back-to-back: "${todaySplurge.title || todaySplurge.name}" (day ${dayNum}) and "${tomorrowSplurge.title}" (day ${dayNum + 1}). Consider a casual option one of these nights.`,
-        });
+        const nextDay = outByDay.get(dayNum + 1);
+        const nextDinner = nextDay?.activities?.find((a: any) => isSplurgeDinner(a));
+        const nextDinnerLocked = !!(nextDinner && (nextDinner.locked || nextDinner.isLocked || nextDinner.lockedSource));
+
+        if (nextDinner && !nextDinnerLocked) {
+          // Replace tomorrow's splurge dinner with a casual-bistro placeholder.
+          nextDinner.title = 'Casual neighborhood dinner';
+          nextDinner.name = 'Casual neighborhood dinner';
+          nextDinner.description = 'Pacing break after a splurge dinner the night before. Pick a relaxed local bistro near the hotel.';
+          nextDinner.needsRecommendation = true;
+          nextDinner.placeholder = true;
+          if (nextDinner.cost) nextDinner.cost = { ...nextDinner.cost, amount: 0 };
+          warnings.push({
+            dayNumber: dayNum + 1,
+            kind: 'vibe_clash',
+            detail: `Replaced "${tomorrowSplurge.title}" on day ${dayNum + 1} with a casual option to pace after "${todaySplurge.title || todaySplurge.name}" on day ${dayNum}.`,
+          });
+        } else {
+          warnings.push({
+            dayNumber: dayNum,
+            kind: 'vibe_clash',
+            detail: `Two splurge dinners back-to-back: "${todaySplurge.title || todaySplurge.name}" (day ${dayNum}) and "${tomorrowSplurge.title}" (day ${dayNum + 1}). Tomorrow's dinner is locked — leaving as-is.`,
+          });
+        }
       }
     }
   }
