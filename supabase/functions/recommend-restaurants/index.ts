@@ -89,42 +89,37 @@ async function executeGoogleSearch(
   apiKey: string,
   maxResults: number = 20
 ): Promise<Record<string, unknown>[]> {
-  const requestBody: Record<string, unknown> = {
-    textQuery: query,
-    includedType: 'restaurant',
-    maxResultCount: maxResults,
-    languageCode: 'en',
-  };
+  // apiKey kept for signature compatibility; the wrapper reads the key itself
+  void apiKey;
 
-  if (coordinates) {
-    requestBody.locationBias = {
-      circle: {
-        center: { latitude: coordinates.lat, longitude: coordinates.lng },
-        radius: 8000, // Increased radius to 8km
-      },
-    };
-  }
+  const locationBias = coordinates
+    ? {
+        circle: {
+          center: { latitude: coordinates.lat, longitude: coordinates.lng },
+          radius: 8000, // 8km
+        },
+      }
+    : undefined;
 
-  const response = await fetch(
-    'https://places.googleapis.com/v1/places:searchText',
+  const result = await googlePlacesTextSearch(
     {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.photos,places.websiteUri,places.nationalPhoneNumber,places.currentOpeningHours,places.types,places.reviews',
-      },
-      body: JSON.stringify(requestBody),
-    }
+      textQuery: query,
+      includedType: 'restaurant',
+      maxResultCount: maxResults,
+      languageCode: 'en',
+      locationBias,
+      fieldMask:
+        'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.photos,places.websiteUri,places.nationalPhoneNumber,places.currentOpeningHours,places.types,places.reviews',
+    },
+    { actionType: 'recommend_restaurants_search', reason: query },
   );
 
-  if (!response.ok) {
-    console.error('[Google Places] Search error for query:', query, await response.text());
+  if (!result.ok) {
+    console.error('[Google Places] Search error for query:', query, result.errorText);
     return [];
   }
 
-  const data = await response.json();
-  return data.places || [];
+  return (result.data?.places as Record<string, unknown>[]) || [];
 }
 
 /**
