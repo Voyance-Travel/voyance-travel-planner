@@ -1,6 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import {
+  googleGeocode,
+  googlePlacesTextSearch,
+  googleRoutes,
+  googleDirections,
+  googleDistanceMatrix,
+} from "../_shared/google-api.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -497,18 +504,17 @@ async function geocodeAddress(
   }
 
   try {
-    const searchQuery = encodeURIComponent(`${address}, ${destination}`);
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${searchQuery}&key=${apiKey}`;
-    
-    const response = await fetch(url);
-    const data = await response.json();
+    const geo = await googleGeocode(
+      { address: `${address}, ${destination}` },
+      { actionType: 'optimize_itinerary', reason: `geocode: ${address}` },
+    );
 
-    if (data.status !== 'OK' || !data.results?.[0]) {
+    if (!geo.ok || geo.data?.status !== 'OK' || !geo.data?.results?.[0]) {
       console.warn(`[geocoding] No results for: ${address}`);
       return null;
     }
 
-    const result = data.results[0];
+    const result = geo.data.results[0];
     const location = result.geometry.location;
 
     const geocodeResult: GeocodingResult = {
@@ -639,60 +645,67 @@ async function verifyVenue(
   }
 
   try {
-    const query = encodeURIComponent(`${venueName} ${destination}`);
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(destination)}&key=${apiKey}`;
-    
     // Get destination center for distance check
     let destCenter: { lat: number; lng: number } | null = null;
     try {
-      const geoRes = await fetch(url);
-      const geoData = await geoRes.json();
-      const loc = geoData.results?.[0]?.geometry?.location;
+      const geoRes = await googleGeocode(
+        { address: destination },
+        { actionType: 'optimize_itinerary', reason: `verify-venue center: ${destination}` },
+      );
+      const loc = geoRes.data?.results?.[0]?.geometry?.location;
       if (loc) destCenter = { lat: loc.lat, lng: loc.lng };
     } catch { /* ignore */ }
 
-    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`;
-    const response = await fetch(searchUrl);
-    const data = await response.json();
+    const searchRes = await googlePlacesTextSearch(
+      {
+        textQuery: `${venueName} ${destination}`,
+        fieldMask: "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.regularOpeningHours",
+        maxResultCount: 1,
+      },
+      { actionType: 'optimize_itinerary', reason: `verify-venue: ${venueName}` },
+    );
 
-    if (data.status !== 'OK' || !data.results?.[0]) {
+    if (!searchRes.ok) {
       return { isValid: false, confidence: 0 };
     }
 
-    const place = data.results[0];
+    const place = searchRes.data?.places?.[0];
+    if (!place) {
+      return { isValid: false, confidence: 0 };
+    }
+
+    const placeName: string = place.displayName?.text || '';
+    const placeLoc = place.location ? { lat: place.location.latitude, lng: place.location.longitude } : null;
 
     // Distance guard: reject venues >50km from destination
-    if (destCenter && place.geometry?.location) {
+    if (destCenter && placeLoc) {
       const R = 6371;
-      const dLat = (place.geometry.location.lat - destCenter.lat) * Math.PI / 180;
-      const dLng = (place.geometry.location.lng - destCenter.lng) * Math.PI / 180;
+      const dLat = (placeLoc.lat - destCenter.lat) * Math.PI / 180;
+      const dLng = (placeLoc.lng - destCenter.lng) * Math.PI / 180;
       const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(destCenter.lat * Math.PI / 180) * Math.cos(place.geometry.location.lat * Math.PI / 180) *
+        Math.cos(destCenter.lat * Math.PI / 180) * Math.cos(placeLoc.lat * Math.PI / 180) *
         Math.sin(dLng / 2) ** 2;
       const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       if (distKm > 50) {
-        console.log(`[venue-verification] ❌ REJECTED "${venueName}" → "${place.name}" is ${distKm.toFixed(0)}km from ${destination}`);
+        console.log(`[venue-verification] ❌ REJECTED "${venueName}" → "${placeName}" is ${distKm.toFixed(0)}km from ${destination}`);
         return { isValid: false, confidence: 0 };
       }
     }
 
-    const similarity = calculateStringSimilarity(venueName, place.name);
+    const similarity = calculateStringSimilarity(venueName, placeName);
     const ratingBoost = (place.rating || 0) >= 4.0 ? 0.1 : 0;
     const confidence = Math.min(similarity + ratingBoost, 1.0);
 
     return {
       isValid: confidence >= 0.7,
       confidence,
-      placeId: place.place_id,
-      name: place.name,
+      placeId: place.id,
+      name: placeName,
       rating: place.rating,
-      userRatingsTotal: place.user_ratings_total,
-      location: place.geometry?.location ? {
-        lat: place.geometry.location.lat,
-        lng: place.geometry.location.lng,
-      } : undefined,
-      formattedAddress: place.formatted_address,
-      openingHours: place.opening_hours?.weekday_text,
+      userRatingsTotal: place.userRatingCount,
+      location: placeLoc ?? undefined,
+      formattedAddress: place.formattedAddress,
+      openingHours: place.regularOpeningHours?.weekdayDescriptions,
     };
   } catch (error) {
     console.error(`[venue-verification] Error for ${venueName}:`, error);
@@ -1158,7 +1171,6 @@ async function getGoogleRoutesTransitTransport(
       }
     }
 
-    const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
     const body = {
       origin: toRoutesApiLocation(origin),
       destination: toRoutesApiLocation(destination),
@@ -1176,21 +1188,15 @@ async function getGoogleRoutesTransitTransport(
 
     console.log(`[Transit] (Routes API) Fetching directions for ${destinationName}`);
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': fieldMask,
-      },
-      body: JSON.stringify(body),
-    });
+    const routesRes = await googleRoutes(
+      { body, fieldMask },
+      { actionType: 'optimize_itinerary', reason: `transit: ${destinationName}` },
+    );
 
-    const data = await res.json();
+    const data = routesRes.data;
 
-    if (!res.ok) {
-      const msg = data?.error?.message || JSON.stringify(data);
-      console.log(`[Transit] (Routes API) HTTP ${res.status}: ${msg}`);
+    if (!routesRes.ok) {
+      console.log(`[Transit] (Routes API) HTTP ${routesRes.status}: ${routesRes.errorText || data?.error?.message || ''}`);
       return null;
     }
 
@@ -1259,11 +1265,13 @@ async function getGoogleTransport(
       if (mapsApiKey) {
         const originParam = toGoogleParam(origin);
         const destParam = toGoogleParam(destination);
-        const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${originParam}&destination=${destParam}&mode=transit&departure_time=now&key=${mapsApiKey}`;
         console.log(`[Transit] (Legacy Directions) Fetching directions for ${destinationName}`);
 
-        const directionsResponse = await fetch(directionsUrl);
-        const directionsData = await directionsResponse.json();
+        const directionsRes = await googleDirections(
+          { origin: originParam, destination: destParam, mode: 'transit', departureTime: 'now' },
+          { actionType: 'optimize_itinerary', reason: `transit-fallback: ${destinationName}` },
+        );
+        const directionsData = directionsRes.data ?? {};
 
         console.log(`[Transit] (Legacy Directions) API status: ${directionsData.status}`);
 
@@ -1355,11 +1363,13 @@ async function getGoogleTransport(
 
     const originParam = toGoogleParam(origin);
     const destParam = toGoogleParam(destination);
-    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${originParam}&destinations=${destParam}&mode=${mode}&key=${mapsApiKey}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const dmRes = await googleDistanceMatrix(
+      { origins: originParam, destinations: destParam, mode: mode as any },
+      { actionType: 'optimize_itinerary', reason: `transport ${mode}: ${destinationName}` },
+    );
+    const data = dmRes.data ?? {};
 
-    if (data.status !== 'OK' || !data.rows?.[0]?.elements?.[0]) {
+    if (!dmRes.ok || data.status !== 'OK' || !data.rows?.[0]?.elements?.[0]) {
       return null;
     }
 

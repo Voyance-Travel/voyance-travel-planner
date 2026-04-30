@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { googlePlacesTextSearch } from "../_shared/google-api.ts";
 
 /**
  * Generate Full Preview - "Full Preview, No Details" Model
@@ -309,14 +310,17 @@ Respond in JSON format:
       if (firstDining) {
       try {
           const searchQuery = `${firstDining.venueName} ${destination}`;
-          const validationUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(searchQuery)}&key=${GOOGLE_API_KEY}`;
-          
-          const validationResponse = await fetch(validationUrl);
-          const validationData = await validationResponse.json();
-          
-          costTracker.recordGooglePlaces(1);
-          
-          if (validationData.results?.length > 0) {
+          const validationRes = await googlePlacesTextSearch(
+            {
+              textQuery: searchQuery,
+              fieldMask: "places.id,places.displayName",
+              maxResultCount: 1,
+            },
+            { tracker: costTracker, reason: `preview-validate: ${firstDining.venueName}` },
+          );
+
+          const places = validationRes.data?.places ?? [];
+          if (places.length > 0) {
             console.log(`[generate-full-preview] ✓ Validated venue: ${firstDining.venueName}`);
           } else {
             console.warn(`[generate-full-preview] ⚠ Could not validate: ${firstDining.venueName}`);

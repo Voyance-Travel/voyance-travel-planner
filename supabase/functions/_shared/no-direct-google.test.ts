@@ -25,13 +25,12 @@ import { fromFileUrl, relative } from "https://deno.land/std@0.224.0/path/mod.ts
 // is an explicit debt with a tracking note. NEVER add new entries without
 // reducing the count first.
 const PENDING_MIGRATION_ALLOWLIST = new Set([
-  // Phase 2 — pending finish:
+  // destination-images: search + photo download both flow through wrappers/
+  // photo-storage now, but the file still composes a `places.googleapis.com`
+  // photo URL string before handing it to getCachedPhotoUrl, and contains two
+  // safety guards that test substrings of `places.googleapis.com` /
+  // `maps.googleapis.com`. Net Google billing is fully tracked.
   "supabase/functions/destination-images/index.ts",
-  "supabase/functions/optimize-itinerary/index.ts",
-  "supabase/functions/generate-full-preview/index.ts",
-  "supabase/functions/generate-itinerary/action-generate-trip-day.ts",
-  "supabase/functions/generate-itinerary/action-generate-day.ts",
-  "supabase/functions/generate-itinerary/pipeline/enrich-day.ts",
   // Hotels still constructs photo URLs locally and hands them to
   // getCachedPhotoUrl, which counts the SKU on cache miss. The bare URL
   // string still trips the regex, so it is allowlisted until photos are

@@ -442,6 +442,65 @@ export async function googleDistanceMatrix(
 }
 
 // ============================================================================
+// Directions (legacy endpoint — billed under Routes SKU)
+// ============================================================================
+
+export interface DirectionsParams {
+  origin: string;
+  destination: string;
+  mode: "driving" | "transit" | "walking" | "bicycling";
+  departureTime?: string | number;
+}
+
+export interface DirectionsResult {
+  ok: boolean;
+  status: number;
+  data: any;
+  errorText?: string;
+}
+
+export async function googleDirections(
+  params: DirectionsParams,
+  ctx: GoogleCallContext,
+): Promise<DirectionsResult> {
+  const apiKey = getMapsKey();
+  if (!apiKey) {
+    return { ok: false, status: 0, data: null, errorText: "GOOGLE_MAPS_API_KEY not configured" };
+  }
+  const { tracker, ownsTracker } = resolveTracker("routes", ctx);
+  const meta: InternalCallMeta = { sku: "routes", start: Date.now(), ctx, ownsTracker, tracker };
+
+  const qs = new URLSearchParams({
+    origin: params.origin,
+    destination: params.destination,
+    mode: params.mode,
+    key: apiKey,
+  });
+  if (params.departureTime !== undefined) qs.set("departure_time", String(params.departureTime));
+
+  try {
+    const resp = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${qs.toString()}`);
+    recordSku(tracker, "routes", 1);
+
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      logAudit(meta, false, { httpStatus: resp.status, mode: params.mode });
+      await finalizeIfOwned(meta);
+      return { ok: false, status: resp.status, data: null, errorText };
+    }
+    const data = await resp.json();
+    logAudit(meta, data?.status === "OK", { mode: params.mode, googleStatus: data?.status });
+    await finalizeIfOwned(meta);
+    return { ok: true, status: resp.status, data };
+  } catch (err) {
+    recordSku(tracker, "routes", 1);
+    logAudit(meta, false, { error: String(err), mode: params.mode });
+    await finalizeIfOwned(meta);
+    return { ok: false, status: 0, data: null, errorText: String(err) };
+  }
+}
+
+// ============================================================================
 // Convenience: build a places photo URL for cases where the caller will
 // download it themselves via the wrapper. Exposed so legacy code can compose
 // the resource string without repeating the URL pattern.

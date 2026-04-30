@@ -11,18 +11,25 @@
   - `recommend-restaurants/index.ts`
   - `fetch-reviews/index.ts`
   - `hotels/index.ts` (3 search sites)
-- Migrated Distance Matrix calls in `transfer-pricing/index.ts` (3 modes — driving / transit / walking, all now individually counted).
-- Added `_shared/no-direct-google.test.ts` lint guard with explicit allowlist of remaining offenders. Currently green.
-- 276 backend tests + 197 frontend tests passing.
+- Migrated Distance Matrix calls in `transfer-pricing/index.ts` (3 modes individually counted).
+- Added `_shared/no-direct-google.test.ts` lint guard with allowlist.
 
-## Remaining (Phase 2 — second pass)
-1. `destination-images/index.ts` — Places search + multi-photo download fan-out.
-2. `optimize-itinerary/index.ts` — Geocode + Places Text Search + Routes + Directions + Distance Matrix.
-3. `generate-full-preview/index.ts` — Legacy Place Text Search validation.
-4. `generate-itinerary/action-generate-trip-day.ts`
-5. `generate-itinerary/action-generate-day.ts`
-6. `generate-itinerary/pipeline/enrich-day.ts`
-7. Pass `CostTracker` instances explicitly to `getCachedPhotoUrl` in hotels/recommend-restaurants/fetch-reviews so the warn-log goes silent and photo SKUs attribute to the right action.
-8. SQL view `v_google_spend_per_trip` for invoice reconciliation.
+## Done (Phase 2 — second pass)
+- `destination-images/index.ts` — Places Text Search migrated; tracker threaded through `getGooglePlacesPhoto` → `getCachedPhotoUrl` so photo SKUs are attributed to the right action.
+- `optimize-itinerary/index.ts` — was previously **completely untracked**. Now migrated:
+  - geocode (2 sites) → `googleGeocode`
+  - place verification text search → `googlePlacesTextSearch` (v1)
+  - transit Routes API → `googleRoutes`
+  - legacy Directions API fallback → new `googleDirections` wrapper (counted as routes SKU)
+  - Distance Matrix → `googleDistanceMatrix`
+- `generate-full-preview/index.ts` — venue validation Places search migrated.
+- `_shared/google-api.ts` — added `googleDirections` wrapper for legacy Directions endpoint.
+- Lint allowlist shrunk from 9 entries to 5 (only files left have `places.googleapis.com` photo URL strings or substring guards — no untracked fetch calls).
+- SQL view `public.v_google_spend_per_trip` shipped — per-trip / per-day SKU counts and USD estimates using current Google list pricing. Admin-only via `security_invoker`.
 
-Each pass should shrink `PENDING_MIGRATION_ALLOWLIST` in `no-direct-google.test.ts`. The list must only ever decrease.
+## Verification
+- 276 backend tests pass. 197 frontend tests pass. Lint guard `no-direct-google.test.ts` passes.
+
+## Outstanding (low priority)
+- `hotels` / `recommend-restaurants` / `fetch-reviews`: pass an explicit `CostTracker` to `getCachedPhotoUrl` so the wrapper's "lazy tracker" warn-log goes silent and photo SKUs attribute to the right action_type.
+- `destination-images`: replace the literal `https://places.googleapis.com/...` photo URL builder with `googlePlacesPhoto` (download bytes server-side) so we never expose key-bearing URLs to clients. Net spend already tracked via `getCachedPhotoUrl` cache-miss accounting.

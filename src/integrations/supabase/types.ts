@@ -9488,6 +9488,39 @@ export type Database = {
           },
         ]
       }
+      v_google_spend_per_trip: {
+        Row: {
+          geocoding_calls: number | null
+          geocoding_usd: number | null
+          photos_calls: number | null
+          photos_usd: number | null
+          places_calls: number | null
+          places_usd: number | null
+          routes_calls: number | null
+          routes_usd: number | null
+          spend_date: string | null
+          total_google_usd: number | null
+          tracking_records: number | null
+          trip_id: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_cost_tracking_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_cost_tracking_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_payments_summary: {
         Row: {
           paid_count: number | null

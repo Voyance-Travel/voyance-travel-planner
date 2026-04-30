@@ -1,8 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
-import { trackCost } from "../_shared/cost-tracker.ts";
+import { trackCost, type CostTracker } from "../_shared/cost-tracker.ts";
 import { checkVenueCache, cacheVenueResult } from "../_shared/venue-cache.ts";
+import { googlePlacesTextSearch } from "../_shared/google-api.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -368,7 +369,8 @@ async function getGooglePlacesPhoto(
   venueName: string,
   destination: string,
   apiKey: string,
-  category?: string
+  category?: string,
+  costTracker?: CostTracker,
 ): Promise<DestinationImage | null> {
   try {
     const cat = (category || '').toLowerCase();
@@ -399,33 +401,25 @@ async function getGooglePlacesPhoto(
     const MIN_MATCH_SCORE = 0.55;
 
     try {
-      const searchResponse = await fetch(
-        "https://places.googleapis.com/v1/places:searchText",
+      const searchResult = await googlePlacesTextSearch(
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": apiKey,
-            "X-Goog-FieldMask": "places.id,places.displayName,places.photos,places.types,places.formattedAddress",
-          },
-          body: JSON.stringify({
-            textQuery,
-            maxResultCount: 8, // request more so we can filter
-          }),
+          textQuery,
+          fieldMask: "places.id,places.displayName,places.photos,places.types,places.formattedAddress",
+          maxResultCount: 8,
           signal: controller.signal,
-        }
+        },
+        { tracker: costTracker, actionType: 'destination_images', reason: `image search: ${venueName}` },
       );
 
       clearTimeout(timeoutId);
 
-      if (!searchResponse.ok) {
-        const errorText = await searchResponse.text();
-        console.error("[Images] Google Places v1 error:", searchResponse.status, errorText);
+      if (!searchResult.ok) {
+        console.error("[Images] Google Places v1 error:", searchResult.status, searchResult.errorText);
         return null;
       }
 
-      const searchData = await searchResponse.json();
-      const places = searchData.places || [];
+      const searchData = searchResult.data;
+      const places = searchData?.places || [];
 
       console.log("[Images] Google Places v1 returned", places.length, "results");
 
@@ -511,7 +505,8 @@ async function getGooglePlacesPhoto(
         entityType,
         best.place.id,
         googlePhotoUrl,
-        { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id }
+        { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id },
+        costTracker,
       );
 
       return {
@@ -1304,7 +1299,8 @@ async function fetchImageTiered(
   googleApiKey?: string,
   tripAdvisorApiKey?: string,
   lovableApiKey?: string,
-  skipCache?: boolean
+  skipCache?: boolean,
+  costTracker?: CostTracker,
 ): Promise<DestinationImage> {
   // Step 1: Clean the venue name and check if we should skip API search
   const { cleanName, shouldSkip, inferredCategory } = extractVenueName(venueName);
@@ -1336,7 +1332,8 @@ async function fetchImageTiered(
       cleanName,
       destination,
       googleApiKey,
-      effectiveCategory
+      effectiveCategory,
+      costTracker,
     );
     if (googleImage) {
       candidates.push(googleImage);
@@ -1564,7 +1561,8 @@ serve(async (req) => {
             googleApiKey,
             tripAdvisorApiKey,
             lovableApiKey,
-            params.skipCache
+            params.skipCache,
+            costTracker,
           );
           results[venue.name] = image;
           if (image.source === 'google_places') {
@@ -1656,7 +1654,8 @@ serve(async (req) => {
       googleApiKey,
       tripAdvisorApiKey,
       lovableApiKey,
-      params.skipCache
+      params.skipCache,
+      costTracker,
     );
 
     // Update type if specified
