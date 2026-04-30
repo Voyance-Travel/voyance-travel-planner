@@ -88,6 +88,13 @@ Use ONLY when the user wants to replace ONE specific activity with something els
 ### regenerate_day (for complete rebuilds with a new theme)
 - "Scrap Day 5 entirely and make it an art day"
 
+### record_user_intent (FREE — always use for stated wishes)
+Use this WHENEVER the user expresses a concrete wish for a specific day, even if you also call another tool. Examples:
+- "I want ramen for dinner tonight" → record_user_intent(target_day=current, title='ramen', kind='dinner', priority='must')
+- "We should do a spa morning Tuesday" → record_user_intent(target_day=Tuesday, title='spa morning', kind='spa', priority='should')
+- "Avoid seafood Friday" → record_user_intent(target_day=Friday, title='avoid seafood', kind='avoid', priority='must')
+This PERSISTS the request so the next regeneration honours it. It is FREE (no credits) and complements other tools — call it FIRST, then any rewrite.
+
 ## MULTI-DAY AWARENESS
 When users mention multiple days ("Days 5 and 6 feel repetitive"), you MUST call \`rewrite_day\` for EACH day separately. For the SECOND day, explicitly instruct the rewrite to AVOID the categories, neighborhoods, and restaurant styles used in the FIRST day. Reference specific activities from the other day in your instructions. Example: "Diversify from Day 5 which has [X, Y, Z]. Use different neighborhoods and activity types."
 
