@@ -417,32 +417,24 @@ async function searchHotels(params: HotelSearchParams & { skipCache?: boolean })
     console.log('[Hotels] 🔍 Searching Google Places for hotels in:', cityName);
 
     // Step 2a: Text Search for hotels in the city
-    const response = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
+    const searchResult = await googlePlacesTextSearch(
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos,places.types',
-        },
-        body: JSON.stringify({
-          textQuery: `hotels in ${cityName}`,
-          includedType: 'lodging',
-          maxResultCount: 10,
-          languageCode: 'en',
-        }),
-      }
+        textQuery: `hotels in ${cityName}`,
+        includedType: 'lodging',
+        maxResultCount: 10,
+        languageCode: 'en',
+        fieldMask:
+          'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos,places.types',
+      },
+      { actionType: 'hotels_city_search', reason: `hotels in ${cityName}` },
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Hotels] Google Places search failed:', response.status, errorText);
+    if (!searchResult.ok) {
+      console.error('[Hotels] Google Places search failed:', searchResult.status, searchResult.errorText);
       return generateFallbackHotels(params, params.destination);
     }
 
-    const data = await response.json();
-    const places = data.places || [];
+    const places = searchResult.data?.places || [];
     console.log('[Hotels] Found', places.length, 'hotels via Google Places');
 
     if (places.length === 0) {
