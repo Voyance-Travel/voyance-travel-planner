@@ -1,55 +1,52 @@
-## Diagnosis
+# Two-Path Group Credit Top-Up
 
-Sharing is still corrupted because the app currently has two different share systems, and the main itinerary Share button is still using the collaborator-invite flow by default.
+You're right — and the system half-supports this today. The "transfer from my balance" path works, but the "buy fresh credits straight into the group" path doesn't exist as one flow. Today the owner has to leave the trip, buy credits on the Pricing page, come back, then transfer. That's the friction you're feeling.
 
-What I found:
-- The generated invite link for the recent Paris trip is valid: `/invite/4qO9QB7CSOjh` loads the invite page correctly.
-- But that link is not a seamless trip share. It asks the recipient to sign in/create an account and “join” the trip.
-- The true read-only public share route is `/trip-share/:token`, but the current itinerary Share modal does not expose or enable that flow. It only shows “Invite to Collaborate.”
-- The trip currently has `share_enabled=false` and no public share token, so a public share URL would show “Trip Not Found or sharing is disabled.”
-- There is a newer `TripShareModal` with both “Public Link” and “Invite to Collaborate,” but the main itinerary page is not using it. Instead, `EditorialItinerary.tsx` has its own older share dialog.
-- `TripRecap.tsx` also shares `window.location.href`, which is not a valid public share link for recipients.
+## What changes
 
-## Fix Plan
+The `GroupTopupModal` becomes a two-tab modal:
 
-### 1. Make public read-only sharing the primary share action
-- Update the main itinerary Share button in `EditorialItinerary.tsx` so it uses the unified `TripShareModal` instead of the older embedded collaborator-only dialog.
-- In that modal, make the “Public Link” the default/primary path: anyone with the link can view the itinerary without signing in.
-- Keep “Invite to Collaborate” available, but label it clearly as the edit/join flow.
+```text
+┌─ Top Up Group Pool ────────────────────┐
+│                                        │
+│  [ From my balance ] [ Buy new pack ]  │  ← tabs
+│                                        │
+│  Your balance: 240 credits             │
+│  ( 50 ) ( 100 ) ( 200 )                │
+│  [ Add 100 credits to group ]          │
+└────────────────────────────────────────┘
+```
 
-### 2. Auto-create a working public link when the user shares
-- Add a shared helper for consumer public share links, e.g. `getOrCreatePublicTripShareLink(tripId)`.
-- The helper will:
-  - Check the trip’s existing `share_enabled` / `share_token`.
-  - If missing or disabled, call `toggle_consumer_trip_share(tripId, true)`.
-  - Return a canonical `https://travelwithvoyance.com/trip-share/{token}` link.
-- Use this helper in all consumer “Share Trip” surfaces instead of copying the current private URL.
+### Tab 1 — From my balance (existing behavior, unchanged)
+Preset 50 / 100 / 200, calls `topup-group-budget`, deducts from owner's personal balance, adds to pool. Already works.
 
-### 3. Repair Trip Recap sharing
-- Replace both `TripRecap.tsx` share handlers that currently use `window.location.href`.
-- They should generate/copy/native-share the public `/trip-share/:token` link.
-- Optionally reuse `ShareTripCard` or the unified share modal if that fits cleanly, but the key behavior is that recipients get a working public link.
+### Tab 2 — Buy new pack (new)
+Shows the same credit packs from `CREDIT_PACKS` (Pricing page catalog). Owner picks a pack → Stripe Checkout opens → on success, the purchased credits land **directly in the group pool**, not the owner's personal balance.
 
-### 4. Fix stale/empty link behavior in the unified share modal
-- Ensure Copy / native share / WhatsApp / X never fire with an empty link.
-- If the public link is enabled but not loaded yet, create/load it before sharing.
-- Show a loading/disabled state while the link is being created.
-- Surface backend reasons like `not_authenticated`, `not_owner`, or `trip_not_found` with useful messages instead of generic “Failed to update sharing.”
+## How it works (technical)
 
-### 5. Keep collaboration separate and explicit
-- Keep `/invite/:token` for adding collaborators only.
-- Adjust copy in the share UI so users understand:
-  - “Public link” = view-only, no sign-in required.
-  - “Invite collaborators” = recipient signs in and joins the trip.
-- Avoid naming the collaborator link “share link” in user-facing UI.
+1. **Frontend** — Add `<Tabs>` to `GroupTopupModal.tsx`. Tab 2 renders pack cards (reuse styles from `CreditsAndBilling.tsx`) and calls `create-checkout` with new metadata: `{ destination: "group_pool", trip_id }`.
 
-### 6. Verify end-to-end
-- Use the recent Paris trip as the test case.
-- Generate a public share link from the app.
-- Open the resulting `/trip-share/:token` URL as an unauthenticated visitor and confirm it loads the 6-day itinerary.
-- Confirm `/invite/:token` still works separately for collaborator joining.
-- Check console/network for RPC errors and confirm no “Trip Not Found or sharing disabled” on a freshly shared trip.
+2. **`create-checkout` edge function** — Accept optional `destination` and `tripId` in the request body. Pass them through to Stripe session metadata so the webhook knows where the credits go. Validate the caller is the trip owner before allowing `destination=group_pool`.
 
-## Expected Result
+3. **`stripe-webhook` edge function** — On `checkout.session.completed`, branch on `metadata.destination`:
+   - `"group_pool"` → call the same internal logic as `topup-group-budget` (insert into `group_budgets` / `group_budget_transactions`) instead of crediting the user's personal balance. Mark the ledger row `source: 'stripe_purchase'` so it shows up correctly in recent activity.
+   - default → existing behavior (credit personal balance).
 
-When the user clicks Share, the app produces a public read-only itinerary URL that works immediately for anyone. Collaborator invites remain available, but they no longer hijack normal sharing or force recipients through sign-up just to view the trip.
+4. **Success return path** — `returnPath` set to the trip URL with `?group_topup=success` so we can fire a toast and refresh `['group-budget', tripId]` queries when the user returns.
+
+5. **Edge case** — If the Stripe payment succeeds but the trip was deleted between checkout and webhook, fall back to crediting the owner's personal balance and log it. No money lost.
+
+## Files touched
+
+- `src/components/modals/GroupTopupModal.tsx` — add tabs, pack picker UI
+- `supabase/functions/create-checkout/index.ts` — accept + forward `destination` and `tripId` metadata, owner check
+- `supabase/functions/stripe-webhook/index.ts` — branch credit destination on metadata
+- `src/components/itinerary/GroupBudgetDisplay.tsx` — minor copy: "Top up pool" stays, but the empty-state CTA already says "Purchase group credits" which now actually does that
+
+## Verification
+
+- As owner with sufficient balance: Tab 1 → pool increases, personal balance decreases. (regression check)
+- As owner with zero balance: Tab 2 → Stripe Checkout → on return, pool shows new credits, personal balance unchanged.
+- As non-owner collaborator: modal not reachable (existing guard).
+- Webhook idempotency: replay the same `checkout.session.completed` event, pool credited only once.
