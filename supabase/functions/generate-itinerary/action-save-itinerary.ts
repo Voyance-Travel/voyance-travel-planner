@@ -375,7 +375,27 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       const tripStartFromDb = (tripCountryRow as any)?.start_date || tripStartDate;
       const prefs = (tripCountryRow as any)?.preferences as Record<string, any> | null;
 
-      // Parse fine-tune notes once for the whole trip
+      // ── STRUCTURED DAY INTENTS (preferred source) ──
+      // Read normalized rows from `trip_day_intents` and group by day. Falls
+      // back to legacy metadata blobs if the table is empty for this trip.
+      let intentsByDay = new Map<number, Array<Record<string, any>>>();
+      let tripWideFromTable: string[] = [];
+      try {
+        const { fetchActiveDayIntents, groupIntentsByDay } = await import('../_shared/day-intents-store.ts');
+        const rows = await fetchActiveDayIntents(supabase, tripId);
+        const grouped = groupIntentsByDay(rows);
+        for (const [dn, list] of grouped.entries()) {
+          if (dn === 0) {
+            tripWideFromTable = list.map((r) => r.title);
+          } else {
+            intentsByDay.set(dn, list as Array<Record<string, any>>);
+          }
+        }
+      } catch (e) {
+        console.warn('[save-itinerary] day-intents fetch failed (non-blocking):', e);
+      }
+
+      // Parse fine-tune notes once for the whole trip (legacy fallback)
       let parsedFineTune: { perDay: Array<Record<string, any>>; tripWide: string[] } = { perDay: [], tripWide: [] };
       try {
         if (additionalNotes.trim()) {
