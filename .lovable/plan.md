@@ -1,63 +1,145 @@
-# Two-Mode Assistant: Advisory vs. Action
+Yes — you’re right. We control the storage, so the system should not keep rediscovering meaning from a blob every time. The current implementation improved the day checker, but it still feeds that checker from mixed sources like `metadata.userAnchors`, `metadata.userIntents`, `metadata.additionalNotes`, `mustDoActivities`, and `perDayActivities`. That means the Day Brief exists, but its inputs are still partly blob-shaped.
 
-## Problem
+Plan: build a structured, day-scoped intent intake layer so every user mention becomes its own row before generation or assistant actions use it.
 
-Today the assistant has only **mutation tools** (`rewrite_day`, `suggest_activity_swap`, `adjust_day_pacing`, `regenerate_day`, `apply_filter`). The system prompt explicitly tells it `rewrite_day` is the "PREFERRED tool for conversational editing." So when you ask *"what's the best way to get from A to B?"* or *"is this dinner walkable?"*, its only hammer is to rewrite your day. It doesn't ask "want me to change something?" — it just announces the change.
+```text
+Four entry points
+  1. Start / Chat Planner extraction
+  2. Fine-Tune notes
+  3. Manual paste / manual add / edits
+  4. Itinerary assistant chat
+        |
+        v
+Structured day-intent rows
+  one row per activity / restaurant / avoid / constraint / transport / note
+        |
+        v
+Day Brief builder
+  grouped by trip_id + day_number + date
+        |
+        v
+Prompt + post-save checker + UI visibility
+```
 
-There is no path for the AI to simply **answer**, **advise**, or **discuss** without proposing a structural edit.
+## What I’ll change
 
-## Fix: Intent Classifier + Advisory Mode
+### 1. Add a real normalized table for day-scoped user intent
+Create a new table, separate from the existing generic `trip_intents`, because `trip_intents` only stores `intent_type` + `intent_value` and cannot reliably answer: what day, what time, what kind of thing, which entry point, is it locked, and has it been fulfilled?
 
-Two distinct modes, chosen per turn:
+Proposed table shape:
 
-1. **Advisory mode** (default for questions, "what about…", "is X close to Y", "should I…", "tell me about…", "why did you pick…"). Free. No structural changes. The AI answers conversationally using itinerary context + day-brief + DNA.
-2. **Action mode** (only when the user's intent is clearly an *edit*: "change", "replace", "remove", "add", "make Day 3…", "swap…", or after the AI proposed a change and the user confirmed). Burns credits.
+```text
+trip_day_intents
+- id
+- trip_id
+- user_id
+- day_number
+- date
+- destination
+- source_entry_point
+  chat_planner | fine_tune | manual_paste | manual_add | assistant_chat | pin | edit
+- intent_kind
+  restaurant | dinner | lunch | breakfast | activity | event | transport | avoid | constraint | note
+- title
+- raw_text
+- start_time
+- end_time
+- priority
+  must | should | avoid
+- locked
+- locked_source
+- status
+  active | fulfilled | superseded | dismissed
+- fulfilled_activity_id
+- metadata
+- created_at / updated_at
+```
 
-### Mode selection rules (enforced in the prompt)
+RLS will match trip ownership/collaboration rules. This becomes the storage contract for user requirements.
 
-- Default to **Advisory**.
-- Enter Action mode only if the user uses an **imperative edit verb** OR explicitly confirms a previously proposed change ("yes do it", "go ahead").
-- For ambiguous turns ("Day 3 feels heavy"), the AI asks: *"Want me to lighten Day 3, or just talk through what's there?"* — never auto-rewrites.
-- A stated wish ("I want ramen tonight") → call **`record_user_intent`** (free) and **answer advisorily** ("Got it — saved. Want me to slot it into tonight, or hold for the next regenerate?"). Do NOT auto-`rewrite_day`.
+### 2. Add a shared normalizer/parser used by all four entry points
+Create shared functions that convert messy input into structured rows:
 
-## Technical Changes
+- day-by-day pasted plans become multiple rows, not one `perDayActivities` string
+- “Day 3 dinner at Belcanto 7:30” becomes one dinner row for Day 3
+- “avoid seafood Friday” becomes one avoid row for that date/day
+- “need transport from US Open to JFK” becomes one transport/constraint row
+- “ramen tonight” in assistant chat becomes a dinner row for the current day
 
-**File: `supabase/functions/itinerary-chat/index.ts`**
+The key shift: we can still preserve the raw text for auditing, but raw text is no longer the working source of truth.
 
-1. **Rewrite the system prompt** — replace the "CONVERSATIONAL EDITING PHILOSOPHY" section with an "ADVISORY-FIRST" section:
-   - "Default mode is ADVISORY. Answer the user's question. Do NOT call mutation tools unless the user's message contains an explicit edit verb or confirms a prior proposal."
-   - Add a "PROPOSE-BEFORE-ACTING" rule: when the user describes a problem ("transit is tight on Day 2"), the AI **describes** the issue and **offers** a fix, then waits.
-   - Remove "rewrite_day is the PREFERRED tool for conversational editing." Replace with "rewrite_day is for confirmed structural edits only."
+### 3. Wire Start / Chat Planner extraction into structured storage
+Today the chat planner returns useful fields, but much of it still lands as `mustDoActivities`, `additionalNotes`, `userConstraints`, and `perDayActivities` blobs/arrays inside metadata.
 
-2. **Add a non-mutating tool `answer_question`** (optional but useful for telemetry):
-   - Args: `topic` (transit | timing | venue_info | recommendation | clarification | other), `answer_summary`.
-   - Does nothing server-side beyond logging. Lets us measure advisory vs. action ratio and ensures the model has a "do nothing structural" path it can pick.
+I’ll keep those for backward compatibility, but also immediately write normalized `trip_day_intents` rows after trip creation. This means every extracted venue, restaurant, event, avoid, transport need, or time block has a day-scoped row.
 
-3. **Add a `propose_change` tool** (advisory→action handshake):
-   - Args: `target_day`, `summary`, `would_call` (one of the mutation tool names), `would_call_args`.
-   - The UI renders this as a **"Apply this change"** button. Credits are only charged when the user clicks Apply, which then invokes the real mutation tool. This is the explicit consent gate the user is asking for.
+### 4. Wire Fine-Tune notes into the same table
+Currently Fine-Tune notes are parsed at generation time. That’s too late and too lossy.
 
-4. **Tool-call gating on the server** (defense in depth):
-   - If the user message contains no edit verbs AND is not a confirmation of a pending proposal, **strip mutation tool calls from the response** before executing them, and replace with the advisory text + a `propose_change` card. This prevents the model from "just doing it" even if the prompt drifts.
-   - Edit-verb regex: `/\b(change|replace|swap|remove|delete|add|rewrite|regenerate|make .* (more|less)|move|push|shift|cancel)\b/i`.
-   - Confirmation regex: `/\b(yes|yep|do it|go ahead|sounds good|apply|confirm|please do)\b/i` AND a pending proposal exists in the last assistant turn.
+I’ll add a persist step so Fine-Tune notes are parsed once into day-intent rows when generation starts or when the trip is updated. The original note remains available, but the planner reads the structured rows.
 
-5. **Pending-proposal state** — store the last `propose_change` in `metadata.pendingProposal` (conversation-scoped, ephemeral). Cleared on apply, reject, or after 5 turns.
+### 5. Wire manual paste, manual add, pins, and edits into the same table
+Manual/pasted activities already become locked anchors in metadata and itinerary rows. I’ll also write each one into `trip_day_intents` with `locked=true`, so the Day Brief can treat them consistently with assistant and fine-tune requests.
 
-**File: `src/components/itinerary/AssistantChat*.tsx`** (whichever renders tool results)
+For manual additions/edits applied through the itinerary UI or assistant action executor, I’ll ensure the backend save path extracts any locked/user-requested activities into day-intent rows as part of normalization.
 
-6. Render `propose_change` as a card with **Apply** / **Not now** buttons. Apply triggers the corresponding mutation tool with the saved args. Not now clears the pending proposal.
-7. Render `answer_question` as plain markdown (no card, no credit badge).
+### 6. Change the Day Brief builder to read structured rows first
+Update `day-ledger.ts`, `compile-prompt.ts`, and `action-save-itinerary.ts` so the Day Brief gathers `userIntent` from `trip_day_intents` grouped by day.
 
-## Out of Scope
+Fallback behavior:
+- read old metadata fields only if structured rows are absent
+- optionally backfill rows from old metadata during save/generation
+- do not break existing trips
 
-- No changes to the mutation tools themselves.
-- No changes to the day-brief / ledger pipeline.
-- No new credit costs — advisory is free; mutations stay at current pricing.
+This makes the day checker deterministic: it no longer has to guess from blobs unless it is handling legacy data.
 
-## Why This Solves It
+### 7. Persist day briefs correctly into normalized day rows
+The database already has `itinerary_days.day_brief`, but current sync does not appear to populate it. I’ll fix the sync so each `itinerary_days` row stores the exact Day Brief snapshot used/validated for that day.
 
-- The AI **stops auto-replanning** because mutation tools are gated behind both a prompt rule and a server-side verb check.
-- Users get a real **conversation** ("is this walkable?" → "yes, 9 min flat walk along Av. da Liberdade") without burning credits.
-- When the AI *does* want to change something, it **proposes** it via a card and waits for the click — matching how a human concierge would behave.
-- Aligns with the existing **charge-on-action** credit policy in core memory.
+That gives us a visible audit trail:
+
+```text
+Day 4 knew:
+- user required ramen dinner
+- avoid seafood
+- already did Belém Tower
+- tomorrow has a Michelin dinner
+- museum X closed today
+```
+
+### 8. Add fulfillment/status tracking
+After generation/save, when the checker sees that an intent is present in an activity, mark that intent as fulfilled and link it where possible. If the AI misses a must-intent and the checker inserts a placeholder, keep the intent active and surface it clearly.
+
+This prevents the system from repeatedly asking, “Did we remember this?” because the database knows whether each request was fulfilled.
+
+### 9. Add regression tests around the exact failure mode
+Add tests for:
+
+- multiple restaurants mentioned across multiple days are stored as separate rows
+- Fine-Tune “Day 2 ramen dinner” becomes a Day 2 dinner intent
+- assistant “ramen tonight” stores one row and does not trigger replanning
+- Day Brief reads structured rows and renders them in `USER REQUIRED`
+- save checker inserts placeholder only when an active must-intent is missing
+- legacy metadata fallback still works
+
+## Expected outcome
+
+After this, “Jess told us she wants X dinner on Day 3” will not live as a buried sentence in a metadata blob. It will be a real row:
+
+```text
+trip_id: ...
+day_number: 3
+intent_kind: dinner
+title: X
+priority: must
+source_entry_point: chat_planner
+status: active/fulfilled
+```
+
+Then the generator, assistant, checker, and UI can all use the same source of truth instead of each pathway trying to parse the same blob differently.
+
+## Important principle
+
+This does not replace the Day Brief. It fixes the Day Brief’s input layer.
+
+The Day Brief should remain the per-day working packet. But the raw material feeding it should be normalized structured intent rows, not a collection of ad hoc metadata fields.

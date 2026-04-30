@@ -375,7 +375,27 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       const tripStartFromDb = (tripCountryRow as any)?.start_date || tripStartDate;
       const prefs = (tripCountryRow as any)?.preferences as Record<string, any> | null;
 
-      // Parse fine-tune notes once for the whole trip
+      // ── STRUCTURED DAY INTENTS (preferred source) ──
+      // Read normalized rows from `trip_day_intents` and group by day. Falls
+      // back to legacy metadata blobs if the table is empty for this trip.
+      let intentsByDay = new Map<number, Array<Record<string, any>>>();
+      let tripWideFromTable: string[] = [];
+      try {
+        const { fetchActiveDayIntents, groupIntentsByDay } = await import('../_shared/day-intents-store.ts');
+        const rows = await fetchActiveDayIntents(supabase, tripId);
+        const grouped = groupIntentsByDay(rows);
+        for (const [dn, list] of grouped.entries()) {
+          if (dn === 0) {
+            tripWideFromTable = list.map((r) => r.title);
+          } else {
+            intentsByDay.set(dn, list as Array<Record<string, any>>);
+          }
+        }
+      } catch (e) {
+        console.warn('[save-itinerary] day-intents fetch failed (non-blocking):', e);
+      }
+
+      // Parse fine-tune notes once for the whole trip (legacy fallback)
       let parsedFineTune: { perDay: Array<Record<string, any>>; tripWide: string[] } = { perDay: [], tripWide: [] };
       try {
         if (additionalNotes.trim()) {
@@ -405,30 +425,48 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         const dn = (d.dayNumber as number) || 0;
         const dayAnchors = userAnchors.filter((a) => Number(a.dayNumber) === dn);
 
-        // Soft intents for THIS day from fine-tune + assistant
+        // Soft intents for THIS day. Prefer the structured `trip_day_intents`
+        // rows (one per user-stated wish) when present; fall back to legacy
+        // metadata blobs otherwise.
         const extraIntents: Array<Record<string, any>> = [];
-        for (const p of parsedFineTune.perDay) {
-          if (Number(p.dayNumber) !== dn) continue;
-          extraIntents.push({
-            title: p.title,
-            startTime: p.startTime,
-            kind: p.kind,
-            source: 'fine_tune',
-            priority: p.priority,
-            raw: p.raw,
-          });
-        }
-        for (const ri of recordedIntents) {
-          if (Number(ri.dayNumber) !== dn) continue;
-          if (!ri.title || typeof ri.title !== 'string') continue;
-          extraIntents.push({
-            title: ri.title,
-            startTime: ri.startTime,
-            kind: ri.kind || 'activity',
-            source: ri.source || 'assistant',
-            priority: ri.priority === 'must' ? 'must' : 'should',
-            raw: ri.raw || ri.title,
-          });
+        const structuredForDay = intentsByDay.get(dn) || [];
+        if (structuredForDay.length > 0) {
+          for (const r of structuredForDay) {
+            if (r.locked) continue; // locked rows already covered by anchors
+            extraIntents.push({
+              title: r.title,
+              startTime: r.start_time || undefined,
+              endTime: r.end_time || undefined,
+              kind: r.intent_kind || 'activity',
+              source: r.source_entry_point || 'system',
+              priority: r.priority === 'must' ? 'must' : (r.priority === 'avoid' ? 'must' : 'should'),
+              raw: r.raw_text || r.title,
+            });
+          }
+        } else {
+          for (const p of parsedFineTune.perDay) {
+            if (Number(p.dayNumber) !== dn) continue;
+            extraIntents.push({
+              title: p.title,
+              startTime: p.startTime,
+              kind: p.kind,
+              source: 'fine_tune',
+              priority: p.priority,
+              raw: p.raw,
+            });
+          }
+          for (const ri of recordedIntents) {
+            if (Number(ri.dayNumber) !== dn) continue;
+            if (!ri.title || typeof ri.title !== 'string') continue;
+            extraIntents.push({
+              title: ri.title,
+              startTime: ri.startTime,
+              kind: ri.kind || 'activity',
+              source: ri.source || 'assistant',
+              priority: ri.priority === 'must' ? 'must' : 'should',
+              raw: ri.raw || ri.title,
+            });
+          }
         }
 
         const priorOnly = allActivities.filter((p) => p.dayNumber < dn);
@@ -442,7 +480,8 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         else if (typeof dietary === 'string' && dietary.trim()) userConstraints.dietary = [dietary.trim()];
         const mobility = (prefs as any)?.mobility || (tripMeta as any)?.mobility;
         if (mobility && typeof mobility === 'string') userConstraints.mobility = mobility;
-        if (parsedFineTune.tripWide.length > 0) userConstraints.tripWideNotes = parsedFineTune.tripWide;
+        const tripWideMerged = [...tripWideFromTable, ...parsedFineTune.tripWide];
+        if (tripWideMerged.length > 0) userConstraints.tripWideNotes = tripWideMerged;
 
         return buildDayLedger({
           dayNumber: dn,
@@ -479,6 +518,25 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
 
       // Persist ledger snapshots on the itinerary JSON for downstream consumers.
       (itinerary as any).dayLedgers = ledgers;
+
+      // ── RECONCILE FULFILLMENT ──
+      // Mark active `trip_day_intents` rows as fulfilled when their title now
+      // appears in the saved itinerary. Best-effort, non-blocking.
+      try {
+        const { reconcileFulfillment } = await import('../_shared/day-intents-store.ts');
+        const dayPayload = itineraryDays.map((d: any) => ({
+          dayNumber: (d.dayNumber as number) || 0,
+          activities: (d.activities || []).map((a: any) => ({
+            id: a.id,
+            title: a.title,
+            name: a.name,
+          })),
+        })).filter((d: any) => d.dayNumber > 0);
+        const updated = await reconcileFulfillment(supabase, tripId, dayPayload);
+        if (updated > 0) console.log(`[save-itinerary] ✅ Reconciled ${updated} fulfilled day-intent(s)`);
+      } catch (rfErr) {
+        console.warn('[save-itinerary] reconcileFulfillment failed (non-blocking):', rfErr);
+      }
     }
   } catch (ledgerErr) {
     console.warn('[save-itinerary] Day Brief check failed (non-blocking):', ledgerErr);

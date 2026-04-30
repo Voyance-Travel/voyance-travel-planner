@@ -6682,6 +6682,93 @@ export type Database = {
           },
         ]
       }
+      trip_day_intents: {
+        Row: {
+          created_at: string
+          date: string | null
+          day_number: number | null
+          destination: string | null
+          end_time: string | null
+          fulfilled_activity_id: string | null
+          fulfilled_at: string | null
+          id: string
+          intent_kind: string
+          locked: boolean
+          locked_source: string | null
+          metadata: Json
+          priority: string
+          raw_text: string | null
+          source_entry_point: string
+          start_time: string | null
+          status: string
+          title: string
+          trip_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          date?: string | null
+          day_number?: number | null
+          destination?: string | null
+          end_time?: string | null
+          fulfilled_activity_id?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          intent_kind: string
+          locked?: boolean
+          locked_source?: string | null
+          metadata?: Json
+          priority?: string
+          raw_text?: string | null
+          source_entry_point: string
+          start_time?: string | null
+          status?: string
+          title: string
+          trip_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          date?: string | null
+          day_number?: number | null
+          destination?: string | null
+          end_time?: string | null
+          fulfilled_activity_id?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          intent_kind?: string
+          locked?: boolean
+          locked_source?: string | null
+          metadata?: Json
+          priority?: string
+          raw_text?: string | null
+          source_entry_point?: string
+          start_time?: string | null
+          status?: string
+          title?: string
+          trip_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_day_intents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "trip_day_intents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_day_summaries: {
         Row: {
           created_at: string
