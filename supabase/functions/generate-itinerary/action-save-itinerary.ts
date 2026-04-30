@@ -7,6 +7,8 @@ import { type ActionContext, okJson, errorJson } from './action-types.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
 import { applyAnchorsWin as sharedApplyAnchorsWin } from './anchor-guard.ts';
+import { buildDayLedger, type DayLedger } from './day-ledger.ts';
+import { ledgerCheck } from './ledger-check.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
