@@ -33,6 +33,7 @@ import { CREDIT_COSTS, formatCredits } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
 import { LockedDayCard } from './LockedDayCard';
+import { TripTotalDeltaIndicator } from './TripTotalDeltaIndicator';
 import { FrostedGateOverlay } from './FrostedGateOverlay';
 import { BulkUnlockBanner, getBulkUnlockCost } from './BulkUnlockBanner';
 import { useUnlockDay } from '@/hooks/useUnlockDay';
