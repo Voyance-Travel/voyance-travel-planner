@@ -71,18 +71,34 @@ export async function getCachedPhotoUrl(
   // Download the photo from Google
   try {
     console.log(`[PhotoStorage] Downloading: ${entityType}/${sanitizedId}`);
-    
+
     // Follow redirects (Google Places API redirects to actual image)
     const photoResponse = await fetch(googlePhotoUrl, {
       headers: { 'Accept': 'image/*' },
       redirect: 'follow',
     });
-    
+
+    // Always count the call — Google bills the request, not the success.
+    // Only Places-style URLs are billable; skip TripAdvisor/Foursquare/etc.
+    const isBillableGoogle =
+      googlePhotoUrl.includes('places.googleapis.com') ||
+      googlePhotoUrl.includes('maps.googleapis.com');
+    if (isBillableGoogle) {
+      if (costTracker) {
+        costTracker.recordGooglePhotos(1);
+      } else {
+        console.warn(
+          `[PhotoStorage] Photo download for ${entityType}/${sanitizedId} ` +
+            `was not attributed to a CostTracker — Google spend will be under-reported.`,
+        );
+      }
+    }
+
     if (!photoResponse.ok) {
       console.error(`[PhotoStorage] Download failed: ${photoResponse.status}`);
       return { url: googlePhotoUrl, cached: false, cacheHit: false, source: 'direct' };
     }
-    
+
     // Read as ArrayBuffer for reliable binary handling
     const arrayBuffer = await photoResponse.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
