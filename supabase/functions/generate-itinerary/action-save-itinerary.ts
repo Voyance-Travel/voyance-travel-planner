@@ -7,6 +7,8 @@ import { type ActionContext, okJson, errorJson } from './action-types.ts';
 import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
 import { applyAnchorsWin as sharedApplyAnchorsWin } from './anchor-guard.ts';
+import { buildDayLedger, type DayLedger } from './day-ledger.ts';
+import { ledgerCheck } from './ledger-check.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -343,6 +345,74 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     }
   } catch (anchorErr) {
     console.warn('[save-itinerary] Anchor restore failed (non-blocking):', anchorErr);
+  }
+
+  // ── STEP 2.6: DAY TRUTH LEDGER CHECK ─────────────────────────────
+  // Builds a per-day ledger (user intent + prior-day "alreadyDone" + closures)
+  // and removes any AI-inserted activity that violates it. User-locked items
+  // are never touched; this only deletes unauthorized repeats and known
+  // closed-day venues. Result: even if a future AI step misbehaves, the
+  // user's stated truth survives at the persistence boundary.
+  try {
+    const tripMeta = (trip as any).metadata as Record<string, unknown> | null;
+    const userAnchors = Array.isArray(tripMeta?.userAnchors)
+      ? (tripMeta!.userAnchors as Array<Record<string, any>>)
+      : [];
+
+    if (itineraryDays.length > 0) {
+      // Determine country from trip data (best effort)
+      const { data: tripCountryRow } = await supabase
+        .from('trips')
+        .select('destination, destination_country')
+        .eq('id', tripId)
+        .single();
+      const tripCountry = (tripCountryRow as any)?.destination_country || '';
+
+      // Build prior-day activity list once (titles only, with their dayNumber)
+      const allPriorActivities: Array<{ title: string; dayNumber: number }> = [];
+      for (const d of itineraryDays) {
+        const dn = (d.dayNumber as number) || 0;
+        if (!dn) continue;
+        for (const a of (d.activities || [])) {
+          const t = (a.title || a.name || '').trim();
+          if (t) allPriorActivities.push({ title: t, dayNumber: dn });
+        }
+      }
+
+      const ledgers: DayLedger[] = itineraryDays.map((d: any) => {
+        const dn = (d.dayNumber as number) || 0;
+        const dayAnchors = userAnchors.filter((a) => Number(a.dayNumber) === dn);
+        const priorOnly = allPriorActivities.filter((p) => p.dayNumber < dn);
+        return buildDayLedger({
+          dayNumber: dn,
+          date: d.date || (tripStartDate ? deriveDateFromStartDate(tripStartDate, dn) : ''),
+          city: d.city || d.destination || (tripCountryRow as any)?.destination || '',
+          country: tripCountry,
+          hardFacts: {
+            isFirstDay: dn === 1,
+            isLastDay: dn === itineraryDays.length,
+            isHotelChange: false,
+          },
+          anchors: dayAnchors,
+          priorDayActivities: priorOnly,
+        });
+      });
+
+      const lc = ledgerCheck(itineraryDays, ledgers);
+      if (lc.removed > 0 || lc.warnings.length > 0) {
+        console.log(`[save-itinerary] 🧭 Day Truth Ledger: removed ${lc.removed}, warnings ${lc.warnings.length}`);
+        for (const w of lc.warnings.slice(0, 20)) {
+          console.log(`[save-itinerary]   • [day ${w.dayNumber}] ${w.kind}: ${w.detail}`);
+        }
+        itineraryDays = lc.days;
+        (itinerary as any).days = itineraryDays;
+      }
+
+      // Persist ledger snapshots on the itinerary JSON for downstream consumers.
+      (itinerary as any).dayLedgers = ledgers;
+    }
+  } catch (ledgerErr) {
+    console.warn('[save-itinerary] Day Truth Ledger check failed (non-blocking):', ledgerErr);
   }
 
   // ── STEP 3: PERSIST TO trips.itinerary_data ─────────────────────

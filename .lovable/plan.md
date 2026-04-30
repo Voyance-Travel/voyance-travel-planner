@@ -1,109 +1,183 @@
-# Why only Day 1's dinner survived (verified, not guessed)
 
-I pulled your latest Lisbon trip from the database. The receipt:
+# Day Truth Ledger — single source of truth per day
 
-- `metadata.source` = `chat_planner` (this paste came in via the chat planner, **not** Smart Finish / manual paste)
-- `metadata.userAnchors` = **`[]`** (empty — the anchor guard had nothing to enforce)
-- `metadata.mustDoActivities` = a flat array of strings:
-  ```
-  ["Dinner JNcQUOI Table Day 1 7:00 PM",
-   "Lunch Belcanto Day 2 1:30 PM",
-   "Spa Serenity Spa Lisbon Day 2 3:30 PM",
-   "Dinner Peixola Day 2 7:30 PM",
-   ... 10 more ...]
-  ```
+## The problem you're describing
 
-The chat planner extracted every line correctly. The bug is in **how those strings are converted into anchors** by `src/utils/userAnchors.ts → parseMustDoEntry`:
+Today there is no single, durable record of "what is true and required for Day N." The pipeline knows things in scattered places:
 
-```js
-const dayMatch = trimmed.match(/^Day\s+(\d+)\b[:\-\s]*(.*)$/i);
+- User-locked activities live in `itinerary_activities` (DB) and as `userAnchors` in memory.
+- Hotel/transition facts are recomputed on the fly inside `compile-day-facts.ts`.
+- Closures, holidays, "we already did X yesterday" — **not stored anywhere**. They only exist if the AI happens to remember them inside one prompt.
+- "User specifically asked for Peixola on Day 2 dinner" exists as one line in a flat anchor list with no priority, no note, no reason.
+
+So when generation runs again (e.g., regenerate, smart-finish, day-fix), the AI sees a fresh prompt without a structured ledger of inviolable facts, and drifts. That's exactly what you saw with the Lisbon dinners.
+
+The fix is not a bigger prompt. It's **a real per-day record we read before generation and validate after**.
+
+## What we'll build
+
+A new `dayLedger` object — one per day — assembled deterministically before every generation and re-checked after. It is the only thing the AI is allowed to treat as "ground truth."
+
+### Shape
+
+```text
+dayLedger[dayNumber] = {
+  date, dayOfWeek, city, country,
+
+  hardFacts: {
+    hotel: { name, address, checkIn, checkOut },
+    transitionDay: { from, to, mode, departTime, arriveTime } | null,
+    flight: { ... } | null,
+    isFirstDay, isLastDay, isHotelChange,
+  },
+
+  userIntent: [
+    // EVERY locked / pasted / pinned / chat-extracted activity, with full context
+    {
+      kind: 'dinner' | 'lunch' | 'activity' | 'spa' | ...,
+      title: 'Peixola',
+      startTime: '19:30',
+      source: 'manual_paste' | 'chat' | 'pinned' | 'edited',
+      note: 'User pasted this — DO NOT replace, DO NOT move time',
+      priority: 'must',
+    },
+    ...
+  ],
+
+  alreadyDone: [
+    // What already happened on prior days, so AI doesn't repeat
+    { title: 'Belém Tower', dayNumber: 1 },
+    ...
+  ],
+
+  closures: [
+    // Holidays + known closed-on-this-weekday venues we've already detected
+    { reason: 'Most Lisbon museums closed Mondays', applies: ['Gulbenkian', 'MAAT'] },
+    { reason: 'Public holiday: Liberation Day (Apr 25)', impact: 'banks/markets closed' },
+  ],
+
+  freeSlots: [
+    // What the AI is actually allowed to fill, derived from userIntent + hardFacts
+    { from: '09:00', to: '13:00' },
+    { from: '15:30', to: '19:00' },
+  ],
+}
 ```
 
-It only recognizes `"Day N: ..."` at the **start** of the string. The chat planner puts `Day N` in the **middle** (`"Dinner JNcQUOI Table Day 1 7:00 PM"`). So:
+This is **not** a vibes prompt. It's a deterministic struct compiled before the AI runs.
 
-- `dayMatch` is `null` → `dayNumber = 0`
-- Every anchor goes into the array with `dayNumber: 0`
-- `applyAnchorsWin` checks `if (targetDayNum < 1 || targetDayNum > days.length) continue;` → **all 13 anchors are skipped**
-- `userAnchors.length > 0 ? userAnchors : null` in Start.tsx — they are pushed (length 13), so we save them, but the guard still rejects them on every write because the day number is 0
+## Pipeline integration
 
-That's why Day 1's first dinner ("JNcQUOI Table") happened to survive — the AI's own dinner generation collided with it by chance — and **nothing else did**. The anchor enforcement we built two messages ago is correct; the problem is upstream: anchors are being constructed with `dayNumber: 0`, so the guard never sees them as belonging to any day.
-
-Tests passed because the unit tests use `"Day 1: dinner at X"` format; no test covers the chat-planner's actual emitted format `"X Day 1 TIME"`.
-
----
-
-# Fix
-
-Two coordinated changes — one defensive (parser handles real-world format), one preventive (planner emits structured data).
-
-## 1. Make `parseMustDoEntry` find `Day N` anywhere in the string
-
-Replace the front-anchored regex with one that scans the whole string:
-
-```js
-// BEFORE (only matches "Day 1: foo")
-const dayMatch = trimmed.match(/^Day\s+(\d+)\b[:\-\s]*(.*)$/i);
-const dayNumber = dayMatch ? parseInt(dayMatch[1], 10) : 0;
-const text = dayMatch ? dayMatch[2].trim() : trimmed;
-
-// AFTER (matches "Day 1: foo", "foo Day 1", "foo Day 1 7:00 PM")
-const dayMatch = trimmed.match(/\bDay\s+(\d+)\b/i);
-const dayNumber = dayMatch ? parseInt(dayMatch[1], 10) : 0;
-const text = dayMatch
-  ? trimmed.replace(/\s*\bDay\s+\d+\b\s*[:\-]?\s*/i, ' ').replace(/\s+/g, ' ').trim()
-  : trimmed;
+```text
+                 ┌─────────────────────────────────┐
+  trip data ───▶ │ compile-day-facts.ts            │
+  user anchors   │  (already exists, expand it)    │
+  prior days     │                                 │
+  holidays       └──────────────┬──────────────────┘
+                                ▼
+                      ┌──────────────────┐
+                      │   dayLedger[N]   │  ← single source of truth
+                      └────┬─────────┬───┘
+                           │         │
+                           ▼         ▼
+                  ┌──────────────┐  ┌────────────────────┐
+                  │ compile-     │  │ post-gen validator │
+                  │ prompt.ts    │  │ (anchor-guard +    │
+                  │ injects it   │  │  ledger-check)     │
+                  └──────┬───────┘  └─────────┬──────────┘
+                         ▼                    ▼
+                    AI generation ──────▶ rejects/repairs any
+                                          activity that violates
+                                          userIntent or closures
 ```
 
-This recovers all 13 anchors for the existing Lisbon trip on the next regenerate.
+## Concrete changes
 
-Apply the identical fix in **both** mirrors (Vite ↔ Deno):
-- `src/utils/userAnchors.ts`
-- `supabase/functions/_shared/user-anchors.ts`
+### 1. New module: `supabase/functions/generate-itinerary/day-ledger.ts`
+- Pure function `buildDayLedger(facts, anchors, priorDays, holidays) → DayLedger`.
+- Computes `freeSlots` by subtracting `userIntent` time blocks + hotel/transit windows from the day window.
+- Loads holidays from a small static map (per country) — no API call required for v1; we can wire to a holiday API later.
 
-## 2. Make the chat planner emit `perDayActivities` when the user provides per-day structure
+### 2. Expand `pipeline/compile-day-facts.ts`
+- Already loads hotel + locked activities. Add:
+  - prior days' activity titles → `alreadyDone`
+  - day-of-week + country → match against a static `KNOWN_CLOSURES` table (Mondays in Lisbon = museums, etc.)
+  - call `buildDayLedger(...)` and stash on `CompiledFacts.dayLedger`.
 
-The chat planner already has a `perDayActivities` field in its tool schema (line 512 of `chat-trip-planner/index.ts`) and explicit instructions (line 202) to use it when the user gives day-by-day structure. The Lisbon paste literally has `APRIL 17`, `APRIL 18`, etc. as day headers — that's textbook day-by-day structure — and the model still chose `mustDoActivities`. Tighten the prompt:
+### 3. Inject ledger into `pipeline/compile-prompt.ts`
+Add a clearly-fenced section near the top of the user prompt:
 
-- Promote the `perDayActivities` rule to a **hard requirement** (above all other extraction rules) when the user input contains date headers, "Day N" markers, or numbered days.
-- Add a refusal-style example: "If you put dated/numbered activities into `mustDoActivities` instead of `perDayActivities`, the downstream planner will lose the day binding."
+```text
+## DAY TRUTH LEDGER — DO NOT VIOLATE
+HARD FACTS:
+  - Date: 2026-04-18 (Saturday), Lisbon
+  - Hotel: Memmo Príncipe Real (check-in done)
 
-When `perDayActivities` is populated, `buildUserAnchors` parses each day's activity string with `parseDayActivities` (which already knows day number from the wrapper), so dayNumber is never lost. This is the long-term correct path.
+USER LOCKED (must keep exactly as written, do NOT replace, do NOT retime):
+  - 13:30 Lunch — Belcanto
+  - 15:30 Spa — Serenity Spa Lisbon
+  - 19:30 Dinner — Peixola
 
-## 3. Add deterministic test coverage for the real-world format
+ALREADY DONE (do NOT repeat):
+  - Belém Tower, Pastéis de Belém (day 1)
 
-Add to `supabase/functions/_shared/user-anchors.test.ts` (uses Deno test runner — no AI credits):
+CLOSURES TODAY:
+  - National Tile Museum: closed Saturdays — do NOT schedule
 
-- `mustDoActivities` entries with `Day N` in the middle ("Dinner Venue Day 2 7:30 PM") → expect 1 anchor with `dayNumber: 2`, `startTime: "19:30"`, `title: "Dinner Venue"`.
-- `mustDoActivities` entries with `Day N` at end ("Cervejaria Ramiro Day 7 1:00 PM") → expect `dayNumber: 7`.
-- Original "Day 1: foo" prefix format → still works (regression guard).
-
-The mirrored Vitest test should cover the same cases in `src/utils/userAnchors.test.ts`.
-
-# Files touched
-
-- `src/utils/userAnchors.ts` — relax `parseMustDoEntry` regex (~5 lines)
-- `supabase/functions/_shared/user-anchors.ts` — same change (~5 lines)
-- `supabase/functions/_shared/user-anchors.test.ts` — 3 new test cases (~30 lines)
-- `src/utils/userAnchors.test.ts` (new file if absent) — same 3 cases (~30 lines)
-- `supabase/functions/chat-trip-planner/index.ts` — strengthen prompt around `perDayActivities` (~15 lines of prompt copy, no logic change)
-
-# What this does NOT do
-
-- No backfill script for the existing Lisbon trip's empty anchors. Once the parser fix ships, hitting "Regenerate" on that trip will rebuild anchors from `mustDoActivities` correctly without re-doing the chat extraction.
-- No live AI regeneration to "verify" — the unit tests prove the helper handles the exact strings the database currently holds, deterministically.
-
-# Verification (no AI credits)
-
-After the patch, this Deno test will pass and would have caught the bug originally:
-
-```
-Deno.test('parseMustDoEntry handles "Title Day N TIME" format from chat-trip-planner', () => {
-  const r = parseMustDoEntry('Dinner Peixola Day 2 7:30 PM', 'chat')!;
-  assertEquals(r.dayNumber, 2);
-  assertEquals(r.startTime, '19:30');
-  assert(r.title.toLowerCase().includes('dinner'));
-  assert(r.title.toLowerCase().includes('peixola'));
-});
+FREE SLOTS YOU MAY FILL:
+  - 09:00–13:00
+  - 16:30–19:00 (light only — dinner at 19:30)
 ```
 
-Approve and I'll implement.
+This replaces today's flat `mustDoActivities` strings with a structured, prioritized brief.
+
+### 4. Post-generation `ledger-check.ts`
+Runs after `applyAnchorsWin`:
+- Every entry in `userIntent` must be present on the right day at the right time. If not → repair (re-inject) + log a warning.
+- No activity title may match anything in `alreadyDone` (fuzzy match).
+- No activity may match a `closures` entry.
+- Any violation triggers a single targeted repair pass (not a full regenerate).
+
+### 5. Persist the ledger
+Store `dayLedger` snapshot in `itinerary_days.day_brief` (new JSONB column) so:
+- Regenerations always start from the prior ledger, not a fresh extraction.
+- The UI can render "What we know about this day" (foundation for future "AI notes" panel).
+
+### 6. Static closures + holidays table
+- `supabase/functions/_shared/known-closures.ts` — small hand-curated list per city/country (Lisbon Mondays, Paris Mondays, Istanbul Tuesdays, etc.).
+- `supabase/functions/_shared/public-holidays.ts` — Portuguese, Spanish, French, Italian, US, UK, Japanese holidays for 2026 to start. Easy to extend later.
+
+### 7. Tests
+- `day-ledger.test.ts` — building, free-slot computation, closure matching.
+- Add a Lisbon scenario test in `scenario.test.ts`: 10 days with the exact dinner list → assert all 13 user-intent items are present and unmodified after generation.
+
+## What this does NOT change
+
+- No DB rewrite of user data. Anchors still live where they live.
+- No new AI calls. The ledger is deterministic.
+- No new credits charged. This is a quality / correctness fix.
+
+## Files touched
+
+- New: `supabase/functions/generate-itinerary/day-ledger.ts`
+- New: `supabase/functions/generate-itinerary/ledger-check.ts`
+- New: `supabase/functions/_shared/known-closures.ts`
+- New: `supabase/functions/_shared/public-holidays.ts`
+- New: `supabase/functions/generate-itinerary/day-ledger.test.ts`
+- Edit: `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
+- Edit: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
+- Edit: `supabase/functions/generate-itinerary/pipeline/types.ts` (add `dayLedger`)
+- Edit: `supabase/functions/generate-itinerary/action-generate-day.ts` (call ledger-check after anchor-guard)
+- Edit: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (same)
+- Edit: `supabase/functions/generate-itinerary/scenario.test.ts` (Lisbon dinners regression)
+- Migration: add `itinerary_days.day_brief jsonb`
+
+## Why this fixes the Lisbon problem (and the next ten like it)
+
+The previous fix made sure the parser captured the user's dinners. This plan makes sure that even if the parser were perfect tomorrow, the AI cannot quietly drop, retime, or replace them, because:
+
+1. They are listed explicitly under "USER LOCKED — DO NOT VIOLATE" in every prompt.
+2. After generation, a deterministic check rejects any output that doesn't contain them.
+3. The ledger persists, so a regenerate next week starts from the same truth.
+
+It also generalizes: holidays, closures, "already did this," and per-day notes all live in one structure instead of being re-derived (or forgotten) on each pass.

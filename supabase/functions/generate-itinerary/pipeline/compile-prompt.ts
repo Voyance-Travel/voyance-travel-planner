@@ -1272,7 +1272,54 @@ CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located 
   // Import isRecurringEvent for previous day activity classification
   const { isRecurringEvent } = await import('../currency-utils.ts');
 
-  const userPrompt = `Generate Day ${dayNumber} of ${totalDays} in ${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}.
+  // ── DAY TRUTH LEDGER (deterministic ground truth, top of prompt) ──
+  // The AI sees this BEFORE anything else. Anything in USER LOCKED must
+  // appear in the output verbatim. Anything in CLOSURES must NOT be
+  // scheduled. Anything in ALREADY DONE must NOT be repeated.
+  let dayLedgerPromptBlock = '';
+  try {
+    const { buildDayLedger, renderDayLedgerPrompt } = await import('../day-ledger.ts');
+    const ledgerAnchors = (lockedActivities || []).map((l: any) => ({
+      title: l.title || l.name,
+      startTime: l.startTime,
+      endTime: l.endTime,
+      category: l.category,
+      source: l.lockedSource || 'pinned',
+      lockedSource: l.lockedSource,
+    }));
+    const priorList: Array<{ title: string; dayNumber: number }> = [];
+    for (const prev of (previousDayActivities || [])) {
+      const t = (prev.title || prev.name || '').trim();
+      const dn = (prev.dayNumber as number) || ((prev as any).day as number) || 0;
+      if (t && dn) priorList.push({ title: t, dayNumber: dn });
+    }
+    const ledger = buildDayLedger({
+      dayNumber,
+      date: date || '',
+      city: resolvedDestination,
+      country: resolvedCountry || '',
+      hardFacts: {
+        isFirstDay: !!isFirstDay,
+        isLastDay: !!isLastDay,
+        isHotelChange: false,
+        hotel: resolvedHotelOverride?.name
+          ? {
+              name: resolvedHotelOverride.name,
+              address: resolvedHotelOverride.address,
+              checkIn: resolvedHotelOverride.checkIn,
+              checkOut: resolvedHotelOverride.checkOut,
+            }
+          : null,
+      },
+      anchors: ledgerAnchors,
+      priorDayActivities: priorList,
+    });
+    dayLedgerPromptBlock = renderDayLedgerPrompt(ledger) + '\n\n';
+  } catch (ledgerErr) {
+    console.warn('[compile-prompt] Day Ledger render failed (non-blocking):', ledgerErr);
+  }
+
+  const userPrompt = `${dayLedgerPromptBlock}Generate Day ${dayNumber} of ${totalDays} in ${resolvedDestination}${resolvedCountry ? `, ${resolvedCountry}` : ''}.
 
 Date: ${date}
 Travelers: ${travelers}

@@ -4748,6 +4748,7 @@ export type Database = {
           activities: Json | null
           created_at: string
           date: string
+          day_brief: Json | null
           day_number: number
           description: string | null
           estimated_distance: string | null
@@ -4764,6 +4765,7 @@ export type Database = {
           activities?: Json | null
           created_at?: string
           date: string
+          day_brief?: Json | null
           day_number: number
           description?: string | null
           estimated_distance?: string | null
@@ -4780,6 +4782,7 @@ export type Database = {
           activities?: Json | null
           created_at?: string
           date?: string
+          day_brief?: Json | null
           day_number?: number
           description?: string | null
           estimated_distance?: string | null
