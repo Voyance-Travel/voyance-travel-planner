@@ -43,6 +43,47 @@ function fuzzyMatch(a: string, b: string): boolean {
   return false;
 }
 
+/**
+ * Daily anchors are activities that BY DESIGN repeat every day:
+ *   - Returns/transfers to/from the hotel
+ *   - Midday "freshen up" / wellness refresh
+ *   - In-hotel breakfast (when applicable)
+ *   - Hotel check-in/out
+ * They must bypass the repeat-already-done dedup, otherwise every day after
+ * day 1 is stripped of its structural anchors. Core memory: "Believable
+ * Human Day" and "Universal Locking Protocol".
+ */
+const DAILY_ANCHOR_PATTERNS: RegExp[] = [
+  /^\s*(return to|travel to|taxi to|head back to|back to|drive to|walk back to|transfer to)\b.*\b(hotel|resort|inn|stay|accommodation|lodging|villa|riad|ryokan|airbnb|marriott|hilton|hyatt|four seasons|ritz|peninsula|mandarin|aman|rosewood|park hyatt)\b/i,
+  /^\s*(freshen up|wellness refresh|midday (break|refresh|rest)|siesta|recharge|rest at|relax at|break at)\b/i,
+  /^\s*check[\- ]?(in|out)\b/i,
+  /^\s*(breakfast|coffee) at (the )?(hotel|marriott|hilton|hyatt|four seasons|ritz|peninsula|mandarin|aman|rosewood|park hyatt|your)\b/i,
+  /\bhotel\b.*\b(refresh|freshen|wellness|return|drop off|drop-off)\b/i,
+];
+
+const DAILY_ANCHOR_CATEGORIES = new Set([
+  'transport', 'transportation', 'transit', 'accommodation', 'lodging', 'hotel',
+]);
+
+function isDailyAnchor(activity: any): boolean {
+  const title = String(activity?.title || activity?.name || '').toLowerCase();
+  if (!title) return false;
+  for (const pat of DAILY_ANCHOR_PATTERNS) {
+    if (pat.test(title)) return true;
+  }
+  // Category-based: any transport/accommodation entry whose title references "hotel"
+  // is a daily ritual, not a unique attraction.
+  const cat = String(activity?.category || activity?.type || '').toLowerCase();
+  if (DAILY_ANCHOR_CATEGORIES.has(cat) && /\bhotel|resort|inn|lodging|stay\b/.test(title)) {
+    return true;
+  }
+  // Wellness category that explicitly references the hotel/freshen-up pattern
+  if (cat === 'wellness' && /\b(freshen|refresh|midday|siesta|hotel)\b/.test(title)) {
+    return true;
+  }
+  return false;
+}
+
 function buildPlaceholderForIntent(intent: LedgerUserIntent, dayNumber: number) {
   const startTime = intent.startTime || (
     intent.kind === 'breakfast' ? '08:30' :
