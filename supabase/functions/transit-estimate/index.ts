@@ -281,10 +281,12 @@ Deno.serve(async (req: Request) => {
     // Fetch walking and driving in parallel; only add transit if distance > 800m
     const shouldFetchTransit = fallbackDistance === null || fallbackDistance > 1200;
 
+    const costTracker = trackCost('transit_estimate', 'google_routes');
+
     const promises = [
-      fetchGoogleRoute(origin, destination, 'WALK', apiKey, city),
-      fetchGoogleRoute(origin, destination, 'DRIVE', apiKey, city),
-      ...(shouldFetchTransit ? [fetchGoogleRoute(origin, destination, 'TRANSIT', apiKey, city)] : []),
+      fetchGoogleRoute(origin, destination, 'WALK', apiKey, city, costTracker),
+      fetchGoogleRoute(origin, destination, 'DRIVE', apiKey, city, costTracker),
+      ...(shouldFetchTransit ? [fetchGoogleRoute(origin, destination, 'TRANSIT', apiKey, city, costTracker)] : []),
     ];
 
     const [walkResult, driveResult, transitResult] = await Promise.all(promises);
@@ -305,6 +307,9 @@ Deno.serve(async (req: Request) => {
       driveResult.recommended = (walkResult?.durationMinutes ?? 999) > 15 && !transitResult?.recommended;
       estimates.push(driveResult);
     }
+
+    // Persist cost tracking after all parallel calls complete
+    await costTracker.save();
 
     // Fallback to heuristics if all API calls failed
     if (estimates.length === 0 && fallbackDistance !== null) {
