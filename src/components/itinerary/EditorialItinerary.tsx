@@ -33,6 +33,7 @@ import { CREDIT_COSTS, formatCredits } from '@/config/pricing';
 import { CreditNudge } from './CreditNudge';
 import { UnlockBanner } from './UnlockBanner';
 import { LockedDayCard } from './LockedDayCard';
+import { TripTotalDeltaIndicator } from './TripTotalDeltaIndicator';
 import { FrostedGateOverlay } from './FrostedGateOverlay';
 import { BulkUnlockBanner, getBulkUnlockCost } from './BulkUnlockBanner';
 import { useUnlockDay } from '@/hooks/useUnlockDay';
@@ -5339,6 +5340,10 @@ export function EditorialItinerary({
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-sm text-muted-foreground shrink-0">Trip Total</span>
                     <span className="text-2xl font-bold text-foreground truncate">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
+                    <TripTotalDeltaIndicator
+                      delta={financialSnapshot.lastDelta}
+                      onDismiss={financialSnapshot.acknowledgeDelta}
+                    />
                   </div>
                   {localCurrency !== 'USD' && (
                     <Tooltip delayDuration={200}>

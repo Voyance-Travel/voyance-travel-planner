@@ -11,10 +11,23 @@
  *   - budgetTotalCents:     User-set budget from trip settings
  *   - budgetRemainingCents: budgetTotalCents - tripTotalCents
  *   - plannedUnpaidCents:   tripTotalCents - paidCents (same as toBePaidCents)
+ *
+ * Transparency:
+ *   - lastDelta:           { previousTotalCents, deltaCents, at } when total changes
+ *                          between fetches. Lets UI show "Total updated: +$84".
+ *   - Logs a console.warn + toast when a single refresh jumps the total by >25%
+ *     (catches silent rewrite regressions in repair/sync pipelines).
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+export interface FinancialDelta {
+  previousTotalCents: number;
+  deltaCents: number;
+  at: number; // epoch ms
+}
 
 export interface FinancialSnapshot {
   tripTotalCents: number;
@@ -25,7 +38,9 @@ export interface FinancialSnapshot {
   plannedUnpaidCents: number;
   paidPercent: number;
   loading: boolean;
+  lastDelta: FinancialDelta | null;
   refetch: () => void;
+  acknowledgeDelta: () => void;
 }
 
 interface SnapshotData {
@@ -42,6 +57,13 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     budgetTotalCents: 0,
     loading: true,
   });
+  const [lastDelta, setLastDelta] = useState<FinancialDelta | null>(null);
+
+  // Track previous total across renders without retriggering effects.
+  const prevTotalRef = useRef<number | null>(null);
+  // Suppress the very first delta (initial load) and avoid duplicate toasts.
+  const initialLoadRef = useRef(true);
+  const lastWarnedTotalRef = useRef<number | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
@@ -80,6 +102,37 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       }
     }
 
+    // Compute delta against the previous fetch (skip on initial load).
+    const prev = prevTotalRef.current;
+    if (!initialLoadRef.current && prev != null && prev !== totalCents) {
+      const delta: FinancialDelta = {
+        previousTotalCents: prev,
+        deltaCents: totalCents - prev,
+        at: Date.now(),
+      };
+      setLastDelta(delta);
+
+      // Defensive guard: warn on large unexpected jumps. Threshold = 25%.
+      const ratio = prev > 0 ? Math.abs(delta.deltaCents) / prev : Infinity;
+      if (ratio > 0.25 && lastWarnedTotalRef.current !== totalCents) {
+        lastWarnedTotalRef.current = totalCents;
+        const sign = delta.deltaCents >= 0 ? '+' : '−';
+        const amount = Math.abs(delta.deltaCents) / 100;
+        console.warn(
+          `[useTripFinancialSnapshot] Trip total jumped ${sign}$${amount.toFixed(0)} ` +
+          `(${(ratio * 100).toFixed(0)}%). prev=${prev} new=${totalCents} tripId=${tripId}`
+        );
+        try {
+          toast.warning(`Trip total changed by ${sign}$${amount.toFixed(0)}`, {
+            description: 'Tap to see what changed',
+            duration: 7000,
+          });
+        } catch {}
+      }
+    }
+    prevTotalRef.current = totalCents;
+    initialLoadRef.current = false;
+
     // Atomic update — all values in one setState call
     setData({
       tripTotalCents: totalCents,
@@ -90,6 +143,11 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   }, [tripId]);
 
   useEffect(() => {
+    // Reset bookkeeping when tripId changes
+    initialLoadRef.current = true;
+    prevTotalRef.current = null;
+    lastWarnedTotalRef.current = null;
+    setLastDelta(null);
     fetchData();
   }, [fetchData]);
 
@@ -108,6 +166,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   }, [fetchData]);
 
   const refetch = useCallback(() => fetchData(), [fetchData]);
+  const acknowledgeDelta = useCallback(() => setLastDelta(null), []);
 
   return useMemo(() => {
     const toBePaid = Math.max(0, data.tripTotalCents - data.paidCents);
@@ -123,7 +182,9 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       plannedUnpaidCents: toBePaid,
       paidPercent: Math.min(paidPct, 100),
       loading: data.loading,
+      lastDelta,
       refetch,
+      acknowledgeDelta,
     };
-  }, [data, refetch]);
+  }, [data, refetch, lastDelta, acknowledgeDelta]);
 }

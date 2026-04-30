@@ -8,7 +8,7 @@ import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { enforceMealTimeCoherence } from '@/utils/mealTimeCoherence';
-import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, PenLine, Coins, Calendar, Clock } from 'lucide-react';
+import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, PenLine, Coins, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import { CREDIT_COSTS } from '@/config/pricing';
 import {
   AlertDialog,
@@ -226,6 +226,7 @@ export default function TripDetail() {
   const autoResumeAttemptedRef = useRef(false);
   const emptyDayHealAttemptedRef = useRef(false);
   const onReadyCalledRef = useRef(false);
+  const [incompleteDays, setIncompleteDays] = useState<number[]>([]);
   const [generateNewDaysPrompt, setGenerateNewDaysPrompt] = useState<{
     open: boolean;
     daysAdded: number;
@@ -1202,21 +1203,35 @@ export default function TripDetail() {
             }
           }
 
-          // ── SELF-HEAL: Detect days that exist but have no real activities ("Unplanned") ──
-          // Instead of destructive auto-regeneration, try restoring from version history first.
-          if (expectedTotal > 0 && actualDays >= expectedTotal && !emptyDayHealAttemptedRef.current) {
+          // ── SELF-HEAL: Detect days that are unplanned ("empty" or missing entirely) ──
+          // Fires whenever generation is no longer running, regardless of whether
+          // actualDays reached expectedTotal. Previously this was gated on
+          // `actualDays >= expectedTotal`, which meant trips that ended early
+          // (e.g. 23/25 days produced) silently left days 24 & 25 unplanned forever.
+          const generationFinished =
+            tripData?.itinerary_status !== 'generating' &&
+            tripData?.itinerary_status !== 'queued';
+
+          if (expectedTotal > 0 && generationFinished && !emptyDayHealAttemptedRef.current) {
             const daysList = (itinData?.days || []) as Array<{ dayNumber?: number; activities?: unknown[] }>;
+            const presentDayNumbers = new Set<number>();
             const emptyDayNumbers: number[] = [];
             for (const day of daysList) {
-              const acts = Array.isArray(day.activities) ? day.activities : [];
-              if (acts.length === 0 && day.dayNumber) {
-                emptyDayNumbers.push(day.dayNumber);
+              if (day.dayNumber) {
+                presentDayNumbers.add(day.dayNumber);
+                const acts = Array.isArray(day.activities) ? day.activities : [];
+                if (acts.length === 0) emptyDayNumbers.push(day.dayNumber);
               }
             }
+            // Days that should exist but are missing entirely from the array
+            for (let n = 1; n <= expectedTotal; n++) {
+              if (!presentDayNumbers.has(n)) emptyDayNumbers.push(n);
+            }
+            emptyDayNumbers.sort((a, b) => a - b);
 
             if (emptyDayNumbers.length > 0 && emptyDayNumbers.length < expectedTotal) {
               emptyDayHealAttemptedRef.current = true;
-              console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} days have no activities (days: ${emptyDayNumbers.join(', ')}). Attempting version-history restore first.`);
+              console.warn(`[TripDetail] Self-heal: ${emptyDayNumbers.length} unplanned days (days: ${emptyDayNumbers.join(', ')}). Attempting version-history restore first.`);
 
               setTimeout(async () => {
                 try {
@@ -1240,18 +1255,39 @@ export default function TripDetail() {
                     if (snapshot && Array.isArray(snapshot.activities) && snapshot.activities.length > 0) {
                       console.log(`[TripDetail] Self-heal: Restored day ${dayNum} from version history (${snapshot.activities.length} activities, v${snapshot.version_number})`);
                       const idx = currentDays.findIndex((d: any) => d.dayNumber === dayNum);
+                      // Compute date for this day from trip start_date
+                      let dayDate: string | undefined;
+                      try {
+                        if (tripData?.start_date) {
+                          const start = parseLocalDate(tripData.start_date);
+                          const d = new Date(start);
+                          d.setDate(start.getDate() + (dayNum - 1));
+                          dayDate = d.toISOString().slice(0, 10);
+                        }
+                      } catch {}
+
                       if (idx >= 0) {
                         currentDays[idx] = {
                           ...currentDays[idx],
                           activities: snapshot.activities,
                           ...(snapshot.day_metadata?.title ? { theme: snapshot.day_metadata.title } : {}),
                         };
+                      } else {
+                        // Day was missing entirely — insert it
+                        currentDays.push({
+                          dayNumber: dayNum,
+                          date: dayDate,
+                          theme: snapshot.day_metadata?.title || `Day ${dayNum}`,
+                          activities: snapshot.activities,
+                        });
                       }
                       restoredCount++;
                     } else {
                       unresolvedDays.push(dayNum);
                     }
                   }
+
+                  currentDays.sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
 
                   // Save restored days back if any were recovered
                   if (restoredCount > 0) {
@@ -1275,9 +1311,11 @@ export default function TripDetail() {
                     toast.success(`Restored ${restoredCount} day${restoredCount > 1 ? 's' : ''} from history`);
                   }
 
-                  // Step 2: Only regenerate days that have NO version history at all
+                  // Step 2: For days with NO version history, materialize empty placeholders
+                  // and surface a banner. NEVER silently auto-regenerate — that hides credit
+                  // charges and surprises users. The user must explicitly approve a build.
                   if (unresolvedDays.length > 0) {
-                    console.warn(`[TripDetail] Self-heal: ${unresolvedDays.length} days have no version history (days: ${unresolvedDays.join(', ')}). Falling back to regeneration.`);
+                    console.warn(`[TripDetail] Self-heal: ${unresolvedDays.length} unplanned days with no history (days: ${unresolvedDays.join(', ')}). Materializing placeholders.`);
                     const { data: freshTrip } = await supabase
                       .from('trips')
                       .select('itinerary_data')
@@ -1287,28 +1325,27 @@ export default function TripDetail() {
                     const freshDays = [...(freshItinData.days || [])] as any[];
 
                     for (const dayNum of unresolvedDays) {
-                      console.log(`[TripDetail] Auto-regenerating empty day ${dayNum} (no version history found)`);
-                      const { data: regenResult } = await supabase.functions.invoke('generate-itinerary', {
-                        body: {
-                          action: 'regenerate-day',
-                          tripId: tripId,
-                          dayNumber: dayNum,
-                          destination: tripData.destination,
-                          startDate: tripData.start_date,
-                          endDate: tripData.end_date,
-                          travelers: tripData.travelers || 1,
-                          tripType: tripData.trip_type,
-                          budgetTier: (tripData as any).budget_tier,
-                          isMultiCity: !!(tripData as any).is_multi_city,
-                        },
-                      });
-                      if (regenResult?.day?.activities?.length > 0) {
-                        const idx = freshDays.findIndex((d: any) => d.dayNumber === dayNum);
-                        if (idx >= 0) {
-                          freshDays[idx] = { ...freshDays[idx], ...regenResult.day };
+                      let dayDate: string | undefined;
+                      try {
+                        if (tripData?.start_date) {
+                          const start = parseLocalDate(tripData.start_date);
+                          const d = new Date(start);
+                          d.setDate(start.getDate() + (dayNum - 1));
+                          dayDate = d.toISOString().slice(0, 10);
                         }
+                      } catch {}
+                      const idx = freshDays.findIndex((d: any) => d.dayNumber === dayNum);
+                      if (idx < 0) {
+                        freshDays.push({
+                          dayNumber: dayNum,
+                          date: dayDate,
+                          theme: '',
+                          activities: [],
+                          metadata: { heal_origin: 'incomplete_generation' },
+                        });
                       }
                     }
+                    freshDays.sort((a: any, b: any) => (a.dayNumber || 0) - (b.dayNumber || 0));
 
                     const mergedFresh = { ...freshItinData, days: freshDays };
                     try {
@@ -1316,17 +1353,17 @@ export default function TripDetail() {
                         body: { action: 'save-itinerary', tripId: tripId!, itinerary: mergedFresh },
                       });
                     } catch (saveErr) {
-                      console.error('[TripDetail] Backend save after auto-regen failed:', saveErr);
+                      console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
                       await supabase.from('trips').update({
                         itinerary_data: mergedFresh as any,
                         updated_at: new Date().toISOString(),
                       }).eq('id', tripId!);
                     }
                     queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
-                    toast.success(`Regenerated ${unresolvedDays.length} unplanned day${unresolvedDays.length > 1 ? 's' : ''}`);
+                    setIncompleteDays(unresolvedDays);
                   }
                 } catch (err) {
-                  console.error('[TripDetail] Self-heal (version restore + regen) failed:', err);
+                  console.error('[TripDetail] Self-heal (version restore + placeholders) failed:', err);
                   emptyDayHealAttemptedRef.current = false;
                 }
               }, 2000);
@@ -2847,7 +2884,49 @@ export default function TripDetail() {
                      <GuidePromptBanner tripId={trip.id} destination={trip.destination} />
                    )}
 
-                  <ErrorBoundary>
+                   {/* Incomplete-generation recovery banner */}
+                   {incompleteDays.length > 0 && !isPreviewMode && (
+                     <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+                       <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                       <div className="flex-1 min-w-0">
+                         <p className="text-sm font-medium text-foreground">
+                           Generation ended early — {incompleteDays.length} {incompleteDays.length === 1 ? 'day is' : 'days are'} unplanned
+                         </p>
+                         <p className="text-xs text-muted-foreground mt-0.5">
+                           {incompleteDays.length === 1
+                             ? `Day ${incompleteDays[0]} didn't finish during generation.`
+                             : `Days ${incompleteDays.join(', ')} didn't finish during generation.`}
+                           {' '}You can build {incompleteDays.length === 1 ? 'it' : 'them'} now or plan {incompleteDays.length === 1 ? 'it' : 'them'} yourself.
+                         </p>
+                         <div className="flex flex-wrap gap-2 mt-3">
+                           <Button
+                             size="sm"
+                             onClick={() => {
+                               setGenerateNewDaysPrompt({
+                                 open: true,
+                                 daysAdded: incompleteDays.length,
+                                 insertPosition: 'after',
+                                 dayNumbers: incompleteDays,
+                               });
+                             }}
+                             className="gap-1.5"
+                           >
+                             <Sparkles className="h-3.5 w-3.5" />
+                             Build {incompleteDays.length === 1 ? 'this day' : `these ${incompleteDays.length} days`}
+                           </Button>
+                           <Button
+                             size="sm"
+                             variant="ghost"
+                             onClick={() => setIncompleteDays([])}
+                           >
+                             Dismiss
+                           </Button>
+                         </div>
+                       </div>
+                     </div>
+                   )}
+
+                   <ErrorBoundary>
                   <EditorialItinerary
                   tripId={trip.id}
                   destination={trip.destination}
