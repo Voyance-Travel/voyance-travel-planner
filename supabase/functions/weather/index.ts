@@ -216,10 +216,13 @@ async function fetchWeatherKit(
       })
       .slice(0, days);
 
-    // If no forecast days match the trip dates, return null to fall back
-    if (filteredDays.length === 0 && daily.length > 0) {
-      // Use whatever forecast days are available
-      filteredDays.push(...daily.slice(0, days));
+    // If WeatherKit returns ZERO days overlapping the trip, fall through.
+    // Previously we silently substituted today's window — wrong dates, but
+    // displayed as if successful. Now the caller will try Open-Meteo (16-day
+    // window) or seasonal estimates instead.
+    if (filteredDays.length === 0) {
+      console.log('[Weather] WeatherKit returned no days overlapping trip start', startDate, '— falling through');
+      return null;
     }
 
     const conditionStr = current ? mapConditionCode(current.conditionCode) : 'Unknown';
@@ -429,32 +432,77 @@ Deno.serve(async (req) => {
     }
 
     let weather: WeatherData;
+    let wkCount = 0;
+    let omCount = 0;
+    let fbCount = 0;
 
     if (latitude && longitude) {
-      // Try Apple WeatherKit first
+      // 1) Try Apple WeatherKit first (~10-day window from today).
       const wk = await fetchWeatherKit(latitude, longitude, destination, tripStartDate, days);
-      if (wk) {
+
+      if (wk && wk.forecast.length >= days) {
+        // Full coverage from WeatherKit.
         weather = wk;
-        console.log('[Weather] ✅ Using Apple WeatherKit for:', destination);
-        costTracker.addMetadata('source', 'weatherkit');
+        wkCount = wk.forecast.length;
       } else {
-        // Fall back to Open-Meteo
+        // 2) Either no WeatherKit data, or partial coverage. Get Open-Meteo
+        //    (up to 16 days) and merge — WeatherKit days win on overlap.
         const om = await fetchOpenMeteo(latitude, longitude, destination, tripStartDate, days);
-        if (om) {
+
+        if (wk && om) {
+          const wkDates = new Set(wk.forecast.map((d) => d.date));
+          const merged = [...wk.forecast];
+          for (const omDay of om.forecast) {
+            if (merged.length >= days) break;
+            if (!wkDates.has(omDay.date)) merged.push(omDay);
+          }
+          merged.sort((a, b) => a.date.localeCompare(b.date));
+          weather = {
+            ...wk,
+            forecast: merged.slice(0, days),
+            source: wk.forecast.length >= Math.ceil(days / 2) ? 'weatherkit' : 'open-meteo',
+          };
+          wkCount = wk.forecast.length;
+          omCount = merged.length - wk.forecast.length;
+        } else if (om) {
           weather = om;
-          console.log('[Weather] ⚠️ WeatherKit failed, using Open-Meteo for:', destination);
-          costTracker.addMetadata('source', 'open_meteo');
+          omCount = om.forecast.length;
+        } else if (wk) {
+          weather = wk;
+          wkCount = wk.forecast.length;
         } else {
           weather = generateFallbackForecast(destination, tripStartDate, days);
-          console.log('[Weather] ⚠️ All APIs failed, using seasonal fallback for:', destination);
-          costTracker.addMetadata('source', 'fallback');
+          fbCount = weather.forecast.length;
+        }
+
+        // 3) Pad with seasonal estimates if trip extends past Open-Meteo's
+        //    16-day horizon so the UI always shows the full requested window
+        //    with correct dates.
+        if (weather.forecast.length < days) {
+          const fallback = generateFallbackForecast(destination, tripStartDate, days);
+          const haveDates = new Set(weather.forecast.map((d) => d.date));
+          for (const fbDay of fallback.forecast) {
+            if (weather.forecast.length >= days) break;
+            if (!haveDates.has(fbDay.date)) {
+              weather.forecast.push(fbDay);
+              fbCount++;
+            }
+          }
+          weather.forecast.sort((a, b) => a.date.localeCompare(b.date));
         }
       }
+
+      costTracker.addMetadata('source', weather.source);
     } else {
       weather = generateFallbackForecast(destination, tripStartDate, days);
+      fbCount = weather.forecast.length;
       console.log('[Weather] ⚠️ No coordinates, using fallback for:', destination);
       costTracker.addMetadata('source', 'fallback');
     }
+
+    console.log(
+      `[Weather] coverage "${destination}": weatherkit=${wkCount}, open-meteo=${omCount}, fallback=${fbCount}, requested=${days}, tripStart=${tripStartDate}, source=${weather.source}`
+    );
 
     await costTracker.save();
 
