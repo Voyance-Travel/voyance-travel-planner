@@ -499,15 +499,18 @@ async function getGooglePlacesPhoto(
       // Prefer third photo which tends to be exterior/ambiance.
       const photoIndex = photos.length >= 4 ? 2 : photos.length >= 2 ? 1 : 0;
       const photoResource = photos[photoIndex].name;
-      const googlePhotoUrl = `https://places.googleapis.com/v1/${photoResource}/media?maxWidthPx=1200&key=${apiKey}`;
-      
-      // Download to Supabase Storage to avoid repeated API calls
-      const cacheResult = await getCachedPhotoUrl(
+
+      // Download to Supabase Storage via the central photo cache.
+      // Using the resource-based helper keeps `googleapis.com` out of feature code.
+      const cacheResult = await getCachedPlacesPhotoByResource(
         entityType,
         best.place.id,
-        googlePhotoUrl,
-        { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id },
-        costTracker,
+        photoResource,
+        {
+          maxWidthPx: 1200,
+          metadata: { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id },
+          costTracker,
+        },
       );
 
       return {
