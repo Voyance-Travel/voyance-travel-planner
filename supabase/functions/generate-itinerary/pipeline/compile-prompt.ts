@@ -1297,56 +1297,93 @@ CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located 
       if (t && dn) priorList.push({ title: t, dayNumber: dn });
     }
 
-    // ── EXTRA INTENTS — soft user requests from fine-tune notes & assistant chat ──
-    // metadata.userIntents — written by the itinerary-chat `record_user_intent` tool
-    // metadata.additionalNotes — fine-tune textarea, parsed for "Day N" markers
+    // ── EXTRA INTENTS — soft user requests from structured `trip_day_intents` ──
+    // PRIMARY source: rows in `trip_day_intents` (seeded by prepareContext from
+    // all four entry points and by the assistant chat). FALLBACK: re-parse the
+    // metadata blobs the legacy way. The blob fallback exists only for trips
+    // generated before the structured table was introduced.
     const extraIntents: Array<Record<string, any>> = [];
     const tripWideNotes: string[] = [];
+    let usedStructuredIntents = false;
     try {
-      const fineTuneText = (metadata?.additionalNotes as string) || '';
-      if (fineTuneText.trim()) {
-        const parsed = parseFineTuneIntoDailyIntents({
-          notes: fineTuneText,
-          tripStartDate: (preferences?.startDate as string) || (date ? String(date).split('T')[0] : undefined),
-          totalDays: totalDays || undefined,
-        });
-        for (const p of parsed.perDay) {
-          if (p.dayNumber === dayNumber) {
-            extraIntents.push({
-              title: p.title,
-              startTime: p.startTime,
-              kind: p.kind,
-              source: 'fine_tune',
-              priority: p.priority,
-              raw: p.raw,
-            });
+      if (tripId) {
+        const { fetchActiveDayIntents } = await import('../../_shared/day-intents-store.ts');
+        const rows = await fetchActiveDayIntents(supabase, tripId);
+        for (const r of rows) {
+          // Trip-wide notes (no day_number) feed userConstraints.tripWideNotes
+          if (r.day_number == null) {
+            if (r.intent_kind === 'note' || r.intent_kind === 'constraint') {
+              tripWideNotes.push(r.title);
+            }
+            continue;
           }
+          if (r.day_number !== dayNumber) continue;
+          if (r.status === 'fulfilled' && r.locked !== true) continue; // already done, don't re-inject
+          extraIntents.push({
+            title: r.title,
+            startTime: r.start_time || undefined,
+            endTime: r.end_time || undefined,
+            kind: r.intent_kind,
+            source: r.source_entry_point,
+            priority: r.priority === 'avoid' ? 'avoid' : (r.priority === 'must' ? 'must' : 'should'),
+            raw: r.raw_text || r.title,
+            locked: !!r.locked,
+            lockedSource: r.locked_source || undefined,
+          });
         }
-        for (const w of parsed.tripWide) tripWideNotes.push(w);
+        if (rows.length > 0) usedStructuredIntents = true;
       }
-    } catch (parseErr) {
-      console.warn('[compile-prompt] Fine-tune parse failed (non-blocking):', parseErr);
+    } catch (structErr) {
+      console.warn('[compile-prompt] Structured intent fetch failed (non-blocking):', structErr);
     }
 
-    // metadata.userIntents — { dayNumber, title, kind, startTime?, priority?, raw? }[]
-    try {
-      const recordedIntents = Array.isArray((metadata as any)?.userIntents)
-        ? ((metadata as any).userIntents as Array<Record<string, any>>)
-        : [];
-      for (const ri of recordedIntents) {
-        if (Number(ri.dayNumber) !== dayNumber) continue;
-        if (!ri.title || typeof ri.title !== 'string') continue;
-        extraIntents.push({
-          title: ri.title,
-          startTime: ri.startTime,
-          kind: ri.kind || 'activity',
-          source: ri.source || 'assistant',
-          priority: ri.priority === 'must' ? 'must' : 'should',
-          raw: ri.raw || ri.title,
-        });
+    // FALLBACK: legacy blob parsing — only if the structured table was empty.
+    if (!usedStructuredIntents) {
+      try {
+        const fineTuneText = (metadata?.additionalNotes as string) || '';
+        if (fineTuneText.trim()) {
+          const parsed = parseFineTuneIntoDailyIntents({
+            notes: fineTuneText,
+            tripStartDate: (preferences?.startDate as string) || (date ? String(date).split('T')[0] : undefined),
+            totalDays: totalDays || undefined,
+          });
+          for (const p of parsed.perDay) {
+            if (p.dayNumber === dayNumber) {
+              extraIntents.push({
+                title: p.title,
+                startTime: p.startTime,
+                kind: p.kind,
+                source: 'fine_tune',
+                priority: p.priority,
+                raw: p.raw,
+              });
+            }
+          }
+          for (const w of parsed.tripWide) tripWideNotes.push(w);
+        }
+      } catch (parseErr) {
+        console.warn('[compile-prompt] Fine-tune parse failed (non-blocking):', parseErr);
       }
-    } catch (intentErr) {
-      console.warn('[compile-prompt] Recorded intents read failed (non-blocking):', intentErr);
+
+      try {
+        const recordedIntents = Array.isArray((metadata as any)?.userIntents)
+          ? ((metadata as any).userIntents as Array<Record<string, any>>)
+          : [];
+        for (const ri of recordedIntents) {
+          if (Number(ri.dayNumber) !== dayNumber) continue;
+          if (!ri.title || typeof ri.title !== 'string') continue;
+          extraIntents.push({
+            title: ri.title,
+            startTime: ri.startTime,
+            kind: ri.kind || 'activity',
+            source: ri.source || 'assistant',
+            priority: ri.priority === 'must' ? 'must' : 'should',
+            raw: ri.raw || ri.title,
+          });
+        }
+      } catch (intentErr) {
+        console.warn('[compile-prompt] Recorded intents read failed (non-blocking):', intentErr);
+      }
     }
 
     // ── FORWARD STATE — peek ahead 1–2 days to avoid vibe clashes ──
