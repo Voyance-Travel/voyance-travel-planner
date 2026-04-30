@@ -108,20 +108,26 @@ Deno.test('Lisbon dinner regression: all 13 user intents survive a check', () =>
     { day: 9, title: 'JNcQUOI Avenida', time: '19:00', kind: 'dinner' },
   ];
 
-  const ledgers = lisbonAnchors.map((a) =>
+  // Group anchors by day so each day gets ONE ledger (matches production).
+  const byDay = new Map<number, typeof lisbonAnchors>();
+  for (const a of lisbonAnchors) {
+    if (!byDay.has(a.day)) byDay.set(a.day, []);
+    byDay.get(a.day)!.push(a);
+  }
+  const ledgers = Array.from(byDay.entries()).map(([day, items]) =>
     buildDayLedger({
-      dayNumber: a.day,
-      date: '2026-04-17', // dummy — date math not under test here
+      dayNumber: day,
+      date: '2026-04-17',
       city: 'Lisbon',
       country: 'Portugal',
-      hardFacts: { isFirstDay: a.day === 1, isLastDay: false, isHotelChange: false },
-      anchors: [{ title: a.title, startTime: a.time, source: 'manual_paste', category: a.kind }],
+      hardFacts: { isFirstDay: day === 1, isLastDay: false, isHotelChange: false },
+      anchors: items.map((a) => ({ title: a.title, startTime: a.time, source: 'manual_paste', category: a.kind })),
     })
   );
 
-  const days = lisbonAnchors.map((a) => ({
-    dayNumber: a.day,
-    activities: [{ title: a.title, startTime: a.time, locked: true, lockedSource: 'manual_paste' }],
+  const days = Array.from(byDay.entries()).map(([day, items]) => ({
+    dayNumber: day,
+    activities: items.map((a) => ({ title: a.title, startTime: a.time, locked: true, lockedSource: 'manual_paste' })),
   }));
 
   const res = ledgerCheck(days, ledgers);
