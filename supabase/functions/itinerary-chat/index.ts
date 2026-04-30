@@ -176,7 +176,39 @@ const BLOCKED_PATTERNS = [
   /modify the (app|site|website)/i,
 ];
 
-// Tools the AI can call - structured actions only
+// Edit-verb gate: if the user's message has none of these AND isn't a confirmation
+// of a prior proposal, mutation tool calls are converted to propose_change cards.
+const EDIT_VERB_PATTERN = /\b(change|replace|swap|remove|delete|drop|cancel|add|rewrite|regenerate|redo|rebuild|move|push|shift|reschedule|reorder|pack|unpack|split|fix|update|edit|make (it|this|that|day|the day|day \d+)? ?(more|less|earlier|later|shorter|longer|cheaper|fancier))\b/i;
+const CONFIRMATION_PATTERN = /\b(yes|yep|yeah|sure|do it|go ahead|sounds good|please apply|apply (it|that|this|the change)?|confirm|let's do it|make it so)\b/i;
+const MUTATION_TOOLS = new Set([
+  "rewrite_day",
+  "suggest_activity_swap",
+  "adjust_day_pacing",
+  "apply_filter",
+  "regenerate_day",
+]);
+
+function lastAssistantProposedChange(messages: Array<{ role: string; content: string }>): boolean {
+  // Walk backwards through assistant messages; if the most recent assistant turn
+  // mentions "propose" / "want me to" / "would you like" / "shall I", treat as a pending proposal.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "user") return false;
+    if (m.role !== "assistant") continue;
+    const c = (m.content || "").toLowerCase();
+    if (
+      c.includes("want me to") ||
+      c.includes("would you like") ||
+      c.includes("shall i") ||
+      c.includes("should i") ||
+      c.includes("propose") ||
+      c.includes("i can ") ||
+      c.includes("i could ")
+    ) return true;
+    return false;
+  }
+  return false;
+}
 const TOOLS = [
   {
     type: "function",
