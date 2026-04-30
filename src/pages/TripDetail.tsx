@@ -2890,7 +2890,7 @@ export default function TripDetail() {
                        <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                        <div className="flex-1 min-w-0">
                          <p className="text-sm font-medium text-foreground">
-                           Generation ended early — {incompleteDays.length} {incompleteDays.length === 1 ? 'day is' : 'days are'} unplanned
+                           Generation ended early. {incompleteDays.length} {incompleteDays.length === 1 ? 'day is' : 'days are'} unplanned
                          </p>
                          <p className="text-xs text-muted-foreground mt-0.5">
                            {incompleteDays.length === 1
