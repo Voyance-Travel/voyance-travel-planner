@@ -242,6 +242,61 @@ export function groupIntentsByDay(rows: DayIntentRow[]): Map<number, DayIntentRo
 }
 
 /**
+ * Seed `trip_day_intents` from a trip's legacy metadata blobs. Idempotent —
+ * the unique index on (trip_id, day_number, source, kind, title, locked_source)
+ * dedupes across re-saves. Safe to call from any entry point that has loaded
+ * a trip row (full generation, single-day regen, manual paste enrichment).
+ *
+ * Returns number of rows actually written.
+ */
+export async function seedDayIntentsFromMetadata(
+  supabase: SupabaseClient,
+  trip: { id: string; user_id?: string | null; metadata?: Record<string, unknown> | null; start_date?: string | null },
+  totalDays: number,
+  userId?: string | null,
+): Promise<number> {
+  if (!trip || !trip.id) return 0;
+  try {
+    const { intentsFromChatPlannerExtraction, intentsFromFineTuneNotes, intentsFromUserAnchors } =
+      await import('./intent-normalizers.ts');
+    const md = (trip.metadata || {}) as Record<string, any>;
+    const seedIntents: DayIntentInput[] = [];
+
+    seedIntents.push(...intentsFromChatPlannerExtraction({
+      mustDoActivities: typeof md.mustDoActivities === 'string'
+        ? md.mustDoActivities
+        : Array.isArray(md.mustDoActivities) ? md.mustDoActivities.join('\n') : undefined,
+      perDayActivities: Array.isArray(md.perDayActivities) ? md.perDayActivities : undefined,
+      userConstraints: Array.isArray(md.userConstraints) ? md.userConstraints : undefined,
+      tripStartDate: trip.start_date || undefined,
+      totalDays,
+    }));
+
+    if (typeof md.additionalNotes === 'string' && md.additionalNotes.trim()) {
+      seedIntents.push(...intentsFromFineTuneNotes({
+        notes: md.additionalNotes,
+        tripStartDate: trip.start_date || undefined,
+        totalDays,
+      }));
+    }
+
+    if (Array.isArray(md.userAnchors)) {
+      seedIntents.push(...intentsFromUserAnchors(md.userAnchors));
+    }
+
+    if (seedIntents.length === 0) return 0;
+    const written = await upsertDayIntents(supabase, trip.id, userId || trip.user_id || null, seedIntents);
+    if (written > 0) {
+      console.log(`[day-intents-store] seeded ${written}/${seedIntents.length} rows for trip ${trip.id}`);
+    }
+    return written;
+  } catch (e) {
+    console.warn('[day-intents-store] seedDayIntentsFromMetadata failed (non-blocking):', String(e));
+    return 0;
+  }
+}
+
+/**
  * Mark intents as fulfilled if their title matches an activity in the day.
  * Pure read+write helper used by the post-save Day Brief checker.
  *

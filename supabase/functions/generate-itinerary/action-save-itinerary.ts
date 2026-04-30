@@ -506,7 +506,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         });
       });
 
-      const lc = ledgerCheck(itineraryDays, ledgers);
+      const lc = await ledgerCheck(itineraryDays, ledgers, { supabase, tripId });
       if (lc.removed > 0 || lc.inserted > 0 || lc.warnings.length > 0) {
         console.log(`[save-itinerary] 🧭 Day Brief: removed ${lc.removed}, inserted ${lc.inserted} placeholder(s), warnings ${lc.warnings.length}`);
         for (const w of lc.warnings.slice(0, 20)) {
