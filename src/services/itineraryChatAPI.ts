@@ -151,6 +151,36 @@ export function getActionDisplayInfo(action: { type: string; params: Record<stri
         icon: 'refresh',
         creditCost: 10,
       };
+    case 'propose_change': {
+      const wouldCall = action.params.would_call as string | undefined;
+      const creditMap: Record<string, number> = {
+        rewrite_day: 10,
+        regenerate_day: 10,
+        suggest_activity_swap: 5,
+        adjust_day_pacing: 5,
+        apply_filter: 5,
+      };
+      const iconMap: Record<string, 'swap' | 'pace' | 'filter' | 'refresh' | 'rewrite'> = {
+        rewrite_day: 'rewrite',
+        regenerate_day: 'refresh',
+        suggest_activity_swap: 'swap',
+        adjust_day_pacing: 'pace',
+        apply_filter: 'filter',
+      };
+      return {
+        title: `Suggested change · Day ${action.params.target_day}`,
+        description: (action.params.summary as string) || 'Apply this suggested change?',
+        icon: (wouldCall && iconMap[wouldCall]) || 'rewrite',
+        creditCost: (wouldCall && creditMap[wouldCall]) ?? 5,
+      };
+    }
+    case 'record_user_intent':
+      return {
+        title: `Saved request · Day ${action.params.dayNumber ?? action.params.target_day}`,
+        description: (action.params.title as string) || 'Saved for the next regeneration',
+        icon: 'rewrite',
+        creditCost: 0,
+      };
     default:
       return {
         title: 'Unknown action',
