@@ -56,3 +56,54 @@ Deno.test('parseDayActivities preserves lockedSource as raw input for matching',
   const out = parseDayActivities(3, '9:00 AM - Forbidden City tour');
   assertEquals(out[0].lockedSource, '9:00 AM - Forbidden City tour');
 });
+
+// ---------- Regression: chat-trip-planner emits "<Title> Day N <TIME>" format ----------
+// Bug: parseMustDoEntry only matched "Day N:" at the START of the string, so every
+// chat-extracted anchor like "Dinner Peixola Day 2 7:30 PM" got dayNumber=0 and was
+// then silently dropped by applyAnchorsWin's range guard. Result: AI overwrote every
+// locked dinner except for one Day-1 collision. These tests pin the fix.
+
+Deno.test('buildUserAnchors handles "Title Day N TIME" mid-string format (chat-trip-planner real output)', () => {
+  const anchors = buildUserAnchors({
+    source: 'chat',
+    mustDoActivities: [
+      'Dinner JNcQUOI Table Day 1 7:00 PM',
+      'Lunch Belcanto Day 2 1:30 PM',
+      'Dinner Peixola Day 2 7:30 PM',
+      'Cervejaria Ramiro Day 7 1:00 PM',
+    ],
+  });
+  assertEquals(anchors.length, 4);
+  assertEquals(anchors[0].dayNumber, 1);
+  assertEquals(anchors[0].startTime, '19:00');
+  assert(anchors[0].title.toLowerCase().includes('jncquoi'));
+  assertEquals(anchors[1].dayNumber, 2);
+  assertEquals(anchors[1].startTime, '13:30');
+  assertEquals(anchors[2].dayNumber, 2);
+  assertEquals(anchors[2].startTime, '19:30');
+  assertEquals(anchors[3].dayNumber, 7);
+  assertEquals(anchors[3].startTime, '13:00');
+});
+
+Deno.test('buildUserAnchors still supports legacy "Day N: foo" prefix format', () => {
+  const anchors = buildUserAnchors({
+    source: 'chat',
+    mustDoActivities: ['Day 3: 9:00 AM - Forbidden City tour'],
+  });
+  assertEquals(anchors.length, 1);
+  assertEquals(anchors[0].dayNumber, 3);
+  assertEquals(anchors[0].startTime, '09:00');
+  assert(anchors[0].title.toLowerCase().includes('forbidden city'));
+});
+
+Deno.test('buildUserAnchors strips "Day N" token from title text', () => {
+  const anchors = buildUserAnchors({
+    source: 'chat',
+    mustDoActivities: ['Spa Serenity Spa Lisbon Day 2 3:30 PM'],
+  });
+  assertEquals(anchors.length, 1);
+  assertEquals(anchors[0].dayNumber, 2);
+  // "Day 2" should not appear inside the title — it's a metadata token, not content
+  assert(!/\bDay\s+\d+\b/i.test(anchors[0].title), `title should not contain Day N: ${anchors[0].title}`);
+  assert(anchors[0].title.toLowerCase().includes('serenity spa'));
+});

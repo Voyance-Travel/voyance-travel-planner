@@ -198,14 +198,21 @@ When a user pastes a DETAILED itinerary (with specific times, venues, restaurant
 9. If the plan spans multiple cities, ALWAYS populate the cities array with all cities, nights, and hotels.
 10. NEVER refuse to generate. The user chose "Just Tell Us" because they want a VOYANCE trip built from their plan. Always call the tool.
 
-CRITICAL — DAY-LEVEL EXTRACTION:
-When a user provides activities organized by day (e.g., "April 10: breakfast, pool... April 11: transfer to Radisson..."), you MUST use the perDayActivities array, NOT just mustDoActivities.
+CRITICAL — DAY-LEVEL EXTRACTION (HARD REQUIREMENT, OVERRIDES ALL OTHER RULES):
+If the user's input contains ANY of the following, you MUST use perDayActivities — not mustDoActivities — as the PRIMARY extraction target:
+  • Date headers ("APRIL 17, 2026", "Aug 10", "March 3rd")
+  • Day-of-week markers ("Friday", "Saturday", "Monday — Day 2")
+  • Numbered days ("Day 1", "Day 2", "Day 3")
+  • Day-by-day bullet lists where each section corresponds to a calendar day
 
-For each day the user described, create one entry in perDayActivities with:
-- dayNumber: the sequential day number (1, 2, 3...)
-- activities: ALL activities for that day as a comma-separated string WITH times
+For each such day in the user's input, create exactly one entry in perDayActivities:
+  - dayNumber: sequential day number starting at 1 based on the order in their plan
+  - activities: ALL activities for that day as a comma-separated string WITH times
 
-This preserves day-level structure so the generator puts activities on the CORRECT day.
+This preserves day-level structure so the generator locks each activity to the CORRECT day.
+
+WHY THIS MATTERS — IF YOU IGNORE THIS RULE:
+The downstream anchor system parses perDayActivities to create day-bound locks. If you put dated/numbered activities into mustDoActivities as a flat list ("Dinner X Day 2 7:30 PM"), the day binding becomes ambiguous and the AI itinerary generator will overwrite the user's reservations with its own picks. The user has explicitly told us they DO NOT want this. THIS IS A PRODUCT-BREAKING BUG. Do not let it happen.
 
 RULES FOR perDayActivities:
 1. Include EVERYTHING the user specified — restaurants, hotels, meetings, presentations, volunteering, pool time, spa, drinks, ALL of it.
