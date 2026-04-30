@@ -934,6 +934,30 @@ async function cacheImage(
 // Clean activity title to extract searchable venue name
 function extractVenueName(activityTitle: string): { cleanName: string; shouldSkip: boolean; inferredCategory?: string } {
   const title = activityTitle.trim();
+
+  // ── Hard generic-name guard (cost saver) ─────────────────────────────────
+  // Strings that have hit Google repeatedly with $0 yield in production logs.
+  // Reject before any cache or API work.
+  const lower = title.toLowerCase();
+  const HARD_GENERIC = new Set([
+    'hotel', 'your hotel', 'the hotel', 'home', 'house', 'apartment',
+    'return to hotel', 'check in', 'check out', 'check-in', 'check-out',
+    'free time', 'downtime', 'rest', 'relax', 'leisure', 'breakfast',
+    'lunch', 'dinner', 'brunch', 'snack', 'meal', 'drinks', 'cocktails',
+    'transit', 'transfer', 'arrival', 'departure', 'flight', 'train',
+  ]);
+  if (HARD_GENERIC.has(lower) || title.replace(/[^a-z]/gi, '').length < 4) {
+    return { cleanName: title, shouldSkip: true, inferredCategory: inferCategoryFromTitle(title) };
+  }
+  // Catch trailing duplicates from our own logs: "Marriott hotel hotel", "Plaza hotel hotel"
+  if (/\b(hotel|resort|inn|spa|cafe|bar|restaurant)\s+\1\b/i.test(title)) {
+    return {
+      cleanName: title.replace(/\s+(hotel|resort|inn|spa|cafe|bar|restaurant)$/i, '').trim(),
+      shouldSkip: false,
+      inferredCategory: 'accommodation',
+    };
+  }
+
   
   // Activities that should use category fallback instead of search
   const skipPatterns = [
