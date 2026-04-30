@@ -116,6 +116,7 @@ import { ItineraryOnboardingTour } from './ItineraryOnboardingTour';
 import { HelpButton } from './HelpButton';
 import { FirstUseHint } from './FirstUseHint';
 import ShareGuideSheet from '@/components/sharing/ShareGuideSheet';
+import TripShareModal from '@/components/sharing/TripShareModal';
 import { preloadAirportCodes, getAirportDisplaySync } from '@/services/locationSearchAPI';
 // InlineModifier removed — redundant with TripChat
 import type { ItineraryDay } from '@/services/itineraryActionExecutor';
