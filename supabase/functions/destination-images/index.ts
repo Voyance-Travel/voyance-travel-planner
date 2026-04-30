@@ -889,8 +889,8 @@ async function cacheImage(
       return;
     }
 
-    // Secondary safety: double-check no raw Google/Places API URLs leak through
-    if (image.url.includes('places.googleapis.com') || image.url.includes('maps.googleapis.com')) {
+    // Secondary safety: double-check no raw key-bearing Google URLs leak through
+    if (isGoogleBillableUrl(image.url)) {
       console.warn(`[Images] BLOCKED raw Google URL from cache: ${entityKey}`);
       return;
     }
