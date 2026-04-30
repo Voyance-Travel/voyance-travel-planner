@@ -42,6 +42,11 @@ export function CreditNudge({ action, currentBalance, onDismiss, compact }: Cred
   const recommended = getRecommendedPack(deficit);
   const actionLabel = ACTION_LABELS[action] || 'perform this action';
 
+  // Guard: never render an upsell when the user already has enough credits.
+  // Previously this displayed "0 more credits needed... action costs 10",
+  // which contradicted itself. Affordable actions should not mount this component.
+  if (deficit <= 0) return null;
+
   // Show smallest flex credit if deficit is small
   const showQuickTopUp = deficit <= BOOST_PACK.credits;
   const primaryPack = showQuickTopUp ? BOOST_PACK : recommended;
