@@ -503,18 +503,17 @@ async function geocodeAddress(
   }
 
   try {
-    const searchQuery = encodeURIComponent(`${address}, ${destination}`);
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${searchQuery}&key=${apiKey}`;
-    
-    const response = await fetch(url);
-    const data = await response.json();
+    const geo = await googleGeocode(
+      { address: `${address}, ${destination}` },
+      { actionType: 'optimize_itinerary', reason: `geocode: ${address}` },
+    );
 
-    if (data.status !== 'OK' || !data.results?.[0]) {
+    if (!geo.ok || geo.data?.status !== 'OK' || !geo.data?.results?.[0]) {
       console.warn(`[geocoding] No results for: ${address}`);
       return null;
     }
 
-    const result = data.results[0];
+    const result = geo.data.results[0];
     const location = result.geometry.location;
 
     const geocodeResult: GeocodingResult = {
