@@ -164,16 +164,16 @@ export async function getDestinationCenter(
   destination: string,
   apiKey: string
 ): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(destination)}&key=${apiKey}`
-    );
-    const data = await response.json();
-    const loc = data.results?.[0]?.geometry?.location;
-    return loc ? { lat: loc.lat, lng: loc.lng } : null;
-  } catch {
-    return null;
-  }
+  // apiKey is read by the wrapper internally; we keep the param for signature
+  // compatibility with the many existing callers.
+  void apiKey;
+  const result = await googleGeocode(
+    { address: destination },
+    { actionType: 'venue_enrichment_geocode', reason: `dest center: ${destination}` },
+  );
+  if (!result.ok) return null;
+  const loc = result.data?.results?.[0]?.geometry?.location;
+  return loc ? { lat: loc.lat, lng: loc.lng } : null;
 }
 
 // =============================================================================
