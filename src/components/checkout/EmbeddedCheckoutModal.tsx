@@ -70,6 +70,7 @@ export function EmbeddedCheckoutModal({
           credits,
           tripId,
           groupTier,
+          destination,
           days,
           packageTier,
         },
@@ -92,7 +93,7 @@ export function EmbeddedCheckoutModal({
       setError(message);
       throw err;
     }
-  }, [priceId, mode, returnPath, productId, credits, tripId, groupTier, days, packageTier]);
+  }, [priceId, mode, returnPath, productId, credits, tripId, groupTier, destination, days, packageTier]);
 
   const options = { fetchClientSecret };
 
