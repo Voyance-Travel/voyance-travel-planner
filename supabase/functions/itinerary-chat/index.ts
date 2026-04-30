@@ -660,6 +660,54 @@ ${itineraryDescription}
           confidence: args.confidence,
           scope: args.scope || 'trip_only',
         });
+      } else if (fnName === "record_user_intent") {
+        // Persist to trips.metadata.userIntents IMMEDIATELY so the next
+        // regeneration of any kind picks it up. This is free (no AI work).
+        try {
+          const serviceSupabase = createClient(
+            Deno.env.get("SUPABASE_URL") ?? "",
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+          );
+          const { data: tripRow } = await serviceSupabase
+            .from('trips')
+            .select('metadata')
+            .eq('id', itineraryContext.tripId)
+            .single();
+          const meta = (tripRow?.metadata as Record<string, unknown>) || {};
+          const existing = Array.isArray((meta as any).userIntents)
+            ? ((meta as any).userIntents as Array<Record<string, unknown>>)
+            : [];
+
+          const newIntent = {
+            dayNumber: Number(args.target_day),
+            title: String(args.title || '').trim(),
+            kind: args.kind || 'activity',
+            startTime: args.start_time || undefined,
+            priority: args.priority === 'must' ? 'must' : 'should',
+            raw: args.raw || args.title,
+            source: 'assistant',
+            recordedAt: new Date().toISOString(),
+          };
+
+          // De-dupe: same dayNumber + title + startTime
+          const filtered = existing.filter((e: any) => !(
+            Number(e.dayNumber) === newIntent.dayNumber &&
+            String(e.title || '').toLowerCase() === newIntent.title.toLowerCase() &&
+            (e.startTime || '') === (newIntent.startTime || '')
+          ));
+          filtered.push(newIntent);
+
+          await serviceSupabase
+            .from('trips')
+            .update({ metadata: { ...meta, userIntents: filtered } })
+            .eq('id', itineraryContext.tripId);
+
+          log('Recorded user intent', { dayNumber: newIntent.dayNumber, title: newIntent.title, priority: newIntent.priority });
+          // Surface the intent so the front-end can show a confirmation chip.
+          actions.push({ type: 'record_user_intent', params: newIntent });
+        } catch (intentErr) {
+          log('Failed to record user intent', { error: String(intentErr) });
+        }
       } else {
         actions.push({
           type: fnName,
