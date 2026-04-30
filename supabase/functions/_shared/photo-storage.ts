@@ -202,3 +202,35 @@ export async function batchCachePhotos(
 
   return results;
 }
+
+/**
+ * Cache a Google Places v1 photo by its resource name (e.g. "places/X/photos/Y")
+ * without forcing the caller to hand-build a key-bearing URL.
+ *
+ * Centralising URL construction here means feature code never contains a
+ * literal `googleapis.com` string, the lint guard stays clean, and the
+ * single SKU-recording path in `getCachedPhotoUrl` is the only way photos
+ * can be downloaded from Google.
+ */
+export async function getCachedPlacesPhotoByResource(
+  entityType: 'restaurant' | 'hotel' | 'activity' | 'destination',
+  entityId: string,
+  photoResource: string,
+  options?: {
+    maxWidthPx?: number;
+    maxHeightPx?: number;
+    metadata?: { destination?: string; placeName?: string; placeId?: string };
+    costTracker?: CostTracker;
+  },
+): Promise<PhotoCacheResult> {
+  const apiKey = Deno.env.get('GOOGLE_MAPS_API_KEY') ?? '';
+  if (!apiKey) {
+    return { url: '', cached: false, cacheHit: false, source: 'direct' };
+  }
+  const qs: string[] = [`key=${apiKey}`];
+  if (options?.maxWidthPx) qs.push(`maxWidthPx=${options.maxWidthPx}`);
+  if (options?.maxHeightPx) qs.push(`maxHeightPx=${options.maxHeightPx}`);
+  // Resource name is e.g. "places/ChIJ.../photos/AeY..." — already URL-safe.
+  const url = `https://places.googleapis.com/v1/${photoResource}/media?${qs.join('&')}`;
+  return getCachedPhotoUrl(entityType, entityId, url, options?.metadata, options?.costTracker);
+}
