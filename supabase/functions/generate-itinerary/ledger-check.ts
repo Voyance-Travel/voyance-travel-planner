@@ -218,10 +218,15 @@ export async function ledgerCheck(
       }
     }
 
-    // 2) Repeat-of-alreadyDone — drop offending activity (only if not user-locked)
+    // 2) Repeat-of-alreadyDone — drop offending activity (only if not user-locked).
+    //    EXEMPTION: daily anchors (Return to Hotel, Freshen Up, Check-in, in-hotel
+    //    breakfast, hotel transfers) are SUPPOSED to repeat every day. Without
+    //    this exemption every day after day 1 was being stripped of its
+    //    Believable-Human structure (see Core memory).
     const doneSet = ledger.alreadyDone.map((p) => p.title.toLowerCase());
     day.activities = day.activities.filter((a: any) => {
       if (a.locked || a.isLocked || a.lockedSource) return true;
+      if (isDailyAnchor(a)) return true;
       const t = (a.title || a.name || '').toLowerCase().trim();
       if (!t) return true;
       const repeat = doneSet.some((d) => fuzzyMatch(t, d));
