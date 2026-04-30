@@ -686,31 +686,24 @@ async function enrichHotelByName(
     const textQuery = `${hotelName} ${destination}`;
     console.log('[Hotels] Enriching hotel:', textQuery);
 
-    const response = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
+    const enrichResult = await googlePlacesTextSearch(
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos',
-        },
-        body: JSON.stringify({
-          textQuery,
-          includedType: 'lodging',
-          maxResultCount: 1,
-          languageCode: 'en',
-        }),
-      }
+        textQuery,
+        includedType: 'lodging',
+        maxResultCount: 1,
+        languageCode: 'en',
+        fieldMask:
+          'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos',
+      },
+      { actionType: 'hotels_enrich_by_name', reason: textQuery },
     );
 
-    if (!response.ok) {
-      console.error('[Hotels] Enrichment API error:', await response.text());
+    if (!enrichResult.ok) {
+      console.error('[Hotels] Enrichment API error:', enrichResult.errorText);
       return { success: false, message: 'API error' };
     }
 
-    const data = await response.json();
-    const place = data.places?.[0];
+    const place = enrichResult.data?.places?.[0];
 
     if (!place) {
       console.log('[Hotels] No place found for:', hotelName);
