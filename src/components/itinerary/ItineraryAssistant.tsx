@@ -302,10 +302,13 @@ export function ItineraryAssistant({
       // Detect budget intent from the user's message for validation
       const budgetIntent = detectBudgetIntent(response.actions || []);
 
-      // If not in approval mode and there are actions, auto-apply ALL sequentially
+      // If not in approval mode and there are actions, auto-apply ALL sequentially.
+      // EXCEPT: propose_change and record_user_intent are advisory — never auto-applied.
+      const NON_AUTO_APPLY = new Set(['propose_change', 'record_user_intent']);
       if (!approvalMode && response.actions?.length > 0) {
         for (let i = 0; i < response.actions.length; i++) {
           const action = response.actions[i];
+          if (NON_AUTO_APPLY.has(action.type)) continue;
           await handleActionApply(assistantMessage.id, i, {
             type: action.type as ItineraryAction['type'],
             params: action.params,
@@ -348,9 +351,22 @@ export function ItineraryAssistant({
 
   const handleActionApply = async (messageId: string, actionIndex: number, action: ItineraryAction) => {
     const actionId = `${messageId}-${actionIndex}`;
+
+    // If this is a propose_change card, resolve to the underlying mutation tool
+    // and execute that. record_user_intent is informational only — clicking does nothing destructive.
+    if (action.type === 'propose_change') {
+      const wouldCall = action.params.would_call as ItineraryAction['type'] | undefined;
+      const wouldCallArgs = (action.params.would_call_args as Record<string, unknown>) || {};
+      if (!wouldCall) {
+        toast.error('This suggestion is missing target details.');
+        return;
+      }
+      action = { type: wouldCall, params: wouldCallArgs as Record<string, unknown>, status: 'pending' };
+    }
+
     setIsExecuting(true);
     setExecutingActionId(actionId);
-    
+
     // Show immediate feedback that we're working on it
     toast.loading('Applying changes...', { id: actionId, description: 'This may take a few seconds' });
     
@@ -704,7 +720,7 @@ export function ItineraryAssistant({
                                   </div>
                                 </div>
                                 
-                                {isPending && approvalMode && (
+                                {isPending && (approvalMode || action.type === 'propose_change') && (
                                   <div className="flex gap-2 mt-3">
                                     <Button
                                       size="sm"

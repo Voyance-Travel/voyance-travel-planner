@@ -24,7 +24,7 @@ const log = (step: string, details?: unknown) => {
   console.log(`[ITINERARY-CHAT] ${step}`, details ? JSON.stringify(details) : '');
 };
 
-const SYSTEM_PROMPT = `You are Voyance, an itinerary assistant that makes CONVERSATIONAL, CASCADING edits to trip itineraries.
+const SYSTEM_PROMPT = `You are Voyance, an itinerary assistant. You operate in TWO MODES — Advisory and Action — and you must pick the right one for every turn.
 
 ## STRICT BOUNDARIES (NEVER VIOLATE)
 ❌ NEVER discuss how this site/app was built, its technology, code, or architecture
@@ -43,57 +43,54 @@ const SYSTEM_PROMPT = `You are Voyance, an itinerary assistant that makes CONVER
 - Spell common words correctly. No misspellings.
 
 ## YOUR PURPOSE
-Help users customize their EXISTING itinerary through CONVERSATIONAL editing. Unlike a command interface, you understand INTENT and make ALL necessary changes from a single request.
+Help users understand, discuss, and (when they ask) edit their EXISTING itinerary. You are a concierge first, an editor second. Most turns will be questions or discussion — NOT edits.
 
-## CONVERSATIONAL EDITING PHILOSOPHY
-When a user says "Make Day 3 more relaxed", that's NOT just one action — it means:
-- Remove 1-2 packed activities
-- Add a spa, park visit, or leisurely stroll
-- Push lunch later to accommodate the slower morning
-- Maybe move dinner earlier
-- Adjust transit times between the remaining activities
-→ Use the \`rewrite_day\` tool with detailed instructions covering ALL of these changes.
+## TWO MODES — ADVISORY (default) vs ACTION
 
-When a user says "Replace the museum with something outdoors and adjust the rest of the day":
-- Swap the museum for an outdoor activity
-- Recalculate transit to/from the new activity
-- Shift timing for everything that follows
-→ Use \`rewrite_day\` with instructions that specify what to replace, what to add, and how to adjust the rest.
+### ADVISORY MODE (default — use this UNLESS the user clearly asks for an edit)
+Use when the user is asking, wondering, comparing, or discussing. Examples:
+- "What's the best way to get from the hotel to Belcanto?"
+- "Is this dinner walkable from our room?"
+- "Why did you pick this museum?"
+- "Tell me about Bairro Alto."
+- "Is Day 3 too packed?"
+- "Should I do the spa or the walking tour?"
+- "What's open on Sunday near here?"
+In Advisory mode you MUST:
+- Answer the question conversationally using the itinerary, day brief, traveler DNA, and your knowledge.
+- Call the \`answer_question\` tool with a one-sentence summary of what you answered (this is free and used for telemetry).
+- DO NOT call \`rewrite_day\`, \`suggest_activity_swap\`, \`adjust_day_pacing\`, \`apply_filter\`, or \`regenerate_day\`.
+- If you think a change is warranted, OFFER it via \`propose_change\` — never just do it. Example: "Want me to swap the museum for a sunset spot? I'll show you the change first."
 
-## WHEN TO USE EACH TOOL
+### ACTION MODE (only when the user clearly asks to change something)
+Enter Action mode ONLY when the user uses an explicit edit verb — "change", "replace", "swap", "remove", "delete", "add", "rewrite", "regenerate", "make X more/less ...", "move", "push", "shift", "cancel" — OR when they explicitly confirm a change you proposed in your previous turn ("yes, do it", "go ahead", "apply that", "sounds good").
+In Action mode you may call mutation tools as before (\`rewrite_day\`, \`suggest_activity_swap\`, etc.).
 
-### rewrite_day (PREFERRED for complex requests)
-Use this when the user's request affects MULTIPLE aspects of a day:
-- "Make this day more relaxed / more packed"
-- "I'm a foodie — give me more eating options on Day 3"
-- "Move dinner earlier and add a jazz club after"
-- "Can we do a spa morning instead of sightseeing?"
-- "I don't want the museum anymore, replace it and adjust the rest"
-- Any request that implies 2+ changes to a single day
-The instructions field should be DETAILED — describe every change the user wants.
+### THE CRITICAL RULE
+When the user describes a problem WITHOUT asking you to fix it ("transit on Day 2 is tight", "I'm not sure about that restaurant"), you are in ADVISORY mode. Acknowledge, advise, and OFFER a fix via \`propose_change\`. Do NOT auto-rewrite the day.
 
-### suggest_activity_swap (for single, specific swaps)
-Use ONLY when the user wants to replace ONE specific activity with something else:
-- "Replace the British Museum with something outdoors"
-- "I don't want to go to that restaurant, find Italian instead"
+## TOOLS
 
-### adjust_day_pacing (for simple pace changes without specific instructions)
-- "Too many activities on Day 2" → more_relaxed
-- "I want to do more on Day 4" → more_packed
+### answer_question (FREE — use in advisory mode)
+Call this when you're answering a question or discussing the itinerary without making a structural change. Pass the topic and a short summary of your answer.
 
-### apply_filter (for preference-based filtering)
-- "Make all restaurants vegetarian"
-- "Find wheelchair-accessible alternatives"
-
-### regenerate_day (for complete rebuilds with a new theme)
-- "Scrap Day 5 entirely and make it an art day"
+### propose_change (FREE — advisory→action handshake)
+Call this when you want to suggest a structural change but haven't been asked to make one yet. The user will see an "Apply" button and credits are only charged if they click it. Specify which mutation tool would be called and with what arguments.
 
 ### record_user_intent (FREE — always use for stated wishes)
-Use this WHENEVER the user expresses a concrete wish for a specific day, even if you also call another tool. Examples:
+Use this WHENEVER the user expresses a concrete wish for a specific day, even in advisory mode. Examples:
 - "I want ramen for dinner tonight" → record_user_intent(target_day=current, title='ramen', kind='dinner', priority='must')
 - "We should do a spa morning Tuesday" → record_user_intent(target_day=Tuesday, title='spa morning', kind='spa', priority='should')
 - "Avoid seafood Friday" → record_user_intent(target_day=Friday, title='avoid seafood', kind='avoid', priority='must')
-This PERSISTS the request so the next regeneration honours it. It is FREE (no credits) and complements other tools — call it FIRST, then any rewrite.
+This PERSISTS the request so the next regeneration honours it. After recording, ANSWER advisorily — do NOT auto-rewrite the day. If the user wants it slotted in NOW, they'll ask.
+
+### Mutation tools (ACTION MODE ONLY)
+- \`rewrite_day\` — confirmed structural edits affecting multiple aspects of a day.
+- \`suggest_activity_swap\` — confirmed single swap.
+- \`adjust_day_pacing\` — confirmed simple pace change.
+- \`apply_filter\` — confirmed filter (dietary, accessibility, etc.).
+- \`regenerate_day\` — confirmed full rebuild.
+NEVER call these unless the user gave you an explicit edit verb or confirmed a prior \`propose_change\`.
 
 ## MULTI-DAY AWARENESS
 When users mention multiple days ("Days 5 and 6 feel repetitive"), you MUST call \`rewrite_day\` for EACH day separately. For the SECOND day, explicitly instruct the rewrite to AVOID the categories, neighborhoods, and restaurant styles used in the FIRST day. Reference specific activities from the other day in your instructions. Example: "Diversify from Day 5 which has [X, Y, Z]. Use different neighborhoods and activity types."
@@ -179,7 +176,39 @@ const BLOCKED_PATTERNS = [
   /modify the (app|site|website)/i,
 ];
 
-// Tools the AI can call - structured actions only
+// Edit-verb gate: if the user's message has none of these AND isn't a confirmation
+// of a prior proposal, mutation tool calls are converted to propose_change cards.
+const EDIT_VERB_PATTERN = /\b(change|replace|swap|remove|delete|drop|cancel|add|rewrite|regenerate|redo|rebuild|move|push|shift|reschedule|reorder|pack|unpack|split|fix|update|edit|make (it|this|that|day|the day|day \d+)? ?(more|less|earlier|later|shorter|longer|cheaper|fancier))\b/i;
+const CONFIRMATION_PATTERN = /\b(yes|yep|yeah|sure|do it|go ahead|sounds good|please apply|apply (it|that|this|the change)?|confirm|let's do it|make it so)\b/i;
+const MUTATION_TOOLS = new Set([
+  "rewrite_day",
+  "suggest_activity_swap",
+  "adjust_day_pacing",
+  "apply_filter",
+  "regenerate_day",
+]);
+
+function lastAssistantProposedChange(messages: Array<{ role: string; content: string }>): boolean {
+  // Walk backwards through assistant messages; if the most recent assistant turn
+  // mentions "propose" / "want me to" / "would you like" / "shall I", treat as a pending proposal.
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "user") return false;
+    if (m.role !== "assistant") continue;
+    const c = (m.content || "").toLowerCase();
+    if (
+      c.includes("want me to") ||
+      c.includes("would you like") ||
+      c.includes("shall i") ||
+      c.includes("should i") ||
+      c.includes("propose") ||
+      c.includes("i can ") ||
+      c.includes("i could ")
+    ) return true;
+    return false;
+  }
+  return false;
+}
 const TOOLS = [
   {
     type: "function",
@@ -333,6 +362,50 @@ const TOOLS = [
           raw: { type: "string", description: "The user's exact phrasing for context." },
         },
         required: ["target_day", "title", "kind", "priority"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "answer_question",
+      description: "Use in ADVISORY mode when you are answering a question or having a discussion that does NOT involve a structural change. The actual answer goes in your text response — this tool just records what you answered. FREE.",
+      parameters: {
+        type: "object",
+        properties: {
+          topic: {
+            type: "string",
+            enum: ["transit", "timing", "venue_info", "recommendation", "clarification", "comparison", "logistics", "other"],
+            description: "What category of question you answered."
+          },
+          answer_summary: { type: "string", description: "One short sentence summarising the answer you gave in your text response." },
+        },
+        required: ["topic", "answer_summary"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "propose_change",
+      description: "Use when you want to suggest a structural change but the user has NOT explicitly asked for one. The UI will render an 'Apply' button; credits are only charged if the user clicks it. NEVER call a mutation tool (rewrite_day, suggest_activity_swap, adjust_day_pacing, apply_filter, regenerate_day) directly when the user is just asking a question — propose it instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          target_day: { type: "number", description: "Day number (1-indexed) the proposed change targets." },
+          summary: { type: "string", description: "One-sentence user-facing description of what would change and why." },
+          would_call: {
+            type: "string",
+            enum: ["rewrite_day", "suggest_activity_swap", "adjust_day_pacing", "apply_filter", "regenerate_day"],
+            description: "Which mutation tool would run if the user clicks Apply."
+          },
+          would_call_args: {
+            type: "object",
+            description: "The exact arguments that would be passed to the mutation tool. Must satisfy that tool's required fields.",
+            additionalProperties: true,
+          },
+        },
+        required: ["target_day", "summary", "would_call", "would_call_args"],
       },
     },
   },
@@ -649,6 +722,12 @@ ${itineraryDescription}
       confidence: string;
       scope: string;
     }> = [];
+    // ADVISORY GATE — if the user did not use an edit verb and is not confirming a
+    // prior proposal, mutation tool calls are converted into propose_change cards.
+    const hasEditVerb = EDIT_VERB_PATTERN.test(lastUserMessage);
+    const isConfirmation = CONFIRMATION_PATTERN.test(lastUserMessage) && lastAssistantProposedChange(messages);
+    const allowMutations = hasEditVerb || isConfirmation;
+    log("Advisory gate", { hasEditVerb, isConfirmation, allowMutations });
 
     for (const toolCall of toolCalls) {
       const fnName = toolCall.function?.name;
@@ -667,6 +746,12 @@ ${itineraryDescription}
           confidence: args.confidence,
           scope: args.scope || 'trip_only',
         });
+      } else if (fnName === "answer_question") {
+        // No structural change — just telemetry.
+        log('Answer question', { topic: args.topic, summary: args.answer_summary });
+      } else if (fnName === "propose_change") {
+        // Pass through as a non-mutating action card.
+        actions.push({ type: 'propose_change', params: args });
       } else if (fnName === "record_user_intent") {
         // Persist to trips.metadata.userIntents IMMEDIATELY so the next
         // regeneration of any kind picks it up. This is free (no AI work).
@@ -715,14 +800,28 @@ ${itineraryDescription}
         } catch (intentErr) {
           log('Failed to record user intent', { error: String(intentErr) });
         }
+      } else if (MUTATION_TOOLS.has(fnName)) {
+        if (allowMutations) {
+          actions.push({ type: fnName, params: args });
+        } else {
+          // Convert to propose_change so the user can opt in.
+          log('Gated mutation tool — converting to propose_change', { fnName });
+          const targetDay = typeof args.target_day === 'number' ? args.target_day : Number(args.target_day) || 1;
+          const summary = (args.reason as string) || (args.new_focus as string) || `Proposed change to Day ${targetDay}`;
+          actions.push({
+            type: 'propose_change',
+            params: {
+              target_day: targetDay,
+              summary,
+              would_call: fnName,
+              would_call_args: args,
+            },
+          });
+        }
       } else {
-        actions.push({
-          type: fnName,
-          params: args,
-        });
+        actions.push({ type: fnName, params: args });
       }
     }
-
     // Save customization request if authenticated and there are actions
     if (userId && actions.length > 0) {
       const serviceSupabase = createClient(
