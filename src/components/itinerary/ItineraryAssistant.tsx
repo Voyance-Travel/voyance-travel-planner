@@ -302,10 +302,13 @@ export function ItineraryAssistant({
       // Detect budget intent from the user's message for validation
       const budgetIntent = detectBudgetIntent(response.actions || []);
 
-      // If not in approval mode and there are actions, auto-apply ALL sequentially
+      // If not in approval mode and there are actions, auto-apply ALL sequentially.
+      // EXCEPT: propose_change and record_user_intent are advisory — never auto-applied.
+      const NON_AUTO_APPLY = new Set(['propose_change', 'record_user_intent']);
       if (!approvalMode && response.actions?.length > 0) {
         for (let i = 0; i < response.actions.length; i++) {
           const action = response.actions[i];
+          if (NON_AUTO_APPLY.has(action.type)) continue;
           await handleActionApply(assistantMessage.id, i, {
             type: action.type as ItineraryAction['type'],
             params: action.params,
