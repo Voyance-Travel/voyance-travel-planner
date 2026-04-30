@@ -4,6 +4,7 @@ import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
 import { trackCost, type CostTracker } from "../_shared/cost-tracker.ts";
 import { checkVenueCache, cacheVenueResult } from "../_shared/venue-cache.ts";
 import { googlePlacesTextSearch } from "../_shared/google-api.ts";
+import { isGoogleBillableUrl } from "../_shared/is-google-billable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
