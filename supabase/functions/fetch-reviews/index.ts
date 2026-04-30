@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
+import { getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { cacheVenueResult } from "../_shared/venue-cache.ts";
 import { googlePlacesTextSearch } from "../_shared/google-api.ts";
 
@@ -197,13 +197,15 @@ async function fetchGoogleReviews(
     if (photos && photos.length > 0) {
       const cachedPhotos: string[] = [];
       for (const p of photos.slice(0, 5)) {
-        const rawUrl = `https://places.googleapis.com/v1/${p.name}/media?maxHeightPx=400&key=${apiKey}`;
         try {
           const entityId = `review-${(place.id || placeName).toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 60)}-${cachedPhotos.length}`;
-          const cached = await getCachedPhotoUrl('activity', entityId, rawUrl, {
-            destination,
-            placeName: displayName?.text || placeName,
-            placeId: place.id,
+          const cached = await getCachedPlacesPhotoByResource('activity', entityId, p.name, {
+            maxHeightPx: 400,
+            metadata: {
+              destination,
+              placeName: displayName?.text || placeName,
+              placeId: place.id,
+            },
           });
           cachedPhotos.push(cached.url);
         } catch {

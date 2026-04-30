@@ -9,7 +9,8 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-import type { CostTracker } from "./cost-tracker.ts";
+import { type CostTracker, trackCost } from "./cost-tracker.ts";
+import { isGoogleBillableUrl } from "./is-google-billable.ts";
 
 const BUCKET_NAME = 'trip-photos';
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -80,16 +81,27 @@ export async function getCachedPhotoUrl(
 
     // Always count the call — Google bills the request, not the success.
     // Only Places-style URLs are billable; skip TripAdvisor/Foursquare/etc.
-    const isBillableGoogle =
-      googlePhotoUrl.includes('places.googleapis.com') ||
-      googlePhotoUrl.includes('maps.googleapis.com');
-    if (isBillableGoogle) {
+    // ENFORCEMENT: if this is a billable Google URL we MUST record a SKU,
+    // even if the caller forgot to thread a tracker through. Historically
+    // this was a `console.warn` and the cost vanished from accounting,
+    // which is the leak the team has chased multiple times. We now lazily
+    // create + save a tracker so accounting is guaranteed.
+    if (isGoogleBillableUrl(googlePhotoUrl)) {
       if (costTracker) {
         costTracker.recordGooglePhotos(1);
       } else {
         console.warn(
           `[PhotoStorage] Photo download for ${entityType}/${sanitizedId} ` +
-            `was not attributed to a CostTracker — Google spend will be under-reported.`,
+            `was not attributed to a CostTracker — falling back to a lazy ` +
+            `tracker so accounting is preserved. Pass a CostTracker for ` +
+            `correct per-action attribution.`,
+        );
+        const lazy = trackCost('photo_storage_uncategorized');
+        lazy.recordGooglePhotos(1);
+        // Fire-and-forget save — we never want photo logic to fail because
+        // accounting persistence had a hiccup, but we do want the row.
+        lazy.save().catch((err) =>
+          console.error('[PhotoStorage] Lazy tracker save failed:', err),
         );
       }
     }
@@ -189,4 +201,36 @@ export async function batchCachePhotos(
   }
 
   return results;
+}
+
+/**
+ * Cache a Google Places v1 photo by its resource name (e.g. "places/X/photos/Y")
+ * without forcing the caller to hand-build a key-bearing URL.
+ *
+ * Centralising URL construction here means feature code never contains a
+ * literal `googleapis.com` string, the lint guard stays clean, and the
+ * single SKU-recording path in `getCachedPhotoUrl` is the only way photos
+ * can be downloaded from Google.
+ */
+export async function getCachedPlacesPhotoByResource(
+  entityType: 'restaurant' | 'hotel' | 'activity' | 'destination',
+  entityId: string,
+  photoResource: string,
+  options?: {
+    maxWidthPx?: number;
+    maxHeightPx?: number;
+    metadata?: { destination?: string; placeName?: string; placeId?: string };
+    costTracker?: CostTracker;
+  },
+): Promise<PhotoCacheResult> {
+  const apiKey = Deno.env.get('GOOGLE_MAPS_API_KEY') ?? '';
+  if (!apiKey) {
+    return { url: '', cached: false, cacheHit: false, source: 'direct' };
+  }
+  const qs: string[] = [`key=${apiKey}`];
+  if (options?.maxWidthPx) qs.push(`maxWidthPx=${options.maxWidthPx}`);
+  if (options?.maxHeightPx) qs.push(`maxHeightPx=${options.maxHeightPx}`);
+  // Resource name is e.g. "places/ChIJ.../photos/AeY..." — already URL-safe.
+  const url = `https://places.googleapis.com/v1/${photoResource}/media?${qs.join('&')}`;
+  return getCachedPhotoUrl(entityType, entityId, url, options?.metadata, options?.costTracker);
 }

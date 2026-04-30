@@ -1,35 +1,27 @@
 # Google API Centralization — Status
 
-## Done (Phase 1)
-- `_shared/google-api.ts` wrapper with SKU recording + audit log
-- Migrated: `route-details`, `transit-estimate`, `airport-transfers`
-
-## Done (Phase 2 — first pass)
-- `_shared/photo-storage.ts` now records `places_photo` SKU on cache miss when a `CostTracker` is passed (warns when missing). New optional 5th arg + threaded through `batchCachePhotos`.
-- Migrated Places Text Search calls in:
-  - `generate-itinerary/venue-enrichment.ts` (geocode + verify)
+## Enforcement pass (latest)
+- New `_shared/is-google-billable.ts` — single shared predicate (`isGoogleBillableUrl`) for "is this URL Google-billable?".
+- `_shared/photo-storage.ts`:
+  - Now records `places_photo` SKU on EVERY billable Google download, even when the caller didn't pass a tracker (lazy tracker is created + saved instead of just warning). This closes the historical "silent under-report" leak.
+  - New `getCachedPlacesPhotoByResource(entityType, id, photoResource, opts)` helper takes a Places photo resource id and builds the Google URL internally — feature code never constructs a key-bearing URL.
+- Migrated all remaining feature photo callers to the new helper:
+  - `destination-images/index.ts`
+  - `hotels/index.ts` (2 sites)
   - `recommend-restaurants/index.ts`
   - `fetch-reviews/index.ts`
-  - `hotels/index.ts` (3 search sites)
-- Migrated Distance Matrix calls in `transfer-pricing/index.ts` (3 modes individually counted).
-- Added `_shared/no-direct-google.test.ts` lint guard with allowlist.
+- Removed every `googleapis.com` literal from feature files; predicate checks now use `isGoogleBillableUrl`.
+- Lint guard (`_shared/no-direct-google.test.ts`):
+  - Allowlist shrunk to `_shared/google-api.ts`, `_shared/is-google-billable.ts`, `_shared/photo-storage.ts`, and the test itself.
+  - Added a second guard that fails CI if anyone passes a raw Google URL into `getCachedPhotoUrl` instead of using `getCachedPlacesPhotoByResource`.
+- Both lint tests pass.
 
-## Done (Phase 2 — second pass)
-- `destination-images/index.ts` — Places Text Search migrated; tracker threaded through `getGooglePlacesPhoto` → `getCachedPhotoUrl` so photo SKUs are attributed to the right action.
-- `optimize-itinerary/index.ts` — was previously **completely untracked**. Now migrated:
-  - geocode (2 sites) → `googleGeocode`
-  - place verification text search → `googlePlacesTextSearch` (v1)
-  - transit Routes API → `googleRoutes`
-  - legacy Directions API fallback → new `googleDirections` wrapper (counted as routes SKU)
-  - Distance Matrix → `googleDistanceMatrix`
-- `generate-full-preview/index.ts` — venue validation Places search migrated.
-- `_shared/google-api.ts` — added `googleDirections` wrapper for legacy Directions endpoint.
-- Lint allowlist shrunk from 9 entries to 5 (only files left have `places.googleapis.com` photo URL strings or substring guards — no untracked fetch calls).
-- SQL view `public.v_google_spend_per_trip` shipped — per-trip / per-day SKU counts and USD estimates using current Google list pricing. Admin-only via `security_invoker`.
+## Earlier passes (still in effect)
+- `_shared/google-api.ts` wrapper with SKU recording + audit log.
+- Migrated functions: `route-details`, `transit-estimate`, `airport-transfers`, `transfer-pricing`, `optimize-itinerary`, `generate-full-preview`, `generate-itinerary/venue-enrichment`, `recommend-restaurants`, `fetch-reviews`, `hotels`, `destination-images`.
+- `public.v_google_spend_per_trip` view for per-trip / per-day SKU + USD reconciliation.
 
-## Verification
-- 276 backend tests pass. 197 frontend tests pass. Lint guard `no-direct-google.test.ts` passes.
-
-## Outstanding (low priority)
-- `hotels` / `recommend-restaurants` / `fetch-reviews`: pass an explicit `CostTracker` to `getCachedPhotoUrl` so the wrapper's "lazy tracker" warn-log goes silent and photo SKUs attribute to the right action_type.
-- `destination-images`: replace the literal `https://places.googleapis.com/...` photo URL builder with `googlePlacesPhoto` (download bytes server-side) so we never expose key-bearing URLs to clients. Net spend already tracked via `getCachedPhotoUrl` cache-miss accounting.
+## Why the leak should stop recurring
+- No path can fetch from Google without going through one of the wrappers OR `photo-storage.ts`.
+- `photo-storage.ts` always records the `places_photo` SKU when a Google URL is fetched, with or without an explicit tracker.
+- CI fails if someone re-introduces a direct Google URL or hand-builds one for the photo cache.

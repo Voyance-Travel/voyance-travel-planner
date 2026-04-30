@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
+import { getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
 import { googlePlacesTextSearch } from "../_shared/google-api.ts";
 
@@ -187,12 +187,14 @@ async function fetchGooglePlaces(
       // Get cached photo URL from Supabase Storage (downloads once, serves forever)
       let photoUrl: string | undefined;
       if (photos?.[0]?.name) {
-        const googlePhotoUrl = `https://places.googleapis.com/v1/${photos[0].name}/media?maxHeightPx=400&key=${apiKey}`;
-        const cacheResult = await getCachedPhotoUrl(
+        const cacheResult = await getCachedPlacesPhotoByResource(
           'restaurant',
           place.id as string,
-          googlePhotoUrl,
-          { destination, placeName: displayName?.text, placeId: place.id as string }
+          photos[0].name,
+          {
+            maxHeightPx: 400,
+            metadata: { destination, placeName: displayName?.text, placeId: place.id as string },
+          },
         );
         photoUrl = cacheResult.url;
       }

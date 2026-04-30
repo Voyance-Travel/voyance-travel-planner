@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
-import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
+import { getCachedPhotoUrl, getCachedPlacesPhotoByResource } from "../_shared/photo-storage.ts";
 import { trackCost, type CostTracker } from "../_shared/cost-tracker.ts";
 import { checkVenueCache, cacheVenueResult } from "../_shared/venue-cache.ts";
 import { googlePlacesTextSearch } from "../_shared/google-api.ts";
+import { isGoogleBillableUrl } from "../_shared/is-google-billable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -498,15 +499,18 @@ async function getGooglePlacesPhoto(
       // Prefer third photo which tends to be exterior/ambiance.
       const photoIndex = photos.length >= 4 ? 2 : photos.length >= 2 ? 1 : 0;
       const photoResource = photos[photoIndex].name;
-      const googlePhotoUrl = `https://places.googleapis.com/v1/${photoResource}/media?maxWidthPx=1200&key=${apiKey}`;
-      
-      // Download to Supabase Storage to avoid repeated API calls
-      const cacheResult = await getCachedPhotoUrl(
+
+      // Download to Supabase Storage via the central photo cache.
+      // Using the resource-based helper keeps direct Google URLs out of feature code.
+      const cacheResult = await getCachedPlacesPhotoByResource(
         entityType,
         best.place.id,
-        googlePhotoUrl,
-        { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id },
-        costTracker,
+        photoResource,
+        {
+          maxWidthPx: 1200,
+          metadata: { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id },
+          costTracker,
+        },
       );
 
       return {
@@ -816,7 +820,9 @@ function shouldPersistInCuratedCache(image: DestinationImage): boolean {
   const lower = image.url.toLowerCase();
 
   // Never cache transient/sensitive URLs.
-  if (lower.includes('places.googleapis.com')) return false;
+  // Use the shared predicate so we don't sprinkle Google host literals
+  // across the codebase (the lint guard treats those as untracked-fetch risks).
+  if (isGoogleBillableUrl(image.url)) return false;
   if (lower.includes('x-amz-signature=')) return false;
   if (/[?&]token=/.test(lower)) return false;
 
@@ -887,8 +893,8 @@ async function cacheImage(
       return;
     }
 
-    // Secondary safety: double-check no raw Google/Places API URLs leak through
-    if (image.url.includes('places.googleapis.com') || image.url.includes('maps.googleapis.com')) {
+    // Secondary safety: double-check no raw key-bearing Google URLs leak through
+    if (isGoogleBillableUrl(image.url)) {
       console.warn(`[Images] BLOCKED raw Google URL from cache: ${entityKey}`);
       return;
     }
