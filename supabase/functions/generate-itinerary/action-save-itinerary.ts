@@ -518,6 +518,25 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
 
       // Persist ledger snapshots on the itinerary JSON for downstream consumers.
       (itinerary as any).dayLedgers = ledgers;
+
+      // ── RECONCILE FULFILLMENT ──
+      // Mark active `trip_day_intents` rows as fulfilled when their title now
+      // appears in the saved itinerary. Best-effort, non-blocking.
+      try {
+        const { reconcileFulfillment } = await import('../_shared/day-intents-store.ts');
+        const dayPayload = itineraryDays.map((d: any) => ({
+          dayNumber: (d.dayNumber as number) || 0,
+          activities: (d.activities || []).map((a: any) => ({
+            id: a.id,
+            title: a.title,
+            name: a.name,
+          })),
+        })).filter((d: any) => d.dayNumber > 0);
+        const updated = await reconcileFulfillment(supabase, tripId, dayPayload);
+        if (updated > 0) console.log(`[save-itinerary] ✅ Reconciled ${updated} fulfilled day-intent(s)`);
+      } catch (rfErr) {
+        console.warn('[save-itinerary] reconcileFulfillment failed (non-blocking):', rfErr);
+      }
     }
   } catch (ledgerErr) {
     console.warn('[save-itinerary] Day Brief check failed (non-blocking):', ledgerErr);
