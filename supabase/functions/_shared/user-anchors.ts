@@ -155,9 +155,16 @@ export function parseDayActivities(
 function parseMustDoEntry(entry: string, source: UserAnchorSource): UserAnchor | null {
   const trimmed = entry.trim();
   if (!trimmed) return null;
-  const dayMatch = trimmed.match(/^Day\s+(\d+)\b[:\-\s]*(.*)$/i);
+  // Match "Day N" anywhere in the string. The chat-trip-planner often emits
+  // entries like "Dinner Peixola Day 2 7:30 PM" where "Day N" is mid-string.
+  // The previous front-anchored regex (^Day\s+\d+) silently dropped the day
+  // number for every such entry, leaving anchors with dayNumber: 0 which the
+  // anchor-guard then skipped on every write.
+  const dayMatch = trimmed.match(/\bDay\s+(\d+)\b/i);
   const dayNumber = dayMatch ? parseInt(dayMatch[1], 10) : 0;
-  const text = dayMatch ? dayMatch[2].trim() : trimmed;
+  const text = dayMatch
+    ? trimmed.replace(/\s*\bDay\s+\d+\b\s*[:\-]?\s*/i, ' ').replace(/\s+/g, ' ').trim()
+    : trimmed;
   if (!text) return null;
 
   // Reuse the per-day leading-time parser so titles match across sources
