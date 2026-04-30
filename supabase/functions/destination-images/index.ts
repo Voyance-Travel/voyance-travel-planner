@@ -1355,6 +1355,45 @@ async function fetchImageTiered(
     }
   }
 
+  // TIER 1.5: Cross-share lookup in attractions/activities tables (zero cost).
+  // Many photos resolved by other users live here but never made it to curated_images.
+  if (!skipCache && cleanName.length >= 3) {
+    try {
+      const [attractionRes, activityRes] = await Promise.all([
+        supabase
+          .from('attractions')
+          .select('image_url, name')
+          .not('image_url', 'is', null)
+          .ilike('name', `%${cleanName}%`)
+          .limit(1),
+        supabase
+          .from('activities')
+          .select('image_url, name')
+          .not('image_url', 'is', null)
+          .ilike('name', `%${cleanName}%`)
+          .limit(1),
+      ]);
+      const sharedUrl =
+        attractionRes?.data?.[0]?.image_url ||
+        activityRes?.data?.[0]?.image_url ||
+        null;
+      if (sharedUrl && typeof sharedUrl === 'string' && !sharedUrl.startsWith('data:')) {
+        console.log(`[Images] ✅ Shared-table hit for "${cleanName}" — skipping Google`);
+        return {
+          id: `shared-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 60)}`,
+          url: sharedUrl,
+          alt: `${cleanName} photo`,
+          type: entityType === 'destination' ? 'hero' : 'activity',
+          source: 'shared',
+          width: 1200,
+          height: 800,
+        };
+      }
+    } catch (sharedErr) {
+      console.warn('[Images] Shared-table lookup failed:', sharedErr);
+    }
+  }
+
   // TIER 2: Google Places (best for real venue photos)
   if (googleApiKey) {
     const googleImage = await getGooglePlacesPhoto(
