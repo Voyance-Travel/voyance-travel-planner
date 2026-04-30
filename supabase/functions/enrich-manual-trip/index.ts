@@ -569,6 +569,24 @@ serve(async (req) => {
     }
     console.log(`[enrich-manual-trip] Built ${derivedAnchors.length} userAnchors for Smart Finish protection`);
 
+    // ─── Mirror anchors into structured `trip_day_intents` (idempotent) ───
+    // Smart Finish runs single-day regen, which won't re-seed from metadata
+    // until generation actually starts. Writing intents here ensures the
+    // Day Brief picks them up on the very first regen pass.
+    try {
+      if (derivedAnchors.length > 0) {
+        const { intentsFromUserAnchors } = await import('../_shared/intent-normalizers.ts');
+        const { upsertDayIntents } = await import('../_shared/day-intents-store.ts');
+        const anchorIntents = intentsFromUserAnchors(derivedAnchors);
+        if (anchorIntents.length > 0) {
+          await upsertDayIntents(supabase, trip.id, trip.user_id || null, anchorIntents);
+          console.log(`[enrich-manual-trip] Mirrored ${anchorIntents.length} anchors into trip_day_intents`);
+        }
+      }
+    } catch (intentErr) {
+      console.warn('[enrich-manual-trip] trip_day_intents mirror failed (non-blocking):', intentErr);
+    }
+
     // --- Write research context + anchors into trip metadata so generate-itinerary picks them up ---
     const existingMetadata = (trip.metadata as any) || {};
     const updatedMetadata = {
