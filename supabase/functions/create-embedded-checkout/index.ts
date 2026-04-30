@@ -31,11 +31,13 @@ serve(async (req) => {
       // Group unlock fields
       tripId: groupTripId,
       groupTier,
+      // Group-pool credit destination (new): credits buy into a trip's group pool
+      destination,
       // Legacy day purchase fields (deprecated)
       days,
       packageTier,
     } = await req.json();
-    logStep("Request body parsed", { priceId, mode, returnPath, credits, days, packageTier, groupTripId, groupTier });
+    logStep("Request body parsed", { priceId, mode, returnPath, credits, days, packageTier, groupTripId, groupTier, destination });
 
     // Validate required inputs
     if (!priceId || typeof priceId !== 'string' || priceId.length > 200) {
