@@ -351,9 +351,22 @@ export function ItineraryAssistant({
 
   const handleActionApply = async (messageId: string, actionIndex: number, action: ItineraryAction) => {
     const actionId = `${messageId}-${actionIndex}`;
+
+    // If this is a propose_change card, resolve to the underlying mutation tool
+    // and execute that. record_user_intent is informational only — clicking does nothing destructive.
+    if (action.type === 'propose_change') {
+      const wouldCall = action.params.would_call as ItineraryAction['type'] | undefined;
+      const wouldCallArgs = (action.params.would_call_args as Record<string, unknown>) || {};
+      if (!wouldCall) {
+        toast.error('This suggestion is missing target details.');
+        return;
+      }
+      action = { type: wouldCall, params: wouldCallArgs as Record<string, unknown>, status: 'pending' };
+    }
+
     setIsExecuting(true);
     setExecutingActionId(actionId);
-    
+
     // Show immediate feedback that we're working on it
     toast.loading('Applying changes...', { id: actionId, description: 'This may take a few seconds' });
     
