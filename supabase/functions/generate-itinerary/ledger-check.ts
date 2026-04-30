@@ -89,7 +89,11 @@ function isSplurgeDinner(a: any): boolean {
   return false;
 }
 
-export function ledgerCheck(days: any[], ledgers: DayLedger[]): LedgerCheckResult {
+export async function ledgerCheck(
+  days: any[],
+  ledgers: DayLedger[],
+  opts?: { supabase?: any; tripId?: string },
+): Promise<LedgerCheckResult> {
   const warnings: LedgerCheckWarning[] = [];
   let removed = 0;
   let inserted = 0;
@@ -100,10 +104,44 @@ export function ledgerCheck(days: any[], ledgers: DayLedger[]): LedgerCheckResul
   const ledgerByDay = new Map<number, DayLedger>();
   for (const l of ledgers) ledgerByDay.set(l.dayNumber, l);
 
+  // ── Fallback verification: if any day's ledger has empty userIntent BUT
+  // the structured `trip_day_intents` table has 'must' rows for that day,
+  // the compile-prompt fetch likely failed. Re-fetch and merge in.
+  if (opts?.supabase && opts?.tripId) {
+    try {
+      const emptyDays = ledgers.filter((l) => !l.userIntent || l.userIntent.length === 0).map((l) => l.dayNumber);
+      if (emptyDays.length > 0) {
+        const { fetchActiveDayIntents } = await import('../_shared/day-intents-store.ts');
+        const rows = await fetchActiveDayIntents(opts.supabase, opts.tripId);
+        for (const r of rows) {
+          if (r.status === 'fulfilled') continue;
+          if (r.day_number == null) continue;
+          if (!emptyDays.includes(r.day_number)) continue;
+          const ledger = ledgerByDay.get(r.day_number);
+          if (!ledger) continue;
+          ledger.userIntent.push({
+            title: r.title,
+            kind: r.intent_kind as any,
+            priority: r.priority as any,
+            startTime: r.start_time || undefined,
+            endTime: r.end_time || undefined,
+            locked: !!r.locked,
+            lockedSource: r.locked_source || undefined,
+            source: r.source_entry_point as any,
+            note: (r.raw_text as string) || undefined,
+          } as LedgerUserIntent);
+        }
+      }
+    } catch (e) {
+      console.warn('[ledger-check] fallback fetch failed (non-blocking):', String(e));
+    }
+  }
+
   const out = days.map((d) => ({
     ...d,
     activities: Array.isArray(d.activities) ? [...d.activities] : [],
   }));
+
 
   for (const day of out) {
     const dayNum = (day.dayNumber as number) || 0;
