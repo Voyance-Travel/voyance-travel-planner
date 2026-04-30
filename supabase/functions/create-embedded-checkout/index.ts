@@ -96,8 +96,28 @@ serve(async (req) => {
       user_id: userId,
     };
 
+    // Group-pool credit purchase (new): credits land in the trip's shared pool, not personal balance
+    if (destination === "group_pool" && groupTripId && credits && Number(credits) > 0) {
+      // OWNERSHIP CHECK: only the trip owner can route credits into the pool
+      const { data: tripRow, error: tripErr } = await supabaseClient
+        .from('trips')
+        .select('user_id')
+        .eq('id', groupTripId)
+        .maybeSingle();
+      if (tripErr || !tripRow) {
+        return errorResponse("Trip not found", "TRIP_NOT_FOUND", 404);
+      }
+      if (tripRow.user_id !== userId) {
+        return errorResponse("Only the trip owner can fund the group pool", "FORBIDDEN", 403);
+      }
+      sessionMetadata.type = "group_pool_credit_purchase";
+      sessionMetadata.trip_id = groupTripId;
+      sessionMetadata.credits = String(credits);
+      sessionMetadata.price_id = priceId;
+      if (productId) sessionMetadata.product_id = productId;
+    }
     // Group unlock metadata
-    if (groupTripId && groupTier) {
+    else if (groupTripId && groupTier) {
       sessionMetadata.type = "group_unlock";
       sessionMetadata.trip_id = groupTripId;
       sessionMetadata.group_tier = groupTier;
