@@ -934,6 +934,30 @@ async function cacheImage(
 // Clean activity title to extract searchable venue name
 function extractVenueName(activityTitle: string): { cleanName: string; shouldSkip: boolean; inferredCategory?: string } {
   const title = activityTitle.trim();
+
+  // ── Hard generic-name guard (cost saver) ─────────────────────────────────
+  // Strings that have hit Google repeatedly with $0 yield in production logs.
+  // Reject before any cache or API work.
+  const lower = title.toLowerCase();
+  const HARD_GENERIC = new Set([
+    'hotel', 'your hotel', 'the hotel', 'home', 'house', 'apartment',
+    'return to hotel', 'check in', 'check out', 'check-in', 'check-out',
+    'free time', 'downtime', 'rest', 'relax', 'leisure', 'breakfast',
+    'lunch', 'dinner', 'brunch', 'snack', 'meal', 'drinks', 'cocktails',
+    'transit', 'transfer', 'arrival', 'departure', 'flight', 'train',
+  ]);
+  if (HARD_GENERIC.has(lower) || title.replace(/[^a-z]/gi, '').length < 4) {
+    return { cleanName: title, shouldSkip: true, inferredCategory: inferCategoryFromTitle(title) };
+  }
+  // Catch trailing duplicates from our own logs: "Marriott hotel hotel", "Plaza hotel hotel"
+  if (/\b(hotel|resort|inn|spa|cafe|bar|restaurant)\s+\1\b/i.test(title)) {
+    return {
+      cleanName: title.replace(/\s+(hotel|resort|inn|spa|cafe|bar|restaurant)$/i, '').trim(),
+      shouldSkip: false,
+      inferredCategory: 'accommodation',
+    };
+  }
+
   
   // Activities that should use category fallback instead of search
   const skipPatterns = [
@@ -1331,6 +1355,45 @@ async function fetchImageTiered(
     }
   }
 
+  // TIER 1.5: Cross-share lookup in attractions/activities tables (zero cost).
+  // Many photos resolved by other users live here but never made it to curated_images.
+  if (!skipCache && cleanName.length >= 3) {
+    try {
+      const [attractionRes, activityRes] = await Promise.all([
+        supabase
+          .from('attractions')
+          .select('image_url, name')
+          .not('image_url', 'is', null)
+          .ilike('name', `%${cleanName}%`)
+          .limit(1),
+        supabase
+          .from('activities')
+          .select('image_url, name')
+          .not('image_url', 'is', null)
+          .ilike('name', `%${cleanName}%`)
+          .limit(1),
+      ]);
+      const sharedUrl =
+        attractionRes?.data?.[0]?.image_url ||
+        activityRes?.data?.[0]?.image_url ||
+        null;
+      if (sharedUrl && typeof sharedUrl === 'string' && !sharedUrl.startsWith('data:')) {
+        console.log(`[Images] ✅ Shared-table hit for "${cleanName}" — skipping Google`);
+        return {
+          id: `shared-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 60)}`,
+          url: sharedUrl,
+          alt: `${cleanName} photo`,
+          type: entityType === 'destination' ? 'hero' : 'activity',
+          source: 'shared',
+          width: 1200,
+          height: 800,
+        };
+      }
+    } catch (sharedErr) {
+      console.warn('[Images] Shared-table lookup failed:', sharedErr);
+    }
+  }
+
   // TIER 2: Google Places (best for real venue photos)
   if (googleApiKey) {
     const googleImage = await getGooglePlacesPhoto(
@@ -1407,7 +1470,7 @@ async function fetchImageTiered(
   // Prevents repeated Google API calls for venues that consistently return nothing.
   try {
     const normalizedKey = venueName.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
-    const negativeExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(); // 14 days
+    const negativeExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
 
     await supabase.from("curated_images").upsert({
       entity_type: entityType,
@@ -1422,7 +1485,7 @@ async function fetchImageTiered(
     }, {
       onConflict: 'entity_type,entity_key,destination'
     });
-    console.log(`[Images] ⛔ Stored negative cache for: "${venueName}" in ${destination} (14-day TTL)`);
+    console.log(`[Images] ⛔ Stored negative cache for: "${venueName}" in ${destination} (30-day TTL)`);
   } catch (negErr) {
     console.warn('[Images] Failed to write negative cache:', negErr);
   }

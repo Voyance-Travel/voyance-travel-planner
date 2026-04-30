@@ -371,7 +371,24 @@ export class CostTracker {
         (this.entry.perplexity_calls || 0) * 0.005;
       
       const estimatedCost = tokenCost + googleCost + otherCost;
-      
+
+      // Skip $0 rows: if no billable units were recorded, don't write a noise row.
+      // This dropped 850 rows/day (76% of destination_images traffic) on Apr 30.
+      const billableUnits =
+        (this.entry.input_tokens || 0) +
+        (this.entry.output_tokens || 0) +
+        (this.entry.google_places_calls || 0) +
+        (this.entry.google_photos_calls || 0) +
+        (this.entry.google_geocoding_calls || 0) +
+        (this.entry.google_routes_calls || 0) +
+        (this.entry.amadeus_calls || 0) +
+        (this.entry.perplexity_calls || 0);
+
+      if (billableUnits === 0 && estimatedCost === 0) {
+        // Cache hit / fallback / no work performed — skip persisting.
+        return;
+      }
+
       const { error } = await this.supabase
         .from('trip_cost_tracking')
         .insert({
