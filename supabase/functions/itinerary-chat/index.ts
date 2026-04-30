@@ -302,6 +302,32 @@ const TOOLS = [
         required: ["target_day", "new_focus", "reason"],
       },
     },
+  {
+    type: "function",
+    function: {
+      name: "record_user_intent",
+      description: "Record a user-stated intent for a SPECIFIC day so it persists across regenerations and is honored by the planner. Use this whenever the user expresses a concrete wish for a day — e.g. 'ramen for dinner tonight', 'I want to see Belém Tower on Day 3', 'avoid seafood on Friday', 'we definitely need a spa morning Tuesday'. This is FREE — it does not regenerate the day, only ensures the request will be respected next time the day rebuilds. Always pair this with a brief confirmation in your text response: 'Got it — I'll make sure ramen is on the menu for Day 3.'",
+      parameters: {
+        type: "object",
+        properties: {
+          target_day: { type: "number", description: "Day number (1-indexed). Use the current viewing day if the user says 'tonight' or 'today'." },
+          title: { type: "string", description: "What the user wants — e.g. 'ramen for dinner', 'Belém Tower visit', 'avoid seafood'. Keep concise." },
+          kind: {
+            type: "string",
+            enum: ["breakfast", "lunch", "dinner", "drinks", "spa", "activity", "avoid"],
+            description: "Category of the intent. 'avoid' means the user does NOT want this."
+          },
+          start_time: { type: "string", description: "Optional HH:MM time if the user specified one (e.g. '19:30')." },
+          priority: {
+            type: "string",
+            enum: ["must", "should"],
+            description: "'must' for explicit demands ('I need', 'definitely', 'want to'), 'should' for soft preferences."
+          },
+          raw: { type: "string", description: "The user's exact phrasing for context." },
+        },
+        required: ["target_day", "title", "kind", "priority"],
+      },
+    },
   },
 ];
 
