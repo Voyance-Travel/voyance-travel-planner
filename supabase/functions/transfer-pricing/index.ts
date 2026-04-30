@@ -230,31 +230,33 @@ async function getGoogleMapsData(
   departureTime?: string
 ): Promise<GoogleMapsResult> {
   const result: GoogleMapsResult = {};
-  
+
+  // apiKey kept for signature compatibility; the wrapper reads the key itself
+  void apiKey;
+
   try {
-    // Driving
-    const drivingParams = new URLSearchParams({
-      origins: origin,
-      destinations: destination,
-      mode: 'driving',
-      departure_time: 'now',
-      key: apiKey,
-    });
-    
-    const drivingResp = await fetch(
-      `https://maps.googleapis.com/maps/api/distancematrix/json?${drivingParams.toString()}`
+    // Driving (with current traffic)
+    const drivingResult = await googleDistanceMatrix(
+      {
+        origins: origin,
+        destinations: destination,
+        mode: 'driving',
+        departureTime: 'now',
+      },
+      { actionType: 'transfer_pricing_driving', reason: `${origin} → ${destination}` },
     );
-    const drivingData = await drivingResp.json();
-    
-    if (drivingData.status === 'OK' && drivingData.rows?.[0]?.elements?.[0]?.status === 'OK') {
-      const element = drivingData.rows[0].elements[0];
-      const seconds = element.duration_in_traffic?.value || element.duration.value;
-      const meters = element.distance.value;
-      
-      result.drivingDurationMinutes = Math.round(seconds / 60);
-      result.drivingDuration = formatDuration(result.drivingDurationMinutes);
-      result.drivingDistanceKm = Math.round(meters / 1000 * 10) / 10;
-      result.drivingDistance = `${result.drivingDistanceKm} km`;
+    if (drivingResult.ok) {
+      const drivingData = drivingResult.data;
+      if (drivingData?.status === 'OK' && drivingData?.rows?.[0]?.elements?.[0]?.status === 'OK') {
+        const element = drivingData.rows[0].elements[0];
+        const seconds = element.duration_in_traffic?.value || element.duration.value;
+        const meters = element.distance.value;
+
+        result.drivingDurationMinutes = Math.round(seconds / 60);
+        result.drivingDuration = formatDuration(result.drivingDurationMinutes);
+        result.drivingDistanceKm = Math.round(meters / 1000 * 10) / 10;
+        result.drivingDistance = `${result.drivingDistanceKm} km`;
+      }
     }
   } catch (e) {
     console.error('[Transfer-Pricing] Google Maps driving error:', e);
@@ -262,25 +264,25 @@ async function getGoogleMapsData(
 
   try {
     // Transit
-    const transitParams = new URLSearchParams({
-      origins: origin,
-      destinations: destination,
-      mode: 'transit',
-      departure_time: departureTime 
-        ? Math.floor(new Date(departureTime).getTime() / 1000).toString()
-        : 'now',
-      key: apiKey,
-    });
-    
-    const transitResp = await fetch(
-      `https://maps.googleapis.com/maps/api/distancematrix/json?${transitParams.toString()}`
+    const transitDeparture = departureTime
+      ? Math.floor(new Date(departureTime).getTime() / 1000).toString()
+      : 'now';
+    const transitResult = await googleDistanceMatrix(
+      {
+        origins: origin,
+        destinations: destination,
+        mode: 'transit',
+        departureTime: transitDeparture,
+      },
+      { actionType: 'transfer_pricing_transit', reason: `${origin} → ${destination}` },
     );
-    const transitData = await transitResp.json();
-    
-    if (transitData.status === 'OK' && transitData.rows?.[0]?.elements?.[0]?.status === 'OK') {
-      const element = transitData.rows[0].elements[0];
-      result.transitDurationMinutes = Math.round(element.duration.value / 60);
-      result.transitDuration = formatDuration(result.transitDurationMinutes);
+    if (transitResult.ok) {
+      const transitData = transitResult.data;
+      if (transitData?.status === 'OK' && transitData?.rows?.[0]?.elements?.[0]?.status === 'OK') {
+        const element = transitData.rows[0].elements[0];
+        result.transitDurationMinutes = Math.round(element.duration.value / 60);
+        result.transitDuration = formatDuration(result.transitDurationMinutes);
+      }
     }
   } catch (e) {
     console.error('[Transfer-Pricing] Google Maps transit error:', e);
@@ -288,22 +290,21 @@ async function getGoogleMapsData(
 
   try {
     // Walking (for short distances)
-    const walkingParams = new URLSearchParams({
-      origins: origin,
-      destinations: destination,
-      mode: 'walking',
-      key: apiKey,
-    });
-    
-    const walkingResp = await fetch(
-      `https://maps.googleapis.com/maps/api/distancematrix/json?${walkingParams.toString()}`
+    const walkingResult = await googleDistanceMatrix(
+      {
+        origins: origin,
+        destinations: destination,
+        mode: 'walking',
+      },
+      { actionType: 'transfer_pricing_walking', reason: `${origin} → ${destination}` },
     );
-    const walkingData = await walkingResp.json();
-    
-    if (walkingData.status === 'OK' && walkingData.rows?.[0]?.elements?.[0]?.status === 'OK') {
-      const element = walkingData.rows[0].elements[0];
-      result.walkingDurationMinutes = Math.round(element.duration.value / 60);
-      result.walkingDuration = formatDuration(result.walkingDurationMinutes);
+    if (walkingResult.ok) {
+      const walkingData = walkingResult.data;
+      if (walkingData?.status === 'OK' && walkingData?.rows?.[0]?.elements?.[0]?.status === 'OK') {
+        const element = walkingData.rows[0].elements[0];
+        result.walkingDurationMinutes = Math.round(element.duration.value / 60);
+        result.walkingDuration = formatDuration(result.walkingDurationMinutes);
+      }
     }
   } catch (e) {
     console.error('[Transfer-Pricing] Google Maps walking error:', e);
