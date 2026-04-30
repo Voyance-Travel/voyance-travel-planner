@@ -43,6 +43,47 @@ function fuzzyMatch(a: string, b: string): boolean {
   return false;
 }
 
+/**
+ * Daily anchors are activities that BY DESIGN repeat every day:
+ *   - Returns/transfers to/from the hotel
+ *   - Midday "freshen up" / wellness refresh
+ *   - In-hotel breakfast (when applicable)
+ *   - Hotel check-in/out
+ * They must bypass the repeat-already-done dedup, otherwise every day after
+ * day 1 is stripped of its structural anchors. Core memory: "Believable
+ * Human Day" and "Universal Locking Protocol".
+ */
+const DAILY_ANCHOR_PATTERNS: RegExp[] = [
+  /^\s*(return to|travel to|taxi to|head back to|back to|drive to|walk back to|transfer to)\b.*\b(hotel|resort|inn|stay|accommodation|lodging|villa|riad|ryokan|airbnb|marriott|hilton|hyatt|four seasons|ritz|peninsula|mandarin|aman|rosewood|park hyatt)\b/i,
+  /^\s*(freshen up|wellness refresh|midday (break|refresh|rest)|siesta|recharge|rest at|relax at|break at)\b/i,
+  /^\s*check[\- ]?(in|out)\b/i,
+  /^\s*(breakfast|coffee) at (the )?(hotel|marriott|hilton|hyatt|four seasons|ritz|peninsula|mandarin|aman|rosewood|park hyatt|your)\b/i,
+  /\bhotel\b.*\b(refresh|freshen|wellness|return|drop off|drop-off)\b/i,
+];
+
+const DAILY_ANCHOR_CATEGORIES = new Set([
+  'transport', 'transportation', 'transit', 'accommodation', 'lodging', 'hotel',
+]);
+
+function isDailyAnchor(activity: any): boolean {
+  const title = String(activity?.title || activity?.name || '').toLowerCase();
+  if (!title) return false;
+  for (const pat of DAILY_ANCHOR_PATTERNS) {
+    if (pat.test(title)) return true;
+  }
+  // Category-based: any transport/accommodation entry whose title references "hotel"
+  // is a daily ritual, not a unique attraction.
+  const cat = String(activity?.category || activity?.type || '').toLowerCase();
+  if (DAILY_ANCHOR_CATEGORIES.has(cat) && /\bhotel|resort|inn|lodging|stay\b/.test(title)) {
+    return true;
+  }
+  // Wellness category that explicitly references the hotel/freshen-up pattern
+  if (cat === 'wellness' && /\b(freshen|refresh|midday|siesta|hotel)\b/.test(title)) {
+    return true;
+  }
+  return false;
+}
+
 function buildPlaceholderForIntent(intent: LedgerUserIntent, dayNumber: number) {
   const startTime = intent.startTime || (
     intent.kind === 'breakfast' ? '08:30' :
@@ -143,6 +184,10 @@ export async function ledgerCheck(
   }));
 
 
+  // Build a quick lookup of out-by-dayNumber so vibe-clash can mutate next day.
+  const outByDay = new Map<number, any>();
+  for (const d of out) outByDay.set((d.dayNumber as number) || 0, d);
+
   for (const day of out) {
     const dayNum = (day.dayNumber as number) || 0;
     const ledger = ledgerByDay.get(dayNum);
@@ -177,10 +222,15 @@ export async function ledgerCheck(
       }
     }
 
-    // 2) Repeat-of-alreadyDone — drop offending activity (only if not user-locked)
+    // 2) Repeat-of-alreadyDone — drop offending activity (only if not user-locked).
+    //    EXEMPTION: daily anchors (Return to Hotel, Freshen Up, Check-in, in-hotel
+    //    breakfast, hotel transfers) are SUPPOSED to repeat every day. Without
+    //    this exemption every day after day 1 was being stripped of its
+    //    Believable-Human structure (see Core memory).
     const doneSet = ledger.alreadyDone.map((p) => p.title.toLowerCase());
     day.activities = day.activities.filter((a: any) => {
       if (a.locked || a.isLocked || a.lockedSource) return true;
+      if (isDailyAnchor(a)) return true;
       const t = (a.title || a.name || '').toLowerCase().trim();
       if (!t) return true;
       const repeat = doneSet.some((d) => fuzzyMatch(t, d));
@@ -220,18 +270,40 @@ export async function ledgerCheck(
       });
     }
 
-    // 4) Vibe clash — flag (do not remove) if today AND a forward day are both splurge dinners
+    // 4) Vibe clash — auto-soften if today AND tomorrow are both splurge dinners.
+    //    Luminary archetype mandates 1–3 Michelin dinners total; back-to-back
+    //    is a believable-human failure mode. Mutate tomorrow's dinner to a
+    //    casual placeholder so downstream restaurant-recommendation fills it.
     if (ledger.forwardState && ledger.forwardState.length > 0) {
       const todaySplurge = day.activities.find((a: any) => isSplurgeDinner(a));
       const tomorrowSplurge = ledger.forwardState.find(
         (f) => f.dayNumber === dayNum + 1 && f.kind === 'dinner'
       );
       if (todaySplurge && tomorrowSplurge) {
-        warnings.push({
-          dayNumber: dayNum,
-          kind: 'vibe_clash',
-          detail: `Two splurge dinners back-to-back: "${todaySplurge.title || todaySplurge.name}" (day ${dayNum}) and "${tomorrowSplurge.title}" (day ${dayNum + 1}). Consider a casual option one of these nights.`,
-        });
+        const nextDay = outByDay.get(dayNum + 1);
+        const nextDinner = nextDay?.activities?.find((a: any) => isSplurgeDinner(a));
+        const nextDinnerLocked = !!(nextDinner && (nextDinner.locked || nextDinner.isLocked || nextDinner.lockedSource));
+
+        if (nextDinner && !nextDinnerLocked) {
+          // Replace tomorrow's splurge dinner with a casual-bistro placeholder.
+          nextDinner.title = 'Casual neighborhood dinner';
+          nextDinner.name = 'Casual neighborhood dinner';
+          nextDinner.description = 'Pacing break after a splurge dinner the night before. Pick a relaxed local bistro near the hotel.';
+          nextDinner.needsRecommendation = true;
+          nextDinner.placeholder = true;
+          if (nextDinner.cost) nextDinner.cost = { ...nextDinner.cost, amount: 0 };
+          warnings.push({
+            dayNumber: dayNum + 1,
+            kind: 'vibe_clash',
+            detail: `Replaced "${tomorrowSplurge.title}" on day ${dayNum + 1} with a casual option to pace after "${todaySplurge.title || todaySplurge.name}" on day ${dayNum}.`,
+          });
+        } else {
+          warnings.push({
+            dayNumber: dayNum,
+            kind: 'vibe_clash',
+            detail: `Two splurge dinners back-to-back: "${todaySplurge.title || todaySplurge.name}" (day ${dayNum}) and "${tomorrowSplurge.title}" (day ${dayNum + 1}). Tomorrow's dinner is locked — leaving as-is.`,
+          });
+        }
       }
     }
   }
