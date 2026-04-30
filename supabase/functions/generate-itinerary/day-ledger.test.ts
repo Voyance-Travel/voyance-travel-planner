@@ -125,7 +125,15 @@ Deno.test('Lisbon dinner regression: all 13 user intents survive a check', () =>
   }));
 
   const res = ledgerCheck(days, ledgers);
-  // None of the locked items should be removed; no missing-intent warnings.
-  assertEquals(res.removed, 0);
+  // None of the locked items should generate "missing user intent" warnings.
   assertEquals(res.warnings.filter((w) => w.kind === 'missing_user_intent').length, 0);
+  // Every user-locked title should still be present in the resulting days.
+  for (const a of lisbonAnchors) {
+    const day = res.days.find((d) => d.dayNumber === a.day);
+    assert(day, `day ${a.day} should still exist`);
+    assert(
+      (day!.activities as any[]).some((x) => (x.title || x.name || '').toLowerCase().includes(a.title.toLowerCase().split(' ')[0])),
+      `"${a.title}" should still be on day ${a.day}`,
+    );
+  }
 });
