@@ -1561,7 +1561,8 @@ serve(async (req) => {
             googleApiKey,
             tripAdvisorApiKey,
             lovableApiKey,
-            params.skipCache
+            params.skipCache,
+            costTracker,
           );
           results[venue.name] = image;
           if (image.source === 'google_places') {
@@ -1653,7 +1654,8 @@ serve(async (req) => {
       googleApiKey,
       tripAdvisorApiKey,
       lovableApiKey,
-      params.skipCache
+      params.skipCache,
+      costTracker,
     );
 
     // Update type if specified
