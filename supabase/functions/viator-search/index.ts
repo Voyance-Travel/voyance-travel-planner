@@ -237,6 +237,43 @@ async function searchViatorProducts(
   }
 }
 
+// ── In-memory 24h cache (warm-instance scope) ──────────────────────────────
+// Same (activityName + destination + category) within 24h returns cached results
+// at $0. Survives across requests on the same edge runtime instance.
+interface CacheEntry { ts: number; results: SearchResult[]; }
+const VIATOR_CACHE = new Map<string, CacheEntry>();
+const VIATOR_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const VIATOR_CACHE_MAX = 500;
+
+function cacheKey(activityName: string, destination: string, category?: string): string {
+  return [activityName, destination, category || '']
+    .map(s => s.toLowerCase().trim().replace(/\s+/g, ' '))
+    .join('|');
+}
+
+function getCached(key: string): SearchResult[] | null {
+  const entry = VIATOR_CACHE.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > VIATOR_CACHE_TTL_MS) {
+    VIATOR_CACHE.delete(key);
+    return null;
+  }
+  return entry.results;
+}
+
+function setCached(key: string, results: SearchResult[]): void {
+  if (VIATOR_CACHE.size >= VIATOR_CACHE_MAX) {
+    // Drop oldest ~10% to keep map bounded
+    const drop = Math.ceil(VIATOR_CACHE_MAX * 0.1);
+    let i = 0;
+    for (const k of VIATOR_CACHE.keys()) {
+      VIATOR_CACHE.delete(k);
+      if (++i >= drop) break;
+    }
+  }
+  VIATOR_CACHE.set(key, { ts: Date.now(), results });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -250,14 +287,36 @@ serve(async (req) => {
       throw new Error('VIATOR_API_KEY not configured');
     }
 
-    const body: SearchRequest = await req.json();
-    const { activityName, destination, category, limit = 3 } = body;
+    const body: (SearchRequest & { tripId?: string; userId?: string }) = await req.json();
+    const { activityName, destination, category, limit = 3, tripId, userId } = body;
 
     if (!activityName || !destination) {
       throw new Error('activityName and destination are required');
     }
 
-    log('Search request', { activityName, destination, category });
+    // Attribution — so we can see who's driving spikes
+    if (tripId) costTracker.setTripId?.(tripId);
+    if (userId) costTracker.setUserId?.(userId);
+    const referrer = req.headers.get('referer') || req.headers.get('origin') || 'unknown';
+    log('Search request', { activityName, destination, category, tripId, userId, referrer });
+
+    // ── Cache check ─────────────────────────────────────────────────────────
+    const key = cacheKey(activityName, destination, category);
+    const cached = getCached(key);
+    if (cached) {
+      log('Cache hit (24h)', { key, results: cached.length });
+      // Skip costTracker.save() — billable=0 will skip the row automatically.
+      return new Response(
+        JSON.stringify({
+          success: true,
+          cached: true,
+          bestMatch: cached[0] || null,
+          alternatives: cached.slice(1),
+          totalFound: cached.length,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const results = await searchViatorProducts(
       activityName,
@@ -267,30 +326,31 @@ serve(async (req) => {
       limit
     );
 
+    // Cache (even empty results — they're a valid negative for 24h)
+    setCached(key, results);
+
     // Return best match and alternatives
     const bestMatch = results[0] || null;
     const alternatives = results.slice(1);
 
-    log('Search complete', { 
-      bestMatch: bestMatch?.productCode, 
+    log('Search complete', {
+      bestMatch: bestMatch?.productCode,
       matchScore: bestMatch?.matchScore,
-      alternatives: alternatives.length 
+      alternatives: alternatives.length,
     });
 
-    // Track Viator API call — Viator charges per search request
     costTracker.addMetadata('results_count', results.length);
     costTracker.addMetadata('query', activityName);
     costTracker.addMetadata('destination', destination);
+    costTracker.addMetadata('referrer', referrer);
     // Viator API cost: ~$0.005 per search call (partner tier estimate)
-    // Record as custom metadata since there's no dedicated viator counter
-    // The cost tracker will save with $0 token/google cost, so we manually set estimated cost
-    // by recording it as a perplexity-equivalent call ($0.005/call)
-    costTracker.recordPerplexity(1); // $0.005 per call — same ballpark as Viator search
+    costTracker.recordPerplexity(1);
     await costTracker.save();
 
     return new Response(
       JSON.stringify({
         success: true,
+        cached: false,
         bestMatch,
         alternatives,
         totalFound: results.length,
