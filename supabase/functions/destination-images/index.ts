@@ -1298,7 +1298,8 @@ async function fetchImageTiered(
   googleApiKey?: string,
   tripAdvisorApiKey?: string,
   lovableApiKey?: string,
-  skipCache?: boolean
+  skipCache?: boolean,
+  costTracker?: CostTracker,
 ): Promise<DestinationImage> {
   // Step 1: Clean the venue name and check if we should skip API search
   const { cleanName, shouldSkip, inferredCategory } = extractVenueName(venueName);
@@ -1330,7 +1331,8 @@ async function fetchImageTiered(
       cleanName,
       destination,
       googleApiKey,
-      effectiveCategory
+      effectiveCategory,
+      costTracker,
     );
     if (googleImage) {
       candidates.push(googleImage);
