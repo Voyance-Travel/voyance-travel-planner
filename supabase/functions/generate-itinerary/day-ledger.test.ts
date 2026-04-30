@@ -37,8 +37,8 @@ Deno.test('renderDayLedgerPrompt emits fenced sections', () => {
     anchors: [{ title: 'JNcQUOI Table', startTime: '19:00', source: 'manual_paste' }],
   });
   const out = renderDayLedgerPrompt(ledger);
-  assert(out.includes('DAY TRUTH LEDGER'));
-  assert(out.includes('USER LOCKED'));
+  assert(out.includes('DAY BRIEF'));
+  assert(out.includes('USER REQUIRED'));
   assert(out.includes('JNcQUOI Table'));
   assert(out.includes('First day in city'));
 });
