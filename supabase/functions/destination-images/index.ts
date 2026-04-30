@@ -505,7 +505,8 @@ async function getGooglePlacesPhoto(
         entityType,
         best.place.id,
         googlePhotoUrl,
-        { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id }
+        { destination, placeName: best.place.displayName?.text || venueName, placeId: best.place.id },
+        costTracker,
       );
 
       return {
