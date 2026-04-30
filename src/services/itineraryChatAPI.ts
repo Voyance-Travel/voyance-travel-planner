@@ -18,7 +18,7 @@ export interface ChatMessage {
 }
 
 export interface ItineraryAction {
-  type: 'suggest_activity_swap' | 'adjust_day_pacing' | 'apply_filter' | 'regenerate_day' | 'rewrite_day';
+  type: 'suggest_activity_swap' | 'adjust_day_pacing' | 'apply_filter' | 'regenerate_day' | 'rewrite_day' | 'propose_change' | 'record_user_intent' | 'answer_question';
   params: Record<string, unknown>;
   status: 'pending' | 'applied' | 'declined' | 'failed';
 }
