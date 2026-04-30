@@ -173,19 +173,20 @@ export async function batchCachePhotos(
     entityId: string;
     googlePhotoUrl: string;
     metadata?: { destination?: string; placeName?: string; placeId?: string };
-  }>
+  }>,
+  costTracker?: CostTracker,
 ): Promise<PhotoCacheResult[]> {
   // Process in parallel with concurrency limit
   const CONCURRENCY = 5;
   const results: PhotoCacheResult[] = [];
-  
+
   for (let i = 0; i < photos.length; i += CONCURRENCY) {
     const batch = photos.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.all(
-      batch.map(p => getCachedPhotoUrl(p.entityType, p.entityId, p.googlePhotoUrl, p.metadata))
+      batch.map(p => getCachedPhotoUrl(p.entityType, p.entityId, p.googlePhotoUrl, p.metadata, costTracker))
     );
     results.push(...batchResults);
   }
-  
+
   return results;
 }
