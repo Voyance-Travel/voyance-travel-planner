@@ -1,145 +1,73 @@
-Yes — you’re right. We control the storage, so the system should not keep rediscovering meaning from a blob every time. The current implementation improved the day checker, but it still feeds that checker from mixed sources like `metadata.userAnchors`, `metadata.userIntents`, `metadata.additionalNotes`, `mustDoActivities`, and `perDayActivities`. That means the Day Brief exists, but its inputs are still partly blob-shaped.
+# Audit: Structured Day Intents — what's solid, what's broken
 
-Plan: build a structured, day-scoped intent intake layer so every user mention becomes its own row before generation or assistant actions use it.
+## ✅ What's secure & correctly mapped
 
-```text
-Four entry points
-  1. Start / Chat Planner extraction
-  2. Fine-Tune notes
-  3. Manual paste / manual add / edits
-  4. Itinerary assistant chat
-        |
-        v
-Structured day-intent rows
-  one row per activity / restaurant / avoid / constraint / transport / note
-        |
-        v
-Day Brief builder
-  grouped by trip_id + day_number + date
-        |
-        v
-Prompt + post-save checker + UI visibility
-```
+**`trip_day_intents` table is locked down properly.**
+- RLS is enabled.
+- Four scoped policies, no `USING (true)`:
+  - **SELECT** — owner OR accepted collaborator (any permission tier)
+  - **INSERT / UPDATE** — owner OR collaborator with `edit / admin / editor / contributor`
+  - **DELETE** — owner only
+- No linter findings reference this table.
+- Unique index on `(trip_id, day_number, source, kind, title, locked_source)` — dedupes across re-saves.
 
-## What I’ll change
-
-### 1. Add a real normalized table for day-scoped user intent
-Create a new table, separate from the existing generic `trip_intents`, because `trip_intents` only stores `intent_type` + `intent_value` and cannot reliably answer: what day, what time, what kind of thing, which entry point, is it locked, and has it been fulfilled?
-
-Proposed table shape:
+**The four entry points all populate the table correctly when their flows run:**
 
 ```text
-trip_day_intents
-- id
-- trip_id
-- user_id
-- day_number
-- date
-- destination
-- source_entry_point
-  chat_planner | fine_tune | manual_paste | manual_add | assistant_chat | pin | edit
-- intent_kind
-  restaurant | dinner | lunch | breakfast | activity | event | transport | avoid | constraint | note
-- title
-- raw_text
-- start_time
-- end_time
-- priority
-  must | should | avoid
-- locked
-- locked_source
-- status
-  active | fulfilled | superseded | dismissed
-- fulfilled_activity_id
-- metadata
-- created_at / updated_at
+Entry point             →  Writer                                    →  trip_day_intents
+─────────────────────────────────────────────────────────────────────────────────────────
+1. Chat Planner         →  generation-core.prepareContext (seeds)    →  ✅ rows
+2. Fine-Tune notes      →  generation-core.prepareContext (seeds)    →  ✅ rows
+3. Manual paste/anchor  →  generation-core.prepareContext (seeds)    →  ✅ rows
+4. Assistant chat       →  itinerary-chat record_user_intent         →  ✅ rows (direct)
 ```
 
-RLS will match trip ownership/collaboration rules. This becomes the storage contract for user requirements.
+**Readers downstream all consume the table:**
+- `compile-prompt.ts` — primary source for Day Brief (with metadata fallback)
+- `action-save-itinerary.ts` — builds the post-gen ledger from rows
+- `reconcileFulfillment` — marks rows as fulfilled after save
 
-### 2. Add a shared normalizer/parser used by all four entry points
-Create shared functions that convert messy input into structured rows:
+## 🔴 Three real gaps found
 
-- day-by-day pasted plans become multiple rows, not one `perDayActivities` string
-- “Day 3 dinner at Belcanto 7:30” becomes one dinner row for Day 3
-- “avoid seafood Friday” becomes one avoid row for that date/day
-- “need transport from US Open to JFK” becomes one transport/constraint row
-- “ramen tonight” in assistant chat becomes a dinner row for the current day
+### Gap 1 (highest impact) — Day-regen path skips the seeder
 
-The key shift: we can still preserve the raw text for auditing, but raw text is no longer the working source of truth.
+`action-generate-day.ts` (used by Smart Finish, regenerate-day, and assistant `rewrite_day`) **never calls `prepareContext`**. It loads the trip directly. If the table is empty for a trip — e.g. a brand-new trip that goes straight into Smart Finish, or a trip created before this migration — the day-regen reads no structured intents and silently falls back to re-parsing metadata blobs.
 
-### 3. Wire Start / Chat Planner extraction into structured storage
-Today the chat planner returns useful fields, but much of it still lands as `mustDoActivities`, `additionalNotes`, `userConstraints`, and `perDayActivities` blobs/arrays inside metadata.
+Result: Smart Finish and single-day regens are still partly blob-driven.
 
-I’ll keep those for backward compatibility, but also immediately write normalized `trip_day_intents` rows after trip creation. This means every extracted venue, restaurant, event, avoid, transport need, or time block has a day-scoped row.
+**Fix:** Extract the seeding block into a tiny shared helper `seedDayIntentsFromMetadata(supabase, trip)` in `_shared/day-intents-store.ts`, and call it at the top of:
+- `prepareContext` (already there)
+- `handleGenerateDay` in `action-generate-day.ts` (NEW — right after the trip is loaded)
+- `enrich-manual-trip/index.ts` after it builds `userAnchors` (NEW — so manual paste flows seed before any generation runs)
 
-### 4. Wire Fine-Tune notes into the same table
-Currently Fine-Tune notes are parsed at generation time. That’s too late and too lossy.
+Idempotent — the unique index dedupes.
 
-I’ll add a persist step so Fine-Tune notes are parsed once into day-intent rows when generation starts or when the trip is updated. The original note remains available, but the planner reads the structured rows.
+### Gap 2 — `enrich-manual-trip` writes `userAnchors` but not intents
 
-### 5. Wire manual paste, manual add, pins, and edits into the same table
-Manual/pasted activities already become locked anchors in metadata and itinerary rows. I’ll also write each one into `trip_day_intents` with `locked=true`, so the Day Brief can treat them consistently with assistant and fine-tune requests.
+`enrich-manual-trip` (the Smart Finish entry point for pasted itineraries) builds `derivedAnchors` and writes them to `metadata.userAnchors` — but it does NOT call `intentsFromUserAnchors` + `upsertDayIntents`. So pasted itinerary anchors only become intent rows on the *next* full-trip generation, not on the immediate Smart Finish that follows the paste.
 
-For manual additions/edits applied through the itinerary UI or assistant action executor, I’ll ensure the backend save path extracts any locked/user-requested activities into day-intent rows as part of normalization.
+**Fix:** in `enrich-manual-trip/index.ts`, right after `derivedAnchors` is built (line ~570), add an `upsertDayIntents` call using `intentsFromUserAnchors(derivedAnchors)`.
 
-### 6. Change the Day Brief builder to read structured rows first
-Update `day-ledger.ts`, `compile-prompt.ts`, and `action-save-itinerary.ts` so the Day Brief gathers `userIntent` from `trip_day_intents` grouped by day.
+### Gap 3 — Post-gen checker (`ledger-check.ts`) doesn't read the table
 
-Fallback behavior:
-- read old metadata fields only if structured rows are absent
-- optionally backfill rows from old metadata during save/generation
-- do not break existing trips
+`ledger-check.ts` checks the in-memory `DayLedger` built by `compile-prompt`, which is correct for the same generation pass. But it does NOT independently re-fetch from `trip_day_intents` to verify nothing was lost between compile and save. So if compile-prompt's fetch fails (logged as non-blocking), the checker has no fallback — it'll happily pass a day that's missing a "must" intent.
 
-This makes the day checker deterministic: it no longer has to guess from blobs unless it is handling legacy data.
+**Fix:** small hardening — when `ledger.userIntent` is empty AND a tripId is available, the checker should fetch active intents directly from the table and verify any `priority='must'` row appears in the day. This is the "checker map" the user is asking for: structured rows → checker → smart-finish/regeneration all using the same source.
 
-### 7. Persist day briefs correctly into normalized day rows
-The database already has `itinerary_days.day_brief`, but current sync does not appear to populate it. I’ll fix the sync so each `itinerary_days` row stores the exact Day Brief snapshot used/validated for that day.
+## 🟡 Smaller observations (not breaking, worth noting)
 
-That gives us a visible audit trail:
+- **No client-side reads.** `trip_day_intents` is never queried from `src/`. That's fine for now (the AI pipeline owns it) but means there's no UI surface yet for users to *see* the captured intents per day. Out of scope for this fix.
+- **No `userIntent` priority drift.** The save-itinerary path correctly preserves `must` vs `should` vs `avoid`. The compile-prompt path preserves them. Round-trip is intact.
+- **`metadata.userIntents`** (legacy blob written by old assistant chat code) is still read in compile-prompt's fallback branch — kept for back-compat with trips generated before today.
 
-```text
-Day 4 knew:
-- user required ramen dinner
-- avoid seafood
-- already did Belém Tower
-- tomorrow has a Michelin dinner
-- museum X closed today
-```
+## Implementation plan (after approval)
 
-### 8. Add fulfillment/status tracking
-After generation/save, when the checker sees that an intent is present in an activity, mark that intent as fulfilled and link it where possible. If the AI misses a must-intent and the checker inserts a placeholder, keep the intent active and surface it clearly.
+1. **Add shared helper** `seedDayIntentsFromMetadata(supabase, trip, userId)` in `supabase/functions/_shared/day-intents-store.ts`. Move the 50 lines currently inline in `generation-core.ts` into it.
+2. **Update `generation-core.ts`** to call the helper instead of the inline block.
+3. **Update `action-generate-day.ts`** — call the helper right after the trip is loaded, before `compilePrompt`.
+4. **Update `enrich-manual-trip/index.ts`** — call `intentsFromUserAnchors(derivedAnchors)` + `upsertDayIntents` after deriving anchors.
+5. **Harden `ledger-check.ts`** — accept an optional `(supabase, tripId)` and fetch active intents as a verification fallback when `ledger.userIntent` is empty for a day with `priority='must'` rows in the DB.
+6. **No DB migration needed** — table, indexes, and RLS are all in place.
 
-This prevents the system from repeatedly asking, “Did we remember this?” because the database knows whether each request was fulfilled.
-
-### 9. Add regression tests around the exact failure mode
-Add tests for:
-
-- multiple restaurants mentioned across multiple days are stored as separate rows
-- Fine-Tune “Day 2 ramen dinner” becomes a Day 2 dinner intent
-- assistant “ramen tonight” stores one row and does not trigger replanning
-- Day Brief reads structured rows and renders them in `USER REQUIRED`
-- save checker inserts placeholder only when an active must-intent is missing
-- legacy metadata fallback still works
-
-## Expected outcome
-
-After this, “Jess told us she wants X dinner on Day 3” will not live as a buried sentence in a metadata blob. It will be a real row:
-
-```text
-trip_id: ...
-day_number: 3
-intent_kind: dinner
-title: X
-priority: must
-source_entry_point: chat_planner
-status: active/fulfilled
-```
-
-Then the generator, assistant, checker, and UI can all use the same source of truth instead of each pathway trying to parse the same blob differently.
-
-## Important principle
-
-This does not replace the Day Brief. It fixes the Day Brief’s input layer.
-
-The Day Brief should remain the per-day working packet. But the raw material feeding it should be normalized structured intent rows, not a collection of ad hoc metadata fields.
+## Risk
+Low. All changes are additive, all writes are idempotent via the unique index, all reads are non-blocking.
