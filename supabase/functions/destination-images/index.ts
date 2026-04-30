@@ -1431,7 +1431,7 @@ async function fetchImageTiered(
   // Prevents repeated Google API calls for venues that consistently return nothing.
   try {
     const normalizedKey = venueName.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').slice(0, 100);
-    const negativeExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(); // 14 days
+    const negativeExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
 
     await supabase.from("curated_images").upsert({
       entity_type: entityType,
