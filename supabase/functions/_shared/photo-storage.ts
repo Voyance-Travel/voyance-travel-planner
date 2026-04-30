@@ -9,6 +9,7 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import type { CostTracker } from "./cost-tracker.ts";
 
 const BUCKET_NAME = 'trip-photos';
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -23,7 +24,12 @@ interface PhotoCacheResult {
 }
 
 /**
- * Get a cached photo URL from Supabase Storage, or download and cache it
+ * Get a cached photo URL from Supabase Storage, or download and cache it.
+ *
+ * Pass a `costTracker` whenever possible — every cache MISS triggers a Google
+ * Places photo download (one billable `places_photo` SKU). Without a tracker,
+ * the download still happens but the cost is silently lost from our internal
+ * accounting (this is the historical bug behind under-reported Google spend).
  */
 export async function getCachedPhotoUrl(
   entityType: 'restaurant' | 'hotel' | 'activity' | 'destination',
@@ -33,7 +39,8 @@ export async function getCachedPhotoUrl(
     destination?: string;
     placeName?: string;
     placeId?: string;
-  }
+  },
+  costTracker?: CostTracker,
 ): Promise<PhotoCacheResult> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false }
@@ -64,18 +71,34 @@ export async function getCachedPhotoUrl(
   // Download the photo from Google
   try {
     console.log(`[PhotoStorage] Downloading: ${entityType}/${sanitizedId}`);
-    
+
     // Follow redirects (Google Places API redirects to actual image)
     const photoResponse = await fetch(googlePhotoUrl, {
       headers: { 'Accept': 'image/*' },
       redirect: 'follow',
     });
-    
+
+    // Always count the call — Google bills the request, not the success.
+    // Only Places-style URLs are billable; skip TripAdvisor/Foursquare/etc.
+    const isBillableGoogle =
+      googlePhotoUrl.includes('places.googleapis.com') ||
+      googlePhotoUrl.includes('maps.googleapis.com');
+    if (isBillableGoogle) {
+      if (costTracker) {
+        costTracker.recordGooglePhotos(1);
+      } else {
+        console.warn(
+          `[PhotoStorage] Photo download for ${entityType}/${sanitizedId} ` +
+            `was not attributed to a CostTracker — Google spend will be under-reported.`,
+        );
+      }
+    }
+
     if (!photoResponse.ok) {
       console.error(`[PhotoStorage] Download failed: ${photoResponse.status}`);
       return { url: googlePhotoUrl, cached: false, cacheHit: false, source: 'direct' };
     }
-    
+
     // Read as ArrayBuffer for reliable binary handling
     const arrayBuffer = await photoResponse.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
@@ -150,19 +173,20 @@ export async function batchCachePhotos(
     entityId: string;
     googlePhotoUrl: string;
     metadata?: { destination?: string; placeName?: string; placeId?: string };
-  }>
+  }>,
+  costTracker?: CostTracker,
 ): Promise<PhotoCacheResult[]> {
   // Process in parallel with concurrency limit
   const CONCURRENCY = 5;
   const results: PhotoCacheResult[] = [];
-  
+
   for (let i = 0; i < photos.length; i += CONCURRENCY) {
     const batch = photos.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.all(
-      batch.map(p => getCachedPhotoUrl(p.entityType, p.entityId, p.googlePhotoUrl, p.metadata))
+      batch.map(p => getCachedPhotoUrl(p.entityType, p.entityId, p.googlePhotoUrl, p.metadata, costTracker))
     );
     results.push(...batchResults);
   }
-  
+
   return results;
 }

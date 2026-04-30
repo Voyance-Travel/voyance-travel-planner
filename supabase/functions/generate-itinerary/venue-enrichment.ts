@@ -7,6 +7,7 @@
 
 import type { StrictActivity, StrictDay, VenueVerification, CachedVenue, EnrichmentStats } from './generation-types.ts';
 import { normalizeVenueName, haversineDistanceKm } from './generation-utils.ts';
+import { googleGeocode, googlePlacesTextSearch } from '../_shared/google-api.ts';
 
 // =============================================================================
 // HOTEL PROXIMITY GUARD — Tight radius for water-bound / car-free destinations
@@ -163,16 +164,16 @@ export async function getDestinationCenter(
   destination: string,
   apiKey: string
 ): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const response = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(destination)}&key=${apiKey}`
-    );
-    const data = await response.json();
-    const loc = data.results?.[0]?.geometry?.location;
-    return loc ? { lat: loc.lat, lng: loc.lng } : null;
-  } catch {
-    return null;
-  }
+  // apiKey is read by the wrapper internally; we keep the param for signature
+  // compatibility with the many existing callers.
+  void apiKey;
+  const result = await googleGeocode(
+    { address: destination },
+    { actionType: 'venue_enrichment_geocode', reason: `dest center: ${destination}` },
+  );
+  if (!result.ok) return null;
+  const loc = result.data?.results?.[0]?.geometry?.location;
+  return loc ? { lat: loc.lat, lng: loc.lng } : null;
 }
 
 // =============================================================================
@@ -204,45 +205,35 @@ export async function verifyVenueWithGooglePlaces(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    const requestBody: Record<string, unknown> = {
-      textQuery,
-      maxResultCount: 1,
-    };
+    const locationBias = destCenter
+      ? {
+          circle: {
+            center: { latitude: destCenter.lat, longitude: destCenter.lng },
+            radius: 30000.0,
+          },
+        }
+      : undefined;
 
-    if (destCenter) {
-      requestBody.locationBias = {
-        circle: {
-          center: { latitude: destCenter.lat, longitude: destCenter.lng },
-          radius: 30000.0,
-        },
-      };
-    }
-
-    const response = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
+    const result = await googlePlacesTextSearch(
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask':
-            'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.currentOpeningHours,places.websiteUri,places.googleMapsUri',
-        },
-        body: JSON.stringify(requestBody),
+        textQuery,
+        maxResultCount: 1,
+        fieldMask:
+          'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.currentOpeningHours,places.websiteUri,places.googleMapsUri',
+        locationBias,
         signal: controller.signal,
-      }
+      },
+      { actionType: 'venue_enrichment_verify', reason: `verify: ${venueName}` },
     );
 
     clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log(`[Stage 4] Google Places API error for "${venueName}":`, response.status, errorText);
+    if (!result.ok) {
+      console.log(`[Stage 4] Google Places API error for "${venueName}":`, result.status, result.errorText);
       return null;
     }
 
-    const data = await response.json();
-    const place = data.places?.[0];
+    const place = result.data?.places?.[0];
 
     if (!place) {
       console.log(`[Stage 4] No place found for: ${venueName}`);

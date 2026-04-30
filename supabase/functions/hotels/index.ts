@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { googlePlacesTextSearch } from "../_shared/google-api.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -416,32 +417,24 @@ async function searchHotels(params: HotelSearchParams & { skipCache?: boolean })
     console.log('[Hotels] 🔍 Searching Google Places for hotels in:', cityName);
 
     // Step 2a: Text Search for hotels in the city
-    const response = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
+    const searchResult = await googlePlacesTextSearch(
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos,places.types',
-        },
-        body: JSON.stringify({
-          textQuery: `hotels in ${cityName}`,
-          includedType: 'lodging',
-          maxResultCount: 10,
-          languageCode: 'en',
-        }),
-      }
+        textQuery: `hotels in ${cityName}`,
+        includedType: 'lodging',
+        maxResultCount: 10,
+        languageCode: 'en',
+        fieldMask:
+          'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos,places.types',
+      },
+      { actionType: 'hotels_city_search', reason: `hotels in ${cityName}` },
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Hotels] Google Places search failed:', response.status, errorText);
+    if (!searchResult.ok) {
+      console.error('[Hotels] Google Places search failed:', searchResult.status, searchResult.errorText);
       return generateFallbackHotels(params, params.destination);
     }
 
-    const data = await response.json();
-    const places = data.places || [];
+    const places = searchResult.data?.places || [];
     console.log('[Hotels] Found', places.length, 'hotels via Google Places');
 
     if (places.length === 0) {
@@ -625,31 +618,24 @@ async function searchHotelsByName(
     const textQuery = `${query} hotel ${destination}`;
     console.log('[Hotels] Searching Google Places:', textQuery);
 
-    const response = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
+    const searchResult = await googlePlacesTextSearch(
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.types',
-        },
-        body: JSON.stringify({
-          textQuery,
-          includedType: 'lodging',
-          maxResultCount: 8,
-          languageCode: 'en',
-        }),
-      }
+        textQuery,
+        includedType: 'lodging',
+        maxResultCount: 8,
+        languageCode: 'en',
+        fieldMask:
+          'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.types',
+      },
+      { actionType: 'hotels_search_by_name', reason: textQuery },
     );
 
-    if (!response.ok) {
-      console.error('[Hotels] Google Places error:', await response.text());
+    if (!searchResult.ok) {
+      console.error('[Hotels] Google Places error:', searchResult.errorText);
       return [];
     }
 
-    const data = await response.json();
-    const places = data.places || [];
+    const places = searchResult.data?.places || [];
 
     console.log('[Hotels] Found', places.length, 'hotels via Google Places');
 
@@ -700,31 +686,24 @@ async function enrichHotelByName(
     const textQuery = `${hotelName} ${destination}`;
     console.log('[Hotels] Enriching hotel:', textQuery);
 
-    const response = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
+    const enrichResult = await googlePlacesTextSearch(
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos',
-        },
-        body: JSON.stringify({
-          textQuery,
-          includedType: 'lodging',
-          maxResultCount: 1,
-          languageCode: 'en',
-        }),
-      }
+        textQuery,
+        includedType: 'lodging',
+        maxResultCount: 1,
+        languageCode: 'en',
+        fieldMask:
+          'places.id,places.displayName,places.formattedAddress,places.addressComponents,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.photos',
+      },
+      { actionType: 'hotels_enrich_by_name', reason: textQuery },
     );
 
-    if (!response.ok) {
-      console.error('[Hotels] Enrichment API error:', await response.text());
+    if (!enrichResult.ok) {
+      console.error('[Hotels] Enrichment API error:', enrichResult.errorText);
       return { success: false, message: 'API error' };
     }
 
-    const data = await response.json();
-    const place = data.places?.[0];
+    const place = enrichResult.data?.places?.[0];
 
     if (!place) {
       console.log('[Hotels] No place found for:', hotelName);

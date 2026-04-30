@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { getCachedPhotoUrl } from "../_shared/photo-storage.ts";
 import { cacheVenueResult } from "../_shared/venue-cache.ts";
+import { googlePlacesTextSearch } from "../_shared/google-api.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -139,31 +140,24 @@ async function fetchGoogleReviews(
     // Step 1: Search for the place
     const searchQuery = `${placeName} ${destination}`;
     
-    const searchResponse = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
+    const searchResult = await googlePlacesTextSearch(
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.photos,places.websiteUri,places.nationalPhoneNumber,places.currentOpeningHours,places.types,places.reviews',
-        },
-        body: JSON.stringify({
-          textQuery: searchQuery,
-          maxResultCount: 1,
-          languageCode: 'en',
-        }),
-      }
+        textQuery: searchQuery,
+        maxResultCount: 1,
+        languageCode: 'en',
+        fieldMask:
+          'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.photos,places.websiteUri,places.nationalPhoneNumber,places.currentOpeningHours,places.types,places.reviews',
+      },
+      { actionType: 'fetch_reviews_search', reason: searchQuery },
     );
 
-    if (!searchResponse.ok) {
-      console.error('[Google] Search error:', await searchResponse.text());
+    if (!searchResult.ok) {
+      console.error('[Google] Search error:', searchResult.errorText);
       return { place: null, reviews: [] };
     }
 
-    const searchData = await searchResponse.json();
-    const places = searchData.places || [];
-    
+    const places = searchResult.data?.places || [];
+
     if (places.length === 0) {
       console.log('[Google] No places found for:', searchQuery);
       return { place: null, reviews: [] };
