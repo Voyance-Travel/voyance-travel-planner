@@ -428,7 +428,15 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         // Soft intents for THIS day. Prefer the structured `trip_day_intents`
         // rows (one per user-stated wish) when present; fall back to legacy
         // metadata blobs otherwise.
-        const extraIntents: Array<Record<string, any>> = [];
+        const extraIntents: Array<{
+          title: string;
+          startTime?: string;
+          endTime?: string;
+          kind?: string;
+          source?: string;
+          priority?: 'must' | 'should';
+          raw?: string;
+        }> = [];
         const structuredForDay = intentsByDay.get(dn) || [];
         if (structuredForDay.length > 0) {
           for (const r of structuredForDay) {

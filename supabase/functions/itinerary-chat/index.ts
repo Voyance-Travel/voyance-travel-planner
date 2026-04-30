@@ -338,6 +338,7 @@ const TOOLS = [
         required: ["target_day", "new_focus", "reason"],
       },
     },
+  },
   {
     type: "function",
     function: {
