@@ -618,31 +618,24 @@ async function searchHotelsByName(
     const textQuery = `${query} hotel ${destination}`;
     console.log('[Hotels] Searching Google Places:', textQuery);
 
-    const response = await fetch(
-      'https://places.googleapis.com/v1/places:searchText',
+    const searchResult = await googlePlacesTextSearch(
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.types',
-        },
-        body: JSON.stringify({
-          textQuery,
-          includedType: 'lodging',
-          maxResultCount: 8,
-          languageCode: 'en',
-        }),
-      }
+        textQuery,
+        includedType: 'lodging',
+        maxResultCount: 8,
+        languageCode: 'en',
+        fieldMask:
+          'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.location,places.websiteUri,places.googleMapsUri,places.types',
+      },
+      { actionType: 'hotels_search_by_name', reason: textQuery },
     );
 
-    if (!response.ok) {
-      console.error('[Hotels] Google Places error:', await response.text());
+    if (!searchResult.ok) {
+      console.error('[Hotels] Google Places error:', searchResult.errorText);
       return [];
     }
 
-    const data = await response.json();
-    const places = data.places || [];
+    const places = searchResult.data?.places || [];
 
     console.log('[Hotels] Found', places.length, 'hotels via Google Places');
 
