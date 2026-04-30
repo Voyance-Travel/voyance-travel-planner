@@ -1,183 +1,149 @@
+# Day Brief Unification — Single Source of Truth Per Day
 
-# Day Truth Ledger — single source of truth per day
+You're right. The Day Truth Ledger I just shipped is the **storage layer**, but the **capture layer** is fragmented across four entry points and the **enforcement layer** has no final spot-check. Three things need to land for the polish to stop failing.
 
-## The problem you're describing
+## The Three Gaps
 
-Today there is no single, durable record of "what is true and required for Day N." The pipeline knows things in scattered places:
+**1. Capture (4 entry points → 1 bucket)**
 
-- User-locked activities live in `itinerary_activities` (DB) and as `userAnchors` in memory.
-- Hotel/transition facts are recomputed on the fly inside `compile-day-facts.ts`.
-- Closures, holidays, "we already did X yesterday" — **not stored anywhere**. They only exist if the AI happens to remember them inside one prompt.
-- "User specifically asked for Peixola on Day 2 dinner" exists as one line in a flat anchor list with no priority, no note, no reason.
+| Entry point | Today | Fix |
+|---|---|---|
+| Chat Planner paste | Parses Day N (just fixed) | ✅ already feeds ledger |
+| Fine-Tune notes (textarea) | Trip-wide blob → global prompt | Parse for "Day N" / dates / "tonight" → split into per-day intents |
+| Manual Add card | Writes activity row, no `note` field for intent | Optional "user wants" reason captured to ledger |
+| Assistant chat ("ramen tonight") | Ephemeral, lost on regen | New `record_user_intent` tool → writes to `day_brief` |
 
-So when generation runs again (e.g., regenerate, smart-finish, day-fix), the AI sees a fresh prompt without a structured ledger of inviolable facts, and drifts. That's exactly what you saw with the Lisbon dinners.
+**2. Context (ledger payload is too thin)**
 
-The fix is not a bigger prompt. It's **a real per-day record we read before generation and validate after**.
+Today's ledger has hard facts, locked items, already-done, static closures, holidays. Missing:
+- `weather` (rain → swap walking tour)
+- `events` (marathon, festival → street closures)
+- `transit_disruptions` (metro strike)
+- `prayer_times` (Muslim destinations / Ramadan)
+- `trip_forward_state` (don't put 3 fado nights back-to-back)
+- `user_constraints_for_day` (per-day budget, mobility flag)
 
-## What we'll build
+**3. Spot-checker (the final polish)**
 
-A new `dayLedger` object — one per day — assembled deterministically before every generation and re-checked after. It is the only thing the AI is allowed to treat as "ground truth."
+`ledger-check.ts` exists but only runs at save time and only checks closures + locked items. It does NOT verify:
+- Every `userIntent` item actually appears in the final day
+- Already-done items aren't repeated
+- Forward-state vibe-clashes (two fancy dinners back to back)
+- Holiday/closure matches reality post-generation
 
-### Shape
+## What To Build
 
-```text
-dayLedger[dayNumber] = {
+### A. `day_brief` as the single bucket (DB)
+
+The migration I shipped added `itinerary_days.day_brief jsonb`. Expand its shape:
+
+```ts
+day_brief: {
   date, dayOfWeek, city, country,
-
-  hardFacts: {
-    hotel: { name, address, checkIn, checkOut },
-    transitionDay: { from, to, mode, departTime, arriveTime } | null,
-    flight: { ... } | null,
-    isFirstDay, isLastDay, isHotelChange,
+  hardFacts: { hotel, transit, flight, isFirstDay, isLastDay },
+  destination_facts: {
+    holidays: [...],
+    closures: [...],
+    events: [...],          // NEW — fed by destination_events table or AI enrichment
+    weather: { summary, rain_prob, temp },  // NEW — fetched at gen time
+    prayer_times: [...],    // NEW — only for relevant destinations
+    transit_disruptions: [] // NEW — best-effort
   },
-
-  userIntent: [
-    // EVERY locked / pasted / pinned / chat-extracted activity, with full context
-    {
-      kind: 'dinner' | 'lunch' | 'activity' | 'spa' | ...,
-      title: 'Peixola',
-      startTime: '19:30',
-      source: 'manual_paste' | 'chat' | 'pinned' | 'edited',
-      note: 'User pasted this — DO NOT replace, DO NOT move time',
-      priority: 'must',
-    },
-    ...
+  user_explicit_requests: [  // unified across all 4 entry points
+    { source: 'chat_paste'|'fine_tune'|'manual'|'assistant',
+      kind: 'dinner'|'activity'|'avoid'|...,
+      title, startTime?, note, priority: 'must'|'should',
+      capturedAt }
   ],
-
-  alreadyDone: [
-    // What already happened on prior days, so AI doesn't repeat
-    { title: 'Belém Tower', dayNumber: 1 },
-    ...
-  ],
-
-  closures: [
-    // Holidays + known closed-on-this-weekday venues we've already detected
-    { reason: 'Most Lisbon museums closed Mondays', applies: ['Gulbenkian', 'MAAT'] },
-    { reason: 'Public holiday: Liberation Day (Apr 25)', impact: 'banks/markets closed' },
-  ],
-
-  freeSlots: [
-    // What the AI is actually allowed to fill, derived from userIntent + hardFacts
-    { from: '09:00', to: '13:00' },
-    { from: '15:30', to: '19:00' },
-  ],
+  user_constraints: { dietary, mobility, budget_for_day },
+  trip_history: [{ title, dayNumber, kind }],
+  trip_forward_state: [{ dayNumber, kind, vibe }]  // next 1–2 days
 }
 ```
 
-This is **not** a vibes prompt. It's a deterministic struct compiled before the AI runs.
+### B. Capture pipeline — wire the 4 entry points
 
-## Pipeline integration
+1. **Fine-Tune textarea** — new `parseFineTuneIntoDailyIntents()` in `_shared/`. Recognizes:
+   - `"Day 3: ..."`, `"April 19: ..."`, `"on Sunday: ..."`
+   - `"tonight"` / `"tomorrow"` resolved against trip dates
+   - Trip-wide notes (no day marker) → applied to every day's `user_constraints` block
+2. **Manual Add card** — add optional "Why / note" field; persists to the activity row AND the day's `user_explicit_requests`.
+3. **Assistant chat** — add a `record_user_intent` tool to `itinerary-chat`. When the user says "ramen tonight," the assistant calls it with `{dayNumber, kind:'dinner', title:'ramen', priority:'must'}`. This writes to `day_brief.user_explicit_requests` *immediately*, even before regeneration.
+4. **Chat Planner paste** — already feeds the ledger via the userAnchors fix.
 
-```text
-                 ┌─────────────────────────────────┐
-  trip data ───▶ │ compile-day-facts.ts            │
-  user anchors   │  (already exists, expand it)    │
-  prior days     │                                 │
-  holidays       └──────────────┬──────────────────┘
-                                ▼
-                      ┌──────────────────┐
-                      │   dayLedger[N]   │  ← single source of truth
-                      └────┬─────────┬───┘
-                           │         │
-                           ▼         ▼
-                  ┌──────────────┐  ┌────────────────────┐
-                  │ compile-     │  │ post-gen validator │
-                  │ prompt.ts    │  │ (anchor-guard +    │
-                  │ injects it   │  │  ledger-check)     │
-                  └──────┬───────┘  └─────────┬──────────┘
-                         ▼                    ▼
-                    AI generation ──────▶ rejects/repairs any
-                                          activity that violates
-                                          userIntent or closures
+All four converge in `compileDayBrief()` (rename of current `buildDayLedger`).
+
+### C. Context enrichment
+
+- `_shared/destination-events.ts` — small static seed (Lisbon Santo António, NYC marathon, etc.) + read from a future `destination_events` table.
+- `_shared/weather-fetch.ts` — best-effort call (open-meteo, no key) for the trip date range, cached on the trip row.
+- `_shared/prayer-times.ts` — only activated for flagged destinations.
+- `trip_forward_state` — derived in-process by peeking at days N+1 and N+2 inside `compileDayBrief()`.
+
+### D. Prompt injection
+
+Update `compile-prompt.ts` to render `day_brief` as a **DAY BRIEF — DO NOT VIOLATE** block at the top of every per-day prompt, with explicit sections:
+```
+DAY BRIEF — Day 3, Sunday April 19, Lisbon
+HARD FACTS: Hotel = X. No transit.
+WEATHER: 18°C, 80% rain afternoon.
+CLOSURES: Most museums closed Sundays. Holiday: none.
+USER REQUIRED (DO NOT DROP):
+  - Dinner 8:15 PM at JNcQUOI Asia (source: chat_paste)
+  - User said "ramen for lunch" (source: assistant)
+ALREADY DONE (DO NOT REPEAT): Belém Tower (Day 2), Pastéis de Belém (Day 2)
+TOMORROW HAS: Fancy dinner at Belcanto → keep tonight casual
+USER CONSTRAINTS: Vegetarian, $200/day food cap.
 ```
 
-## Concrete changes
+### E. Spot-checker (final polish)
 
-### 1. New module: `supabase/functions/generate-itinerary/day-ledger.ts`
-- Pure function `buildDayLedger(facts, anchors, priorDays, holidays) → DayLedger`.
-- Computes `freeSlots` by subtracting `userIntent` time blocks + hotel/transit windows from the day window.
-- Loads holidays from a small static map (per country) — no API call required for v1; we can wire to a holiday API later.
+Promote `ledger-check.ts` to a **two-stage** validator:
 
-### 2. Expand `pipeline/compile-day-facts.ts`
-- Already loads hotel + locked activities. Add:
-  - prior days' activity titles → `alreadyDone`
-  - day-of-week + country → match against a static `KNOWN_CLOSURES` table (Mondays in Lisbon = museums, etc.)
-  - call `buildDayLedger(...)` and stash on `CompiledFacts.dayLedger`.
+1. **Pre-save check** (already exists, expand): every `user_explicit_requests[priority='must']` must have a matching activity in the day. If missing → targeted repair (insert it) instead of just logging.
+2. **Post-generation polish pass** — new `runDayBriefSpotCheck()` runs once after the full itinerary generates:
+   - For each day, walk the brief and assert every must-item is present.
+   - Check forward-state vibe clashes (≥2 consecutive splurge dinners → flag).
+   - Check repeats against `trip_history`.
+   - Run **one** AI repair call per failing day with the brief + current day → return corrected day.
+   - Cap at 2 retries per day to bound credits.
 
-### 3. Inject ledger into `pipeline/compile-prompt.ts`
-Add a clearly-fenced section near the top of the user prompt:
+This is the "spot checker" — it runs once, deterministically, after AI is done, and is the layer that's missing today.
 
-```text
-## DAY TRUTH LEDGER — DO NOT VIOLATE
-HARD FACTS:
-  - Date: 2026-04-18 (Saturday), Lisbon
-  - Hotel: Memmo Príncipe Real (check-in done)
+## Files
 
-USER LOCKED (must keep exactly as written, do NOT replace, do NOT retime):
-  - 13:30 Lunch — Belcanto
-  - 15:30 Spa — Serenity Spa Lisbon
-  - 19:30 Dinner — Peixola
+**New**
+- `supabase/functions/_shared/parse-fine-tune-intents.ts` (+ test)
+- `supabase/functions/_shared/destination-events.ts`
+- `supabase/functions/_shared/weather-fetch.ts`
+- `supabase/functions/_shared/prayer-times.ts`
+- `supabase/functions/generate-itinerary/day-brief-spotcheck.ts` (+ test)
 
-ALREADY DONE (do NOT repeat):
-  - Belém Tower, Pastéis de Belém (day 1)
+**Edited**
+- `supabase/functions/generate-itinerary/day-ledger.ts` → expand to full `DayBrief` shape, add `forward_state` derivation
+- `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts` → wire fine-tune parser, weather, events
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` → render the new `DAY BRIEF` block
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` → invoke spot-checker after save
+- `supabase/functions/generate-itinerary/ledger-check.ts` → upgrade to targeted repair for missing must-items
+- `supabase/functions/itinerary-chat/index.ts` → add `record_user_intent` tool
+- `src/components/itinerary/AddActivityDialog.tsx` (or equivalent) → add optional "note / why" field
+- `src/components/...FineTune...tsx` (find the textarea owner) → no change needed; parsing is server-side
 
-CLOSURES TODAY:
-  - National Tile Museum: closed Saturdays — do NOT schedule
+**Migration**
+- Add columns to `itinerary_days`: nothing new (reuse `day_brief jsonb`).
+- Optional: `trips.weather_cache jsonb` to avoid refetch.
 
-FREE SLOTS YOU MAY FILL:
-  - 09:00–13:00
-  - 16:30–19:00 (light only — dinner at 19:30)
-```
+## Out of scope (call out)
 
-This replaces today's flat `mustDoActivities` strings with a structured, prioritized brief.
+- Real-time transit disruption feeds → stub for now, return `[]`.
+- Prayer times only activated for flagged destinations (Morocco, UAE, Indonesia, etc.) — not a global feature.
+- The Manual Add "note" field is optional UI; if you'd rather skip the UI change, we keep manual-add silent and rely on its activity row appearing in `userIntent` automatically.
 
-### 4. Post-generation `ledger-check.ts`
-Runs after `applyAnchorsWin`:
-- Every entry in `userIntent` must be present on the right day at the right time. If not → repair (re-inject) + log a warning.
-- No activity title may match anything in `alreadyDone` (fuzzy match).
-- No activity may match a `closures` entry.
-- Any violation triggers a single targeted repair pass (not a full regenerate).
+## Verification
 
-### 5. Persist the ledger
-Store `dayLedger` snapshot in `itinerary_days.day_brief` (new JSONB column) so:
-- Regenerations always start from the prior ledger, not a fresh extraction.
-- The UI can render "What we know about this day" (foundation for future "AI notes" panel).
+- Lisbon-dinners regression test extended: paste the full Lisbon list, regenerate, assert every dinner survives in `day_brief.user_explicit_requests` AND in the final saved day.
+- Fine-tune parser test: 12 phrasings ("Day 3", "April 19", "Sunday", "tonight", trip-wide).
+- Spot-check test: synthetic day missing a must-item → spot-check inserts it.
+- Forward-state test: two splurge dinners in a row → flagged and one downgraded.
 
-### 6. Static closures + holidays table
-- `supabase/functions/_shared/known-closures.ts` — small hand-curated list per city/country (Lisbon Mondays, Paris Mondays, Istanbul Tuesdays, etc.).
-- `supabase/functions/_shared/public-holidays.ts` — Portuguese, Spanish, French, Italian, US, UK, Japanese holidays for 2026 to start. Easy to extend later.
-
-### 7. Tests
-- `day-ledger.test.ts` — building, free-slot computation, closure matching.
-- Add a Lisbon scenario test in `scenario.test.ts`: 10 days with the exact dinner list → assert all 13 user-intent items are present and unmodified after generation.
-
-## What this does NOT change
-
-- No DB rewrite of user data. Anchors still live where they live.
-- No new AI calls. The ledger is deterministic.
-- No new credits charged. This is a quality / correctness fix.
-
-## Files touched
-
-- New: `supabase/functions/generate-itinerary/day-ledger.ts`
-- New: `supabase/functions/generate-itinerary/ledger-check.ts`
-- New: `supabase/functions/_shared/known-closures.ts`
-- New: `supabase/functions/_shared/public-holidays.ts`
-- New: `supabase/functions/generate-itinerary/day-ledger.test.ts`
-- Edit: `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts`
-- Edit: `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
-- Edit: `supabase/functions/generate-itinerary/pipeline/types.ts` (add `dayLedger`)
-- Edit: `supabase/functions/generate-itinerary/action-generate-day.ts` (call ledger-check after anchor-guard)
-- Edit: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (same)
-- Edit: `supabase/functions/generate-itinerary/scenario.test.ts` (Lisbon dinners regression)
-- Migration: add `itinerary_days.day_brief jsonb`
-
-## Why this fixes the Lisbon problem (and the next ten like it)
-
-The previous fix made sure the parser captured the user's dinners. This plan makes sure that even if the parser were perfect tomorrow, the AI cannot quietly drop, retime, or replace them, because:
-
-1. They are listed explicitly under "USER LOCKED — DO NOT VIOLATE" in every prompt.
-2. After generation, a deterministic check rejects any output that doesn't contain them.
-3. The ledger persists, so a regenerate next week starts from the same truth.
-
-It also generalizes: holidays, closures, "already did this," and per-day notes all live in one structure instead of being re-derived (or forgotten) on each pass.
+Approve and I'll build it. If you want to descope, the highest-leverage subset is **(B) capture pipeline + (E) spot-checker** — those alone close 80% of the polish gap.

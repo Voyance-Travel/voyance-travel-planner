@@ -88,6 +88,13 @@ Use ONLY when the user wants to replace ONE specific activity with something els
 ### regenerate_day (for complete rebuilds with a new theme)
 - "Scrap Day 5 entirely and make it an art day"
 
+### record_user_intent (FREE — always use for stated wishes)
+Use this WHENEVER the user expresses a concrete wish for a specific day, even if you also call another tool. Examples:
+- "I want ramen for dinner tonight" → record_user_intent(target_day=current, title='ramen', kind='dinner', priority='must')
+- "We should do a spa morning Tuesday" → record_user_intent(target_day=Tuesday, title='spa morning', kind='spa', priority='should')
+- "Avoid seafood Friday" → record_user_intent(target_day=Friday, title='avoid seafood', kind='avoid', priority='must')
+This PERSISTS the request so the next regeneration honours it. It is FREE (no credits) and complements other tools — call it FIRST, then any rewrite.
+
 ## MULTI-DAY AWARENESS
 When users mention multiple days ("Days 5 and 6 feel repetitive"), you MUST call \`rewrite_day\` for EACH day separately. For the SECOND day, explicitly instruct the rewrite to AVOID the categories, neighborhoods, and restaurant styles used in the FIRST day. Reference specific activities from the other day in your instructions. Example: "Diversify from Day 5 which has [X, Y, Z]. Use different neighborhoods and activity types."
 
@@ -300,6 +307,32 @@ const TOOLS = [
           reason: { type: "string", description: "Brief explanation" },
         },
         required: ["target_day", "new_focus", "reason"],
+      },
+    },
+  {
+    type: "function",
+    function: {
+      name: "record_user_intent",
+      description: "Record a user-stated intent for a SPECIFIC day so it persists across regenerations and is honored by the planner. Use this whenever the user expresses a concrete wish for a day — e.g. 'ramen for dinner tonight', 'I want to see Belém Tower on Day 3', 'avoid seafood on Friday', 'we definitely need a spa morning Tuesday'. This is FREE — it does not regenerate the day, only ensures the request will be respected next time the day rebuilds. Always pair this with a brief confirmation in your text response: 'Got it — I'll make sure ramen is on the menu for Day 3.'",
+      parameters: {
+        type: "object",
+        properties: {
+          target_day: { type: "number", description: "Day number (1-indexed). Use the current viewing day if the user says 'tonight' or 'today'." },
+          title: { type: "string", description: "What the user wants — e.g. 'ramen for dinner', 'Belém Tower visit', 'avoid seafood'. Keep concise." },
+          kind: {
+            type: "string",
+            enum: ["breakfast", "lunch", "dinner", "drinks", "spa", "activity", "avoid"],
+            description: "Category of the intent. 'avoid' means the user does NOT want this."
+          },
+          start_time: { type: "string", description: "Optional HH:MM time if the user specified one (e.g. '19:30')." },
+          priority: {
+            type: "string",
+            enum: ["must", "should"],
+            description: "'must' for explicit demands ('I need', 'definitely', 'want to'), 'should' for soft preferences."
+          },
+          raw: { type: "string", description: "The user's exact phrasing for context." },
+        },
+        required: ["target_day", "title", "kind", "priority"],
       },
     },
   },
@@ -634,6 +667,54 @@ ${itineraryDescription}
           confidence: args.confidence,
           scope: args.scope || 'trip_only',
         });
+      } else if (fnName === "record_user_intent") {
+        // Persist to trips.metadata.userIntents IMMEDIATELY so the next
+        // regeneration of any kind picks it up. This is free (no AI work).
+        try {
+          const serviceSupabase = createClient(
+            Deno.env.get("SUPABASE_URL") ?? "",
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+          );
+          const { data: tripRow } = await serviceSupabase
+            .from('trips')
+            .select('metadata')
+            .eq('id', itineraryContext.tripId)
+            .single();
+          const meta = (tripRow?.metadata as Record<string, unknown>) || {};
+          const existing = Array.isArray((meta as any).userIntents)
+            ? ((meta as any).userIntents as Array<Record<string, unknown>>)
+            : [];
+
+          const newIntent = {
+            dayNumber: Number(args.target_day),
+            title: String(args.title || '').trim(),
+            kind: args.kind || 'activity',
+            startTime: args.start_time || undefined,
+            priority: args.priority === 'must' ? 'must' : 'should',
+            raw: args.raw || args.title,
+            source: 'assistant',
+            recordedAt: new Date().toISOString(),
+          };
+
+          // De-dupe: same dayNumber + title + startTime
+          const filtered = existing.filter((e: any) => !(
+            Number(e.dayNumber) === newIntent.dayNumber &&
+            String(e.title || '').toLowerCase() === newIntent.title.toLowerCase() &&
+            (e.startTime || '') === (newIntent.startTime || '')
+          ));
+          filtered.push(newIntent);
+
+          await serviceSupabase
+            .from('trips')
+            .update({ metadata: { ...meta, userIntents: filtered } })
+            .eq('id', itineraryContext.tripId);
+
+          log('Recorded user intent', { dayNumber: newIntent.dayNumber, title: newIntent.title, priority: newIntent.priority });
+          // Surface the intent so the front-end can show a confirmation chip.
+          actions.push({ type: 'record_user_intent', params: newIntent });
+        } catch (intentErr) {
+          log('Failed to record user intent', { error: String(intentErr) });
+        }
       } else {
         actions.push({
           type: fnName,

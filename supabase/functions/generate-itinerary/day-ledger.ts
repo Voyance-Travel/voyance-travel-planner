@@ -1,14 +1,26 @@
 /**
- * day-ledger.ts — Day Truth Ledger
+ * day-ledger.ts — Day Truth Ledger / Day Brief
  *
  * The single deterministic record of "what is true and required for Day N."
  * Built BEFORE generation, injected into the prompt, validated AFTER.
  *
  * Pure function. No IO, no AI.
+ *
+ * v2 expands the ledger into a richer "Day Brief" by adding:
+ *   - destination_facts.events / weather / prayer_times / transit_disruptions
+ *   - extra user intents (free-form, not yet locked) from fine-tune notes,
+ *     manual-add notes, and the assistant's `record_user_intent` tool
+ *   - per-day user constraints (dietary / mobility / budget_for_day)
+ *   - forward state — what the next 1–2 days have, to avoid vibe clashes
+ *
+ * All v2 fields are OPTIONAL on input; old call sites continue to work.
  */
 
 import { getKnownClosures, type KnownClosure } from '../_shared/known-closures.ts';
 import { getPublicHolidayForDate, type PublicHoliday } from '../_shared/public-holidays.ts';
+import { getDestinationEvents, type DestinationEvent } from '../_shared/destination-events.ts';
+import type { WeatherSummary } from '../_shared/weather-fetch.ts';
+import type { PrayerTimes } from '../_shared/prayer-times.ts';
 
 export interface LedgerHardFacts {
   hotel?: { name: string; address?: string; checkIn?: string; checkOut?: string } | null;
@@ -20,14 +32,16 @@ export interface LedgerHardFacts {
 }
 
 export interface LedgerUserIntent {
-  kind: string;          // 'dinner' | 'lunch' | 'activity' | 'spa' | ...
+  kind: string;          // 'dinner' | 'lunch' | 'activity' | 'spa' | 'avoid' | ...
   title: string;
   startTime?: string;    // HH:MM
   endTime?: string;
-  source: string;        // 'manual_paste' | 'chat' | 'pinned' | 'edited' | 'harvested'
+  source: string;        // 'manual_paste' | 'chat_paste' | 'fine_tune' | 'manual' | 'assistant' | 'pinned' | 'edited'
   note: string;          // Human-readable reminder for the AI
   priority: 'must' | 'should';
   lockedSource?: string; // fingerprint
+  /** True if this intent corresponds to a hard-locked DB row. */
+  locked?: boolean;
 }
 
 export interface LedgerAlreadyDone {
@@ -45,6 +59,28 @@ export interface LedgerFreeSlot {
   to: string;
 }
 
+export interface LedgerForwardItem {
+  dayNumber: number;
+  title: string;
+  kind: string;
+  startTime?: string;
+}
+
+export interface LedgerUserConstraints {
+  dietary?: string[];
+  mobility?: string;
+  budgetForDay?: { amount: number; currency: string };
+  /** Free-form trip-wide notes that didn't bind to a single day. */
+  tripWideNotes?: string[];
+}
+
+export interface LedgerDestinationFacts {
+  events: DestinationEvent[];
+  weather: WeatherSummary | null;
+  prayerTimes: PrayerTimes | null;
+  transitDisruptions: string[];
+}
+
 export interface DayLedger {
   dayNumber: number;
   date: string;            // YYYY-MM-DD
@@ -58,6 +94,11 @@ export interface DayLedger {
   freeSlots: LedgerFreeSlot[];
   /** Optional: holiday match for the date */
   holiday?: PublicHoliday | null;
+
+  // ─── v2 — Day Brief enrichments (all optional) ───
+  destinationFacts?: LedgerDestinationFacts;
+  forwardState?: LedgerForwardItem[];
+  userConstraints?: LedgerUserConstraints;
 }
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -97,18 +138,54 @@ export interface BuildDayLedgerInput {
   anchors: Array<Record<string, any>>;
   /** Activities from prior days (any day < dayNumber). */
   priorDayActivities?: Array<{ title?: string; name?: string; dayNumber: number }>;
+
+  // ─── v2 — optional ───
+  /** Soft user intents (fine-tune, assistant chat, manual notes) — not yet locked. */
+  extraIntents?: Array<{
+    title: string;
+    startTime?: string;
+    endTime?: string;
+    kind?: string;
+    source?: string;
+    priority?: 'must' | 'should';
+    raw?: string;
+  }>;
+  /** What's planned for tomorrow / day-after — fed back to avoid vibe clashes. */
+  forwardActivities?: Array<{
+    dayNumber: number;
+    title?: string;
+    name?: string;
+    category?: string;
+    startTime?: string;
+  }>;
+  /** Per-day user constraints, if available. */
+  userConstraints?: LedgerUserConstraints;
+  /** Optional pre-fetched weather summary. */
+  weather?: WeatherSummary | null;
+  /** Optional pre-fetched prayer times. */
+  prayerTimes?: PrayerTimes | null;
+  /** Optional transit disruptions, if known. */
+  transitDisruptions?: string[];
 }
 
 export function buildDayLedger(input: BuildDayLedgerInput): DayLedger {
-  const { dayNumber, date, city, country, hardFacts, anchors, priorDayActivities = [] } = input;
+  const {
+    dayNumber, date, city, country, hardFacts,
+    anchors, priorDayActivities = [],
+    extraIntents = [], forwardActivities = [],
+    userConstraints, weather = null, prayerTimes = null,
+    transitDisruptions = [],
+  } = input;
 
   const d = new Date(date.length > 10 ? date : `${date}T00:00:00`);
   const dow = isNaN(d.getTime()) ? 0 : d.getDay();
   const dayOfWeek = DAY_NAMES[dow];
 
-  // userIntent — keep order, dedupe by title+time
+  // userIntent — keep order, dedupe by title+time.
+  // Locked anchors first (priority='must'), then soft extraIntents.
   const seen = new Set<string>();
   const userIntent: LedgerUserIntent[] = [];
+
   for (const a of anchors || []) {
     const title = (a.title || a.name || '').trim();
     if (!title) continue;
@@ -127,6 +204,30 @@ export function buildDayLedger(input: BuildDayLedgerInput): DayLedger {
       note: `User locked this — DO NOT replace, DO NOT retime, DO NOT drop.`,
       priority: 'must',
       lockedSource: a.lockedSource,
+      locked: true,
+    });
+  }
+
+  for (const ei of extraIntents || []) {
+    const title = (ei.title || '').trim();
+    if (!title) continue;
+    const startTime = ei.startTime;
+    const key = `${title.toLowerCase()}|${startTime || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const kind = ei.kind || inferKind(title);
+    const source = ei.source || 'fine_tune';
+    const priority = ei.priority || 'should';
+    const verb = priority === 'must' ? 'MUST appear' : 'SHOULD appear';
+    userIntent.push({
+      kind,
+      title,
+      startTime,
+      endTime: ei.endTime,
+      source,
+      note: `User said: "${ei.raw || title}" — ${verb} in this day.`,
+      priority,
+      locked: false,
     });
   }
 
@@ -177,6 +278,30 @@ export function buildDayLedger(input: BuildDayLedgerInput): DayLedger {
   }
   if (cursor < dayEnd) freeSlots.push({ from: minsToHHMM(cursor), to: minsToHHMM(dayEnd) });
 
+  // ─── v2 — destination facts ───
+  const events = date ? getDestinationEvents(city, date.slice(0, 10)) : [];
+  const destinationFacts: LedgerDestinationFacts = {
+    events,
+    weather: weather ?? null,
+    prayerTimes: prayerTimes ?? null,
+    transitDisruptions: transitDisruptions || [],
+  };
+
+  // ─── v2 — forward state (next 1–2 days) ───
+  const forwardState: LedgerForwardItem[] = [];
+  for (const f of forwardActivities || []) {
+    const dn = f.dayNumber;
+    if (typeof dn !== 'number' || dn <= dayNumber || dn > dayNumber + 2) continue;
+    const title = (f.title || f.name || '').trim();
+    if (!title) continue;
+    forwardState.push({
+      dayNumber: dn,
+      title,
+      kind: inferKind(title, f.category),
+      startTime: f.startTime,
+    });
+  }
+
   return {
     dayNumber,
     date: date.slice(0, 10),
@@ -189,6 +314,9 @@ export function buildDayLedger(input: BuildDayLedgerInput): DayLedger {
     closures,
     freeSlots,
     holiday,
+    destinationFacts,
+    forwardState,
+    userConstraints,
   };
 }
 
@@ -198,7 +326,7 @@ export function buildDayLedger(input: BuildDayLedgerInput): DayLedger {
  */
 export function renderDayLedgerPrompt(ledger: DayLedger): string {
   const lines: string[] = [];
-  lines.push('## DAY TRUTH LEDGER — DO NOT VIOLATE');
+  lines.push('## DAY BRIEF — DO NOT VIOLATE');
   lines.push(`HARD FACTS:`);
   lines.push(`  - Date: ${ledger.date} (${ledger.dayOfWeek}), ${ledger.city}${ledger.country ? `, ${ledger.country}` : ''}`);
   if (ledger.hardFacts.hotel?.name) {
@@ -212,21 +340,85 @@ export function renderDayLedgerPrompt(ledger: DayLedger): string {
   if (ledger.hardFacts.isLastDay) lines.push('  - Last day in city');
   if (ledger.hardFacts.isHotelChange) lines.push('  - Hotel change today (move bags between properties)');
 
+  // ─── DESTINATION FACTS ───
+  const df = ledger.destinationFacts;
+  if (df) {
+    if (df.weather && df.weather.summary) {
+      lines.push('');
+      lines.push(`WEATHER: ${df.weather.summary}`);
+    }
+    if (df.events && df.events.length > 0) {
+      lines.push('');
+      lines.push('LOCAL EVENTS TODAY — adapt the day around these:');
+      for (const e of df.events) {
+        lines.push(`  - ${e.name} — ${e.impact}`);
+      }
+    }
+    if (df.prayerTimes && (df.prayerTimes.dhuhr || df.prayerTimes.maghrib)) {
+      const pt = df.prayerTimes;
+      lines.push('');
+      lines.push(`PRAYER TIMES: Fajr ${pt.fajr || '—'}, Dhuhr ${pt.dhuhr || '—'}, Asr ${pt.asr || '—'}, Maghrib ${pt.maghrib || '—'}, Isha ${pt.isha || '—'}.${pt.note ? ` ${pt.note}` : ''}`);
+    }
+    if (df.transitDisruptions && df.transitDisruptions.length > 0) {
+      lines.push('');
+      lines.push('TRANSIT DISRUPTIONS:');
+      for (const t of df.transitDisruptions) lines.push(`  - ${t}`);
+    }
+  }
+
+  // ─── USER REQUIRED ───
   if (ledger.userIntent.length > 0) {
-    lines.push('');
-    lines.push('USER LOCKED — must keep exactly as written, do NOT replace, do NOT retime, do NOT drop:');
-    for (const u of ledger.userIntent) {
-      const time = u.startTime ? `${u.startTime}${u.endTime ? `–${u.endTime}` : ''}` : '(no fixed time)';
-      lines.push(`  - ${time}  ${u.kind.toUpperCase()} — ${u.title}    [source: ${u.source}]`);
+    const must = ledger.userIntent.filter((u) => u.priority === 'must');
+    const should = ledger.userIntent.filter((u) => u.priority !== 'must');
+    if (must.length > 0) {
+      lines.push('');
+      lines.push('USER REQUIRED — DO NOT DROP, DO NOT REPLACE, DO NOT RETIME:');
+      for (const u of must) {
+        const time = u.startTime ? `${u.startTime}${u.endTime ? `–${u.endTime}` : ''}` : '(no fixed time)';
+        lines.push(`  - ${time}  ${u.kind.toUpperCase()} — ${u.title}    [source: ${u.source}]`);
+      }
+    }
+    if (should.length > 0) {
+      lines.push('');
+      lines.push('USER PREFERENCES — try to honour these unless impossible:');
+      for (const u of should) {
+        const time = u.startTime ? `${u.startTime}${u.endTime ? `–${u.endTime}` : ''}` : '(flexible)';
+        lines.push(`  - ${time}  ${u.kind.toUpperCase()} — ${u.title}    [source: ${u.source}]`);
+      }
+    }
+  }
+
+  // ─── USER CONSTRAINTS ───
+  const uc = ledger.userConstraints;
+  if (uc) {
+    const bits: string[] = [];
+    if (uc.dietary && uc.dietary.length > 0) bits.push(`dietary: ${uc.dietary.join(', ')}`);
+    if (uc.mobility) bits.push(`mobility: ${uc.mobility}`);
+    if (uc.budgetForDay) bits.push(`budget today: ${uc.budgetForDay.amount} ${uc.budgetForDay.currency}`);
+    if (bits.length > 0) {
+      lines.push('');
+      lines.push(`USER CONSTRAINTS: ${bits.join(' · ')}`);
+    }
+    if (uc.tripWideNotes && uc.tripWideNotes.length > 0) {
+      lines.push('');
+      lines.push('TRIP-WIDE NOTES from the user (apply across days):');
+      for (const n of uc.tripWideNotes.slice(0, 8)) lines.push(`  - ${n}`);
     }
   }
 
   if (ledger.alreadyDone.length > 0) {
     lines.push('');
     lines.push('ALREADY DONE on prior days — do NOT repeat or re-suggest:');
-    // Cap at 30 to keep prompt size reasonable
     for (const p of ledger.alreadyDone.slice(0, 30)) {
       lines.push(`  - ${p.title} (day ${p.dayNumber})`);
+    }
+  }
+
+  if (ledger.forwardState && ledger.forwardState.length > 0) {
+    lines.push('');
+    lines.push('UPCOMING DAYS already have these — keep variety, no vibe clash:');
+    for (const f of ledger.forwardState.slice(0, 12)) {
+      lines.push(`  - day ${f.dayNumber}: ${f.kind.toUpperCase()} — ${f.title}`);
     }
   }
 

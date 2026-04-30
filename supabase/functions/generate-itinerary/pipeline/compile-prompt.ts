@@ -1272,13 +1272,16 @@ CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located 
   // Import isRecurringEvent for previous day activity classification
   const { isRecurringEvent } = await import('../currency-utils.ts');
 
-  // ── DAY TRUTH LEDGER (deterministic ground truth, top of prompt) ──
-  // The AI sees this BEFORE anything else. Anything in USER LOCKED must
+  // ── DAY BRIEF / DAY TRUTH LEDGER (deterministic ground truth, top of prompt) ──
+  // The AI sees this BEFORE anything else. Anything in USER REQUIRED must
   // appear in the output verbatim. Anything in CLOSURES must NOT be
-  // scheduled. Anything in ALREADY DONE must NOT be repeated.
+  // scheduled. Anything in ALREADY DONE must NOT be repeated. UPCOMING
+  // DAYS warns against vibe clashes.
   let dayLedgerPromptBlock = '';
   try {
     const { buildDayLedger, renderDayLedgerPrompt } = await import('../day-ledger.ts');
+    const { parseFineTuneIntoDailyIntents } = await import('../../_shared/parse-fine-tune-intents.ts');
+
     const ledgerAnchors = (lockedActivities || []).map((l: any) => ({
       title: l.title || l.name,
       startTime: l.startTime,
@@ -1293,6 +1296,96 @@ CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located 
       const dn = (prev.dayNumber as number) || ((prev as any).day as number) || 0;
       if (t && dn) priorList.push({ title: t, dayNumber: dn });
     }
+
+    // ── EXTRA INTENTS — soft user requests from fine-tune notes & assistant chat ──
+    // metadata.userIntents — written by the itinerary-chat `record_user_intent` tool
+    // metadata.additionalNotes — fine-tune textarea, parsed for "Day N" markers
+    const extraIntents: Array<Record<string, any>> = [];
+    const tripWideNotes: string[] = [];
+    try {
+      const fineTuneText = (metadata?.additionalNotes as string) || '';
+      if (fineTuneText.trim()) {
+        const parsed = parseFineTuneIntoDailyIntents({
+          notes: fineTuneText,
+          tripStartDate: (preferences?.startDate as string) || (date ? String(date).split('T')[0] : undefined),
+          totalDays: totalDays || undefined,
+        });
+        for (const p of parsed.perDay) {
+          if (p.dayNumber === dayNumber) {
+            extraIntents.push({
+              title: p.title,
+              startTime: p.startTime,
+              kind: p.kind,
+              source: 'fine_tune',
+              priority: p.priority,
+              raw: p.raw,
+            });
+          }
+        }
+        for (const w of parsed.tripWide) tripWideNotes.push(w);
+      }
+    } catch (parseErr) {
+      console.warn('[compile-prompt] Fine-tune parse failed (non-blocking):', parseErr);
+    }
+
+    // metadata.userIntents — { dayNumber, title, kind, startTime?, priority?, raw? }[]
+    try {
+      const recordedIntents = Array.isArray((metadata as any)?.userIntents)
+        ? ((metadata as any).userIntents as Array<Record<string, any>>)
+        : [];
+      for (const ri of recordedIntents) {
+        if (Number(ri.dayNumber) !== dayNumber) continue;
+        if (!ri.title || typeof ri.title !== 'string') continue;
+        extraIntents.push({
+          title: ri.title,
+          startTime: ri.startTime,
+          kind: ri.kind || 'activity',
+          source: ri.source || 'assistant',
+          priority: ri.priority === 'must' ? 'must' : 'should',
+          raw: ri.raw || ri.title,
+        });
+      }
+    } catch (intentErr) {
+      console.warn('[compile-prompt] Recorded intents read failed (non-blocking):', intentErr);
+    }
+
+    // ── FORWARD STATE — peek ahead 1–2 days to avoid vibe clashes ──
+    // We piggyback on `previousDayActivities` ONLY if it carries forward items
+    // (some callers attach future days as well). Caller may also pass a
+    // dedicated `forwardActivities` field through metadata.
+    const forwardActivities: Array<Record<string, any>> = [];
+    try {
+      const md = metadata as any;
+      const fa = Array.isArray(md?.forwardActivities) ? md.forwardActivities : [];
+      for (const f of fa) {
+        const dn = Number(f.dayNumber);
+        if (!isFinite(dn) || dn <= dayNumber || dn > dayNumber + 2) continue;
+        forwardActivities.push({
+          dayNumber: dn,
+          title: f.title || f.name,
+          name: f.name || f.title,
+          category: f.category,
+          startTime: f.startTime,
+        });
+      }
+    } catch (_fwdErr) { /* non-blocking */ }
+
+    // ── USER CONSTRAINTS — dietary / mobility / per-day budget ──
+    const userConstraints: Record<string, any> = {};
+    try {
+      const dietaryFromPrefs = (preferences as any)?.dietaryRestrictions
+        || (preferences as any)?.dietary
+        || (metadata as any)?.dietaryRestrictions;
+      if (Array.isArray(dietaryFromPrefs) && dietaryFromPrefs.length > 0) {
+        userConstraints.dietary = dietaryFromPrefs.filter(Boolean);
+      } else if (typeof dietaryFromPrefs === 'string' && dietaryFromPrefs.trim()) {
+        userConstraints.dietary = [dietaryFromPrefs.trim()];
+      }
+      const mobility = (preferences as any)?.mobility || (metadata as any)?.mobility;
+      if (mobility && typeof mobility === 'string') userConstraints.mobility = mobility;
+      if (tripWideNotes.length > 0) userConstraints.tripWideNotes = tripWideNotes;
+    } catch (_cErr) { /* non-blocking */ }
+
     const ledger = buildDayLedger({
       dayNumber,
       date: date || '',
@@ -1313,8 +1406,15 @@ CRITICAL GEOGRAPHIC RULE: Every restaurant and venue MUST be physically located 
       },
       anchors: ledgerAnchors,
       priorDayActivities: priorList,
+      extraIntents,
+      forwardActivities,
+      userConstraints: Object.keys(userConstraints).length > 0 ? userConstraints : undefined,
     });
     dayLedgerPromptBlock = renderDayLedgerPrompt(ledger) + '\n\n';
+
+    if (extraIntents.length > 0) {
+      console.log(`[compile-prompt] Day ${dayNumber} brief: ${extraIntents.length} soft intent(s) injected`);
+    }
   } catch (ledgerErr) {
     console.warn('[compile-prompt] Day Ledger render failed (non-blocking):', ledgerErr);
   }
