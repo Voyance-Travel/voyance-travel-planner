@@ -1170,7 +1170,6 @@ async function getGoogleRoutesTransitTransport(
       }
     }
 
-    const url = 'https://routes.googleapis.com/directions/v2:computeRoutes';
     const body = {
       origin: toRoutesApiLocation(origin),
       destination: toRoutesApiLocation(destination),
@@ -1188,21 +1187,15 @@ async function getGoogleRoutesTransitTransport(
 
     console.log(`[Transit] (Routes API) Fetching directions for ${destinationName}`);
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': fieldMask,
-      },
-      body: JSON.stringify(body),
-    });
+    const routesRes = await googleRoutes(
+      { body, fieldMask },
+      { actionType: 'optimize_itinerary', reason: `transit: ${destinationName}` },
+    );
 
-    const data = await res.json();
+    const data = routesRes.data;
 
-    if (!res.ok) {
-      const msg = data?.error?.message || JSON.stringify(data);
-      console.log(`[Transit] (Routes API) HTTP ${res.status}: ${msg}`);
+    if (!routesRes.ok) {
+      console.log(`[Transit] (Routes API) HTTP ${routesRes.status}: ${routesRes.errorText || data?.error?.message || ''}`);
       return null;
     }
 
