@@ -93,6 +93,7 @@ serve(async (req) => {
     // Check for API error
     if (data.error) {
       console.error(`[route-details] Routes API error: ${data.error.code} - ${data.error.message}`);
+      await costTracker.save();
       return new Response(JSON.stringify({
         steps: [],
         summary: 'Route not available',
@@ -106,6 +107,7 @@ serve(async (req) => {
 
     if (!data.routes?.[0]?.legs?.[0]) {
       console.log('[route-details] No routes returned');
+      await costTracker.save();
       return new Response(JSON.stringify({
         steps: [],
         summary: 'No route found for this mode of transport',
