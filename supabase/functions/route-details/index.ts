@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { googleRoutes } from "../_shared/google-api.ts";
+import { trackCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,6 +29,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const costTracker = trackCost('route_details', 'google_routes');
 
     console.log(`[route-details] ${mode}: "${origin}" → "${destination}"`);
 
@@ -70,18 +74,21 @@ serve(async (req) => {
       'routes.legs.steps.transitDetails',
     ].join(',');
 
-    const url = `https://routes.googleapis.com/directions/v2:computeRoutes`;
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-        'X-Goog-FieldMask': fieldMask,
-      },
-      body: JSON.stringify(routesRequestBody),
-    });
+    const routesResult = await googleRoutes(
+      { body: routesRequestBody, fieldMask },
+      { tracker: costTracker, actionType: 'route_details', reason: `${mode}: ${origin} → ${destination}` },
+    );
 
-    const data = await resp.json();
+    if (!routesResult.ok) {
+      console.error(`[route-details] Routes API request failed: ${routesResult.status} ${routesResult.errorText ?? ''}`);
+      await costTracker.save();
+      return new Response(JSON.stringify({
+        steps: [], summary: 'Route details unavailable',
+        totalDuration: '', totalDistance: '',
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const data = routesResult.data;
 
     // Check for API error
     if (data.error) {
