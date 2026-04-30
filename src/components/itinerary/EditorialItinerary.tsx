@@ -5382,10 +5382,17 @@ export function EditorialItinerary({
               {/* ROW 2: Action Buttons */}
               <div className="px-4 sm:px-6 py-3 border-b border-border/50 overflow-hidden" data-tour="trip-actions">
                 <div className="flex items-center justify-center gap-3 flex-wrap">
-                  <Button variant="outline" size="sm" onClick={() => setShowShareModal(true)} className="gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowQuickShareModal(true)} className="gap-2">
                     <Share2 className="h-4 w-4" />
                     Share
                   </Button>
+
+                  {tripPermission?.isOwner && (
+                    <Button variant="ghost" size="sm" onClick={() => setShowShareModal(true)} className="gap-2 text-muted-foreground">
+                      <Users className="h-4 w-4" />
+                      Manage
+                    </Button>
+                  )}
 
                   {effectiveIsEditable && (entitlements?.can_export_pdf || smartFinishPurchased || isPaid || isManualMode) && (
                     <Button
