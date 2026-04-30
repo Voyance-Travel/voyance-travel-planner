@@ -333,6 +333,50 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "answer_question",
+      description: "Use in ADVISORY mode when you are answering a question or having a discussion that does NOT involve a structural change. The actual answer goes in your text response — this tool just records what you answered. FREE.",
+      parameters: {
+        type: "object",
+        properties: {
+          topic: {
+            type: "string",
+            enum: ["transit", "timing", "venue_info", "recommendation", "clarification", "comparison", "logistics", "other"],
+            description: "What category of question you answered."
+          },
+          answer_summary: { type: "string", description: "One short sentence summarising the answer you gave in your text response." },
+        },
+        required: ["topic", "answer_summary"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "propose_change",
+      description: "Use when you want to suggest a structural change but the user has NOT explicitly asked for one. The UI will render an 'Apply' button; credits are only charged if the user clicks it. NEVER call a mutation tool (rewrite_day, suggest_activity_swap, adjust_day_pacing, apply_filter, regenerate_day) directly when the user is just asking a question — propose it instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          target_day: { type: "number", description: "Day number (1-indexed) the proposed change targets." },
+          summary: { type: "string", description: "One-sentence user-facing description of what would change and why." },
+          would_call: {
+            type: "string",
+            enum: ["rewrite_day", "suggest_activity_swap", "adjust_day_pacing", "apply_filter", "regenerate_day"],
+            description: "Which mutation tool would run if the user clicks Apply."
+          },
+          would_call_args: {
+            type: "object",
+            description: "The exact arguments that would be passed to the mutation tool. Must satisfy that tool's required fields.",
+            additionalProperties: true,
+          },
+        },
+        required: ["target_day", "summary", "would_call", "would_call_args"],
+      },
+    },
+  },
 ];
 
 interface ChatMessage {
