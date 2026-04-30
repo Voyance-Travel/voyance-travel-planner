@@ -85,7 +85,7 @@ export function GroupTopupModal({ isOpen, onClose, tripId, creditsAvailable }: G
             </div>
             <h2 className="text-lg font-serif font-medium text-foreground">Top Up Group Pool</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Fund the shared pool from your balance — or buy a fresh pack
+              Fund the shared pool from your balance, or buy a fresh pack
             </p>
           </div>
 
@@ -148,7 +148,7 @@ export function GroupTopupModal({ isOpen, onClose, tripId, creditsAvailable }: G
 
                 {!canAfford && (
                   <p className="text-center text-xs text-destructive">
-                    Not enough credits in your balance — switch to "Buy new pack"
+                    Not enough credits in your balance. Switch to "Buy new pack"
                   </p>
                 )}
               </div>
@@ -158,7 +158,7 @@ export function GroupTopupModal({ isOpen, onClose, tripId, creditsAvailable }: G
             <TabsContent value="buy" className="mt-0">
               <div className="px-6 py-3 mt-2 border-y border-border bg-muted/30">
                 <p className="text-xs text-muted-foreground text-center">
-                  Credits go straight into this trip's group pool — your personal balance stays untouched.
+                  Credits go straight into this trip's group pool. Your personal balance stays untouched.
                 </p>
               </div>
 
