@@ -143,3 +143,63 @@ Deno.test('Lisbon dinner regression: all 13 user intents survive a check', () =>
     );
   }
 });
+
+Deno.test('v2: extraIntents from fine-tune surface in userIntent as soft "should"', () => {
+  const ledger = buildDayLedger({
+    dayNumber: 3,
+    date: '2026-04-19',
+    city: 'Lisbon',
+    country: 'Portugal',
+    hardFacts: { isFirstDay: false, isLastDay: false, isHotelChange: false },
+    anchors: [],
+    extraIntents: [
+      { title: 'ramen for dinner', kind: 'dinner', source: 'assistant', priority: 'must', raw: 'I want ramen tonight' },
+      { title: 'Belém Tower', kind: 'activity', source: 'fine_tune', priority: 'should' },
+    ],
+  });
+  assertEquals(ledger.userIntent.length, 2);
+  assertEquals(ledger.userIntent[0].priority, 'must');
+  assertEquals(ledger.userIntent[0].locked, false);
+  assertEquals(ledger.userIntent[1].source, 'fine_tune');
+});
+
+Deno.test('v2: ledgerCheck inserts a placeholder when a soft must-intent is missing', () => {
+  const ledgers = [
+    buildDayLedger({
+      dayNumber: 3,
+      date: '2026-04-19',
+      city: 'Lisbon',
+      country: 'Portugal',
+      hardFacts: { isFirstDay: false, isLastDay: false, isHotelChange: false },
+      anchors: [],
+      extraIntents: [
+        { title: 'JNcQUOI Asia', kind: 'dinner', startTime: '20:15', source: 'fine_tune', priority: 'must', raw: 'Day 3 dinner JNcQUOI Asia' },
+      ],
+    }),
+  ];
+  const days = [{ dayNumber: 3, activities: [{ title: 'Some random dinner', startTime: '20:00' }] }];
+  const res = ledgerCheck(days, ledgers);
+  assertEquals(res.inserted, 1);
+  assert(res.warnings.some((w) => w.kind === 'missing_user_intent_restored'));
+  const placeholders = (res.days[0].activities as any[]).filter((a) => a.placeholder);
+  assertEquals(placeholders.length, 1);
+  assertEquals(placeholders[0].title, 'JNcQUOI Asia');
+  assertEquals(placeholders[0].isUserRequested, true);
+});
+
+Deno.test('v2: forwardState renders in prompt for vibe-clash hint', () => {
+  const ledger = buildDayLedger({
+    dayNumber: 2,
+    date: '2026-04-18',
+    city: 'Lisbon',
+    country: 'Portugal',
+    hardFacts: { isFirstDay: false, isLastDay: false, isHotelChange: false },
+    anchors: [],
+    forwardActivities: [
+      { dayNumber: 3, title: 'Belcanto tasting menu', category: 'dinner', startTime: '20:00' },
+    ],
+  });
+  const out = renderDayLedgerPrompt(ledger);
+  assert(out.includes('UPCOMING DAYS'));
+  assert(out.includes('Belcanto'));
+});
