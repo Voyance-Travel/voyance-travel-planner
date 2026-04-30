@@ -816,7 +816,9 @@ function shouldPersistInCuratedCache(image: DestinationImage): boolean {
   const lower = image.url.toLowerCase();
 
   // Never cache transient/sensitive URLs.
-  if (lower.includes('places.googleapis.com')) return false;
+  // Use the shared predicate so we don't sprinkle `googleapis.com` literals
+  // across the codebase (the lint guard treats those as untracked-fetch risks).
+  if (isGoogleBillableUrl(image.url)) return false;
   if (lower.includes('x-amz-signature=')) return false;
   if (/[?&]token=/.test(lower)) return false;
 
