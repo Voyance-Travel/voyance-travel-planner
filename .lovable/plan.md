@@ -1,149 +1,63 @@
-# Day Brief Unification — Single Source of Truth Per Day
+# Two-Mode Assistant: Advisory vs. Action
 
-You're right. The Day Truth Ledger I just shipped is the **storage layer**, but the **capture layer** is fragmented across four entry points and the **enforcement layer** has no final spot-check. Three things need to land for the polish to stop failing.
+## Problem
 
-## The Three Gaps
+Today the assistant has only **mutation tools** (`rewrite_day`, `suggest_activity_swap`, `adjust_day_pacing`, `regenerate_day`, `apply_filter`). The system prompt explicitly tells it `rewrite_day` is the "PREFERRED tool for conversational editing." So when you ask *"what's the best way to get from A to B?"* or *"is this dinner walkable?"*, its only hammer is to rewrite your day. It doesn't ask "want me to change something?" — it just announces the change.
 
-**1. Capture (4 entry points → 1 bucket)**
+There is no path for the AI to simply **answer**, **advise**, or **discuss** without proposing a structural edit.
 
-| Entry point | Today | Fix |
-|---|---|---|
-| Chat Planner paste | Parses Day N (just fixed) | ✅ already feeds ledger |
-| Fine-Tune notes (textarea) | Trip-wide blob → global prompt | Parse for "Day N" / dates / "tonight" → split into per-day intents |
-| Manual Add card | Writes activity row, no `note` field for intent | Optional "user wants" reason captured to ledger |
-| Assistant chat ("ramen tonight") | Ephemeral, lost on regen | New `record_user_intent` tool → writes to `day_brief` |
+## Fix: Intent Classifier + Advisory Mode
 
-**2. Context (ledger payload is too thin)**
+Two distinct modes, chosen per turn:
 
-Today's ledger has hard facts, locked items, already-done, static closures, holidays. Missing:
-- `weather` (rain → swap walking tour)
-- `events` (marathon, festival → street closures)
-- `transit_disruptions` (metro strike)
-- `prayer_times` (Muslim destinations / Ramadan)
-- `trip_forward_state` (don't put 3 fado nights back-to-back)
-- `user_constraints_for_day` (per-day budget, mobility flag)
+1. **Advisory mode** (default for questions, "what about…", "is X close to Y", "should I…", "tell me about…", "why did you pick…"). Free. No structural changes. The AI answers conversationally using itinerary context + day-brief + DNA.
+2. **Action mode** (only when the user's intent is clearly an *edit*: "change", "replace", "remove", "add", "make Day 3…", "swap…", or after the AI proposed a change and the user confirmed). Burns credits.
 
-**3. Spot-checker (the final polish)**
+### Mode selection rules (enforced in the prompt)
 
-`ledger-check.ts` exists but only runs at save time and only checks closures + locked items. It does NOT verify:
-- Every `userIntent` item actually appears in the final day
-- Already-done items aren't repeated
-- Forward-state vibe-clashes (two fancy dinners back to back)
-- Holiday/closure matches reality post-generation
+- Default to **Advisory**.
+- Enter Action mode only if the user uses an **imperative edit verb** OR explicitly confirms a previously proposed change ("yes do it", "go ahead").
+- For ambiguous turns ("Day 3 feels heavy"), the AI asks: *"Want me to lighten Day 3, or just talk through what's there?"* — never auto-rewrites.
+- A stated wish ("I want ramen tonight") → call **`record_user_intent`** (free) and **answer advisorily** ("Got it — saved. Want me to slot it into tonight, or hold for the next regenerate?"). Do NOT auto-`rewrite_day`.
 
-## What To Build
+## Technical Changes
 
-### A. `day_brief` as the single bucket (DB)
+**File: `supabase/functions/itinerary-chat/index.ts`**
 
-The migration I shipped added `itinerary_days.day_brief jsonb`. Expand its shape:
+1. **Rewrite the system prompt** — replace the "CONVERSATIONAL EDITING PHILOSOPHY" section with an "ADVISORY-FIRST" section:
+   - "Default mode is ADVISORY. Answer the user's question. Do NOT call mutation tools unless the user's message contains an explicit edit verb or confirms a prior proposal."
+   - Add a "PROPOSE-BEFORE-ACTING" rule: when the user describes a problem ("transit is tight on Day 2"), the AI **describes** the issue and **offers** a fix, then waits.
+   - Remove "rewrite_day is the PREFERRED tool for conversational editing." Replace with "rewrite_day is for confirmed structural edits only."
 
-```ts
-day_brief: {
-  date, dayOfWeek, city, country,
-  hardFacts: { hotel, transit, flight, isFirstDay, isLastDay },
-  destination_facts: {
-    holidays: [...],
-    closures: [...],
-    events: [...],          // NEW — fed by destination_events table or AI enrichment
-    weather: { summary, rain_prob, temp },  // NEW — fetched at gen time
-    prayer_times: [...],    // NEW — only for relevant destinations
-    transit_disruptions: [] // NEW — best-effort
-  },
-  user_explicit_requests: [  // unified across all 4 entry points
-    { source: 'chat_paste'|'fine_tune'|'manual'|'assistant',
-      kind: 'dinner'|'activity'|'avoid'|...,
-      title, startTime?, note, priority: 'must'|'should',
-      capturedAt }
-  ],
-  user_constraints: { dietary, mobility, budget_for_day },
-  trip_history: [{ title, dayNumber, kind }],
-  trip_forward_state: [{ dayNumber, kind, vibe }]  // next 1–2 days
-}
-```
+2. **Add a non-mutating tool `answer_question`** (optional but useful for telemetry):
+   - Args: `topic` (transit | timing | venue_info | recommendation | clarification | other), `answer_summary`.
+   - Does nothing server-side beyond logging. Lets us measure advisory vs. action ratio and ensures the model has a "do nothing structural" path it can pick.
 
-### B. Capture pipeline — wire the 4 entry points
+3. **Add a `propose_change` tool** (advisory→action handshake):
+   - Args: `target_day`, `summary`, `would_call` (one of the mutation tool names), `would_call_args`.
+   - The UI renders this as a **"Apply this change"** button. Credits are only charged when the user clicks Apply, which then invokes the real mutation tool. This is the explicit consent gate the user is asking for.
 
-1. **Fine-Tune textarea** — new `parseFineTuneIntoDailyIntents()` in `_shared/`. Recognizes:
-   - `"Day 3: ..."`, `"April 19: ..."`, `"on Sunday: ..."`
-   - `"tonight"` / `"tomorrow"` resolved against trip dates
-   - Trip-wide notes (no day marker) → applied to every day's `user_constraints` block
-2. **Manual Add card** — add optional "Why / note" field; persists to the activity row AND the day's `user_explicit_requests`.
-3. **Assistant chat** — add a `record_user_intent` tool to `itinerary-chat`. When the user says "ramen tonight," the assistant calls it with `{dayNumber, kind:'dinner', title:'ramen', priority:'must'}`. This writes to `day_brief.user_explicit_requests` *immediately*, even before regeneration.
-4. **Chat Planner paste** — already feeds the ledger via the userAnchors fix.
+4. **Tool-call gating on the server** (defense in depth):
+   - If the user message contains no edit verbs AND is not a confirmation of a pending proposal, **strip mutation tool calls from the response** before executing them, and replace with the advisory text + a `propose_change` card. This prevents the model from "just doing it" even if the prompt drifts.
+   - Edit-verb regex: `/\b(change|replace|swap|remove|delete|add|rewrite|regenerate|make .* (more|less)|move|push|shift|cancel)\b/i`.
+   - Confirmation regex: `/\b(yes|yep|do it|go ahead|sounds good|apply|confirm|please do)\b/i` AND a pending proposal exists in the last assistant turn.
 
-All four converge in `compileDayBrief()` (rename of current `buildDayLedger`).
+5. **Pending-proposal state** — store the last `propose_change` in `metadata.pendingProposal` (conversation-scoped, ephemeral). Cleared on apply, reject, or after 5 turns.
 
-### C. Context enrichment
+**File: `src/components/itinerary/AssistantChat*.tsx`** (whichever renders tool results)
 
-- `_shared/destination-events.ts` — small static seed (Lisbon Santo António, NYC marathon, etc.) + read from a future `destination_events` table.
-- `_shared/weather-fetch.ts` — best-effort call (open-meteo, no key) for the trip date range, cached on the trip row.
-- `_shared/prayer-times.ts` — only activated for flagged destinations.
-- `trip_forward_state` — derived in-process by peeking at days N+1 and N+2 inside `compileDayBrief()`.
+6. Render `propose_change` as a card with **Apply** / **Not now** buttons. Apply triggers the corresponding mutation tool with the saved args. Not now clears the pending proposal.
+7. Render `answer_question` as plain markdown (no card, no credit badge).
 
-### D. Prompt injection
+## Out of Scope
 
-Update `compile-prompt.ts` to render `day_brief` as a **DAY BRIEF — DO NOT VIOLATE** block at the top of every per-day prompt, with explicit sections:
-```
-DAY BRIEF — Day 3, Sunday April 19, Lisbon
-HARD FACTS: Hotel = X. No transit.
-WEATHER: 18°C, 80% rain afternoon.
-CLOSURES: Most museums closed Sundays. Holiday: none.
-USER REQUIRED (DO NOT DROP):
-  - Dinner 8:15 PM at JNcQUOI Asia (source: chat_paste)
-  - User said "ramen for lunch" (source: assistant)
-ALREADY DONE (DO NOT REPEAT): Belém Tower (Day 2), Pastéis de Belém (Day 2)
-TOMORROW HAS: Fancy dinner at Belcanto → keep tonight casual
-USER CONSTRAINTS: Vegetarian, $200/day food cap.
-```
+- No changes to the mutation tools themselves.
+- No changes to the day-brief / ledger pipeline.
+- No new credit costs — advisory is free; mutations stay at current pricing.
 
-### E. Spot-checker (final polish)
+## Why This Solves It
 
-Promote `ledger-check.ts` to a **two-stage** validator:
-
-1. **Pre-save check** (already exists, expand): every `user_explicit_requests[priority='must']` must have a matching activity in the day. If missing → targeted repair (insert it) instead of just logging.
-2. **Post-generation polish pass** — new `runDayBriefSpotCheck()` runs once after the full itinerary generates:
-   - For each day, walk the brief and assert every must-item is present.
-   - Check forward-state vibe clashes (≥2 consecutive splurge dinners → flag).
-   - Check repeats against `trip_history`.
-   - Run **one** AI repair call per failing day with the brief + current day → return corrected day.
-   - Cap at 2 retries per day to bound credits.
-
-This is the "spot checker" — it runs once, deterministically, after AI is done, and is the layer that's missing today.
-
-## Files
-
-**New**
-- `supabase/functions/_shared/parse-fine-tune-intents.ts` (+ test)
-- `supabase/functions/_shared/destination-events.ts`
-- `supabase/functions/_shared/weather-fetch.ts`
-- `supabase/functions/_shared/prayer-times.ts`
-- `supabase/functions/generate-itinerary/day-brief-spotcheck.ts` (+ test)
-
-**Edited**
-- `supabase/functions/generate-itinerary/day-ledger.ts` → expand to full `DayBrief` shape, add `forward_state` derivation
-- `supabase/functions/generate-itinerary/pipeline/compile-day-facts.ts` → wire fine-tune parser, weather, events
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` → render the new `DAY BRIEF` block
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` → invoke spot-checker after save
-- `supabase/functions/generate-itinerary/ledger-check.ts` → upgrade to targeted repair for missing must-items
-- `supabase/functions/itinerary-chat/index.ts` → add `record_user_intent` tool
-- `src/components/itinerary/AddActivityDialog.tsx` (or equivalent) → add optional "note / why" field
-- `src/components/...FineTune...tsx` (find the textarea owner) → no change needed; parsing is server-side
-
-**Migration**
-- Add columns to `itinerary_days`: nothing new (reuse `day_brief jsonb`).
-- Optional: `trips.weather_cache jsonb` to avoid refetch.
-
-## Out of scope (call out)
-
-- Real-time transit disruption feeds → stub for now, return `[]`.
-- Prayer times only activated for flagged destinations (Morocco, UAE, Indonesia, etc.) — not a global feature.
-- The Manual Add "note" field is optional UI; if you'd rather skip the UI change, we keep manual-add silent and rely on its activity row appearing in `userIntent` automatically.
-
-## Verification
-
-- Lisbon-dinners regression test extended: paste the full Lisbon list, regenerate, assert every dinner survives in `day_brief.user_explicit_requests` AND in the final saved day.
-- Fine-tune parser test: 12 phrasings ("Day 3", "April 19", "Sunday", "tonight", trip-wide).
-- Spot-check test: synthetic day missing a must-item → spot-check inserts it.
-- Forward-state test: two splurge dinners in a row → flagged and one downgraded.
-
-Approve and I'll build it. If you want to descope, the highest-leverage subset is **(B) capture pipeline + (E) spot-checker** — those alone close 80% of the polish gap.
+- The AI **stops auto-replanning** because mutation tools are gated behind both a prompt rule and a server-side verb check.
+- Users get a real **conversation** ("is this walkable?" → "yes, 9 min flat walk along Av. da Liberdade") without burning credits.
+- When the AI *does* want to change something, it **proposes** it via a card and waits for the click — matching how a human concierge would behave.
+- Aligns with the existing **charge-on-action** credit policy in core memory.
