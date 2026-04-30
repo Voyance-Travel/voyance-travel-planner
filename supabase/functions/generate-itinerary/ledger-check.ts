@@ -184,6 +184,10 @@ export async function ledgerCheck(
   }));
 
 
+  // Build a quick lookup of out-by-dayNumber so vibe-clash can mutate next day.
+  const outByDay = new Map<number, any>();
+  for (const d of out) outByDay.set((d.dayNumber as number) || 0, d);
+
   for (const day of out) {
     const dayNum = (day.dayNumber as number) || 0;
     const ledger = ledgerByDay.get(dayNum);
