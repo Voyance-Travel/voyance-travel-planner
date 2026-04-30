@@ -81,16 +81,27 @@ export async function getCachedPhotoUrl(
 
     // Always count the call — Google bills the request, not the success.
     // Only Places-style URLs are billable; skip TripAdvisor/Foursquare/etc.
-    const isBillableGoogle =
-      googlePhotoUrl.includes('places.googleapis.com') ||
-      googlePhotoUrl.includes('maps.googleapis.com');
-    if (isBillableGoogle) {
+    // ENFORCEMENT: if this is a billable Google URL we MUST record a SKU,
+    // even if the caller forgot to thread a tracker through. Historically
+    // this was a `console.warn` and the cost vanished from accounting,
+    // which is the leak the team has chased multiple times. We now lazily
+    // create + save a tracker so accounting is guaranteed.
+    if (isGoogleBillableUrl(googlePhotoUrl)) {
       if (costTracker) {
         costTracker.recordGooglePhotos(1);
       } else {
         console.warn(
           `[PhotoStorage] Photo download for ${entityType}/${sanitizedId} ` +
-            `was not attributed to a CostTracker — Google spend will be under-reported.`,
+            `was not attributed to a CostTracker — falling back to a lazy ` +
+            `tracker so accounting is preserved. Pass a CostTracker for ` +
+            `correct per-action attribution.`,
+        );
+        const lazy = trackCost('photo_storage_uncategorized');
+        lazy.recordGooglePhotos(1);
+        // Fire-and-forget save — we never want photo logic to fail because
+        // accounting persistence had a hiccup, but we do want the row.
+        lazy.save().catch((err) =>
+          console.error('[PhotoStorage] Lazy tracker save failed:', err),
         );
       }
     }
