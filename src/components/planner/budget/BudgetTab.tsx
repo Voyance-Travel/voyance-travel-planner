@@ -545,6 +545,24 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               )}>
                 {formatCurrency(snapshot.tripTotalCents)}
               </span>
+              {(settings?.budget_currency || 'USD') !== 'USD' && rateDisclosure(settings?.budget_currency || 'USD') && (
+                <TooltipProvider>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="text-muted-foreground/70 hover:text-foreground transition-colors self-center"
+                        aria-label="Exchange rate info"
+                      >
+                        <Info className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <span className="text-xs">{rateDisclosure(settings?.budget_currency || 'USD')}</span>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {(settings?.budget_total_cents || 0) > 0 && (
                 <span className="text-xs text-muted-foreground">
                   ({Math.round((snapshot.tripTotalCents / (settings?.budget_total_cents || 1)) * 100)}%)
