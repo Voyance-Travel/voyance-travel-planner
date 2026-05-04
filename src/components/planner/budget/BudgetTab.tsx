@@ -486,15 +486,29 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       {/* Missing items warning */}
       {(() => {
         const missingItems: string[] = [];
+        const hotelHasPrice = !!(hotelSelection?.totalPrice || hotelSelection?.pricePerNight);
+        const hotelMissingPrice = (settings?.budget_include_hotel ?? true) && hasHotel && !hotelHasPrice;
+
         if ((settings?.budget_include_hotel ?? true) && !hasHotel) missingItems.push('Hotel');
         if ((settings?.budget_include_flight ?? false) && !hasFlight) missingItems.push('Flights');
-        if (missingItems.length === 0) return null;
+
+        if (missingItems.length === 0 && !hotelMissingPrice) return null;
+
         return (
           <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <p className="text-sm">
-              Some budgeted categories have no items yet: <span className="font-medium">{missingItems.join(', ')}</span>. Your actual spend may be higher than shown.
-            </p>
+            <div className="text-sm space-y-1">
+              {missingItems.length > 0 && (
+                <p>
+                  Some budgeted categories have no items yet: <span className="font-medium">{missingItems.join(', ')}</span>. Your actual spend may be higher than shown.
+                </p>
+              )}
+              {hotelMissingPrice && (
+                <p>
+                  <span className="font-medium">{hotelSelection?.name || 'Your hotel'}</span> has no nightly rate set — we&rsquo;ve estimated it from typical {destination || 'destination'} {(budgetTier || 'mid')}-tier hotel rates. Add the actual price in Flights &amp; Hotels for a precise budget.
+                </p>
+              )}
+            </div>
           </div>
         );
       })()}

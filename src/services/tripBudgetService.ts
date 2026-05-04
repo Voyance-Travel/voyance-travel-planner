@@ -105,6 +105,7 @@ export interface BudgetSummary {
   plannedFoodCents: number;
   plannedActivitiesCents: number;
   plannedTransitCents: number;
+  plannedMiscCents: number;
   
   // Calculated
   remainingCents: number;
@@ -444,6 +445,7 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
   let plannedFood = 0;
   let plannedActivities = 0;
   let plannedTransit = 0;
+  let plannedMisc = 0;
   let plannedTotal = 0;
   
   for (const entry of ledger) {
@@ -456,6 +458,7 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
       if (entry.category === 'food') plannedFood += entry.amount_cents;
       else if (entry.category === 'activities') plannedActivities += entry.amount_cents;
       else if (entry.category === 'transit') plannedTransit += entry.amount_cents;
+      else if (entry.category === 'misc') plannedMisc += entry.amount_cents;
     }
   }
   
@@ -487,6 +490,7 @@ export async function getBudgetSummary(tripId: string, totalDays?: number): Prom
     plannedFoodCents: plannedFood,
     plannedActivitiesCents: plannedActivities,
     plannedTransitCents: plannedTransit,
+    plannedMiscCents: plannedMisc,
     
     remainingCents: remaining,
     remainingPerPersonCents: Math.round(remaining / settings.travelers),
@@ -616,8 +620,8 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
     {
       category: 'misc',
       allocatedCents: Math.round(discretionaryTotal * (allocations.misc_percent / 100)),
-      usedCents: 0,
-      remainingCents: Math.round(discretionaryTotal * (allocations.misc_percent / 100)),
+      usedCents: summary.plannedMiscCents,
+      remainingCents: Math.round(discretionaryTotal * (allocations.misc_percent / 100)) - summary.plannedMiscCents,
       percent: Math.round(allocations.misc_percent * discRatio),
     },
   );
