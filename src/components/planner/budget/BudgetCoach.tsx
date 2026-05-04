@@ -157,6 +157,20 @@ export function BudgetCoach({
   const [allProtected, setAllProtected] = useState(false);
   const fetchedRef = useRef(false);
 
+  // ⚠️ Hook-order safety: these two hooks must be declared BEFORE any
+  // conditional `return` below (e.g. the on-target early return). Otherwise
+  // toggling between under/over budget changes the hook count and triggers
+  // React error #310, which crashes the entire Budget tab.
+  const bumpDismissKey = `budget-coach:bump-dismissed:${tripId}`;
+  const [bumpDismissedAtTotal, setBumpDismissedAtTotal] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem(bumpDismissKey);
+      return raw ? Number(raw) : null;
+    } catch { return null; }
+  });
+  const [isBumping, setIsBumping] = useState(false);
+
   // Dismissed activity IDs — persisted in localStorage so they survive
   // page reloads but are device-local (no DB round-trip needed).
   const dismissedStorageKey = `budget-coach:dismissed:${tripId}`;
@@ -416,14 +430,7 @@ export function BudgetCoach({
   const bumpTargetCents = Math.ceil((currentTotalCents * 1.05) / 50000) * 50000; // round up to nearest $500
 
   // Dismissal — local to device, keyed by tripId. Re-shows if overrun deepens by ≥10%.
-  const bumpDismissKey = `budget-coach:bump-dismissed:${tripId}`;
-  const [bumpDismissedAtTotal, setBumpDismissedAtTotal] = useState<number | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const raw = window.localStorage.getItem(bumpDismissKey);
-      return raw ? Number(raw) : null;
-    } catch { return null; }
-  });
+  // (hooks declared above the early return; see top of component)
   const dismissedRecently = bumpDismissedAtTotal !== null && currentTotalCents <= bumpDismissedAtTotal * 1.10;
   const showBumpCta = !!onBumpBudget && isMaterialOverrun && foodSharePct >= 45 && hasLuxuryAnchor && !dismissedRecently && !isNowOnTarget;
 
@@ -432,7 +439,7 @@ export function BudgetCoach({
     try { window.localStorage.setItem(bumpDismissKey, String(currentTotalCents)); } catch { /* ignore */ }
   };
 
-  const [isBumping, setIsBumping] = useState(false);
+
   const handleBump = async () => {
     if (!onBumpBudget) return;
     setIsBumping(true);

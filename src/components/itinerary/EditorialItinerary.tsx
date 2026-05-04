@@ -84,6 +84,7 @@ import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { PaymentsTab } from './PaymentsTab';
 import { BudgetTab } from '@/components/planner/budget/BudgetTab';
+import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripBudget } from '@/hooks/useTripBudget';
 import { useTripMembers } from '@/services/tripBudgetAPI';
@@ -6385,6 +6386,22 @@ export function EditorialItinerary({
             hintKey="budget_hint_shown"
             message="Set a trip budget and Voyance will track your spending across all activities automatically."
           />
+          <ErrorBoundary
+            fallback={
+              <div className="max-w-md mx-auto text-center py-12">
+                <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-destructive"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                <h3 className="text-lg font-semibold mb-2">Budget didn't load</h3>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Something went wrong loading your budget. Your itinerary is safe — try switching tabs or refreshing.
+                </p>
+                <Button onClick={() => window.location.reload()} size="sm">
+                  Refresh
+                </Button>
+              </div>
+            }
+          >
           <BudgetTab
             tripId={tripId}
             travelers={travelers}
@@ -6504,6 +6521,7 @@ export function EditorialItinerary({
               }
             }}
           />
+          </ErrorBoundary>
           </>
         )}
 
