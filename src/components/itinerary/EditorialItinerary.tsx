@@ -26,6 +26,7 @@ import {
   Footprints, Navigation2, History as HistoryIcon, Lightbulb, CheckCircle2,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
+import { convertFromUSD, convertToUSD, formatCurrency, rateDisclosure } from '@/lib/currency';
 import { toFriendlyError } from '@/utils/friendlyErrors';
 import { enrichAttraction, lookupActivityUrl } from '@/services/enrichmentService';
 import { useCredits } from '@/hooks/useCredits';
