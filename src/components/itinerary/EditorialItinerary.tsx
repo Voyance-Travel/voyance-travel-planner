@@ -3806,10 +3806,24 @@ export function EditorialItinerary({
   const handleRepairPricing = useCallback(async () => {
     setIsRepairingPricing(true);
     try {
-      const { repairTripCosts } = await import('@/services/activityCostService');
+      const { repairTripCosts, getRecentCostChanges } = await import('@/services/activityCostService');
       const result = await repairTripCosts(tripId);
       if (result.success) {
-        toast.success(`Pricing repaired: ${result.repaired} activities updated${result.corrected > 0 ? `, ${result.corrected} outliers corrected` : ''}`);
+        const changes = await getRecentCostChanges(tripId, 15_000);
+        if (changes.length === 0) {
+          toast.success(`Pricing repaired: ${result.repaired} activities updated`);
+        } else {
+          const top = changes.slice(0, 3).map(c => {
+            const delta = (c.new_cents - c.previous_cents) / 100;
+            const sign = delta >= 0 ? '+' : '−';
+            return `${c.activity_title || 'Activity'} ${sign}$${Math.abs(delta).toFixed(0)}`;
+          }).join(', ');
+          const more = changes.length > 3 ? ` and ${changes.length - 3} more` : '';
+          toast.success(`Pricing repaired: ${changes.length} adjusted`, {
+            description: `${top}${more}`,
+            duration: 8000,
+          });
+        }
         await refetchItineraryFromDb();
       } else {
         toast.error(toFriendlyError(result.error));
