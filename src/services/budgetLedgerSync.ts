@@ -111,8 +111,65 @@ export async function syncFlightToLedger(
 }
 
 /**
+ * Look up a per-night reference rate for a hotel from `cost_reference`.
+ * Returns null if no row exists for the city or _global fallback.
+ *
+ * Per the Cost Integrity rule: AI MUST NEVER estimate costs. We only ever
+ * read from the curated `cost_reference` table.
+ */
+async function lookupHotelReferenceRate(
+  destinationCity: string | null,
+  budgetTier: 'budget' | 'mid' | 'luxury' = 'mid',
+): Promise<number | null> {
+  const tier = budgetTier === 'budget' || budgetTier === 'mid' || budgetTier === 'luxury' ? budgetTier : 'mid';
+
+  // Try city-specific row first
+  if (destinationCity) {
+    const { data } = await supabase
+      .from('cost_reference')
+      .select('cost_mid_usd')
+      .eq('category', 'accommodation')
+      .eq('subcategory', tier)
+      .ilike('destination_city', destinationCity)
+      .maybeSingle();
+    if (data?.cost_mid_usd) return Number(data.cost_mid_usd);
+  }
+
+  // Fall back to global
+  const { data: globalRow } = await supabase
+    .from('cost_reference')
+    .select('cost_mid_usd')
+    .eq('category', 'accommodation')
+    .eq('subcategory', tier)
+    .eq('destination_city', '_global')
+    .maybeSingle();
+  return globalRow?.cost_mid_usd ? Number(globalRow.cost_mid_usd) : null;
+}
+
+/**
+ * Compute nights between check-in/check-out dates on a hotel selection.
+ */
+function getHotelNights(hotel: HotelSelection): number {
+  const hotelAny = hotel as any;
+  let nights = hotelAny.nights || 0;
+  if (nights > 0) return nights;
+  const checkIn = hotel.checkIn || hotelAny.checkInDate;
+  const checkOut = hotel.checkOut || hotelAny.checkOutDate;
+  if (checkIn && checkOut) {
+    const checkInMs = new Date(checkIn).getTime();
+    const checkOutMs = new Date(checkOut).getTime();
+    if (!isNaN(checkInMs) && !isNaN(checkOutMs) && checkOutMs > checkInMs) {
+      return Math.max(1, Math.ceil((checkOutMs - checkInMs) / (1000 * 60 * 60 * 24)));
+    }
+  }
+  return 0;
+}
+
+/**
  * Sync hotel selection price to activity_costs.
  * Uses totalPrice if available, otherwise pricePerNight × nights.
+ * If neither is available, falls back to a reference-table estimate so the
+ * accommodation line still appears in the budget breakdown.
  */
 export async function syncHotelToLedger(
   tripId: string,
@@ -124,26 +181,35 @@ export async function syncHotelToLedger(
   }
 
   let totalUsd = hotel.totalPrice || 0;
+  let isEstimated = false;
 
-  // Fallback: calculate from per-night if total isn't set
-  // Handle both legacy (checkIn/checkOut) and normalized (checkInDate/checkOutDate) field names
+  // First fallback: pricePerNight × nights
   if (!totalUsd && hotel.pricePerNight) {
-    const hotelAny = hotel as any;
-    const checkIn = hotel.checkIn || hotelAny.checkInDate;
-    const checkOut = hotel.checkOut || hotelAny.checkOutDate;
+    const nights = getHotelNights(hotel);
+    if (nights > 0) totalUsd = hotel.pricePerNight * nights;
+  }
 
-    // Use explicit nights field if available, otherwise calculate from dates
-    let nights = hotelAny.nights || 0;
-    if (!nights && checkIn && checkOut) {
-      const checkInMs = new Date(checkIn).getTime();
-      const checkOutMs = new Date(checkOut).getTime();
-      if (!isNaN(checkInMs) && !isNaN(checkOutMs) && checkOutMs > checkInMs) {
-        nights = Math.max(1, Math.ceil((checkOutMs - checkInMs) / (1000 * 60 * 60 * 24)));
-      }
-    }
-
+  // Second fallback: reference-table estimate (NEVER an AI guess).
+  // Triggered when the user picked a hotel but never entered a rate.
+  if (!totalUsd || totalUsd <= 0) {
+    const nights = getHotelNights(hotel);
     if (nights > 0) {
-      totalUsd = hotel.pricePerNight * nights;
+      // Look up the trip's destination + tier for the reference rate
+      const { data: tripRow } = await supabase
+        .from('trips')
+        .select('destination, budget_tier')
+        .eq('id', tripId)
+        .maybeSingle();
+
+      const tier = (tripRow?.budget_tier as 'budget' | 'mid' | 'luxury') || 'mid';
+      // Strip "Trip to " or trailing country, take first city token
+      const rawDest = (tripRow?.destination || '').replace(/^Trip to\s+/i, '').split(/[,;/]/)[0].trim();
+      const refRate = await lookupHotelReferenceRate(rawDest || null, tier);
+
+      if (refRate && refRate > 0) {
+        totalUsd = refRate * nights;
+        isEstimated = true;
+      }
     }
   }
 
@@ -152,7 +218,8 @@ export async function syncHotelToLedger(
     return;
   }
 
-  const description = hotel.name ? `Hotel: ${hotel.name}` : 'Hotel';
+  const baseDesc = hotel.name ? `Hotel: ${hotel.name}` : 'Hotel';
+  const description = isEstimated ? `${baseDesc} (estimated)` : baseDesc;
 
   await upsertLogisticsCost(tripId, 'hotel', totalUsd, description);
 }
