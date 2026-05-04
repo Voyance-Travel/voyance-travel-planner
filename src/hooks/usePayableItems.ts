@@ -229,7 +229,7 @@ export function usePayableItems({
     // ─── Manual entries from payments (flight/hotel + new categories) ───
     const addManualGroups = (itemType: PayableItemType) => {
       const manualPayments = payments.filter(p =>
-        p.item_type === itemType && p.item_id.startsWith('manual-')
+        p.item_type === itemType && isManualId(p.item_id)
       );
       const groups = new Map<string, TripPayment[]>();
       manualPayments.forEach(p => {
