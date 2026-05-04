@@ -15,7 +15,8 @@ import { FirstUseHint } from './FirstUseHint';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
   CheckCircle2, Users, ChevronDown, Receipt,
-  Wallet, X, User, Plus, UserPlus, AlertCircle, Split
+  Wallet, X, User, Plus, UserPlus, AlertCircle, Split,
+  Utensils, Car, ShoppingBag
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -104,7 +105,7 @@ export function PaymentsTab({
   
   // Manual entry states
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
-  const [newExpenseType, setNewExpenseType] = useState<'flight' | 'hotel' | 'activity'>('flight');
+  const [newExpenseType, setNewExpenseType] = useState<PayableItem['type']>('flight');
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
@@ -663,11 +664,16 @@ export function PaymentsTab({
     }
   };
 
-  const getItemIcon = (type: 'flight' | 'hotel' | 'activity') => {
+  const getItemIcon = (type: PayableItem['type']) => {
     switch (type) {
       case 'flight': return <Plane className="h-4 w-4" />;
       case 'hotel': return <Hotel className="h-4 w-4" />;
       case 'activity': return <Camera className="h-4 w-4" />;
+      case 'dining': return <Utensils className="h-4 w-4" />;
+      case 'transport': return <Car className="h-4 w-4" />;
+      case 'shopping': return <ShoppingBag className="h-4 w-4" />;
+      case 'other':
+      default: return <Receipt className="h-4 w-4" />;
     }
   };
 
@@ -1621,28 +1627,31 @@ export function PaymentsTab({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Expense Type</Label>
-              <Select value={newExpenseType} onValueChange={(v) => setNewExpenseType(v as 'flight' | 'hotel' | 'activity')}>
+              <Select value={newExpenseType} onValueChange={(v) => setNewExpenseType(v as PayableItem['type'])}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="flight">
-                    <div className="flex items-center gap-2">
-                      <Plane className="h-4 w-4" />
-                      Flight
-                    </div>
+                    <div className="flex items-center gap-2"><Plane className="h-4 w-4" />Flight</div>
                   </SelectItem>
                   <SelectItem value="hotel">
-                    <div className="flex items-center gap-2">
-                      <Hotel className="h-4 w-4" />
-                      Hotel / Accommodation
-                    </div>
+                    <div className="flex items-center gap-2"><Hotel className="h-4 w-4" />Hotel / Accommodation</div>
                   </SelectItem>
                   <SelectItem value="activity">
-                    <div className="flex items-center gap-2">
-                      <Camera className="h-4 w-4" />
-                      Activity / Tour
-                    </div>
+                    <div className="flex items-center gap-2"><Camera className="h-4 w-4" />Activity / Tour</div>
+                  </SelectItem>
+                  <SelectItem value="dining">
+                    <div className="flex items-center gap-2"><Utensils className="h-4 w-4" />Dining</div>
+                  </SelectItem>
+                  <SelectItem value="transport">
+                    <div className="flex items-center gap-2"><Car className="h-4 w-4" />Transport</div>
+                  </SelectItem>
+                  <SelectItem value="shopping">
+                    <div className="flex items-center gap-2"><ShoppingBag className="h-4 w-4" />Shopping</div>
+                  </SelectItem>
+                  <SelectItem value="other">
+                    <div className="flex items-center gap-2"><Receipt className="h-4 w-4" />Other</div>
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -1653,9 +1662,13 @@ export function PaymentsTab({
               <Input
                 id="expenseName"
                 placeholder={
-                  newExpenseType === 'flight' ? 'e.g., Round-trip to Rome (Delta)' :
-                  newExpenseType === 'hotel' ? 'e.g., The St. Regis Rome (3 nights)' :
-                  'e.g., Colosseum Tour'
+                  newExpenseType === 'flight' ? 'e.g., Round-trip to Paris (Delta)' :
+                  newExpenseType === 'hotel' ? 'e.g., Le Bristol Paris (3 nights)' :
+                  newExpenseType === 'activity' ? 'e.g., Louvre private tour' :
+                  newExpenseType === 'dining' ? "e.g., Dinner at L'Arpège" :
+                  newExpenseType === 'transport' ? 'e.g., Taxi to CDG airport' :
+                  newExpenseType === 'shopping' ? 'e.g., Hermès scarf' :
+                  'e.g., Travel insurance'
                 }
                 value={newExpenseName}
                 onChange={(e) => setNewExpenseName(e.target.value)}

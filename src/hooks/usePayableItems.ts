@@ -19,9 +19,11 @@ export interface PayableSubItem {
   amountCents: number;
 }
 
+export type PayableItemType = 'flight' | 'hotel' | 'activity' | 'dining' | 'transport' | 'shopping' | 'other';
+
 export interface PayableItem {
   id: string;
-  type: 'flight' | 'hotel' | 'activity';
+  type: PayableItemType;
   name: string;
   amountCents: number;
   dayNumber?: number;
@@ -198,8 +200,8 @@ export function usePayableItems({
       }
     }
 
-    // ─── Manual flight/hotel entries from payments ───
-    const addManualGroups = (itemType: 'flight' | 'hotel' | 'activity') => {
+    // ─── Manual entries from payments (flight/hotel + new categories) ───
+    const addManualGroups = (itemType: PayableItemType) => {
       const manualPayments = payments.filter(p =>
         p.item_type === itemType && p.item_id.startsWith('manual-')
       );
@@ -226,6 +228,10 @@ export function usePayableItems({
     };
     addManualGroups('flight');
     addManualGroups('hotel');
+    addManualGroups('dining');
+    addManualGroups('transport');
+    addManualGroups('shopping');
+    addManualGroups('other');
 
     // ─── DB-driven activity rows: ONE per non-transit row, grouped per day for transit ───
     if (activityCosts?.length) {
