@@ -389,6 +389,15 @@ export function usePayableItems({
         });
         if (looksFree) continue;
 
+        // Skip placeholder departure transfers (no mode chosen): never auto-price.
+        if (isPlaceholderDepartureTransfer({
+          title: a.title || a.name,
+          category: cat,
+          description: (a as any).description,
+          bookingRequired: (a as any).bookingRequired,
+          cost: a.cost,
+        })) continue;
+
         const explicitRaw = typeof a.cost === 'number' ? a.cost
           : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
           : (typeof a.explicitCost === 'number' ? a.explicitCost : undefined);
