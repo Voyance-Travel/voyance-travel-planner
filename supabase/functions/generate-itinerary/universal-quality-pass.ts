@@ -232,6 +232,7 @@ export async function universalQualityPass(
     }
   }
 
+  // ── Step 8: Ensure hotel return at end of day (except departure day) ──
   if (dayIndex < totalDays - 1 && result.length > 0) {
     const lastActivity = result[result.length - 1];
     const lastCat = (lastActivity?.category || '').toUpperCase();
