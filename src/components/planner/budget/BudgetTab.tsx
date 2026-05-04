@@ -414,7 +414,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           && settings?.budget_warning_threshold !== 'off'
           && (snapshotStatus === 'red' || (snapshotStatus === 'yellow' && settings?.budget_warning_threshold !== 'red_only'));
 
-        if (!showWarning || snapshotStatus === 'green') return null;
+        if (!showWarning) return null;
+        if (snapshotStatus !== 'red' && snapshotStatus !== 'yellow') return null;
 
         return (
           <BudgetWarning
