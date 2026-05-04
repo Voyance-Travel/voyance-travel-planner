@@ -107,23 +107,14 @@ export function resolvePerPersonForDb(
   const sourceCurrency = (cost.currency || 'USD').toUpperCase();
   if (sourceCurrency === 'USD' || !sourceCurrency) return perPersonInSourceCurrency;
 
-  // Lazy-import to avoid creating a hard cycle for callers that don't need FX.
-  // EXCHANGE_RATES_FROM_USD lives in src/lib/currency.ts.
-  // We inline-require to keep this file dependency-light for unit tests.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { convertToUSD, hasRate } = require('./currency') as typeof import('./currency');
-    if (!hasRate(sourceCurrency)) {
-      // Unknown currency — keep original value but warn so we can add the rate.
-      if (typeof console !== 'undefined') {
-        console.warn(`[trip-pricing] Unknown currency "${sourceCurrency}" — storing raw amount as USD. This will distort totals.`);
-      }
-      return perPersonInSourceCurrency;
+  // Lazy-import-free: pull from the static currency module loaded at top.
+  if (!hasRate(sourceCurrency)) {
+    if (typeof console !== 'undefined') {
+      console.warn(`[trip-pricing] Unknown currency "${sourceCurrency}" — storing raw amount as USD. This will distort totals.`);
     }
-    return convertToUSD(perPersonInSourceCurrency, sourceCurrency);
-  } catch {
     return perPersonInSourceCurrency;
   }
+  return convertToUSD(perPersonInSourceCurrency, sourceCurrency);
 }
 
 /**
