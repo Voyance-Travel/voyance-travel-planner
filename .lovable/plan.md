@@ -1,37 +1,66 @@
+# Fix: "Accommodation 159%" overflow in Budget by Category
+
 ## Root cause
 
-`budget-coach` sends the itinerary to Gemini and trusts whatever IDs/titles come back. Two failure modes:
+`getCategoryAllocations` in `src/services/tripBudgetService.ts` injects an **Accommodation** (and **Flight**) row whenever the user has "Include Hotel/Flight in Budget" toggled on AND a hotel/flight cost exists in `activity_costs`. Its percentage is computed as:
 
-1. **Hallucinated `current_item` titles.** The post-filter only checks `activity_id` against `dismissedSet` and `protectedActivityIds`. It NEVER verifies the ID belongs to the itinerary at all. If the model invents an ID (or reuses an ID but writes a fabricated `current_item` like "Lunch at L'Atelier de Joël Robuchon"), the suggestion is rendered as-is. The UI shows `s.current_item` (the AI's free-text), not the real activity title.
+```
+hotelPercent = committedHotelCents / budgetTotalCents * 100
+```
 
-2. **Stale/out-of-range IDs survive.** When the itinerary has only ~3 swappable items per day with $0 cost (free venues), the model fills the requested 5–8 slots by inventing items. Free venues are stripped from `activityCostCentsById` (because cost === 0), so even the cost-floor guard `newCostCents >= currentCostCents` passes — `currentCostCents` falls back to the AI's own `current_cost`, which it also invented.
+Spend-style allocation profiles (`value_focused`, `balanced`, `splurge_forward`) only contain food / activities / transit / misc / buffer — there is **no hotel bucket**. So the injected Accommodation row has no allocation to live inside; if the hotel cost exceeds the trip budget total, the % goes above 100 (e.g. $2,850 hotel against a $1,796 trip budget = 159%).
 
-For the user's Paris trip: of 25 cost rows, 4 are `[Free venue]` (cost 0) and the rest are mostly $25–$65. The Robuchon, Frenchie, Le Jardin, etc. don't exist in the trip — Gemini hallucinated a "luxury Paris itinerary" template.
+The UI in `BudgetTab.tsx` then renders that row with `allocated = used` and a percent badge, making it look like a category that was "given" 159% of the budget — which is nonsensical because it was never allocated at all.
+
+A secondary symptom: when committed fixed costs exceed the budget, `discretionaryTotal = max(budgetTotal − committedFixed, 0) = 0`, so Food / Activities / Transit / Misc all collapse to `$0 / $0`, which compounds the confusion.
 
 ## Fix
 
-Two strict server-side guards in `supabase/functions/budget-coach/index.ts`. No DB changes, no client changes.
+Reframe Accommodation and Flight as **Fixed Costs**, visually and semantically distinct from the discretionary allocation buckets, and stop expressing them as a "percent of budget" that can exceed 100%.
 
-1. **ID-must-exist guard.** Build `allValidIds = Set<string>` from the full itinerary. Drop any suggestion whose `activity_id` is not in that set. Log it.
+### 1. `src/services/tripBudgetService.ts` — `getCategoryAllocations`
 
-2. **Title-must-match guard.** Build `activityTitleById`. For each suggestion, normalize both the AI's `current_item` and the real activity title (lowercase, strip punctuation) and require either:
-   - real title contains the AI's `current_item` substring, OR
-   - AI's `current_item` contains the real title substring, OR
-   - token overlap ≥ 60% (cheap Jaccard on word tokens ≥ 4 chars).
+- Tag the hotel and flight rows with a new `kind: 'fixed'` field (vs `'discretionary'` for the others).
+- Stop computing `percent` for fixed rows — it's not an allocation slice. Instead expose `shareOfBudget` (committed / budgetTotal) for informational display, and a boolean `exceedsBudget` when committed > budgetTotal.
+- Keep `allocatedCents = usedCents` for fixed rows but flag them so the UI can render them differently.
+- Clamp `discRatio` so discretionary categories still show their intended slider percentages even when fixed costs blow past the total (the buckets just become "$0 remaining" rather than visually disappearing).
 
-   Otherwise drop. This catches the case where the model reuses a real ID but writes a fabricated title for the user-visible card.
+Type addition (in the same file):
+```ts
+export interface CategoryAllocation {
+  category: BudgetCategory;
+  allocatedCents: number;
+  usedCents: number;
+  remainingCents: number;
+  percent: number;
+  kind?: 'fixed' | 'discretionary';
+  exceedsBudget?: boolean;
+}
+```
 
-3. **Force-overwrite the rendered title.** Replace `current_item` in the returned suggestion with the actual activity title from the itinerary, so even if the model's text is slightly off the user sees the real itinerary item.
+### 2. `src/components/planner/budget/BudgetTab.tsx`
 
-4. **Drop $0 / unknown-cost items entirely from what's sent to the model** (they shouldn't be candidates for "make cheaper" anyway). This shrinks the swappable pool and makes the model more likely to pick real items instead of inventing.
+- Split `allocations` into two groups: `fixed` (hotel, flight) and `discretionary` (food, activities, transit, misc).
+- Render a small **Fixed Costs** sub-header above the fixed rows, with a one-line caption: *"Tracked against your trip total but not part of the spend-style allocation."*
+- For fixed rows:
+  - Drop the `%` allocation badge (it was the source of "159%").
+  - Show the dollar amount only, e.g. `$2,850` with a muted "share of total: 159%" note.
+  - When `exceedsBudget` is true, show a destructive inline warning under the row: *"Accommodation exceeds your trip budget by {delta}. Consider raising your total or toggling 'Include Hotel in Budget' off."* with a quick action that scrolls to the budget total / toggle.
+- Render discretionary rows below with their existing progress bar + percent badge UI.
 
-## Files touched
+### 3. Edge case
 
-- `supabase/functions/budget-coach/index.ts` — add `allValidIds` and `activityTitleById`, add ID-existence + title-match guards in the post-filter, overwrite `current_item` with the real title, filter `cost <= 0` out of the prompt summary.
+If `budget_include_hotel` is OFF, the hotel row is already filtered out by existing logic (per the budget-visibility memory). Confirm the same in the new fixed-row path so toggling the switch immediately removes the row.
 
-## Validation
+## Out of scope
 
-After fix, re-running budget-coach on the Paris trip (4 free venues, ~21 priced items) should:
-- Never return Robuchon/Frenchie/Le Jardin etc. — none have matching IDs.
-- If model still invents, every invented suggestion is dropped server-side and logged with `→ FILTERED OUT (unknown activity_id)` or `→ FILTERED OUT (title mismatch)`.
-- Suggestions that survive will render with the actual itinerary item title in the UI.
+- No schema changes.
+- No change to spend-style profiles or how discretionary percentages are calculated.
+- No change to the Trip Total / payments reconciliation logic fixed earlier.
+
+## Acceptance
+
+- With Splurge-Forward selected and a $2,850 hotel against a $1,796 trip budget, the Budget by Category panel shows:
+  - A "Fixed Costs" group with **Accommodation $2,850** (no % badge), an inline destructive warning that it exceeds the trip total, and a "share of total" note.
+  - The four discretionary categories (Food, Activities, Transit, Misc) below, with their normal slider percentages and `$0` remaining.
+- Toggling **Include Hotel in Budget** OFF immediately removes the Accommodation row and restores the four discretionary buckets to their non-fixed-cost view.
