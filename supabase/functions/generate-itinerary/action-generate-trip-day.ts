@@ -2536,22 +2536,15 @@ async function _handleGenerateTripDayInner(
       console.error('[generate-trip-day] Post-completion table sync error (non-fatal):', syncErr);
     }
 
-    // ── RUN CANONICAL PRICING REPAIR as the LAST pricing step ──
-    // This ensures free-venue overrides are applied to the activity_costs table
-    // AFTER all generation and sync steps, preventing phantom pricing.
-    try {
-      const { handleRepairTripCosts } = await import('./action-repair-costs.ts');
-      const repairCtx = { supabase, userId, params: { tripId } };
-      const repairResult = await handleRepairTripCosts(repairCtx);
-      const repairBody = await repairResult.json().catch(() => null);
-      if (repairBody && !repairBody.success) {
-        console.error('[generate-trip-day] Post-completion cost repair failed:', repairBody);
-      } else {
-        console.log(`[generate-trip-day] Post-completion cost repair OK: ${repairBody?.repaired || 0} rows, ${repairBody?.corrected || 0} corrected`);
-      }
-    } catch (repairErr) {
-      console.error('[generate-trip-day] Post-completion cost repair error (non-fatal):', repairErr);
-    }
+    // ── NOTE: post-completion cost repair intentionally removed ──
+    // Running handleRepairTripCosts here silently rewrote prices via
+    // Michelin/ticketed/reference floors at the end of every regen, producing
+    // the "+$340 just now" total jumps users complained about. The generation
+    // pipeline (generation-core.ts Phase 4) already writes correct
+    // activity_costs from the cost_reference table. Pricing repair is now
+    // available only as:
+    //   1) one-time legacy backfill (gated by trips.last_cost_repair_at), or
+    //   2) the explicit "Repair pricing" user action in the UI.
 
     await triggerNextJourneyLeg(supabase, tripId);
 
