@@ -1,92 +1,109 @@
-# Fix Restaurant Pricing & Day 4 Departure Logistics
+## Goal
 
-Trip affected: **Trip to Paris** (May 7–10, 2026), 2 travelers.
+Resolve the 3 routing/timing issues the itinerary has flagged, finish Day 3 dining corrections, fix Day 4 departure metadata, and patch the generation pipeline so the same classes of bug don't reappear on future trips.
 
-## Problems found
+## What's wrong (trip `7ea828ac…`)
 
-### 1. Restaurant pricing is wrong on multiple entries
+**Day 1 — broken dinner routing**
+- 17:42 Golden hour photos at Pont de l'Alma → ends 18:27
+- 18:57 "Travel to Four Seasons George V" (15 min hole, no travel from viewpoint)
+- 19:00 Dinner at Le Bouillon Julien (no travel TO the restaurant; restaurant is in 10th arr., not at hotel)
+- 19:07 "Return to Four Seasons" *during* dinner
 
-Inspecting the itinerary on this trip:
+**Day 2 — broken evening chain**
+- 15:20–18:00 "Freshen Up" (2h40m, way too long)
+- 18:00 Walk to Le Bar at Plaza Athénée → 18:07
+- 19:00 Dinner at Chez L'Ami Jean (7th arr.) — no travel from bar; bar nightcap is *after* dinner at 21:00
+- The pre-dinner bar stop is mis-sequenced; the "Walk to Le Bar" at 18:00 is actually wrong activity (should be travel to restaurant)
 
-- **Lunch at L'Arpège — $250 (for 2 travelers).** L'Arpège is a 3‑Michelin restaurant; the lunch tasting alone is ~€220 / person and the full lunch experience runs higher. $250 total for two is wildly under real cost.
-- **Breakfast at Café de Flore — $12.** Description text says "Breakfast at Le Bristol – Epicure" (a totally different, 3‑Michelin venue). Either the venue or the price is wrong; both as-is is misleading.
-- Other dining entries on Days 1–3 should be re-checked against the cost reference table for the same per-traveler scaling issue.
+**Day 3 — multiple issues**
+- 12:30 Lunch at Le Comptoir du Panthéon overlaps with 12:31 "Travel to Sacré-Cœur"
+- 14:41 Sacré-Cœur start has unexplained 1h11 gap after lunch
+- **Dinner at Arpège $30** — duplicate of Day 1 lunch venue AND impossibly priced
+- 19:00–20:15 dinner, then 20:06 travel that arrives 22:36 (2.5h transit for a 3.5 USD metro ride is impossible)
 
-Per project rules, costs must come from the `cost_reference` table — not AI guesses — and must be scaled by traveler count and rounded to the nearest $5.
-
-### 2. Day 4 departure logistics are chaotic
-
-Day 4 currently looks like this:
-
-```text
-08:30  Breakfast at Café de Flore
-09:30  Walk to Petit Palais
-10:10  Petit Palais
-11:25  Walk to Four Seasons George V
-11:43  Checkout from Four Seasons George V
-12:13  Travel to Hôtel de Crillon - Les Ambassadeurs   <-- different hotel
-15:00  Transfer to the Airport (synthetic departure)
-17:53  Dinner at Les Ambassadeurs                      <-- AFTER airport transfer
-```
-
-Issues:
-
-- Dinner at 17:53 is scheduled **after** the 15:00 airport transfer.
-- Guest checks out of Four Seasons George V, then travels to a **different hotel** (Hôtel de Crillon) just to dine — this isn't a hotel switch, it's the departure day.
-- No "Return to hotel for bag pickup" or proper bag-drop sequencing.
-- Violates the Logistics Mandate (departure buffer: 180m for flights — anything starting after the buffer window must be removed) and the Hard Constraint Enforcement rule (immovable departures).
+**Day 4 — departure flight has no time/duration/cost**
+- "Transfer to the Airport" exists but the flight activity itself is missing scheduling fields
 
 ## Fix plan
 
-### A. Correct restaurant pricing on the affected trip
+### A. Trip data fixes (one-time, via SQL)
 
-1. For each dining activity on the trip, look up canonical pricing in `cost_reference` (or the closest matching tier when a specific venue isn't present) and scale by `travelers = 2`, rounded to the nearest $5.
-2. Update both `cost.amount` and `estimatedCost.amount` on each activity in `itinerary_data` so UI fallbacks and the activity_costs snapshot stay consistent.
-3. Fix the Café de Flore description text so it no longer references "Le Bristol – Epicure".
-4. Specifically reprice: L'Arpège lunch, Café de Flore breakfast, and any other dining entry whose current value looks anomalous against the reference table.
+1. **Day 1 dinner sequence** — rewrite the 18:27→19:22 block:
+   - 18:27 Walk to Pont de l'Alma metro (5 min)
+   - 18:32 Metro/taxi to Le Bouillon Julien (~25 min from 7th to 10th arr.)
+   - 19:00 Dinner at Le Bouillon Julien (75 min)
+   - 20:15 Taxi to Four Seasons George V (~20 min)
+   - Remove the misplaced 18:57 "Travel to Four Seasons" and 19:07 "Return to hotel"
 
-This is a data correction, executed via the database insert/update tool against `trips.itinerary_data` for trip `7ea828ac-9db5-42e7-b9a2-daeed10dd71f`. No schema change.
+2. **Day 2 evening sequence** — rewrite 15:20→22:47:
+   - Compress freshen-up to 60 min (15:20–16:20) — backed by Believable Human rule
+   - Insert afternoon free block or shift dinner earlier; or
+   - Keep freshen until 18:00, then 18:00 Travel to Chez L'Ami Jean (taxi ~15 min)
+   - 18:30–20:00 Dinner at Chez L'Ami Jean
+   - 20:00 Walk/taxi to Le Bar Plaza Athénée
+   - 20:30–22:00 Nightcap (shorten from 90 min)
+   - 22:00 Walk to Four Seasons (existing)
 
-### B. Repair Day 4 departure flow
+3. **Day 3 fixes**:
+   - Shift lunch to 12:35–13:35 (after 12:31 travel completes) OR move travel to start at 13:30
+   - Replace dinner "Arpège $30" with a fresh Paris venue from `cost_reference` (e.g. **Le Bistrot Paul Bert** ~$160 for two, or **Frenchie** ~$280) — must NOT be Arpège (Day 1) or any other already-used venue
+   - Recompute travel time from new dinner venue → Sunset Sunside Jazz Club; if >30 min metro is unrealistic, replace with taxi ($25–35) and proper duration
 
-Rebuild Day 4 around the departure as a hard anchor:
+4. **Day 4 departure flight**:
+   - Populate `time`, `endTime`, `durationMinutes`, `cost`, and `description` from the existing flight metadata in `trips.itinerary_data.flight` (departure flight)
+   - Confirm 180-min buffer between arrival at airport and flight departure
 
-```text
-08:30  Breakfast at Café de Flore
-09:30  Walk to Petit Palais
-10:10  Petit Palais
-11:25  Walk back to Four Seasons George V
-11:45  Hotel checkout + bag drop (luggage held at hotel)
-12:15  Lunch near the hotel (light, ~75 min) — replaces the misplaced
-       "Travel to Hôtel de Crillon - Les Ambassadeurs"
-13:45  One short final activity OR free time near the hotel
-14:30  Return to Four Seasons George V to collect bags
-15:00  Airport transfer (existing synthetic departure, locked)
-```
+5. **Sync `activity_costs` and `cost`/`estimatedCost`** in JSONB for every changed row.
 
-Concretely:
+### B. Generation pipeline hardening (prevents recurrence on all trips)
 
-- **Remove** "Travel to Hôtel de Crillon - Les Ambassadeurs" and the "Dinner at Les Ambassadeurs" entry — both fall after/around the immovable 15:00 departure and the latter starts well past the 180-minute departure buffer.
-- **Insert** a "Return to hotel for bag pickup" entry before the 15:00 transfer (per the Itinerary Logistics Mandate).
-- **Optionally insert** a light lunch venue near George V (sourced from the existing restaurant pool, not duplicating earlier days) using `cost_reference` pricing.
-- Keep the synthetic `final-departure-4` airport transfer locked and unchanged.
+1. **Post-meal travel guard** (`day-validation.ts` + `repair-travel.ts`):
+   - For every dining activity, require a `transport` activity immediately preceding it whose `toLocation` matches the restaurant venue (or starts within 5 min of dining start).
+   - If missing, the repair pass synthesizes a realistic transport leg using existing `predictTransitDuration` (already enforces 1.4× walk factor and 1200m taxi threshold).
+   - Symmetrically, any activity following dinner must have a transport leg from the restaurant.
 
-This is also a data correction on `itinerary_data` for the same trip.
+2. **Travel-time sanity cap** (extend existing transit estimation memory):
+   - If a `transport` activity's `durationMinutes` exceeds 90 min within the same city (no inter-city flag), flag as `TRANSIT_IMPLAUSIBLE` and let repair recompute via Google Distance Matrix wrapper.
+   - Already-extracted helper: reuse `centralized Google API wrapper` (per `Google API Centralization` memory).
 
-### C. Sanity check Days 1–3
+3. **Cost-floor enforcement for premium venues** (`action-repair-costs/index.ts`):
+   - Currently only writes to `activity_costs`. **Extend it to also patch `trips.itinerary_data` JSONB** (per `Table Driven Cost Architecture` memory).
+   - Add a "repeat-venue cost-floor" rule: if a venue name appears in `cost_reference` with `tier='michelin'` or `cost_floor>=100`, any activity whose cost is <50% of the reference floor is auto-corrected.
+   - Run this pass at the end of `action-save-itinerary` for every newly generated trip, not just on-demand.
 
-While editing, scan Days 1–3 dining entries and apply the same pricing correction pass so the trip's totals are coherent. No structural changes to those days.
+4. **Freshen-up duration cap** (`day-validation.ts`):
+   - Cap `accommodation` activities tagged `freshen-up`/midday-hotel-ritual to 90 min max (per Believable Human memory). Current observed: 160 min on Day 2.
 
-D. Make a fix for all generations not just one trip
+5. **Departure flight metadata completeness check** (`hard-constraint-enforcement.ts`):
+   - On final guard pass, assert the last-day flight activity has non-null `time`, `endTime`, `durationMinutes`. If missing, hydrate from `trips.itinerary_data.flight` payload. Throw `MISSING_DEPARTURE_METADATA` if still empty.
 
-## Technical notes
+### C. Tests
 
-- All edits are JSONB updates to `trips.itinerary_data` for trip id `7ea828ac-9db5-42e7-b9a2-daeed10dd71f` via the insert/update tool. No migrations.
-- Pricing source of truth: `cost_reference` table (Paris, dining tier matching each venue). Never estimate.
-- Round each scaled price to the nearest $5.
-- Preserve any activity flagged `isLocked: true` or originating from manual entry — only the AI-generated entries listed above will be touched.
-- After the edit, the activity_costs snapshot used by the UI total-cost logic will reflect the corrected values automatically.
+- Add fixture-based tests in `supabase/functions/generate-itinerary/_tests/`:
+  - `post-meal-travel.test.ts` — synthesizes a day with restaurant + no leading transport; expects repair to insert one
+  - `transit-sanity-cap.test.ts` — feeds a 150-min same-city transport; expects flag + recompute
+  - `cost-floor-jsonb.test.ts` — runs `action-repair-costs` and asserts `itinerary_data` JSONB updated, not just `activity_costs`
+  - `freshen-up-cap.test.ts` — input 160-min freshen-up; expects capped to 90
+  - `departure-metadata.test.ts` — last-day flight with empty time; expects hydration from trip-level flight payload
+
+## Execution order
+
+1. SQL fixes for Days 1-4 (one-time; no code change).
+2. Pipeline patches (B1-B5) with tests.
+3. Run targeted test suite (`generate-itinerary/_tests`); confirm all green before deploying edge functions.
 
 ## Out of scope
 
-- No changes to the generation pipeline or edge functions in this pass — this is a targeted data fix on one trip. If the same pricing class of bug shows up on other trips, a follow-up task can harden the cost lookup in `generate-itinerary`.
+- Re-generating the trip end-to-end (user opted to surgically fix; preserves locked items).
+- Changes to the planner UI — these are all backend.
+
+## Files expected to change
+
+- `supabase/functions/generate-itinerary/day-validation.ts`
+- `supabase/functions/generate-itinerary/repair-travel.ts` (new helper if not present)
+- `supabase/functions/generate-itinerary/hard-constraint-enforcement.ts`
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts`
+- `supabase/functions/action-repair-costs/index.ts`
+- `supabase/functions/generate-itinerary/_tests/*` (5 new tests)
+- One-shot SQL UPDATE on `trips.itinerary_data` for trip `7ea828ac…`
