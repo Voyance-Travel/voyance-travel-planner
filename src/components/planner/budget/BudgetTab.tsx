@@ -504,7 +504,10 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               )}
               {hotelMissingPrice && (
                 <p>
-                  <span className="font-medium">{hotelSelection?.name || 'Your hotel'}</span> has no nightly rate set — we&rsquo;ve estimated it from typical {destination || 'destination'} {(budgetTier || 'mid')}-tier hotel rates. Add the actual price in Flights &amp; Hotels for a precise budget.
+                  We&rsquo;ve used an estimated nightly rate for{' '}
+                  <span className="font-medium">{hotelSelection?.name || 'your hotel'}</span>
+                  {summary && summary.committedHotelCents > 0 ? <> (~{formatCurrency(summary.committedHotelCents)} total)</> : null}
+                  {' '}based on typical {destination || 'destination'} {(budgetTier || 'mid')}-tier hotels. Add the actual rate in Flights &amp; Hotels to lock in a precise budget.
                 </p>
               )}
             </div>
