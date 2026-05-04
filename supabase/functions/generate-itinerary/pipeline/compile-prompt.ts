@@ -867,11 +867,14 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
   // BUDGET RESOLUTION
   // ═══════════════════════════════════════════════════════════════════════
   let actualDailyBudgetPerPerson: number | null = null;
+  // Per-day per-person targets surfaced into the prompt so the model actually
+  // distributes spend across food / activities / transit per the user's preset.
+  let allocationPromptBlock = '';
   if (tripId) {
     try {
       const { data: tripBudgetData } = await supabase
         .from('trips')
-        .select('budget_total_cents, flight_selection, hotel_selection')
+        .select('budget_total_cents, flight_selection, hotel_selection, budget_allocations, budget_currency')
         .eq('id', tripId)
         .single();
       if (tripBudgetData?.budget_total_cents && tripBudgetData.budget_total_cents > 0) {
@@ -904,6 +907,34 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
           } catch (e) {
             console.warn('[compile-prompt] Per-city budget fetch failed:', e);
           }
+        }
+
+        // ── Spend allocation block — turn the user's preset into per-day targets ──
+        try {
+          const alloc = tripBudgetData.budget_allocations as any;
+          if (alloc && typeof alloc.activities_percent === 'number' && actualDailyBudgetPerPerson != null) {
+            const dailyTotalPP = actualDailyBudgetPerPerson;
+            const foodPP = Math.round(dailyTotalPP * (alloc.food_percent || 0) / 100);
+            const actsPP = Math.round(dailyTotalPP * (alloc.activities_percent || 0) / 100);
+            const transitPP = Math.round(dailyTotalPP * (alloc.transit_percent || 0) / 100);
+            const cur = tripBudgetData.budget_currency || 'USD';
+            const isSplurge = (alloc.activities_percent || 0) >= 33 && (alloc.buffer_percent ?? 30) <= 20;
+            const isValue = (alloc.buffer_percent || 0) >= 28;
+            const styleGuidance = isSplurge
+              ? `SPLURGE-FORWARD: Schedule ≥1 paid signature experience per day in the $${Math.max(40, Math.round(actsPP * 0.6))}–$${Math.max(120, Math.round(actsPP * 1.4))}/pp range — museum/exhibit tickets, guided tours, wine or food tastings, river/harbor cruises, cooking classes, premium attractions. Do NOT pad the day with only free landmarks; the user is paying for experiences, not just dinners.`
+              : isValue
+                ? `VALUE-FOCUSED: Lean on free landmarks, walking routes, markets. Limit paid activities to 1/day and keep them under $${actsPP}/pp.`
+                : `BALANCED: At least 1 paid ticketed experience most days, mixed with free landmarks. Stay near $${actsPP}/pp on activities.`;
+            allocationPromptBlock = `
+SPEND ALLOCATION TARGETS (per person, per day, in ${cur}, derived from the user's "${isSplurge ? 'Splurge-Forward' : isValue ? 'Value-Focused' : 'Balanced'}" preset):
+- Food: ~$${foodPP}
+- Paid activities/experiences: ~$${actsPP}
+- Local transit: ~$${transitPP}
+${styleGuidance}
+The Activities target is REAL spend on bookable experiences — free venues do NOT count toward it.`;
+          }
+        } catch (e) {
+          console.warn('[compile-prompt] Allocation block failed:', e);
         }
       }
     } catch (e) {
@@ -1469,6 +1500,7 @@ Travelers: ${travelers}
 Budget: ${effectiveBudgetTier}${actualDailyBudgetPerPerson != null ? ` (~$${actualDailyBudgetPerPerson}/day per person)
 ⚠️ HARD BUDGET CAP: The user has set a real budget of ~$${Math.round(actualDailyBudgetPerPerson * (travelers || 1))}/day total ($${actualDailyBudgetPerPerson}/person) for activities.
 ${actualDailyBudgetPerPerson < 10 ? `🚨 EXTREMELY TIGHT BUDGET: Do your best — prioritize FREE activities (parks, temples, markets, viewpoints, walking tours). For meals, suggest cheapest realistic options (street food, convenience stores). Do NOT invent fake low prices — use real local costs. Include a "budget_note" field with an honest 1-sentence note about budget feasibility.` : actualDailyBudgetPerPerson < 30 ? `⚡ TIGHT BUDGET: Lean heavily on free attractions, street food, self-guided exploration. Limit paid activities to 1-2/day. Use realistic local prices.` : `Stay within this cap. Balance expensive activities with free alternatives.`}` : ''}
+${allocationPromptBlock}
 ARCHETYPE: ${primaryArchetype}
 ${isFullDay ? `DAY TYPE: Full exploration day — generate a COMPLETE hour-by-hour plan with ${dayMealPolicy?.requiredMeals?.length ?? 3} meals (${dayMealPolicy?.requiredMeals?.join(', ') ?? 'breakfast, lunch, dinner'}), transit between every stop, evening activity, and next-morning preview.` : dayMealPolicy && !isFirstDay && !isLastDay ? `DAY TYPE: ${dayMealPolicy.dayMode.replace(/_/g, ' ')} — ${dayMealPolicy.mealInstructionText}` : `SIGHTSEEING ACTIVITY COUNT: ${minActivitiesFromArchetype}-${maxActivitiesFromArchetype} (adjust for arrival/departure constraints)`}
 ${preferences?.pace ? `Pace: ${preferences.pace}` : ''}
