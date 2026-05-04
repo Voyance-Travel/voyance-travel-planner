@@ -364,7 +364,6 @@ export function usePayableItems({
         const looksFree = isLikelyFreePublicVenue({
           title: a.title || a.name,
           category: cat,
-          priceLevel: a.priceLevel ?? a.price_level,
         });
         if (looksFree) continue;
 
