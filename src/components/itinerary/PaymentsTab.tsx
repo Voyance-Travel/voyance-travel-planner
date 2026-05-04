@@ -15,7 +15,8 @@ import { FirstUseHint } from './FirstUseHint';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
   CheckCircle2, Users, ChevronDown, Receipt,
-  Wallet, X, User, Plus, UserPlus, AlertCircle, Split
+  Wallet, X, User, Plus, UserPlus, AlertCircle, Split,
+  Utensils, Car, ShoppingBag
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
