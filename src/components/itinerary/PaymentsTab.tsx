@@ -238,6 +238,7 @@ export function PaymentsTab({
     destination,
     destinationCountry,
     activityCosts,
+    paymentsLoaded: !loading,
   });
 
   // ─── Canonical total from DB ledger (single source of truth, matches header + budget) ───
