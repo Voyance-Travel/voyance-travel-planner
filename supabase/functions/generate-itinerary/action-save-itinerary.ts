@@ -326,18 +326,24 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
             `[save-itinerary] 🍽️ MEAL GUARD: Day ${dayNumber} was missing [${result.injectedMeals.join(', ')}] — injected before save`
           );
         }
+      }
 
-        // Terminal cleanup for this day
+      // Terminal cleanup ALWAYS runs on first/last days so the post-departure
+      // barrier (no strolls/lunches after heading to airport) is enforced even
+      // when no meal injection was needed.
+      if (isFirstDay || isLastDay) {
         try {
           const { terminalCleanup } = await import('./universal-quality-pass.ts');
+          const cityForCleanup = day.city || day.destination || 'the destination';
           terminalCleanup(itineraryDays[i].activities, {
             arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
             departureTime24: isLastDay ? savedDepartureTime24 : undefined,
-            city: destination,
+            city: cityForCleanup,
             dayNumber,
             isFirstDay,
             isLastDay,
           });
+          itineraryDays[i] = { ...itineraryDays[i], activities: itineraryDays[i].activities };
         } catch (_e) { /* non-blocking */ }
       }
 
