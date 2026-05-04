@@ -231,7 +231,11 @@ export function BudgetCoach({
     async (force = false) => {
       if (!isOverBudget) return;
 
-      const currentHash = hashItinerary(itineraryDays);
+      // Cache key includes protections + dismissals so toggling either
+      // invalidates stale results.
+      const protectionsKey = [...protectedCategories].sort().join(',');
+      const dismissedKey = [...dismissedIds].sort().join(',');
+      const currentHash = `${hashItinerary(itineraryDays)}::p=${protectionsKey}::d=${dismissedKey}`;
       const cached = suggestionsCache.get(tripId);
       if (
         !force &&
@@ -240,11 +244,13 @@ export function BudgetCoach({
         Date.now() - cached.ts < 5 * 60 * 1000 // 5min TTL
       ) {
         setSuggestions(cached.suggestions);
+        setAllProtected(cached.suggestions.length === 0 && protectedCategories.length > 0);
         return;
       }
 
       setIsLoading(true);
       setError(null);
+      setAllProtected(false);
 
       try {
         const { data, error: fnError } = await supabase.functions.invoke(
@@ -256,6 +262,8 @@ export function BudgetCoach({
               current_total_cents: currentTotalCents,
               currency,
               destination,
+              protected_categories: protectedCategories,
+              dismissed_activity_ids: dismissedIds,
             },
           }
         );
@@ -265,6 +273,7 @@ export function BudgetCoach({
 
         const fetched: BudgetSuggestion[] = data?.suggestions || [];
         setSuggestions(fetched);
+        setAllProtected(Boolean(data?.all_protected));
         suggestionsCache.set(tripId, {
           suggestions: fetched,
           itineraryHash: currentHash,
@@ -287,6 +296,8 @@ export function BudgetCoach({
       currentTotalCents,
       currency,
       destination,
+      protectedCategories,
+      dismissedIds,
     ]
   );
 
@@ -297,6 +308,50 @@ export function BudgetCoach({
       fetchSuggestions();
     }
   }, [isOverBudget, itineraryDays.length, fetchSuggestions]);
+
+  // Re-fetch when protections or dismissals change (after the initial fetch).
+  const protectionsKey = protectedCategories.join('|');
+  const dismissedKey = dismissedIds.join('|');
+  useEffect(() => {
+    if (fetchedRef.current && isOverBudget) {
+      fetchSuggestions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [protectionsKey, dismissedKey]);
+
+  const toggleProtected = useCallback(
+    (label: string) => {
+      const next = protectedCategories.includes(label)
+        ? protectedCategories.filter((l) => l !== label)
+        : [...protectedCategories, label];
+      onProtectedCategoriesChange?.(next);
+    },
+    [protectedCategories, onProtectedCategoriesChange]
+  );
+
+  const dismissSuggestion = useCallback(
+    (activityId: string) => {
+      // Remove from view immediately
+      setSuggestions((prev) => prev.filter((s) => s.activity_id !== activityId));
+      const cached = suggestionsCache.get(tripId);
+      if (cached) {
+        suggestionsCache.set(tripId, {
+          ...cached,
+          suggestions: cached.suggestions.filter((s) => s.activity_id !== activityId),
+        });
+      }
+      // Persist for future fetches
+      if (!dismissedIds.includes(activityId)) {
+        persistDismissed([...dismissedIds, activityId]);
+      }
+    },
+    [tripId, dismissedIds, persistDismissed]
+  );
+
+  const clearProtections = useCallback(() => {
+    onProtectedCategoriesChange?.([]);
+    persistDismissed([]);
+  }, [onProtectedCategoriesChange, persistDismissed]);
 
   // ─── On-target state ──────────────────────────────────────────
   if (!isOverBudget) {
