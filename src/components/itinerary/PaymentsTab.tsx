@@ -893,18 +893,25 @@ export function PaymentsTab({
           <div className="text-right">
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
             <p className="text-xs text-muted-foreground">Trip Total</p>
-            {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (
-              <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
-                {Math.abs(payableTotalCents - financialSnapshot.tripTotalCents) <= 100 ? (
-                  <>
-                    <CheckCircle2 className="h-3 w-3 text-green-600" />
-                    Matches itinerary
-                  </>
-                ) : (
-                  <span className="text-amber-600">Reconciling…</span>
-                )}
-              </p>
-            )}
+            {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (() => {
+              const rawManualCents = payments
+                .filter(p => typeof p.item_id === 'string' && p.item_id.startsWith('manual-'))
+                .reduce((s, p) => s + p.amount_cents * (p.quantity || 1), 0);
+              const clientTotal = payableTotalCents + rawManualCents;
+              const matches = Math.abs(clientTotal - estimatedTotal) <= 100;
+              return (
+                <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
+                  {matches ? (
+                    <>
+                      <CheckCircle2 className="h-3 w-3 text-green-600" />
+                      Matches itinerary
+                    </>
+                  ) : (
+                    <span className="text-amber-600">Reconciling…</span>
+                  )}
+                </p>
+              );
+            })()}
           </div>
         </div>
         
