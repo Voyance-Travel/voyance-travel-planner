@@ -208,16 +208,19 @@ export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayI
     const items = splitDayActivitiesString(d.activities || '');
     for (const item of items) {
       if (!item.title) continue;
+      const kind = inferKindFromText(item.title);
+      const lock = maybeLock({ source: 'chat_planner', dayNumber: d.dayNumber, title: item.title, startTime: item.startTime, kind });
       out.push({
         dayNumber: d.dayNumber,
         source: 'chat_planner',
-        kind: inferKindFromText(item.title),
+        kind,
         title: item.title,
         rawText: item.raw,
         startTime: item.startTime || null,
         endTime: item.endTime || null,
-        priority: 'must', // user explicitly listed it on this day
-        locked: false,
+        priority: 'must',
+        locked: lock.locked,
+        lockedSource: lock.lockedSource,
       });
     }
   }
@@ -236,34 +239,40 @@ export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayI
       c.type === 'preference' ? 'constraint' :
       c.type === 'time_block' || isAllDay ? 'event' :
       inferKindFromText(desc);
+    const title = desc.length > 140 ? desc.slice(0, 137) + '…' : desc;
+    const lock = maybeLock({ source: 'chat_planner', dayNumber: c.day, title, startTime: c.time, kind });
     out.push({
       dayNumber: c.day ?? null,
       source: 'chat_planner',
       kind,
-      title: desc.length > 140 ? desc.slice(0, 137) + '…' : desc,
+      title,
       rawText: desc,
       startTime: c.time || null,
       endTime: c.endTime || null,
       priority: isAvoid ? 'avoid' : 'must',
-      locked: false,
+      locked: lock.locked,
+      lockedSource: lock.lockedSource,
       metadata: { fullDayEvent: isAllDay || undefined },
     });
   }
 
   // 3c. mustDoActivities — fallback comma-separated string. Only used if
-  // perDayActivities didn't already cover it. Day inference is best-effort.
+  // perDayActivities didn't already cover it.
   if (args.mustDoActivities && (!args.perDayActivities || args.perDayActivities.length === 0)) {
     const items = splitMustDoString(args.mustDoActivities);
     for (const item of items) {
+      const kind = inferKindFromText(item.title);
+      const lock = maybeLock({ source: 'chat_planner', dayNumber: item.dayNumber, title: item.title, startTime: item.startTime, kind });
       out.push({
         dayNumber: item.dayNumber ?? null,
         source: 'chat_planner',
-        kind: inferKindFromText(item.title),
+        kind,
         title: item.title,
         rawText: item.raw,
         startTime: item.startTime || null,
         priority: 'must',
-        locked: false,
+        locked: lock.locked,
+        lockedSource: lock.lockedSource,
       });
     }
   }
