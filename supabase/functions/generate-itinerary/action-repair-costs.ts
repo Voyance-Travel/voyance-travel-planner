@@ -199,6 +199,9 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         : (activity.cost && typeof activity.cost === "object") ? (activity.cost.amount || 0)
         : 0;
 
+      // Snapshot pre-repair price so we can record any uplift to cost_change_log.
+      const originalPerPerson = costPerPerson;
+
       // Declare source/wasCorrected BEFORE any branch that uses them
       let source = "repair";
       let wasCorrected = false;
