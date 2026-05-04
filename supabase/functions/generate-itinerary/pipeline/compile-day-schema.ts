@@ -277,12 +277,18 @@ DO NOT plan activities before ${arrival24}.`;
 
       console.log(`[compile-day-schema] Day1: hotel provided, no flight — default arrival at ${defaultArrival}`);
 
+      // Hotel standard check-in is typically 15:00; arriving at 09:00 means
+      // the room won't be ready. Frame the morning hotel stop as a luggage
+      // drop and add an explicit later check-in step at the real check-in time.
+      const standardCheckInTime = '15:00';
+      const standardCheckInEnd = addMinutesToHHMM(standardCheckInTime, 15);
       dayConstraints = `
 ARRIVAL DAY — NO FLIGHT DETAILS PROVIDED:
 - Hotel: ${flightContext.hotelName}
 - Address: ${flightContext.hotelAddress || 'Address on file'}
+- Standard check-in time: ${standardCheckInTime} (rooms not guaranteed before this)
 
-The traveler has not provided flight details. Assume a morning arrival at approximately ${defaultArrival}.
+The traveler has not provided flight details. Assume a morning arrival at approximately ${defaultArrival}. Because they arrive well before the hotel's standard ${standardCheckInTime} check-in, treat the morning hotel stop as a LUGGAGE DROP, not a check-in.
 
 REQUIRED OPENING SEQUENCE (in this exact order):
 1. "Transfer to ${flightContext.hotelName}"
@@ -291,19 +297,26 @@ REQUIRED OPENING SEQUENCE (in this exact order):
    - description: "Travel from arrival point to hotel."
    - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
 
-2. "Check-in at ${flightContext.hotelName}"
-   - startTime: "${transferEnd}", endTime: "${checkinEnd}"
+2. "Luggage Drop at ${flightContext.hotelName}"
+   - startTime: "${transferEnd}", endTime: "${addMinutesToHHMM(transferEnd, 20)}"
    - category: "accommodation"
-   - description: "Check in and drop bags. Early check-in often available on request."
+   - description: "Drop your bags and freshen up. Your room will be ready at ${standardCheckInTime}."
+   - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
+
+LATER (around ${standardCheckInTime}, before evening activities):
+3. "Check-in at ${flightContext.hotelName}"
+   - startTime: "${standardCheckInTime}", endTime: "${standardCheckInEnd}"
+   - category: "accommodation"
+   - description: "Pick up keys, settle into your room."
    - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
 
 DAY 1 GUIDELINES:
-- After check-in (${checkinEnd}), plan a full day of activities starting from ${earliestActivity}
-- Include a "Return to Hotel" activity around 15:00-15:30 for official check-in/freshen up if the day is long enough
-- The traveler is free to explore all day after dropping bags
-- End with dinner
+- After luggage drop (${addMinutesToHHMM(transferEnd, 20)}), plan morning/afternoon activities until ~${standardCheckInTime}
+- Insert the "Check-in at ${flightContext.hotelName}" step at ${standardCheckInTime} so the traveler can settle into the room
+- After check-in, continue with evening activities and end with dinner
 
 Start the day at ${defaultArrival} with the arrival sequence.`;
+
     } else {
       // No flight, no hotel — assume 09:00 arrival with placeholder hotel
       console.log(`[compile-day-schema] Day1: no flight AND no hotel — default arrival at 09:00`);
