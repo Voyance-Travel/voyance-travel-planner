@@ -202,11 +202,22 @@ export function BudgetCoach({
   // Build the payload activities in the format the edge function expects
   // Exclude locked activities — they should not be suggested for swaps
   const buildPayloadDays = useCallback(() => {
+    // Reject placeholder/generic titles that the coach cannot meaningfully swap
+    // (e.g. "Dinner (Day 2)", "transport (Day 2)", "Activity"). Targeting these
+    // produces phantom suggestions because the AI has nothing concrete to anchor to.
+    const GENERIC_TITLE_RE = /^(breakfast|lunch|dinner|brunch|meal|activity|activities|transport|transit|hotel|accommodation|untitled)\s*(\(|-|–|—|$)/i;
+    const isGenericTitle = (t?: string) => {
+      const s = (t || '').trim();
+      if (!s) return true;
+      if (/^(activity|untitled|tbd|n\/a)$/i.test(s)) return true;
+      return GENERIC_TITLE_RE.test(s);
+    };
     return itineraryDays.map((day) => ({
       dayNumber: day.dayNumber,
       date: day.date,
       activities: day.activities
         .filter((a) => !a.isLocked)
+        .filter((a) => !isGenericTitle(a.title || a.name))
         .map((a) => {
           let costCents = 0;
           if (typeof a.cost === 'number' && Number.isFinite(a.cost)) {
