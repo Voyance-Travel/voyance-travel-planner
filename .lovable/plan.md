@@ -1,37 +1,49 @@
-# Le Bon Marché missing from Payments — fix
+# EUR display rounding makes a single rate look like many
 
-## Root cause
+## What's actually happening
 
-The activity exists in the itinerary JSON with `cost.amount = 0` and no row in `activity_costs` (it's `category: 'shopping'`, which the cost-repair pipeline doesn't write rows for).
+There is exactly one EUR rate in the app: `1 USD = 0.86 EUR` (≡ `1.1628 USD/EUR`), defined in `src/lib/currency.ts`. Every line reconciles to that rate exactly:
 
-So `usePayableItems`' JSON-walk fallback runs for it and:
+| Item | DB USD/pp | × 0.86 = EUR/pp | Displayed as |
+|---|---|---|---|
+| Holybelly | $25.00 | €21.50 | **€22** (rounded) |
+| Bouillon Pigalle | $25.00 | €21.50 | **€22** (rounded) |
+| L'Entrecôte | $50.00 | €43.00 | **€43** (no round) |
+| Robuchon | $180.00 | €154.80 | **€155** (rounded) |
+| Spa / Musée Hébert / Les Bains | $65.22 | €56.09 | **€56** (rounded) |
+| Louvre | $24.00 | €20.64 | **€21** (rounded) |
 
-1. Reads `explicit = 0` from `a.cost.amount`.
-2. Passes `explicitCost: 0` into `estimateCostSync`.
-3. `estimateCostSync` short-circuits on `explicitCost !== undefined && explicitCost >= 0` and returns `amount: 0`.
-4. The fallback drops the row (`if (cents <= 0) continue`).
+Total stays in unrounded USD (the source of truth), then renders. So when a user back-computes `displayed_eur × 2 / displayed_usd_total`, they get rates ranging 1.13–1.18 even though there's only one rate.
 
-Net effect: any paid-category activity stored with `cost.amount = 0` (a missing-data placeholder, not a confirmed free experience) silently disappears from Payments.
+## The fix
 
-## Fix — one file
+`formatCurrency` (in `src/lib/currency.ts`) currently uses `minimumFractionDigits: 0, maximumFractionDigits: 0` for every currency. That zero-decimal rendering is what creates the apparent inconsistency.
 
-**`src/hooks/usePayableItems.ts`** (JSON-walk fallback, ~line 388):
+Change: when the value would round more than ~$1 worth (i.e. for non-USD per-person amounts under ~$200), render with **one decimal place**. This:
+- Shows €21.5 instead of €22 → user's back-calculation gives the right rate.
+- Keeps large totals tidy (€1,234 not €1,234.0) by capping decimals at the unit-magnitude threshold.
 
-Treat `explicit === 0` as "no cost recorded, please estimate" — only pass `explicitCost` to `estimateCostSync` when it's strictly positive. This lets the priceLevel / city-tier estimator produce a real number for shopping, activity, dining, etc. rows that came in with a placeholder `$0`.
-
+Concrete rule:
 ```ts
-const explicitRaw = /* …same extraction… */;
-const explicit = (typeof explicitRaw === 'number' && explicitRaw > 0) ? explicitRaw : undefined;
+// Whole-currency unit amounts under 100 in non-USD currencies show 1 decimal,
+// so back-of-envelope math reconciles to the published FX rate.
+const useDecimal = currency.toUpperCase() !== 'USD' && Math.abs(amount) < 100;
+new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency,
+  minimumFractionDigits: useDecimal ? 1 : 0,
+  maximumFractionDigits: useDecimal ? 1 : 0,
+}).format(amount);
 ```
 
-That's the entire change. After it ships, Le Bon Marché will appear with a Paris-shopping estimate (priceLevel/midpoint-based) until the user records an actual amount.
+USD continues to render as whole dollars (matches existing UI everywhere).
 
-## Why not also write an `activity_costs` row?
+## Files to change
 
-The cost-repair pipeline intentionally skips `shopping` (along with other discretionary categories) because budgets for shopping are user-driven. The Payments tab should still surface the activity so the user can mark it paid / enter a real amount — the fallback estimate is the right vehicle for that, we just have to stop letting `0` masquerade as truth.
+- `src/lib/currency.ts` — `formatCurrency` decimal rule.
 
-## Out of scope (still pending from earlier)
+That's the entire fix. Totals don't change (they were always correct USD), only the per-person dual-display becomes self-consistent.
 
-- Generic-named itinerary rows (`Dinner (Day 2)`, `transport (Day 2)`).
-- Hotel committed without `pricePerNight`.
-- All-Costs list collapse bug.
+## Out of scope
+
+This does not address the real-world rate drift (0.86 vs ~0.92 spot today) — that's a rate-table refresh decision, not a math bug, and the disclosure tooltip already says "rates as of May 4, 2026… final charges may vary."

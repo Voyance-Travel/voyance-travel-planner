@@ -178,12 +178,18 @@ export function formatCurrency(
 ): string {
   if (amount === null || amount === undefined) return '-';
   if (amount === 0) return 'Free';
+  // For non-USD per-person amounts under 100 units, show one decimal so users
+  // back-computing the FX rate get a self-consistent answer (e.g. $25 × 0.86 =
+  // €21.5, not €22 which would imply a different rate). USD always renders as
+  // whole dollars to match the rest of the UI; large totals stay tidy too.
+  const useDecimal = currency.toUpperCase() !== 'USD' && Math.abs(amount) < 100;
+  const fractionDigits = useDecimal ? 1 : 0;
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency.toUpperCase(),
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
     }).format(amount);
   } catch {
     return new Intl.NumberFormat('en-US', {
