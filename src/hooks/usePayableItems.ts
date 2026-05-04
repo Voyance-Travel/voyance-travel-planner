@@ -339,9 +339,123 @@ export function usePayableItems({
     // Manual activity expenses
     addManualGroups('activity');
 
-    return result;
-    // travelers retained in deps for callers; not used directly because num_travelers is on the row
-  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, hasManualHotel, hasManualFlight]);
+    // ─── JSON-walk fallback: surface every itinerary activity not already in result ───
+    // The activity_costs DB table only holds rows that the cost pipeline has processed.
+    // Without this fallback, anything not yet costed (or stored as $0) silently disappears
+    // from the Payments tab, even though users see the activity on its day card.
+    const FREE_CATEGORIES = new Set([
+      'accommodation', 'hotel', 'stay', 'check-in', 'checkout', 'check-out',
+      'flight', 'departure', 'arrival',
+    ]);
+    const seenActivityIds = new Set(
+      result
+        .filter(r => r.type === 'activity' && !r.groupKind)
+        .map(r => r.id.replace(/_d\d+$/, ''))
+    );
+    const walkTransitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
+
+    for (const day of days) {
+      for (const a of day.activities) {
+        if (!a?.id || seenActivityIds.has(a.id)) continue;
+        const cat = (a.category || a.type || 'activity').toLowerCase();
+        if (FREE_CATEGORIES.has(cat)) continue;
+
+        // Free-public-venue heuristic: skip silently
+        const looksFree = isLikelyFreePublicVenue({
+          title: a.title || a.name,
+          category: cat,
+          priceLevel: a.priceLevel ?? a.price_level,
+        });
+        if (looksFree) continue;
+
+        const explicit = typeof a.cost === 'number' ? a.cost
+          : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
+          : (typeof a.explicitCost === 'number' ? a.explicitCost : undefined);
+
+        const est = estimateCostSync({
+          category: cat,
+          title: a.title || a.name,
+          city: destination,
+          country: destinationCountry,
+          travelers,
+          budgetTier: (budgetTier as any) || 'moderate',
+          priceLevel: a.priceLevel ?? a.price_level,
+          explicitCost: explicit,
+        });
+        const cents = Math.round((est?.amount || 0) * 100);
+        if (cents <= 0) continue;
+
+        if (TRANSIT_CATEGORIES.has(cat)) {
+          const bucket = walkTransitByDay.get(day.dayNumber) || { totalCents: 0, subItems: [] };
+          bucket.subItems.push({
+            id: a.id,
+            name: a.title || a.name || 'Local transit',
+            amountCents: cents,
+          });
+          bucket.totalCents += cents;
+          walkTransitByDay.set(day.dayNumber, bucket);
+          continue;
+        }
+
+        const compositeId = `${a.id}_d${day.dayNumber}`;
+        const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === compositeId);
+        const assignedIds = activityPayments
+          .map(p => (p as any)?.assigned_member_id)
+          .filter(Boolean) as string[];
+        result.push({
+          id: compositeId,
+          type: 'activity',
+          name: a.title || a.name || 'Activity',
+          amountCents: cents,
+          dayNumber: day.dayNumber,
+          payment: activityPayments[0],
+          allPayments: activityPayments,
+          assignedMemberId: assignedIds[0],
+          assignedMemberIds: [...new Set(assignedIds)],
+        });
+      }
+    }
+
+    // Merge walk-derived transit into existing per-day rows (or emit new ones)
+    for (const [dayNumber, { totalCents, subItems }] of walkTransitByDay) {
+      const groupId = `transit-d${dayNumber}`;
+      const existing = result.find(r => r.id === groupId);
+      if (existing) {
+        existing.amountCents += totalCents;
+        existing.subItems = [...(existing.subItems || []), ...subItems];
+      } else {
+        const groupPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === groupId);
+        const assignedIds = groupPayments.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
+        result.push({
+          id: groupId,
+          type: 'activity',
+          name: `Local transit — Day ${dayNumber}`,
+          amountCents: totalCents,
+          dayNumber,
+          payment: groupPayments[0],
+          allPayments: groupPayments,
+          assignedMemberId: assignedIds[0],
+          assignedMemberIds: [...new Set(assignedIds)],
+          subItems,
+          groupKind: 'transit',
+        });
+      }
+    }
+
+    // Manual activity expenses
+    addManualGroups('activity');
+
+    // ─── Final dedupe: ensure manual hotel/flight overrides win over canonical rows ───
+    const hasManualHotelItem = result.some(r => r.type === 'hotel' && isManualId(r.id));
+    const hasManualFlightItem = result.some(r => r.type === 'flight' && isManualId(r.id));
+    const deduped = result.filter(r => {
+      if (r.type === 'hotel' && r.id === 'hotel-selection' && hasManualHotelItem) return false;
+      if (r.type === 'flight' && r.id === 'flight-selection' && hasManualFlightItem) return false;
+      return true;
+    });
+
+    return deduped;
+  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, hasManualHotel, hasManualFlight, paymentsLoaded, budgetTier, destination, destinationCountry]);
 
   const totalCents = useMemo(() => items.reduce((sum, i) => sum + i.amountCents, 0), [items]);
   const essentialItems = useMemo(() => items.filter(i => i.type === 'flight' || i.type === 'hotel'), [items]);
