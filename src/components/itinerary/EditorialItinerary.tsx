@@ -1452,9 +1452,39 @@ export function EditorialItinerary({
 
   // Inject synthetic travel activity cards on transition days:
   // Check-out → Head to transport → Transport (seat/ticket) → Arrival → Check-in
-  const days = useMemo(() => rawDays.map((day, dayIndex) => {
+  const days = useMemo(() => {
+    // When the traveler hasn't added flight details, the generator emits a
+    // bare "Arrival"/"Arrive at Airport" placeholder on Day 1. The arrival
+    // game-plan banner above already prompts for flight details, so the
+    // placeholder is redundant and reads as "unfinished". Strip it whenever
+    // no flight data is present — it'll reappear once a real flight is added
+    // (the generator then enriches it with airline/airport/time).
+    const hasFlight = !!flightSelection && (
+      !!(flightSelection as any).legs?.length ||
+      !!(flightSelection as any).outbound ||
+      !!(flightSelection as any).return
+    );
+    const isPlaceholderArrival = (a: any): boolean => {
+      if (!a || a.locked || a.isLocked) return false;
+      const title = String(a.title || a.name || '').toLowerCase().trim();
+      const cat = String(a.category || a.type || '').toLowerCase();
+      const venue = String(a.location?.name || '').toLowerCase().trim();
+      const hasAirline = !!(a.airline || a.flightNumber || a.carrier || a.confirmationNumber);
+      const isArrivalTitle = title === 'arrival' || title === 'arrive at airport' ||
+        title === 'arrival at airport' || /^arrival at\b/.test(title) ||
+        /^arrive at\b.*airport/.test(title) || title === 'arrival flight';
+      const isAirportishVenue = !venue || venue === 'airport' || venue === 'the airport' ||
+        venue.endsWith(' airport');
+      const isTravelCat = cat === 'flight' || cat === 'travel' || cat === 'transport' || cat === 'transit';
+      return isArrivalTitle && isTravelCat && isAirportishVenue && !hasAirline;
+    };
+
+    return rawDays.map((day, dayIndex) => {
     const d = day as any;
-    let updatedActivities = [...day.activities];
+    const baseActivities = (!hasFlight && day.dayNumber === 1)
+      ? day.activities.filter(a => !isPlaceholderArrival(a))
+      : day.activities;
+    let updatedActivities = [...baseActivities];
 
     // === Transition day: inject travel summary at top ===
     if (d.isTransitionDay && d.transitionFrom && d.transitionTo) {
@@ -1937,7 +1967,8 @@ export function EditorialItinerary({
       ...day,
       activities: updatedActivities,
     };
-  }), [rawDays, flightSelection]);
+    });
+  }, [rawDays, flightSelection]);
 
   // Compute expected total days from start/end dates so we can show placeholders during generation
   const expectedTotalDays = useMemo(() => {

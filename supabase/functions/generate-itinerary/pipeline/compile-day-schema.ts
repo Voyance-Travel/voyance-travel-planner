@@ -285,18 +285,13 @@ ARRIVAL DAY — NO FLIGHT DETAILS PROVIDED:
 The traveler has not provided flight details. Assume a morning arrival at approximately ${defaultArrival}.
 
 REQUIRED OPENING SEQUENCE (in this exact order):
-1. "Arrival" 
-   - startTime: "${defaultArrival}", endTime: "${addMinutesToHHMM(defaultArrival, 15)}"
-   - category: "travel"
-   - description: "Arrive at destination."
-
-2. "Transfer to ${flightContext.hotelName}"
-   - startTime: "${addMinutesToHHMM(defaultArrival, 15)}", endTime: "${transferEnd}"
+1. "Transfer to ${flightContext.hotelName}"
+   - startTime: "${defaultArrival}", endTime: "${transferEnd}"
    - category: "transport"
    - description: "Travel from arrival point to hotel."
    - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
 
-3. "Check-in at ${flightContext.hotelName}"
+2. "Check-in at ${flightContext.hotelName}"
    - startTime: "${transferEnd}", endTime: "${checkinEnd}"
    - category: "accommodation"
    - description: "Check in and drop bags. Early check-in often available on request."
@@ -321,27 +316,22 @@ Use "Your Hotel" as a placeholder name for accommodation activities — these wi
 Assume a morning arrival at approximately 09:00.
 
 REQUIRED OPENING SEQUENCE (in this exact order):
-1. "Arrival"
-   - startTime: "09:00", endTime: "09:15"
-   - category: "travel"
-   - description: "Arrive at destination."
-
-2. "Transfer to Your Hotel"
-   - startTime: "09:15", endTime: "09:45"
+1. "Transfer to Your Hotel"
+   - startTime: "09:00", endTime: "09:30"
    - category: "transport"
    - description: "Travel from arrival point to hotel."
    - location: { name: "Your Hotel" }
 
-3. "Check-in at Your Hotel"
-   - startTime: "09:45", endTime: "10:15"
+2. "Check-in at Your Hotel"
+   - startTime: "09:30", endTime: "10:00"
    - category: "accommodation"
    - description: "Check in and get settled."
    - location: { name: "Your Hotel" }
 
 STRUCTURE:
-4. After check-in, plan a full day of activities starting from 10:30
-5. Include a "Freshen up at Your Hotel" break mid-afternoon
-6. End with dinner
+3. After check-in, plan a full day of activities starting from 10:15
+4. Include a "Freshen up at Your Hotel" break mid-afternoon
+5. End with dinner
 
 Start the day at 09:00 with the arrival sequence.`;
     }
