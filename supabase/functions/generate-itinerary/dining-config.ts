@@ -279,3 +279,27 @@ export function buildDiningPromptBlock(
 
   return parts.join('\n');
 }
+
+/**
+ * Build the Day 1 "Grand Entrance" dinner directive for luxury food audiences.
+ * Returns null when the dining DNA does not warrant an elevated arrival dinner.
+ */
+export function buildGrandEntranceBlock(
+  config: DiningConfig,
+  destination: string,
+): string | null {
+  if (config.michelinPolicy !== 'required' && config.michelinPolicy !== 'encouraged') {
+    return null;
+  }
+  const [, dinnerHi] = config.priceRange.dinner;
+  const lo = Math.round(dinnerHi * 0.7);
+  return `
+🌟 DAY 1 "GRAND ENTRANCE" DINNER — REQUIRED:
+This traveler's first dinner sets the tone for the trip. It MUST be an elevated, destination-defining restaurant — NOT a casual bistro, brasserie, or neighborhood steak-frites house.
+- Choose a Michelin-starred dining room, palace-hotel restaurant, or iconic chef-led tasting venue in ${destination || 'the destination'}
+- Target price: €${lo}–€${dinnerHi}/pp (tasting menu or chef-driven prix fixe)
+- Even if Day 1 lunch is intentionally casual/authentic, the dinner MUST compensate by being elevated
+- Tag this activity with: tags: ["grand_entrance", "signature_meal"]
+- Reservation note in description: "Book 2–4 weeks ahead"
+- Do NOT pick: Le Comptoir du Relais, Le Relais de l'Entrecôte, Bouillon Chartier, Chez Janou, or any similar bistro/brasserie for THIS dinner`;
+}
