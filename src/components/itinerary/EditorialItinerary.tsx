@@ -1967,7 +1967,8 @@ export function EditorialItinerary({
       ...day,
       activities: updatedActivities,
     };
-  }), [rawDays, flightSelection]);
+    });
+  }, [rawDays, flightSelection]);
 
   // Compute expected total days from start/end dates so we can show placeholders during generation
   const expectedTotalDays = useMemo(() => {
