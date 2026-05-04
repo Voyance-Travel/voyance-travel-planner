@@ -172,7 +172,7 @@ export function usePayableItems({
     }
 
     // ─── Hotel from selection ───
-    if (hotelSelection?.totalPrice || hotelSelection?.pricePerNight) {
+    if (!hasManualHotel && (hotelSelection?.totalPrice || hotelSelection?.pricePerNight)) {
       const hotelId = 'hotel-selection';
       const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
       const nights = Math.max(1, days.length - 1);
