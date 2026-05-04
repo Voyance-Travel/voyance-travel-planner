@@ -546,8 +546,24 @@ export function PaymentsTab({
     }
   };
 
-  /**
-   * Resolve a member ID that might be a synthetic "collab-xxx" ID
+  const handleDeleteExpense = async (item: PayableItem) => {
+    if (item.allPayments.length === 0) return;
+    setDeleting(true);
+    try {
+      const ids = item.allPayments.map(p => p.id);
+      const { error } = await supabase.from('trip_payments').delete().in('id', ids);
+      if (error) throw error;
+      toast.success('Expense deleted');
+      setDeleteTarget(null);
+      await fetchPayments(150);
+      window.dispatchEvent(new CustomEvent('booking-changed'));
+    } catch (err) {
+      console.error('Error deleting expense:', err);
+      toast.error('Failed to delete expense');
+    } finally {
+      setDeleting(false);
+    }
+  };
    * to a real trip_members row ID. Creates a trip_members row if needed.
    */
   const resolveRealMemberId = async (memberId: string): Promise<string | null> => {
