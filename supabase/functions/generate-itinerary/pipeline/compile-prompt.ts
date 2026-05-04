@@ -867,11 +867,14 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
   // BUDGET RESOLUTION
   // ═══════════════════════════════════════════════════════════════════════
   let actualDailyBudgetPerPerson: number | null = null;
+  // Per-day per-person targets surfaced into the prompt so the model actually
+  // distributes spend across food / activities / transit per the user's preset.
+  let allocationPromptBlock = '';
   if (tripId) {
     try {
       const { data: tripBudgetData } = await supabase
         .from('trips')
-        .select('budget_total_cents, flight_selection, hotel_selection')
+        .select('budget_total_cents, flight_selection, hotel_selection, budget_allocations, budget_currency')
         .eq('id', tripId)
         .single();
       if (tripBudgetData?.budget_total_cents && tripBudgetData.budget_total_cents > 0) {
