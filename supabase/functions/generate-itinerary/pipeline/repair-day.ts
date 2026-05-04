@@ -1902,6 +1902,23 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 8d. RE-RUN DEPARTURE SEQUENCE AFTER INJECTIONS ---
+  // Steps 8/8b/8c may have just injected the checkout, departure-transport,
+  // and flight cards. Re-run sequence repair so those newly added cards
+  // become hard barriers and any non-logistics card scheduled after them
+  // is pulled back / removed.
+  if (isDepartureDayForSequence) {
+    const seqRepairs2 = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
+    if (seqRepairs2.length > 0) {
+      repairs.push(...seqRepairs2);
+      activities.sort((a: any, b: any) => {
+        const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+        const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+        return ta - tb;
+      });
+    }
+  }
+
   // --- 9. MISSING_SLOT: bookend validator (with departure-day guards) ---
   // Always inject hotel bookends — use placeholder if no hotel selected yet.
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
