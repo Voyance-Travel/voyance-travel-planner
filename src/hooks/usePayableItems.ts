@@ -55,6 +55,10 @@ interface PayableItemsInput {
       name?: string;
       type?: string;
       category?: string;
+      priceLevel?: number;
+      price_level?: number;
+      cost?: number;
+      explicitCost?: number;
     }>;
   }>;
   flightSelection?: {
@@ -70,11 +74,12 @@ interface PayableItemsInput {
   } | null;
   travelers: number;
   payments: TripPayment[];
-  /** Kept in signature for back-compat; no longer used. */
   budgetTier?: string;
   destination?: string;
   destinationCountry?: string;
   activityCosts?: ActivityCostRow[] | null;
+  /** When false, suppress canonical hotel/flight rows to avoid flashing duplicates before payments load. */
+  paymentsLoaded?: boolean;
 }
 
 const TRANSIT_CATEGORIES = new Set([
