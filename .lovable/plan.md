@@ -1,45 +1,32 @@
 ## Problem
 
-The Split Bill UI in `PaymentsTab.tsx` only shows real members from `trip_members` plus collaborators. For a 2-guest trip with no invited collaborators, only the trip owner appears, so all 32 items default to "Unassigned" until the second person accepts an email invite. The trip's `travelers` count (which the user has already confirmed) is ignored.
+The header **Trip Total** in `PaymentsTab` is sourced from `useTripFinancialSnapshot(tripId)`, which reads exclusively from the `activity_costs` ledger. Manual expenses added via the "Add Expense" dialog are written **only** to `trip_payments` (with `item_id` prefixed `manual-`), never into `activity_costs`. Result: the manual $2,400 hotel inflates the per-item list and "Paid so far", but the canonical Trip Total stays at the original $2,921 estimate, making the math look broken.
+
+`usePayableItems` already includes manual entries (lines 201–228), so `payableTotalCents` already reflects them — the bug is that `estimatedTotal` prefers the snapshot when available and ignores `payableTotalCents` once the snapshot is non-zero.
 
 ## Plan
 
-### 1. Pre-populate placeholder guests from the trip's `travelers` count
+In `src/components/itinerary/PaymentsTab.tsx`, update the `estimatedTotal` derivation (lines 242–252):
 
-In `src/components/itinerary/PaymentsTab.tsx`, in the `tripMembers` `useMemo` (line 116) that already merges owner + collaborators, append synthetic placeholder rows so the merged list length equals `travelers`:
+1. Compute `manualExtraCents` from `payments` where `item_id` starts with `manual-` (sum of `amount_cents * quantity`). These are the entries the snapshot does not know about.
+2. Set `estimatedTotal = max(snapshotTotal + manualExtraCents, payableTotalCents)`. This:
+   - Adds manual costs on top of the canonical ledger total, so adding a $2,400 hotel raises Trip Total by $2,400.
+   - Keeps `payableTotalCents` as a floor in case the snapshot is briefly stale or zero.
+3. No changes to "Paid so far" (already correct from `trip_payments`) or to per-item rendering.
 
-- Synthetic ID format: `guest-2`, `guest-3`, … (deterministic across renders so split assignments stay stable).
-- Display: "Guest 2", "Guest 3", with a subtle "Placeholder" hint badge in the assignment UI.
-- `userId: null`, `acceptedAt` set to `new Date()` so they pass any "accepted" filters.
-- Add `travelers` to the `useMemo` dependency array.
+## Why not write manual entries into `activity_costs`?
 
-### 2. Materialize a real `trip_members` row on first assignment
-
-Extend `resolveRealMemberId` (line 465) to handle `guest-N` IDs the same way it handles `owner-` and `collab-` IDs:
-
-- Check if a `trip_members` row already exists with `email = 'guest-N@placeholder.local'` (deterministic email keyed on tripId + index so re-assigning the same guest reuses the row).
-- If not, call `addTripMember({ tripId, email: 'guest-N@placeholder.local', name: 'Guest N', role: 'attendee' })`. The existing upsert on `(trip_id, email)` makes this safe.
-- Return the new member's real ID so the assignment writes correctly.
-
-This means the UI works instantly with no email invite, and the persistence layer "graduates" the placeholder into a real row only when the user actually splits a bill onto them. No phantom rows for unused seats.
-
-### 3. Allow renaming a placeholder in-place
-
-In the assign-member dialog, if a placeholder guest is shown, render an inline rename pencil icon that calls `updateTripMember({ name })` after first-assign materializes the row. This lets the user turn "Guest 2" into "Sarah" without going through the email invite flow at all. Email invite remains an optional path (e.g. for actually sharing the trip), not a prerequisite for splitting bills.
-
-### 4. Default-split toggle
-
-Add a small "Split evenly across all guests" quick action above the items list. When clicked, it assigns every unassigned item to all `tripMembers` (including placeholders, materializing them on demand). This addresses the "32 items all unassigned" friction in one click for the common case where the user just wants a 50/50 trip.
+`activity_costs` is the AI-generated cost ledger keyed by `activity_id` and tied to itinerary days. Manual one-off expenses don't belong there — they're free-form line items the user logged. Sourcing the Trip Total from `payments + ledger` keeps each table's role clean and avoids polluting ledger-driven analytics.
 
 ## Files
 
-- `src/components/itinerary/PaymentsTab.tsx` — placeholder generation in `tripMembers` memo; extend `resolveRealMemberId` to handle `guest-N`; add inline rename + bulk split-evenly button.
-
-No DB migrations, no edge functions, no schema changes — `trip_members` already supports arbitrary email values via upsert on `(trip_id, email)`.
+- `src/components/itinerary/PaymentsTab.tsx` — replace the 11-line `estimatedTotal` block with the additive computation above.
 
 ## Expected outcome
 
-- A 2-guest trip immediately shows "Trip Owner" + "Guest 2" in the Split Bill picker — no email invite required.
-- One-click "Split evenly" assigns all unassigned items across both seats.
-- "Guest 2" can be renamed inline to a real name without sending any emails.
-- Email invites still work, and if the second person later accepts, the placeholder row is reconciled by name/email match (logic already in place at lines 154–158).
+After adding a $2,400 manual hotel and a $500 paid L'Arpège on a $2,921 base trip:
+- Trip Total: **$5,321** (2,921 + 2,400)
+- Paid so far: **$2,900** (unchanged)
+- Remaining: **$2,421**
+
+Reconciliation badge ("✓ Matches itinerary") continues to compare `payableTotalCents` (which already includes manual entries) against the snapshot — that comparison is unaffected.
