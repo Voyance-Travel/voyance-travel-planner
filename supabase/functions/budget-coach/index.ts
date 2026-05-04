@@ -362,23 +362,48 @@ Rules:
     }
 
     // Title-match helper: tolerant comparison between AI-claimed item name
-    // and the real activity title for a given ID.
+    // and the real activity title for a given ID. Stop-words (meal/category/day
+    // tokens) are excluded so a single shared word like "dinner" cannot pass.
+    const TITLE_STOPWORDS = new Set([
+      "dinner", "lunch", "breakfast", "brunch", "meal", "snack", "drinks",
+      "activity", "activities", "transport", "transit", "taxi", "metro",
+      "hotel", "accommodation", "stay", "checkin", "checkout",
+      "day", "evening", "morning", "afternoon", "night",
+      "restaurant", "cafe", "café", "bar", "tour", "visit",
+    ]);
     const normalize = (s: string) =>
       s.toLowerCase().replace(/[^a-z0-9\s]+/g, " ").replace(/\s+/g, " ").trim();
     const tokenize = (s: string) =>
-      new Set(normalize(s).split(" ").filter((t) => t.length >= 4));
+      new Set(
+        normalize(s)
+          .split(" ")
+          .filter((t) => t.length >= 4 && !TITLE_STOPWORDS.has(t))
+      );
     const titleMatches = (claimed: string, real: string): boolean => {
       const c = normalize(claimed);
       const r = normalize(real);
       if (!c || !r) return false;
-      if (c.includes(r) || r.includes(c)) return true;
+      // Substring match only counts when the shared side is meaningfully long
+      const shorter = c.length <= r.length ? c : r;
+      const longer = shorter === c ? r : c;
+      if (shorter.length >= 8 && longer.includes(shorter)) return true;
       const ct = tokenize(claimed);
       const rt = tokenize(real);
       if (ct.size === 0 || rt.size === 0) return false;
       let overlap = 0;
       for (const t of ct) if (rt.has(t)) overlap++;
-      const denom = Math.min(ct.size, rt.size);
-      return denom > 0 && overlap / denom >= 0.6;
+      // Require at least 2 non-stopword tokens in common
+      return overlap >= 2;
+    };
+
+    // Placeholder titles indicate the underlying activity is unresolved — the
+    // coach has nothing concrete to swap, so reject any suggestion against one.
+    const PLACEHOLDER_TITLE_RE = /^(breakfast|lunch|dinner|brunch|meal|activity|activities|transport|transit|hotel|accommodation|untitled)\s*(\(|-|–|—|$)/i;
+    const isPlaceholderTitle = (t?: string) => {
+      const s = (t || "").trim();
+      if (!s) return true;
+      if (/^(activity|untitled|tbd|n\/a)$/i.test(s)) return true;
+      return PLACEHOLDER_TITLE_RE.test(s);
     };
 
     console.log("Activity costs (cents) from caller:", JSON.stringify(Object.fromEntries(activityCostCentsById)));
