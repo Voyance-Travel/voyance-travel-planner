@@ -339,12 +339,22 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
   
   // Map activity_costs rows → BudgetLedgerEntry shape for UI compatibility
   const entries: BudgetLedgerEntry[] = (costsResult.data || []).map((row: any) => {
-    const costPerPerson = Number(row.cost_per_person_usd) || 0;
+    let costPerPerson = Number(row.cost_per_person_usd) || 0;
     const numTravelers = Number(row.num_travelers) || 1;
+
+    // Read-time guard: any row tagged "Free venue" must report $0, even if
+    // the underlying DB row is corrupted. Belt-and-suspenders alongside the
+    // DB trigger and the edge-function write guard.
+    const noteStr = (row.notes || '').toLowerCase();
+    if (noteStr.includes('free venue') && costPerPerson !== 0) {
+      console.warn(`[BudgetService] Free-venue row ${row.id} has non-zero cost $${costPerPerson} — coercing to $0 at read time`);
+      costPerPerson = 0;
+    }
+
     const totalCents = Math.round(costPerPerson * numTravelers * 100);
     const isPaid = row.is_paid === true;
     const isLogistics = row.source === 'logistics-sync';
-    
+
     return {
       id: row.id,
       trip_id: row.trip_id,
