@@ -715,7 +715,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                               <span className="text-white">{categoryIcons[alloc.category]}</span>
                             </div>
                             <span className="font-medium">{categoryLabels[alloc.category]}</span>
-                            <Badge variant="outline" className="text-xs">
+                            <Badge
+                              variant="outline"
+                              className="text-xs"
+                              title="Target share of discretionary budget"
+                            >
                               {alloc.percent}%
                             </Badge>
                           </div>
