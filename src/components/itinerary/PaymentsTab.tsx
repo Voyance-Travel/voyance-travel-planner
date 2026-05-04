@@ -665,8 +665,8 @@ export function PaymentsTab({
       .filter(Boolean) as TripMember[];
     
     return (
+      <div key={`${item.type}-${item.id}`}>
       <motion.div
-        key={`${item.type}-${item.id}`}
         initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}
         className={cn(
@@ -768,6 +768,17 @@ export function PaymentsTab({
           )}
         </div>
       </motion.div>
+      {item.subItems && item.subItems.length > 0 && (
+        <div className="pl-11 pr-2 pb-2 -mt-1 space-y-0.5">
+          {item.subItems.map(sub => (
+            <div key={sub.id} className="flex items-center justify-between text-xs text-muted-foreground py-1 border-b border-border/30 last:border-0">
+              <span className="truncate pr-2">{sub.name}</span>
+              <span className="tabular-nums">{formatCurrency(sub.amountCents)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      </div>
     );
   };
 
@@ -796,6 +807,18 @@ export function PaymentsTab({
           <div className="text-right">
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
             <p className="text-xs text-muted-foreground">Trip Total</p>
+            {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (
+              <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
+                {Math.abs(payableTotalCents - financialSnapshot.tripTotalCents) <= 100 ? (
+                  <>
+                    <CheckCircle2 className="h-3 w-3 text-green-600" />
+                    Matches itinerary
+                  </>
+                ) : (
+                  <span className="text-amber-600">Reconciling…</span>
+                )}
+              </p>
+            )}
           </div>
         </div>
         
