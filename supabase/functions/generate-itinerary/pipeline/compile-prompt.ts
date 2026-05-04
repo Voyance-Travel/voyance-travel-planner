@@ -621,6 +621,8 @@ If this describes a primary purpose (event, wedding, conference), dedicate appro
     paramIsTransitionDay: !!paramIsTransitionDay,
     mustDoEventItems,
     arrivalAirportDisplay, airportTransferMinutes,
+    archetypeTier,
+    archetypeIdentity: archetypeContext.definition.identity || primaryArchetype,
   });
   flightContext = schema.flightContext;
   const dayConstraints = schema.dayConstraints;
