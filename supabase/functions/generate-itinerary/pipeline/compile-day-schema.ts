@@ -323,15 +323,15 @@ REQUIRED OPENING SEQUENCE (in this exact order):
    - location: { name: "Your Hotel" }
 
 2. "Check-in at Your Hotel"
-   - startTime: "09:45", endTime: "10:15"
+   - startTime: "09:30", endTime: "10:00"
    - category: "accommodation"
    - description: "Check in and get settled."
    - location: { name: "Your Hotel" }
 
 STRUCTURE:
-4. After check-in, plan a full day of activities starting from 10:30
-5. Include a "Freshen up at Your Hotel" break mid-afternoon
-6. End with dinner
+3. After check-in, plan a full day of activities starting from 10:15
+4. Include a "Freshen up at Your Hotel" break mid-afternoon
+5. End with dinner
 
 Start the day at 09:00 with the arrival sequence.`;
     }
