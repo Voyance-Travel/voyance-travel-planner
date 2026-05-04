@@ -22,6 +22,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { shouldCountRow } from '@/services/tripBudgetService';
 
 export interface FinancialDelta {
   previousTotalCents: number;
@@ -88,9 +89,9 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     let paidTotal = 0;
 
     for (const row of costs || []) {
-      // Skip hotel/flight logistics rows (day_number=0) when toggled off
-      if (row.day_number === 0 && row.category === 'hotel' && !includeHotel) continue;
-      if (row.day_number === 0 && row.category === 'flight' && !includeFlight) continue;
+      // Use shared inclusion rule — must match getBudgetSummary exactly,
+      // otherwise snapshot total and summary total drift apart.
+      if (!shouldCountRow(row, includeHotel, includeFlight)) continue;
 
       const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
       totalCents += Math.round(rowTotal * 100);

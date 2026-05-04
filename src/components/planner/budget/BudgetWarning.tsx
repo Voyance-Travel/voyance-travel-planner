@@ -1,16 +1,24 @@
 /**
  * Budget Warning Toast
- * 
+ *
  * Actionable budget warning that appears when users are over budget.
+ * Takes EXPLICIT primitive props (not a summary blob) so the percent and
+ * dollar overage are guaranteed to come from the same source of truth.
  */
 
 import { AlertTriangle, XCircle, ArrowRight, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { BudgetSummary } from '@/services/tripBudgetService';
 
 interface BudgetWarningProps {
-  summary: BudgetSummary;
+  status: 'yellow' | 'red';
+  /** Total used as a percentage of budget (e.g. 138 for 138%) */
+  usedPercent: number;
+  /** Cents over budget when status === 'red'. Ignored otherwise. */
+  overageCents: number;
+  /** Cents remaining when status === 'yellow'. Ignored otherwise. */
+  remainingCents: number;
+  currency: string;
   onDismiss?: () => void;
   onRebalance?: () => void;
   onSwapSuggestion?: () => void;
@@ -18,39 +26,37 @@ interface BudgetWarningProps {
 }
 
 export function BudgetWarning({
-  summary,
+  status,
+  usedPercent,
+  overageCents,
+  remainingCents,
+  currency,
   onDismiss,
   onRebalance,
   onSwapSuggestion,
   className,
 }: BudgetWarningProps) {
-  const isRed = summary.status === 'red';
-  const usedPercent = isFinite(summary.usedPercent) ? Math.round(summary.usedPercent) : 0;
-  const rawOveragePercent = summary.usedPercent - 100;
-  const overagePercent = isFinite(rawOveragePercent) ? Math.round(rawOveragePercent) : 0;
-  const rawOverageCents = summary.totalCommittedCents + summary.plannedTotalCents - summary.budgetTotalCents;
-  const overageCents = isFinite(rawOverageCents) ? rawOverageCents : 0;
-  const remainingCents = summary.budgetTotalCents - summary.totalCommittedCents - summary.plannedTotalCents;
+  const isRed = status === 'red';
+  const safeUsedPercent = isFinite(usedPercent) ? Math.round(usedPercent) : 0;
+  const safeOveragePercent = isFinite(usedPercent) ? Math.max(0, Math.round(usedPercent - 100)) : 0;
+  const safeOverageCents = isFinite(overageCents) ? Math.max(0, overageCents) : 0;
+  const safeRemainingCents = isFinite(remainingCents) ? Math.max(0, remainingCents) : 0;
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: summary.currency,
+      currency,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(cents / 100);
   };
 
-  if (summary.status !== 'yellow' && summary.status !== 'red') {
-    return null;
-  }
-
   return (
     <div
       className={cn(
         "flex items-center gap-3 p-4 rounded-lg border",
-        isRed 
-          ? "bg-destructive/10 border-destructive/30 text-destructive" 
+        isRed
+          ? "bg-destructive/10 border-destructive/30 text-destructive"
           : "bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-400",
         className
       )}
@@ -66,9 +72,9 @@ export function BudgetWarning({
           {isRed ? 'Over Budget' : 'Approaching Budget Limit'}
         </p>
         <p className="text-sm opacity-80">
-          {isRed 
-            ? `You're ${formatCurrency(Math.abs(overageCents))} (${overagePercent}%) over your budget.`
-            : `You've used ${usedPercent}% of your budget — ${formatCurrency(Math.max(0, remainingCents))} remaining.`
+          {isRed
+            ? `You're ${formatCurrency(safeOverageCents)} (${safeOveragePercent}%) over your budget.`
+            : `You've used ${safeUsedPercent}% of your budget — ${formatCurrency(safeRemainingCents)} remaining.`
           }
         </p>
       </div>
@@ -87,7 +93,7 @@ export function BudgetWarning({
             Swap Ideas
           </Button>
         )}
-        
+
         {onRebalance && isRed && (
           <Button
             variant="ghost"

@@ -41,6 +41,27 @@ export interface TripBudgetSettings {
 }
 
 /**
+ * Shared inclusion rule for activity_costs rows.
+ * MUST be used by every total-computing code path so the snapshot, the
+ * summary, and the ledger never disagree on which rows to count.
+ *
+ * Rule: a row tagged hotel/flight is excluded entirely when its corresponding
+ * inclusion toggle is off — regardless of day_number. (Previously the
+ * snapshot only excluded day_number=0 logistics rows, while the summary
+ * excluded all hotel rows; that mismatch was the second source of drift.)
+ */
+export function shouldCountRow(
+  row: { category?: string | null },
+  includeHotel: boolean,
+  includeFlight: boolean,
+): boolean {
+  const cat = (row.category || '').toLowerCase();
+  if (cat === 'hotel' && !includeHotel) return false;
+  if ((cat === 'flight' || cat === 'flights') && !includeFlight) return false;
+  return true;
+}
+
+/**
  * A ledger entry derived from activity_costs.
  * This replaces the old trip_budget_ledger-backed type.
  */
@@ -341,13 +362,23 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
     };
   });
 
-  // Largest-remainder adjustment: ensure ledger item sum matches canonical DB total
-  if (entries.length > 0 && totalResult.data) {
-    const canonicalCents = Math.round((Number(totalResult.data.total_all_travelers_usd) || 0) * 100);
+  // Largest-remainder adjustment: ensure ledger item sum matches a canonical total.
+  // Prefer the v_trip_total view, but fall back to the raw activity_costs sum
+  // if the view is missing/stale. This guarantees the ledger is ALWAYS reconciled,
+  // which prevents per-category drift between renders (Food $1,749 → $1,999, etc.).
+  if (entries.length > 0) {
     const rawSum = entries.reduce((s, e) => s + e.amount_cents, 0);
+    let canonicalCents: number | null = null;
+    if (totalResult.data && totalResult.data.total_all_travelers_usd != null) {
+      canonicalCents = Math.round((Number(totalResult.data.total_all_travelers_usd) || 0) * 100);
+    }
+    // If the view disagrees by more than the rounding tolerance, treat it as stale
+    // and use the freshly-summed activity_costs as the canonical total instead.
+    if (canonicalCents == null || Math.abs(canonicalCents - rawSum) > entries.length) {
+      canonicalCents = rawSum;
+    }
     const diff = canonicalCents - rawSum;
-    if (diff !== 0 && Math.abs(diff) <= entries.length) {
-      // Apply adjustment to the largest entry
+    if (diff !== 0) {
       let largestIdx = 0;
       for (let i = 1; i < entries.length; i++) {
         if (entries[i].amount_cents > entries[largestIdx].amount_cents) largestIdx = i;
