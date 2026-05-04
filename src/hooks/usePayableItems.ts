@@ -12,7 +12,7 @@
 
 import { useMemo } from 'react';
 import type { TripPayment } from '@/services/tripPaymentsAPI';
-import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer } from '@/lib/cost-estimation';
+import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle } from '@/lib/cost-estimation';
 
 export interface PayableSubItem {
   id: string;
