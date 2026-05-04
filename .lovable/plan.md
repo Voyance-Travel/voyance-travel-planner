@@ -1,51 +1,55 @@
 ## Problem
 
-Day 2 "Local transit" totals $140 because the cost pipeline auto-prices every transit sub-leg as a taxi at full retail (e.g. $54 for one intra-Paris hop). The user never picked taxi as their mode — the AI inserted "Taxi to …" titles and the cost layer faithfully estimated taxi fares from them.
+Day 1's $161 "Local transit" persists because the previous fix only caught two title patterns:
+- `Transfer/Travel to airport/station/...` (placeholder departure)
+- `Taxi to X` (unconfirmed taxi)
 
-Two real bugs feed this:
-
-1. **Auto-taxi titling.** Stage-2 itinerary generation labels short intra-city hops as "Taxi to X" by default. In a metro-rich city like Paris this should default to metro/walk, not taxi.
-2. **Unconfirmed fares counted as committed spend.** Even when "Taxi" is in the title, those rows go straight into `activity_costs` and the Payments grand total without any "user confirmed this mode" flag. Compare to the placeholder-departure-transfer rule, which already keeps unmoded transfers at $0.
+It misses **mode-less generic hops** like `Travel to Four Seasons` ($76), `Travel to Sébillon Rivoli` ($4), `Travel to Spa` — there's no mode keyword and no airport keyword, so both guards fall through and the cost-reference lookup prices them as taxis.
 
 ## Fix
 
-### 1. Treat AI-inserted intra-city taxis as unconfirmed (cost = $0 until user picks)
+### 1. Backend: add a generic "unconfirmed transit" rule
 
-In `supabase/functions/generate-itinerary/action-repair-costs.ts`, extend the placeholder-departure logic to a broader "unconfirmed transit" rule:
+In `supabase/functions/generate-itinerary/action-repair-costs.ts`, immediately after the existing `isUnconfirmedTaxi` branch, add:
 
-- If `category === 'transport'` AND title matches `^(taxi|cab|uber|lyft|rideshare|private car)\b.*\bto\b` AND `activity.cost?.basis` is not `'user' | 'user_override'` AND `booking_required !== true` → write the row as `cost_per_person_usd: 0`, `source: 'unconfirmed_transit'`, `notes: '[Choose a mode — taxi/metro/walk]'`.
-- This mirrors the existing `placeholder_departure` branch (lines 112–138) and is consistent with the [Placeholder Departure Transfer memory](mem://constraints/itinerary/placeholder-departure-transfer-no-cost).
+```ts
+const isGenericUnconfirmedTransit = category === 'transport'
+  && !TRANSPORT_MODE_RE.test(_titleForPlaceholder)
+  && !TRANSPORT_MODE_RE.test(_descForPlaceholder)
+  && !isUserConfirmedCost
+  && activity.booking_required !== true;
+```
 
-The transit row still appears on the day card with a "Choose mode" hint, but it does **not** inflate the Payments total.
+If true → write `cost_per_person_usd: 0`, `source: 'unconfirmed_transit'`, `notes: '[Choose a mode — taxi/metro/walk]'`. This is a strict superset of the placeholder-departure and unconfirmed-taxi rules, so they remain harmless but explicit.
 
-### 2. Suppress unconfirmed-transit sub-items from the grouped Payments row
+`TRANSPORT_MODE_RE` already includes: `taxi|cab|uber|lyft|rideshare|private car|car service|metro|subway|train|rer|tgv|shuttle|bus|tram|ferry|boat`. So a leg only earns a price if the user (or the AI) actually committed to a mode.
 
-In `src/hooks/usePayableItems.ts` (the transit grouping branch around lines 291–307):
+### 2. Frontend: extend the same guard
 
-- Skip sub-items whose `activity_costs` row has `source === 'unconfirmed_transit'` OR `cost_per_person_usd === 0`.
-- If the day's bucket ends up empty, don't emit the "Local transit — Day N" row at all.
+In `src/lib/cost-estimation.ts`, generalize `isUnconfirmedIntraCityTaxi` → `isUnconfirmedTransitLeg`: same exit conditions (`cost.basis = user/user_override`, `booking_required`, non-transport category) but the title check becomes "no mode keyword anywhere". Keep the old export name as an alias for backward compat.
 
-### 3. Lower the taxi base + scale for compact European cities
+In `src/hooks/usePayableItems.ts` both call sites (DB-driven transit branch ~line 291 and JSON-walk fallback ~line 401) use the new helper.
 
-`src/lib/cost-estimation.ts` line 442 currently sets `transportBase = 20` for any "taxi/cab" title. Combined with the Paris cost multiplier this produces ~$27–$54 per leg. This estimator should only fire when the user *has* confirmed taxi (basis = `user`), so:
+### 3. One-time data backfill
 
-- Keep the $20 base for confirmed taxis (it's a defensible Paris average).
-- Make sure the estimator is **not** called on rows already classified `unconfirmed_transit` upstream — guard via the same title-without-mode-confirmation check used in repair-costs.
+Run a SQL update to zero out existing `activity_costs` rows where:
+- `category IN ('transport','transit','transfer','taxi','rideshare')`
+- `cost_per_person_usd > 0`
+- The matching itinerary activity title/description contains no mode keyword
+- `cost.basis NOT IN ('user','user_override')` and `booking_required != true`
 
-### 4. Stage-2 default-mode bias (small, defensive)
-
-In the itinerary generation prompt section that names transit legs, add a one-liner rule: *"For intra-city hops under ~3 km in cities with strong metro coverage (Paris, London, Tokyo, NYC, Berlin, Madrid), title legs as 'Metro to X' or 'Walk to X', not 'Taxi to X', unless the user has explicitly opted into taxi-heavy travel."* This stops the bug at the source for future generations.
-
-## Files to change
-
-- `supabase/functions/generate-itinerary/action-repair-costs.ts` — add `unconfirmed_transit` branch
-- `src/hooks/usePayableItems.ts` — filter zero-cost / unconfirmed transit sub-items
-- `src/lib/cost-estimation.ts` — short comment + optional guard
-- `supabase/functions/generate-itinerary/` prompt for stage-2 transit naming
-- One-time SQL: zero out existing `activity_costs` rows for the affected trip where `category='transport'` and the activity title starts with "Taxi to" / "Travel to" without a user-confirmed `cost.basis`
+Tag with `source = 'unconfirmed_transit'`.
 
 ## Result
 
-- Day 2 "Local transit" drops from $140 → $0 (with a visible "Choose mode" hint on each leg).
-- Users explicitly upgrade a leg to Taxi when they want it; only then does it hit the Payments total.
-- New trips stop generating "Taxi to …" titles for short central-Paris hops in the first place.
+- Day 1 transit drops from $161 → $0 (each leg shown with a "choose a mode" hint).
+- Future generations: any mode-less transport leg the AI invents stays $0 until the user picks taxi/metro/walk.
+- Confirmed legs (user picked taxi, or it's a booked airport transfer with `booking_required=true`) still price normally.
+
+## Files
+
+- `supabase/functions/generate-itinerary/action-repair-costs.ts` — add generic branch
+- `src/lib/cost-estimation.ts` — add `isUnconfirmedTransitLeg`
+- `src/hooks/usePayableItems.ts` — swap to new helper at both call sites
+- One-time SQL data update
+- Memory update: rename `unconfirmed-intra-city-taxi-no-cost` → broader scope

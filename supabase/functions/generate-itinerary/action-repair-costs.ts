@@ -165,6 +165,30 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         continue;
       }
 
+      // Generic unconfirmed transit — any transport leg whose title/desc has
+      // NO mode keyword (e.g. "Travel to Four Seasons", "Transfer to Hotel").
+      // Catches the long tail of mode-less hops the prior two rules miss.
+      const isGenericUnconfirmedTransit = category === 'transport'
+        && !TRANSPORT_MODE_RE.test(_titleForPlaceholder)
+        && !TRANSPORT_MODE_RE.test(_descForPlaceholder)
+        && !isUserConfirmedCost
+        && activity.booking_required !== true;
+      if (isGenericUnconfirmedTransit) {
+        rows.push({
+          trip_id: tripId,
+          activity_id: activity.id,
+          day_number: dayNum,
+          cost_per_person_usd: 0,
+          num_travelers: numTravelers,
+          category: 'transport',
+          source: 'unconfirmed_transit',
+          confidence: 'low',
+          cost_reference_id: null,
+          notes: '[Choose a mode — taxi/metro/walk]',
+        });
+        continue;
+      }
+
 
       const title = activity.title || activity.name || "";
       const subcategory = inferSub(title, category);
