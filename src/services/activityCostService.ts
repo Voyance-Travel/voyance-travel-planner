@@ -496,7 +496,17 @@ export async function repairTripCosts(tripId: string): Promise<RepairResult> {
  * Returns true if repair is needed.
  */
 export async function needsCostRepair(tripId: string): Promise<boolean> {
-  // Check if trip has itinerary_data but no activity_costs rows
+  // Only auto-repair LEGACY trips: no activity_costs rows AND never repaired before.
+  // Without the second guard, every page load could re-run repair and silently
+  // raise prices (Michelin/ticketed floors), surprising users with "+$900" jumps.
+  const { data: tripRow } = await supabase
+    .from('trips')
+    .select('last_cost_repair_at')
+    .eq('id', tripId)
+    .maybeSingle();
+
+  if ((tripRow as any)?.last_cost_repair_at) return false;
+
   const { count, error } = await supabase
     .from('activity_costs')
     .select('id', { count: 'exact', head: true })
@@ -507,6 +517,39 @@ export async function needsCostRepair(tripId: string): Promise<boolean> {
     return false;
   }
 
-  // If there are 0 activity_costs rows, likely needs repair
   return (count || 0) === 0;
+}
+
+export interface CostChangeRow {
+  id: string;
+  activity_id: string;
+  previous_cents: number;
+  new_cents: number;
+  reason: string;
+  activity_title: string | null;
+  applied_at: string;
+}
+
+/**
+ * Fetch cost changes applied within the last `sinceMs` milliseconds.
+ * Used by useTripFinancialSnapshot to attribute total-jump deltas to a
+ * specific repair pass (so we don't show a generic "Total changed +$900" toast).
+ */
+export async function getRecentCostChanges(
+  tripId: string,
+  sinceMs: number = 10_000,
+): Promise<CostChangeRow[]> {
+  const since = new Date(Date.now() - sinceMs).toISOString();
+  const { data, error } = await (supabase as any)
+    .from('cost_change_log')
+    .select('id, activity_id, previous_cents, new_cents, reason, activity_title, applied_at')
+    .eq('trip_id', tripId)
+    .gte('applied_at', since)
+    .order('applied_at', { ascending: false });
+
+  if (error) {
+    console.warn('getRecentCostChanges error:', error);
+    return [];
+  }
+  return (data || []) as CostChangeRow[];
 }
