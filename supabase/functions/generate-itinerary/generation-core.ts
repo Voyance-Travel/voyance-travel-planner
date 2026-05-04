@@ -2277,7 +2277,11 @@ Generate activities for this day following ALL constraints above.`;
                 mealType: r.mealType || 'any',
               }))
             : [],
-          { earliestTimeMins: mealGuardEarliestMins, latestTimeMins: mealGuardLatestMins },
+          {
+            earliestTimeMins: mealGuardEarliestMins,
+            latestTimeMins: mealGuardLatestMins,
+            blockedRestaurants: ((context as any).usedRestaurants as string[]) || [],
+          },
         );
         if (!mealGuardResult.alreadyCompliant) {
           // If NOT the last attempt, treat meal guard firing as a retry trigger
