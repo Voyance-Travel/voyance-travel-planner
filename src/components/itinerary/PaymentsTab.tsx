@@ -1627,28 +1627,31 @@ export function PaymentsTab({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Expense Type</Label>
-              <Select value={newExpenseType} onValueChange={(v) => setNewExpenseType(v as 'flight' | 'hotel' | 'activity')}>
+              <Select value={newExpenseType} onValueChange={(v) => setNewExpenseType(v as PayableItem['type'])}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="flight">
-                    <div className="flex items-center gap-2">
-                      <Plane className="h-4 w-4" />
-                      Flight
-                    </div>
+                    <div className="flex items-center gap-2"><Plane className="h-4 w-4" />Flight</div>
                   </SelectItem>
                   <SelectItem value="hotel">
-                    <div className="flex items-center gap-2">
-                      <Hotel className="h-4 w-4" />
-                      Hotel / Accommodation
-                    </div>
+                    <div className="flex items-center gap-2"><Hotel className="h-4 w-4" />Hotel / Accommodation</div>
                   </SelectItem>
                   <SelectItem value="activity">
-                    <div className="flex items-center gap-2">
-                      <Camera className="h-4 w-4" />
-                      Activity / Tour
-                    </div>
+                    <div className="flex items-center gap-2"><Camera className="h-4 w-4" />Activity / Tour</div>
+                  </SelectItem>
+                  <SelectItem value="dining">
+                    <div className="flex items-center gap-2"><Utensils className="h-4 w-4" />Dining</div>
+                  </SelectItem>
+                  <SelectItem value="transport">
+                    <div className="flex items-center gap-2"><Car className="h-4 w-4" />Transport</div>
+                  </SelectItem>
+                  <SelectItem value="shopping">
+                    <div className="flex items-center gap-2"><ShoppingBag className="h-4 w-4" />Shopping</div>
+                  </SelectItem>
+                  <SelectItem value="other">
+                    <div className="flex items-center gap-2"><Receipt className="h-4 w-4" />Other</div>
                   </SelectItem>
                 </SelectContent>
               </Select>
