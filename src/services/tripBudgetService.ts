@@ -363,15 +363,45 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
   // Build activity_id → display-name map from the trip's itinerary so we
   // can show real titles instead of raw category enums.
   const nameById = new Map<string, string>();
+  // Secondary index: (dayNumber|category) → queue of activity names that
+  // exist in the JSON. Used as a fallback when an activity_costs row's
+  // activity_id was orphaned by a late-stage quality pass that minted a
+  // new uuid for the swapped activity. Keeps the cost ledger labelled
+  // with the real venue name instead of "Meal (Day N)".
+  const nameQueueByDayCat = new Map<string, string[]>();
+  const dayCatKey = (d: number | null | undefined, c: string) =>
+    `${d ?? 'x'}|${(c || '').toLowerCase()}`;
+  const DINING_RE = /\b(breakfast|brunch|lunch|dinner|supper|cafe|café|coffee|bakery|tapas|cocktails?|nightcap|aperitif|drinks?)\b/i;
   const days = ((tripResult.data as any)?.itinerary_data?.days) || [];
   for (const day of days) {
+    const dn = Number(day?.dayNumber) || null;
     for (const a of (day?.activities || [])) {
-      if (a?.id) {
-        const n = (a.title || a.name || '').toString().trim();
-        if (n) nameById.set(String(a.id), n);
+      const n = (a?.title || a?.name || '').toString().trim();
+      if (a?.id && n) nameById.set(String(a.id), n);
+      if (!n) continue;
+      // Map itinerary category to budget category (mirrors the small map
+      // used by tripBudgetService elsewhere). Tag meals from title too,
+      // since some activities use category="activity" for "Lunch at …".
+      const rawCat = (a?.category || a?.type || '').toString().toLowerCase();
+      let mapped: string | null = null;
+      if (rawCat === 'dining' || rawCat === 'food' || rawCat === 'restaurant' || DINING_RE.test(n)) {
+        mapped = 'dining';
+      } else if (['transport', 'transportation', 'taxi', 'metro', 'transit', 'transfer'].includes(rawCat)) {
+        mapped = 'transport';
+      } else if (rawCat === 'nightlife') mapped = 'nightlife';
+      else if (rawCat === 'shopping') mapped = 'shopping';
+      else if (rawCat === 'hotel' || rawCat === 'accommodation') mapped = 'hotel';
+      else if (rawCat === 'flight') mapped = 'flight';
+      else if (rawCat) mapped = 'activity';
+      if (mapped && dn != null) {
+        const k = dayCatKey(dn, mapped);
+        const arr = nameQueueByDayCat.get(k) || [];
+        arr.push(n);
+        nameQueueByDayCat.set(k, arr);
       }
     }
   }
+
   const hotelSel: any = (tripResult.data as any)?.hotel_selection;
   const flightSel: any = (tripResult.data as any)?.flight_selection;
   const hotelName: string | undefined = hotelSel?.name || hotelSel?.hotel?.name;
