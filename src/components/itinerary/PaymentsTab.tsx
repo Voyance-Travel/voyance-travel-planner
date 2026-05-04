@@ -564,6 +564,9 @@ export function PaymentsTab({
       setDeleting(false);
     }
   };
+
+  /**
+   * Resolve a member ID that might be a synthetic "collab-xxx" ID
    * to a real trip_members row ID. Creates a trip_members row if needed.
    */
   const resolveRealMemberId = async (memberId: string): Promise<string | null> => {
