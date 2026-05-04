@@ -119,6 +119,8 @@ export function PaymentsTab({
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<PayableItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Listen for cross-tab "Add expense" requests from BudgetTab's Misc empty-state.
   useEffect(() => {
