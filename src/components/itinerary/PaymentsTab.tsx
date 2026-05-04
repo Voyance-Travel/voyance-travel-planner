@@ -895,11 +895,11 @@ export function PaymentsTab({
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
             <p className="text-xs text-muted-foreground">Trip Total</p>
             {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (() => {
-              const rawManualCents = payments
-                .filter(p => typeof p.item_id === 'string' && p.item_id.startsWith('manual-'))
-                .reduce((s, p) => s + p.amount_cents * (p.quantity || 1), 0);
-              const clientTotal = payableTotalCents + rawManualCents;
-              const matches = Math.abs(clientTotal - estimatedTotal) <= 100;
+              // payableTotalCents already includes manual-* rows via addManualGroups
+              // in usePayableItems. Do NOT re-add them here or manual entries get
+              // double-counted and the badge sticks on "Reconciling…" forever.
+              // Tolerance widened to $2 to absorb per-row Math.round cent drift.
+              const matches = Math.abs(payableTotalCents - estimatedTotal) <= 200;
               return (
                 <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
                   {matches ? (
