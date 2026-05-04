@@ -803,7 +803,7 @@ export function enforceRequiredMealsFinalGuard(
   currency: string = 'USD',
   dayMode: string = 'unknown',
   fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [],
-  options?: { earliestTimeMins?: number; latestTimeMins?: number },
+  options?: { earliestTimeMins?: number; latestTimeMins?: number; blockedRestaurants?: string[] },
 ): MealGuardResult {
   if (requiredMeals.length === 0) {
     return { activities, injectedMeals: [], alreadyCompliant: true };
@@ -813,10 +813,29 @@ export function enforceRequiredMealsFinalGuard(
   const earliestMins = options?.earliestTimeMins ?? 0;     // default: midnight
   const latestMins = options?.latestTimeMins ?? 24 * 60;   // default: end of day
 
-  // Pre-filter: remove any chain restaurants from fallbackVenues
-  const cleanFallbackVenues = fallbackVenues.filter(v => !isChainRestaurant(v.name));
+  // Trip-wide blocked restaurants (used on previous days). Skip these in fallback selection.
+  const blockedNorm = new Set<string>(
+    (options?.blockedRestaurants || [])
+      .map((n) => extractRestaurantVenueName(n || ''))
+      .filter((n) => n.length > 2),
+  );
+  const isBlocked = (name: string): boolean => {
+    if (blockedNorm.size === 0) return false;
+    const norm = extractRestaurantVenueName(name || '');
+    if (!norm) return false;
+    if (blockedNorm.has(norm)) return true;
+    for (const b of blockedNorm) {
+      if (venueNamesMatch(norm, b)) return true;
+    }
+    return false;
+  };
+
+  // Pre-filter: remove any chain restaurants AND blocked restaurants from fallbackVenues
+  const cleanFallbackVenues = fallbackVenues.filter(
+    (v) => !isChainRestaurant(v.name) && !isBlocked(v.name),
+  );
   if (cleanFallbackVenues.length < fallbackVenues.length) {
-    console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Stripped ${fallbackVenues.length - cleanFallbackVenues.length} chain(s) from fallback venues`);
+    console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Stripped ${fallbackVenues.length - cleanFallbackVenues.length} chain/blocked-duplicate venue(s) from fallback pool`);
   }
   fallbackVenues = cleanFallbackVenues;
 
