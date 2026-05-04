@@ -1,52 +1,34 @@
-# Two-Path Group Credit Top-Up
+I found several restaurant deduplication layers, but there are two likely holes causing repeats to survive:
 
-You're right — and the system half-supports this today. The "transfer from my balance" path works, but the "buy fresh credits straight into the group" path doesn't exist as one flow. Today the owner has to leave the trip, buy credits on the Pricing page, come back, then transfer. That's the friction you're feeling.
+1. The chained `generate-trip-day` path builds `usedRestaurants` only from metadata, not robustly from the already-saved itinerary days. If metadata is stale, missing, or reset during retries, later days can reuse earlier restaurants.
+2. The final meal guard can inject missing meals after deduplication, but it does not receive a trip-wide blocked restaurant set. That means a removed duplicate dinner can be reinserted from the same pool/verified fallback later.
 
-## What changes
+Plan:
 
-The `GroupTopupModal` becomes a two-tab modal:
+1. Strengthen restaurant history at the source
+   - In `supabase/functions/generate-itinerary/action-generate-trip-day.ts`, derive a canonical `usedRestaurants` set from both:
+     - `trip.metadata.used_restaurants`
+     - all existing `itinerary_data.days[*].activities` dining entries
+   - Extract from all venue-bearing fields: `title`, `name`, `venue_name`, `restaurant.name`, `location.name`.
+   - Use the existing `extractRestaurantVenueName` + `venueNamesMatch` helpers so variants like `Dinner at X`, `X Restaurant`, and location-name-only versions match.
 
-```text
-┌─ Top Up Group Pool ────────────────────┐
-│                                        │
-│  [ From my balance ] [ Buy new pack ]  │  ← tabs
-│                                        │
-│  Your balance: 240 credits             │
-│  ( 50 ) ( 100 ) ( 200 )                │
-│  [ Add 100 credits to group ]          │
-└────────────────────────────────────────┘
-```
+2. Pass restaurant pool and history into the deterministic repair pipeline
+   - The current `repairDay` call in `action-generate-trip-day.ts` has fields for `restaurantPool` and `usedRestaurants`, but this call is not passing them.
+   - Add them so duplicate dining validation can swap from the pool instead of keeping repeated primary meals.
 
-### Tab 1 — From my balance (existing behavior, unchanged)
-Preset 50 / 100 / 200, calls `topup-group-budget`, deducts from owner's personal balance, adds to pool. Already works.
+3. Make the final meal guard trip-aware
+   - Update `enforceRequiredMealsFinalGuard` in `day-validation.ts` to accept an optional blocked restaurant list.
+   - When selecting fallback venues, skip anything matching blocked restaurants using the same canonical venue matching helpers.
+   - Also seed the guard's internal used venue set with canonical location/name fields, not only raw activity titles.
 
-### Tab 2 — Buy new pack (new)
-Shows the same credit packs from `CREDIT_PACKS` (Pricing page catalog). Owner picks a pack → Stripe Checkout opens → on success, the purchased credits land **directly in the group pool**, not the owner's personal balance.
+4. Apply the guard fix in all callers
+   - Update `action-generate-trip-day.ts`, `action-generate-day.ts`, `generation-core.ts`, and `action-save-itinerary.ts` call sites to pass known used restaurants where available.
+   - For the chained full-trip save pass, update the blocked set as each day is processed so Day 3 cannot reuse a restaurant injected into Day 2 by the guard.
 
-## How it works (technical)
+5. Add regression coverage
+   - Add tests around `enforceRequiredMealsFinalGuard` proving it will not inject a fallback venue already used on prior days.
+   - Add a repair-pipeline test proving duplicate primary meals are swapped when a replacement exists, rather than kept because meals are required.
 
-1. **Frontend** — Add `<Tabs>` to `GroupTopupModal.tsx`. Tab 2 renders pack cards (reuse styles from `CreditsAndBilling.tsx`) and calls `create-checkout` with new metadata: `{ destination: "group_pool", trip_id }`.
-
-2. **`create-checkout` edge function** — Accept optional `destination` and `tripId` in the request body. Pass them through to Stripe session metadata so the webhook knows where the credits go. Validate the caller is the trip owner before allowing `destination=group_pool`.
-
-3. **`stripe-webhook` edge function** — On `checkout.session.completed`, branch on `metadata.destination`:
-   - `"group_pool"` → call the same internal logic as `topup-group-budget` (insert into `group_budgets` / `group_budget_transactions`) instead of crediting the user's personal balance. Mark the ledger row `source: 'stripe_purchase'` so it shows up correctly in recent activity.
-   - default → existing behavior (credit personal balance).
-
-4. **Success return path** — `returnPath` set to the trip URL with `?group_topup=success` so we can fire a toast and refresh `['group-budget', tripId]` queries when the user returns.
-
-5. **Edge case** — If the Stripe payment succeeds but the trip was deleted between checkout and webhook, fall back to crediting the owner's personal balance and log it. No money lost.
-
-## Files touched
-
-- `src/components/modals/GroupTopupModal.tsx` — add tabs, pack picker UI
-- `supabase/functions/create-checkout/index.ts` — accept + forward `destination` and `tripId` metadata, owner check
-- `supabase/functions/stripe-webhook/index.ts` — branch credit destination on metadata
-- `src/components/itinerary/GroupBudgetDisplay.tsx` — minor copy: "Top up pool" stays, but the empty-state CTA already says "Purchase group credits" which now actually does that
-
-## Verification
-
-- As owner with sufficient balance: Tab 1 → pool increases, personal balance decreases. (regression check)
-- As owner with zero balance: Tab 2 → Stripe Checkout → on return, pool shows new credits, personal balance unchanged.
-- As non-owner collaborator: modal not reachable (existing guard).
-- Webhook idempotency: replay the same `checkout.session.completed` event, pool credited only once.
+6. Run the relevant tests
+   - Run the edge function tests for the itinerary generation suite.
+   - Run the frontend/unit tests if touched code affects shared TypeScript or UI behavior.

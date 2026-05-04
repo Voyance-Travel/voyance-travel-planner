@@ -364,11 +364,51 @@ async function _handleGenerateTripDayInner(
   } catch (_e) { /* trace-only */ }
 
   const restaurantPoolByCity: Record<string, any[]> = (tripMeta.restaurant_pool as any) || {};
-  const usedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
+  const metaUsedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
+
+  // ── ROBUST USED-RESTAURANTS DERIVATION ──
+  // Don't trust metadata alone (it can be stale or reset on retry). Walk every
+  // already-saved day and harvest dining venue names from ALL venue-bearing
+  // fields, then merge with metadata via canonical-venue dedup.
+  const usedRestaurants: string[] = [];
+  {
+    const { extractRestaurantVenueName: _extract, venueNamesMatch: _match } = await import('./generation-utils.ts');
+    const seen = new Set<string>();
+    const pushIfNew = (raw: string) => {
+      const canon = _extract(raw || '');
+      if (!canon || canon.length < 2) return;
+      if (seen.has(canon)) return;
+      // Fuzzy-match against existing entries
+      for (const existing of seen) {
+        if (_match(canon, existing)) return;
+      }
+      seen.add(canon);
+      usedRestaurants.push(canon);
+    };
+
+    // Seed from metadata
+    for (const m of metaUsedRestaurants) pushIfNew(m);
+
+    // Harvest from already-saved itinerary days
+    const MEAL_RE_HARVEST = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+    for (const d of existingDays) {
+      for (const a of (d?.activities || [])) {
+        const cat = (a.category || '').toLowerCase();
+        const typ = (a.type || '').toLowerCase();
+        const isDining = cat === 'dining' || cat === 'restaurant' || cat === 'food' ||
+          typ === 'dining' || MEAL_RE_HARVEST.test(a.title || '');
+        if (!isDining) continue;
+        for (const src of [a.title, a.name, a.venue_name, a.restaurant?.name, a.location?.name]) {
+          if (typeof src === 'string' && src.length > 0) pushIfNew(src);
+        }
+      }
+    }
+  }
   // === RESTAURANT DEDUP DEBUG ===
   console.log('=== RESTAURANT DEDUP DEBUG ===');
   console.log(`Day number: ${dayNumber}`);
-  console.log(`usedRestaurants received (${usedRestaurants.length}):`, JSON.stringify(usedRestaurants));
+  console.log(`metaUsedRestaurants (${metaUsedRestaurants.length}):`, JSON.stringify(metaUsedRestaurants));
+  console.log(`usedRestaurants merged from itinerary+metadata (${usedRestaurants.length}):`, JSON.stringify(usedRestaurants));
   console.log(`Type: ${typeof tripMeta.used_restaurants}, IsArray: ${Array.isArray(tripMeta.used_restaurants)}`);
   const allRestaurantParams = Object.keys(tripMeta).filter(k => /restaurant|used|block|previous|dining/i.test(k));
   console.log('All restaurant-related metadata keys:', JSON.stringify(allRestaurantParams.map(k => ({ key: k, count: Array.isArray(tripMeta[k]) ? (tripMeta[k] as any[]).length : 'N/A' }))));
@@ -1325,6 +1365,9 @@ async function _handleGenerateTripDayInner(
         previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
         previousHotelAddress: (cityInfo as any)?.previousHotelAddress || tripPreviousHotelAddress,
         hotelCoordinates: tripHotelCoordinates,
+        // Pass dedup context so DUPLICATE_CONCEPT / MEAL_DUPLICATE can swap from the pool
+        restaurantPool: restaurantPool && restaurantPool.length > 0 ? restaurantPool : undefined,
+        usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
       });
 
       if (repairs.length > 0) {
@@ -1737,6 +1780,26 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // Trip-wide blocked restaurant accumulator. Seeded with usedRestaurants and
+  // grown as each day is processed so Day N+1 can't reuse a venue that the
+  // guard injected on Day N.
+  const tripBlockedRestaurants: string[] = [...usedRestaurants];
+  const { extractRestaurantVenueName: _extractGuard } = await import('./generation-utils.ts');
+  const _harvestDining = (acts: any[]) => {
+    const MEAL_RE_H = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+    for (const a of acts || []) {
+      const cat = (a.category || '').toLowerCase();
+      const isDining = cat === 'dining' || cat === 'restaurant' || cat === 'food' || MEAL_RE_H.test(a.title || '');
+      if (!isDining) continue;
+      for (const src of [a.title, a.name, a.venue_name, a.restaurant?.name, a.location?.name]) {
+        if (typeof src === 'string' && src.length > 0) {
+          const canon = _extractGuard(src);
+          if (canon && !tripBlockedRestaurants.includes(canon)) tripBlockedRestaurants.push(canon);
+        }
+      }
+    }
+  };
+
   for (let i = 0; i < updatedDays.length; i++) {
     const d = updatedDays[i];
     if (!d?.activities || !Array.isArray(d.activities)) continue;
@@ -1751,7 +1814,10 @@ async function _handleGenerateTripDayInner(
       arrivalTime24: isFirstDayLoop ? savedArrivalTime24 : undefined,
       departureTime24: isLastDayLoop ? savedDepartureTime24 : undefined,
     });
-    if (policy.requiredMeals.length === 0) continue;
+    if (policy.requiredMeals.length === 0) {
+      _harvestDining(d.activities);
+      continue;
+    }
     const detected = detectMealSlots(d.activities);
     const missing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
 
@@ -1761,12 +1827,25 @@ async function _handleGenerateTripDayInner(
 
     if (missing.length > 0) {
       const dest = d.city || cityInfo?.cityName || destination || 'the destination';
-      const result = enforceRequiredMealsFinalGuard(d.activities, policy.requiredMeals, dn, dest, 'USD', policy.dayMode, fallbackVenues, { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop });
+      const result = enforceRequiredMealsFinalGuard(
+        d.activities,
+        policy.requiredMeals,
+        dn,
+        dest,
+        'USD',
+        policy.dayMode,
+        fallbackVenues,
+        { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop, blockedRestaurants: tripBlockedRestaurants },
+      );
       if (!result.alreadyCompliant) {
         updatedDays[i] = { ...d, activities: result.activities };
         console.warn(`[generate-trip-day] 🍽️ MEAL GUARD: Day ${dn} missing [${result.injectedMeals.join(', ')}] — injected before chain save`);
       }
     }
+
+    // After processing this day (with or without injection), record its
+    // dining venues so subsequent days don't pick the same restaurant.
+    _harvestDining(updatedDays[i].activities);
 
     // Terminal cleanup for each day
     try {

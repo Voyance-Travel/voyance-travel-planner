@@ -5,6 +5,7 @@
 import { isRecurringEvent } from './currency-utils.ts';
 import type { RequiredMeal } from './meal-policy.ts';
 import { getRandomFallbackRestaurant, GENERIC_VENUE_TEMPLATES } from './fix-placeholders.ts';
+import { extractRestaurantVenueName, venueNamesMatch } from './generation-utils.ts';
 
 // =============================================================================
 // CHAIN RESTAURANT BLOCKLIST — prevents chain restaurants from appearing
@@ -802,7 +803,7 @@ export function enforceRequiredMealsFinalGuard(
   currency: string = 'USD',
   dayMode: string = 'unknown',
   fallbackVenues: Array<{ name: string; address: string; mealType: string }> = [],
-  options?: { earliestTimeMins?: number; latestTimeMins?: number },
+  options?: { earliestTimeMins?: number; latestTimeMins?: number; blockedRestaurants?: string[] },
 ): MealGuardResult {
   if (requiredMeals.length === 0) {
     return { activities, injectedMeals: [], alreadyCompliant: true };
@@ -812,10 +813,29 @@ export function enforceRequiredMealsFinalGuard(
   const earliestMins = options?.earliestTimeMins ?? 0;     // default: midnight
   const latestMins = options?.latestTimeMins ?? 24 * 60;   // default: end of day
 
-  // Pre-filter: remove any chain restaurants from fallbackVenues
-  const cleanFallbackVenues = fallbackVenues.filter(v => !isChainRestaurant(v.name));
+  // Trip-wide blocked restaurants (used on previous days). Skip these in fallback selection.
+  const blockedNorm = new Set<string>(
+    (options?.blockedRestaurants || [])
+      .map((n) => extractRestaurantVenueName(n || ''))
+      .filter((n) => n.length > 2),
+  );
+  const isBlocked = (name: string): boolean => {
+    if (blockedNorm.size === 0) return false;
+    const norm = extractRestaurantVenueName(name || '');
+    if (!norm) return false;
+    if (blockedNorm.has(norm)) return true;
+    for (const b of blockedNorm) {
+      if (venueNamesMatch(norm, b)) return true;
+    }
+    return false;
+  };
+
+  // Pre-filter: remove any chain restaurants AND blocked restaurants from fallbackVenues
+  const cleanFallbackVenues = fallbackVenues.filter(
+    (v) => !isChainRestaurant(v.name) && !isBlocked(v.name),
+  );
   if (cleanFallbackVenues.length < fallbackVenues.length) {
-    console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Stripped ${fallbackVenues.length - cleanFallbackVenues.length} chain(s) from fallback venues`);
+    console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Stripped ${fallbackVenues.length - cleanFallbackVenues.length} chain/blocked-duplicate venue(s) from fallback pool`);
   }
   fallbackVenues = cleanFallbackVenues;
 
@@ -967,10 +987,23 @@ export function enforceRequiredMealsFinalGuard(
     dinner:    { start: '19:00', end: '20:15', cost: 30, startMins: 1140 },
   };
 
-  // Track which venue names have been used to avoid duplicates within this guard call
-  const usedVenueNamesForInjection = new Set<string>(
-    activities.map(a => (a.title || '').toLowerCase())
-  );
+  // Track which venue names have been used to avoid duplicates within this guard call.
+  // Seed with both raw titles AND canonical venue names + trip-wide blocked names so the
+  // fallback DB (TRY 2) cannot reintroduce a restaurant that was already used on a previous day.
+  const usedVenueNamesForInjection = new Set<string>();
+  for (const a of activities) {
+    const t = (a.title || '').toLowerCase();
+    if (t) usedVenueNamesForInjection.add(t);
+    const canonTitle = extractRestaurantVenueName(a.title || '');
+    if (canonTitle) usedVenueNamesForInjection.add(canonTitle);
+    const canonLoc = extractRestaurantVenueName((a as any).location?.name || '');
+    if (canonLoc) usedVenueNamesForInjection.add(canonLoc);
+  }
+  for (const b of blockedNorm) usedVenueNamesForInjection.add(b);
+  for (const raw of (options?.blockedRestaurants || [])) {
+    const lower = (raw || '').toLowerCase().trim();
+    if (lower) usedVenueNamesForInjection.add(lower);
+  }
 
   const result = [...activities];
 
@@ -990,10 +1023,12 @@ export function enforceRequiredMealsFinalGuard(
     let venueDescription: string = '';
     let usedRealVenue = false;
 
-    // Find matching venue: prefer specific meal type, then 'any'
+    // Find matching venue: prefer specific meal type, then 'any'.
+    // Reject anything already used (this day) or blocked (previous days).
     const matchingVenues = fallbackVenues.filter(v =>
       (v.mealType === mealType || v.mealType === 'any') &&
-      !usedVenueNamesForInjection.has(v.name.toLowerCase())
+      !usedVenueNamesForInjection.has(v.name.toLowerCase()) &&
+      !isBlocked(v.name)
     );
     // Prefer meal-type-specific matches first
     const specificMatch = matchingVenues.find(v => v.mealType === mealType);
@@ -1004,6 +1039,7 @@ export function enforceRequiredMealsFinalGuard(
       venueAddress = venue.address || `${venue.name}, ${destination}`;
       venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
       usedVenueNamesForInjection.add(venue.name.toLowerCase());
+      usedVenueNamesForInjection.add(extractRestaurantVenueName(venue.name));
       usedRealVenue = true;
       // Remove from fallbackVenues so next meal gets a different one
       const idx = fallbackVenues.indexOf(venue);
