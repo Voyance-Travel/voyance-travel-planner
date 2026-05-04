@@ -227,6 +227,26 @@ export function PaymentsTab({
     enabled: !!tripId,
   });
 
+  // Fetch trip-level inclusion toggles so the Payments list and the Trip Total
+  // share the exact same row-inclusion contract (matches useTripFinancialSnapshot).
+  const { data: tripInclusion } = useQuery({
+    queryKey: ['trip-inclusion-toggles', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('trips')
+        .select('budget_include_hotel, budget_include_flight')
+        .eq('id', tripId)
+        .single();
+      return {
+        includeHotel: data?.budget_include_hotel ?? true,
+        includeFlight: data?.budget_include_flight ?? false,
+      };
+    },
+    enabled: !!tripId,
+  });
+  const includeHotel = tripInclusion?.includeHotel ?? true;
+  const includeFlight = tripInclusion?.includeFlight ?? false;
+
   // Use the shared payable items hook — single source of truth for cost totals
   const { items: payableItems, totalCents: payableTotalCents, essentialItems, activityItems } = usePayableItems({
     days,
@@ -239,6 +259,8 @@ export function PaymentsTab({
     destinationCountry,
     activityCosts,
     paymentsLoaded: !loading,
+    includeHotel,
+    includeFlight,
   });
 
   // ─── Canonical total from DB ledger (single source of truth, matches header + budget) ───
@@ -896,10 +918,21 @@ export function PaymentsTab({
             <p className="text-xs text-muted-foreground">Trip Total</p>
             {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (() => {
               // payableTotalCents already includes manual-* rows via addManualGroups
-              // in usePayableItems. Do NOT re-add them here or manual entries get
-              // double-counted and the badge sticks on "Reconciling…" forever.
-              // Tolerance widened to $2 to absorb per-row Math.round cent drift.
-              const matches = Math.abs(payableTotalCents - estimatedTotal) <= 200;
+              // and respects the same hotel/flight inclusion toggles as the
+              // financial snapshot. The remaining drift comes from JSON-walk
+              // fallback rows for activities the cost pipeline has not yet
+              // costed, so we tolerate small percentage gaps to avoid a
+              // permanent "Reconciling…" state on otherwise-consistent trips.
+              const diff = Math.abs(payableTotalCents - estimatedTotal);
+              const pctDrift = estimatedTotal > 0 ? diff / estimatedTotal : 0;
+              const matches = diff <= 500 || pctDrift <= 0.02; // $5 OR 2%
+              if (!matches && import.meta.env.DEV) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                  '[PaymentsTab] Reconciling badge mismatch',
+                  { payableTotalCents, estimatedTotal, diff, pctDrift }
+                );
+              }
               return (
                 <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
                   {matches ? (

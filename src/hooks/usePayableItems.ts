@@ -80,6 +80,10 @@ interface PayableItemsInput {
   activityCosts?: ActivityCostRow[] | null;
   /** When false, suppress canonical hotel/flight rows to avoid flashing duplicates before payments load. */
   paymentsLoaded?: boolean;
+  /** Trip-level inclusion toggles. Must mirror useTripFinancialSnapshot so the
+   *  Payments list and the Trip Total agree on which logistics rows count. */
+  includeHotel?: boolean;
+  includeFlight?: boolean;
 }
 
 const TRANSIT_CATEGORIES = new Set([
@@ -103,12 +107,25 @@ export function usePayableItems({
   hotelSelection,
   travelers,
   payments,
-  activityCosts,
+  activityCosts: activityCostsRaw,
   budgetTier,
   destination,
   destinationCountry,
   paymentsLoaded = true,
+  includeHotel = true,
+  includeFlight = false,
 }: PayableItemsInput): PayableItemsResult {
+  // Apply trip-level inclusion toggles so the visible Payments total matches
+  // the Trip Total computed by useTripFinancialSnapshot (shouldCountRow).
+  const activityCosts = useMemo(() => {
+    if (!activityCostsRaw) return activityCostsRaw;
+    return activityCostsRaw.filter((row) => {
+      const cat = (row.category || '').toLowerCase();
+      if (cat === 'hotel' && !includeHotel) return false;
+      if ((cat === 'flight' || cat === 'flights') && !includeFlight) return false;
+      return true;
+    });
+  }, [activityCostsRaw, includeHotel, includeFlight]);
   // Build a lookup: activity_id -> display name + cost from JSON itinerary.
   // The cost is used as a rescue fallback when the activity_costs DB row is
   // bogusly $0 (e.g. a restaurant misclassified as a "Free venue - Tier 1").

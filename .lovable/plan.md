@@ -1,51 +1,40 @@
-## Real bug
+## Problem
 
-Payments shows the **correct** $235 group total for "Nightcap at Le Bar" (2 guests in Paris). The itinerary card is the one lying — it labels the same $235 as "$235 /pp" and the tooltip says "Group total: $470" (i.e. it multiplies by travelers a second time).
+The Payments header is still showing `Reconciling…` because the badge compares two totals that are built from different inclusion rules:
 
-### Why
+- `estimatedTotal` is based on the canonical financial snapshot, which respects trip budget inclusion toggles via `shouldCountRow(...)`.
+- `payableTotalCents` is the visible Payments line-item total, currently built from all `activity_costs` rows without applying those same hotel/flight inclusion rules.
 
-`estimateCostSync(category: 'dining', travelers: 2, …)` in `src/lib/cost-estimation.ts` (line 285) computes:
+So the badge can remain stuck even when the UI is internally consistent enough for the user. In this session, the trip has manual paid hotel data plus canonical ledger data; the header comparison is too strict and not using a shared total contract.
 
-```
-subtotal = perPerson * travelers     // already group total for dining
-total    = round(subtotal * (1 + tax_tip_buffer) / 5) * 5
-```
+## Fix
 
-It returns `{ amount: total /* group */, perPerson, … }`.
+1. **Make Payments line items use the same inclusion rules as the Trip Total**
+   - Update `usePayableItems` so it accepts the trip-level `budget_include_hotel` and `budget_include_flight` flags.
+   - Filter `activityCosts` through the shared `shouldCountRow(...)` helper before generating visible payable rows.
+   - This keeps the Payments list and Trip Total grounded in the same ledger definition.
 
-In `src/components/itinerary/EditorialItinerary.tsx` (~line 1002), the wrapper takes `result.amount` and returns `{ amount, basis }` where `basis` was defaulted to `'per_person'` higher in the function. Result: card displays the group total but tags it `/pp` and the tooltip helpfully multiplies it by travelers AGAIN to show a phantom "Group total".
+2. **Pass the inclusion flags from `PaymentsTab`**
+   - The `useTripFinancialSnapshot` hook already reads these flags internally, but `PaymentsTab` also needs them for `usePayableItems`.
+   - Extend the activity-costs query (or a small adjacent trip settings query if cleaner) so `PaymentsTab` can pass `includeHotel/includeFlight` into the hook.
 
-This affects **every estimated dining/restaurant/bar row** with `travelers > 1` — the visible per-person price in the itinerary is inflated 2× (or 3×, 4× for larger groups).
+3. **Fix the sync badge comparison**
+   - Compare the visible payable total to the same canonical total that actually drives the displayed Trip Total.
+   - Keep a small rounding tolerance, but remove the current false-positive path where a valid manual override or excluded logistics row causes permanent `Reconciling…`.
+   - If there is a manual hotel/flight override, treat it as an override delta consistently in both the header total and the badge comparison.
 
-## Fix (one place)
+4. **Add lightweight diagnostics for future drift**
+   - In development only, log the two compared totals and the delta when the badge would show `Reconciling…`.
+   - This gives us the exact mismatch next time without exposing anything to production users.
 
-In `EditorialItinerary.tsx` around lines 1015-1021, when the result came from `estimateCostSync` for a per-person category (dining/restaurant/breakfast/brunch/lunch/dinner/cafe/coffee), return the cost with `basis: 'flat'` — meaning "this number IS the group total, do not show /pp and do not multiply".
+## Files to update
 
-```ts
-const PER_PERSON_CATS = new Set(['dining','restaurant','breakfast','brunch','lunch','dinner','cafe','coffee']);
-const engineBasis: CostBasis = PER_PERSON_CATS.has(category.toLowerCase())
-  ? 'flat'   // engine already multiplied by travelers
-  : basis;   // attractions/activities: engine returns per-person flat anyway
+- `src/hooks/usePayableItems.ts`
+- `src/components/itinerary/PaymentsTab.tsx`
 
-return { amount, isEstimated: result.isEstimated, estimateReason: result.reason, confidence: result.confidence, basis: engineBasis };
-```
+## Expected result
 
-Net effect on the card:
-- `basisLabel(basis='flat', travelers=2)` → no "/pp" suffix
-- The "Group total" tooltip line (`travelers > 1 && basis === 'per_person'`) won't render
-- Headline number stays $235 — matches Payments
-
-## Why not change the engine
-
-Other call sites (Payments JSON-walk, budgetLedgerSync) already consume `estimateCostSync().amount` as the group total. Changing the engine would require recalibrating every consumer. The display-side fix is one diff and makes the contract explicit at the boundary.
-
-## Files
-
-- `src/components/itinerary/EditorialItinerary.tsx` — set `basis: 'flat'` for engine-estimated per-person categories
-- No DB changes; no edge-function changes. The Payments tab is already correct.
-
-## Result
-
-- Itinerary row: `$235` (no `/pp` suffix), tooltip drops the misleading "Group total: $470" line
-- Payments row: unchanged at $235 — they finally agree
-- All other multi-traveler dining estimates also self-correct
+- The persistent `Reconciling…` indicator clears once the Payments item total and displayed Trip Total are using the same inclusion/override rules.
+- The Payments rows remain itemized as before.
+- Manual hotel/flight overrides no longer keep the sync badge in a permanent amber state.
+- No database schema changes are needed.
