@@ -404,6 +404,19 @@ export function estimateCostSync(params: EstimateParams): CostEstimateResult {
   // ─── Transport mode-aware pricing ───
   if (['transport', 'transfer', 'transportation'].includes(normalizedCategory)) {
     const titleLower = (params.title || '').toLowerCase();
+
+    // Placeholder departure transfer (no mode chosen): never auto-commit a price.
+    if (isPlaceholderDepartureTransferTitle(params.title)) {
+      return {
+        amount: 0,
+        currency: 'USD',
+        isEstimated: true,
+        confidence: 'low' as const,
+        source: 'category_estimate' as const,
+        reason: 'No transport mode chosen — see airport transfer options',
+      };
+    }
+
     let transportBase: number;
 
     if (titleLower.includes('walk') || titleLower.includes('stroll')) {
