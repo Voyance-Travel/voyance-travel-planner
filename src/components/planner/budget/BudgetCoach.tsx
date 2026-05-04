@@ -440,7 +440,6 @@ export function BudgetCoach({
   };
 
 
-  const [isBumping, setIsBumping] = useState(false);
   const handleBump = async () => {
     if (!onBumpBudget) return;
     setIsBumping(true);
