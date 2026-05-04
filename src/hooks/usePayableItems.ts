@@ -109,14 +109,20 @@ export function usePayableItems({
   destinationCountry,
   paymentsLoaded = true,
 }: PayableItemsInput): PayableItemsResult {
-  // Build a lookup: activity_id -> display name from JSON itinerary
+  // Build a lookup: activity_id -> display name + cost from JSON itinerary.
+  // The cost is used as a rescue fallback when the activity_costs DB row is
+  // bogusly $0 (e.g. a restaurant misclassified as a "Free venue - Tier 1").
   const activityNameById = useMemo(() => {
-    const map = new Map<string, { name: string; dayNumber: number }>();
+    const map = new Map<string, { name: string; dayNumber: number; jsonCost: number; category: string }>();
     days.forEach(day => {
       day.activities.forEach(a => {
         if (!a?.id) return;
         const name = a.title || a.name || 'Activity';
-        map.set(a.id, { name, dayNumber: day.dayNumber });
+        const explicit = typeof a.cost === 'number' ? a.cost
+          : (a.cost && typeof a.cost === 'object' && typeof (a.cost as any).amount === 'number') ? (a.cost as any).amount
+          : (typeof a.explicitCost === 'number' ? a.explicitCost : 0);
+        const category = (a.category || a.type || '').toLowerCase();
+        map.set(a.id, { name, dayNumber: day.dayNumber, jsonCost: Number(explicit) || 0, category });
       });
     });
     return map;
