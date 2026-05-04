@@ -485,7 +485,10 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       {/* Missing items warning */}
       {(() => {
         const missingItems: string[] = [];
-        const hotelHasPrice = !!(hotelSelection?.totalPrice || hotelSelection?.pricePerNight);
+        const hasManualHotelPayment = payments.some(
+          p => p.item_type === 'hotel' && typeof p.item_id === 'string' && p.item_id.startsWith('manual-')
+        );
+        const hotelHasPrice = !!(hotelSelection?.totalPrice || hotelSelection?.pricePerNight) || hasManualHotelPayment;
         const hotelMissingPrice = (settings?.budget_include_hotel ?? true) && hasHotel && !hotelHasPrice;
 
         if ((settings?.budget_include_hotel ?? true) && !hasHotel) missingItems.push('Hotel');

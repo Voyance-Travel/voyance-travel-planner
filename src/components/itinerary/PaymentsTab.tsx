@@ -282,30 +282,12 @@ export function PaymentsTab({
     .filter(r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0)
     .reduce((s, r) => s + Math.round((r.cost_per_person_usd || 0) * (r.num_travelers || 1) * 100), 0);
 
-  const manualExtraCents = useMemo(() => {
-    let manualHotelCents = 0;
-    let manualFlightCents = 0;
-    let otherManualCents = 0;
-    for (const p of payments) {
-      if (typeof p.item_id !== 'string' || !p.item_id.startsWith('manual-')) continue;
-      const cents = p.amount_cents * (p.quantity || 1);
-      if (p.item_type === 'hotel') manualHotelCents += cents;
-      else if (p.item_type === 'flight') manualFlightCents += cents;
-      else otherManualCents += cents;
-    }
-    // Manual hotel/flight REPLACES the canonical day-0 row (delta, not addition).
-    // If no canonical row exists, the manual amount is purely additive.
-    const hotelDelta = hasCanonicalHotel ? (manualHotelCents - canonicalHotelCents) : manualHotelCents;
-    const flightDelta = hasCanonicalFlight ? (manualFlightCents - canonicalFlightCents) : manualFlightCents;
-    return otherManualCents + hotelDelta + flightDelta;
-  }, [payments, hasCanonicalHotel, hasCanonicalFlight, canonicalHotelCents, canonicalFlightCents]);
-
+  // Manual payments are now folded into useTripFinancialSnapshot directly
+  // (override-aware for hotel/flight, additive for others). No local delta needed.
   const baseTotal = financialSnapshot.loading
     ? payableTotalCents
     : (financialSnapshot.tripTotalCents > 0 ? financialSnapshot.tripTotalCents : payableTotalCents);
-  // Single canonical ledger total + override-aware manual delta. No Math.max
-  // floor against payableTotalCents — that floor magnified the double-count.
-  const estimatedTotal = Math.max(0, baseTotal + manualExtraCents);
+  const estimatedTotal = Math.max(0, baseTotal);
   // "Paid so far" reflects actual recorded payments from trip_payments
   const paidAmount = totals.paid;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
