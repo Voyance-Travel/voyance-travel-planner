@@ -1,52 +1,28 @@
-# Fix: Budget by Category breaks when fixed costs exceed the total
+# Fix: Hotel "no nightly rate set" warning contradicts the committed line item
 
-## Root cause (verified against the live row)
+## Root cause
 
-The trip in the screenshot has `budget_total_cents = 179_600` ($1,796) and `committedHotelCents ≈ $2,850`. The hotel alone is more than the entire budget.
+`BudgetTab.tsx` lines 488–509 trigger a yellow banner whenever `hotel_selection.totalPrice` and `hotel_selection.pricePerNight` are both missing. The banner copy says *"…has no nightly rate set — we've estimated it from typical … rates."*
 
-`getCategoryAllocations` in `src/services/tripBudgetService.ts` (lines 655–731) then does:
+That is technically true of the **selection object** but the estimate has already been synced into `activity_costs` as a `committed` row (per the Hotel Ledger Sync mandate — Day 0 hotel cost is always written). So the user sees:
 
-```ts
-const sharePct = Math.round((committedHotelCents / budgetTotal) * 100);
-// → 2850/1796 ≈ 159 → "159% of total"
+- **All Costs:** *Four Seasons Hotel George V — Hotel · Committed · $2,850* ✅
+- **Banner:** *…has no nightly rate set — we've estimated it…* ❌ (reads like the cost is missing)
 
-const discretionaryTotal = Math.max(budgetTotal - committedFixed, 0);
-// → max(1796 - 2850, 0) = 0
-// → every discretionary row's allocatedCents = round(0 * 35/100) = 0
-```
-
-So:
-- **159% on Accommodation** is literally `committedHotel / budgetTotal`. Mathematically correct, semantically nonsense — "share of total" can't exceed 100%.
-- **$0 allocated on Food / Activities / Transit / Misc** is because the discretionary pool went to zero. The percent badges in the JSX (`{alloc.percent}%`) still come from the saved allocation (35/35/10/5) — the UI just *displays* them next to "$… / $0", which reads as "0% allocated" to a user. (The DB allocations are persisting fine — confirmed via `read_query`; user is conflating "$0 allocated" with "0%".)
-- **The total adds up** because `usedCents` is read directly from `summary.planned*Cents`, which is independent of the broken discretionary pool.
+Both statements are about the same row. The banner is the only wrong one — the $2,850 *is* the estimate.
 
 ## Fix
 
-### `src/services/tripBudgetService.ts` — `getCategoryAllocations`
+In `src/components/planner/budget/BudgetTab.tsx` (the missing-items warning block):
 
-1. **Clamp `shareOfBudgetPercent` at 100** and add an `exceedsBudget` flag (already exists). UI will say "$2,850 — over budget" instead of "159% of total".
-2. **Discretionary fallback when fixed costs swallow the budget.** When `discretionaryTotal === 0` *and* there is real planned discretionary spend (`summary.plannedFood + plannedActivities + plannedTransit + plannedMisc > 0`), compute each category's `allocatedCents` from the **original budget total** using the saved percentages, instead of from the empty remainder. Tag the result with `discretionaryUnderwater = true` so the UI can show a single explanatory note (no per-row noise).
-3. **Stop pretending the percent badge is share-of-spend.** Keep `percent` = the saved allocation (intent), but rename the UI sub-label so it reads "Target 35% of budget" rather than the ambiguous "35%" pill that the user mis-read as a usage bar.
-
-### `src/components/planner/budget/BudgetTab.tsx` — Budget by Category
-
-1. **Fixed row label.** Replace `({sharePct}% of total)` with:
-   - `({sharePct}% of total)` when `!exceedsBudget`
-   - `Over budget` (red) when `exceedsBudget`
-2. **Discretionary underwater banner.** When `discretionaryUnderwater` is true on any row, render a single muted note above the discretionary section:
-   > *Hotel costs have absorbed your full trip budget. Increase your total or toggle "Include Hotel in Budget" off to free up the discretionary pool.*
-3. **Badge tooltip.** Add a `title="Target share of discretionary budget"` to the `{alloc.percent}%` badge so the meaning is unambiguous on hover.
-
-### Out of scope
-
-- No DB writes; allocations are already persisting correctly (verified).
-- No change to `summary` math — `usedCents` and the underlying totals are correct.
-- No change to spend-style defaults.
+1. **Rewrite the hotel-missing-rate copy** to acknowledge the estimate is live in the ledger and frame the banner as a precision prompt, not a missing-data alarm:
+   > *We've used an estimated nightly rate for **Four Seasons Hotel George V, Paris** (~$2,850 total) based on typical Paris luxury-tier hotels. Add the actual rate in Flights & Hotels to lock in a precise budget.*
+2. **Inline the estimated total** by reading `summary.committedHotelCents` (already in scope via the hook) and formatting it with the existing `formatCurrency` helper. If the committed amount is 0 or unavailable, fall back to the prior phrasing without the dollar figure.
+3. **No change** to when the banner appears — the underlying detection is correct; only the wording is wrong.
 
 ## Acceptance
 
-For the affected trip:
-- Accommodation row reads `$2,850 — Over budget` (red), not `159% of total`.
-- Food/Activities/Transit/Misc rows show non-zero `allocatedCents` (computed from the original $1,796 × saved percentages) and a single explanatory line about the hotel absorbing the budget.
-- The 35 / 35 / 10 / 5 badges still display correctly with a hover tooltip clarifying they're intent, not usage.
-- Trip Expenses total ($4,506) is unchanged.
+- Banner no longer claims the rate is unset when a committed estimate exists.
+- Banner explicitly references the estimated dollar amount that the user sees in the ledger directly above.
+- Banner still appears when the hotel has no real rate, but reads as a "tighten this up" nudge rather than a contradiction.
+- No DB or pipeline changes; ledger and totals are unchanged.
