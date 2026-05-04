@@ -674,7 +674,9 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                               <span className={cn("font-medium", alloc.exceedsBudget && "text-destructive")}>
                                 {formatCurrency(alloc.usedCents)}
                               </span>
-                              {typeof alloc.shareOfBudgetPercent === 'number' && (
+                              {alloc.exceedsBudget ? (
+                                <span className="text-xs font-medium text-destructive">Over budget</span>
+                              ) : typeof alloc.shareOfBudgetPercent === 'number' && (
                                 <span className="text-xs text-muted-foreground">
                                   ({alloc.shareOfBudgetPercent}% of total)
                                 </span>
