@@ -144,8 +144,10 @@ export interface CategoryAllocation {
   kind?: 'fixed' | 'discretionary';
   /** True when a fixed cost exceeds the entire trip budget total. */
   exceedsBudget?: boolean;
-  /** For fixed rows: committed / budgetTotal as a percent (informational only, may exceed 100). */
+  /** For fixed rows: committed / budgetTotal as a percent, clamped to 100. */
   shareOfBudgetPercent?: number;
+  /** True on every discretionary row when fixed costs have absorbed the full budget. */
+  discretionaryUnderwater?: boolean;
 }
 
 // =============================================================================
