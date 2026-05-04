@@ -466,6 +466,38 @@ export function BudgetCoach({
             transition={{ duration: 0.2 }}
           >
             <CardContent className="space-y-3 pt-0">
+              {/* Protected categories chip row */}
+              {onProtectedCategoriesChange && (
+                <div className="flex items-start gap-2 flex-wrap pb-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1 pt-1.5 shrink-0">
+                    <Shield className="h-3 w-3" />
+                    Don't suggest swaps for:
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {CATEGORY_GROUP_LABELS.map((label) => {
+                      const active = protectedCategories.includes(label);
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => toggleProtected(label)}
+                          className={cn(
+                            'px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+                            active
+                              ? 'bg-primary/10 text-primary border-primary/40'
+                              : 'bg-background text-muted-foreground border-border hover:border-foreground/30'
+                          )}
+                          aria-pressed={active}
+                        >
+                          {active && <Check className="h-3 w-3 inline mr-1" />}
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Loading state */}
               {isLoading && (
                 <div className="flex items-center justify-center py-8 gap-3">
