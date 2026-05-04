@@ -104,6 +104,10 @@ export function usePayableItems({
   travelers,
   payments,
   activityCosts,
+  budgetTier,
+  destination,
+  destinationCountry,
+  paymentsLoaded = true,
 }: PayableItemsInput): PayableItemsResult {
   // Build a lookup: activity_id -> display name from JSON itinerary
   const activityNameById = useMemo(() => {
@@ -118,12 +122,15 @@ export function usePayableItems({
     return map;
   }, [days]);
 
+  const isManualId = (id: unknown): id is string =>
+    typeof id === 'string' && /^manual[-_]/i.test(id.trim());
+
   const hasManualHotel = useMemo(
-    () => payments.some(p => p.item_type === 'hotel' && typeof p.item_id === 'string' && p.item_id.startsWith('manual-')),
+    () => payments.some(p => p.item_type === 'hotel' && isManualId(p.item_id)),
     [payments]
   );
   const hasManualFlight = useMemo(
-    () => payments.some(p => p.item_type === 'flight' && typeof p.item_id === 'string' && p.item_id.startsWith('manual-')),
+    () => payments.some(p => p.item_type === 'flight' && isManualId(p.item_id)),
     [payments]
   );
 
