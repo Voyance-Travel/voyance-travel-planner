@@ -289,8 +289,12 @@ export function usePayableItems({
 
         // Group transit rows
         if (TRANSIT_CATEGORIES.has(cat)) {
-          const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
           const lookup = activityNameById.get(row.activity_id);
+          // Skip placeholder departure transfers — no mode chosen, no committed price.
+          if (lookup && isPlaceholderDepartureTransferTitleSafe(lookup.name)) {
+            continue;
+          }
+          const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
           const subName = lookup?.name || 'Local transit';
           bucket.subItems.push({
             id: row.activity_id,
