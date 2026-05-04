@@ -1,40 +1,36 @@
-## Plan to fix persistent “Reconciling…” in Payments
+## Root cause
 
-### What I found
-The badge is not a Stripe/payment-session status. It is rendered in `PaymentsTab.tsx` when two different totals disagree:
+For trip `7ea828ac…` Day 1, `activity_costs` contains **two dining rows**:
 
-- `estimatedTotal`: canonical total from `useTripFinancialSnapshot`, mainly `activity_costs` plus manual payments.
-- `payableTotalCents`: Payments tab line-item total from `usePayableItems`.
+| activity_id | per-person | × travelers | total | in itinerary JSON? |
+|---|---|---|---|---|
+| `21050843…` (live "Lunch at Le Comptoir du Relais") | $45 | 2 | **$90** | ✅ |
+| `f11e8f19…` (orphan from a prior swap) | $25 | 2 | **$50** | ❌ |
 
-For the active Paris test trip, the database ledger currently totals about **$1,917** in activity costs plus a **$2,400 manual hotel payment**, while Payments can still add extra JSON-walk fallback estimates for itinerary items that are not in `activity_costs`. That fallback was intended to keep uncosted visible activities from disappearing, but it makes the visible payment rows drift from the canonical ledger, so the badge stays “Reconciling…” across sessions.
+Only the $90 row corresponds to a real activity. The $50 row is leftover from a swap that never ran `cleanupRemovedActivityCosts`. Both `getBudgetLedger` and `usePayableItems` then run "orphan rescue" — when a row's `activity_id` no longer exists in JSON, they pop the next name from the `(day|category)` queue. The queue still contains "Lunch at Le Comptoir du Relais" (the only dining activity on Day 1), so the orphan inherits the *same* name, producing two visually identical rows at different prices. Existing dedupe keys on amount, so $50 ≠ $90 slips through.
 
-### Fix
-1. **Make Payments totals ledger-first**
-   - Update `usePayableItems` so the Payments tab does not add estimated JSON-walk fallback rows into the grand total by default.
-   - Keep the existing DB-backed rows, manual expenses, hotel/flight inclusion toggles, transit grouping, and orphan payment recovery.
-   - This makes the Payments tab total use the same source of truth as Budget/header totals.
+## Fix (3 layers)
 
-2. **Surface missing-cost items without changing the total**
-   - For itinerary activities that are visible but missing a real `activity_costs` row, show them as “Not priced yet” / `$0 pending pricing` rather than estimating and adding them to the total.
-   - Do not show truly free or excluded rows: walking, accommodation rituals, flights, known free public venues, placeholder airport transfers.
-   - This preserves transparency without silently inflating the Payments total.
+### 1. Backfill: purge existing orphans for all trips
+SQL migration that deletes any non-`logistics-sync` `activity_costs` row whose `activity_id` is not present in `trips.itinerary_data->days[*].activities[*].id`. One-shot cleanup of pre-existing damage like this trip's `f11e8f19…` row.
 
-3. **Replace the sticky “Reconciling…” badge**
-   - Remove the permanent amber “Reconciling…” label from the header.
-   - If totals match, keep the positive “Matches itinerary” indicator.
-   - If there is still a larger mismatch, show a clearer one-line diagnostic such as “Payment rows differ by $X” in dev/diagnostic contexts, instead of a vague persistent status that looks like a stuck payment process.
+### 2. Read-time guard in `getBudgetLedger` (`src/services/tripBudgetService.ts`)
+Before the rescue loop runs, drop any row whose `activity_id` is non-null and **not** present in `nameById`. These are by definition orphaned rows that no longer correspond to any activity the user can see. Logistics rows (hotel/flight, `day_number=0`, no `activity_id`) are unaffected.
 
-4. **Clean up dead comparison logic in `PaymentsTab.tsx`**
-   - Simplify comments and logic around `estimatedTotal`, `payableTotalCents`, and mismatch detection.
-   - Ensure the top “Trip Total”, paid/unpaid math, budget progress, and split/person calculations all continue to use the canonical total.
+### 3. Same guard in `usePayableItems` (`src/hooks/usePayableItems.ts`)
+Mirror the filter in the `for (const row of activityCosts)` loop so the Payments tab and Budget tab agree. Skip rows where `row.activity_id` exists but is missing from `activityNameById`.
 
-5. **Verify against current Paris test data**
-   - Confirm the active trip no longer shows “Reconciling…”.
-   - Confirm the Payments trip total aligns with the ledger-backed total and does not include ad-hoc JSON estimates.
-   - Confirm All Costs still shows paid/manual rows and visible DB-backed activities correctly.
+### 4. Tighten orphan-rescue to prevent reintroducing duplicate names
+Even after the guard, harden rescue so it never assigns a name already used by another costed row on the same day. (Defensive — the guard above should make this unreachable, but cheap to add.)
 
-### Files to change
-- `src/hooks/usePayableItems.ts`
-- `src/components/itinerary/PaymentsTab.tsx`
+## Why not just fix sync?
+`syncBudgetFromDays` already calls `cleanupRemovedActivityCosts` correctly. The orphan exists because either (a) it predates the cleanup logic, or (b) it was written by a path that bypassed the React component (e.g. an edge-function cost repair). A read-time filter is the durable fix; the migration handles existing damage.
 
-No database migration is required for this fix.
+## Files
+
+- **new migration** — delete orphan `activity_costs` rows
+- `src/services/tripBudgetService.ts` — filter orphans before mapping/rescue
+- `src/hooks/usePayableItems.ts` — same filter in the activity-cost loop
+
+## Verification
+After deploy, the Day 1 list will show one "Lunch at Le Comptoir du Relais — $90" row, and the trip total will drop by $50.
