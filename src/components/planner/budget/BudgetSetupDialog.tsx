@@ -49,6 +49,8 @@ export function BudgetSetupDialog({
   onSave,
   memberNames = [],
   tripTotalCents,
+  hotelCents = 0,
+  totalNights = 0,
 }: BudgetSetupDialogProps) {
   const [inputMode, setInputMode] = useState<'total' | 'per_person'>(settings?.budget_input_mode || 'total');
   const [amount, setAmount] = useState('');
