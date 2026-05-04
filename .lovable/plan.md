@@ -1,32 +1,37 @@
 ## Problem
 
-The header **Trip Total** in `PaymentsTab` is sourced from `useTripFinancialSnapshot(tripId)`, which reads exclusively from the `activity_costs` ledger. Manual expenses added via the "Add Expense" dialog are written **only** to `trip_payments` (with `item_id` prefixed `manual-`), never into `activity_costs`. Result: the manual $2,400 hotel inflates the per-item list and "Paid so far", but the canonical Trip Total stays at the original $2,921 estimate, making the math look broken.
-
-`usePayableItems` already includes manual entries (lines 201–228), so `payableTotalCents` already reflects them — the bug is that `estimatedTotal` prefers the snapshot when available and ignores `payableTotalCents` once the snapshot is non-zero.
+The Add Expense modal in `PaymentsTab.tsx` only offers `flight`, `hotel`, `activity`. The DB CHECK constraint `trip_payments_item_type_check` enforces the same three values, so simply adding new options client-side would fail at insert.
 
 ## Plan
 
-In `src/components/itinerary/PaymentsTab.tsx`, update the `estimatedTotal` derivation (lines 242–252):
+### 1. DB migration
 
-1. Compute `manualExtraCents` from `payments` where `item_id` starts with `manual-` (sum of `amount_cents * quantity`). These are the entries the snapshot does not know about.
-2. Set `estimatedTotal = max(snapshotTotal + manualExtraCents, payableTotalCents)`. This:
-   - Adds manual costs on top of the canonical ledger total, so adding a $2,400 hotel raises Trip Total by $2,400.
-   - Keeps `payableTotalCents` as a floor in case the snapshot is briefly stale or zero.
-3. No changes to "Paid so far" (already correct from `trip_payments`) or to per-item rendering.
+Loosen `trip_payments_item_type_check` to accept additional categories used for manual logging:
 
-## Why not write manual entries into `activity_costs`?
+```
+flight, hotel, activity, dining, transport, shopping, other
+```
 
-`activity_costs` is the AI-generated cost ledger keyed by `activity_id` and tied to itinerary days. Manual one-off expenses don't belong there — they're free-form line items the user logged. Sourcing the Trip Total from `payments + ledger` keeps each table's role clean and avoids polluting ledger-driven analytics.
+`flight | hotel | activity` remain canonical for AI-generated rows (the payable items hook keys off these). The new values are only used by manually-added expenses (`item_id` starts with `manual-`).
+
+### 2. Client changes (`src/components/itinerary/PaymentsTab.tsx`)
+
+- Widen the `newExpenseType` state union to include the 4 new values.
+- Update the `<Select>` options with friendly labels: Flight ✈️, Hotel/Accommodation 🏨, Activity/Tour 🎟️, **Dining 🍽️**, **Transport 🚗**, **Shopping 🛍️**, **Other 💳**.
+- Update name-field placeholders for each new type (e.g. dining → "e.g., Dinner at Le Comptoir").
+- Update `getItemIcon` to return appropriate lucide icons for `dining` (Utensils), `transport` (Car), `shopping` (ShoppingBag), `other` (Receipt). Add the imports.
+- Update the inline icon used in the manual-grouping flow inside `usePayableItems` consumer paths (no schema change needed there — rendering already uses `getItemIcon(type)`).
+
+### 3. `usePayableItems`
+
+Extend the manual-group sweep so it also picks up `dining`, `transport`, `shopping`, `other` item types (currently only sweeps `flight` and `hotel`; `activity` is handled separately by the activity branch). Without this, new manual expenses would be inserted but never rendered as payable items.
 
 ## Files
 
-- `src/components/itinerary/PaymentsTab.tsx` — replace the 11-line `estimatedTotal` block with the additive computation above.
+- DB migration: relax CHECK constraint on `trip_payments.item_type`
+- `src/components/itinerary/PaymentsTab.tsx` — widen union, new Select options, placeholders, icons
+- `src/hooks/usePayableItems.ts` — sweep new manual types into payable items
 
 ## Expected outcome
 
-After adding a $2,400 manual hotel and a $500 paid L'Arpège on a $2,921 base trip:
-- Trip Total: **$5,321** (2,921 + 2,400)
-- Paid so far: **$2,900** (unchanged)
-- Remaining: **$2,421**
-
-Reconciliation badge ("✓ Matches itinerary") continues to compare `payableTotalCents` (which already includes manual entries) against the snapshot — that comparison is unaffected.
+User can log a manual "Dinner at Le Comptoir – $180" under **Dining**, a "Taxi to CDG – $90" under **Transport**, or a "Hermès scarf – $450" under **Shopping**, and each shows up in the payments list with an appropriate icon and folds into the Trip Total exactly like manual flights/hotels do today.
