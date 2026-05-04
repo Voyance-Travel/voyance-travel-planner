@@ -576,16 +576,22 @@ RULES FOR USER-SPECIFIED ACTIVITIES:
   // ═══════════════════════════════════════════════════════════════════════
   // ADDITIONAL NOTES / TRIP PURPOSE
   // ═══════════════════════════════════════════════════════════════════════
+  // The structured Day Brief / Day Truth Ledger now carries every per-day user
+  // intent (chat-planner extraction, fine-tune notes, manual paste, assistant
+  // chat) as single-line bullets the AI is forbidden from rewriting. Re-injecting
+  // the raw `additionalNotes` paragraph here used to encourage the model to
+  // re-interpret and re-time the same wishes. We now only inject the raw blob
+  // as a high-level "TRIP PURPOSE" section — the per-item enforcement lives in
+  // the Day Brief, not here.
   let additionalNotesPrompt = '';
   const additionalNotes = (metadata?.additionalNotes as string) || '';
   if (additionalNotes.trim()) {
-    additionalNotesPrompt = `\n## 🎯 TRAVELER'S TRIP PURPOSE / ADDITIONAL NOTES
-The traveler provided these additional notes about their trip. These describe the PRIMARY PURPOSE or special requirements:
+    additionalNotesPrompt = `\n## 🎯 TRAVELER'S TRIP PURPOSE
+The traveler's overall trip context (do NOT use this to schedule individual items — the DAY BRIEF above is the only source of truth for per-day requests):
 
 "${additionalNotes.trim()}"
 
-CRITICAL: If these notes describe a specific event, activity, or purpose (e.g., "going for the U.S. Open", "attending a wedding", "here for a conference"), this MUST be treated as a NON-NEGOTIABLE anchor for the trip. Dedicate appropriate days to it.
-If the purpose is a specific event, plan at least ONE full day around that event. The rest of the trip should complement this primary purpose.
+If this describes a primary purpose (event, wedding, conference), dedicate appropriate days to it; specific items already appear in the DAY BRIEF.
 `;
 
     if (!mustDoPrompt.trim()) {
