@@ -665,8 +665,8 @@ export function PaymentsTab({
       .filter(Boolean) as TripMember[];
     
     return (
+      <div key={`${item.type}-${item.id}`}>
       <motion.div
-        key={`${item.type}-${item.id}`}
         initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}
         className={cn(
