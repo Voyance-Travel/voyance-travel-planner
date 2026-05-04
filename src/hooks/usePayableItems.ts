@@ -272,8 +272,20 @@ export function usePayableItems({
       for (const row of activityCosts) {
         if (row.day_number === 0) continue; // hotel/flight handled above
         const cat = (row.category || '').toLowerCase();
-        const cents = rowTotalCents(row);
-        if (cents <= 0) continue; // free venues: don't surface
+        let cents = rowTotalCents(row);
+
+        // Rescue: if the DB row is $0 but the itinerary JSON has an explicit
+        // positive cost, trust the JSON. This catches restaurants that the
+        // cost-repair pipeline misclassified as "Free venue - Tier 1".
+        if (cents <= 0) {
+          const lookup = activityNameById.get(row.activity_id);
+          const PAID_CATS = new Set(['dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'bar', 'nightlife', 'spa', 'wellness']);
+          const isPaidCat = PAID_CATS.has(cat) || (lookup && PAID_CATS.has(lookup.category));
+          if (isPaidCat && lookup && lookup.jsonCost > 0) {
+            cents = Math.round(lookup.jsonCost * (row.num_travelers || 1) * 100);
+          }
+        }
+        if (cents <= 0) continue; // genuinely free venues: don't surface
 
         // Group transit rows
         if (TRANSIT_CATEGORIES.has(cat)) {
