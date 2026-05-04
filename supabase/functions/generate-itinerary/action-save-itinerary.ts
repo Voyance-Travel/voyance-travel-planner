@@ -243,6 +243,24 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   }
 
   if (totalDays > 0) {
+    // Trip-wide blocked-restaurants accumulator (canonical names)
+    const { extractRestaurantVenueName: _extractSave } = await import('./generation-utils.ts');
+    const saveTripBlocked: string[] = [];
+    const _harvestSave = (acts: any[]) => {
+      const MEAL_RE_S = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+      for (const a of acts || []) {
+        const cat = (a.category || '').toLowerCase();
+        const isDining = cat === 'dining' || cat === 'restaurant' || cat === 'food' || MEAL_RE_S.test(a.title || '');
+        if (!isDining) continue;
+        for (const src of [a.title, a.name, a.venue_name, a.restaurant?.name, a.location?.name]) {
+          if (typeof src === 'string' && src.length > 0) {
+            const canon = _extractSave(src);
+            if (canon && !saveTripBlocked.includes(canon)) saveTripBlocked.push(canon);
+          }
+        }
+      }
+    };
+
     for (let i = 0; i < itineraryDays.length; i++) {
       const day = itineraryDays[i];
       if (!day?.activities || !Array.isArray(day.activities)) continue;
@@ -260,7 +278,10 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         departureTime24: isLastDay ? savedDepartureTime24 : undefined,
       });
 
-      if (policy.requiredMeals.length === 0) continue;
+      if (policy.requiredMeals.length === 0) {
+        _harvestSave(day.activities);
+        continue;
+      }
 
       const detected = detectMealSlots(day.activities);
       const missing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
@@ -296,7 +317,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           'USD',
           policy.dayMode,
           saveFallbackVenues,
-          { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop },
+          { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop, blockedRestaurants: saveTripBlocked },
         );
         if (!result.alreadyCompliant) {
           itineraryDays[i] = { ...day, activities: result.activities };
