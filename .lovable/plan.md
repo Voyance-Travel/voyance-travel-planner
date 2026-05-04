@@ -1,28 +1,43 @@
 ## Problem
 
-The L'Arpège lunch payment ($500, item_id `59643e43-2e68-4b8e-9196-6e9bf2d2bcb9_d1`) exists in `trip_payments` but the underlying activity is no longer in `itinerary_data` and has no row in `activity_costs`. So:
+Two related bugs around manually-added hotel payments:
 
-- It correctly counts toward "Paid so far" (sums `trip_payments`).
-- It never appears as a row in `usePayableItems` (which only emits rows for items present in the itinerary JSON or `activity_costs`).
-- Counter shows `0/24` instead of `1/N` and the user can't see what they paid for.
+1. **Budget tab ignores manual hotel cost.** `useTripFinancialSnapshot` only sums `activity_costs`. When a manual hotel payment is recorded, `syncHotelToLedger` deliberately removes the canonical day-0 hotel row (to avoid double-billing), and the manual amount lives only in `trip_payments`. Result: BudgetTab shows $1,818 expenses instead of $4,218, even though "Include Hotel in Budget" is ON. PaymentsTab patches this locally with `manualExtraCents`, but BudgetTab doesn't.
+
+2. **Stale "estimated nightly rate" disclaimer.** The banner in BudgetTab fires whenever `hasHotel && !hotelSelection.price`. It doesn't know the user already supplied a real cost via the manual Payments entry, so the disclaimer keeps showing as if no rate is set.
 
 ## Fix
 
-Add an **orphan payment recovery** pass at the end of `usePayableItems` (in `src/hooks/usePayableItems.ts`), right before the final dedupe:
+### A. Snapshot folds in manual payments (single source of truth)
 
-1. After all itinerary-derived and manual rows are pushed, build a `Set` of present item IDs.
-2. Iterate `payments` and, for any non-manual `activity` payment whose `item_id` is not in the set, group payments by `item_id`.
-3. Emit one `PayableItem` per orphan group, using `payment.item_name` as the row label, `amount_cents * quantity` as the amount, and recovering `dayNumber` from the trailing `_dN` suffix.
+In `src/hooks/useTripFinancialSnapshot.ts`:
 
-This keeps all existing behavior (transit grouping, manual overrides, JSON-walk fallback) intact, while guaranteeing every payment appears as a row in the list.
+- After fetching `activity_costs`, also fetch `trip_payments` rows where `item_id LIKE 'manual-%'`.
+- Apply the same override-aware delta PaymentsTab uses:
+  - For `item_type = 'hotel'`: if a canonical day-0 hotel row exists, `delta = manualHotelCents - canonicalHotelCents`; otherwise add the full `manualHotelCents`. Only counted when `includeHotel` is true.
+  - Same for `flight` (gated by `includeFlight`).
+  - Other manual categories (dining/activity/transport/etc.) always add.
+- Add the resulting delta to `tripTotalCents` and to `paidCents` (manual payments are by definition paid).
+- Re-fetch on the existing `'booking-changed'` listener (already dispatched after manual entry CRUD).
+
+This means BudgetTab automatically shows the right number with no changes there, and PaymentsTab can drop its local `manualExtraCents` workaround (or keep it as a no-op safety net — recommend deleting to enforce one source of truth).
+
+### B. Suppress estimated-rate disclaimer when manual hotel exists
+
+In `src/components/planner/budget/BudgetTab.tsx` (line ~488):
+
+- Compute `hasManualHotelPayment` from `payments` (or accept it via prop from the parent that already knows).
+- Treat that as satisfying `hotelHasPrice`, so `hotelMissingPrice` becomes false and the "based on typical Paris luxury-tier hotels" banner stops rendering.
 
 ## Files
 
-- `src/hooks/usePayableItems.ts` — add the orphan recovery block before the final dedupe.
+- `src/hooks/useTripFinancialSnapshot.ts` — fetch + fold manual payments, override-aware.
+- `src/components/itinerary/PaymentsTab.tsx` — remove `manualExtraCents` and use `snapshot.tripTotalCents` directly (avoid double-add now that snapshot includes it).
+- `src/components/planner/budget/BudgetTab.tsx` — suppress the estimated-rate banner when a manual hotel payment is present.
 
 ## Result
 
-- L'Arpège row reappears as a paid activity item, label "Lunch at L'Arpège", $500.
-- Counter switches to `1/N` (and N reflects the additional row).
-- Paid total is unchanged.
-- No DB or edge-function changes.
+- Budget tab "Trip expenses" jumps from $1,818 → $4,218, matching Payments.
+- Over-budget warning fires correctly (~$2,422 over a $1,796 budget).
+- Estimated-rate disclaimer disappears once the manual hotel is recorded.
+- All three views (Budget, Payments, header) read the same canonical total.
