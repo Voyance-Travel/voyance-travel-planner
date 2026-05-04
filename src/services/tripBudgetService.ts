@@ -265,7 +265,8 @@ export async function getTripBudgetSettings(tripId: string): Promise<TripBudgetS
       budget_warnings_enabled,
       budget_warning_threshold,
       budget_allocations,
-      travelers
+      travelers,
+      coach_protected_categories
     `)
     .eq('id', tripId)
     .single();
@@ -285,6 +286,7 @@ export async function getTripBudgetSettings(tripId: string): Promise<TripBudgetS
     budget_warning_threshold: (data.budget_warning_threshold as WarningThreshold) || 'yellow',
     budget_allocations: isValidAllocations(data.budget_allocations) ? (data.budget_allocations as unknown as BudgetAllocations) : DEFAULT_ALLOCATIONS.balanced,
     travelers: data.travelers || 1,
+    coach_protected_categories: (data as any).coach_protected_categories ?? null,
   };
 }
 
