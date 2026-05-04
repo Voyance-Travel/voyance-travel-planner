@@ -1,31 +1,37 @@
-I found the persistent duplicate source:
+## Problem
 
-- The manually-added hotel payment is in `trip_payments`: `Four Seasons Hotel George V - 3 nights` for `$2,400`.
-- The system placeholder is still in `activity_costs`: category `hotel`, day `0`, source `logistics-sync`, notes `Hotel: Four Seasons Hotel George V, Paris (estimated)`, amount `$2,850`.
-- `usePayableItems` already tries to hide the canonical hotel when a manual hotel exists, but the data and totals still remain vulnerable because the stale day-0 hotel ledger row is still present and budget/snapshot paths read from `activity_costs`.
+The "Matches itinerary / Reconciling…" indicator in the Payments header never resolves when a manual hotel, flight, or other manual entry exists.
 
-Plan:
+`PaymentsTab` computes the reconciliation client total as:
 
-1. Harden hotel ledger sync so placeholders do not override manual stays
-   - Update `src/services/budgetLedgerSync.ts` so `syncHotelToLedger` first checks for an existing manual hotel payment for the same trip.
-   - If a manual hotel exists, remove the day-0 `activity_costs` hotel placeholder instead of inserting/updating it.
-   - Also prevent the reference-rate fallback from creating a committed-looking placeholder when the hotel has no explicit user-entered `totalPrice` or `pricePerNight`; selected hotel without a price should not become an automatic `$2,850` bill.
+```
+clientTotal = payableTotalCents + rawManualCents
+```
 
-2. Make Payments/Travel Essentials dedupe robust, not just ID-based
-   - Update `src/hooks/usePayableItems.ts` so manual hotel rows override any canonical hotel rows by semantic match, not only by `manual-*` item IDs.
-   - Keep manually-entered hotel expenses visible and paid, but suppress `hotel-selection` / day-0 hotel rows when a manual hotel for the same trip exists.
-   - Fix the duplicate `addManualGroups('activity')` call if still present, because manual activities are currently appended twice.
+But `payableTotalCents` (from `usePayableItems`) **already** includes every `manual-*` row via `addManualGroups('hotel' | 'flight' | 'dining' | …)`. Adding `rawManualCents` on top double-counts manual entries, so `clientTotal` exceeds `estimatedTotal` by exactly the sum of manual payments and the badge stays stuck on "Reconciling…".
 
-3. Align Payments header reconciliation
-   - Update `src/components/itinerary/PaymentsTab.tsx` so the “Matches itinerary / Reconciling…” comparison uses the override-aware payable total rather than adding raw manual payments on top of already-rendered manual rows.
-   - Ensure Travel Essentials subtotal and Trip Total follow the same rule: manual hotel replaces system hotel, never adds to it.
+Verified against the live Paris trip (`7ea828ac…`):
+- snapshot trip total: $1,728 (no canonical hotel/flight in `activity_costs`)
+- manual hotel: $2,400
+- `estimatedTotal` = $4,128
+- `payableTotalCents` ≈ $4,128 (already includes manual hotel)
+- buggy `clientTotal` = $4,128 + $2,400 = $6,528 → mismatch persists
 
-4. Clean the corrupted existing data for the reported trip
-   - Remove or zero out the stale `activity_costs` row for trip `7ea828ac-9db5-42e7-b9a2-daeed10dd71f` where category is `hotel`, day `0`, source `logistics-sync`, and notes contain `Four Seasons Hotel George V`.
-   - Keep the manual `trip_payments` row for `Four Seasons Hotel George V - 3 nights` intact.
-   - This must be a data update, not a schema migration.
+## Fix
 
-5. Verify with read-only checks after the fix
-   - Confirm the trip has only one hotel payable item in Travel Essentials: the manual `$2,400` Four Seasons stay.
-   - Confirm the stale `$2,850 Hotel Accommodation` no longer contributes to the trip total.
-   - Confirm hotel accommodation rituals in the itinerary (check-in, freshen up, return to hotel) remain `$0` and visible as logistics, not expenses.
+`src/components/itinerary/PaymentsTab.tsx` (the reconciliation block around lines 897–915):
+
+1. Remove the redundant `rawManualCents` addition. The correct comparison is `payableTotalCents` vs `estimatedTotal` (both already manual-aware via the override delta on the snapshot side and via `addManualGroups` on the items side).
+2. Slightly widen the equality tolerance from $1 to $2 to absorb cents-level rounding from per-row `Math.round` (24 rows × ½¢ ≈ 12¢, well within $2).
+3. Add a one-line comment explaining that `payableTotalCents` is already manual-inclusive so future edits don't reintroduce the double-count.
+
+No changes needed in `usePayableItems`, `useTripFinancialSnapshot`, or the budget service — those are already consistent with each other.
+
+## Verification
+
+After the fix, for the Paris trip:
+- `estimatedTotal` = $4,128
+- `payableTotalCents` = $4,128
+- diff ≤ $2 → badge shows "Matches itinerary" with the green check.
+
+Spot-check a second trip with no manual entries to confirm the existing matching case still works (it relies on the same numbers, just with `rawManualCents = 0`, so behavior is unchanged there).
