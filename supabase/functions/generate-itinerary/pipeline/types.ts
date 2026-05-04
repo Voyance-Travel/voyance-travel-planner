@@ -247,10 +247,6 @@ export interface DaySchemaInput {
   mustDoEventItems: any[];
   arrivalAirportDisplay: string;
   airportTransferMinutes: number;
-  /** Archetype tier (Curator, Achiever, Explorer, Connector, Restorer). Optional — used for Grand Entrance gating. */
-  archetypeTier?: string;
-  /** Specific archetype identity (e.g. "The Luxury Luminary"). Optional — used for Grand Entrance gating. */
-  archetypeIdentity?: string;
 }
 
 // =============================================================================
