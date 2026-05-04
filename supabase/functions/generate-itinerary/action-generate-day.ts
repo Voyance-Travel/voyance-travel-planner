@@ -1436,7 +1436,11 @@ export async function handleGenerateDay(
         'USD',
         dayMealPolicy.dayMode,
         mealFallbackVenues,
-        { earliestTimeMins: arrMinsForGuard, latestTimeMins: depMinsForGuard },
+        {
+          earliestTimeMins: arrMinsForGuard,
+          latestTimeMins: depMinsForGuard,
+          blockedRestaurants: paramUsedRestaurants || [],
+        },
       );
       if (!mealGuardResult.alreadyCompliant) {
         generatedDay.activities = mealGuardResult.activities as any;
