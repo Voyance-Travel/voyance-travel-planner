@@ -746,6 +746,23 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                           value={percent}
                           className={cn("h-2", isOver && "[&>div]:bg-destructive")}
                         />
+                        {/* Empty-state affordance — Misc reads as broken/dead at $0.
+                            Tell users what it's for and offer a one-click "Add expense"
+                            that opens the existing manual-expense flow on Payments. */}
+                        {alloc.category === 'misc' && used === 0 && allocated > 0 && (
+                          <div className="flex items-start justify-between gap-2 text-xs text-muted-foreground pl-8 -mt-0.5">
+                            <span>For tips, market finds, pharmacy, SIM cards.</span>
+                            <button
+                              type="button"
+                              className="text-primary hover:underline shrink-0 inline-flex items-center gap-1"
+                              onClick={() => {
+                                window.dispatchEvent(new CustomEvent('open-add-expense', { detail: { type: 'other' } }));
+                              }}
+                            >
+                              <Plus className="h-3 w-3" />Add expense
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
