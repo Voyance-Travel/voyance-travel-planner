@@ -1,48 +1,52 @@
-# Fix: "All Costs" list leaks raw schema, internal tags, and duplicates
+# Fix: Budget by Category breaks when fixed costs exceed the total
 
-## Root cause
+## Root cause (verified against the live row)
 
-`getBudgetLedger` in `src/services/tripBudgetService.ts` (line 381) sets the description with:
+The trip in the screenshot has `budget_total_cents = 179_600` ($1,796) and `committedHotelCents ≈ $2,850`. The hotel alone is more than the entire budget.
+
+`getCategoryAllocations` in `src/services/tripBudgetService.ts` (lines 655–731) then does:
 
 ```ts
-description: row.notes || `${row.category} (Day ${row.day_number})`
+const sharePct = Math.round((committedHotelCents / budgetTotal) * 100);
+// → 2850/1796 ≈ 159 → "159% of total"
+
+const discretionaryTotal = Math.max(budgetTotal - committedFixed, 0);
+// → max(1796 - 2850, 0) = 0
+// → every discretionary row's allocatedCents = round(0 * 35/100) = 0
 ```
 
-Two failure modes feed straight into the UI:
-
-1. **Internal tags as description.** `row.notes` is the column the cost pipeline writes diagnostic flags into: `"[Free venue - Tier 1]"`, `"[Repair auto-corrected]"`, `"[Auto-corrected from $X, exceeded 3x ref high $Y]"`, `"[User override: …]"`. These are pipeline breadcrumbs (verified in DB: every notes value in the affected trip is one of those bracketed strings). When `notes` is set the ledger uses it verbatim.
-2. **Raw category fallback.** When `notes` is null the fallback is the lowercase enum + `(Day N)` — `"dining (Day 1)"`, `"transport (Day 2)"`, `"cultural (Day 2)"`. No itinerary lookup, no friendly label.
-
-The duplicate `transport (Day 2) — $7` rows are real twin `activity_costs` rows that the repair pass writes (we already saw `[Repair auto-corrected]` transport rows in the same trip); both get mapped to the same opaque label so the user sees them as identical.
-
-The "Show all 25" button itself works correctly (`setShowAll(!showAll)` toggles a slice); the perceived breakage is that scrolling past 10 looks identical because the additional rows are more raw labels — the user assumes nothing happened.
+So:
+- **159% on Accommodation** is literally `committedHotel / budgetTotal`. Mathematically correct, semantically nonsense — "share of total" can't exceed 100%.
+- **$0 allocated on Food / Activities / Transit / Misc** is because the discretionary pool went to zero. The percent badges in the JSX (`{alloc.percent}%`) still come from the saved allocation (35/35/10/5) — the UI just *displays* them next to "$… / $0", which reads as "0% allocated" to a user. (The DB allocations are persisting fine — confirmed via `read_query`; user is conflating "$0 allocated" with "0%".)
+- **The total adds up** because `usedCents` is read directly from `summary.planned*Cents`, which is independent of the broken discretionary pool.
 
 ## Fix
 
-### File: `src/services/tripBudgetService.ts` — `getBudgetLedger`
+### `src/services/tripBudgetService.ts` — `getCategoryAllocations`
 
-1. **Fetch the trip's itinerary alongside `activity_costs`** so we can resolve `activity_id → title`. Also read `hotel_selection.name` and `flight_selection` to label day-0 rows.
-2. **Resolve description in priority order:**
-   1. Activity title from `itinerary_data.days[].activities[].title || .name`
-   2. Hotel name (for `category='hotel'`, day 0) / `Flight (Airline)` (for `category='flight'`, day 0)
-   3. Sanitized `notes` — strip any `[...]` segments before using
-   4. Pretty category label + `(Day N)` — e.g. `Meal (Day 2)`, `Local transit (Day 2)`, `Activity (Day 1)`. Map of category → friendly noun (`dining→Meal`, `transport/transit→Local transit`, `cultural→Activity`, `hotel→Accommodation`, `flight→Flight`, etc.).
-3. **Always sanitize `notes`** (`.replace(/\[[^\]]*\]/g, '').trim()`) before showing — never leak `[Free venue …]`, `[Repair auto-corrected]`, `[Auto-corrected …]`, `[User override: …]`.
-4. **Dedupe identical rows.** After the map step, collapse entries that share `(day_number, category, amount_cents, normalized_description)`. This kills the twin `transport (Day 2) — $7` rows without affecting the canonical sum (the dropped row's amount is already represented by the surviving twin — and `v_trip_total` is the source of truth for the grand total, so no balancing needed).
+1. **Clamp `shareOfBudgetPercent` at 100** and add an `exceedsBudget` flag (already exists). UI will say "$2,850 — over budget" instead of "159% of total".
+2. **Discretionary fallback when fixed costs swallow the budget.** When `discretionaryTotal === 0` *and* there is real planned discretionary spend (`summary.plannedFood + plannedActivities + plannedTransit + plannedMisc > 0`), compute each category's `allocatedCents` from the **original budget total** using the saved percentages, instead of from the empty remainder. Tag the result with `discretionaryUnderwater = true` so the UI can show a single explanatory note (no per-row noise).
+3. **Stop pretending the percent badge is share-of-spend.** Keep `percent` = the saved allocation (intent), but rename the UI sub-label so it reads "Target 35% of budget" rather than the ambiguous "35%" pill that the user mis-read as a usage bar.
+
+### `src/components/planner/budget/BudgetTab.tsx` — Budget by Category
+
+1. **Fixed row label.** Replace `({sharePct}% of total)` with:
+   - `({sharePct}% of total)` when `!exceedsBudget`
+   - `Over budget` (red) when `exceedsBudget`
+2. **Discretionary underwater banner.** When `discretionaryUnderwater` is true on any row, render a single muted note above the discretionary section:
+   > *Hotel costs have absorbed your full trip budget. Increase your total or toggle "Include Hotel in Budget" off to free up the discretionary pool.*
+3. **Badge tooltip.** Add a `title="Target share of discretionary budget"` to the `{alloc.percent}%` badge so the meaning is unambiguous on hover.
 
 ### Out of scope
 
-- No DB changes. `notes` keeps its diagnostic role for the validation triggers and audit; only the UI mapping changes.
-- No edits to `CostsList` rendering or the "Show all" toggle — both work; the perceived breakage disappears once the descriptions read like real items.
-- No change to category buckets, totals, or the recently-fixed payable-items hook.
+- No DB writes; allocations are already persisting correctly (verified).
+- No change to `summary` math — `usedCents` and the underlying totals are correct.
+- No change to spend-style defaults.
 
 ## Acceptance
 
-On the affected trip, the "All Costs (N)" list shows:
-
-- Real activity titles (e.g. *"Lunch at L'Arpège"*, *"Louvre Museum"*) sourced from the itinerary.
-- *"Four Seasons Hotel George V, Paris"* for the day-0 hotel row instead of `[Repair auto-corrected]`.
-- Friendly fallbacks like *"Local transit (Day 2)"*, *"Meal (Day 1)"* when no JSON match exists.
-- No `[Free venue …]`, `[Repair auto-corrected]`, `[Auto-corrected …]`, or `[User override …]` strings anywhere.
-- No duplicate identical rows.
-- Clicking *Show all 25 items* reveals all 25 (the toggle already works; rows are now distinguishable, so the expansion is visually obvious).
+For the affected trip:
+- Accommodation row reads `$2,850 — Over budget` (red), not `159% of total`.
+- Food/Activities/Transit/Misc rows show non-zero `allocatedCents` (computed from the original $1,796 × saved percentages) and a single explanatory line about the hotel absorbing the budget.
+- The 35 / 35 / 10 / 5 badges still display correctly with a hover tooltip clarifying they're intent, not usage.
+- Trip Expenses total ($4,506) is unchanged.

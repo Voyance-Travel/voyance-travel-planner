@@ -144,8 +144,10 @@ export interface CategoryAllocation {
   kind?: 'fixed' | 'discretionary';
   /** True when a fixed cost exceeds the entire trip budget total. */
   exceedsBudget?: boolean;
-  /** For fixed rows: committed / budgetTotal as a percent (informational only, may exceed 100). */
+  /** For fixed rows: committed / budgetTotal as a percent, clamped to 100. */
   shareOfBudgetPercent?: number;
+  /** True on every discretionary row when fixed costs have absorbed the full budget. */
+  discretionaryUnderwater?: boolean;
 }
 
 // =============================================================================
@@ -655,15 +657,16 @@ export async function recordCommittedExpense(
 export async function getCategoryAllocations(tripId: string): Promise<CategoryAllocation[]> {
   const settings = await getTripBudgetSettings(tripId);
   const summary = await getBudgetSummary(tripId);
-  
+
   if (!settings || !summary) return [];
-  
+
   const allocations = settings.budget_allocations;
   const budgetTotal = summary.budgetTotalCents || 0;
   const result: CategoryAllocation[] = [];
 
   if (settings.budget_include_hotel && summary.committedHotelCents > 0) {
-    const sharePct = budgetTotal > 0 ? Math.round((summary.committedHotelCents / budgetTotal) * 100) : 0;
+    const rawShare = budgetTotal > 0 ? (summary.committedHotelCents / budgetTotal) * 100 : 0;
+    const sharePct = Math.min(100, Math.round(rawShare));
     result.push({
       category: 'hotel',
       allocatedCents: summary.committedHotelCents,
@@ -677,7 +680,8 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
   }
 
   if (settings.budget_include_flight && summary.committedFlightCents > 0) {
-    const sharePct = budgetTotal > 0 ? Math.round((summary.committedFlightCents / budgetTotal) * 100) : 0;
+    const rawShare = budgetTotal > 0 ? (summary.committedFlightCents / budgetTotal) * 100 : 0;
+    const sharePct = Math.min(100, Math.round(rawShare));
     result.push({
       category: 'flight',
       allocatedCents: summary.committedFlightCents,
@@ -692,40 +696,40 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
 
   const committedFixed = (settings.budget_include_hotel ? summary.committedHotelCents : 0)
     + (settings.budget_include_flight ? summary.committedFlightCents : 0);
-  const discretionaryTotal = Math.max(budgetTotal - committedFixed, 0);
+  const discretionaryRemainder = Math.max(budgetTotal - committedFixed, 0);
+
+  // When fixed costs have swallowed the entire budget, the discretionary
+  // remainder is $0 — which makes every category's "allocated" read as $0
+  // even though the user clearly intended the saved 35/35/10/5 split. Fall
+  // back to the original budget total × saved percentages so the per-category
+  // targets stay meaningful, and tag the rows so the UI can explain the state.
+  const plannedDiscretionary = summary.plannedFoodCents + summary.plannedActivitiesCents
+    + summary.plannedTransitCents + summary.plannedMiscCents;
+  const underwater = discretionaryRemainder === 0 && plannedDiscretionary > 0 && budgetTotal > 0;
+  const allocBase = underwater ? budgetTotal : discretionaryRemainder;
+
+  const buildDiscretionary = (
+    category: BudgetCategory,
+    pct: number,
+    used: number,
+  ): CategoryAllocation => {
+    const allocatedCents = Math.round(allocBase * (pct / 100));
+    return {
+      category,
+      allocatedCents,
+      usedCents: used,
+      remainingCents: allocatedCents - used,
+      percent: pct,
+      kind: 'discretionary',
+      discretionaryUnderwater: underwater || undefined,
+    };
+  };
+
   result.push(
-    {
-      category: 'food',
-      allocatedCents: Math.round(discretionaryTotal * (allocations.food_percent / 100)),
-      usedCents: summary.plannedFoodCents,
-      remainingCents: Math.round(discretionaryTotal * (allocations.food_percent / 100)) - summary.plannedFoodCents,
-      percent: allocations.food_percent,
-      kind: 'discretionary',
-    },
-    {
-      category: 'activities',
-      allocatedCents: Math.round(discretionaryTotal * (allocations.activities_percent / 100)),
-      usedCents: summary.plannedActivitiesCents,
-      remainingCents: Math.round(discretionaryTotal * (allocations.activities_percent / 100)) - summary.plannedActivitiesCents,
-      percent: allocations.activities_percent,
-      kind: 'discretionary',
-    },
-    {
-      category: 'transit',
-      allocatedCents: Math.round(discretionaryTotal * (allocations.transit_percent / 100)),
-      usedCents: summary.plannedTransitCents,
-      remainingCents: Math.round(discretionaryTotal * (allocations.transit_percent / 100)) - summary.plannedTransitCents,
-      percent: allocations.transit_percent,
-      kind: 'discretionary',
-    },
-    {
-      category: 'misc',
-      allocatedCents: Math.round(discretionaryTotal * (allocations.misc_percent / 100)),
-      usedCents: summary.plannedMiscCents,
-      remainingCents: Math.round(discretionaryTotal * (allocations.misc_percent / 100)) - summary.plannedMiscCents,
-      percent: allocations.misc_percent,
-      kind: 'discretionary',
-    },
+    buildDiscretionary('food', allocations.food_percent, summary.plannedFoodCents),
+    buildDiscretionary('activities', allocations.activities_percent, summary.plannedActivitiesCents),
+    buildDiscretionary('transit', allocations.transit_percent, summary.plannedTransitCents),
+    buildDiscretionary('misc', allocations.misc_percent, summary.plannedMiscCents),
   );
 
   return result;

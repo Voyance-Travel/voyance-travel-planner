@@ -674,7 +674,9 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                               <span className={cn("font-medium", alloc.exceedsBudget && "text-destructive")}>
                                 {formatCurrency(alloc.usedCents)}
                               </span>
-                              {typeof alloc.shareOfBudgetPercent === 'number' && (
+                              {alloc.exceedsBudget ? (
+                                <span className="text-xs font-medium text-destructive">Over budget</span>
+                              ) : typeof alloc.shareOfBudgetPercent === 'number' && (
                                 <span className="text-xs text-muted-foreground">
                                   ({alloc.shareOfBudgetPercent}% of total)
                                 </span>
@@ -691,6 +693,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                       {discretionaryRows.length > 0 && (
                         <div className="pt-2 border-t border-border">
                           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Discretionary</span>
+                          {discretionaryRows.some((r) => r.discretionaryUnderwater) && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Fixed costs have absorbed your full trip budget. Targets below are calculated against your original total — raise it or toggle a fixed cost off to free up the discretionary pool.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -708,7 +715,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                               <span className="text-white">{categoryIcons[alloc.category]}</span>
                             </div>
                             <span className="font-medium">{categoryLabels[alloc.category]}</span>
-                            <Badge variant="outline" className="text-xs">
+                            <Badge
+                              variant="outline"
+                              className="text-xs"
+                              title="Target share of discretionary budget"
+                            >
                               {alloc.percent}%
                             </Badge>
                           </div>
