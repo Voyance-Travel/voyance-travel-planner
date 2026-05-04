@@ -1,73 +1,76 @@
-## Goal
-Make every immediate fact a user gives us — at any entry point — survive as a **single-line, day-scoped, locked row** that is injected into generation and verified before the itinerary is shown. No more giant blobs, no more silent overwrites.
+## Why the total keeps jumping up
 
-## What already exists (don't rebuild)
-- `public.trip_day_intents` table — one row per stated wish, day-scoped, with `priority`, `locked`, `locked_source`, `status`. Unique index dedupes re-saves.
-- `_shared/day-intents-store.ts` — `upsertDayIntents`, `fetchActiveDayIntents`, `seedDayIntentsFromMetadata`, `reconcileFulfillment`.
-- `_shared/intent-normalizers.ts` — converts each entry-point shape into `DayIntentInput[]`.
-- `_shared/parse-fine-tune-intents.ts` — parses "Day 3 dinner at Belcanto", "April 19", "first night", etc.
-- `generate-itinerary/day-ledger.ts` — builds + renders the per-day "DAY BRIEF — DO NOT VIOLATE" prompt block (one bullet per intent).
-- `generate-itinerary/ledger-check.ts` — post-generation: inserts placeholder for missing `must` intents, drops closure violations, flags vibe clashes.
-- `generation-core.ts` already calls `seedDayIntentsFromMetadata` once per generation; `compile-prompt.ts` reads `trip_day_intents` first and only falls back to blob parsing.
+When you open a trip and immediately see "+$900" or "+$500" jumps, you're seeing the same `TripTotalDeltaIndicator` toast/badge fire because the cost ledger genuinely changed between the previous fetch and the new one. The numbers really did move — the question is *why* they're moving without you doing anything.
 
-## Real gaps to close
+I traced every place that writes to `activity_costs` (the single source of truth `useTripFinancialSnapshot` reads). Three silent rewriters are the culprits:
 
-### 1. Entry-point coverage (the leak)
-`seedDayIntentsFromMetadata` only fires inside `generate-itinerary`. That means an intent only becomes a row **when generation runs**, and only from fields it knows about. We need each entry point to upsert immediately on save, in its own shape:
+### 1. Auto-repair on page load (`TripDetail.tsx:1471`)
+On every trip open we run `needsCostRepair` → if zero rows, fire `repairTripCosts`. That edge function (`action-repair-costs.ts`) does much more than fill blanks:
+- **Michelin floor** (lines 291–353): any dining row below `MICHELIN_FLOOR.mid` ($120) or `.high` ($180) is *raised* to the floor.
+- **Ticketed-attraction floor** (lines 247–263): any matched venue under its min price is *raised*.
+- **Reference fallback** (line 279): any $0 dining/activity is *raised* to `cost_mid_usd` from `cost_reference`.
+- **JSONB writeback** (line 403+): the patched cost is written back into `trips.itinerary_data` so the cards visibly change.
 
-| Entry point | File | Today | Fix |
-|---|---|---|---|
-| Just Tell Us / chat-trip-planner | `supabase/functions/chat-trip-planner/index.ts` | Writes `mustDoActivities`, `perDayActivities`, `userConstraints`, `additionalNotes` to `trip.metadata`; intents only materialize at generation time. | After persisting trip metadata, call `intentsFromChatPlannerExtraction(...)` + `upsertDayIntents` so rows exist before the user even taps "generate". |
-| Fine-Tune textarea | `src/components/planner/ItineraryContextForm.tsx` (saves to metadata) | Same as above — only seeded at generation. | On save, invoke a tiny edge function (or extend `enrich-manual-trip`) that calls `intentsFromFineTuneNotes` + `upsertDayIntents`. |
-| Manual paste / chat paste | `enrich-manual-trip/index.ts` | Already calls `intentsFromUserAnchors` ✅ | No change. |
-| Assistant chat | `itinerary-chat/index.ts` (already uses `record_user_intent`) ✅ | No change. |
+Result: open a legacy trip → total can jump hundreds of dollars in one fetch. The user gets a toast with no attribution.
 
-This guarantees the structured rows exist at every save point, so `compile-prompt` always sees them via the structured path (never the blob fallback).
+### 2. Post-regeneration repair (`EditorialItinerary.tsx:3791`)
+After regenerate, we always (not conditionally) call `repairTripCosts`. Same floors fire — even on trips that were fine — so each regen ratchets the total up.
 
-### 2. Lock semantics for "immediate facts"
-Today, anything from chat-planner / fine-tune is stored with `locked: false` and `priority: 'must'`. The Day Brief prints them under "USER REQUIRED — DO NOT DROP", but anchor-guard does not actually pin them, and the AI can still re-time or reword them.
+### 3. `syncBudgetFromDays` reading patched JSONB (`EditorialItinerary.tsx:1294–1400`)
+Days re-render → `syncBudgetFromDays` reads `act.cost` (already patched up by the repair JSONB writeback) → upserts into `activity_costs` again at the higher price → dispatches `booking-changed` with `optimisticTotalCents`. The snapshot fetches, sees the new total, fires the delta toast.
 
-Fix in `intent-normalizers.ts`:
-- When the user gives an explicit time + named venue (e.g. "Dinner at Belcanto 7:30 Day 3"), set `locked: true` and `lockedSource: 'just_tell_us:<hash>'`. That promotes the row from "soft must" to a hard anchor that the existing anchor-restore step in `action-save-itinerary.ts` will re-insert verbatim.
-- Lines without a venue or time stay `locked: false, priority: 'must'` — covered by the placeholder-restoration path already in `ledger-check.ts`.
+The 25% jump warning at `useTripFinancialSnapshot.ts:160` then wraps it all in a `toast.warning("Trip total changed by +$X")` — which is the message you keep seeing.
 
-### 3. Pre-presentation verification gate
-`ledgerCheck` runs in `action-save-itinerary.ts` and produces warnings + auto-restored placeholders, but warnings are only logged. We should:
-- Persist `lc.warnings` onto `itinerary.dayLedgers[*].warnings` (already partially done via `(itinerary as any).dayLedgers = ledgers`, just append warnings keyed by day).
-- Add a final assertion: for every `trip_day_intents` row with `priority IN ('must','avoid')` and `status='active'` after `reconcileFulfillment`, either (a) it appears in the day, (b) a placeholder was inserted, or (c) it's logged as `missing_user_intent_unresolved` — and the trip cannot be marked "ready" until all three are satisfied. Front-end already reads `dayLedgers`; this just needs one extra log + a `readyForPresentation` boolean on the itinerary JSON.
+---
 
-### 4. Single-line render audit
-`renderDayLedgerPrompt` already emits one `  - <time>  <KIND> — <title>    [source: …]` line per intent. Confirmed correct. The blob-style "USER WANTS" paragraphs that used to exist in `compile-prompt.ts` are now gone from the structured path — but the **legacy fallback** still injects free-form `additionalNotes` further down in the user prompt. Once gap #1 is closed, we can remove the legacy paragraph-style injection in `compile-prompt.ts` so the Day Brief is the only voice telling the AI what the user wants.
+## The fix
+
+Three changes, smallest-blast-radius first.
+
+### A. Gate the auto-repair so it doesn't silently raise prices
+- `needsCostRepair` should only return true if `activity_costs` is **completely empty** for the trip (already does) **and** the trip has never been repaired (`trips.last_cost_repair_at IS NULL`). Add `last_cost_repair_at` column and stamp it in `action-repair-costs.ts` after a successful run.
+- Skip the post-regeneration repair (`EditorialItinerary.tsx:3791`) entirely. The generation pipeline already writes correct costs; the repair function exists for legacy/missing data, not as a routine post-step.
+
+### B. Make floor adjustments explicit, not silent
+- In `action-repair-costs.ts`, when Michelin/ticketed/reference floors *increase* an existing non-zero cost, write a row to a new `cost_change_log` table: `{ trip_id, activity_id, previous_cents, new_cents, reason, applied_at }`.
+- On a manual "Repair pricing" click (`handleRepairPricing`), surface a summary: "Adjusted 4 items: Sushi Saito +$80 (Michelin 3-star floor), …" — no surprise for the user.
+- Locked rows (`source IN ('user_override','user','manual')` — already respected by the trigger) are never touched.
+
+### C. Stop the delta toast from misleading
+- In `useTripFinancialSnapshot.ts`, when the delta is caused by a known repair within the last 5 seconds (check `cost_change_log`), suppress the generic warning toast and replace it with the itemized list above.
+- Keep the indicator badge (it's useful) but show the per-item breakdown on click.
+
+---
 
 ## Files to touch
 
+```text
+supabase/migrations/<new>.sql
+  - add trips.last_cost_repair_at timestamptz
+  - create cost_change_log table + RLS
+
+supabase/functions/generate-itinerary/action-repair-costs.ts
+  - log every floor/fallback raise to cost_change_log
+  - stamp trips.last_cost_repair_at on success
+
+src/services/activityCostService.ts
+  - needsCostRepair: also require last_cost_repair_at IS NULL
+  - new getRecentCostChanges(tripId, sinceMs)
+
+src/pages/TripDetail.tsx
+  - unchanged behavior (auto-repair only fires once ever)
+
+src/components/itinerary/EditorialItinerary.tsx
+  - remove the always-on post-regenerate repairTripCosts call (line 3791)
+  - handleRepairPricing: show itemized change summary
+
+src/hooks/useTripFinancialSnapshot.ts
+  - if recent cost_change_log rows explain the delta, render attributed toast
+  - otherwise keep the existing 25% warning
 ```
-supabase/functions/chat-trip-planner/index.ts
-  - After trip insert/update, import intent-normalizers + day-intents-store
-    and upsert intents from extracted fields.
-
-supabase/functions/_shared/intent-normalizers.ts
-  - In intentsFromChatPlannerExtraction & intentsFromFineTuneNotes:
-    promote rows with (explicit time AND named venue) to locked=true,
-    lockedSource='just_tell_us:'+stableHash(title+time+day).
-
-supabase/functions/generate-itinerary/action-save-itinerary.ts
-  - Attach lc.warnings into itinerary.dayLedgers[d].warnings.
-  - After reconcileFulfillment, set itinerary.readyForPresentation =
-    (no must/avoid row left active without a placeholder or match).
-
-supabase/functions/generate-itinerary/pipeline/compile-prompt.ts
-  - Stop appending raw additionalNotes paragraph when structured rows exist
-    (the Day Brief already covers them — duplication encourages the AI to
-    re-interpret and re-time).
-
-src/components/planner/ItineraryContextForm.tsx (+ TripContext.tsx)
-  - On save of fine-tune notes, call a thin RPC/edge endpoint that runs
-    intentsFromFineTuneNotes + upsertDayIntents so rows exist pre-generation.
-```
-
-No DB migrations needed — `trip_day_intents` and all helpers already exist.
 
 ## Out of scope
-- UI surfacing of unresolved intents (separate ticket — the data will be on `dayLedgers[*].warnings` after this change).
-- Reworking `parseFineTuneIntoDailyIntents` heuristics (they're adequate; we're fixing flow, not parsing).
+- The cost-reference data itself (Michelin floors, ticketed minimums) is unchanged. Those values are correct; the problem is they were being applied silently and repeatedly.
+- Manual entries you've made are already protected by the `validate_activity_cost` trigger and won't be modified.
+
+Approve and I'll implement.
