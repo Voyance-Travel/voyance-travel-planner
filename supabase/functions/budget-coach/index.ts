@@ -344,21 +344,45 @@ Rules:
       }
     }
 
-    // Build a lookup of original activity costs (already in cents from the
-    // caller). Use the FULL itinerary so we can validate IDs the model returns
-    // even if they referenced a protected/dismissed item (we'll filter those
-    // out in the post-filter below).
+    // Build lookups for ID-existence + title-match guards. Use the FULL
+    // itinerary so we can validate IDs even if they referenced a protected
+    // or dismissed item (filtered separately below).
     const activityCostCentsById = new Map<string, number>();
+    const activityTitleById = new Map<string, string>();
+    const allValidIds = new Set<string>();
     for (const day of itinerary_days) {
       for (const activity of day.activities ?? []) {
+        const sid = String(activity.id);
+        allValidIds.add(sid);
+        activityTitleById.set(sid, String(activity.title || ""));
         if (typeof activity.cost === "number" && Number.isFinite(activity.cost) && activity.cost > 0) {
-          activityCostCentsById.set(activity.id, Math.round(activity.cost));
+          activityCostCentsById.set(sid, Math.round(activity.cost));
         }
       }
     }
 
+    // Title-match helper: tolerant comparison between AI-claimed item name
+    // and the real activity title for a given ID.
+    const normalize = (s: string) =>
+      s.toLowerCase().replace(/[^a-z0-9\s]+/g, " ").replace(/\s+/g, " ").trim();
+    const tokenize = (s: string) =>
+      new Set(normalize(s).split(" ").filter((t) => t.length >= 4));
+    const titleMatches = (claimed: string, real: string): boolean => {
+      const c = normalize(claimed);
+      const r = normalize(real);
+      if (!c || !r) return false;
+      if (c.includes(r) || r.includes(c)) return true;
+      const ct = tokenize(claimed);
+      const rt = tokenize(real);
+      if (ct.size === 0 || rt.size === 0) return false;
+      let overlap = 0;
+      for (const t of ct) if (rt.has(t)) overlap++;
+      const denom = Math.min(ct.size, rt.size);
+      return denom > 0 && overlap / denom >= 0.6;
+    };
+
     console.log("Activity costs (cents) from caller:", JSON.stringify(Object.fromEntries(activityCostCentsById)));
-    console.log(`Protections: categories=${JSON.stringify(protected_categories)} dismissed=${dismissed_activity_ids.length} preFilteredOut=${protectedActivityIds.size}`);
+    console.log(`Protections: categories=${JSON.stringify(protected_categories)} dismissed=${dismissed_activity_ids.length} preFilteredOut=${protectedActivityIds.size} validIds=${allValidIds.size}`);
 
     // The AI is instructed to return whole-currency values (e.g. 50 for $50).
     // We simply multiply by 100 to get cents. No heuristic.
