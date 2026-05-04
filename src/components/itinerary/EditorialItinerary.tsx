@@ -1479,11 +1479,58 @@ export function EditorialItinerary({
       return isArrivalTitle && isTravelCat && isAirportishVenue && !hasAirline;
     };
 
+    // Pre-check-in relabel: if a Day-1 "Check-in at <hotel>" is scheduled
+    // before the hotel's stated check-in time, relabel it as "Luggage Drop"
+    // so the user doesn't expect a room to be ready. The real check-in
+    // typically happens later in the day (added by the generator). This is
+    // purely cosmetic — id, cost, location, category are preserved.
+    const hotelCheckInRaw = (hotelSelection as any)?.checkInTime || (hotelSelection as any)?.checkIn;
+    const parseHHMMOrAmPm = (s?: string): number | null => {
+      if (!s || typeof s !== 'string') return null;
+      const trimmed = s.trim();
+      const m24 = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+      if (m24) return parseInt(m24[1], 10) * 60 + parseInt(m24[2], 10);
+      const mAmPm = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+      if (mAmPm) {
+        let h = parseInt(mAmPm[1], 10) % 12;
+        if (mAmPm[3].toUpperCase() === 'PM') h += 12;
+        return h * 60 + (mAmPm[2] ? parseInt(mAmPm[2], 10) : 0);
+      }
+      return null;
+    };
+    const hotelCheckInMins = parseHHMMOrAmPm(hotelCheckInRaw) ?? 15 * 60; // default 15:00
+    const hotelDisplayCheckIn = (() => {
+      // Render as "3:00 PM"
+      const h24 = Math.floor(hotelCheckInMins / 60);
+      const m = hotelCheckInMins % 60;
+      const period = h24 >= 12 ? 'PM' : 'AM';
+      const h12 = ((h24 + 11) % 12) + 1;
+      return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+    })();
+    const relabelPreCheckIn = (a: any): any => {
+      if (!a || a.locked || a.isLocked) return a;
+      const title = String(a.title || a.name || '').trim();
+      if (!/^check[-\s]?in\b/i.test(title)) return a;
+      const startMins = parseHHMMOrAmPm(a.startTime || a.time);
+      if (startMins === null || startMins >= hotelCheckInMins) return a;
+      const hotelPart = title.replace(/^check[-\s]?in\s*(?:at|to|—|–|-|@)\s*/i, '').trim() || a.location?.name || 'your hotel';
+      return {
+        ...a,
+        title: `Luggage Drop at ${hotelPart}`,
+        name: `Luggage Drop at ${hotelPart}`,
+        description: `Drop your bags and freshen up. Your room will be ready at ${hotelDisplayCheckIn}.`,
+        durationMinutes: Math.min(20, a.durationMinutes ?? 30),
+      };
+    };
+
     return rawDays.map((day, dayIndex) => {
     const d = day as any;
-    const baseActivities = (!hasFlight && day.dayNumber === 1)
+    const filtered = (!hasFlight && day.dayNumber === 1)
       ? day.activities.filter(a => !isPlaceholderArrival(a))
       : day.activities;
+    const baseActivities = day.dayNumber === 1
+      ? filtered.map(relabelPreCheckIn)
+      : filtered;
     let updatedActivities = [...baseActivities];
 
     // === Transition day: inject travel summary at top ===
