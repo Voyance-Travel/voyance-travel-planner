@@ -549,7 +549,16 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         (itinerary as any).days = itineraryDays;
       }
 
-      // Persist ledger snapshots on the itinerary JSON for downstream consumers.
+      // Attach per-day warnings onto the persisted ledger snapshots so the
+      // front-end can surface unresolved/violated user intents.
+      const warnByDay = new Map<number, typeof lc.warnings>();
+      for (const w of lc.warnings) {
+        if (!warnByDay.has(w.dayNumber)) warnByDay.set(w.dayNumber, []);
+        warnByDay.get(w.dayNumber)!.push(w);
+      }
+      for (const led of ledgers) {
+        (led as any).warnings = warnByDay.get(led.dayNumber) || [];
+      }
       (itinerary as any).dayLedgers = ledgers;
 
       // ── RECONCILE FULFILLMENT ──
@@ -569,6 +578,52 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         if (updated > 0) console.log(`[save-itinerary] ✅ Reconciled ${updated} fulfilled day-intent(s)`);
       } catch (rfErr) {
         console.warn('[save-itinerary] reconcileFulfillment failed (non-blocking):', rfErr);
+      }
+
+      // ── PRESENTATION GATE ──
+      // Trip is "ready to present" iff every must/avoid intent is either
+      // fulfilled (matched in the day) OR has had a placeholder restored.
+      // `missing_user_intent` warnings (locked items the anchor-guard should
+      // have restored but didn't) block readiness.
+      try {
+        const { fetchActiveDayIntents } = await import('../_shared/day-intents-store.ts');
+        const remaining = await fetchActiveDayIntents(supabase, tripId);
+        const blockingWarnings = lc.warnings.filter((w) => w.kind === 'missing_user_intent');
+        const unresolved = remaining.filter((r) =>
+          r.status === 'active'
+          && (r.priority === 'must' || r.priority === 'avoid')
+          && r.day_number != null
+          // 'avoid' rows never "fulfill" — they're satisfied by absence.
+          && r.intent_kind !== 'avoid'
+          && r.intent_kind !== 'note'
+          && r.intent_kind !== 'constraint'
+        );
+        // Cross-reference: an unresolved row is OK if a placeholder was inserted.
+        const placeholderTitles = new Set<string>();
+        for (const w of lc.warnings) {
+          if (w.kind === 'missing_user_intent_restored') {
+            const m = w.detail.match(/"([^"]+)"/);
+            if (m) placeholderTitles.add(m[1].toLowerCase());
+          }
+        }
+        const trulyUnresolved = unresolved.filter((r) => !placeholderTitles.has(r.title.toLowerCase()));
+        const ready = blockingWarnings.length === 0 && trulyUnresolved.length === 0;
+        (itinerary as any).readyForPresentation = ready;
+        if (!ready) {
+          (itinerary as any).unresolvedIntents = trulyUnresolved.map((r) => ({
+            dayNumber: r.day_number,
+            title: r.title,
+            kind: r.intent_kind,
+            priority: r.priority,
+            source: r.source_entry_point,
+          }));
+          console.log(`[save-itinerary] ⚠️ Presentation gate: ${trulyUnresolved.length} unresolved must/avoid intent(s), ${blockingWarnings.length} missing-intent warning(s)`);
+        } else {
+          console.log('[save-itinerary] ✅ Presentation gate: all user intents resolved');
+        }
+      } catch (gateErr) {
+        console.warn('[save-itinerary] presentation gate failed (non-blocking):', gateErr);
+        (itinerary as any).readyForPresentation = true; // fail-open
       }
     }
   } catch (ledgerErr) {
