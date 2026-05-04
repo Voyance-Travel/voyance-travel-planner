@@ -10,6 +10,58 @@ import type { DayIntentInput, IntentPriority } from './day-intents-store.ts';
 import { inferKindFromText, normalizeKind } from './day-intents-store.ts';
 import { parseFineTuneIntoDailyIntents } from './parse-fine-tune-intents.ts';
 
+/**
+ * A "hard fact" is an intent specific enough to lock verbatim:
+ *   - has an explicit time (HH:MM), AND
+ *   - title contains a Proper-Noun-looking venue name (≥1 capitalized word
+ *     that isn't a meal label like "Dinner" / "Lunch" / "Spa").
+ * Locked rows are restored verbatim by the anchor-guard pipeline.
+ */
+const MEAL_LABELS = new Set([
+  'Breakfast', 'Brunch', 'Lunch', 'Dinner', 'Drinks', 'Cocktails',
+  'Spa', 'Massage', 'Hammam', 'Activity', 'Tour', 'Visit',
+]);
+
+function looksLikeNamedVenue(title: string): boolean {
+  if (!title) return false;
+  // Strip leading meal/kind word
+  const cleaned = title.replace(/^(at|to|for)\s+/i, '').trim();
+  // Look for a capitalized word that isn't a generic meal label
+  const tokens = cleaned.split(/\s+/);
+  for (const tok of tokens) {
+    if (/^[A-Z][\w'’&.-]{1,}$/.test(tok) && !MEAL_LABELS.has(tok)) return true;
+  }
+  // "at <Name>" pattern
+  if (/\bat\s+[A-Z]/.test(title)) return true;
+  return false;
+}
+
+function stableHash(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36).slice(0, 10);
+}
+
+/**
+ * Decide whether a parsed intent qualifies as a hard fact (locked verbatim).
+ * Only applies to non-avoid kinds. Returns a `{ locked, lockedSource }` patch.
+ */
+function maybeLock(args: {
+  source: string;
+  dayNumber?: number | null;
+  title: string;
+  startTime?: string | null;
+  kind: string;
+}): { locked: boolean; lockedSource: string | null } {
+  if (args.kind === 'avoid' || args.kind === 'note' || args.kind === 'constraint') {
+    return { locked: false, lockedSource: null };
+  }
+  if (!args.startTime) return { locked: false, lockedSource: null };
+  if (!looksLikeNamedVenue(args.title)) return { locked: false, lockedSource: null };
+  const key = `${args.source}|${args.dayNumber ?? '*'}|${args.title.toLowerCase()}|${args.startTime}`;
+  return { locked: true, lockedSource: `${args.source}:${stableHash(key)}` };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1) FINE-TUNE NOTES  →  intents
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,15 +81,18 @@ export function intentsFromFineTuneNotes(args: {
 
   for (const p of perDay) {
     const kind = p.kind === 'avoid' ? 'avoid' : normalizeKind(p.kind);
+    const title = p.title || p.raw;
+    const lock = maybeLock({ source: 'fine_tune', dayNumber: p.dayNumber, title, startTime: p.startTime, kind });
     out.push({
       dayNumber: p.dayNumber,
       source: 'fine_tune',
       kind,
-      title: p.title || p.raw,
+      title,
       rawText: p.raw,
       startTime: p.startTime || null,
       priority: kind === 'avoid' ? 'avoid' : (p.priority as IntentPriority),
-      locked: false,
+      locked: lock.locked,
+      lockedSource: lock.lockedSource,
     });
   }
 
@@ -153,16 +208,19 @@ export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayI
     const items = splitDayActivitiesString(d.activities || '');
     for (const item of items) {
       if (!item.title) continue;
+      const kind = inferKindFromText(item.title);
+      const lock = maybeLock({ source: 'chat_planner', dayNumber: d.dayNumber, title: item.title, startTime: item.startTime, kind });
       out.push({
         dayNumber: d.dayNumber,
         source: 'chat_planner',
-        kind: inferKindFromText(item.title),
+        kind,
         title: item.title,
         rawText: item.raw,
         startTime: item.startTime || null,
         endTime: item.endTime || null,
-        priority: 'must', // user explicitly listed it on this day
-        locked: false,
+        priority: 'must',
+        locked: lock.locked,
+        lockedSource: lock.lockedSource,
       });
     }
   }
@@ -181,34 +239,40 @@ export function intentsFromChatPlannerExtraction(args: ChatExtractedInput): DayI
       c.type === 'preference' ? 'constraint' :
       c.type === 'time_block' || isAllDay ? 'event' :
       inferKindFromText(desc);
+    const title = desc.length > 140 ? desc.slice(0, 137) + '…' : desc;
+    const lock = maybeLock({ source: 'chat_planner', dayNumber: c.day, title, startTime: c.time, kind });
     out.push({
       dayNumber: c.day ?? null,
       source: 'chat_planner',
       kind,
-      title: desc.length > 140 ? desc.slice(0, 137) + '…' : desc,
+      title,
       rawText: desc,
       startTime: c.time || null,
       endTime: c.endTime || null,
       priority: isAvoid ? 'avoid' : 'must',
-      locked: false,
+      locked: lock.locked,
+      lockedSource: lock.lockedSource,
       metadata: { fullDayEvent: isAllDay || undefined },
     });
   }
 
   // 3c. mustDoActivities — fallback comma-separated string. Only used if
-  // perDayActivities didn't already cover it. Day inference is best-effort.
+  // perDayActivities didn't already cover it.
   if (args.mustDoActivities && (!args.perDayActivities || args.perDayActivities.length === 0)) {
     const items = splitMustDoString(args.mustDoActivities);
     for (const item of items) {
+      const kind = inferKindFromText(item.title);
+      const lock = maybeLock({ source: 'chat_planner', dayNumber: item.dayNumber, title: item.title, startTime: item.startTime, kind });
       out.push({
         dayNumber: item.dayNumber ?? null,
         source: 'chat_planner',
-        kind: inferKindFromText(item.title),
+        kind,
         title: item.title,
         rawText: item.raw,
         startTime: item.startTime || null,
         priority: 'must',
-        locked: false,
+        locked: lock.locked,
+        lockedSource: lock.lockedSource,
       });
     }
   }
