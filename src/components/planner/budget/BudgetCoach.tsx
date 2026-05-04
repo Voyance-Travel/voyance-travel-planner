@@ -71,7 +71,46 @@ interface BudgetCoachProps {
   travelers?: number;
   /** Called when the user applies a suggestion — parent must update the itinerary. Returns true if swap succeeded. */
   onApplySuggestion?: (suggestion: BudgetSuggestion) => Promise<boolean> | void;
+  /**
+   * User-protected category labels (one of CATEGORY_GROUP_LABELS). Items in
+   * these categories are removed from the coach prompt entirely.
+   */
+  protectedCategories?: string[];
+  /** Persist a change to protectedCategories (writes back to trip settings). */
+  onProtectedCategoriesChange?: (next: string[]) => void;
   className?: string;
+}
+
+/**
+ * User-facing category labels and the keywords each one matches against the
+ * raw `category` / `type` strings on activities. Keep in lockstep with the
+ * server's CATEGORY_GROUPS map in supabase/functions/budget-coach/index.ts.
+ */
+export const CATEGORY_GROUPS: Record<string, string[]> = {
+  Dining: ['dining', 'breakfast', 'lunch', 'dinner', 'brunch', 'cafe', 'café', 'coffee', 'food', 'restaurant', 'meal', 'nightcap', 'drinks', 'bar'],
+  Hotels: ['hotel', 'accommodation', 'lodging', 'stay', 'resort', 'check-in', 'check-out', 'bag-drop'],
+  Tours: ['tour', 'guided_tour', 'guided tour', 'experience', 'attraction', 'excursion'],
+  Transit: ['transit', 'transport', 'transportation', 'taxi', 'train', 'flight', 'transfer', 'metro', 'subway'],
+  Activities: ['activity', 'sightseeing', 'museum', 'gallery', 'culture', 'wellness', 'shopping', 'park', 'landmark'],
+};
+export const CATEGORY_GROUP_LABELS = Object.keys(CATEGORY_GROUPS);
+
+/**
+ * Seed default protections from a trip's DNA / archetype tags. Called by
+ * BudgetTab on first render when `coach_protected_categories` is null.
+ */
+export function seedProtectedCategoriesFromDna(dnaTokens: string[]): string[] {
+  const tokens = dnaTokens.map((t) => (t || '').toLowerCase());
+  const has = (...needles: string[]) =>
+    tokens.some((t) => needles.some((n) => t.includes(n)));
+  const out = new Set<string>();
+  if (has('gourmand', 'food', 'culinary', 'michelin', 'luminary')) out.add('Dining');
+  if (has('luxe', 'luxury', 'palace')) {
+    out.add('Hotels');
+    out.add('Dining');
+  }
+  if (has('cultural', 'museums-first', 'museum-first')) out.add('Tours');
+  return Array.from(out);
 }
 
 // Simple in-memory cache keyed by tripId
