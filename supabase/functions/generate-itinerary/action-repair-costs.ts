@@ -261,17 +261,36 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         corrected++;
       }
 
+      // Write-time guard: free venues and walking transport must be $0.
+      // The DB trigger enforces this too, but normalizing here keeps the
+      // returned payload consistent and avoids a useless DB round-trip.
+      const titleLowerForGuard = (title || '').toLowerCase().trim();
+      const isWalkingTransport = category === 'transport' && /^walk\b/.test(titleLowerForGuard);
+      const notesStr = wasCorrected ? `[Repair auto-corrected${subcategory ? `, ${subcategory}` : ""}]` : null;
+      const isFreeVenueNote = (notesStr || '').toLowerCase().includes('free venue');
+      let finalCost = Math.round(costPerPerson * 100) / 100;
+      let finalSource = source;
+      let finalNotes = notesStr;
+      if (isWalkingTransport || isFreeVenueNote) {
+        if (finalCost !== 0) {
+          console.warn(`[repair-trip-costs] FREE-VENUE/WALK GUARD: "${title}" $${finalCost} → $0`);
+        }
+        finalCost = 0;
+        finalSource = 'free_venue';
+        finalNotes = isWalkingTransport ? '[Walking - free]' : '[Free venue - Tier 1]';
+      }
+
       rows.push({
         trip_id: tripId,
         activity_id: activity.id,
         day_number: dayNum,
-        cost_per_person_usd: Math.round(costPerPerson * 100) / 100,
+        cost_per_person_usd: finalCost,
         num_travelers: numTravelers,
         category,
-        source,
+        source: finalSource,
         confidence: ref ? "medium" : "low",
         cost_reference_id: ref?.id || null,
-        notes: wasCorrected ? `[Repair auto-corrected${subcategory ? `, ${subcategory}` : ""}]` : null,
+        notes: finalNotes,
       });
     }
   }
