@@ -476,15 +476,15 @@ export function usePayableItems({
       }
     }
 
-    // Manual activity expenses
-    addManualGroups('activity');
+    // (manual activity expenses already added above; do not call addManualGroups('activity') a second time)
 
     // ─── Final dedupe: ensure manual hotel/flight overrides win over canonical rows ───
     const hasManualHotelItem = result.some(r => r.type === 'hotel' && isManualId(r.id));
     const hasManualFlightItem = result.some(r => r.type === 'flight' && isManualId(r.id));
     const deduped = result.filter(r => {
-      if (r.type === 'hotel' && r.id === 'hotel-selection' && hasManualHotelItem) return false;
-      if (r.type === 'flight' && r.id === 'flight-selection' && hasManualFlightItem) return false;
+      // Suppress ANY non-manual hotel row when a manual hotel exists, regardless of id.
+      if (r.type === 'hotel' && !isManualId(r.id) && hasManualHotelItem) return false;
+      if (r.type === 'flight' && !isManualId(r.id) && hasManualFlightItem) return false;
       return true;
     });
 
