@@ -294,6 +294,10 @@ export function usePayableItems({
           if (lookup && isPlaceholderDepartureTransferTitle(lookup.name)) {
             continue;
           }
+          // Skip unconfirmed intra-city taxi/rideshare legs (auto-titled "Taxi to X").
+          if (lookup && isUnconfirmedIntraCityTaxi({ title: lookup.name, category: cat })) {
+            continue;
+          }
           const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
           const subName = lookup?.name || 'Local transit';
           bucket.subItems.push({
