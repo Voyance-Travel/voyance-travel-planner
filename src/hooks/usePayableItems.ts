@@ -204,7 +204,7 @@ export function usePayableItems({
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
       });
-    } else if (activityCosts?.length && !hasManualHotel) {
+    } else if (paymentsLoaded && activityCosts?.length && !hasManualHotel) {
       // Fallback: hotel cost stored as day_number=0 row
       const hotelRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'hotel' && r.day_number === 0);
       if (hotelRow && hotelRow.cost_per_person_usd > 0) {
