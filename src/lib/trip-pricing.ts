@@ -67,6 +67,14 @@ export function resolveGroupTotal(
  * So we must store the per-person portion only.
  * 
  * For flat-rate items, divide by travelers so the view doesn't double-count.
+ *
+ * CRITICAL: the column is named `cost_per_person_usd` and downstream UIs
+ * (Budget tab, Coach, header) treat its values as USD when applying FX
+ * conversion for display. If a non-USD currency is supplied here we MUST
+ * normalize to USD first, otherwise the same FX rate gets re-applied at
+ * display time and the visible total inflates by ~1/rate. (e.g. EUR values
+ * stored unconverted become ~1.16x too large in EUR display, ~1.35x in
+ * USD display, etc.)
  */
 export function resolvePerPersonForDb(
   cost: ActivityCostInput | number | null | undefined,
@@ -75,27 +83,44 @@ export function resolvePerPersonForDb(
   if (cost == null) return 0;
 
   if (typeof cost === 'number') {
-    // Plain number assumed per_person already
+    // Plain number assumed per_person already AND assumed USD
     return cost;
   }
 
-  // If total is explicitly provided, derive per-person from it
+  // Resolve in source currency, then normalize.
+  let perPersonInSourceCurrency = 0;
+
   if (cost.total != null && cost.total > 0) {
-    return cost.total / Math.max(travelers, 1);
+    perPersonInSourceCurrency = cost.total / Math.max(travelers, 1);
+  } else {
+    const amount = cost.amount ?? cost.perPerson ?? 0;
+    if (amount <= 0) return 0;
+    const basis = (cost.basis || 'per_person') as CostBasis;
+    perPersonInSourceCurrency = (basis === 'flat' || basis === 'per_room')
+      ? amount / Math.max(travelers, 1)
+      : amount;
   }
 
-  const amount = cost.amount ?? cost.perPerson ?? 0;
-  if (amount <= 0) return 0;
+  // Normalize to USD if a non-USD source currency is provided.
+  const sourceCurrency = (cost.currency || 'USD').toUpperCase();
+  if (sourceCurrency === 'USD' || !sourceCurrency) return perPersonInSourceCurrency;
 
-  const basis = (cost.basis || 'per_person') as CostBasis;
-
-  switch (basis) {
-    case 'flat':
-    case 'per_room':
-      return amount / Math.max(travelers, 1);
-    case 'per_person':
-    default:
-      return amount;
+  // Lazy-import to avoid creating a hard cycle for callers that don't need FX.
+  // EXCHANGE_RATES_FROM_USD lives in src/lib/currency.ts.
+  // We inline-require to keep this file dependency-light for unit tests.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { convertToUSD, hasRate } = require('./currency') as typeof import('./currency');
+    if (!hasRate(sourceCurrency)) {
+      // Unknown currency — keep original value but warn so we can add the rate.
+      if (typeof console !== 'undefined') {
+        console.warn(`[trip-pricing] Unknown currency "${sourceCurrency}" — storing raw amount as USD. This will distort totals.`);
+      }
+      return perPersonInSourceCurrency;
+    }
+    return convertToUSD(perPersonInSourceCurrency, sourceCurrency);
+  } catch {
+    return perPersonInSourceCurrency;
   }
 }
 
