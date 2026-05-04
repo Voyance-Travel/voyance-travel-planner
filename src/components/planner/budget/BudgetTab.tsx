@@ -301,15 +301,14 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // ─── Canonical financial snapshot from DB ledger (single source of truth) ───
   const snapshot = useTripFinancialSnapshot(tripId);
 
-  // When the snapshot total changes, invalidate the cached summary/ledger so
-  // the per-category breakdown can never lag behind the headline number.
+  // NOTE: We deliberately do NOT invalidate summary/ledger/allocations queries
+  // when the snapshot total changes. The snapshot, summary, and allocations all
+  // ultimately read from `activity_costs`; the `booking-changed` event already
+  // refetches every consumer in lockstep. Invalidating here on every total
+  // change created the "numbers shift on their own" effect: every background
+  // sync write triggered a snapshot delta → a query refetch → a re-render with
+  // a slightly different rounding, ad infinitum.
   const queryClient = useQueryClient();
-  useEffect(() => {
-    if (snapshot.loading) return;
-    queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
-    queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
-    queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
-  }, [snapshot.tripTotalCents, snapshot.loading, tripId, queryClient]);
 
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
