@@ -768,6 +768,17 @@ export function PaymentsTab({
           )}
         </div>
       </motion.div>
+      {item.subItems && item.subItems.length > 0 && (
+        <div className="pl-11 pr-2 pb-2 -mt-1 space-y-0.5">
+          {item.subItems.map(sub => (
+            <div key={sub.id} className="flex items-center justify-between text-xs text-muted-foreground py-1 border-b border-border/30 last:border-0">
+              <span className="truncate pr-2">{sub.name}</span>
+              <span className="tabular-nums">{formatCurrency(sub.amountCents)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      </div>
     );
   };
 
