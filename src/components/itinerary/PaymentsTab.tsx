@@ -174,8 +174,29 @@ export function PaymentsTab({
       }
     }
     
+    // Pre-populate placeholder guests up to the trip's traveler count so a
+    // 2-guest trip already has both seats visible without an email invite.
+    // Synthetic IDs (`guest-N`) are deterministic so split assignments stay
+    // stable across renders. They materialize into a real trip_members row
+    // on first assignment via resolveRealMemberId().
+    const desiredCount = Math.max(1, travelers || 1);
+    let guestIndex = 1;
+    while (merged.length < desiredCount) {
+      guestIndex += 1;
+      merged.push({
+        id: `guest-${guestIndex}`,
+        tripId,
+        userId: null,
+        email: `guest-${guestIndex}@placeholder.local`,
+        name: `Guest ${guestIndex}`,
+        role: 'attendee' as const,
+        invitedAt: new Date().toISOString(),
+        acceptedAt: new Date().toISOString(),
+      });
+    }
+    
     return merged;
-  }, [rawTripMembers, collaborators, ownerId, ownerName, tripId]);
+  }, [rawTripMembers, collaborators, ownerId, ownerName, tripId, travelers]);
 
   // Fetch payments — with optional delay for DB write consistency
   const fetchPayments = useCallback(async (delayMs = 0) => {
@@ -487,6 +508,29 @@ export function PaymentsTab({
         return newMember.id;
       } catch (err) {
         console.error('Failed to create trip member for owner:', err);
+        return null;
+      }
+    }
+    
+    // If it's a synthetic placeholder guest, materialize a real trip_members row
+    if (memberId.startsWith('guest-')) {
+      const member = tripMembers.find(m => m.id === memberId);
+      if (!member) return null;
+      const placeholderEmail = member.email || `${memberId}@placeholder.local`;
+      const existingReal = rawTripMembers.find(
+        m => m.email?.toLowerCase() === placeholderEmail.toLowerCase()
+      );
+      if (existingReal) return existingReal.id;
+      try {
+        const newMember = await addTripMember({
+          tripId,
+          email: placeholderEmail,
+          name: member.name || undefined,
+          role: 'attendee',
+        });
+        return newMember.id;
+      } catch (err) {
+        console.error('Failed to create trip member for placeholder guest:', err);
         return null;
       }
     }
