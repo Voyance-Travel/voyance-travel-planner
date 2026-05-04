@@ -12,7 +12,7 @@
 
 import { useMemo } from 'react';
 import type { TripPayment } from '@/services/tripPaymentsAPI';
-import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle } from '@/lib/cost-estimation';
+import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle, isUnconfirmedIntraCityTaxi } from '@/lib/cost-estimation';
 
 export interface PayableSubItem {
   id: string;
@@ -294,6 +294,10 @@ export function usePayableItems({
           if (lookup && isPlaceholderDepartureTransferTitle(lookup.name)) {
             continue;
           }
+          // Skip unconfirmed intra-city taxi/rideshare legs (auto-titled "Taxi to X").
+          if (lookup && isUnconfirmedIntraCityTaxi({ title: lookup.name, category: cat })) {
+            continue;
+          }
           const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
           const subName = lookup?.name || 'Local transit';
           bucket.subItems.push({
@@ -394,6 +398,15 @@ export function usePayableItems({
           title: a.title || a.name,
           category: cat,
           description: (a as any).description,
+          bookingRequired: (a as any).bookingRequired,
+          cost: a.cost,
+        })) continue;
+
+        // Skip unconfirmed intra-city taxi/rideshare legs: AI named them
+        // "Taxi to X" but user never confirmed mode. Stays $0 until user picks.
+        if (isUnconfirmedIntraCityTaxi({
+          title: a.title || a.name,
+          category: cat,
           bookingRequired: (a as any).bookingRequired,
           cost: a.cost,
         })) continue;

@@ -137,6 +137,34 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         continue;
       }
 
+      // Unconfirmed intra-city taxi/rideshare — AI named the leg "Taxi to X"
+      // but the user never picked taxi as their mode. Treat as $0 until they
+      // explicitly confirm (cost.basis === 'user' | 'user_override') or it's
+      // a booked ride (booking_required === true). The leg still appears on
+      // the day card with a "choose a mode" hint; it just doesn't inflate the
+      // Payments total. Mirrors the placeholder_departure rule above.
+      const UNCONFIRMED_TAXI_RE = /^\s*(?:taxi|cab|uber|lyft|rideshare|private\s+car|car\s+service)\b.*\bto\b/i;
+      const isUserConfirmedCost = activity.cost?.basis === 'user' || activity.cost?.basis === 'user_override';
+      const isUnconfirmedTaxi = category === 'transport'
+        && UNCONFIRMED_TAXI_RE.test(_titleForPlaceholder)
+        && !isUserConfirmedCost
+        && activity.booking_required !== true;
+      if (isUnconfirmedTaxi) {
+        rows.push({
+          trip_id: tripId,
+          activity_id: activity.id,
+          day_number: dayNum,
+          cost_per_person_usd: 0,
+          num_travelers: numTravelers,
+          category: 'transport',
+          source: 'unconfirmed_transit',
+          confidence: 'low',
+          cost_reference_id: null,
+          notes: '[Choose a mode — taxi/metro/walk]',
+        });
+        continue;
+      }
+
 
       const title = activity.title || activity.name || "";
       const subcategory = inferSub(title, category);

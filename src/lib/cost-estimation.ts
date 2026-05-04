@@ -682,6 +682,33 @@ export function isPlaceholderDepartureTransfer(activity: {
 }
 
 /**
+ * Unconfirmed intra-city taxi/rideshare leg — AI named it "Taxi to X" but the
+ * user never picked taxi as their mode. We never auto-cost these; they appear
+ * on the day card with a "choose a mode" hint, but stay $0 until the user
+ * confirms (cost.basis = 'user'/'user_override') or it's a booked ride.
+ * Mirrors the placeholder_departure rule on the backend.
+ */
+const UNCONFIRMED_TAXI_TITLE_RE = /^\s*(?:taxi|cab|uber|lyft|rideshare|private\s+car|car\s+service)\b.*\bto\b/i;
+export function isUnconfirmedIntraCityTaxi(activity: {
+  title?: string;
+  name?: string;
+  category?: string;
+  type?: string;
+  bookingRequired?: boolean;
+  booking_required?: boolean;
+  cost?: any;
+}): boolean {
+  const title = activity.title || activity.name || '';
+  if (!UNCONFIRMED_TAXI_TITLE_RE.test(title)) return false;
+  if (activity.bookingRequired === true || activity.booking_required === true) return false;
+  const basis = activity.cost && typeof activity.cost === 'object' ? (activity.cost as any).basis : undefined;
+  if (basis === 'user' || basis === 'user_override') return false;
+  const cat = (activity.category || activity.type || '').toLowerCase();
+  if (cat && !['transport', 'transfer', 'transportation', 'transit', 'taxi', 'rideshare'].includes(cat)) return false;
+  return true;
+}
+
+/**
  * Pre-warm the cache (call early in app lifecycle)
  */
 export async function preloadCostIndex(): Promise<void> {
