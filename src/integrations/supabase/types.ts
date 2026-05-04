@@ -2357,6 +2357,54 @@ export type Database = {
         }
         Relationships: []
       }
+      cost_change_log: {
+        Row: {
+          activity_id: string
+          activity_title: string | null
+          applied_at: string
+          id: string
+          new_cents: number
+          previous_cents: number
+          reason: string
+          trip_id: string
+        }
+        Insert: {
+          activity_id: string
+          activity_title?: string | null
+          applied_at?: string
+          id?: string
+          new_cents: number
+          previous_cents: number
+          reason: string
+          trip_id: string
+        }
+        Update: {
+          activity_id?: string
+          activity_title?: string | null
+          applied_at?: string
+          id?: string
+          new_cents?: number
+          previous_cents?: number
+          reason?: string
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_change_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trip_budget_summary"
+            referencedColumns: ["trip_id"]
+          },
+          {
+            foreignKeyName: "cost_change_log_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cost_reference: {
         Row: {
           category: string
@@ -8153,6 +8201,7 @@ export type Database = {
           journey_order: number | null
           journey_total_legs: number | null
           last_activity_at: string | null
+          last_cost_repair_at: string | null
           metadata: Json | null
           name: string
           origin_city: string | null
@@ -8218,6 +8267,7 @@ export type Database = {
           journey_order?: number | null
           journey_total_legs?: number | null
           last_activity_at?: string | null
+          last_cost_repair_at?: string | null
           metadata?: Json | null
           name: string
           origin_city?: string | null
@@ -8283,6 +8333,7 @@ export type Database = {
           journey_order?: number | null
           journey_total_legs?: number | null
           last_activity_at?: string | null
+          last_cost_repair_at?: string | null
           metadata?: Json | null
           name?: string
           origin_city?: string | null
@@ -9670,6 +9721,7 @@ export type Database = {
           journey_order: number | null
           journey_total_legs: number | null
           last_activity_at: string | null
+          last_cost_repair_at: string | null
           metadata: Json | null
           name: string
           origin_city: string | null
