@@ -334,7 +334,7 @@ export async function updateTripBudgetSettings(
  * Maps activity_costs rows to the BudgetLedgerEntry interface for UI compatibility.
  */
 export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry[]> {
-  const [costsResult, totalResult] = await Promise.all([
+  const [costsResult, totalResult, tripResult] = await Promise.all([
     supabase
       .from('activity_costs')
       .select('*')
@@ -346,15 +346,72 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
       .select('total_all_travelers_usd')
       .eq('trip_id', tripId)
       .maybeSingle(),
+    supabase
+      .from('trips')
+      .select('itinerary_data, hotel_selection, flight_selection')
+      .eq('id', tripId)
+      .maybeSingle(),
   ]);
-  
+
   if (costsResult.error) {
     console.error('[BudgetService] Error fetching ledger from activity_costs:', costsResult.error);
     return [];
   }
-  
-  // Map activity_costs rows → BudgetLedgerEntry shape for UI compatibility
-  const entries: BudgetLedgerEntry[] = (costsResult.data || []).map((row: any) => {
+
+  // Build activity_id → display-name map from the trip's itinerary so we
+  // can show real titles instead of raw category enums.
+  const nameById = new Map<string, string>();
+  const days = ((tripResult.data as any)?.itinerary_data?.days) || [];
+  for (const day of days) {
+    for (const a of (day?.activities || [])) {
+      if (a?.id) {
+        const n = (a.title || a.name || '').toString().trim();
+        if (n) nameById.set(String(a.id), n);
+      }
+    }
+  }
+  const hotelSel: any = (tripResult.data as any)?.hotel_selection;
+  const flightSel: any = (tripResult.data as any)?.flight_selection;
+  const hotelName: string | undefined = hotelSel?.name || hotelSel?.hotel?.name;
+  const flightAirline: string | undefined =
+    flightSel?.outbound?.airline || flightSel?.legs?.[0]?.airline || flightSel?.airline;
+
+  // Strip internal pipeline tags like "[Free venue - Tier 1]",
+  // "[Repair auto-corrected]", "[Auto-corrected from $X, …]",
+  // "[User override: …]" before the notes string is ever shown.
+  const sanitizeNotes = (raw: unknown): string => {
+    if (typeof raw !== 'string') return '';
+    return raw.replace(/\[[^\]]*\]/g, '').replace(/\s{2,}/g, ' ').trim();
+  };
+
+  // Friendly nouns for the "category (Day N)" fallback so users don't see
+  // raw schema like "dining (Day 1)" or "transport (Day 2)".
+  const CATEGORY_LABEL: Record<string, string> = {
+    dining: 'Meal',
+    food: 'Meal',
+    activity: 'Activity',
+    cultural: 'Activity',
+    museum: 'Museum',
+    tour: 'Tour',
+    transport: 'Local transit',
+    transportation: 'Local transit',
+    transit: 'Local transit',
+    transfer: 'Transfer',
+    taxi: 'Taxi',
+    hotel: 'Accommodation',
+    accommodation: 'Accommodation',
+    flight: 'Flight',
+    nightlife: 'Nightlife',
+    shopping: 'Shopping',
+    wellness: 'Wellness',
+    other: 'Item',
+  };
+  const prettyCategory = (cat: string): string => {
+    const k = (cat || '').toLowerCase();
+    return CATEGORY_LABEL[k] || (k ? k.charAt(0).toUpperCase() + k.slice(1) : 'Item');
+  };
+
+  const rawEntries: BudgetLedgerEntry[] = (costsResult.data || []).map((row: any) => {
     let costPerPerson = Number(row.cost_per_person_usd) || 0;
     const numTravelers = Number(row.num_travelers) || 1;
 
@@ -371,6 +428,23 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
     const isPaid = row.is_paid === true;
     const isLogistics = row.source === 'logistics-sync';
 
+    // Resolve a human description in priority order:
+    //   1. Activity title from the itinerary JSON
+    //   2. Hotel name / "Flight (Airline)" for day-0 logistics rows
+    //   3. Sanitized notes (with bracketed pipeline tags stripped)
+    //   4. Friendly category label + "(Day N)"
+    const cat = (row.category || '').toLowerCase();
+    let description = (row.activity_id && nameById.get(String(row.activity_id))) || '';
+    if (!description && cat === 'hotel' && hotelName) description = hotelName;
+    if (!description && cat === 'flight' && flightAirline) description = `Flight (${flightAirline})`;
+    if (!description) {
+      const cleaned = sanitizeNotes(row.notes);
+      if (cleaned) description = cleaned;
+    }
+    if (!description) {
+      description = `${prettyCategory(cat)}${row.day_number != null ? ` (Day ${row.day_number})` : ''}`;
+    }
+
     return {
       id: row.id,
       trip_id: row.trip_id,
@@ -378,7 +452,7 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
       entry_type: (isPaid || isLogistics ? 'committed' : 'planned') as EntryType,
       amount_cents: totalCents,
       currency: 'USD',
-      description: row.notes || `${row.category} (Day ${row.day_number})`,
+      description,
       day_number: row.day_number,
       activity_id: row.activity_id,
       external_booking_id: null,
@@ -387,6 +461,20 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
       updated_at: row.updated_at || new Date().toISOString(),
     };
   });
+
+  // Collapse exact duplicates (same day + category + amount + description).
+  // Repair passes occasionally write twin transit rows on a single day; surfacing
+  // both as identical line items just confuses the user.
+  const dedupKey = (e: BudgetLedgerEntry) =>
+    `${e.day_number}|${e.category}|${e.amount_cents}|${e.description.toLowerCase()}`;
+  const seen = new Set<string>();
+  const entries: BudgetLedgerEntry[] = [];
+  for (const e of rawEntries) {
+    const k = dedupKey(e);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    entries.push(e);
+  }
 
   // Largest-remainder adjustment: ensure ledger item sum matches a canonical total.
   // Prefer the v_trip_total view, but fall back to the raw activity_costs sum

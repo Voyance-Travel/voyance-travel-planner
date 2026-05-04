@@ -1,54 +1,48 @@
-# Fix: Activity items disappeared (31→15) and hotel duplicated in Essentials
+# Fix: "All Costs" list leaks raw schema, internal tags, and duplicates
 
-## Root causes
+## Root cause
 
-### A. Activity items dropped from 31 to 15
+`getBudgetLedger` in `src/services/tripBudgetService.ts` (line 381) sets the description with:
 
-`src/hooks/usePayableItems.ts` was reworked so activity rows are derived **exclusively** from the `activity_costs` DB table (the JSON-walk + `estimateCostSync` fallback was deleted — see the file's top comment dated May 2026).
+```ts
+description: row.notes || `${row.category} (Day ${row.day_number})`
+```
 
-For this trip (`7ea828ac…`), `activity_costs` only contains ~25 rows. The displayed JSON itinerary has many more activities. Anything not yet costed in `activity_costs` (or stored as $0 — the loop continues on `cents <= 0`) is invisible. So the count collapsed to whatever the DB happened to have written, not what the user sees on the days.
+Two failure modes feed straight into the UI:
 
-### B. Travel Essentials jumped to $5,250 (duplicate hotel)
+1. **Internal tags as description.** `row.notes` is the column the cost pipeline writes diagnostic flags into: `"[Free venue - Tier 1]"`, `"[Repair auto-corrected]"`, `"[Auto-corrected from $X, exceeded 3x ref high $Y]"`, `"[User override: …]"`. These are pipeline breadcrumbs (verified in DB: every notes value in the affected trip is one of those bracketed strings). When `notes` is set the ledger uses it verbatim.
+2. **Raw category fallback.** When `notes` is null the fallback is the lowercase enum + `(Day N)` — `"dining (Day 1)"`, `"transport (Day 2)"`, `"cultural (Day 2)"`. No itinerary lookup, no friendly label.
 
-The trip has both:
-1. A manual payment row: `item_type='hotel'`, `item_id='manual-…'`, `$2,400`.
-2. A canonical `activity_costs` row: `category='hotel'`, `day_number=0`, `$2,850` (auto-written by the hotel-ledger sync).
+The duplicate `transport (Day 2) — $7` rows are real twin `activity_costs` rows that the repair pass writes (we already saw `[Repair auto-corrected]` transport rows in the same trip); both get mapped to the same opaque label so the user sees them as identical.
 
-The guard in `usePayableItems` only suppresses the canonical day-0 hotel when a manual hotel exists — **but only inside the `hotelSelection` branch (lines 175-213)**. The hotel ledger row also feeds `useTripFinancialSnapshot` (used elsewhere), and the day-0 row leaks back into "Essentials" totals via the `essentialItems` reducer if any code path emits it as an item. In addition, a transient render before `payments` loads (`hasManualHotel` is briefly false) lets the canonical row through and it stays visually duplicated until next refetch.
+The "Show all 25" button itself works correctly (`setShowAll(!showAll)` toggles a slice); the perceived breakage is that scrolling past 10 looks identical because the additional rows are more raw labels — the user assumes nothing happened.
 
 ## Fix
 
-### 1. Restore the JSON-walk fallback for activity items
-File: `src/hooks/usePayableItems.ts`
+### File: `src/services/tripBudgetService.ts` — `getBudgetLedger`
 
-- After the `activity_costs` loop, walk `days[].activities` and emit a payable item for any activity whose `id` is **not** already represented in the result list.
-- Use `estimateCostSync` (already imported elsewhere as `@/lib/cost-estimation`) with the same `travelers / budgetTier / destination / destinationCountry` props the hook already accepts but currently ignores. Skip activities whose estimated cents <= 0 *and* whose name matches the free-venue heuristic, otherwise still surface them at $0 so users see the line item.
-- Keep the transit grouping behavior (per-day rollup) for any walk-derived transport rows.
+1. **Fetch the trip's itinerary alongside `activity_costs`** so we can resolve `activity_id → title`. Also read `hotel_selection.name` and `flight_selection` to label day-0 rows.
+2. **Resolve description in priority order:**
+   1. Activity title from `itinerary_data.days[].activities[].title || .name`
+   2. Hotel name (for `category='hotel'`, day 0) / `Flight (Airline)` (for `category='flight'`, day 0)
+   3. Sanitized `notes` — strip any `[...]` segments before using
+   4. Pretty category label + `(Day N)` — e.g. `Meal (Day 2)`, `Local transit (Day 2)`, `Activity (Day 1)`. Map of category → friendly noun (`dining→Meal`, `transport/transit→Local transit`, `cultural→Activity`, `hotel→Accommodation`, `flight→Flight`, etc.).
+3. **Always sanitize `notes`** (`.replace(/\[[^\]]*\]/g, '').trim()`) before showing — never leak `[Free venue …]`, `[Repair auto-corrected]`, `[Auto-corrected …]`, `[User override: …]`.
+4. **Dedupe identical rows.** After the map step, collapse entries that share `(day_number, category, amount_cents, normalized_description)`. This kills the twin `transport (Day 2) — $7` rows without affecting the canonical sum (the dropped row's amount is already represented by the surviving twin — and `v_trip_total` is the source of truth for the grand total, so no balancing needed).
 
-This restores the original "one row per scheduled activity" UX while still letting the DB-side `activity_costs` win the price when present.
+### Out of scope
 
-### 2. Harden the hotel-override suppression
-File: `src/hooks/usePayableItems.ts`
-
-- Move `hasManualHotel` / `hasManualFlight` detection to be **case-insensitive** and tolerant of whitespace in `item_id` (`/^manual[-_]/i.test(p.item_id)`).
-- Guard the `result.push` for the day-0 canonical hotel/flight rows in **all** code paths (both the `hotelSelection` UI branch and the `activityCosts` fallback branch) behind a single check that re-asserts `!hasManualHotel`.
-- Add a final post-processing dedupe: if the result list contains both a `type==='hotel'` item with `id==='hotel-selection'` and a manual hotel item, drop the `hotel-selection` one. Same for flights.
-
-### 3. Avoid the brief render-before-payments-load duplicate
-File: `src/components/itinerary/PaymentsTab.tsx`
-
-- The `payments` state initializes to `[]` while `getTripPayments` resolves; during that window `hasManualHotel === false` and the canonical row renders. Add a `paymentsLoaded` boolean (set true inside `fetchPayments` after `setPayments`) and pass it to `usePayableItems`. While `paymentsLoaded === false`, the hook returns `items: []` (or just suppresses canonical hotel/flight rows) so we never flash the duplicate.
-
-## Out of scope
-
-- No schema changes.
-- No edits to `useTripFinancialSnapshot` (header/budget reconciliation already passes the override-aware total).
-- No change to the manual-expense insert flow.
+- No DB changes. `notes` keeps its diagnostic role for the validation triggers and audit; only the UI mapping changes.
+- No edits to `CostsList` rendering or the "Show all" toggle — both work; the perceived breakage disappears once the descriptions read like real items.
+- No change to category buckets, totals, or the recently-fixed payable-items hook.
 
 ## Acceptance
 
-- Reload the Payments tab on the affected trip:
-  - **Activities & Experiences** count returns to ≥ the number of bookable activities visible in the itinerary (not just the costed-in-DB subset).
-  - **Travel Essentials** shows exactly one hotel row at $2,400 (the manual entry); total is $2,400, not $5,250.
-- A trip with no manual hotel still shows the canonical hotel row from `hotelSelection` / `activity_costs` once.
-- "Reconciling…" badge does not return to a stuck state.
+On the affected trip, the "All Costs (N)" list shows:
+
+- Real activity titles (e.g. *"Lunch at L'Arpège"*, *"Louvre Museum"*) sourced from the itinerary.
+- *"Four Seasons Hotel George V, Paris"* for the day-0 hotel row instead of `[Repair auto-corrected]`.
+- Friendly fallbacks like *"Local transit (Day 2)"*, *"Meal (Day 1)"* when no JSON match exists.
+- No `[Free venue …]`, `[Repair auto-corrected]`, `[Auto-corrected …]`, or `[User override …]` strings anywhere.
+- No duplicate identical rows.
+- Clicking *Show all 25 items* reveals all 25 (the toggle already works; rows are now distinguishable, so the expansion is visually obvious).
