@@ -1,67 +1,56 @@
 ## Problem
 
-Day 1 shows **"Check-in at Four Seasons" at 09:45** even though the hotel's stated check-in is **15:00**. The card calls itself a check-in (with a 30-min "check-in window") and the description says "early luggage storage usually available", but the headline still implies the room is ready. A luxury traveler expects accuracy — they will arrive at 9:45 expecting a room and won't get one.
-
-The card is generated three different ways (all currently broken on this case):
-
-1. `compile-day-schema.ts` (no-flight prompt blocks at lines 285–336) hard-codes step 2 as `"Check-in at <hotel>"` regardless of the hotel's actual `checkInTime`.
-2. `generation-core.ts` line 687 has the right rule ("title it Luggage Drop at {Hotel} when arriving before checkInTime") but the model often ignores it.
-3. `injectHotelActivities.ts` line 33 builds a hard-coded `"Check-in at <hotel>"` accommodation card.
-4. `repair-day.ts` line 1430 (mid-trip hotel change) does the same.
-
-None of them check whether the scheduled time is actually ≥ the hotel's `checkInTime`.
+For luxury food audiences (Luxury Luminary, Culinary Cartographer, VIP Voyager, or `foodie + luxury` budget), Day 1 frequently lands two bistro-tier meals (lunch + dinner both €30–€50/pp). The arrival day is the "Grand Entrance" — at least the dinner should be elevated. Today nothing in `compile-day-schema.ts` tells the model that Day 1 dinner is special, so the dining-config Michelin policy gets "spent" later in the trip.
 
 ## Fix
 
-Three layers, defensive.
+Add a **Day 1 "Grand Entrance" dinner directive** that's injected into the existing arrival prompts in `compile-day-schema.ts`, gated on the dining config the trip already resolves.
 
-### 1. Read-time safety net — `EditorialItinerary.tsx`
+### 1. New helper — `buildGrandEntranceBlock`
+File: `supabase/functions/generate-itinerary/dining-config.ts`
 
-In the `days` useMemo, after the existing arrival-placeholder filter, add a relabel pass: for each Day 1 (or first-day-in-city) accommodation activity whose title starts with `Check-in` AND whose `startTime < effectiveHotelSelection.checkInTime`, rewrite it in place to:
-
-- title: `Luggage Drop at <hotel>`
-- description: `Drop your bags and freshen up. Your room will be ready at <checkInTime>.`
-- duration cap: 20 min (was 30)
-- keep `category: 'accommodation'`, keep ID, keep location
-
-Skip if `locked || isLocked` (Universal Locking). This handles every existing trip immediately, no migration.
-
-### 2. Generator prompt — `compile-day-schema.ts`
-
-In both no-flight blocks (lines 287–304 and 318–335), choose the title at template time based on whether `transferEnd < checkInTime`:
-
-```text
-const isBeforeCheckin = parseTime(transferEnd) < parseTime(hotel.checkInTime ?? '15:00');
-const title = isBeforeCheckin ? `Luggage Drop at ${hotel}` : `Check-in at ${hotel}`;
-const desc  = isBeforeCheckin
-  ? `Drop bags and freshen up. Your room will be ready at ${checkInTime}.`
-  : `Check in and get settled.`;
+```ts
+export function buildGrandEntranceBlock(
+  config: DiningConfig,
+  destination: string,
+): string | null {
+  if (config.michelinPolicy !== 'required' && config.michelinPolicy !== 'encouraged') return null;
+  const [, dinnerHi] = config.priceRange.dinner;
+  return `
+🌟 DAY 1 "GRAND ENTRANCE" DINNER — REQUIRED:
+This traveler's first dinner sets the tone for the trip. It MUST be an elevated, destination-defining restaurant, NOT a casual bistro/brasserie.
+- Choose a Michelin-starred room, palace-hotel dining room, or an iconic chef-led restaurant in ${destination}
+- Target price: €${Math.round(dinnerHi * 0.7)}–€${dinnerHi}/pp (tasting menu or chef-driven prix fixe)
+- Do NOT pick neighborhood bistros, steak-frites houses, or "authentic local" casual spots for THIS dinner
+- If lunch on Day 1 is already casual/bistro, the dinner MUST compensate by being elevated
+- Reservation note: flag as "Book 2–4 weeks ahead"`;
+}
 ```
 
-When `isBeforeCheckin` is true, also append a short instruction so the model adds an explicit `"Check-in at <hotel>"` accommodation activity at `checkInTime` (15-min) before evening activities. That gives the user the full timeline: bag drop → day → real check-in → dinner.
+### 2. Inject into Day 1 arrival prompts
+File: `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts`
 
-### 3. Helper utilities — `injectHotelActivities.ts` and `repair-day.ts`
+Resolve dining config once at the top of the `isFirstDay` branch (the tier + archetype are already in `input` — pass them through `DaySchemaInput` if not already there; they live on the trip context used to call `compileDaySchema`). Append the Grand Entrance block to `dayConstraints` for every Day 1 sub-branch that schedules a dinner: morning arrival (with/without hotel), afternoon arrival (with/without hotel), no-flight + hotel, no-flight + no-hotel. Skip for evening arrival (dinner is already optional + traveler exhausted) and skip for the all-day-event branch.
 
-`buildCheckInActivity` (line 33) already receives `hotel.checkInTime`. Change it to accept a scheduled `startTime` arg; if `startTime < checkInTime`, build a "Luggage Drop" activity instead. The repair-day mid-trip hotel-change branch (line 1430) gets the same conditional.
+### 3. Pair-aware guard in universal quality pass
+File: `supabase/functions/generate-itinerary/universal-quality-pass.ts`
 
-## Why this is safe
+After the existing Day 1 passes, add a check: if `tier === 'Curator' || archetype ∈ {Luxury Luminary, Culinary Cartographer, VIP Voyager}` AND Day 1 lunch + dinner are both ≤ the lunch price-range midpoint, log a `low_priority` warning ("Day 1 dining tier mismatch") and tag the dinner activity with `needs_elevation: true`. The repair pass already rewrites flagged dinners, so this gives the existing repair loop a single deterministic signal instead of duplicating the prompt logic.
 
-- Read-time relabel is purely cosmetic (title + description + duration); IDs, costs, locations untouched. Cost ledger, Payments, locking all unaffected.
-- Locked activities are skipped — manual edits are preserved (Universal Locking memory).
-- When `checkInTime` is unknown we keep current behavior (default 15:00 still gates the rename, so the most common luxury hotels behave correctly).
-- Generator changes only alter *future* generations; existing trips rely on the read-time net.
+### 4. Editorial copy
+When the Grand Entrance dinner is rendered in `EditorialItinerary.tsx`, prefix the description with "Your Grand Entrance dinner — " for Day 1 only when the activity carries the `grand_entrance` tag (set by the generator from the new prompt block). No layout change; pure string prefix.
 
-## Files touched
+## Out of scope
+- Re-pricing existing trips — change applies on next regeneration / Day 1 refresh.
+- Changing lunch tier (lunch can stay "authentic Paris"; the pairing problem is solved by elevating only dinner).
+- Budget/Value tier travelers — they keep current behavior.
 
-- `src/components/itinerary/EditorialItinerary.tsx` — relabel pass inside the existing Day 1 `days` useMemo (~25 lines).
-- `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts` — conditional titles + add explicit later check-in step (~25 lines across two blocks).
-- `src/utils/injectHotelActivities.ts` — `buildCheckInActivity` accepts scheduled time, branches title/description (~15 lines).
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — mid-trip hotel-change card uses the same gate (~10 lines).
+## Files to edit
+- `supabase/functions/generate-itinerary/dining-config.ts` — add `buildGrandEntranceBlock`
+- `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts` — inject block into Day 1 branches
+- `supabase/functions/generate-itinerary/pipeline/types.ts` — add `tier` + `archetype` to `DaySchemaInput` if missing
+- `supabase/functions/generate-itinerary/action-generate-day.ts` — pass tier/archetype when calling `compileDaySchema`
+- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — pair-aware guard
+- `src/components/itinerary/EditorialItinerary.tsx` — Grand Entrance description prefix
 
-## Verification
-
-- Existing trip with 09:45 "Check-in at Four Seasons" reloads as **"Luggage Drop at Four Seasons — Drop bags and freshen up. Your room will be ready at 15:00."**
-- New trip without flight, hotel checkInTime=15:00 → opening sequence reads Transfer → Luggage Drop → … → Check-in at 15:00 → dinner.
-- Trip arriving at 16:00 (after checkInTime) → still says "Check-in at <hotel>" exactly as before.
-
-Approve to ship.
+Approve to implement?
