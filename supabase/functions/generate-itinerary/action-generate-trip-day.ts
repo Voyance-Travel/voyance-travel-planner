@@ -1365,6 +1365,9 @@ async function _handleGenerateTripDayInner(
         previousHotelName: (cityInfo as any)?.previousHotelName || tripPreviousHotelName,
         previousHotelAddress: (cityInfo as any)?.previousHotelAddress || tripPreviousHotelAddress,
         hotelCoordinates: tripHotelCoordinates,
+        // Pass dedup context so DUPLICATE_CONCEPT / MEAL_DUPLICATE can swap from the pool
+        restaurantPool: restaurantPool && restaurantPool.length > 0 ? restaurantPool : undefined,
+        usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
       });
 
       if (repairs.length > 0) {
