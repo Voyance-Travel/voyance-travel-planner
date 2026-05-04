@@ -1405,12 +1405,17 @@ export function EditorialItinerary({
     });
   }, [tripId, queryClient, travelers, creationSource]);
 
-  // Auto-sync budget ledger on initial load so stale planned entries are replaced
+  // Auto-sync flight/hotel logistics on initial load. We intentionally do
+  // NOT call syncBudgetFromDays here — that would rewrite activity_costs
+  // from whatever JSON happens to be in the rendered itinerary on every
+  // page load, producing surprise "+$340 just now" trip total swings with
+  // no user action. Activity costs are written by the generation pipeline
+  // and only re-synced on explicit user edits (swap, add/remove, save,
+  // regenerate). Flight/hotel sync is idempotent and safe.
   const budgetSyncedRef = useRef(false);
   useEffect(() => {
     if (!budgetSyncedRef.current && rawDays.length > 0 && tripId) {
       budgetSyncedRef.current = true;
-      syncBudgetFromDays(rawDays);
 
       // Sync flight/hotel costs to activity_costs table
       import('@/services/budgetLedgerSync').then(({ syncFlightToLedger, syncHotelToLedger, syncMultiCityHotelsToLedger }) => {
