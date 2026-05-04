@@ -420,29 +420,45 @@ export function BudgetSetupDialog({
               </div>
             </div>
 
-            {/* Preset Buttons */}
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAllocations(DEFAULT_ALLOCATIONS.value_focused)}
-              >
-                Value-Focused
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAllocations(DEFAULT_ALLOCATIONS.balanced)}
-              >
-                Balanced
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAllocations(DEFAULT_ALLOCATIONS.splurge_forward)}
-              >
-                Splurge-Forward
-              </Button>
+            {/* Preset Buttons — labels carry realistic per-person/day spend bands
+                so users don't anchor on the vibe word and undersize the budget
+                for venues the AI then schedules. */}
+            <div className="flex flex-col gap-2 pt-2">
+              <p className="text-xs text-muted-foreground">
+                Pick a preset that matches your daily spend, not just your vibe.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-col h-auto py-2 items-start"
+                  onClick={() => setAllocations(DEFAULT_ALLOCATIONS.value_focused)}
+                  title="Hostels, casual dining, free activities. Best for backpacking and longer stays."
+                >
+                  <span className="font-medium">Value-Focused</span>
+                  <span className="text-[10px] text-muted-foreground">$80–150/day pp</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-col h-auto py-2 items-start"
+                  onClick={() => setAllocations(DEFAULT_ALLOCATIONS.balanced)}
+                  title="Mid-range hotels, bistros + one nicer dinner. Most travelers."
+                >
+                  <span className="font-medium">Balanced</span>
+                  <span className="text-[10px] text-muted-foreground">$150–300/day pp</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-col h-auto py-2 items-start"
+                  onClick={() => setAllocations(DEFAULT_ALLOCATIONS.splurge_forward)}
+                  title="4–5★ hotels, 1 splurge dinner, premium activities. Not Michelin-every-night."
+                >
+                  <span className="font-medium">Splurge-Forward</span>
+                  <span className="text-[10px] text-muted-foreground">$300–500/day pp</span>
+                </Button>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
