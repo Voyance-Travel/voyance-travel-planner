@@ -164,7 +164,7 @@ export function usePayableItems({
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
       });
-    } else if (activityCosts?.length && !hasManualFlight) {
+    } else if (activityCosts?.length && !hasManualFlight && paymentsLoaded) {
       const flightRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0);
       if (flightRow && flightRow.cost_per_person_usd > 0) {
         const flightId = 'flight-selection';
