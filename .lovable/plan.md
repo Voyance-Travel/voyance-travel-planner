@@ -1,37 +1,52 @@
 ## Problem
 
-The Add Expense modal in `PaymentsTab.tsx` only offers `flight`, `hotel`, `activity`. The DB CHECK constraint `trip_payments_item_type_check` enforces the same three values, so simply adding new options client-side would fail at insert.
+On the last day in Paris, the itinerary shows:
 
-## Plan
-
-### 1. DB migration
-
-Loosen `trip_payments_item_type_check` to accept additional categories used for manual logging:
-
-```
-flight, hotel, activity, dining, transport, shopping, other
+```text
+4:02 PM  Checkout from hotel
+~        Transfer to airport (CDG)
+4:36 PM  Stroll along the Seine     ← nonsensical, you're at the airport
+8:36 PM  Departure flight
 ```
 
-`flight | hotel | activity` remain canonical for AI-generated rows (the payable items hook keys off these). The new values are only used by manually-added expenses (`item_id` starts with `manual-`).
+Two real bugs are colliding:
 
-### 2. Client changes (`src/components/itinerary/PaymentsTab.tsx`)
+1. **Late checkout**: 4:02 PM is way past any normal hotel checkout time (~11 AM). The repair pass already has a "re-anchor checkout if too late" rule (`R5` in `repairDepartureSequence`), but it only fires when `LOGISTICS_SEQUENCE` validation has already flagged the day. With no breakfast / security card present, validation passes and the rule never runs.
+2. **Leisure after airport transfer**: nothing in the pipeline treats the *airport-transport* card as a hard barrier. The "no activities after security" rule (`R3`) only triggers when there is an explicit "airport security" card. The post-departure time filter (`universal-quality-pass.ts` step 3) keeps anything that starts before `flight − 180min`, so a 4:36 PM stroll against an 8:36 PM flight slips through (4:36 < 5:36 cutoff).
 
-- Widen the `newExpenseType` state union to include the 4 new values.
-- Update the `<Select>` options with friendly labels: Flight ✈️, Hotel/Accommodation 🏨, Activity/Tour 🎟️, **Dining 🍽️**, **Transport 🚗**, **Shopping 🛍️**, **Other 💳**.
-- Update name-field placeholders for each new type (e.g. dining → "e.g., Dinner at Le Comptoir").
-- Update `getItemIcon` to return appropriate lucide icons for `dining` (Utensils), `transport` (Car), `shopping` (ShoppingBag), `other` (Receipt). Add the imports.
-- Update the inline icon used in the manual-grouping flow inside `usePayableItems` consumer paths (no schema change needed there — rendering already uses `getItemIcon(type)`).
+The Day Truth Ledger / Logistics Sync Protocol in our core rules already mandates this kind of barrier — the implementation just isn't catching this shape of error.
 
-### 3. `usePayableItems`
+## Fix
 
-Extend the manual-group sweep so it also picks up `dining`, `transport`, `shopping`, `other` item types (currently only sweeps `flight` and `hotel`; `activity` is handled separately by the activity branch). Without this, new manual expenses would be inserted but never rendered as payable items.
+All edits in the departure-day repair pipeline. No schema changes, no UI changes.
 
-## Files
+### 1. Treat airport-transport as a hard barrier (`pipeline/repair-day.ts`)
 
-- DB migration: relax CHECK constraint on `trip_payments.item_type`
-- `src/components/itinerary/PaymentsTab.tsx` — widen union, new Select options, placeholders, icons
-- `src/hooks/usePayableItems.ts` — sweep new manual types into payable items
+Extend `repairDepartureSequence` (R3) so that when there is an `airport-transport` card on a departure day, **any non-departure activity scheduled after it gets moved to before it** (or removed if it can't fit without violating the 180-min flight buffer). Today this only triggers off `airport-security`; add `airport-transport` as an equally valid anchor.
 
-## Expected outcome
+### 2. Always run departure-day repairs on the last day
 
-User can log a manual "Dinner at Le Comptoir – $180" under **Dining**, a "Taxi to CDG – $90" under **Transport**, or a "Hermès scarf – $450" under **Shopping**, and each shows up in the payments list with an appropriate icon and folds into the Trip Total exactly like manual flights/hotels do today.
+In the validate→repair loop, force `repairDepartureSequence` to run whenever `isLastDay` (or `isLastDayInCity && !isTransitionDay`) is true and a departure time is known — not only when `LOGISTICS_SEQUENCE` errors exist. This makes R5's checkout re-anchor (`latestCheckoutMins = depMins − 180 − transportDuration − 30`) reliably fire so a 4:02 PM checkout becomes ~11 AM and downstream activities get re-timed.
+
+### 3. Tighten the post-departure time filter (`universal-quality-pass.ts`)
+
+In step 3 ("Post-departure filter"), also drop any non-transport activity whose `startTime` is later than the airport-transport card's `startTime` on the last day. This is the safety net if repair-day misses it.
+
+### 4. Surface a validation error so observability picks it up
+
+Add a new check in `checkLogisticsSequence` (`pipeline/validate-day.ts`):
+
+> If `airport-transport` exists on a departure day, every later non-departure activity is `LOGISTICS_SEQUENCE` error with `autoRepairable: true`.
+
+This keeps the validate→repair contract honest and gives us a log line when this happens again.
+
+### Out of scope
+
+- Locked / manually-added activities are still respected (they will warn but not be moved/removed, per Universal Locking Protocol).
+- No changes to credit charging — this is a generation-quality fix, not a structural mutation the user requested.
+
+## Files touched
+
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — extend R3 anchor, force-run on last day
+- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — new "activities after airport-transport" check
+- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — airport-transport-aware post-departure filter
