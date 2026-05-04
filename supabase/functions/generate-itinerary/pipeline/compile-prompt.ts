@@ -60,7 +60,7 @@ import {
   buildFullPromptGuidanceAsync,
   getArchetypeDefinition,
 } from '../archetype-data.ts';
-import { getDiningConfig, buildDiningPromptBlock, buildGrandEntranceBlock } from '../dining-config.ts';
+import { getDiningConfig, buildDiningPromptBlock, buildGrandEntranceBlock, buildArrivalCulturalAnchorBlock } from '../dining-config.ts';
 import {
   buildTripTypePromptSection,
 } from '../trip-type-modifiers.ts';
@@ -987,6 +987,11 @@ The Activities target is REAL spend on bookable experiences — free venues do N
     if (grandEntrance) {
       timingInstructions = `${timingInstructions}\n${grandEntrance}\n`;
       console.log(`[compile-prompt] Day 1 Grand Entrance directive injected (tier=${archetypeTier}, policy=${diningConfig.michelinPolicy})`);
+    }
+    const arrivalAnchor = buildArrivalCulturalAnchorBlock(diningConfig, resolvedDestination || destination || '');
+    if (arrivalAnchor) {
+      timingInstructions = `${timingInstructions}\n${arrivalAnchor}\n`;
+      console.log(`[compile-prompt] Day 1 Arrival Cultural Anchor directive injected`);
     }
   }
   const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;

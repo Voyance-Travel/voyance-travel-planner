@@ -303,3 +303,30 @@ This traveler's first dinner sets the tone for the trip. It MUST be an elevated,
 - Reservation note in description: "Book 2–4 weeks ahead"
 - Do NOT pick: Le Comptoir du Relais, Le Relais de l'Entrecôte, Bouillon Chartier, Chez Janou, or any similar bistro/brasserie for THIS dinner`;
 }
+
+/**
+ * Build the Day 1 "Arrival Cultural Anchor" directive — a sibling rule to the
+ * Grand Entrance Dinner. Ensures luxury food audiences get a second iconic
+ * experiential beat on arrival day (terrace champagne, golden-hour walk,
+ * late-open landmark) so Day 1 isn't just one museum + meals.
+ */
+export function buildArrivalCulturalAnchorBlock(
+  config: DiningConfig,
+  destination: string,
+): string | null {
+  if (config.michelinPolicy !== 'required' && config.michelinPolicy !== 'encouraged') {
+    return null;
+  }
+  return `
+🌟 DAY 1 "ARRIVAL CULTURAL ANCHOR" — REQUIRED:
+In addition to any morning/early-afternoon cultural stop, Day 1 MUST include ONE more iconic, sensory, destination-defining experience scheduled in the late afternoon or early evening (≈16:00–18:30), BEFORE the Grand Entrance Dinner.
+- 60–90 minutes, real named venue in ${destination || 'the destination'} (no placeholders, no generic "explore the area")
+- Pick ONE archetype that fits ${destination || 'the destination'}:
+  • Golden-hour walk along an iconic waterway / boulevard / viewpoint (e.g. Seine quais, Trocadéro, Pont Alexandre III, riverside promenade)
+  • Champagne / signature cocktail at a landmark hotel bar, rooftop, or palace terrace
+  • Quick visit to a flagship cultural building open late (Grand Palais, contemporary art foundation, gallery district stroll)
+  • Sensory / scenic ritual unique to the destination (covered passages, historic arcade, observation deck at sunset)
+- Cost: free–€60/pp; this does NOT replace lunch or dinner and is NOT counted as a meal
+- Tag this activity with: tags: ["arrival_anchor"]
+- Description should evoke arrival-day magic in 1–2 sentences`;
+}

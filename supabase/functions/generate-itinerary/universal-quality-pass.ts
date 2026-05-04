@@ -229,6 +229,14 @@ export async function universalQualityPass(
         (dinner as any).needs_elevation = true;
         console.warn(`[${label}] Day 1 dining tier mismatch: lunch €${priceOf(lunch)} + dinner €${priceOf(dinner)} both ≤ lunch-mid €${lunchMid}. Tagged dinner "${dinner.title}" for elevation.`);
       }
+
+      // Arrival Cultural Anchor check — Day 1 must have ≥2 non-meal experiential beats.
+      const experientialCats = new Set(['ATTRACTION', 'CULTURE', 'MUSEUM', 'OUTDOOR', 'ENTERTAINMENT', 'SIGHTSEEING', 'NIGHTLIFE', 'EXPERIENCE']);
+      const experientialCount = result.filter(a => experientialCats.has(String(a.category || '').toUpperCase())).length;
+      if (experientialCount < 2) {
+        (result as any).__missingArrivalAnchor = true;
+        console.warn(`[${label}] Day 1 missing Arrival Cultural Anchor: only ${experientialCount} experiential activity(ies). Flagged for repair.`);
+      }
     }
   }
 
