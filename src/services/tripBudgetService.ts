@@ -469,6 +469,14 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
     let description = (row.activity_id && nameById.get(String(row.activity_id))) || '';
     if (!description && cat === 'hotel' && hotelName) description = hotelName;
     if (!description && cat === 'flight' && flightAirline) description = `Flight (${flightAirline})`;
+    // Orphan rescue: activity_id no longer exists in itinerary_data (a late
+    // quality pass swapped the activity and minted a new uuid). Pop the next
+    // matching name from the (day, category) queue so we still show the real
+    // venue rather than the generic "Meal (Day N)" fallback.
+    if (!description) {
+      const queue = nameQueueByDayCat.get(dayCatKey(row.day_number, cat));
+      if (queue && queue.length > 0) description = queue.shift() as string;
+    }
     if (!description) {
       const cleaned = sanitizeNotes(row.notes);
       if (cleaned) description = cleaned;
@@ -476,6 +484,7 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
     if (!description) {
       description = `${prettyCategory(cat)}${row.day_number != null ? ` (Day ${row.day_number})` : ''}`;
     }
+
 
     return {
       id: row.id,
