@@ -145,6 +145,36 @@ export function usePayableItems({
     return map;
   }, [days]);
 
+  // Secondary index used to rescue orphaned activity_costs rows whose
+  // activity_id no longer exists in itinerary_data (a late quality pass
+  // swapped the activity and minted a new uuid). We pop a name from the
+  // matching (day, category) queue so the All Costs / Split Bill view
+  // shows the real venue rather than "Meal".
+  const orphanRescueByDayCat = useMemo(() => {
+    const DINING_RE = /\b(breakfast|brunch|lunch|dinner|supper|cafe|café|coffee|bakery|tapas|cocktails?|nightcap|aperitif|drinks?)\b/i;
+    const map = new Map<string, string[]>();
+    days.forEach(day => {
+      day.activities.forEach(a => {
+        const name = (a?.title || a?.name || '').toString().trim();
+        if (!name) return;
+        const rawCat = (a?.category || a?.type || '').toString().toLowerCase();
+        let mapped = '';
+        if (rawCat === 'dining' || rawCat === 'food' || rawCat === 'restaurant' || DINING_RE.test(name)) mapped = 'dining';
+        else if (['transport', 'transportation', 'taxi', 'metro', 'transit', 'transfer'].includes(rawCat)) mapped = 'transport';
+        else if (rawCat === 'nightlife') mapped = 'nightlife';
+        else if (rawCat === 'shopping') mapped = 'shopping';
+        else if (rawCat) mapped = 'activity';
+        if (!mapped) return;
+        const k = `${day.dayNumber}|${mapped}`;
+        const arr = map.get(k) || [];
+        arr.push(name);
+        map.set(k, arr);
+      });
+    });
+    return map;
+  }, [days]);
+
+
   const isManualId = (id: unknown): id is string =>
     typeof id === 'string' && /^manual[-_]/i.test(id.trim());
 
@@ -335,6 +365,16 @@ export function usePayableItems({
           .map(p => (p as any)?.assigned_member_id)
           .filter(Boolean) as string[];
 
+        // Orphan rescue: when activity_id no longer exists in the itinerary
+        // JSON, pop a name from the (day, category) queue before falling back
+        // to the generic label. Keeps "Dinner at Sacré Fleur" visible after
+        // a quality-pass swap that re-minted the activity uuid.
+        let rescuedName = '';
+        if (!lookup) {
+          const queue = orphanRescueByDayCat.get(`${row.day_number}|${cat}`);
+          if (queue && queue.length > 0) rescuedName = queue.shift() as string;
+        }
+
         // If we don't have a JSON name, fall back to a category-derived label.
         // This avoids leaking an opaque UUID into the UI.
         const fallbackLabel =
@@ -345,7 +385,7 @@ export function usePayableItems({
         result.push({
           id: compositeId,
           type: 'activity',
-          name: lookup?.name || fallbackLabel,
+          name: lookup?.name || rescuedName || fallbackLabel,
           amountCents: cents,
           dayNumber: row.day_number,
           payment: activityPayments[0],
@@ -553,7 +593,7 @@ export function usePayableItems({
     });
 
     return deduped;
-  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, hasManualHotel, hasManualFlight, paymentsLoaded, budgetTier, destination, destinationCountry]);
+  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, orphanRescueByDayCat, hasManualHotel, hasManualFlight, paymentsLoaded, budgetTier, destination, destinationCountry]);
 
   const totalCents = useMemo(() => items.reduce((sum, i) => sum + i.amountCents, 0), [items]);
   const essentialItems = useMemo(() => items.filter(i => i.type === 'flight' || i.type === 'hotel'), [items]);
