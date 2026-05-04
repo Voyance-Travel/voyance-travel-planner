@@ -34,6 +34,10 @@ interface BudgetSetupDialogProps {
   memberNames?: { id: string; name: string }[];
   /** Current estimated trip total in cents — used for feasibility warnings */
   tripTotalCents?: number;
+  /** Committed hotel cost in cents — used for hotel-vs-budget realism note */
+  hotelCents?: number;
+  /** Number of nights, for hotel breakdown copy */
+  totalNights?: number;
 }
 
 export function BudgetSetupDialog({
