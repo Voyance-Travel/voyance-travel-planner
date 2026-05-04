@@ -583,15 +583,9 @@ function isFuzzyLocationMatch(
   return false;
 }
 
-// FX rates, conversion helpers, and `formatCurrency` are sourced from the
-// shared currency module so this component and the Budget tab stay in sync.
-// See: src/lib/currency.ts
-import {
-  convertFromUSD,
-  convertToUSD,
-  formatCurrency,
-  rateDisclosure,
-} from '@/lib/currency';
+// FX rates, conversion helpers, and `formatCurrency` are imported at the top
+// of this file from `@/lib/currency` — the shared module ensures this header
+// and the Budget tab always render the same converted value.
 
 function normalizeCurrencyCode(input: unknown): string | null {
   if (!input) return null;
