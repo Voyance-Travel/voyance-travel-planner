@@ -467,7 +467,21 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
     }
   }
 
-  console.log(`[repair-trip-costs] Done: ${inserted} rows upserted, ${corrected} corrected, ${jsonbPatched} JSONB-patched`);
+  // Persist change-log so the client can attribute total deltas.
+  if (changeLog.length > 0) {
+    const { error: logErr } = await supabase
+      .from('cost_change_log')
+      .insert(changeLog.map(c => ({ ...c, trip_id: tripId })));
+    if (logErr) console.warn('[repair-trip-costs] cost_change_log insert failed:', logErr);
+  }
 
-  return okJson({ success: true, repaired: inserted, corrected, jsonbPatched, totalActivities: rows.length });
+  // Stamp the trip so we don't auto-repair again on every page load.
+  await supabase
+    .from('trips')
+    .update({ last_cost_repair_at: new Date().toISOString() })
+    .eq('id', tripId);
+
+  console.log(`[repair-trip-costs] Done: ${inserted} rows upserted, ${corrected} corrected, ${jsonbPatched} JSONB-patched, ${changeLog.length} changes logged`);
+
+  return okJson({ success: true, repaired: inserted, corrected, jsonbPatched, totalActivities: rows.length, changes: changeLog.length });
 }
