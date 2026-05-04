@@ -65,6 +65,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   // Suppress the very first delta (initial load) and avoid duplicate toasts.
   const initialLoadRef = useRef(true);
   const lastWarnedTotalRef = useRef<number | null>(null);
+  // Mount time — used to suppress the "just now" badge for transient deltas
+  // that happen during hydration (e.g. optimistic event from a sibling, a
+  // logistics-sync upsert that lands a beat after the initial fetch). Real
+  // user-driven changes happen well after this window.
+  const mountedAtRef = useRef<number>(Date.now());
+  const STABILIZATION_MS = 4_000;
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
