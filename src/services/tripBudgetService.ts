@@ -41,6 +41,27 @@ export interface TripBudgetSettings {
 }
 
 /**
+ * Shared inclusion rule for activity_costs rows.
+ * MUST be used by every total-computing code path so the snapshot, the
+ * summary, and the ledger never disagree on which rows to count.
+ *
+ * Rule: a row tagged hotel/flight is excluded entirely when its corresponding
+ * inclusion toggle is off — regardless of day_number. (Previously the
+ * snapshot only excluded day_number=0 logistics rows, while the summary
+ * excluded all hotel rows; that mismatch was the second source of drift.)
+ */
+export function shouldCountRow(
+  row: { category?: string | null },
+  includeHotel: boolean,
+  includeFlight: boolean,
+): boolean {
+  const cat = (row.category || '').toLowerCase();
+  if (cat === 'hotel' && !includeHotel) return false;
+  if ((cat === 'flight' || cat === 'flights') && !includeFlight) return false;
+  return true;
+}
+
+/**
  * A ledger entry derived from activity_costs.
  * This replaces the old trip_budget_ledger-backed type.
  */
