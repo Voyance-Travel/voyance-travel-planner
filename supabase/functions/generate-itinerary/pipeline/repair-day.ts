@@ -1427,21 +1427,30 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       activities.splice(transportIdx, 0, transportActivity);
       repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_transfer_transport' });
 
-      // --- Check-in at NEW hotel: arrives right after transport + 15 min buffer ---
+      // --- Hotel arrival: arrives right after transport + 15 min buffer ---
+      // If we arrive before the standard 15:00 check-in, frame this as a
+      // luggage drop, not a check-in (room won't be ready).
+      const STANDARD_CHECKIN_MIN = 15 * 60;
       const checkInStartMin = transportEndMin + 15;
+      const isLuggageDrop = checkInStartMin < STANDARD_CHECKIN_MIN;
+      const arrivalDuration = isLuggageDrop ? 20 : 30;
       const checkInStart = minutesToHHMM(checkInStartMin);
-      const checkInEnd = minutesToHHMM(checkInStartMin + 30);
+      const checkInEnd = minutesToHHMM(checkInStartMin + arrivalDuration);
+      const arrivalTitle = isLuggageDrop ? `Luggage Drop at ${hn}` : `Check-in at ${hn}`;
+      const arrivalDesc = isLuggageDrop
+        ? `Drop bags at ${hn}. Your room will be ready at 3:00 PM.`
+        : `Check in to ${hn}, freshen up after the hotel change.`;
       const checkInActivity = {
         id: `day${dayNumber}-checkin-repair-${Date.now() + 1}`,
-        title: `Check-in at ${hn}`,
-        name: `Check-in at ${hn}`,
-        description: `Check in to ${hn}, freshen up after the hotel change.`,
+        title: arrivalTitle,
+        name: arrivalTitle,
+        description: arrivalDesc,
         startTime: checkInStart, endTime: checkInEnd,
         category: 'accommodation', type: 'accommodation',
         location: { name: hn, address: ha },
         cost: { amount: 0, currency: 'USD' },
-        bookingRequired: false, isLocked: false, durationMinutes: 30,
-        source: 'repair-checkin-guarantee',
+        bookingRequired: false, isLocked: false, durationMinutes: arrivalDuration,
+        source: isLuggageDrop ? 'repair-luggage-drop-guarantee' : 'repair-checkin-guarantee',
       };
       // Insert check-in chronologically (after transport)
       let insertIdx = activities.length;
@@ -1450,7 +1459,7 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         if (checkInStartMin <= actStart) { insertIdx = i; break; }
       }
       activities.splice(insertIdx, 0, checkInActivity);
-      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_checkin_guarantee_hotel_change' });
+      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: isLuggageDrop ? 'injected_luggage_drop_hotel_change' : 'injected_checkin_guarantee_hotel_change' });
     }
 
     // --- 8b. SPLIT-STAY SEQUENCE ENFORCEMENT ---
