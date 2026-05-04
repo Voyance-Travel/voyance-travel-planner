@@ -112,6 +112,15 @@ export function usePayableItems({
     return map;
   }, [days]);
 
+  const hasManualHotel = useMemo(
+    () => payments.some(p => p.item_type === 'hotel' && typeof p.item_id === 'string' && p.item_id.startsWith('manual-')),
+    [payments]
+  );
+  const hasManualFlight = useMemo(
+    () => payments.some(p => p.item_type === 'flight' && typeof p.item_id === 'string' && p.item_id.startsWith('manual-')),
+    [payments]
+  );
+
   const items = useMemo(() => {
     const result: PayableItem[] = [];
 
