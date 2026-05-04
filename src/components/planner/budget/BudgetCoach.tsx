@@ -78,6 +78,8 @@ interface BudgetCoachProps {
   protectedCategories?: string[];
   /** Persist a change to protectedCategories (writes back to trip settings). */
   onProtectedCategoriesChange?: (next: string[]) => void;
+  /** Persist a bumped budget total (cents). When provided, Coach may surface a one-click "Bump to $Y" CTA. */
+  onBumpBudget?: (newTotalCents: number) => Promise<void> | void;
   className?: string;
 }
 
