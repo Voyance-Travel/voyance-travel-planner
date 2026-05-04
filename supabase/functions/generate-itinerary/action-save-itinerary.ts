@@ -340,6 +340,10 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
           });
         } catch (_e) { /* non-blocking */ }
       }
+
+      // Always update trip-wide blocked set after this day so later days
+      // never reuse a venue that was just kept or injected.
+      _harvestSave(itineraryDays[i].activities);
     }
 
     if (mealGuardInjections > 0) {
