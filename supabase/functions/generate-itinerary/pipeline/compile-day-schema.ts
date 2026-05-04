@@ -316,18 +316,13 @@ Use "Your Hotel" as a placeholder name for accommodation activities — these wi
 Assume a morning arrival at approximately 09:00.
 
 REQUIRED OPENING SEQUENCE (in this exact order):
-1. "Arrival"
-   - startTime: "09:00", endTime: "09:15"
-   - category: "travel"
-   - description: "Arrive at destination."
-
-2. "Transfer to Your Hotel"
-   - startTime: "09:15", endTime: "09:45"
+1. "Transfer to Your Hotel"
+   - startTime: "09:00", endTime: "09:30"
    - category: "transport"
    - description: "Travel from arrival point to hotel."
    - location: { name: "Your Hotel" }
 
-3. "Check-in at Your Hotel"
+2. "Check-in at Your Hotel"
    - startTime: "09:45", endTime: "10:15"
    - category: "accommodation"
    - description: "Check in and get settled."
