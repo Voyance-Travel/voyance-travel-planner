@@ -438,6 +438,11 @@ export function usePayableItems({
     // The activity_costs DB table only holds rows that the cost pipeline has processed.
     // Without this fallback, anything not yet costed (or stored as $0) silently disappears
     // from the Payments tab, even though users see the activity on its day card.
+    //
+    // IMPORTANT: This block is gated by `estimateMissingCosts` because client-side
+    // estimates here drift from the canonical activity_costs ledger and were the
+    // root cause of the persistent "Reconciling…" badge on Payments. The Payments
+    // tab passes false (default) so its grand total matches the ledger exactly.
     const FREE_CATEGORIES = new Set([
       'accommodation', 'hotel', 'stay', 'check-in', 'checkout', 'check-out',
       'flight', 'departure', 'arrival',
@@ -448,6 +453,8 @@ export function usePayableItems({
         .map(r => r.id.replace(/_d\d+$/, ''))
     );
     const walkTransitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
+
+    if (estimateMissingCosts) {
 
     for (const day of days) {
       for (const a of day.activities) {
