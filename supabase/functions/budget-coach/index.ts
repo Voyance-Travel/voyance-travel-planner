@@ -395,12 +395,27 @@ Rules:
         // activity (model drift safety net — the prompt should prevent this,
         // but we guard against it anyway).
         const sid = String(s.activity_id);
+
+        // ID-MUST-EXIST GUARD: drop hallucinated IDs that aren't in the trip.
+        if (!allValidIds.has(sid)) {
+          console.log(`  → FILTERED OUT (unknown activity_id "${sid}", claimed item: "${s.current_item}")`);
+          return null;
+        }
+
         if (dismissedSet.has(sid)) {
           console.log(`  → FILTERED OUT (dismissed activity ${sid})`);
           return null;
         }
         if (protectedActivityIds.has(sid)) {
           console.log(`  → FILTERED OUT (protected activity ${sid} in ${protected_categories.join(",")})`);
+          return null;
+        }
+
+        // TITLE-MUST-MATCH GUARD: catches the case where the model reuses a
+        // real ID but writes a fabricated current_item for the user-visible card.
+        const realTitle = activityTitleById.get(sid) || "";
+        if (realTitle && s.current_item && !titleMatches(String(s.current_item), realTitle)) {
+          console.log(`  → FILTERED OUT (title mismatch: claimed "${s.current_item}" vs real "${realTitle}")`);
           return null;
         }
 
