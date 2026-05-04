@@ -105,7 +105,7 @@ export function PaymentsTab({
   
   // Manual entry states
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
-  const [newExpenseType, setNewExpenseType] = useState<'flight' | 'hotel' | 'activity'>('flight');
+  const [newExpenseType, setNewExpenseType] = useState<PayableItem['type']>('flight');
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
