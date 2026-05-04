@@ -84,6 +84,7 @@ import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { PaymentsTab } from './PaymentsTab';
 import { BudgetTab } from '@/components/planner/budget/BudgetTab';
+import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripBudget } from '@/hooks/useTripBudget';
 import { useTripMembers } from '@/services/tripBudgetAPI';
