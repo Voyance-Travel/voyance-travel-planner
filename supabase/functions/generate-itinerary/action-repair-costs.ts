@@ -387,6 +387,26 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         cost_reference_id: ref?.id || null,
         notes: finalNotes,
       });
+
+      // Record any price uplift to cost_change_log so the UI can attribute
+      // sudden total jumps. Only log when the new per-person cost is HIGHER
+      // than what was on the activity before (raises are what surprise users).
+      const prevCents = Math.round(originalPerPerson * numTravelers * 100);
+      const newCents = Math.round(finalCost * numTravelers * 100);
+      const isFloorReason = finalSource === 'michelin_floor'
+        || finalSource === 'ticketed_attraction_floor'
+        || finalSource === 'auto_corrected'
+        || finalSource === 'reference_fallback';
+      if (isFloorReason && newCents > prevCents) {
+        changeLog.push({
+          activity_id: activity.id,
+          activity_title: title || null,
+          previous_cents: prevCents,
+          new_cents: newCents,
+          reason: finalSource,
+        });
+      }
+
     }
   }
 
