@@ -1267,8 +1267,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 6. LOGISTICS_SEQUENCE (departure day) ---
+  // Force-run on every departure day, not only when validation flagged it.
+  // Validation can miss subtle cases (no security card, late checkout) but
+  // repairDepartureSequence's R5 must still re-anchor late checkouts and R3
+  // must still pull leisure activities back before the airport transfer.
   const isDepartureDayForSequence = isLastDay || (isLastDayInCity && !isTransitionDay);
-  if (isDepartureDayForSequence && byCode.has(FAILURE_CODES.LOGISTICS_SEQUENCE)) {
+  if (isDepartureDayForSequence) {
     const seqRepairs = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
     repairs.push(...seqRepairs);
     // Re-sort after departure fixes
