@@ -3787,11 +3787,11 @@ export function EditorialItinerary({
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
       toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
 
-      // Async rebuild activity_costs so DB stays in sync for future page loads
-      import('@/services/activityCostService').then(({ repairTripCosts }) => {
-        repairTripCosts(tripId)
-          .catch(err => console.error('[Regeneration] repair-trip-costs failed:', err));
-      });
+      // Note: we used to call repairTripCosts here on every regeneration.
+      // That silently raised prices (Michelin/ticketed/reference floors) and
+      // produced "+$900" total jumps with no attribution. The generation
+      // pipeline already writes correct activity_costs via syncBudgetFromDays,
+      // and a one-shot legacy backfill runs in TripDetail when needed.
     } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);
       if (!err?.message?.startsWith('Not enough credits')) {
