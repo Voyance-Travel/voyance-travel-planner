@@ -75,20 +75,33 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   const fetchData = useCallback(async () => {
     if (!tripId) return;
     
-    // 1. Fetch trip settings (budget + inclusion toggles)
+    // 1. Fetch trip settings (budget + inclusion toggles) AND itinerary_data so
+    // we can filter out orphaned activity_costs rows whose activity_id no
+    // longer exists in the live itinerary. Without this, the snapshot total
+    // includes ghost rows that Budget/Payments correctly drop, producing
+    // session-to-session drift and a permanent "Reconciling…" mismatch.
     const { data: tripData } = await supabase
       .from('trips')
-      .select('budget_total_cents, budget_include_hotel, budget_include_flight')
+      .select('budget_total_cents, budget_include_hotel, budget_include_flight, itinerary_data')
       .eq('id', tripId)
       .single();
 
     const includeHotel = tripData?.budget_include_hotel ?? true;
     const includeFlight = tripData?.budget_include_flight ?? false;
 
+    // Build the live activity ID set from the rendered itinerary JSON.
+    const liveActivityIds = new Set<string>();
+    const days = ((tripData as any)?.itinerary_data?.days) || [];
+    for (const day of days) {
+      for (const a of (day?.activities || [])) {
+        if (a?.id) liveActivityIds.add(String(a.id));
+      }
+    }
+
     // 2. Fetch all activity_costs for this trip
     const { data: costs } = await supabase
       .from('activity_costs')
-      .select('cost_per_person_usd, num_travelers, is_paid, paid_amount_usd, category, day_number')
+      .select('id, activity_id, cost_per_person_usd, num_travelers, is_paid, paid_amount_usd, category, day_number, source')
       .eq('trip_id', tripId);
 
     // 2b. Fetch manual payments. They live only in trip_payments — syncHotelToLedger
