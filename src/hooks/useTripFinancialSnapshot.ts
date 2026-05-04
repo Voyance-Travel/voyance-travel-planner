@@ -230,6 +230,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     initialLoadRef.current = true;
     prevTotalRef.current = null;
     lastWarnedTotalRef.current = null;
+    mountedAtRef.current = Date.now();
     setLastDelta(null);
     fetchData();
   }, [fetchData]);
