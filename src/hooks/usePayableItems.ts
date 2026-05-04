@@ -330,6 +330,12 @@ export function usePayableItems({
 
       for (const row of activityCosts) {
         if (row.day_number === 0) continue; // hotel/flight handled above
+        // Orphan guard: any row whose activity_id no longer exists in the
+        // itinerary JSON is leftover from a prior swap. Surfacing it would
+        // produce duplicate-looking line items (same venue, two prices)
+        // because the orphan-rescue logic below assigns the live activity's
+        // name. Drop it. Logistics rows (day_number=0) handled above.
+        if (row.activity_id && !activityNameById.has(row.activity_id)) continue;
         const cat = (row.category || '').toLowerCase();
         let cents = rowTotalCents(row);
 
