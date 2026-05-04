@@ -139,10 +139,13 @@ serve(async (req) => {
       }
     }
 
-    // Build a concise itinerary summary for the prompt (post-filter)
+    // Build a concise itinerary summary for the prompt (post-filter).
+    // Drop $0 / unknown-cost rows — they aren't candidates for "make cheaper"
+    // and their presence encourages the model to invent items to fill gaps.
     const itinerarySummary = filteredDays
       .map((day) => {
         const acts = day.activities
+          .filter((a) => typeof a.cost === "number" && a.cost > 0)
           .map(
             (a) =>
               `  - [${a.id}] ${a.title} (${a.category || "activity"}) — ${currency} ${(a.cost / 100).toFixed(0)}`
