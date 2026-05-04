@@ -10,6 +10,58 @@ import type { DayIntentInput, IntentPriority } from './day-intents-store.ts';
 import { inferKindFromText, normalizeKind } from './day-intents-store.ts';
 import { parseFineTuneIntoDailyIntents } from './parse-fine-tune-intents.ts';
 
+/**
+ * A "hard fact" is an intent specific enough to lock verbatim:
+ *   - has an explicit time (HH:MM), AND
+ *   - title contains a Proper-Noun-looking venue name (≥1 capitalized word
+ *     that isn't a meal label like "Dinner" / "Lunch" / "Spa").
+ * Locked rows are restored verbatim by the anchor-guard pipeline.
+ */
+const MEAL_LABELS = new Set([
+  'Breakfast', 'Brunch', 'Lunch', 'Dinner', 'Drinks', 'Cocktails',
+  'Spa', 'Massage', 'Hammam', 'Activity', 'Tour', 'Visit',
+]);
+
+function looksLikeNamedVenue(title: string): boolean {
+  if (!title) return false;
+  // Strip leading meal/kind word
+  const cleaned = title.replace(/^(at|to|for)\s+/i, '').trim();
+  // Look for a capitalized word that isn't a generic meal label
+  const tokens = cleaned.split(/\s+/);
+  for (const tok of tokens) {
+    if (/^[A-Z][\w'’&.-]{1,}$/.test(tok) && !MEAL_LABELS.has(tok)) return true;
+  }
+  // "at <Name>" pattern
+  if (/\bat\s+[A-Z]/.test(title)) return true;
+  return false;
+}
+
+function stableHash(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36).slice(0, 10);
+}
+
+/**
+ * Decide whether a parsed intent qualifies as a hard fact (locked verbatim).
+ * Only applies to non-avoid kinds. Returns a `{ locked, lockedSource }` patch.
+ */
+function maybeLock(args: {
+  source: string;
+  dayNumber?: number | null;
+  title: string;
+  startTime?: string | null;
+  kind: string;
+}): { locked: boolean; lockedSource: string | null } {
+  if (args.kind === 'avoid' || args.kind === 'note' || args.kind === 'constraint') {
+    return { locked: false, lockedSource: null };
+  }
+  if (!args.startTime) return { locked: false, lockedSource: null };
+  if (!looksLikeNamedVenue(args.title)) return { locked: false, lockedSource: null };
+  const key = `${args.source}|${args.dayNumber ?? '*'}|${args.title.toLowerCase()}|${args.startTime}`;
+  return { locked: true, lockedSource: `${args.source}:${stableHash(key)}` };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1) FINE-TUNE NOTES  →  intents
 // ─────────────────────────────────────────────────────────────────────────────
