@@ -78,6 +78,8 @@ interface BudgetCoachProps {
   protectedCategories?: string[];
   /** Persist a change to protectedCategories (writes back to trip settings). */
   onProtectedCategoriesChange?: (next: string[]) => void;
+  /** Persist a bumped budget total (cents). When provided, Coach may surface a one-click "Bump to $Y" CTA. */
+  onBumpBudget?: (newTotalCents: number) => Promise<void> | void;
   className?: string;
 }
 
@@ -144,6 +146,7 @@ export function BudgetCoach({
   onApplySuggestion,
   protectedCategories = [],
   onProtectedCategoriesChange,
+  onBumpBudget,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
@@ -390,6 +393,62 @@ export function BudgetCoach({
   const totalPotentialSavings = suggestions.reduce((sum, s) => sum + s.savings, 0);
   const isNowOnTarget = remainingGap <= 0;
 
+  // ─── "Bump tier" CTA — when the user's plan has clearly outgrown the preset ──
+  // Three signals must all fire so we don't nag on minor overruns:
+  //   1) Total is >10% over budget (real overrun, not noise).
+  //   2) Food share of total ≥ 45% (the "Splurge-Forward picked, Michelin booked" pattern).
+  //   3) At least one luxury anchor is present (Michelin, palace hotel, tasting menu, etc.).
+  const LUXURY_ANCHOR_RE = /michelin|plaza athénée|plaza athenee|ritz|le bristol|four seasons|wine tasting|tasting menu|caviar|george v|le meurice|cheval blanc|mandarin oriental/i;
+  const DINING_KEYWORDS = CATEGORY_GROUPS.Dining;
+  const isDining = (a: ItineraryActivity) => {
+    const haystack = `${a.category || ''} ${a.type || ''}`.toLowerCase();
+    return DINING_KEYWORDS.some((k) => haystack.includes(k));
+  };
+  const activityCostCents = (a: ItineraryActivity): number => {
+    const v = typeof a.cost === 'number' ? a.cost : (a.cost as any)?.amount ?? 0;
+    return Math.round((v || 0) * 100);
+  };
+  const allActivities = itineraryDays.flatMap((d) => d.activities);
+  const foodCents = allActivities.filter(isDining).reduce((s, a) => s + activityCostCents(a), 0);
+  const foodSharePct = currentTotalCents > 0 ? (foodCents / currentTotalCents) * 100 : 0;
+  const hasLuxuryAnchor = allActivities.some((a) => LUXURY_ANCHOR_RE.test(`${a.title || a.name || ''} ${a.description || ''}`));
+  const isMaterialOverrun = budgetTargetCents > 0 && currentTotalCents > budgetTargetCents * 1.10;
+  const bumpTargetCents = Math.ceil((currentTotalCents * 1.05) / 50000) * 50000; // round up to nearest $500
+
+  // Dismissal — local to device, keyed by tripId. Re-shows if overrun deepens by ≥10%.
+  const bumpDismissKey = `budget-coach:bump-dismissed:${tripId}`;
+  const [bumpDismissedAtTotal, setBumpDismissedAtTotal] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem(bumpDismissKey);
+      return raw ? Number(raw) : null;
+    } catch { return null; }
+  });
+  const dismissedRecently = bumpDismissedAtTotal !== null && currentTotalCents <= bumpDismissedAtTotal * 1.10;
+  const showBumpCta = !!onBumpBudget && isMaterialOverrun && foodSharePct >= 45 && hasLuxuryAnchor && !dismissedRecently && !isNowOnTarget;
+
+  const dismissBump = () => {
+    setBumpDismissedAtTotal(currentTotalCents);
+    try { window.localStorage.setItem(bumpDismissKey, String(currentTotalCents)); } catch { /* ignore */ }
+  };
+
+  const [isBumping, setIsBumping] = useState(false);
+  const handleBump = async () => {
+    if (!onBumpBudget) return;
+    setIsBumping(true);
+    try {
+      await onBumpBudget(bumpTargetCents);
+      toast.success(`Budget bumped to ${formatCurrency(bumpTargetCents)}`);
+      setBumpDismissedAtTotal(currentTotalCents);
+      try { window.localStorage.setItem(bumpDismissKey, String(currentTotalCents)); } catch { /* ignore */ }
+    } catch {
+      toast.error('Could not update budget. Try again.');
+    } finally {
+      setIsBumping(false);
+    }
+  };
+
+
   const handleApply = async (suggestion: BudgetSuggestion) => {
     // Call parent handler and wait for success/failure
     try {
@@ -477,6 +536,32 @@ export function BudgetCoach({
             transition={{ duration: 0.2 }}
           >
             <CardContent className="space-y-3 pt-0">
+              {/* "Bump tier" CTA — turn a complaint into an action when the
+                  plan has clearly outgrown the preset (food-heavy + luxury anchors). */}
+              {showBumpCta && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Your plan is bigger than your preset.</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Food is {Math.round(foodSharePct)}% of total and your trip includes premium anchors.
+                        Bump budget to {formatCurrency(bumpTargetCents)} to match your actual plan, or apply the swaps below to fit.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Button size="sm" onClick={handleBump} disabled={isBumping}>
+                          {isBumping ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                          Bump to {formatCurrency(bumpTargetCents)}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={dismissBump} disabled={isBumping}>
+                          Keep budget, swap items
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Protected categories chip row */}
               {onProtectedCategoriesChange && (
                 <div className="flex items-start gap-2 flex-wrap pb-1">

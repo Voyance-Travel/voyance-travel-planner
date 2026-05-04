@@ -85,23 +85,66 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       .select('cost_per_person_usd, num_travelers, is_paid, paid_amount_usd, category, day_number')
       .eq('trip_id', tripId);
 
+    // 2b. Fetch manual payments. They live only in trip_payments — syncHotelToLedger
+    // intentionally clears the canonical day-0 hotel row when a manual hotel
+    // payment exists, to avoid double-billing. If we don't fold the manual amount
+    // in here, BudgetTab silently understates the trip total.
+    const { data: manualPayments } = await supabase
+      .from('trip_payments')
+      .select('item_type, amount_cents, quantity')
+      .eq('trip_id', tripId)
+      .like('item_id', 'manual-%');
+
     let totalCents = 0;
     let paidTotal = 0;
+    let canonicalHotelCents = 0;
+    let canonicalFlightCents = 0;
 
     for (const row of costs || []) {
+      const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
+      const rowCents = Math.round(rowTotal * 100);
+      const cat = (row.category || '').toLowerCase();
+
+      // Track canonical day-0 logistics rows separately so we can compute the
+      // manual override delta (manual replaces canonical, doesn't add to it).
+      if (row.day_number === 0 && cat === 'hotel') canonicalHotelCents += rowCents;
+      if (row.day_number === 0 && cat === 'flight') canonicalFlightCents += rowCents;
+
       // Use shared inclusion rule — must match getBudgetSummary exactly,
       // otherwise snapshot total and summary total drift apart.
       if (!shouldCountRow(row, includeHotel, includeFlight)) continue;
 
-      const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
-      totalCents += Math.round(rowTotal * 100);
+      totalCents += rowCents;
 
       if (row.is_paid) {
-        // Use paid_amount_usd if set, otherwise use the full cost
         const paidUsd = row.paid_amount_usd != null ? row.paid_amount_usd : rowTotal;
         paidTotal += Math.round(paidUsd * 100);
       }
     }
+
+    // Manual payment delta — override-aware for hotel/flight, additive for others.
+    let manualHotelCents = 0;
+    let manualFlightCents = 0;
+    let manualOtherCents = 0;
+    let manualPaidCents = 0;
+    for (const p of manualPayments || []) {
+      const cents = (p.amount_cents || 0) * (p.quantity || 1);
+      if (p.item_type === 'hotel') manualHotelCents += cents;
+      else if (p.item_type === 'flight') manualFlightCents += cents;
+      else manualOtherCents += cents;
+      manualPaidCents += cents;
+    }
+    const hotelDelta = canonicalHotelCents > 0
+      ? (manualHotelCents - canonicalHotelCents)
+      : manualHotelCents;
+    const flightDelta = canonicalFlightCents > 0
+      ? (manualFlightCents - canonicalFlightCents)
+      : manualFlightCents;
+    if (includeHotel) totalCents += hotelDelta;
+    if (includeFlight) totalCents += flightDelta;
+    totalCents += manualOtherCents;
+    totalCents = Math.max(0, totalCents);
+    paidTotal += manualPaidCents;
 
     // Compute delta against the previous fetch (skip on initial load).
     const prev = prevTotalRef.current;
