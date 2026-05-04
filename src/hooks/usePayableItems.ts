@@ -572,18 +572,25 @@ export function usePayableItems({
 
     // (manual activity expenses already added above; do not call addManualGroups('activity') a second time)
 
-    // ─── Orphan payment recovery ───
-    // Surface any non-manual activity payment whose item_id is NOT represented
-    // in the items list. This happens when an activity is removed from the
-    // itinerary after a payment was recorded against it (e.g. L'Arpège lunch
-    // paid, then activity later swapped out). Without this, the payment shows
-    // up in "Paid so far" but the row is missing → 0/N counter mismatch.
+    // ─── Orphan payment recovery (live activities only) ───
+    // Surface non-manual activity payments whose item_id is missing from the
+    // current items list — but ONLY when the underlying activity still
+    // exists in the itinerary. Payments for activities that have since been
+    // removed are intentionally hidden from the live Activities list to
+    // avoid duplicate-looking rows (e.g. the old paid "Lunch at L'Arpège"
+    // appearing alongside the live lunch on Day 1). They remain in the
+    // payments table and continue to count toward "Paid so far" via totals
+    // computed by getTripPayments — they just don't render as a live row.
     const presentItemIds = new Set(result.map(r => r.id));
     const orphanGroups = new Map<string, TripPayment[]>();
     for (const p of payments) {
       if (p.item_type !== 'activity') continue;
       if (!p.item_id || isManualId(p.item_id)) continue;
       if (presentItemIds.has(p.item_id)) continue;
+      // Strip optional composite suffix (_dN) to get the raw activity id.
+      const rawActivityId = p.item_id.replace(/_d\d+$/, '');
+      // Only recover if the activity still exists in the live itinerary.
+      if (!activityNameById.has(rawActivityId)) continue;
       const group = orphanGroups.get(p.item_id) || [];
       group.push(p);
       orphanGroups.set(p.item_id, group);
@@ -596,7 +603,7 @@ export function usePayableItems({
       result.push({
         id: itemId,
         type: 'activity',
-        name: primary.item_name || 'Removed activity',
+        name: primary.item_name || 'Activity',
         amountCents: primary.amount_cents * (primary.quantity || 1),
         dayNumber,
         payment: primary,
