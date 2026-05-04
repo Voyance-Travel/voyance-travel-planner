@@ -5452,6 +5452,36 @@ export function EditorialItinerary({
                     </span>
                   )}
                 </div>
+                {(hotelCost > 0 || flightCost > 0) && (() => {
+                  const daysSubtotal = totalActivityCost * (travelers || 1);
+                  const nightsCount = (allHotels && allHotels.length > 0)
+                    ? allHotels.reduce((sum, h) => {
+                        if (h.checkInDate && h.checkOutDate) {
+                          return sum + Math.max(1, Math.ceil(
+                            (parseLocalDate(h.checkOutDate).getTime() - parseLocalDate(h.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
+                          ));
+                        }
+                        return sum;
+                      }, 0)
+                    : (hotelSelection?.nights ?? Math.max(1, days.length - 1));
+                  return (
+                    <div className="flex items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground flex-wrap justify-center">
+                      <span><span className="text-muted-foreground/70">Days</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(daysSubtotal), tripCurrency)}</span></span>
+                      {hotelCost > 0 && (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span><span className="text-muted-foreground/70">Hotel</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(hotelCost), tripCurrency)}</span> <span className="text-muted-foreground/70">({nightsCount} {nightsCount === 1 ? 'night' : 'nights'})</span></span>
+                        </>
+                      )}
+                      {flightCost > 0 && (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span><span className="text-muted-foreground/70">Flights</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(flightCost), tripCurrency)}</span></span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* ROW 2: Action Buttons */}
