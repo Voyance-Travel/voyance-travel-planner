@@ -1,13 +1,23 @@
 /**
- * usePayableItems — Shared hook for computing payable items from itinerary data.
- * 
- * Single source of truth for trip cost totals used by both BudgetTab and PaymentsTab.
- * Replaces the divergent calculation paths that caused budget mismatches.
+ * usePayableItems — Single source of truth for Payments tab line items.
+ *
+ * After the reconciliation pass (May 2026): activity costs come ONLY from the
+ * `activity_costs` DB table, never from a JSON-walk + estimateCostSync fallback.
+ * This guarantees Payments grand total === Budget header total === per-day badges.
+ *
+ * Transport rows (`category in (transport, transit, transfer, taxi)`) are grouped
+ * into a single collapsible "Local transit — Day N" row so users don't see a
+ * parade of $50 micro-leg taxis that never appeared as costed cards in the itinerary.
  */
 
 import { useMemo } from 'react';
-import { estimateCostSync, isLikelyFreePublicVenue } from '@/lib/cost-estimation';
 import type { TripPayment } from '@/services/tripPaymentsAPI';
+
+export interface PayableSubItem {
+  id: string;
+  name: string;
+  amountCents: number;
+}
 
 export interface PayableItem {
   id: string;
@@ -19,6 +29,10 @@ export interface PayableItem {
   allPayments: TripPayment[];
   assignedMemberId?: string;
   assignedMemberIds: string[];
+  /** When set, this item represents a grouped row (e.g. local transit per day). */
+  subItems?: PayableSubItem[];
+  /** Visual hint for grouped rows. */
+  groupKind?: 'transit';
 }
 
 interface ActivityCostRow {
@@ -38,11 +52,6 @@ interface PayableItemsInput {
       name?: string;
       type?: string;
       category?: string;
-      cost?: { amount?: number; currency?: string } | number | null;
-      estimatedCost?: { amount?: number } | null;
-      timeBlockType?: string;
-      priceLevel?: number;
-      price_level?: number;
     }>;
   }>;
   flightSelection?: {
@@ -58,31 +67,16 @@ interface PayableItemsInput {
   } | null;
   travelers: number;
   payments: TripPayment[];
+  /** Kept in signature for back-compat; no longer used. */
   budgetTier?: string;
   destination?: string;
   destinationCountry?: string;
   activityCosts?: ActivityCostRow[] | null;
 }
 
-const NON_PAYABLE_KEYWORDS = [
-  'free time', 'downtime', 'leisure time', 'at leisure', 'rest', 'sleep',
-  'check-in', 'check-out', 'checkin', 'checkout', 'check in', 'check out',
-  'arrival at', 'departure from', 'packing',
-  'walk to', 'walk through', 'stroll', 'walking', 'evening walk', 'neighborhood walk',
-];
-const NON_PAYABLE_CATEGORIES = ['downtime', 'free_time', 'walk', 'walking', 'stroll'];
-
-const NEVER_FREE_CATEGORIES = [
-  'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee',
-  'cruise', 'boat', 'tour', 'activity', 'experience', 'spa', 'massage', 'show',
-  'performance', 'concert', 'theater', 'theatre', 'nightlife', 'bar', 'club',
-  'transfer', 'transport', 'transportation', 'airport', 'taxi', 'uber', 'rideshare'
-];
-const NEVER_FREE_KEYWORDS = [
-  'breakfast', 'brunch', 'lunch', 'dinner', 'cruise', 'tour',
-  'restaurant', 'café', 'cafe', 'transfer', 'airport', 'taxi',
-  'uber', 'private car', 'shuttle', 'train to', 'bus to'
-];
+const TRANSIT_CATEGORIES = new Set([
+  'transport', 'transportation', 'transit', 'transfer', 'taxi', 'rideshare',
+]);
 
 export interface PayableItemsResult {
   items: PayableItem[];
@@ -91,21 +85,35 @@ export interface PayableItemsResult {
   activityItems: PayableItem[];
 }
 
+function rowTotalCents(row: ActivityCostRow): number {
+  return Math.round((row.cost_per_person_usd || 0) * (row.num_travelers || 1) * 100);
+}
+
 export function usePayableItems({
   days,
   flightSelection,
   hotelSelection,
   travelers,
   payments,
-  budgetTier = 'moderate',
-  destination,
-  destinationCountry,
   activityCosts,
 }: PayableItemsInput): PayableItemsResult {
+  // Build a lookup: activity_id -> display name from JSON itinerary
+  const activityNameById = useMemo(() => {
+    const map = new Map<string, { name: string; dayNumber: number }>();
+    days.forEach(day => {
+      day.activities.forEach(a => {
+        if (!a?.id) return;
+        const name = a.title || a.name || 'Activity';
+        map.set(a.id, { name, dayNumber: day.dayNumber });
+      });
+    });
+    return map;
+  }, [days]);
+
   const items = useMemo(() => {
     const result: PayableItem[] = [];
 
-    // Flight from selection — compute total from legs, outbound/return, or totalPrice
+    // ─── Flight from selection (UI source) ───
     const flightTotal = flightSelection?.totalPrice
       || (flightSelection?.legs?.reduce((s, l) => s + (l?.price || 0), 0) || 0)
       || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0));
@@ -129,7 +137,6 @@ export function usePayableItems({
         assignedMemberIds: [...new Set(assignedIds)],
       });
     } else if (activityCosts?.length) {
-      // DB fallback: check activity_costs for a flight category row
       const flightRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0);
       if (flightRow && flightRow.cost_per_person_usd > 0) {
         const flightId = 'flight-selection';
@@ -137,12 +144,11 @@ export function usePayableItems({
         const assignedIds = flightPayments
           .map(p => (p as any)?.assigned_member_id)
           .filter(Boolean) as string[];
-        const totalFlightCents = Math.round(flightRow.cost_per_person_usd * (flightRow.num_travelers || 1) * 100);
         result.push({
           id: flightId,
           type: 'flight',
           name: 'Round-trip Flight',
-          amountCents: totalFlightCents,
+          amountCents: rowTotalCents(flightRow),
           payment: flightPayments[0],
           allPayments: flightPayments,
           assignedMemberId: assignedIds[0],
@@ -151,7 +157,7 @@ export function usePayableItems({
       }
     }
 
-    // Hotel from selection
+    // ─── Hotel from selection ───
     if (hotelSelection?.totalPrice || hotelSelection?.pricePerNight) {
       const hotelId = 'hotel-selection';
       const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
@@ -170,9 +176,29 @@ export function usePayableItems({
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
       });
+    } else if (activityCosts?.length) {
+      // Fallback: hotel cost stored as day_number=0 row
+      const hotelRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'hotel' && r.day_number === 0);
+      if (hotelRow && hotelRow.cost_per_person_usd > 0) {
+        const hotelId = 'hotel-selection';
+        const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
+        const assignedIds = hotelPayments
+          .map(p => (p as any)?.assigned_member_id)
+          .filter(Boolean) as string[];
+        result.push({
+          id: hotelId,
+          type: 'hotel',
+          name: 'Hotel Accommodation',
+          amountCents: rowTotalCents(hotelRow),
+          payment: hotelPayments[0],
+          allPayments: hotelPayments,
+          assignedMemberId: assignedIds[0],
+          assignedMemberIds: [...new Set(assignedIds)],
+        });
+      }
     }
 
-    // Manual entries from payments (flights, hotels, activities)
+    // ─── Manual flight/hotel entries from payments ───
     const addManualGroups = (itemType: 'flight' | 'hotel' | 'activity') => {
       const manualPayments = payments.filter(p =>
         p.item_type === itemType && p.item_id.startsWith('manual-')
@@ -201,143 +227,89 @@ export function usePayableItems({
     addManualGroups('flight');
     addManualGroups('hotel');
 
-    // Activities from itinerary
-    days.forEach(day => {
-      day.activities.forEach(activity => {
-        // Use nullish coalescing so that explicit 0 is preserved (free venues)
-        const rawCost = typeof activity.cost === 'number' ? activity.cost : (activity.cost as any)?.amount;
-        const rawEst = (activity.estimatedCost as any)?.amount;
-        let cost = (rawCost !== null && rawCost !== undefined && !isNaN(rawCost)) ? rawCost
-          : (rawEst !== null && rawEst !== undefined && !isNaN(rawEst)) ? rawEst : 0;
-
-        // Also check is_free flag set by backend sanitization
-        if ((activity as any).is_free === true) cost = 0;
-
-        const titleLower = (activity.title || '').toLowerCase();
-        const catLower = (activity.type || activity.category || '').toLowerCase();
-
-        const isNonPayable = NON_PAYABLE_KEYWORDS.some(kw => titleLower.includes(kw)) ||
-          NON_PAYABLE_CATEGORIES.includes(catLower) ||
-          activity.timeBlockType === 'downtime';
-        if (isNonPayable) return;
-
-        if (cost <= 0) {
-          // Check if this is a free public venue BEFORE applying never-free estimation
-          const isFreeVenue = isLikelyFreePublicVenue({
-            title: activity.title || activity.name,
-            category: activity.category || activity.type,
-            type: activity.type,
-            venueName: (activity as any).venue_name,
-            restaurantName: (activity as any).restaurant?.name,
-            placeName: (activity as any).place_name,
-            locationName: (activity as any).location?.name,
-            description: (activity as any).description,
-            address: (activity as any).location?.address,
-          });
-          if (isFreeVenue) return; // Skip — free public venues are not payable
-
-          const shouldNeverBeFree = NEVER_FREE_CATEGORIES.some(nfc => catLower.includes(nfc)) ||
-            NEVER_FREE_KEYWORDS.some(kw => titleLower.includes(kw));
-
-          if (shouldNeverBeFree) {
-            const priceLevel = (activity as any).priceLevel || (activity as any).price_level;
-            const estimated = estimateCostSync({
-              category: catLower,
-              title: activity.title || '',
-              city: destination,
-              country: destinationCountry,
-              travelers,
-              budgetTier: budgetTier as 'budget' | 'moderate' | 'luxury',
-              priceLevel: priceLevel ? Number(priceLevel) : undefined,
-            });
-            cost = estimated.amount;
-          }
-        }
-
-        if (cost > 0) {
-          const compositeId = `${activity.id}_d${day.dayNumber}`;
-          const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === compositeId);
-          const assignedIds = activityPayments
-            .map(p => (p as any)?.assigned_member_id)
-            .filter(Boolean) as string[];
-          result.push({
-            id: compositeId,
-            type: 'activity',
-            name: activity.title || activity.name || (activity as any).venue || 'Activity',
-            amountCents: Math.round(cost * travelers * 100),
-            dayNumber: day.dayNumber,
-            payment: activityPayments[0],
-            allPayments: activityPayments,
-            assignedMemberId: assignedIds[0],
-            assignedMemberIds: [...new Set(assignedIds)],
-          });
-        }
-      });
-    });
-
-    // Manual activities
-    addManualGroups('activity');
-
-    // ─── Reconcile with activity_costs DB rows ───
-    // Surface categories (dining, transit, etc.) that exist in DB but not in JSON-parsed items
+    // ─── DB-driven activity rows: ONE per non-transit row, grouped per day for transit ───
     if (activityCosts?.length) {
-      const CATEGORY_LABELS: Record<string, string> = {
-        dining: 'Food & Dining',
-        food: 'Food & Dining',
-        restaurant: 'Food & Dining',
-        breakfast: 'Food & Dining',
-        lunch: 'Food & Dining',
-        dinner: 'Food & Dining',
-        cafe: 'Food & Dining',
-        transit: 'Local Transit',
-        transport: 'Local Transit',
-        transportation: 'Local Transit',
-        transfer: 'Local Transit',
-      };
+      const transitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
 
-      // Collect IDs already represented in result
-      const coveredActivityIds = new Set(result.map(i => i.id));
-
-      // Group DB costs by display label, skipping logistics (day_number=0) and already-covered items
-      const labelTotals = new Map<string, number>();
       for (const row of activityCosts) {
         if (row.day_number === 0) continue; // hotel/flight handled above
         const cat = (row.category || '').toLowerCase();
-        const label = CATEGORY_LABELS[cat];
-        if (!label) continue; // only add summary items for known gap categories
+        const cents = rowTotalCents(row);
+        if (cents <= 0) continue; // free venues: don't surface
 
-        // Check if this specific activity_cost row's activity is already in the result
-        const compositePatterns = result.some(
-          r => r.id.startsWith(row.activity_id) || r.id === row.activity_id
-        );
-        if (compositePatterns) continue;
+        // Group transit rows
+        if (TRANSIT_CATEGORIES.has(cat)) {
+          const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
+          const lookup = activityNameById.get(row.activity_id);
+          const subName = lookup?.name || 'Local transit';
+          bucket.subItems.push({
+            id: row.activity_id,
+            name: subName,
+            amountCents: cents,
+          });
+          bucket.totalCents += cents;
+          transitByDay.set(row.day_number, bucket);
+          continue;
+        }
 
-        const totalCentsRow = Math.round((row.cost_per_person_usd || 0) * (row.num_travelers || 1) * 100);
-        labelTotals.set(label, (labelTotals.get(label) || 0) + totalCentsRow);
-      }
+        // Non-transit: one payable item per row, name from JSON itinerary
+        const lookup = activityNameById.get(row.activity_id);
+        const compositeId = `${row.activity_id}_d${row.day_number}`;
+        const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === compositeId);
+        const assignedIds = activityPayments
+          .map(p => (p as any)?.assigned_member_id)
+          .filter(Boolean) as string[];
 
-      for (const [label, cents] of labelTotals) {
-        if (cents <= 0) continue;
-        const summaryId = `cat-${label.toLowerCase().replace(/[^a-z]/g, '-')}`;
-        if (coveredActivityIds.has(summaryId)) continue;
+        // If we don't have a JSON name, fall back to a category-derived label.
+        // This avoids leaking an opaque UUID into the UI.
+        const fallbackLabel =
+          cat === 'dining' ? 'Meal' :
+          cat === 'activity' ? 'Activity' :
+          cat.charAt(0).toUpperCase() + cat.slice(1);
 
-        const catPayments = payments.filter(p => p.item_id === summaryId);
-        const assignedIds = catPayments.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
         result.push({
-          id: summaryId,
+          id: compositeId,
           type: 'activity',
-          name: label,
+          name: lookup?.name || fallbackLabel,
           amountCents: cents,
-          payment: catPayments[0],
-          allPayments: catPayments,
+          dayNumber: row.day_number,
+          payment: activityPayments[0],
+          allPayments: activityPayments,
           assignedMemberId: assignedIds[0],
           assignedMemberIds: [...new Set(assignedIds)],
         });
       }
+
+      // Emit one grouped transit row per day
+      const sortedTransitDays = Array.from(transitByDay.entries()).sort((a, b) => a[0] - b[0]);
+      for (const [dayNumber, { totalCents, subItems }] of sortedTransitDays) {
+        const groupId = `transit-d${dayNumber}`;
+        const groupPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === groupId);
+        const assignedIds = groupPayments
+          .map(p => (p as any)?.assigned_member_id)
+          .filter(Boolean) as string[];
+        result.push({
+          id: groupId,
+          type: 'activity',
+          name: `Local transit — Day ${dayNumber}`,
+          amountCents: totalCents,
+          dayNumber,
+          payment: groupPayments[0],
+          allPayments: groupPayments,
+          assignedMemberId: assignedIds[0],
+          assignedMemberIds: [...new Set(assignedIds)],
+          subItems,
+          groupKind: 'transit',
+        });
+      }
     }
 
+    // Manual activity expenses
+    addManualGroups('activity');
+
     return result;
-  }, [flightSelection, hotelSelection, days, payments, travelers, budgetTier, destination, destinationCountry, activityCosts]);
+    // travelers retained in deps for callers; not used directly because num_travelers is on the row
+  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById]);
 
   const totalCents = useMemo(() => items.reduce((sum, i) => sum + i.amountCents, 0), [items]);
   const essentialItems = useMemo(() => items.filter(i => i.type === 'flight' || i.type === 'hotel'), [items]);
