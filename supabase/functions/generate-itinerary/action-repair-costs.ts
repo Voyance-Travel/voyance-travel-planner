@@ -290,7 +290,50 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
     inserted = upserted?.length || 0;
   }
 
-  console.log(`[repair-trip-costs] Done: ${inserted} rows upserted, ${corrected} corrected`);
+  // ── JSONB WRITEBACK ──────────────────────────────────────────────
+  // Per Table-Driven Cost Architecture: activity_costs is the source of truth,
+  // but the trips.itinerary_data JSONB is rendered directly by the UI for cost
+  // chips on activity cards. If we corrected a Michelin floor in activity_costs
+  // without also patching the JSONB, the user sees the wrong (low) price in the
+  // itinerary view. Write the corrected per-activity cost (cost_per_person_usd
+  // × num_travelers) back into JSONB.cost.amount and JSONB.estimatedCost.amount.
+  let jsonbPatched = 0;
+  const correctedById = new Map<string, { totalUsd: number; reason: string }>();
+  for (const r of rows) {
+    if (r.source === 'michelin_floor' || r.source === 'ticketed_attraction_floor' || r.source === 'auto_corrected') {
+      correctedById.set(r.activity_id, {
+        totalUsd: Math.round((r.cost_per_person_usd || 0) * (r.num_travelers || 1)),
+        reason: r.source,
+      });
+    }
+  }
+  if (correctedById.size > 0) {
+    const patchedDays = days.map((day: any) => ({
+      ...day,
+      activities: (day.activities || []).map((a: any) => {
+        const fix = correctedById.get(a.id);
+        if (!fix) return a;
+        jsonbPatched++;
+        return {
+          ...a,
+          cost: { amount: fix.totalUsd, currency: 'USD' },
+          estimatedCost: { amount: fix.totalUsd, currency: 'USD' },
+        };
+      }),
+    }));
+    const { error: writeErr } = await supabase
+      .from('trips')
+      .update({ itinerary_data: { ...itData, days: patchedDays } })
+      .eq('id', tripId);
+    if (writeErr) {
+      console.error(`[repair-trip-costs] JSONB writeback error:`, writeErr);
+      // Non-fatal: activity_costs is still corrected
+    } else {
+      console.log(`[repair-trip-costs] JSONB writeback: ${jsonbPatched} activities patched in trips.itinerary_data`);
+    }
+  }
 
-  return okJson({ success: true, repaired: inserted, corrected, totalActivities: rows.length });
+  console.log(`[repair-trip-costs] Done: ${inserted} rows upserted, ${corrected} corrected, ${jsonbPatched} JSONB-patched`);
+
+  return okJson({ success: true, repaired: inserted, corrected, jsonbPatched, totalActivities: rows.length });
 }
