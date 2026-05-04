@@ -378,12 +378,29 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     );
   }
 
-  const remainingPercent = summary ? Math.max(0, 100 - summary.usedPercent) : 100;
-
-  // Hoist budget status so it's accessible to both BudgetWarning and BudgetCoach render blocks
+  // ─── SINGLE SOURCE OF TRUTH: snapshot drives every headline number ───
+  // The over-budget banner percent AND dollar overage MUST come from the
+  // same aggregation, otherwise they drift between renders ($690 (38%) →
+  // $1,125 (38%) → $1,125 (63%) bug).
   const budgetCents = settings?.budget_total_cents || 0;
   const snapshotUsedPct = budgetCents > 0 ? (snapshot.tripTotalCents / budgetCents) * 100 : 0;
-  const snapshotStatus: 'green' | 'yellow' | 'red' = snapshotUsedPct >= 100 ? 'red' : snapshotUsedPct >= 85 ? 'yellow' : 'green';
+  const snapshotOverageCents = Math.max(0, snapshot.tripTotalCents - budgetCents);
+  const snapshotRemainingCents = Math.max(0, budgetCents - snapshot.tripTotalCents);
+  const snapshotStatus: 'green' | 'yellow' | 'red' =
+    snapshotUsedPct >= 100 ? 'red' : snapshotUsedPct >= 85 ? 'yellow' : 'green';
+  const remainingPercent = Math.max(0, 100 - snapshotUsedPct);
+
+  // Dev-only: log if the cached summary disagrees with the snapshot. Catches
+  // future regressions where a code path bypasses the shared inclusion rule.
+  if (import.meta.env.DEV && summary && Math.abs(summary.usedPercent - snapshotUsedPct) > 0.5) {
+    // eslint-disable-next-line no-console
+    console.error('[budget] source mismatch — snapshot vs summary', {
+      snapshotUsedPct,
+      summaryUsedPercent: summary.usedPercent,
+      snapshotTotalCents: snapshot.tripTotalCents,
+      summaryTotalUsed: summary.totalCommittedCents + summary.plannedTotalCents,
+    });
+  }
 
   return (
     <motion.div
@@ -391,19 +408,23 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 py-6"
     >
-      {/* Over-budget Warning Banner — use snapshot as canonical source (hidden in manual mode) */}
+      {/* Over-budget Warning Banner — snapshot is the only source (hidden in manual mode) */}
       {!isManualMode && (() => {
         const showWarning = settings?.budget_warnings_enabled !== false
           && settings?.budget_warning_threshold !== 'off'
           && (snapshotStatus === 'red' || (snapshotStatus === 'yellow' && settings?.budget_warning_threshold !== 'red_only'));
 
-        return showWarning && summary ? (
-          <BudgetWarning summary={{
-            ...summary,
-            usedPercent: snapshotUsedPct,
-            status: snapshotStatus,
-          }} />
-        ) : null;
+        if (!showWarning || snapshotStatus === 'green') return null;
+
+        return (
+          <BudgetWarning
+            status={snapshotStatus}
+            usedPercent={snapshotUsedPct}
+            overageCents={snapshotOverageCents}
+            remainingCents={snapshotRemainingCents}
+            currency={settings?.budget_currency || 'USD'}
+          />
+        );
       })()}
 
       {/* Over-budget explainer — actionable guidance when expenses far exceed budget (hidden in manual mode) */}
