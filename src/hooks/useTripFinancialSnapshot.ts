@@ -120,6 +120,23 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     let canonicalFlightCents = 0;
 
     for (const row of costs || []) {
+      // Orphan filter: drop activity-bound rows whose activity_id no longer
+      // exists in the live itinerary. Logistics rows (day_number=0 or
+      // source=logistics-sync) are exempt — they belong to hotel/flight,
+      // not to itinerary activities. This MUST mirror getBudgetLedger and
+      // usePayableItems exactly so all three views report the same total.
+      const isLogisticsRow =
+        row.source === 'logistics-sync' ||
+        row.day_number == null ||
+        row.day_number === 0;
+      if (
+        !isLogisticsRow &&
+        row.activity_id &&
+        !liveActivityIds.has(String(row.activity_id))
+      ) {
+        continue;
+      }
+
       const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
       const rowCents = Math.round(rowTotal * 100);
       const cat = (row.category || '').toLowerCase();
