@@ -109,6 +109,35 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       const category = normCat(activity.category || activity.type);
       if (category === "accommodation") continue;
 
+      // Placeholder departure transfer (no mode chosen): write $0, do not estimate.
+      const _titleForPlaceholder = (activity.title || activity.name || "");
+      const _descForPlaceholder = (activity.description || "");
+      const PLACEHOLDER_DEPARTURE_RE = /^(?:transfer|travel|head|go|depart|leave)\s+(?:to|for)\s+(?:the\s+)?(?:airport|station|terminal|port|train\s+station|bus\s+station)\b/i;
+      const PLACEHOLDER_LUGGAGE_RE = /^collect\s+luggage\s*(?:&|and)\s*transfer\b/i;
+      const TRANSPORT_MODE_RE = /\b(?:taxi|cab|uber|lyft|rideshare|private\s+car|car\s+service|metro|subway|train|rer|tgv|shuttle|bus|tram|ferry|boat)\b/i;
+      const isPlaceholderDeparture = category === "transport"
+        && (PLACEHOLDER_DEPARTURE_RE.test(_titleForPlaceholder) || PLACEHOLDER_LUGGAGE_RE.test(_titleForPlaceholder))
+        && !TRANSPORT_MODE_RE.test(_titleForPlaceholder)
+        && !TRANSPORT_MODE_RE.test(_descForPlaceholder)
+        && activity.booking_required !== true
+        && (activity.cost?.basis !== 'user' && activity.cost?.basis !== 'user_override');
+      if (isPlaceholderDeparture) {
+        rows.push({
+          trip_id: tripId,
+          activity_id: activity.id,
+          day_number: dayNum,
+          cost_per_person_usd: 0,
+          num_travelers: numTravelers,
+          category: 'transport',
+          source: 'placeholder_departure',
+          confidence: 'low',
+          cost_reference_id: null,
+          notes: '[Departure transfer — choose a mode]',
+        });
+        continue;
+      }
+
+
       const title = activity.title || activity.name || "";
       const subcategory = inferSub(title, category);
       let costPerPerson = typeof activity.estimatedCost === "number" ? activity.estimatedCost

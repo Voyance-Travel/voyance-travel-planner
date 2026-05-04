@@ -12,7 +12,7 @@
 
 import { useMemo } from 'react';
 import type { TripPayment } from '@/services/tripPaymentsAPI';
-import { estimateCostSync, isLikelyFreePublicVenue } from '@/lib/cost-estimation';
+import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle } from '@/lib/cost-estimation';
 
 export interface PayableSubItem {
   id: string;
@@ -289,8 +289,12 @@ export function usePayableItems({
 
         // Group transit rows
         if (TRANSIT_CATEGORIES.has(cat)) {
-          const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
           const lookup = activityNameById.get(row.activity_id);
+          // Skip placeholder departure transfers — no mode chosen, no committed price.
+          if (lookup && isPlaceholderDepartureTransferTitle(lookup.name)) {
+            continue;
+          }
+          const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
           const subName = lookup?.name || 'Local transit';
           bucket.subItems.push({
             id: row.activity_id,
@@ -384,6 +388,15 @@ export function usePayableItems({
           category: cat,
         });
         if (looksFree) continue;
+
+        // Skip placeholder departure transfers (no mode chosen): never auto-price.
+        if (isPlaceholderDepartureTransfer({
+          title: a.title || a.name,
+          category: cat,
+          description: (a as any).description,
+          bookingRequired: (a as any).bookingRequired,
+          cost: a.cost,
+        })) continue;
 
         const explicitRaw = typeof a.cost === 'number' ? a.cost
           : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
