@@ -466,6 +466,7 @@ export interface RepairResult {
   repaired: number;
   corrected: number;
   totalActivities: number;
+  changes?: number;
   error?: string;
 }
 
