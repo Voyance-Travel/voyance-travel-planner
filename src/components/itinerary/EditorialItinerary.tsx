@@ -1523,13 +1523,26 @@ export function EditorialItinerary({
       };
     };
 
+    // Day-1 "Grand Entrance" dinner — purely cosmetic description prefix when
+    // the generator/quality-pass tagged this activity. Skips locked items and
+    // never modifies anything beyond the description.
+    const GRAND_ENTRANCE_PREFIX = 'Your Grand Entrance dinner — ';
+    const labelGrandEntrance = (a: any): any => {
+      if (!a || a.locked || a.isLocked) return a;
+      const tags = Array.isArray(a.tags) ? a.tags : [];
+      if (!tags.includes('grand_entrance')) return a;
+      const desc = String(a.description || '').trim();
+      if (desc.startsWith(GRAND_ENTRANCE_PREFIX)) return a;
+      return { ...a, description: `${GRAND_ENTRANCE_PREFIX}${desc}` };
+    };
+
     return rawDays.map((day, dayIndex) => {
     const d = day as any;
     const filtered = (!hasFlight && day.dayNumber === 1)
       ? day.activities.filter(a => !isPlaceholderArrival(a))
       : day.activities;
     const baseActivities = (day.dayNumber === 1
-      ? filtered.map(relabelPreCheckIn)
+      ? filtered.map(relabelPreCheckIn).map(labelGrandEntrance)
       : filtered) as EditorialActivity[];
     let updatedActivities = [...baseActivities];
 
