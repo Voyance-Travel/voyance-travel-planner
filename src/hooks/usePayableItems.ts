@@ -57,7 +57,7 @@ interface PayableItemsInput {
       category?: string;
       priceLevel?: number;
       price_level?: number;
-      cost?: number;
+      cost?: any;
       explicitCost?: number;
     }>;
   }>;
