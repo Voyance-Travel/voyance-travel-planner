@@ -479,6 +479,9 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           onProtectedCategoriesChange={(next) => {
             updateSettings({ coach_protected_categories: next });
           }}
+          onBumpBudget={async (newTotalCents) => {
+            await updateSettings({ budget_total_cents: newTotalCents });
+          }}
         />
       )}
 
