@@ -125,6 +125,7 @@ export function usePayableItems({
   paymentsLoaded = true,
   includeHotel = true,
   includeFlight = false,
+  estimateMissingCosts = false,
 }: PayableItemsInput): PayableItemsResult {
   // Apply trip-level inclusion toggles so the visible Payments total matches
   // the Trip Total computed by useTripFinancialSnapshot (shouldCountRow).
