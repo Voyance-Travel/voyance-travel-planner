@@ -112,13 +112,25 @@ export function usePayableItems({
     return map;
   }, [days]);
 
+  const hasManualHotel = useMemo(
+    () => payments.some(p => p.item_type === 'hotel' && typeof p.item_id === 'string' && p.item_id.startsWith('manual-')),
+    [payments]
+  );
+  const hasManualFlight = useMemo(
+    () => payments.some(p => p.item_type === 'flight' && typeof p.item_id === 'string' && p.item_id.startsWith('manual-')),
+    [payments]
+  );
+
   const items = useMemo(() => {
     const result: PayableItem[] = [];
 
     // ─── Flight from selection (UI source) ───
-    const flightTotal = flightSelection?.totalPrice
+    // Skip canonical flight if user has a manual flight override (avoids double-count).
+    const flightTotal = hasManualFlight ? 0 : (
+      flightSelection?.totalPrice
       || (flightSelection?.legs?.reduce((s, l) => s + (l?.price || 0), 0) || 0)
-      || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0));
+      || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0))
+    );
 
     if (flightTotal > 0) {
       const flightId = 'flight-selection';
@@ -138,7 +150,7 @@ export function usePayableItems({
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
       });
-    } else if (activityCosts?.length) {
+    } else if (activityCosts?.length && !hasManualFlight) {
       const flightRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0);
       if (flightRow && flightRow.cost_per_person_usd > 0) {
         const flightId = 'flight-selection';
@@ -160,7 +172,7 @@ export function usePayableItems({
     }
 
     // ─── Hotel from selection ───
-    if (hotelSelection?.totalPrice || hotelSelection?.pricePerNight) {
+    if (!hasManualHotel && (hotelSelection?.totalPrice || hotelSelection?.pricePerNight)) {
       const hotelId = 'hotel-selection';
       const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
       const nights = Math.max(1, days.length - 1);
@@ -178,7 +190,7 @@ export function usePayableItems({
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
       });
-    } else if (activityCosts?.length) {
+    } else if (activityCosts?.length && !hasManualHotel) {
       // Fallback: hotel cost stored as day_number=0 row
       const hotelRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'hotel' && r.day_number === 0);
       if (hotelRow && hotelRow.cost_per_person_usd > 0) {
@@ -315,7 +327,7 @@ export function usePayableItems({
 
     return result;
     // travelers retained in deps for callers; not used directly because num_travelers is on the row
-  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById]);
+  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, hasManualHotel, hasManualFlight]);
 
   const totalCents = useMemo(() => items.reduce((sum, i) => sum + i.amountCents, 0), [items]);
   const essentialItems = useMemo(() => items.filter(i => i.type === 'flight' || i.type === 'hotel'), [items]);
