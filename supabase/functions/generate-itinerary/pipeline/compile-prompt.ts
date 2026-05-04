@@ -988,6 +988,11 @@ The Activities target is REAL spend on bookable experiences — free venues do N
       timingInstructions = `${timingInstructions}\n${grandEntrance}\n`;
       console.log(`[compile-prompt] Day 1 Grand Entrance directive injected (tier=${archetypeTier}, policy=${diningConfig.michelinPolicy})`);
     }
+    const arrivalAnchor = buildArrivalCulturalAnchorBlock(diningConfig, resolvedDestination || destination || '');
+    if (arrivalAnchor) {
+      timingInstructions = `${timingInstructions}\n${arrivalAnchor}\n`;
+      console.log(`[compile-prompt] Day 1 Arrival Cultural Anchor directive injected`);
+    }
   }
   const maxActivitiesFromArchetype = archetypeContext.definition.dayStructure.maxScheduledActivities;
   const minActivitiesFromArchetype = archetypeContext.definition.dayStructure.minScheduledActivities
