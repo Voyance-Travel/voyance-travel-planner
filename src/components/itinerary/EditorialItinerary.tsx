@@ -9488,6 +9488,21 @@ function DayCard({
     const info = getActivityCostInfo(act, travelers, budgetTier, destination, destinationCountry, isManualMode);
     return sum + (isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount));
   }, 0);
+  // Airport-transfer subtotal — broken out of transit so users see why Day 1
+  // transit looks high. Detected by "airport" in title/name/description on a
+  // transit-category row.
+  const airportTransferSubtotal = dayIsPreview ? 0 : day.activities.reduce((sum, act) => {
+    const cat = (act.category || '').toLowerCase();
+    const typ = ((act as any).type || '').toLowerCase();
+    const isTransit = cat === 'transportation' || cat === 'transport' || cat === 'transit'
+      || typ === 'transportation' || typ === 'transport' || typ === 'transit';
+    if (!isTransit) return sum;
+    const haystack = `${act.title || ''} ${(act as any).name || ''} ${act.description || ''}`.toLowerCase();
+    if (!/\bairport\b/.test(haystack)) return sum;
+    const info = getActivityCostInfo(act, travelers, budgetTier, destination, destinationCountry, isManualMode);
+    return sum + (isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount));
+  }, 0);
+  const otherTransitSubtotal = Math.max(0, transitSubtotal - airportTransferSubtotal);
   const visibleActivitiesSubtotal = Math.max(0, totalCost - transitSubtotal);
   
   // Transport details toggle - collapsed by default to reduce visual noise
