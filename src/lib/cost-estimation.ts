@@ -638,6 +638,49 @@ export function isLikelyFreePublicVenue(fields: {
   return FREE_VENUE_PATTERNS.some(p => p.test(combined));
 }
 
+// ============================================================================
+// PLACEHOLDER DEPARTURE TRANSFER DETECTION
+// ============================================================================
+
+const PLACEHOLDER_DEPARTURE_TITLE = /^(?:transfer|travel|head|go|depart|leave)\s+(?:to|for)\s+(?:the\s+)?(?:airport|station|terminal|port|train\s+station|bus\s+station)\b/i;
+const PLACEHOLDER_LUGGAGE_TRANSFER = /^collect\s+luggage\s*(?:&|and)\s*transfer\b/i;
+const TRANSPORT_MODE_KEYWORDS = /\b(?:taxi|cab|uber|lyft|rideshare|private\s+car|car\s+service|metro|subway|train|rer|tgv|shuttle|bus|tram|ferry|boat|walk)\b/i;
+
+/**
+ * True when a title looks like a generic "Transfer to Airport" stub with no mode.
+ */
+export function isPlaceholderDepartureTransferTitle(title?: string | null): boolean {
+  if (!title) return false;
+  const t = title.trim();
+  if (!t) return false;
+  if (TRANSPORT_MODE_KEYWORDS.test(t)) return false;
+  return PLACEHOLDER_DEPARTURE_TITLE.test(t) || PLACEHOLDER_LUGGAGE_TRANSFER.test(t);
+}
+
+/**
+ * Full activity check: title pattern + no mode keyword + not user-confirmed + no booking.
+ */
+export function isPlaceholderDepartureTransfer(activity: {
+  title?: string;
+  name?: string;
+  description?: string;
+  category?: string;
+  type?: string;
+  bookingRequired?: boolean;
+  booking_required?: boolean;
+  cost?: any;
+}): boolean {
+  const title = activity.title || activity.name || '';
+  if (!isPlaceholderDepartureTransferTitle(title)) return false;
+  if (activity.description && TRANSPORT_MODE_KEYWORDS.test(activity.description)) return false;
+  if (activity.bookingRequired === true || activity.booking_required === true) return false;
+  const basis = activity.cost && typeof activity.cost === 'object' ? (activity.cost as any).basis : undefined;
+  if (basis === 'user' || basis === 'user_override') return false;
+  const cat = (activity.category || activity.type || '').toLowerCase();
+  if (cat && !['transport', 'transfer', 'transportation'].includes(cat)) return false;
+  return true;
+}
+
 /**
  * Pre-warm the cache (call early in app lifecycle)
  */
