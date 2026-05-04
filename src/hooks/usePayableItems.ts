@@ -19,9 +19,11 @@ export interface PayableSubItem {
   amountCents: number;
 }
 
+export type PayableItemType = 'flight' | 'hotel' | 'activity' | 'dining' | 'transport' | 'shopping' | 'other';
+
 export interface PayableItem {
   id: string;
-  type: 'flight' | 'hotel' | 'activity';
+  type: PayableItemType;
   name: string;
   amountCents: number;
   dayNumber?: number;
