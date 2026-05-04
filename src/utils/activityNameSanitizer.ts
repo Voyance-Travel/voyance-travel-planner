@@ -178,6 +178,8 @@ const VOYANCE_PICK_RE = /\s*(?:Voyance\s+Pick|Hotel\s+Pick)\s*/gi;
 export function sanitizeActivityText(text: string | undefined | null): string {
   if (!text) return '';
   return text
+    // Repair orphaned "City" gap (e.g. "Explore the of Paris Museum…")
+    .replace(/\bthe\s+of\s+(?=[A-Z])/g, 'the City of ')
     .replace(SYSTEM_LABEL_RE, '')
     .replace(VOYANCE_PICK_RE, '')
     // Strip any Voyance branding text that leaks into descriptions

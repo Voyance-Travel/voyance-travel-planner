@@ -1072,6 +1072,9 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     // "the's" → "Lisbon's"
     result = result.replace(/\bthe's\b/gi, destination + "'s");
 
+    // Generic orphaned "City" repair: "Explore the of Paris Museum…" → "Explore the City of Paris Museum…"
+    // Only fires when followed by a capital letter (i.e. a proper noun follows).
+    result = result.replace(/\bthe\s+of\s+(?=[A-Z])/g, 'the City of ');
     // "in the of [Noun]" title pattern → "in Lisbon, the City of [Noun]"
     // ", the of [Noun]" → ", the City of [Noun]" (comma-prefixed variant)
     result = result.replace(/,\s*the\s+of\b/gi, ', the City of');
