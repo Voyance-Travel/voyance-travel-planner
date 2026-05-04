@@ -1948,6 +1948,20 @@ export function EditorialItinerary({
   const [activeTab, setActiveTab] = useState<'itinerary' | 'budget' | 'payments' | 'details' | 'needtoknow' | 'collab'>('itinerary');
   const [showTripOverview, setShowTripOverview] = useState(false);
 
+  // Cross-tab "Add expense" trigger — emitted from Misc empty-state hint in BudgetTab.
+  // Switch to Payments tab and re-emit so the now-mounted PaymentsTab listener fires.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setActiveTab('payments');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('open-add-expense:mounted', { detail }));
+      }, 50);
+    };
+    window.addEventListener('open-add-expense', handler);
+    return () => window.removeEventListener('open-add-expense', handler);
+  }, []);
+
   // Navigate to a section when parent requests it (e.g., from TripHealthPanel quick-fix buttons)
   useEffect(() => {
     if (!navigateToSection) return;
