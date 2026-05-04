@@ -95,6 +95,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
   const destination = (tripData.destination || "").toLowerCase();
   const numTravelers = tripData.travelers || 1;
   const rows: any[] = [];
+  const changeLog: Array<{ activity_id: string; activity_title: string | null; previous_cents: number; new_cents: number; reason: string }> = [];
   let corrected = 0;
 
   for (const day of days) {
