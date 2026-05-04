@@ -1,78 +1,37 @@
-# Two missing Payments rows — root cause + fix
+# Le Bon Marché missing from Payments — fix
 
-## What's actually happening
+## Root cause
 
-I queried the trip and the data tells a clear story:
+The activity exists in the itinerary JSON with `cost.amount = 0` and no row in `activity_costs` (it's `category: 'shopping'`, which the cost-repair pipeline doesn't write rows for).
 
-`activity_costs` has rows for both activities, but with `cost_per_person_usd = 0` and `notes = "[Free venue - Tier 1]"`:
+So `usePayableItems`' JSON-walk fallback runs for it and:
 
-| activity_id | day | title (from JSON) | JSON cost | DB cost | DB notes |
-|---|---|---|---|---|---|
-| `b402d7a7…` | 1 | Dinner at Frenchie | $70 | **$0** | [Free venue - Tier 1] |
-| `190ff620…` | 3 | Breakfast at La Fontaine de Belleville | $18 | **$0** | [Free venue - Tier 1] |
-| `8d585833…` | 1 | Lunch at Chez Janou | $40 | **$0** | [Free venue - Tier 1] |
+1. Reads `explicit = 0` from `a.cost.amount`.
+2. Passes `explicitCost: 0` into `estimateCostSync`.
+3. `estimateCostSync` short-circuits on `explicitCost !== undefined && explicitCost >= 0` and returns `amount: 0`.
+4. The fallback drops the row (`if (cents <= 0) continue`).
 
-(Lunch at Chez Janou is also missing from Payments for the exact same reason — the user only spotted two of three.)
+Net effect: any paid-category activity stored with `cost.amount = 0` (a missing-data placeholder, not a confirmed free experience) silently disappears from Payments.
 
-Two compounding bugs in `src/hooks/usePayableItems.ts`:
+## Fix — one file
 
-1. **DB-driven loop (line 270)**: `if (cents <= 0) continue;` — silently drops the row.
-2. **JSON-walk fallback (line 359)**: `seenActivityIds` is built from `result`, but `seenActivityIds` is also populated implicitly by anything in `activity_costs` because the DB loop adds nothing for $0 rows yet still "claims" the activity… actually no — re-reading: `seenActivityIds` is only populated from items pushed to `result`. So the fallback *should* catch these. Why doesn't it?
+**`src/hooks/usePayableItems.ts`** (JSON-walk fallback, ~line 388):
 
-   Because the fallback then runs `isLikelyFreePublicVenue({ title, category })` (line 364). For `category: 'dining'` with a restaurant title, this should return false — but if it's returning true for these names, that's the second bug. More likely: the fallback IS running but `estimateCostSync` returns 0 for some reason, OR the activity's `category` is being read as something the fallback's `FREE_CATEGORIES` skips.
+Treat `explicit === 0` as "no cost recorded, please estimate" — only pass `explicitCost` to `estimateCostSync` when it's strictly positive. This lets the priceLevel / city-tier estimator produce a real number for shopping, activity, dining, etc. rows that came in with a placeholder `$0`.
 
-   I'll instrument-confirm this in the fix branch, but the safe, deterministic fix doesn't depend on knowing which path fails: **stop trusting `cost_per_person_usd = 0` when the source itinerary has an explicit non-zero cost**.
+```ts
+const explicitRaw = /* …same extraction… */;
+const explicit = (typeof explicitRaw === 'number' && explicitRaw > 0) ? explicitRaw : undefined;
+```
 
-## The fix
+That's the entire change. After it ships, Le Bon Marché will appear with a Paris-shopping estimate (priceLevel/midpoint-based) until the user records an actual amount.
 
-### 1. Frontend: `src/hooks/usePayableItems.ts` (deterministic, immediate)
+## Why not also write an `activity_costs` row?
 
-In the DB-driven loop (around line 266–313), when a non-transit row has `cents <= 0`:
-- Look up the matching activity in `activityNameById` extended to also carry `cost`/`estimatedCost` from the JSON.
-- If the JSON has an explicit positive cost for that activity, use it instead of skipping.
-- Tag the resulting `PayableItem` with a `source: 'json-fallback'` field (internal, for debugging) and add it to `result`.
+The cost-repair pipeline intentionally skips `shopping` (along with other discretionary categories) because budgets for shopping are user-driven. The Payments tab should still surface the activity so the user can mark it paid / enter a real amount — the fallback estimate is the right vehicle for that, we just have to stop letting `0` masquerade as truth.
 
-This guarantees: any activity that appears in the itinerary with a real cost will appear in Payments, regardless of how the cost pipeline mislabeled it.
-
-Also: tighten the JSON-walk fallback's free-venue heuristic so `category === 'dining'` is never treated as a free public venue (a restaurant is not a park).
-
-### 2. Backend: stop creating bogus `[Free venue - Tier 1]` rows for restaurants
-
-The pipeline that writes `activity_costs` is tagging named restaurants like "Frenchie", "Chez Janou", "La Fontaine de Belleville" as Tier 1 free venues. Search for the writer:
-
-- `src/services/budgetLedgerSync.ts` and the edge functions that call into it
-- The "Tier 1 / free venue" classifier (likely `lib/cost-estimation` or a server-side equivalent)
-
-Fix: the free-venue classifier must short-circuit to `false` whenever `category === 'dining'`. Dining is never free. (Cafés with no entry fee are still paid — you order food.)
-
-Also clean up the existing 3 bad rows on this trip via a one-off update so the user sees the fix immediately without waiting for a re-sync.
-
-### 3. Data backfill (one-off, this trip only)
-
-Update the three offending `activity_costs` rows to use the JSON costs:
-- `b402d7a7…` → $70/pp
-- `190ff620…` → $18/pp
-- `8d585833…` → $40/pp
-
-Clear the `[Free venue - Tier 1]` note and set `source = 'json-rescue'`.
-
-## Why both layers
-
-Frontend-only fix: Payments will be correct, but Budget totals and the Budget Coach (which read from `activity_costs`) will still under-count by ~$256 on this trip alone.
-
-Backend-only fix: future trips correct, but this trip stays broken until something forces a re-sync.
-
-Doing both means: this trip is fixed now, and no future trip has the same problem.
-
-## Files to change
-
-- `src/hooks/usePayableItems.ts` — JSON cost fallback for $0 DB rows; tighten free-venue heuristic for dining.
-- `src/lib/cost-estimation.ts` (and/or its server twin) — `isLikelyFreePublicVenue` returns false when category is dining/restaurant/meal.
-- The cost-sync edge function that classifies "Tier 1 free venue" — same guard.
-- One-off data update for the 3 affected rows on trip `7ea828ac…`.
-
-## Out of scope (already noted in earlier rounds, still pending)
+## Out of scope (still pending from earlier)
 
 - Generic-named itinerary rows (`Dinner (Day 2)`, `transport (Day 2)`).
 - Hotel committed without `pricePerNight`.
-- All-Costs list collapse bug (#5 from the summary).
+- All-Costs list collapse bug.
