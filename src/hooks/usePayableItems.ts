@@ -588,7 +588,8 @@ export function usePayableItems({
       if (!p.item_id || isManualId(p.item_id)) continue;
       if (presentItemIds.has(p.item_id)) continue;
       // Strip optional composite suffix (_dN) to get the raw activity id.
-      const rawActivityId = p.item_id.replace(/_d\d+$/, '');
+      const itemIdStr = String(p.item_id);
+      const rawActivityId = itemIdStr.replace(/_d\d+$/, '');
       // Only recover if the activity still exists in the live itinerary.
       if (!activityNameById.has(rawActivityId)) continue;
       const group = orphanGroups.get(p.item_id) || [];
