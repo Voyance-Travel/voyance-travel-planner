@@ -1326,7 +1326,7 @@ export function EditorialItinerary({
           // Only write rows with actual costs (skip $0 to avoid noise)
           if (costPerPerson > 0) {
             // Guard: don't write positive rows for free public venues
-            const { isLikelyFreePublicVenue: isFreeVenue } = await import('@/lib/cost-estimation');
+            const { isLikelyFreePublicVenue: isFreeVenue, isPlaceholderDepartureTransfer } = await import('@/lib/cost-estimation');
             const isFree = isFreeVenue({
               title: act.title,
               category: act.category,
@@ -1339,6 +1339,18 @@ export function EditorialItinerary({
             });
             if (isFree) {
               console.log(`[syncBudgetFromDays] Skipping free venue: "${act.title}"`);
+              continue;
+            }
+            // Guard: placeholder departure transfers (no mode chosen) must not commit a price.
+            if (isPlaceholderDepartureTransfer({
+              title: act.title,
+              category: act.category,
+              type: act.type,
+              description: (act as any).description,
+              bookingRequired: (act as any).bookingRequired,
+              cost: act.cost,
+            })) {
+              console.log(`[syncBudgetFromDays] Skipping placeholder departure transfer: "${act.title}"`);
               continue;
             }
             activitiesForCostTable.push({
