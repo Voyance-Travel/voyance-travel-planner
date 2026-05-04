@@ -84,6 +84,17 @@ interface PayableItemsInput {
    *  Payments list and the Trip Total agree on which logistics rows count. */
   includeHotel?: boolean;
   includeFlight?: boolean;
+  /**
+   * When true (legacy), missing itinerary activities are surfaced with a
+   * client-side estimate that gets added to the grand total. This causes
+   * persistent drift from the canonical activity_costs ledger and was the
+   * root cause of the sticky "Reconciling…" badge.
+   *
+   * When false (default for Payments tab), missing items are still surfaced
+   * for transparency but priced at $0 so the Payments total matches the
+   * canonical ledger total exactly.
+   */
+  estimateMissingCosts?: boolean;
 }
 
 const TRANSIT_CATEGORIES = new Set([

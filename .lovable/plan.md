@@ -1,49 +1,40 @@
-## What you're hitting
+## Plan to fix persistent “Reconciling…” in Payments
 
-The Splurge-Forward preset for a 4-night Paris trip suggests a ~$1,796 budget. The Four Seasons George V alone runs ~$1,500–2,000/night, which means the *hotel line* exceeds the entire trip budget several times over. The current banner says "Trip expenses exceed your budget by $1,651 (92%) — Use Budget Coach or adjust your budget" but it doesn't:
+### What I found
+The badge is not a Stripe/payment-session status. It is rendered in `PaymentsTab.tsx` when two different totals disagree:
 
-1. Tell the user **what** is causing the overage (it's the hotel, not the activities)
-2. Offer a **one-click fix** (raise the budget to a realistic floor, or toggle Hotel out of the budget)
-3. Catch it **at the moment of choice** — picking the Four Seasons silently consumes the entire trip's budget without comment
+- `estimatedTotal`: canonical total from `useTripFinancialSnapshot`, mainly `activity_costs` plus manual payments.
+- `payableTotalCents`: Payments tab line-item total from `usePayableItems`.
 
-## Plan
+For the active Paris test trip, the database ledger currently totals about **$1,917** in activity costs plus a **$2,400 manual hotel payment**, while Payments can still add extra JSON-walk fallback estimates for itinerary items that are not in `activity_costs`. That fallback was intended to keep uncosted visible activities from disappearing, but it makes the visible payment rows drift from the canonical ledger, so the badge stays “Reconciling…” across sessions.
 
-Three small, high-leverage UX changes — no schema work, no regen.
+### Fix
+1. **Make Payments totals ledger-first**
+   - Update `usePayableItems` so the Payments tab does not add estimated JSON-walk fallback rows into the grand total by default.
+   - Keep the existing DB-backed rows, manual expenses, hotel/flight inclusion toggles, transit grouping, and orphan payment recovery.
+   - This makes the Payments tab total use the same source of truth as Budget/header totals.
 
-### 1. Diagnostic over-budget banner (`BudgetTab.tsx`)
+2. **Surface missing-cost items without changing the total**
+   - For itinerary activities that are visible but missing a real `activity_costs` row, show them as “Not priced yet” / `$0 pending pricing` rather than estimating and adding them to the total.
+   - Do not show truly free or excluded rows: walking, accommodation rituals, flights, known free public venues, placeholder airport transfers.
+   - This preserves transparency without silently inflating the Payments total.
 
-Replace today's generic "Trip expenses exceed your budget…" explainer with a **diagnostic** version that decomposes the overage:
+3. **Replace the sticky “Reconciling…” badge**
+   - Remove the permanent amber “Reconciling…” label from the header.
+   - If totals match, keep the positive “Matches itinerary” indicator.
+   - If there is still a larger mismatch, show a clearer one-line diagnostic such as “Payment rows differ by $X” in dev/diagnostic contexts, instead of a vague persistent status that looks like a stuck payment process.
 
-> Your hotel ($X for 4 nights) is **N×** your trip budget. With hotel included you're $1,651 over.
->
-> **Quick fixes:**
-> - [ Raise budget to $3,500 ]  ← one-click; rounds to nearest $100
-> - [ Hide hotel from budget ] ← toggles `include_hotel_in_budget` off
-> - [ Pick a different hotel ]  ← jumps to hotel selector
+4. **Clean up dead comparison logic in `PaymentsTab.tsx`**
+   - Simplify comments and logic around `estimatedTotal`, `payableTotalCents`, and mismatch detection.
+   - Ensure the top “Trip Total”, paid/unpaid math, budget progress, and split/person calculations all continue to use the canonical total.
 
-The "raise budget" button updates `budget_total_cents` directly (no AI, no credits). The "hide hotel" toggle already exists at the bottom of the page — we just surface it inline. The detection rule: `hotelCents > budgetCents * 0.6` ⇒ show hotel-driven variant; otherwise keep current generic copy.
+5. **Verify against current Paris test data**
+   - Confirm the active trip no longer shows “Reconciling…”.
+   - Confirm the Payments trip total aligns with the ledger-backed total and does not include ad-hoc JSON estimates.
+   - Confirm All Costs still shows paid/manual rows and visible DB-backed activities correctly.
 
-### 2. Pre-selection guard at hotel pick (`UnifiedAccommodationSelector` / hotel picker)
+### Files to change
+- `src/hooks/usePayableItems.ts`
+- `src/components/itinerary/PaymentsTab.tsx`
 
-When the user is about to confirm a hotel whose all-nights cost > current `budget_total_cents`, show a small inline note next to the confirm button:
-
-> Heads up: this stay is $X across N nights — about 1.7× your current $1,800 trip budget. We can raise your budget automatically when you continue.
-
-A checkbox "Auto-raise my trip budget to fit" defaults to **on**. On confirm we bump `budget_total_cents` to `ceil((hotelCents + activityFloor) / 100) * 100`. No surprise mismatch later.
-
-### 3. Preset realism note in setup (`BudgetSetupDialog.tsx`)
-
-When a user picks Splurge-Forward and the system already knows the selected hotel cost (it does — `trips.hotel_selection`), show a one-liner under the preset chip:
-
-> Splurge-Forward suggests **$1,800** for this trip. Your selected hotel costs **$6,400** alone — consider **$8,500+** so the preset can fund signature dining and experiences on top.
-
-Pure guidance copy; no automatic action.
-
-## Files touched
-
-- `src/components/planner/budget/BudgetTab.tsx` — diagnostic banner with one-click actions
-- `src/components/trips/UnifiedAccommodationSelector.tsx` — pre-confirm budget-fit note + auto-raise checkbox
-- `src/components/planner/budget/BudgetSetupDialog.tsx` — preset realism hint when a hotel is already chosen
-- New `src/lib/budget-realism.ts` — single helper: `assessBudgetFit({ hotelCents, activityFloorCents, budgetCents })` returning `{ severity, drivers, suggestedFloorCents }` so the three surfaces stay consistent
-
-No DB / edge changes. No effect on the cost ledger or generation pipeline. Approve to apply.
+No database migration is required for this fix.
