@@ -298,6 +298,16 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   // ─── Canonical financial snapshot from DB ledger (single source of truth) ───
   const snapshot = useTripFinancialSnapshot(tripId);
 
+  // When the snapshot total changes, invalidate the cached summary/ledger so
+  // the per-category breakdown can never lag behind the headline number.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (snapshot.loading) return;
+    queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
+    queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
+    queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
+  }, [snapshot.tripTotalCents, snapshot.loading, tripId, queryClient]);
+
   // Per-city budget breakdown for multi-city trips
   const { data: cityBudgets } = useQuery({
     queryKey: ['cityBudgetBreakdown', tripId],
