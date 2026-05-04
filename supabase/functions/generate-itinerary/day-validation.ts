@@ -1019,10 +1019,12 @@ export function enforceRequiredMealsFinalGuard(
     let venueDescription: string = '';
     let usedRealVenue = false;
 
-    // Find matching venue: prefer specific meal type, then 'any'
+    // Find matching venue: prefer specific meal type, then 'any'.
+    // Reject anything already used (this day) or blocked (previous days).
     const matchingVenues = fallbackVenues.filter(v =>
       (v.mealType === mealType || v.mealType === 'any') &&
-      !usedVenueNamesForInjection.has(v.name.toLowerCase())
+      !usedVenueNamesForInjection.has(v.name.toLowerCase()) &&
+      !isBlocked(v.name)
     );
     // Prefer meal-type-specific matches first
     const specificMatch = matchingVenues.find(v => v.mealType === mealType);
@@ -1033,6 +1035,7 @@ export function enforceRequiredMealsFinalGuard(
       venueAddress = venue.address || `${venue.name}, ${destination}`;
       venueDescription = `${label} at ${venue.name} — a real local spot worth visiting`;
       usedVenueNamesForInjection.add(venue.name.toLowerCase());
+      usedVenueNamesForInjection.add(extractRestaurantVenueName(venue.name));
       usedRealVenue = true;
       // Remove from fallbackVenues so next meal gets a different one
       const idx = fallbackVenues.indexOf(venue);
