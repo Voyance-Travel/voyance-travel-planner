@@ -109,6 +109,19 @@ export function PaymentsTab({
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
+
+  // Listen for cross-tab "Add expense" requests from BudgetTab's Misc empty-state.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { type?: PayableItem['type'] } | undefined;
+      setNewExpenseType(detail?.type ?? 'other');
+      setNewExpenseName('');
+      setNewExpenseAmount('');
+      setShowAddExpenseModal(true);
+    };
+    window.addEventListener('open-add-expense:mounted', handler);
+    return () => window.removeEventListener('open-add-expense:mounted', handler);
+  }, []);
   // Fetch real trip members and collaborators
   const { data: rawTripMembers = [], isLoading: membersLoading } = useTripMembers(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
