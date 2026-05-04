@@ -1,45 +1,67 @@
 ## Problem
 
-On Day 1 the itinerary surfaces "1 activity has no travel buffer. **Refresh Day** to fix timing." The user has to:
+Day 1 shows **"Check-in at Four Seasons" at 09:45** even though the hotel's stated check-in is **15:00**. The card calls itself a check-in (with a 30-min "check-in window") and the description says "early luggage storage usually available", but the headline still implies the room is ready. A luxury traveler expects accuracy — they will arrive at 9:45 expecting a room and won't get one.
 
-1. Notice the small gray banner above the day's activities.
-2. Click *Refresh Day* (an edge-function call).
-3. Read the diff panel.
-4. Accept the proposed time-shift changes.
+The card is generated three different ways (all currently broken on this case):
 
-For an arrival day on a first-time user, that's three friction points before the itinerary is usable. Worse — refresh isn't even guaranteed: it's a soft suggestion the user can miss.
+1. `compile-day-schema.ts` (no-flight prompt blocks at lines 285–336) hard-codes step 2 as `"Check-in at <hotel>"` regardless of the hotel's actual `checkInTime`.
+2. `generation-core.ts` line 687 has the right rule ("title it Luggage Drop at {Hotel} when arriving before checkInTime") but the model often ignores it.
+3. `injectHotelActivities.ts` line 33 builds a hard-coded `"Check-in at <hotel>"` accommodation card.
+4. `repair-day.ts` line 1430 (mid-trip hotel change) does the same.
 
-## Fix — silent Day 1 auto-buffer
+None of them check whether the scheduled time is actually ≥ the hotel's `checkInTime`.
 
-Add a one-shot effect in `EditorialItinerary.tsx` that runs whenever the Day 1 activity list changes. If it detects a zero/negative gap between two non-transport, non-same-venue, non-locked activities, it cascades a 15-minute breathing buffer forward without an edge call, without a toast, and without disturbing the user.
+## Fix
 
-### Algorithm
-1. Build a fingerprint of Day 1 activities (`id@startTime` joined). Skip if already processed.
-2. Walk consecutive pairs `(a, b)`:
-   - Skip if either side is `category === 'transport'` (transport entries *are* the buffer).
-   - Skip if both share the same `location.name` (legit back-to-back at one venue).
-   - Skip if `b.locked || b.isLocked` (Universal Locking — never move user/manual/extracted).
-   - Skip if `a.endTime` or `b.startTime` aren't simple `HH:MM` (don't risk parsing AM/PM here).
-   - If `b.startTime < a.endTime + 15`, shift `b.startTime` (and `b.endTime` by the same delta) forward.
-3. Cascade: each shifted activity becomes the new anchor for the next pair, so a single early collision propagates cleanly through the morning.
-4. Bail out of any shift that would push past 23:30 (don't push activities into the night).
-5. Mark `setHasChanges(true)` so autosave persists the corrected schedule; the existing buffer-warning banner reads from the same `days` state and disappears on the next render.
+Three layers, defensive.
 
-### Why this is safe
-- **Locked items anchor** — manual / extracted / pinned activities (Universal Locking memory) are never moved. The cascade simply skips them.
-- **Transport rows are preserved** — they already represent travel time, so we don't double-buffer.
-- **Same-venue pairs** (e.g. drinks → dinner at the same hotel bar) don't get artificial gaps.
-- **Idempotent** — the fingerprint guard prevents loops, and once the gaps are ≥15 min nothing mutates.
-- **Day 1 only** — other days continue to surface the explicit *Refresh Day* affordance, which is the right UX when the user is mid-trip planning. Arrival day is uniquely sensitive because nothing else has been edited yet.
+### 1. Read-time safety net — `EditorialItinerary.tsx`
 
-## File touched
+In the `days` useMemo, after the existing arrival-placeholder filter, add a relabel pass: for each Day 1 (or first-day-in-city) accommodation activity whose title starts with `Check-in` AND whose `startTime < effectiveHotelSelection.checkInTime`, rewrite it in place to:
 
-- `src/components/itinerary/EditorialItinerary.tsx` — add a `useEffect` (~70 lines) right next to the existing refresh-day state at line 2171. No prop changes, no edge function changes.
+- title: `Luggage Drop at <hotel>`
+- description: `Drop your bags and freshen up. Your room will be ready at <checkInTime>.`
+- duration cap: 20 min (was 30)
+- keep `category: 'accommodation'`, keep ID, keep location
+
+Skip if `locked || isLocked` (Universal Locking). This handles every existing trip immediately, no migration.
+
+### 2. Generator prompt — `compile-day-schema.ts`
+
+In both no-flight blocks (lines 287–304 and 318–335), choose the title at template time based on whether `transferEnd < checkInTime`:
+
+```text
+const isBeforeCheckin = parseTime(transferEnd) < parseTime(hotel.checkInTime ?? '15:00');
+const title = isBeforeCheckin ? `Luggage Drop at ${hotel}` : `Check-in at ${hotel}`;
+const desc  = isBeforeCheckin
+  ? `Drop bags and freshen up. Your room will be ready at ${checkInTime}.`
+  : `Check in and get settled.`;
+```
+
+When `isBeforeCheckin` is true, also append a short instruction so the model adds an explicit `"Check-in at <hotel>"` accommodation activity at `checkInTime` (15-min) before evening activities. That gives the user the full timeline: bag drop → day → real check-in → dinner.
+
+### 3. Helper utilities — `injectHotelActivities.ts` and `repair-day.ts`
+
+`buildCheckInActivity` (line 33) already receives `hotel.checkInTime`. Change it to accept a scheduled `startTime` arg; if `startTime < checkInTime`, build a "Luggage Drop" activity instead. The repair-day mid-trip hotel-change branch (line 1430) gets the same conditional.
+
+## Why this is safe
+
+- Read-time relabel is purely cosmetic (title + description + duration); IDs, costs, locations untouched. Cost ledger, Payments, locking all unaffected.
+- Locked activities are skipped — manual edits are preserved (Universal Locking memory).
+- When `checkInTime` is unknown we keep current behavior (default 15:00 still gates the rename, so the most common luxury hotels behave correctly).
+- Generator changes only alter *future* generations; existing trips rely on the read-time net.
+
+## Files touched
+
+- `src/components/itinerary/EditorialItinerary.tsx` — relabel pass inside the existing Day 1 `days` useMemo (~25 lines).
+- `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts` — conditional titles + add explicit later check-in step (~25 lines across two blocks).
+- `src/utils/injectHotelActivities.ts` — `buildCheckInActivity` accepts scheduled time, branches title/description (~15 lines).
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — mid-trip hotel-change card uses the same gate (~10 lines).
 
 ## Verification
 
-- Open the affected trip → Day 1 reflows automatically; the "no travel buffer" banner disappears within a render cycle.
-- Lock an activity, then drag a sibling to overlap it → the locked one stays put, the unlocked one is auto-shifted.
-- Days 2+ still show the *Refresh Day* affordance unchanged.
+- Existing trip with 09:45 "Check-in at Four Seasons" reloads as **"Luggage Drop at Four Seasons — Drop bags and freshen up. Your room will be ready at 15:00."**
+- New trip without flight, hotel checkInTime=15:00 → opening sequence reads Transfer → Luggage Drop → … → Check-in at 15:00 → dinner.
+- Trip arriving at 16:00 (after checkInTime) → still says "Check-in at <hotel>" exactly as before.
 
 Approve to ship.
