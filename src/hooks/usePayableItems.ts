@@ -12,6 +12,7 @@
 
 import { useMemo } from 'react';
 import type { TripPayment } from '@/services/tripPaymentsAPI';
+import { estimateCostSync, isLikelyFreePublicVenue } from '@/lib/cost-estimation';
 
 export interface PayableSubItem {
   id: string;
@@ -54,6 +55,10 @@ interface PayableItemsInput {
       name?: string;
       type?: string;
       category?: string;
+      priceLevel?: number;
+      price_level?: number;
+      cost?: any;
+      explicitCost?: number;
     }>;
   }>;
   flightSelection?: {
@@ -69,11 +74,12 @@ interface PayableItemsInput {
   } | null;
   travelers: number;
   payments: TripPayment[];
-  /** Kept in signature for back-compat; no longer used. */
   budgetTier?: string;
   destination?: string;
   destinationCountry?: string;
   activityCosts?: ActivityCostRow[] | null;
+  /** When false, suppress canonical hotel/flight rows to avoid flashing duplicates before payments load. */
+  paymentsLoaded?: boolean;
 }
 
 const TRANSIT_CATEGORIES = new Set([
@@ -98,6 +104,10 @@ export function usePayableItems({
   travelers,
   payments,
   activityCosts,
+  budgetTier,
+  destination,
+  destinationCountry,
+  paymentsLoaded = true,
 }: PayableItemsInput): PayableItemsResult {
   // Build a lookup: activity_id -> display name from JSON itinerary
   const activityNameById = useMemo(() => {
@@ -112,12 +122,15 @@ export function usePayableItems({
     return map;
   }, [days]);
 
+  const isManualId = (id: unknown): id is string =>
+    typeof id === 'string' && /^manual[-_]/i.test(id.trim());
+
   const hasManualHotel = useMemo(
-    () => payments.some(p => p.item_type === 'hotel' && typeof p.item_id === 'string' && p.item_id.startsWith('manual-')),
+    () => payments.some(p => p.item_type === 'hotel' && isManualId(p.item_id)),
     [payments]
   );
   const hasManualFlight = useMemo(
-    () => payments.some(p => p.item_type === 'flight' && typeof p.item_id === 'string' && p.item_id.startsWith('manual-')),
+    () => payments.some(p => p.item_type === 'flight' && isManualId(p.item_id)),
     [payments]
   );
 
@@ -126,7 +139,8 @@ export function usePayableItems({
 
     // ─── Flight from selection (UI source) ───
     // Skip canonical flight if user has a manual flight override (avoids double-count).
-    const flightTotal = hasManualFlight ? 0 : (
+    // Also suppress until payments load to prevent a brief duplicate flash.
+    const flightTotal = (hasManualFlight || !paymentsLoaded) ? 0 : (
       flightSelection?.totalPrice
       || (flightSelection?.legs?.reduce((s, l) => s + (l?.price || 0), 0) || 0)
       || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0))
@@ -150,7 +164,7 @@ export function usePayableItems({
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
       });
-    } else if (activityCosts?.length && !hasManualFlight) {
+    } else if (activityCosts?.length && !hasManualFlight && paymentsLoaded) {
       const flightRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'flight' && r.day_number === 0);
       if (flightRow && flightRow.cost_per_person_usd > 0) {
         const flightId = 'flight-selection';
@@ -172,7 +186,7 @@ export function usePayableItems({
     }
 
     // ─── Hotel from selection ───
-    if (!hasManualHotel && (hotelSelection?.totalPrice || hotelSelection?.pricePerNight)) {
+    if (paymentsLoaded && !hasManualHotel && (hotelSelection?.totalPrice || hotelSelection?.pricePerNight)) {
       const hotelId = 'hotel-selection';
       const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
       const nights = Math.max(1, days.length - 1);
@@ -190,7 +204,7 @@ export function usePayableItems({
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
       });
-    } else if (activityCosts?.length && !hasManualHotel) {
+    } else if (paymentsLoaded && activityCosts?.length && !hasManualHotel) {
       // Fallback: hotel cost stored as day_number=0 row
       const hotelRow = activityCosts.find(r => (r.category || '').toLowerCase() === 'hotel' && r.day_number === 0);
       if (hotelRow && hotelRow.cost_per_person_usd > 0) {
@@ -215,7 +229,7 @@ export function usePayableItems({
     // ─── Manual entries from payments (flight/hotel + new categories) ───
     const addManualGroups = (itemType: PayableItemType) => {
       const manualPayments = payments.filter(p =>
-        p.item_type === itemType && p.item_id.startsWith('manual-')
+        p.item_type === itemType && isManualId(p.item_id)
       );
       const groups = new Map<string, TripPayment[]>();
       manualPayments.forEach(p => {
@@ -325,9 +339,122 @@ export function usePayableItems({
     // Manual activity expenses
     addManualGroups('activity');
 
-    return result;
-    // travelers retained in deps for callers; not used directly because num_travelers is on the row
-  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, hasManualHotel, hasManualFlight]);
+    // ─── JSON-walk fallback: surface every itinerary activity not already in result ───
+    // The activity_costs DB table only holds rows that the cost pipeline has processed.
+    // Without this fallback, anything not yet costed (or stored as $0) silently disappears
+    // from the Payments tab, even though users see the activity on its day card.
+    const FREE_CATEGORIES = new Set([
+      'accommodation', 'hotel', 'stay', 'check-in', 'checkout', 'check-out',
+      'flight', 'departure', 'arrival',
+    ]);
+    const seenActivityIds = new Set(
+      result
+        .filter(r => r.type === 'activity' && !r.groupKind)
+        .map(r => r.id.replace(/_d\d+$/, ''))
+    );
+    const walkTransitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
+
+    for (const day of days) {
+      for (const a of day.activities) {
+        if (!a?.id || seenActivityIds.has(a.id)) continue;
+        const cat = (a.category || a.type || 'activity').toLowerCase();
+        if (FREE_CATEGORIES.has(cat)) continue;
+
+        // Free-public-venue heuristic: skip silently
+        const looksFree = isLikelyFreePublicVenue({
+          title: a.title || a.name,
+          category: cat,
+        });
+        if (looksFree) continue;
+
+        const explicit = typeof a.cost === 'number' ? a.cost
+          : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
+          : (typeof a.explicitCost === 'number' ? a.explicitCost : undefined);
+
+        const est = estimateCostSync({
+          category: cat,
+          title: a.title || a.name,
+          city: destination,
+          country: destinationCountry,
+          travelers,
+          budgetTier: (budgetTier as any) || 'moderate',
+          priceLevel: a.priceLevel ?? a.price_level,
+          explicitCost: explicit,
+        });
+        const cents = Math.round((est?.amount || 0) * 100);
+        if (cents <= 0) continue;
+
+        if (TRANSIT_CATEGORIES.has(cat)) {
+          const bucket = walkTransitByDay.get(day.dayNumber) || { totalCents: 0, subItems: [] };
+          bucket.subItems.push({
+            id: a.id,
+            name: a.title || a.name || 'Local transit',
+            amountCents: cents,
+          });
+          bucket.totalCents += cents;
+          walkTransitByDay.set(day.dayNumber, bucket);
+          continue;
+        }
+
+        const compositeId = `${a.id}_d${day.dayNumber}`;
+        const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === compositeId);
+        const assignedIds = activityPayments
+          .map(p => (p as any)?.assigned_member_id)
+          .filter(Boolean) as string[];
+        result.push({
+          id: compositeId,
+          type: 'activity',
+          name: a.title || a.name || 'Activity',
+          amountCents: cents,
+          dayNumber: day.dayNumber,
+          payment: activityPayments[0],
+          allPayments: activityPayments,
+          assignedMemberId: assignedIds[0],
+          assignedMemberIds: [...new Set(assignedIds)],
+        });
+      }
+    }
+
+    // Merge walk-derived transit into existing per-day rows (or emit new ones)
+    for (const [dayNumber, { totalCents, subItems }] of walkTransitByDay) {
+      const groupId = `transit-d${dayNumber}`;
+      const existing = result.find(r => r.id === groupId);
+      if (existing) {
+        existing.amountCents += totalCents;
+        existing.subItems = [...(existing.subItems || []), ...subItems];
+      } else {
+        const groupPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === groupId);
+        const assignedIds = groupPayments.map(p => (p as any)?.assigned_member_id).filter(Boolean) as string[];
+        result.push({
+          id: groupId,
+          type: 'activity',
+          name: `Local transit — Day ${dayNumber}`,
+          amountCents: totalCents,
+          dayNumber,
+          payment: groupPayments[0],
+          allPayments: groupPayments,
+          assignedMemberId: assignedIds[0],
+          assignedMemberIds: [...new Set(assignedIds)],
+          subItems,
+          groupKind: 'transit',
+        });
+      }
+    }
+
+    // Manual activity expenses
+    addManualGroups('activity');
+
+    // ─── Final dedupe: ensure manual hotel/flight overrides win over canonical rows ───
+    const hasManualHotelItem = result.some(r => r.type === 'hotel' && isManualId(r.id));
+    const hasManualFlightItem = result.some(r => r.type === 'flight' && isManualId(r.id));
+    const deduped = result.filter(r => {
+      if (r.type === 'hotel' && r.id === 'hotel-selection' && hasManualHotelItem) return false;
+      if (r.type === 'flight' && r.id === 'flight-selection' && hasManualFlightItem) return false;
+      return true;
+    });
+
+    return deduped;
+  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, hasManualHotel, hasManualFlight, paymentsLoaded, budgetTier, destination, destinationCountry]);
 
   const totalCents = useMemo(() => items.reduce((sum, i) => sum + i.amountCents, 0), [items]);
   const essentialItems = useMemo(() => items.filter(i => i.type === 'flight' || i.type === 'hotel'), [items]);
