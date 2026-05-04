@@ -135,7 +135,17 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       const isPaidExperience = activity.booking_required ||
         /\b(tour|guided|ticket|admission|entry|botanical|bot[âa]nico)\b/i.test(allText);
 
-      if (ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test(allText)) && !isPaidExperience) {
+      // Categories that are NEVER free regardless of name patterns.
+      // A restaurant called "La Fontaine de Belleville" must not be tagged a free
+      // fountain venue; "Lunch at Chez Janou" must not be tagged free because of
+      // "place" wording, etc. Dining is always paid.
+      const PAID_CATEGORIES = new Set([
+        'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner',
+        'cafe', 'coffee', 'bar', 'nightlife', 'spa', 'wellness',
+      ]);
+      const isPaidCategory = PAID_CATEGORIES.has(category);
+
+      if (ALWAYS_FREE_VENUE_PATTERNS.some(p => p.test(allText)) && !isPaidExperience && !isPaidCategory) {
         console.log(`[repair-trip-costs] FREE VENUE CHECK: "${title}" — forcing $0`);
         rows.push({
           trip_id: tripId,
