@@ -385,9 +385,13 @@ export function usePayableItems({
         });
         if (looksFree) continue;
 
-        const explicit = typeof a.cost === 'number' ? a.cost
+        const explicitRaw = typeof a.cost === 'number' ? a.cost
           : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
           : (typeof a.explicitCost === 'number' ? a.explicitCost : undefined);
+        // Treat explicit 0 as "no cost recorded — please estimate". A value of
+        // exactly $0 on a paid category (shopping/dining/activity) is almost
+        // always a missing-data placeholder, not a confirmed free experience.
+        const explicit = (typeof explicitRaw === 'number' && explicitRaw > 0) ? explicitRaw : undefined;
 
         const est = estimateCostSync({
           category: cat,
