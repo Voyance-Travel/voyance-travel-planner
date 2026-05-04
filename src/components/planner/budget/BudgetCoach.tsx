@@ -142,6 +142,8 @@ export function BudgetCoach({
   itineraryDays,
   travelers = 1,
   onApplySuggestion,
+  protectedCategories = [],
+  onProtectedCategoriesChange,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
@@ -149,7 +151,33 @@ export function BudgetCoach({
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [allProtected, setAllProtected] = useState(false);
   const fetchedRef = useRef(false);
+
+  // Dismissed activity IDs — persisted in localStorage so they survive
+  // page reloads but are device-local (no DB round-trip needed).
+  const dismissedStorageKey = `budget-coach:dismissed:${tripId}`;
+  const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem(dismissedStorageKey);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const persistDismissed = useCallback(
+    (next: string[]) => {
+      setDismissedIds(next);
+      try {
+        window.localStorage.setItem(dismissedStorageKey, JSON.stringify(next));
+      } catch {
+        /* quota or private mode — ignore */
+      }
+    },
+    [dismissedStorageKey]
+  );
 
   const gapCents = currentTotalCents - budgetTargetCents;
   const isOverBudget = gapCents > 0;
