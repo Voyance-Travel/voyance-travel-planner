@@ -592,32 +592,45 @@ export function BudgetCoach({
                           </div>
                         </div>
 
-                        {/* Apply button or locked notice */}
+                        {/* Apply button + dismiss, or locked notice */}
                         {isLocked ? (
                           <span className="flex-shrink-0 flex items-center gap-1 text-xs text-muted-foreground italic">
                             <Lock className="h-3 w-3" />
                             Locked
                           </span>
                         ) : (
-                          <Button
-                            variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : 'default'}
-                            size="sm"
-                            disabled={isApplied}
-                            onClick={() => handleApply(s)}
-                            className={cn(
-                              'flex-shrink-0',
-                              isApplied && 'text-emerald-600 dark:text-emerald-400'
+                          <div className="flex-shrink-0 flex items-center gap-1">
+                            <Button
+                              variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : 'default'}
+                              size="sm"
+                              disabled={isApplied}
+                              onClick={() => handleApply(s)}
+                              className={cn(
+                                isApplied && 'text-emerald-600 dark:text-emerald-400'
+                              )}
+                            >
+                              {isApplied ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5 mr-1" />
+                                  Applied
+                                </>
+                              ) : (
+                                'Apply'
+                              )}
+                            </Button>
+                            {!isApplied && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => dismissSuggestion(s.activity_id)}
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                aria-label="Don't suggest this swap again"
+                                title="Don't suggest this again"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
                             )}
-                          >
-                            {isApplied ? (
-                              <>
-                                <Check className="h-3.5 w-3.5 mr-1" />
-                                Applied
-                              </>
-                            ) : (
-                              'Apply'
-                            )}
-                          </Button>
+                          </div>
                         )}
                       </motion.div>
                     );
