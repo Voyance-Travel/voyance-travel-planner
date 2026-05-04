@@ -10121,9 +10121,38 @@ function DayCard({
                       </>
                     )}
 
-                    <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
-                      Day Total: {formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}{travelers > 1 ? '/pp' : ''}
-                    </span>
+                    {transitSubtotal > 0 ? (
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary cursor-default">
+                            Day Total: {formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}{travelers > 1 ? '/pp' : ''}
+                            <span className="ml-1.5 text-[11px] font-normal text-primary/70">
+                              (incl. {formatCurrency(Math.floor(displayCost(transitSubtotal)), tripCurrency)} transit)
+                            </span>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          <div className="text-xs space-y-0.5 min-w-[140px]">
+                            <div className="flex justify-between gap-3">
+                              <span className="text-muted-foreground">Activities</span>
+                              <span className="font-medium tabular-nums">{formatCurrency(Math.floor(displayCost(visibleActivitiesSubtotal)), tripCurrency)}</span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                              <span className="text-muted-foreground">Transit & transfers</span>
+                              <span className="font-medium tabular-nums">{formatCurrency(Math.floor(displayCost(transitSubtotal)), tripCurrency)}</span>
+                            </div>
+                            <div className="flex justify-between gap-3 pt-0.5 mt-0.5 border-t border-border">
+                              <span className="font-semibold">Day total{travelers > 1 ? ' /pp' : ''}</span>
+                              <span className="font-semibold tabular-nums">{formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}</span>
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary">
+                        Day Total: {formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}{travelers > 1 ? '/pp' : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
