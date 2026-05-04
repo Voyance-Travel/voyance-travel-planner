@@ -365,6 +365,16 @@ export function usePayableItems({
           .map(p => (p as any)?.assigned_member_id)
           .filter(Boolean) as string[];
 
+        // Orphan rescue: when activity_id no longer exists in the itinerary
+        // JSON, pop a name from the (day, category) queue before falling back
+        // to the generic label. Keeps "Dinner at Sacré Fleur" visible after
+        // a quality-pass swap that re-minted the activity uuid.
+        let rescuedName = '';
+        if (!lookup) {
+          const queue = orphanRescueByDayCat.get(`${row.day_number}|${cat}`);
+          if (queue && queue.length > 0) rescuedName = queue.shift() as string;
+        }
+
         // If we don't have a JSON name, fall back to a category-derived label.
         // This avoids leaking an opaque UUID into the UI.
         const fallbackLabel =
@@ -375,7 +385,7 @@ export function usePayableItems({
         result.push({
           id: compositeId,
           type: 'activity',
-          name: lookup?.name || fallbackLabel,
+          name: lookup?.name || rescuedName || fallbackLabel,
           amountCents: cents,
           dayNumber: row.day_number,
           payment: activityPayments[0],
