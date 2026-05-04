@@ -152,9 +152,12 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     totalCents = Math.max(0, totalCents);
     paidTotal += manualPaidCents;
 
-    // Compute delta against the previous fetch (skip on initial load).
+    // Compute delta against the previous fetch (skip on initial load and
+    // during the brief stabilization window where hydration / logistics-sync
+    // can legitimately move the total without it being a user-perceived change).
     const prev = prevTotalRef.current;
-    if (!initialLoadRef.current && prev != null && prev !== totalCents) {
+    const withinStabilization = Date.now() - mountedAtRef.current < STABILIZATION_MS;
+    if (!initialLoadRef.current && !withinStabilization && prev != null && prev !== totalCents) {
       const delta: FinancialDelta = {
         previousTotalCents: prev,
         deltaCents: totalCents - prev,
