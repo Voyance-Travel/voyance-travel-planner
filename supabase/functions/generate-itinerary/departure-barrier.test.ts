@@ -53,7 +53,7 @@ Deno.test("terminalCleanup: never removes user-locked activities", () => {
   const activities: any[] = [
     { id: "1", title: "Checkout", category: "accommodation", startTime: "10:00", endTime: "10:30" },
     { id: "2", title: "Transfer to Airport", category: "transport", startTime: "11:00", endTime: "11:45" },
-    { id: "3", title: "Locked goodbye lunch", category: "dining", startTime: "12:00", endTime: "13:00", locked: true },
+    { id: "3", title: "Locked farewell viewpoint", category: "activity", startTime: "12:00", endTime: "13:00", locked: true },
     { id: "4", title: "Departure Flight", category: "flight", startTime: "15:00", endTime: "17:00" },
   ];
 
