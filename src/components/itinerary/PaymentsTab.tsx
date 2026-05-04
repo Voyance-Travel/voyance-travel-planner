@@ -174,8 +174,29 @@ export function PaymentsTab({
       }
     }
     
+    // Pre-populate placeholder guests up to the trip's traveler count so a
+    // 2-guest trip already has both seats visible without an email invite.
+    // Synthetic IDs (`guest-N`) are deterministic so split assignments stay
+    // stable across renders. They materialize into a real trip_members row
+    // on first assignment via resolveRealMemberId().
+    const desiredCount = Math.max(1, travelers || 1);
+    let guestIndex = 1;
+    while (merged.length < desiredCount) {
+      guestIndex += 1;
+      merged.push({
+        id: `guest-${guestIndex}`,
+        tripId,
+        userId: null,
+        email: `guest-${guestIndex}@placeholder.local`,
+        name: `Guest ${guestIndex}`,
+        role: 'attendee' as const,
+        invitedAt: new Date().toISOString(),
+        acceptedAt: new Date().toISOString(),
+      });
+    }
+    
     return merged;
-  }, [rawTripMembers, collaborators, ownerId, ownerName, tripId]);
+  }, [rawTripMembers, collaborators, ownerId, ownerName, tripId, travelers]);
 
   // Fetch payments — with optional delay for DB write consistency
   const fetchPayments = useCallback(async (delayMs = 0) => {
