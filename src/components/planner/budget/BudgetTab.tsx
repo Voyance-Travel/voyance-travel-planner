@@ -649,45 +649,89 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-           {/* Category sync warning removed — totals now come from payable items */}
-            {allocations.map((alloc) => {
-              const allocated = alloc.allocatedCents;
-              const used = alloc.usedCents;
-              const percent = allocated > 0 ? Math.min((used / allocated) * 100, 100) : 0;
-              const isOver = used > allocated;
-
+            {/* Category sync warning removed — totals now come from payable items */}
+            {(() => {
+              const fixedRows = allocations.filter((a) => a.kind === 'fixed');
+              const discretionaryRows = allocations.filter((a) => a.kind !== 'fixed');
               return (
-                <div key={alloc.category} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className={cn("w-6 h-6 rounded flex items-center justify-center", categoryColors[alloc.category])}>
-                        <span className="text-white">{categoryIcons[alloc.category]}</span>
+                <>
+                  {fixedRows.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fixed Costs</span>
+                        <span className="text-xs text-muted-foreground">Tracked against your trip total</span>
                       </div>
-                      <span className="font-medium">{categoryLabels[alloc.category]}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {alloc.percent}%
-                      </Badge>
+                      {fixedRows.map((alloc) => (
+                        <div key={alloc.category} className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div className={cn("w-6 h-6 rounded flex items-center justify-center", categoryColors[alloc.category])}>
+                                <span className="text-white">{categoryIcons[alloc.category]}</span>
+                              </div>
+                              <span className="font-medium">{categoryLabels[alloc.category]}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-right">
+                              <span className={cn("font-medium", alloc.exceedsBudget && "text-destructive")}>
+                                {formatCurrency(alloc.usedCents)}
+                              </span>
+                              {typeof alloc.shareOfBudgetPercent === 'number' && (
+                                <span className="text-xs text-muted-foreground">
+                                  ({alloc.shareOfBudgetPercent}% of total)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {alloc.exceedsBudget && (
+                            <p className="text-xs text-destructive pl-8">
+                              {categoryLabels[alloc.category]} exceeds your trip budget. Raise your total or toggle "Include {alloc.category === 'hotel' ? 'Hotel' : 'Flight'} in Budget" off below.
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                      {discretionaryRows.length > 0 && (
+                        <div className="pt-2 border-t border-border">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Discretionary</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 text-right">
-                      <span className={cn(
-                        "font-medium",
-                        isOver && "text-destructive"
-                      )}>
-                        {formatCurrency(used)}
-                      </span>
-                      <span className="text-muted-foreground">/</span>
-                      <span className="text-muted-foreground">
-                        {formatCurrency(allocated)}
-                      </span>
-                    </div>
-                  </div>
-                  <Progress 
-                    value={percent} 
-                    className={cn("h-2", isOver && "[&>div]:bg-destructive")}
-                  />
-                </div>
+                  )}
+                  {discretionaryRows.map((alloc) => {
+                    const allocated = alloc.allocatedCents;
+                    const used = alloc.usedCents;
+                    const percent = allocated > 0 ? Math.min((used / allocated) * 100, 100) : 0;
+                    const isOver = used > allocated;
+                    return (
+                      <div key={alloc.category} className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className={cn("w-6 h-6 rounded flex items-center justify-center", categoryColors[alloc.category])}>
+                              <span className="text-white">{categoryIcons[alloc.category]}</span>
+                            </div>
+                            <span className="font-medium">{categoryLabels[alloc.category]}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {alloc.percent}%
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 text-right">
+                            <span className={cn("font-medium", isOver && "text-destructive")}>
+                              {formatCurrency(used)}
+                            </span>
+                            <span className="text-muted-foreground">/</span>
+                            <span className="text-muted-foreground">
+                              {formatCurrency(allocated)}
+                            </span>
+                          </div>
+                        </div>
+                        <Progress
+                          value={percent}
+                          className={cn("h-2", isOver && "[&>div]:bg-destructive")}
+                        />
+                      </div>
+                    );
+                  })}
+                </>
               );
-            })}
+            })()}
             {/* Authoritative total from itinerary */}
             {snapshot.tripTotalCents > 0 && (
               <div className="flex items-center justify-between pt-3 border-t border-border text-sm">
