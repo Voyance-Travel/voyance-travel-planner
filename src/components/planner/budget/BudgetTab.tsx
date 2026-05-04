@@ -693,6 +693,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                       {discretionaryRows.length > 0 && (
                         <div className="pt-2 border-t border-border">
                           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Discretionary</span>
+                          {discretionaryRows.some((r) => r.discretionaryUnderwater) && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Fixed costs have absorbed your full trip budget. Targets below are calculated against your original total — raise it or toggle a fixed cost off to free up the discretionary pool.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
