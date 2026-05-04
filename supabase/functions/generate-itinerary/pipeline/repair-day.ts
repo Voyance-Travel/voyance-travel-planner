@@ -2897,8 +2897,13 @@ function repairDepartureSequence(
     if (cat === 'flight' || t.includes('flight departure') || t.includes('departure flight')) return 'flight';
     if (t.includes('airport departure') || t.includes('airport security') || t.includes('security and boarding') ||
         t.includes('check-in at airport') || t.includes('departure and security')) return 'airport-security';
-    if ((cat === 'transport' || cat === 'transit') &&
-        (t.includes('airport') || t.includes('head to airport') || t.includes('taxi to airport'))) return 'airport-transport';
+    // Any logistics card heading to the airport/station/terminal — including
+    // generic "Departure Transfer" or "Heading Home" — is a hard barrier.
+    if ((cat === 'transport' || cat === 'transit' || cat === 'logistics') &&
+        (t.includes('airport') || t.includes('head to airport') || t.includes('taxi to airport') ||
+         t.includes('transfer to') || t.includes('to the airport') || t.includes('to the station') ||
+         t.includes('to the terminal') || t.includes('departure transfer') ||
+         /\bheading?\s+home\b/.test(t) || /\bdepart(?:ure|ing|s)?\b/.test(t))) return 'airport-transport';
     if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) return 'checkout';
     if ((cat === 'dining' || cat === 'restaurant' || cat === 'food') &&
         (t.includes('breakfast') || t.includes('morning meal'))) return 'breakfast';
