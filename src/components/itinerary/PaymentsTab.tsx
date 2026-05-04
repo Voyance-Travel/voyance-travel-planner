@@ -16,8 +16,18 @@ import {
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
   CheckCircle2, Users, ChevronDown, Receipt,
   Wallet, X, User, Plus, UserPlus, AlertCircle, Split,
-  Utensils, Car, ShoppingBag
+  Utensils, Car, ShoppingBag, Trash2
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -109,6 +119,8 @@ export function PaymentsTab({
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<PayableItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Listen for cross-tab "Add expense" requests from BudgetTab's Misc empty-state.
   useEffect(() => {
@@ -534,6 +546,25 @@ export function PaymentsTab({
     }
   };
 
+  const handleDeleteExpense = async (item: PayableItem) => {
+    if (item.allPayments.length === 0) return;
+    setDeleting(true);
+    try {
+      const ids = item.allPayments.map(p => p.id);
+      const { error } = await supabase.from('trip_payments').delete().in('id', ids);
+      if (error) throw error;
+      toast.success('Expense deleted');
+      setDeleteTarget(null);
+      await fetchPayments(150);
+      window.dispatchEvent(new CustomEvent('booking-changed'));
+    } catch (err) {
+      console.error('Error deleting expense:', err);
+      toast.error('Failed to delete expense');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   /**
    * Resolve a member ID that might be a synthetic "collab-xxx" ID
    * to a real trip_members row ID. Creates a trip_members row if needed.
@@ -868,6 +899,18 @@ export function PaymentsTab({
             >
               <Check className="h-3 w-3 mr-1" />
               Mark Paid
+            </Button>
+          )}
+
+          {item.allPayments.length > 0 && item.allPayments.every(p => p.external_provider === 'manual') && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              onClick={() => setDeleteTarget(item)}
+              title="Delete expense"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
@@ -1770,6 +1813,31 @@ export function PaymentsTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Expense Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && !deleting && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this expense?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? `${deleteTarget.name} — ${formatCurrency(deleteTarget.amountCents)}. This can't be undone.` : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget) handleDeleteExpense(deleteTarget);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Journey Spending Summary — cross-leg overview for linked trips */}
       {journeyId && (
