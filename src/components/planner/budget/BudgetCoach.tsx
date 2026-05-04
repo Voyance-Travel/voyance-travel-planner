@@ -157,6 +157,20 @@ export function BudgetCoach({
   const [allProtected, setAllProtected] = useState(false);
   const fetchedRef = useRef(false);
 
+  // ⚠️ Hook-order safety: these two hooks must be declared BEFORE any
+  // conditional `return` below (e.g. the on-target early return). Otherwise
+  // toggling between under/over budget changes the hook count and triggers
+  // React error #310, which crashes the entire Budget tab.
+  const bumpDismissKey = `budget-coach:bump-dismissed:${tripId}`;
+  const [bumpDismissedAtTotal, setBumpDismissedAtTotal] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem(bumpDismissKey);
+      return raw ? Number(raw) : null;
+    } catch { return null; }
+  });
+  const [isBumping, setIsBumping] = useState(false);
+
   // Dismissed activity IDs — persisted in localStorage so they survive
   // page reloads but are device-local (no DB round-trip needed).
   const dismissedStorageKey = `budget-coach:dismissed:${tripId}`;
