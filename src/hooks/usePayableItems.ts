@@ -538,6 +538,7 @@ export function usePayableItems({
         });
       }
     }
+    } // end estimateMissingCosts
 
     // Merge walk-derived transit into existing per-day rows (or emit new ones)
     for (const [dayNumber, { totalCents, subItems }] of walkTransitByDay) {
