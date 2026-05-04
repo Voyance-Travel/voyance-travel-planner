@@ -1528,9 +1528,9 @@ export function EditorialItinerary({
     const filtered = (!hasFlight && day.dayNumber === 1)
       ? day.activities.filter(a => !isPlaceholderArrival(a))
       : day.activities;
-    const baseActivities = day.dayNumber === 1
+    const baseActivities = (day.dayNumber === 1
       ? filtered.map(relabelPreCheckIn)
-      : filtered;
+      : filtered) as EditorialActivity[];
     let updatedActivities = [...baseActivities];
 
     // === Transition day: inject travel summary at top ===
