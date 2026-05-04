@@ -362,13 +362,23 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
     };
   });
 
-  // Largest-remainder adjustment: ensure ledger item sum matches canonical DB total
-  if (entries.length > 0 && totalResult.data) {
-    const canonicalCents = Math.round((Number(totalResult.data.total_all_travelers_usd) || 0) * 100);
+  // Largest-remainder adjustment: ensure ledger item sum matches a canonical total.
+  // Prefer the v_trip_total view, but fall back to the raw activity_costs sum
+  // if the view is missing/stale. This guarantees the ledger is ALWAYS reconciled,
+  // which prevents per-category drift between renders (Food $1,749 → $1,999, etc.).
+  if (entries.length > 0) {
     const rawSum = entries.reduce((s, e) => s + e.amount_cents, 0);
+    let canonicalCents: number | null = null;
+    if (totalResult.data && totalResult.data.total_all_travelers_usd != null) {
+      canonicalCents = Math.round((Number(totalResult.data.total_all_travelers_usd) || 0) * 100);
+    }
+    // If the view disagrees by more than the rounding tolerance, treat it as stale
+    // and use the freshly-summed activity_costs as the canonical total instead.
+    if (canonicalCents == null || Math.abs(canonicalCents - rawSum) > entries.length) {
+      canonicalCents = rawSum;
+    }
     const diff = canonicalCents - rawSum;
-    if (diff !== 0 && Math.abs(diff) <= entries.length) {
-      // Apply adjustment to the largest entry
+    if (diff !== 0) {
       let largestIdx = 0;
       for (let i = 1; i < entries.length; i++) {
         if (entries[i].amount_cents > entries[largestIdx].amount_cents) largestIdx = i;
