@@ -8,6 +8,8 @@
  * Do not manually multiply by travelers elsewhere.
  */
 
+import { convertToUSD, hasRate } from './currency';
+
 export type CostBasis = 'per_person' | 'flat' | 'per_room';
 
 export interface ActivityCostInput {
