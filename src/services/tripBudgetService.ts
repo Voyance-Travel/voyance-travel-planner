@@ -38,6 +38,12 @@ export interface TripBudgetSettings {
   budget_warning_threshold: WarningThreshold;
   budget_allocations: BudgetAllocations;
   travelers: number;
+  /**
+   * Categories the Budget Coach must never propose swaps for. `null` means
+   * never set — the UI seeds defaults from trip DNA. Empty array means the
+   * user explicitly cleared all protections (do not re-seed).
+   */
+  coach_protected_categories: string[] | null;
 }
 
 /**
