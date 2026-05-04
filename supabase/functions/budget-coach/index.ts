@@ -26,6 +26,37 @@ interface RequestBody {
   current_total_cents: number;
   currency: string;
   destination?: string;
+  /** User-protected category labels (e.g. ["Dining", "Hotels"]). */
+  protected_categories?: string[];
+  /** Activity IDs the user has explicitly dismissed via "Don't suggest". */
+  dismissed_activity_ids?: string[];
+}
+
+// ─── Category normalization ─────────────────────────────────────
+// Maps user-facing labels → the set of raw category/type strings the AI
+// itinerary uses. Keep this list in lockstep with the client's CATEGORY_GROUPS
+// in src/components/planner/budget/BudgetCoach.tsx.
+const CATEGORY_GROUPS: Record<string, string[]> = {
+  Dining: ["dining", "breakfast", "lunch", "dinner", "brunch", "cafe", "café", "coffee", "food", "restaurant", "meal", "nightcap", "drinks", "bar"],
+  Hotels: ["hotel", "accommodation", "lodging", "stay", "resort", "check-in", "check-out", "bag-drop"],
+  Tours: ["tour", "guided_tour", "guided tour", "experience", "attraction", "excursion"],
+  Transit: ["transit", "transport", "transportation", "taxi", "train", "flight", "transfer", "metro", "subway"],
+  Activities: ["activity", "sightseeing", "museum", "gallery", "culture", "wellness", "shopping", "park", "landmark"],
+};
+
+function activityMatchesProtectedGroup(
+  activity: Activity,
+  protectedLabels: string[]
+): boolean {
+  if (!protectedLabels?.length) return false;
+  const cat = (activity.category || "").toLowerCase().trim();
+  if (!cat) return false;
+  for (const label of protectedLabels) {
+    const tokens = CATEGORY_GROUPS[label];
+    if (!tokens) continue;
+    if (tokens.some((t) => cat.includes(t))) return true;
+  }
+  return false;
 }
 
 serve(async (req) => {
@@ -34,8 +65,15 @@ serve(async (req) => {
   }
 
   try {
-    const { itinerary_days, budget_target_cents, current_total_cents, currency, destination } =
-      (await req.json()) as RequestBody;
+    const {
+      itinerary_days,
+      budget_target_cents,
+      current_total_cents,
+      currency,
+      destination,
+      protected_categories = [],
+      dismissed_activity_ids = [],
+    } = (await req.json()) as RequestBody;
 
     const gap_cents = current_total_cents - budget_target_cents;
     if (gap_cents <= 0) {
@@ -47,6 +85,37 @@ serve(async (req) => {
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    // ─── Pre-filter: drop protected & dismissed activities entirely ───
+    const dismissedSet = new Set(dismissed_activity_ids.map(String));
+    const protectedActivityIds = new Set<string>();
+    const filteredDays = itinerary_days.map((day) => ({
+      ...day,
+      activities: (day.activities ?? []).filter((a) => {
+        if (dismissedSet.has(String(a.id))) return false;
+        if (activityMatchesProtectedGroup(a, protected_categories)) {
+          protectedActivityIds.add(String(a.id));
+          return false;
+        }
+        return true;
+      }),
+    }));
+
+    const remainingActivityCount = filteredDays.reduce(
+      (n, d) => n + d.activities.length,
+      0
+    );
+
+    if (remainingActivityCount === 0) {
+      return new Response(
+        JSON.stringify({
+          suggestions: [],
+          on_target: false,
+          all_protected: true,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // ─── Look up cost_reference for this destination to ground AI suggestions ───
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -70,8 +139,8 @@ serve(async (req) => {
       }
     }
 
-    // Build a concise itinerary summary for the prompt
-    const itinerarySummary = itinerary_days
+    // Build a concise itinerary summary for the prompt (post-filter)
+    const itinerarySummary = filteredDays
       .map((day) => {
         const acts = day.activities
           .map(
@@ -79,13 +148,21 @@ serve(async (req) => {
               `  - [${a.id}] ${a.title} (${a.category || "activity"}) — ${currency} ${(a.cost / 100).toFixed(0)}`
           )
           .join("\n");
-        return `Day ${day.dayNumber}${day.date ? ` (${day.date})` : ""}:\n${acts || "  (no activities)"}`;
+        return `Day ${day.dayNumber}${day.date ? ` (${day.date})` : ""}:\n${acts || "  (no swappable activities)"}`;
       })
       .join("\n\n");
 
     const budgetTarget = (budget_target_cents / 100).toFixed(0);
     const currentTotal = (current_total_cents / 100).toFixed(0);
     const gap = (gap_cents / 100).toFixed(0);
+
+    // Build the protected-categories clause for the prompt
+    const protectedClause = protected_categories.length > 0
+      ? `\n\nPROTECTED CATEGORIES — DO NOT TOUCH:
+The user has marked these categories as non-negotiable for this trip: ${protected_categories.join(", ")}.
+Items in these categories have already been removed from the itinerary you see below — do NOT invent suggestions for them, and do NOT propose swaps in these categories under any other guise (e.g. don't suggest a cheaper restaurant if Dining is protected, even if you remember an item from earlier context).
+This trip's identity is built around those categories. Suggesting swaps for them is a hard failure.`
+      : "";
 
     const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience.
 
@@ -101,11 +178,11 @@ CRITICAL COST RULES:
 - If no reference pricing is available for a swap, use the lowest reasonable amount from the reference data for that category.
 - Your new_cost must ALWAYS be strictly LESS than the current_cost. If you can't find a cheaper alternative, skip that item.
 - All costs are in whole currency units (e.g., 50 for $50), NOT cents.
-- NEVER output a cost number without it being sourced from the reference pricing data.`;
+- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
-Here is the full itinerary:
+Here is the full itinerary (items in protected categories have been removed):
 
 ${itinerarySummary}
 ${costRefLookup}
@@ -264,7 +341,10 @@ Rules:
       }
     }
 
-    // Build a lookup of original activity costs (already in cents from the caller)
+    // Build a lookup of original activity costs (already in cents from the
+    // caller). Use the FULL itinerary so we can validate IDs the model returns
+    // even if they referenced a protected/dismissed item (we'll filter those
+    // out in the post-filter below).
     const activityCostCentsById = new Map<string, number>();
     for (const day of itinerary_days) {
       for (const activity of day.activities ?? []) {
@@ -275,6 +355,7 @@ Rules:
     }
 
     console.log("Activity costs (cents) from caller:", JSON.stringify(Object.fromEntries(activityCostCentsById)));
+    console.log(`Protections: categories=${JSON.stringify(protected_categories)} dismissed=${dismissed_activity_ids.length} preFilteredOut=${protectedActivityIds.size}`);
 
     // The AI is instructed to return whole-currency values (e.g. 50 for $50).
     // We simply multiply by 100 to get cents. No heuristic.
@@ -282,6 +363,19 @@ Rules:
       .map((s: any) => {
         const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
         if (rawNew === null || rawNew < 0) return null;
+
+        // POST-FILTER: drop any suggestion targeting a protected or dismissed
+        // activity (model drift safety net — the prompt should prevent this,
+        // but we guard against it anyway).
+        const sid = String(s.activity_id);
+        if (dismissedSet.has(sid)) {
+          console.log(`  → FILTERED OUT (dismissed activity ${sid})`);
+          return null;
+        }
+        if (protectedActivityIds.has(sid)) {
+          console.log(`  → FILTERED OUT (protected activity ${sid} in ${protected_categories.join(",")})`);
+          return null;
+        }
 
         // GENERIC NAME FILTER: reject vague swap names
         const swapName = (s.suggested_swap || "").toLowerCase();
@@ -303,7 +397,7 @@ Rules:
         const newCostCents = Math.round(rawNew * 100);
 
         // Use the known activity cost as ground truth (already in cents)
-        const knownCostCents = activityCostCentsById.get(String(s.activity_id));
+        const knownCostCents = activityCostCentsById.get(sid);
         const currentCostCents = knownCostCents ?? Math.round((typeof s.current_cost === "number" ? s.current_cost : 0) * 100);
 
         console.log(`Suggestion "${s.suggested_swap}": AI current=${s.current_cost}, AI new=${s.new_cost}, knownCents=${knownCostCents}, newCents=${newCostCents}, currentCents=${currentCostCents}`);
