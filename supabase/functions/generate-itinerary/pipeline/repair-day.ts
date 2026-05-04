@@ -2436,8 +2436,115 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
         return ta - tb;
       });
       repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'swapped_checkout_before_departure_transport' });
+      }
     }
-  }
+
+    // 15a-ter. TRANSIT/NEXT-VENUE COHERENCE PASS
+    // Ensure each transit card's destination matches the IMMEDIATE next non-transit
+    // activity. If the LLM emitted a transit card that names a venue 2+ stops away
+    // (e.g. "Travel to Hammam" inserted before lunch when Hammam is post-lunch),
+    // either move the transit to immediately precede its real target, or rewrite
+    // the label to point at the actual next venue.
+    {
+      const stripVerb = (t: string) =>
+        (t || '').replace(/^(?:Travel|Walk|Taxi|Drive|Bus|Metro|Ride|Transfer|Take(?:\s+(?:a|the))?)\s+to\s+/i, '').trim();
+      const norm = (s: string) =>
+        (s || '')
+          .toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/^(?:le|la|les|l'|the|à\s+la|a\s+la|el|los|las)\s+/i, '')
+          .replace(/[^a-z0-9 ]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const tokens = (s: string) => new Set(norm(s).split(' ').filter(w => w.length >= 4));
+      const overlaps = (a: string, b: string) => {
+        const na = norm(a), nb = norm(b);
+        if (!na || !nb) return false;
+        if (na.includes(nb) || nb.includes(na)) return true;
+        const ta = tokens(a), tb = tokens(b);
+        for (const w of ta) if (tb.has(w)) return true;
+        return false;
+      };
+
+      for (let i = 0; i < activities.length; i++) {
+        const transport = activities[i];
+        if (!isTransportFinal(transport)) continue;
+
+        // Resolve transport's claimed destination
+        const claimedDest = (transport.location?.name || stripVerb(transport.title || '') || '').trim();
+        if (!claimedDest) continue;
+
+        // Find the immediate next non-transport activity
+        let nextIdx = -1;
+        for (let j = i + 1; j < activities.length; j++) {
+          if (!isTransportFinal(activities[j])) { nextIdx = j; break; }
+        }
+        if (nextIdx === -1) continue;
+        const nextAct = activities[nextIdx];
+        const nextName = nextAct.location?.name || nextAct.venue_name || sanitizeTransitDestination(nextAct.title || '') || '';
+
+        if (!nextName || isPlaceholderDestination(nextName)) continue;
+        if (overlaps(claimedDest, nextName)) continue; // already consistent
+
+        // Look further ahead for an activity the transit ACTUALLY names
+        let realTargetIdx = -1;
+        for (let j = nextIdx + 1; j < activities.length; j++) {
+          if (isTransportFinal(activities[j])) continue;
+          const candName = activities[j].location?.name || activities[j].venue_name || sanitizeTransitDestination(activities[j].title || '') || '';
+          if (overlaps(claimedDest, candName)) { realTargetIdx = j; break; }
+        }
+
+        const method = transport.transportation?.method || 'transit';
+
+        if (realTargetIdx !== -1) {
+          // Case A: transit card is in the wrong slot. Move it just before the real target.
+          const target = activities[realTargetIdx];
+          const prevReal = (() => {
+            for (let k = realTargetIdx - 1; k >= 0; k--) {
+              if (k === i) continue;
+              if (!isTransportFinal(activities[k])) return activities[k];
+            }
+            return null;
+          })();
+          const oldTitle = transport.title;
+          // Recompute startTime from prev activity's end (or target.startTime - duration)
+          const dur = transport.durationMinutes || 15;
+          const prevEnd = prevReal ? parseTimeToMinutes(prevReal.endTime || '') : null;
+          const targetStart = parseTimeToMinutes(target.startTime || '') ?? null;
+          let newStart: number | null = null;
+          if (targetStart !== null) newStart = Math.max(0, targetStart - dur);
+          else if (prevEnd !== null) newStart = prevEnd;
+          if (newStart !== null) {
+            transport.startTime = minutesToHHMM(newStart);
+            transport.endTime = addMinutesToHHMM(transport.startTime, dur);
+          }
+          // Splice: remove from i, insert before realTargetIdx (account for shift)
+          const [card] = activities.splice(i, 1);
+          const insertAt = realTargetIdx > i ? realTargetIdx - 1 : realTargetIdx;
+          activities.splice(insertAt, 0, card);
+          console.warn(`[TRANSIT-COHERENCE] Moved "${oldTitle}" to precede its real target "${target.title}"`);
+          repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'transit_label_realign_move', before: oldTitle, after: card.title });
+          // Reset i so we don't skip anything
+          i = -1;
+          continue;
+        } else {
+          // Case B: rewrite label to point at the actual next venue
+          const oldTitle = transport.title;
+          transport.title = generateTransitLabel(nextAct, method);
+          transport.name = transport.title;
+          transport.location = { name: nextName, address: nextAct.location?.address || '' };
+          const fromName = (() => {
+            for (let k = i - 1; k >= 0; k--) {
+              if (!isTransportFinal(activities[k])) return activities[k].location?.name || activities[k].title || 'previous venue';
+            }
+            return 'previous venue';
+          })();
+          transport.description = `Transit from ${fromName} to ${nextName}.`;
+          console.warn(`[TRANSIT-COHERENCE] Rewrote "${oldTitle}" → "${transport.title}" to match next venue`);
+          repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'transit_label_realign_rewrite', before: oldTitle, after: transport.title });
+        }
+      }
+    }
 
 
   // --- 12. NON-FLIGHT DEPARTURE: strip airport activities ---

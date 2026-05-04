@@ -21,7 +21,9 @@ export function sanitizeText(text: string | undefined | null): string {
   if (!text) return '';
   return text
     .replace(/—/g, ' - ')
-    .replace(/–/g, '-');
+    .replace(/–/g, '-')
+    // Fix orphaned possessive artifact: "the's" / "the' s" → "the city's"
+    .replace(/\bthe'\s?s\b/gi, "the city's");
 }
 
 /**
