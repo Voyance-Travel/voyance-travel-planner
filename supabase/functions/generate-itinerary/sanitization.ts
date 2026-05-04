@@ -1064,13 +1064,13 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/\s{2,}/g, ' ')
     .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '');
 
+  // Always fix orphaned possessive "the's" / "the' s" → "the city's" (reads
+  // natural regardless of destination, avoids ugly forms like "Paris's").
+  result = result.replace(/\bthe'\s?s\b/gi, "the city's");
+
   // Replace generic "the destination" with actual city name
   if (destination) {
     result = result.replace(/\b(?:the destination|the city|this destination|this city)\b/gi, destination);
-
-    // Fix orphaned articles where city name was dropped
-    // "the's" → "Lisbon's"
-    result = result.replace(/\bthe's\b/gi, destination + "'s");
 
     // Generic orphaned "City" repair: "Explore the of Paris Museum…" → "Explore the City of Paris Museum…"
     // Only fires when followed by a capital letter (i.e. a proper noun follows).
