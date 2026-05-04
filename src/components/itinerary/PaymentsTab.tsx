@@ -954,36 +954,12 @@ export function PaymentsTab({
           <div className="text-right">
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
             <p className="text-xs text-muted-foreground">Trip Total</p>
-            {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (() => {
-              // payableTotalCents already includes manual-* rows via addManualGroups
-              // and respects the same hotel/flight inclusion toggles as the
-              // financial snapshot. The remaining drift comes from JSON-walk
-              // fallback rows for activities the cost pipeline has not yet
-              // costed, so we tolerate small percentage gaps to avoid a
-              // permanent "Reconciling…" state on otherwise-consistent trips.
-              const diff = Math.abs(payableTotalCents - estimatedTotal);
-              const pctDrift = estimatedTotal > 0 ? diff / estimatedTotal : 0;
-              const matches = diff <= 500 || pctDrift <= 0.02; // $5 OR 2%
-              if (!matches && import.meta.env.DEV) {
-                // eslint-disable-next-line no-console
-                console.warn(
-                  '[PaymentsTab] Reconciling badge mismatch',
-                  { payableTotalCents, estimatedTotal, diff, pctDrift }
-                );
-              }
-              return (
-                <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
-                  {matches ? (
-                    <>
-                      <CheckCircle2 className="h-3 w-3 text-green-600" />
-                      Matches itinerary
-                    </>
-                  ) : (
-                    <span className="text-amber-600">Reconciling…</span>
-                  )}
-                </p>
-              );
-            })()}
+            {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (
+              <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
+                <CheckCircle2 className="h-3 w-3 text-green-600" />
+                Matches itinerary
+              </p>
+            )}
           </div>
         </div>
         

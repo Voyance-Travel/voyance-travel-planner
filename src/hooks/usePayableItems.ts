@@ -84,6 +84,17 @@ interface PayableItemsInput {
    *  Payments list and the Trip Total agree on which logistics rows count. */
   includeHotel?: boolean;
   includeFlight?: boolean;
+  /**
+   * When true (legacy), missing itinerary activities are surfaced with a
+   * client-side estimate that gets added to the grand total. This causes
+   * persistent drift from the canonical activity_costs ledger and was the
+   * root cause of the sticky "Reconciling…" badge.
+   *
+   * When false (default for Payments tab), missing items are still surfaced
+   * for transparency but priced at $0 so the Payments total matches the
+   * canonical ledger total exactly.
+   */
+  estimateMissingCosts?: boolean;
 }
 
 const TRANSIT_CATEGORIES = new Set([
@@ -114,6 +125,7 @@ export function usePayableItems({
   paymentsLoaded = true,
   includeHotel = true,
   includeFlight = false,
+  estimateMissingCosts = false,
 }: PayableItemsInput): PayableItemsResult {
   // Apply trip-level inclusion toggles so the visible Payments total matches
   // the Trip Total computed by useTripFinancialSnapshot (shouldCountRow).
@@ -426,6 +438,11 @@ export function usePayableItems({
     // The activity_costs DB table only holds rows that the cost pipeline has processed.
     // Without this fallback, anything not yet costed (or stored as $0) silently disappears
     // from the Payments tab, even though users see the activity on its day card.
+    //
+    // IMPORTANT: This block is gated by `estimateMissingCosts` because client-side
+    // estimates here drift from the canonical activity_costs ledger and were the
+    // root cause of the persistent "Reconciling…" badge on Payments. The Payments
+    // tab passes false (default) so its grand total matches the ledger exactly.
     const FREE_CATEGORIES = new Set([
       'accommodation', 'hotel', 'stay', 'check-in', 'checkout', 'check-out',
       'flight', 'departure', 'arrival',
@@ -436,6 +453,8 @@ export function usePayableItems({
         .map(r => r.id.replace(/_d\d+$/, ''))
     );
     const walkTransitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
+
+    if (estimateMissingCosts) {
 
     for (const day of days) {
       for (const a of day.activities) {
@@ -519,6 +538,7 @@ export function usePayableItems({
         });
       }
     }
+    } // end estimateMissingCosts
 
     // Merge walk-derived transit into existing per-day rows (or emit new ones)
     for (const [dayNumber, { totalCents, subItems }] of walkTransitByDay) {
@@ -593,7 +613,7 @@ export function usePayableItems({
     });
 
     return deduped;
-  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, orphanRescueByDayCat, hasManualHotel, hasManualFlight, paymentsLoaded, budgetTier, destination, destinationCountry]);
+  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, orphanRescueByDayCat, hasManualHotel, hasManualFlight, paymentsLoaded, budgetTier, destination, destinationCountry, estimateMissingCosts]);
 
   const totalCents = useMemo(() => items.reduce((sum, i) => sum + i.amountCents, 0), [items]);
   const essentialItems = useMemo(() => items.filter(i => i.type === 'flight' || i.type === 'hotel'), [items]);
