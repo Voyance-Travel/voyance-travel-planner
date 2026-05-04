@@ -664,11 +664,16 @@ export function PaymentsTab({
     }
   };
 
-  const getItemIcon = (type: 'flight' | 'hotel' | 'activity') => {
+  const getItemIcon = (type: PayableItem['type']) => {
     switch (type) {
       case 'flight': return <Plane className="h-4 w-4" />;
       case 'hotel': return <Hotel className="h-4 w-4" />;
       case 'activity': return <Camera className="h-4 w-4" />;
+      case 'dining': return <Utensils className="h-4 w-4" />;
+      case 'transport': return <Car className="h-4 w-4" />;
+      case 'shopping': return <ShoppingBag className="h-4 w-4" />;
+      case 'other':
+      default: return <Receipt className="h-4 w-4" />;
     }
   };
 
