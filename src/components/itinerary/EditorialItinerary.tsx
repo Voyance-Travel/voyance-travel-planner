@@ -2169,6 +2169,85 @@ export function EditorialItinerary({
   const [refreshResults, setRefreshResults] = useState<Record<number, RefreshResult>>({});
   const { isRefreshing: isRefreshingDay, refreshDay } = useRefreshDay();
   const [refreshingDayNumber, setRefreshingDayNumber] = useState<number | null>(null);
+
+  // ── Day 1 auto-buffer ──────────────────────────────────────────────
+  // Arrival day is the worst place to surface a "no travel buffer — Refresh
+  // Day to fix timing" banner. When we detect zero/negative gaps between
+  // non-locked, non-transport, non-same-venue activities on Day 1, silently
+  // cascade a 15-min buffer forward so the banner never appears. Locked
+  // (manual / extracted / pinned) activities anchor the cascade.
+  const day1AutoBufferAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const day = days[0];
+    if (!day || !day.activities || day.activities.length < 2) return;
+    const fp = day.activities.map(a => `${a.id}@${a.startTime || (a as any).time || ''}`).join('|');
+    if (day1AutoBufferAppliedRef.current === fp) return;
+
+    const REQ_BUFFER = 15;
+    const isHHMM = (s?: string) => !!s && /^\d{1,2}:\d{2}$/.test(s);
+    const acts = day.activities;
+    let needsFix = false;
+    for (let i = 0; i < acts.length - 1; i++) {
+      const a = acts[i] as any;
+      const b = acts[i + 1] as any;
+      const catA = (a.category || '').toLowerCase();
+      const catB = (b.category || '').toLowerCase();
+      if (catA === 'transport' || catB === 'transport') continue;
+      if (a.location?.name && b.location?.name && a.location.name === b.location.name) continue;
+      const gap = computeGapMinutes(a.endTime, a.startTime || a.time, a.duration, b.startTime || b.time);
+      if (gap !== null && gap < REQ_BUFFER) { needsFix = true; break; }
+    }
+    if (!needsFix) {
+      day1AutoBufferAppliedRef.current = fp;
+      return;
+    }
+
+    setDays(prev => {
+      if (!prev[0]) return prev;
+      const dayActs = [...prev[0].activities];
+      let mutated = false;
+      for (let i = 0; i < dayActs.length - 1; i++) {
+        const a = dayActs[i] as any;
+        const b = dayActs[i + 1] as any;
+        if (b.locked || b.isLocked) continue;
+        const aEnd = a.endTime;
+        const bStart = b.startTime || b.time;
+        const bEnd = b.endTime;
+        if (!isHHMM(aEnd) || !isHHMM(bStart)) continue;
+        const catA = (a.category || '').toLowerCase();
+        const catB = (b.category || '').toLowerCase();
+        if (catA === 'transport' || catB === 'transport') continue;
+        if (a.location?.name && b.location?.name && a.location.name === b.location.name) continue;
+
+        const aEndMin = timeToMinutes(aEnd);
+        const bStartMin = timeToMinutes(bStart);
+        const minStart = aEndMin + REQ_BUFFER;
+        if (bStartMin >= minStart) continue;
+
+        const shift = minStart - bStartMin;
+        const newStartMin = bStartMin + shift;
+        let newEndMin: number | null = null;
+        if (isHHMM(bEnd)) {
+          newEndMin = timeToMinutes(bEnd) + shift;
+          if (newEndMin > 23 * 60 + 30) continue;
+        }
+        dayActs[i + 1] = {
+          ...b,
+          startTime: minutesToTime(newStartMin),
+          time: minutesToTime(newStartMin),
+          ...(newEndMin !== null ? { endTime: minutesToTime(newEndMin) } : {}),
+        };
+        mutated = true;
+      }
+      if (!mutated) return prev;
+      const next = [...prev];
+      next[0] = { ...prev[0], activities: dayActs };
+      return next;
+    });
+    day1AutoBufferAppliedRef.current = fp;
+    setHasChanges(true);
+  }, [days, setDays]);
+
   
   const handleRefreshDay = useCallback(async (dayIndex: number) => {
     const day = days[dayIndex];

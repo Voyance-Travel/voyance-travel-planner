@@ -1,47 +1,45 @@
 ## Problem
 
-When the user hasn't added flight details, Day 1 shows a hollow placeholder card:
+On Day 1 the itinerary surfaces "1 activity has no travel buffer. **Refresh Day** to fix timing." The user has to:
 
-> **7:00 AM — Arrive at Airport** · venue: *Airport* · Free
+1. Notice the small gray banner above the day's activities.
+2. Click *Refresh Day* (an edge-function call).
+3. Read the diff panel.
+4. Accept the proposed time-shift changes.
 
-It sits directly under the "Add Your Flight" banner, so the user sees both the prompt and the empty result of having ignored it. For a luxury traveler this reads as broken/unfinished.
+For an arrival day on a first-time user, that's three friction points before the itinerary is usable. Worse — refresh isn't even guaranteed: it's a soft suggestion the user can miss.
 
-The placeholder is generated server-side (`compile-day-schema.ts` lines 280–339 and `repair-day.ts` lines 824–870) whenever `arrivalTime24` is unknown — it deliberately injects an "Arrival" / "Arrive at the Airport" card so the day has a believable opening sequence. That made sense before the dedicated arrival banner existed; now it duplicates it.
+## Fix — silent Day 1 auto-buffer
 
-## Fix
+Add a one-shot effect in `EditorialItinerary.tsx` that runs whenever the Day 1 activity list changes. If it detects a zero/negative gap between two non-transport, non-same-venue, non-locked activities, it cascades a 15-minute breathing buffer forward without an edge call, without a toast, and without disturbing the user.
 
-### 1. Hide the placeholder at render time when no flight is set
+### Algorithm
+1. Build a fingerprint of Day 1 activities (`id@startTime` joined). Skip if already processed.
+2. Walk consecutive pairs `(a, b)`:
+   - Skip if either side is `category === 'transport'` (transport entries *are* the buffer).
+   - Skip if both share the same `location.name` (legit back-to-back at one venue).
+   - Skip if `b.locked || b.isLocked` (Universal Locking — never move user/manual/extracted).
+   - Skip if `a.endTime` or `b.startTime` aren't simple `HH:MM` (don't risk parsing AM/PM here).
+   - If `b.startTime < a.endTime + 15`, shift `b.startTime` (and `b.endTime` by the same delta) forward.
+3. Cascade: each shifted activity becomes the new anchor for the next pair, so a single early collision propagates cleanly through the morning.
+4. Bail out of any shift that would push past 23:30 (don't push activities into the night).
+5. Mark `setHasChanges(true)` so autosave persists the corrected schedule; the existing buffer-warning banner reads from the same `days` state and disappears on the next render.
 
-In `src/components/itinerary/EditorialItinerary.tsx` (the `days` useMemo at line 1455), filter Day 1 activities through a `isPlaceholderArrival` predicate when `flightSelection` is empty. The predicate matches:
+### Why this is safe
+- **Locked items anchor** — manual / extracted / pinned activities (Universal Locking memory) are never moved. The cascade simply skips them.
+- **Transport rows are preserved** — they already represent travel time, so we don't double-buffer.
+- **Same-venue pairs** (e.g. drinks → dinner at the same hotel bar) don't get artificial gaps.
+- **Idempotent** — the fingerprint guard prevents loops, and once the gaps are ≥15 min nothing mutates.
+- **Day 1 only** — other days continue to surface the explicit *Refresh Day* affordance, which is the right UX when the user is mid-trip planning. Arrival day is uniquely sensitive because nothing else has been edited yet.
 
-- title in {`Arrival`, `Arrive at Airport`, `Arrival at <Airport>`, `Arrival Flight`}
-- category in {flight, travel, transport, transit}
-- venue empty / `Airport` / `the Airport` / `… Airport`
-- no airline / flight-number / carrier / confirmation
-- not user-locked (`locked` or `isLocked`)
+## File touched
 
-Once the user adds flight data, the predicate stops firing and the (now enriched) card returns.
+- `src/components/itinerary/EditorialItinerary.tsx` — add a `useEffect` (~70 lines) right next to the existing refresh-day state at line 2171. No prop changes, no edge function changes.
 
-### 2. Future-proof the generator
+## Verification
 
-Add a comment + a one-line guard in `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (the `!hasArrivalFlight` block around 837) so the synthetic flight/transfer cards are skipped when the trip-level flight context is missing — the UI banner will own that surface. The compile-prompt arrival sequence in `compile-day-schema.ts` (lines 285–311 and 316–340) is reworded to *not* emit an "Arrival" placeholder when flight is missing; it still emits the hotel transfer + check-in steps so the day has structure.
-
-### 3. Verification
-
-- Open a trip without flights → the "Add Your Flight" banner appears; no orphan "Arrive at Airport" card below.
-- Add a flight via the prompt → the enriched arrival activity appears with airline + airport code + correct time.
-- Existing trips with the placeholder already persisted in `itinerary_data` show the cleaned view immediately (read-time filter, no migration needed).
-
-## Files touched
-
-- `src/components/itinerary/EditorialItinerary.tsx` — wrap `days` useMemo with placeholder filter (~25 lines)
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — gate synthetic arrival flight on real flight context (~3 lines)
-- `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts` — drop step 1 ("Arrival") from the no-flight prompt blocks; keep transfer + check-in (~15 line edits)
-
-## Why this is safe
-
-- Filter is read-only and explicitly bypasses any user-locked card, so manually-added arrival activities (Universal Locking memory) are preserved.
-- No DB writes; no cost-row impact (these placeholders are already $0).
-- Generator changes only affect *future* generations where flight is missing; trips with real flight data are untouched.
+- Open the affected trip → Day 1 reflows automatically; the "no travel buffer" banner disappears within a render cycle.
+- Lock an activity, then drag a sibling to overlap it → the locked one stays put, the unlocked one is auto-shifted.
+- Days 2+ still show the *Refresh Day* affordance unchanged.
 
 Approve to ship.
