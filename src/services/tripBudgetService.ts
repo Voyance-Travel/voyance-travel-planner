@@ -140,6 +140,12 @@ export interface CategoryAllocation {
   usedCents: number;
   remainingCents: number;
   percent: number;
+  /** 'fixed' = hotel/flight (not part of spend-style allocation); 'discretionary' = food/activities/transit/misc. */
+  kind?: 'fixed' | 'discretionary';
+  /** True when a fixed cost exceeds the entire trip budget total. */
+  exceedsBudget?: boolean;
+  /** For fixed rows: committed / budgetTotal as a percent (informational only, may exceed 100). */
+  shareOfBudgetPercent?: number;
 }
 
 // =============================================================================
