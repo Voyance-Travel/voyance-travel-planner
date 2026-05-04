@@ -50,6 +50,8 @@ import type { BudgetCategory } from '@/services/tripBudgetService';
 import { getCityBudgetBreakdown } from '@/services/tripBudgetService';
 import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { rateDisclosure } from '@/lib/currency';
 
 interface ItineraryActivity {
   id: string;
