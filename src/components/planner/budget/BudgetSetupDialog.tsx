@@ -34,6 +34,10 @@ interface BudgetSetupDialogProps {
   memberNames?: { id: string; name: string }[];
   /** Current estimated trip total in cents — used for feasibility warnings */
   tripTotalCents?: number;
+  /** Committed hotel cost in cents — used for hotel-vs-budget realism note */
+  hotelCents?: number;
+  /** Number of nights, for hotel breakdown copy */
+  totalNights?: number;
 }
 
 export function BudgetSetupDialog({
@@ -45,6 +49,8 @@ export function BudgetSetupDialog({
   onSave,
   memberNames = [],
   tripTotalCents,
+  hotelCents = 0,
+  totalNights = 0,
 }: BudgetSetupDialogProps) {
   const [inputMode, setInputMode] = useState<'total' | 'per_person'>(settings?.budget_input_mode || 'total');
   const [amount, setAmount] = useState('');
@@ -459,6 +465,20 @@ export function BudgetSetupDialog({
                   <span className="text-[10px] text-muted-foreground">$300–500/day pp</span>
                 </Button>
               </div>
+              {/* Hotel realism note — fires when the chosen hotel alone exceeds the typed budget */}
+              {hotelCents > 0 && includeHotel && totalCents > 0 && hotelCents >= totalCents * 0.6 && (() => {
+                const ratio = hotelCents / Math.max(1, totalCents);
+                const cushion = Math.round(hotelCents * 0.4);
+                const suggested = Math.ceil((hotelCents + cushion) / 10000) * 10000;
+                return (
+                  <div className="flex items-start gap-2 mt-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                    <span>
+                      Your selected hotel alone is <span className="font-medium">{formatCurrency(hotelCents)}</span>{totalNights > 0 ? <> ({totalNights} night{totalNights !== 1 ? 's' : ''})</> : null} — about <span className="font-medium">{ratio.toFixed(1)}×</span> this budget. Consider <span className="font-medium">{formatCurrency(suggested)}+</span> so the preset can fund dining and experiences on top, or toggle "Include Hotel" off below.
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </TabsContent>
         </Tabs>

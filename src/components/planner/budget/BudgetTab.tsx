@@ -52,6 +52,7 @@ import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { rateDisclosure } from '@/lib/currency';
+import { assessBudgetFit, formatMultiplier } from '@/lib/budget-realism';
 
 interface ItineraryActivity {
   id: string;
@@ -440,25 +441,94 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         );
       })()}
 
-      {/* Over-budget explainer — actionable guidance when expenses far exceed budget (hidden in manual mode) */}
+      {/* Over-budget diagnostic banner — decomposes the overage and offers one-click fixes (hidden in manual mode) */}
       {!isManualMode && (() => {
         const budgetCents = settings?.budget_total_cents || 0;
-        if (budgetCents <= 0 || snapshot.tripTotalCents <= budgetCents) return null;
-        const overageCents = snapshot.tripTotalCents - budgetCents;
-        const overagePct = Math.round((overageCents / budgetCents) * 100);
-        // Only show when significantly over (>15%)
+        if (budgetCents <= 0 || !summary || snapshot.tripTotalCents <= budgetCents) return null;
+
+        const includeHotel = settings?.budget_include_hotel ?? true;
+        const includeFlight = settings?.budget_include_flight ?? false;
+        const hotelCents = summary.committedHotelCents || 0;
+        const flightCents = summary.committedFlightCents || 0;
+        const fixedIncluded = (includeHotel ? hotelCents : 0) + (includeFlight ? flightCents : 0);
+        const discretionaryCents = Math.max(0, snapshot.tripTotalCents - fixedIncluded);
+
+        const fit = assessBudgetFit({
+          hotelCents,
+          flightCents,
+          discretionaryCents,
+          budgetCents,
+          includeHotel,
+          includeFlight,
+        });
+
+        const overagePct = Math.round((fit.overageCents / budgetCents) * 100);
         if (overagePct < 15) return null;
+
+        const isHotelDriven = fit.severity === 'hotel_dominated';
+        const hotelMultiplier = formatMultiplier(hotelCents, budgetCents);
+        const suggested = fit.suggestedBudgetCents;
+        const canRaise = suggested > budgetCents;
+
         return (
           <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/5 border border-destructive/20">
             <AlertTriangle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-destructive">
-                Trip expenses exceed your budget by {formatCurrency(overageCents)} ({overagePct}%)
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Your budget is {formattedBudget} but the estimated cost for {travelers} traveler{travelers !== 1 ? 's' : ''} is {formatCurrency(snapshot.tripTotalCents)}. 
-                Use the Budget Coach below to find savings, or adjust your budget to match your plans.
-              </p>
+            <div className="flex-1 min-w-0 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-destructive">
+                  Trip expenses exceed your budget by {formatCurrency(fit.overageCents)} ({overagePct}%)
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isHotelDriven ? (
+                    <>
+                      Your hotel ({formatCurrency(hotelCents)}) is <span className="font-medium text-foreground">{hotelMultiplier} your trip budget</span> of {formattedBudget}. The rest of the plan ({formatCurrency(discretionaryCents)} for food, activities &amp; transit{includeFlight && flightCents > 0 ? ' + flights' : ''}) sits on top.
+                    </>
+                  ) : (
+                    <>
+                      Your budget is {formattedBudget} but the estimated cost for {travelers} traveler{travelers !== 1 ? 's' : ''} is {formatCurrency(snapshot.tripTotalCents)}.
+                      {fit.drivers[0] && (
+                        <> Largest driver: <span className="font-medium text-foreground">{fit.drivers[0].kind === 'discretionary' ? 'food, activities & transit' : fit.drivers[0].kind} ({formatCurrency(fit.drivers[0].cents)})</span>.</>
+                      )}
+                    </>
+                  )}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {canRaise && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={async () => {
+                      await updateSettings({ budget_total_cents: suggested });
+                      window.dispatchEvent(new CustomEvent('booking-changed'));
+                    }}
+                  >
+                    Raise budget to {formatCurrency(suggested)}
+                  </Button>
+                )}
+                {isHotelDriven && includeHotel && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={async () => {
+                      await updateSettings({ budget_include_hotel: false });
+                      window.dispatchEvent(new CustomEvent('booking-changed'));
+                    }}
+                  >
+                    Hide hotel from budget
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-xs text-muted-foreground"
+                  onClick={() => setShowSetupDialog(true)}
+                >
+                  Edit budget…
+                </Button>
+              </div>
             </div>
           </div>
         );
@@ -903,6 +973,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         onOpenChange={setShowSetupDialog}
         memberNames={memberNames}
         tripTotalCents={snapshot.tripTotalCents}
+        hotelCents={summary?.committedHotelCents || 0}
+        totalNights={Math.max(0, totalDays - 1)}
         onSave={async (newSettings) => {
           await updateSettings(newSettings);
           refetch();

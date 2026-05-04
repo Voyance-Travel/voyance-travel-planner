@@ -1,46 +1,49 @@
-## The bug
+## What you're hitting
 
-"Meal (Day 1)" in the All Costs view is the generic fallback in `src/services/tripBudgetService.ts` (line 447). It fires whenever a row in `activity_costs` has an `activity_id` that no longer exists in the trip's `itinerary_data.days[].activities[].id`.
+The Splurge-Forward preset for a 4-night Paris trip suggests a ~$1,796 budget. The Four Seasons George V alone runs ~$1,500–2,000/night, which means the *hotel line* exceeds the entire trip budget several times over. The current banner says "Trip expenses exceed your budget by $1,651 (92%) — Use Budget Coach or adjust your budget" but it doesn't:
 
-I confirmed this on the live Paris trip (`7ea828ac…`):
-
-| Row | `activity_id` | In itinerary JSON? |
-|---|---|---|
-| Day 1 dining $25 | `fec938a1-…` | **No** — orphan |
-| Day 1 dining $45 | `9e0a278f-…` | Yes → "Lunch at Le Comptoir du Relais" |
-
-Day 1's actual dinner in JSON is `Dinner at Sacré Fleur` (id `767e3a94…`) but no cost row references it. So a later quality/sanitization pass replaced the dinner activity (and minted a new id) without re-writing `activity_costs`. The result: an orphan dining row with no name, and a missing cost row for the real dinner.
-
-The page-load `syncBudgetFromDays` was disabled this morning to fix the "+$340 just now" jumps, so the orphan-cleanup that used to mask this no longer runs.
+1. Tell the user **what** is causing the overage (it's the hotel, not the activities)
+2. Offer a **one-click fix** (raise the budget to a realistic floor, or toggle Hotel out of the budget)
+3. Catch it **at the moment of choice** — picking the Four Seasons silently consumes the entire trip's budget without comment
 
 ## Plan
 
-Three layers, smallest to largest impact:
+Three small, high-leverage UX changes — no schema work, no regen.
 
-### 1. Resilient name resolution (the visible fix)
+### 1. Diagnostic over-budget banner (`BudgetTab.tsx`)
 
-In `src/services/tripBudgetService.ts` and `src/hooks/usePayableItems.ts`, when `activity_id` lookup misses, try a secondary match by **(day_number, category)** against the itinerary's activities. Build a per-(day, category) queue of unmatched activity names and pop one for each unmatched cost row. Only fall back to "Meal (Day N)" if even that fails.
+Replace today's generic "Trip expenses exceed your budget…" explainer with a **diagnostic** version that decomposes the overage:
 
-Effect: the orphan Day 1 row will display "Dinner at Sacré Fleur" instead of "Meal (Day 1)".
+> Your hotel ($X for 4 nights) is **N×** your trip budget. With hotel included you're $1,651 over.
+>
+> **Quick fixes:**
+> - [ Raise budget to $3,500 ]  ← one-click; rounds to nearest $100
+> - [ Hide hotel from budget ] ← toggles `include_hotel_in_budget` off
+> - [ Pick a different hotel ]  ← jumps to hotel selector
 
-### 2. Orphan reconciliation on hydration
+The "raise budget" button updates `budget_total_cents` directly (no AI, no credits). The "hide hotel" toggle already exists at the bottom of the page — we just surface it inline. The detection rule: `hotelCents > budgetCents * 0.6` ⇒ show hotel-driven variant; otherwise keep current generic copy.
 
-Add a one-shot reconciliation in `EditorialItinerary.tsx` that, on initial load, checks for `activity_costs` rows whose `activity_id` isn't present in the current itinerary JSON. For each orphan that can be matched 1:1 to an itinerary activity by (day, category), `UPDATE activity_costs SET activity_id = <new id>` — no price change, just a key fix. Wrap behind a `metadata.last_costs_reconciled_at` flag so it runs at most once per trip until the itinerary is regenerated.
+### 2. Pre-selection guard at hotel pick (`UnifiedAccommodationSelector` / hotel picker)
 
-This keeps the DB consistent without re-introducing the page-load price drift.
+When the user is about to confirm a hotel whose all-nights cost > current `budget_total_cents`, show a small inline note next to the confirm button:
 
-### 3. Prevent recurrence at the source
+> Heads up: this stay is $X across N nights — about 1.7× your current $1,800 trip budget. We can raise your budget automatically when you continue.
 
-In `supabase/functions/generate-itinerary/universal-quality-pass.ts` (and any other late-stage pass that swaps activities), when an activity is replaced, **preserve the old `id`** instead of minting a new UUID. If a brand-new activity is genuinely added, also call into the same Phase-4 cost-write helper from `generation-core.ts` for that single activity.
+A checkbox "Auto-raise my trip budget to fit" defaults to **on**. On confirm we bump `budget_total_cents` to `ceil((hotelCents + activityFloor) / 100) * 100`. No surprise mismatch later.
 
-This is the durable fix. I'll scope this to the specific replacement paths I can identify in `universal-quality-pass.ts` and `day-validation.ts` (the two files that mint new activity IDs late).
+### 3. Preset realism note in setup (`BudgetSetupDialog.tsx`)
+
+When a user picks Splurge-Forward and the system already knows the selected hotel cost (it does — `trips.hotel_selection`), show a one-liner under the preset chip:
+
+> Splurge-Forward suggests **$1,800** for this trip. Your selected hotel costs **$6,400** alone — consider **$8,500+** so the preset can fund signature dining and experiences on top.
+
+Pure guidance copy; no automatic action.
 
 ## Files touched
 
-- `src/services/tripBudgetService.ts` — secondary (day, category) name resolution
-- `src/hooks/usePayableItems.ts` — same fallback so Split Bill reads match
-- `src/components/itinerary/EditorialItinerary.tsx` — one-shot orphan key reconciliation on mount
-- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — preserve `id` on activity replacement
-- `supabase/functions/generate-itinerary/day-validation.ts` — same
+- `src/components/planner/budget/BudgetTab.tsx` — diagnostic banner with one-click actions
+- `src/components/trips/UnifiedAccommodationSelector.tsx` — pre-confirm budget-fit note + auto-raise checkbox
+- `src/components/planner/budget/BudgetSetupDialog.tsx` — preset realism hint when a hotel is already chosen
+- New `src/lib/budget-realism.ts` — single helper: `assessBudgetFit({ hotelCents, activityFloorCents, budgetCents })` returning `{ severity, drivers, suggestedFloorCents }` so the three surfaces stay consistent
 
-No schema changes; no price changes. Approve to apply.
+No DB / edge changes. No effect on the cost ledger or generation pipeline. Approve to apply.
