@@ -125,9 +125,12 @@ export function usePayableItems({
     const result: PayableItem[] = [];
 
     // ─── Flight from selection (UI source) ───
-    const flightTotal = flightSelection?.totalPrice
+    // Skip canonical flight if user has a manual flight override (avoids double-count).
+    const flightTotal = hasManualFlight ? 0 : (
+      flightSelection?.totalPrice
       || (flightSelection?.legs?.reduce((s, l) => s + (l?.price || 0), 0) || 0)
-      || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0));
+      || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0))
+    );
 
     if (flightTotal > 0) {
       const flightId = 'flight-selection';
