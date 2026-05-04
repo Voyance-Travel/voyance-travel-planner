@@ -1,91 +1,60 @@
-# Budget Coach: protect what matters
+# Hotel Costs Missing from Budget Breakdown
 
-## Problem
-The coach correctly ranks the most expensive items first, but it has no concept of *trip intent*. For a luxury food trip it cheerfully proposes swapping L'Arpège → Septime and Le Cinq → Café de Flore — the two anchors the entire itinerary was designed around. There's no way to tell it "don't touch dining" or to dismiss a single bad suggestion.
+## Diagnosis
 
-## Solution
-Three layers of control, smallest commitment first:
+I traced both symptoms ("$0 Misc", "no Hotel line") to the database for your Paris trip and confirmed two distinct bugs.
 
-### 1. Trip-level "Protected categories" chips (persisted)
-Above the coach panel, render a small row of toggle chips:
+**Bug 1 — Hotel has no price attached, so it never enters the budget.**
+The Four Seasons George V is saved on the trip with name, address, dates, and photos — but `totalPrice` and `pricePerNight` are both missing. The function that pushes hotel costs into the budget ledger (`syncHotelCostToBudget`) bails out early when there is no price, so no `category='hotel'` row is ever written into `activity_costs`. The Budget tab then derives a hotel allocation row only when `committedHotel > 0` (`tripBudgetService.ts` line 567), so the Hotel/Accommodation line silently disappears from "Budget by Category." The headline total has the same blind spot — it's why your Trip Total feels low.
 
-```
-Don't suggest swaps for:  [ Dining ]  [ Hotels ]  [ Tours ]  [ Transit ]  [ Activities ]
-```
+The "Some budgeted categories have no items yet" amber warning doesn't fire either, because it only checks `hasHotel` (a hotel *object* exists) — not whether that hotel has a usable price.
 
-- Multi-select. Default `[]`.
-- Persisted per-trip in `trip_budget_settings.coach_protected_categories text[]` (new column, defaults to `'{}'`).
-- Toggling a chip immediately re-fetches suggestions (cache key includes the protection set).
+**Bug 2 — Miscellaneous category is hardcoded to $0.**
+`getBudgetAllocations` (line 619 of `tripBudgetService.ts`) sets `usedCents: 0` for the misc row, regardless of what's in the ledger. Meanwhile `toBudgetCategory` does map `nightlife`, `bar`, `club`, `shopping`, `misc` → `misc`, so things like the Day 3 jazz club *should* roll up there but never do. The bar usage is silently swallowed.
 
-### 2. Auto-seed protections from trip DNA / archetype
-On first render, if `coach_protected_categories` is `null` (never set), seed defaults from the trip's `blended_dna` / `dna_snapshot`:
+## Plan
 
-| DNA signal | Seeded protections |
-|---|---|
-| `gourmand`, `food`, `luminary`, `michelin`, `culinary` | Dining |
-| `luxe`, `luxury`, `palace` | Hotels, Dining |
-| `cultural`, `museums-first` | Tours |
-| (none of the above) | `[]` |
+### 1. Estimate hotel cost when the user picked a hotel without a rate
+In `src/services/budgetLedgerSync.ts`, extend `syncHotelCostToBudget` so that when `totalPrice` and `pricePerNight` are both missing, we estimate using the existing `cost_reference` table (the same source the rest of the app uses — no AI estimation, per the cost-integrity rule):
+- Look up a hotel rate for the trip's destination + budget tier (luxury/mid/budget) from `cost_reference`.
+- Multiply by nights between `checkInDate` and `checkOutDate`.
+- Write the row with `source: 'estimated_from_reference'` and `confidence: 'low'` so it's clearly tagged as an estimate.
+- Note in the description: `Hotel: Four Seasons George V (estimated)`.
 
-Seeded values are pre-checked but fully overridable. After the first save, we never auto-mutate the user's set again.
+If no reference row exists for the city, fall back to writing a $0 row tagged `needs_price` so the UI can prompt the user.
 
-### 3. Per-suggestion "Don't suggest again"
-On every suggestion card, add a small `×` next to "Apply":
+### 2. Make the "missing price" state visible
+In `BudgetTab.tsx`, change the missing-items detector to also flag hotels that exist but have no price. Replace the current `!hasHotel` check with `!hasHotelPrice` (a new prop derived from the hotel selection). Message becomes:
+> "Four Seasons George V has no nightly rate set — we've estimated $X/night from typical Paris luxury hotel rates. Add the actual price for a precise budget."
 
-```
-[ Apply ] [ × Don't suggest ]
-```
+Include an inline "Add price" button that opens the existing hotel editor.
 
-Clicking `×`:
-- Removes the suggestion from the visible list immediately.
-- Adds `{tripId, activityId}` to `localStorage` key `budget-coach:dismissed:{tripId}` (array of activity IDs).
-- Sends `dismissed_activity_ids` to the edge function on next fetch so they never resurface.
+### 3. Wire up Miscellaneous correctly
+In `tripBudgetService.ts`:
+- Add a `plannedMisc` accumulator alongside `plannedFood/Activities/Transit` in `getBudgetSummary`.
+- Replace the hardcoded `usedCents: 0` for the misc allocation row with `summary.plannedMiscCents`.
+- Confirm the Day 3 jazz club row maps to `misc` end-to-end (it currently does, via `toBudgetCategory`).
 
-This is the lightest-touch escape valve when category-level protection is too blunt (e.g., user wants to keep L'Arpège specifically but is fine letting the coach touch a different lunch).
+### 4. Trigger a re-sync for the affected trip
+After the code change, run a one-time backfill so existing trips with priced hotels (and any future ones) immediately reflect the fix — call `syncHotelCostToBudget` for trips where `hotel_selection` is non-empty but no `category='hotel'` row exists in `activity_costs`. Done as a SQL/edge-function pass, not user-visible.
 
-### 4. Edge function changes (`supabase/functions/budget-coach/index.ts`)
-Accept two new optional fields on the request body:
-- `protected_categories: string[]`
-- `dismissed_activity_ids: string[]`
+### Files
 
-Apply defense-in-depth on the server (don't trust the client filter alone):
-- **Pre-filter** activities whose `category` (normalized) is in `protected_categories` or whose `id` is in `dismissed_activity_ids` — they never enter the prompt.
-- **Reinforce in the system prompt**: append a hard rule listing the protected categories ("These categories are PROTECTED — do not suggest swaps for any item in: Dining, Hotels. The user has explicitly marked them as non-negotiable.").
-- **Post-filter** the model's output as a final safety net (drop any suggestion whose `activity_id` matches a filtered-out item — handles model drift).
+- `src/services/budgetLedgerSync.ts` — add reference-based estimation in `syncHotelCostToBudget`
+- `src/services/tripBudgetService.ts` — track `plannedMiscCents`; feed misc allocation usage
+- `src/components/planner/budget/BudgetTab.tsx` — `hasHotelPrice` prop, richer missing-items warning, "Add price" CTA
+- `src/components/itinerary/EditorialItinerary.tsx` (or wherever `hasHotel` is computed) — also derive and pass `hasHotelPrice`
+- One-time backfill via migration / edge function call
 
-Category normalization map (handles the messy mix of `dining`/`breakfast`/`lunch`/`dinner`/`cafe`/`food` all being "Dining" from the user's perspective):
+### Out of scope
 
-```text
-Dining     → dining, breakfast, lunch, dinner, brunch, cafe, coffee, food, restaurant
-Hotels     → hotel, accommodation, lodging, stay
-Tours      → tour, guided_tour, experience, attraction
-Transit    → transit, transport, taxi, train, flight, transfer
-Activities → activity, sightseeing, museum, gallery, culture, wellness, shopping
-```
+- Changing how hotels are selected (the picker not collecting a price is a separate, larger UX issue).
+- Changing the budget allocation percentages defaults.
 
-### 5. Empty-state UX
-If protection rules + dismissals leave nothing for the coach to suggest, show:
+## Verification
 
-> All suggestable items are protected. Loosen a category above to see savings, or adjust your budget target.
-
-…with a "Clear protections" link.
-
-## Files touched
-
-- **migration** — add `coach_protected_categories text[] not null default '{}'` to `trip_budget_settings`. (No RLS changes; existing policies cover.)
-- `src/services/tripBudgetService.ts` — read/write the new column on `TripBudgetSettings`.
-- `src/components/planner/budget/BudgetCoach.tsx` —
-  - Accept `protectedCategories`, `setProtectedCategories`, `dismissedIds`, `setDismissedIds` (or read/write directly via callbacks).
-  - Render category chip row above suggestions.
-  - Render "× Don't suggest" button per card.
-  - Re-fetch on protection change; include both arrays in cache key + edge call.
-  - Empty-state message.
-- `src/components/planner/budget/BudgetTab.tsx` — wire `settings.coach_protected_categories` ↔ `BudgetCoach`; on first load, derive seed from `blended_dna` if column is `null`.
-- `src/hooks/useTripBudget.ts` — expose update method for `coach_protected_categories`.
-- `supabase/functions/budget-coach/index.ts` — accept new fields, apply pre-filter, reinforce prompt, post-filter.
-
-## Out of scope
-
-- Letting users protect a *single named venue* without dismissing it (they can already lock the activity in the itinerary, which the coach already respects).
-- A "trip intent" picker separate from DNA — DNA is already the canonical intent and we shouldn't fork it.
-- Server-side persistence of dismissals — keeping them in `localStorage` is fine for v1; if user clears storage, dismissals reset (acceptable since the chip-level protection still holds).
+After implementation, on your Paris trip the Budget tab should show:
+- An **Accommodation** row with the estimated 3-night Four Seasons cost and an "(estimated)" badge
+- A **Miscellaneous** row showing the jazz-club spend instead of $0
+- The amber warning naming the hotel and offering to add a real price
+- Trip Total in the header rises accordingly and reconciles with the per-category sum
