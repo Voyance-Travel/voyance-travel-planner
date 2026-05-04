@@ -285,18 +285,13 @@ ARRIVAL DAY — NO FLIGHT DETAILS PROVIDED:
 The traveler has not provided flight details. Assume a morning arrival at approximately ${defaultArrival}.
 
 REQUIRED OPENING SEQUENCE (in this exact order):
-1. "Arrival" 
-   - startTime: "${defaultArrival}", endTime: "${addMinutesToHHMM(defaultArrival, 15)}"
-   - category: "travel"
-   - description: "Arrive at destination."
-
-2. "Transfer to ${flightContext.hotelName}"
-   - startTime: "${addMinutesToHHMM(defaultArrival, 15)}", endTime: "${transferEnd}"
+1. "Transfer to ${flightContext.hotelName}"
+   - startTime: "${defaultArrival}", endTime: "${transferEnd}"
    - category: "transport"
    - description: "Travel from arrival point to hotel."
    - location: { name: "${flightContext.hotelName}", address: "${flightContext.hotelAddress || 'Hotel Address'}" }
 
-3. "Check-in at ${flightContext.hotelName}"
+2. "Check-in at ${flightContext.hotelName}"
    - startTime: "${transferEnd}", endTime: "${checkinEnd}"
    - category: "accommodation"
    - description: "Check in and drop bags. Early check-in often available on request."
