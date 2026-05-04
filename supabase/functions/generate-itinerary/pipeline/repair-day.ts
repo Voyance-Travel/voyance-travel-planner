@@ -1267,8 +1267,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   }
 
   // --- 6. LOGISTICS_SEQUENCE (departure day) ---
+  // Force-run on every departure day, not only when validation flagged it.
+  // Validation can miss subtle cases (no security card, late checkout) but
+  // repairDepartureSequence's R5 must still re-anchor late checkouts and R3
+  // must still pull leisure activities back before the airport transfer.
   const isDepartureDayForSequence = isLastDay || (isLastDayInCity && !isTransitionDay);
-  if (isDepartureDayForSequence && byCode.has(FAILURE_CODES.LOGISTICS_SEQUENCE)) {
+  if (isDepartureDayForSequence) {
     const seqRepairs = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
     repairs.push(...seqRepairs);
     // Re-sort after departure fixes
@@ -2970,25 +2974,37 @@ function repairDepartureSequence(
     }
   }
 
-  // R3: Move activities after security to before airport transport
-  if (securityItems.length > 0) {
-    const secAct = securityItems[0];
-    const secIdx = activities.indexOf(secAct);
-    if (secIdx !== -1) {
-      const afterSecurity = activities.slice(secIdx + 1);
-      const misplaced = afterSecurity.filter(a => {
-        const role = classify(a);
-        return role !== 'flight' && role !== 'airport-transport' && role !== 'airport-security';
-      });
-      for (const mis of misplaced) {
-        if (lockedIds.has(mis.id)) continue;
-        const misIdx = activities.indexOf(mis);
-        if (misIdx !== -1) {
-          activities.splice(misIdx, 1);
-          const atIdx = activities.findIndex(a => classify(a) === 'airport-transport');
-          const insertAt = atIdx !== -1 ? atIdx : Math.max(0, activities.indexOf(checkoutItems[0]) || 0);
-          activities.splice(insertAt, 0, mis);
-          repairs.push({ code: FAILURE_CODES.LOGISTICS_SEQUENCE, action: 'moved_before_airport_transport', before: mis.title });
+  // R3: Move activities after security OR airport-transport to before that anchor.
+  // The airport transfer is a hard barrier — once you're heading to the airport,
+  // you don't stop for a leisurely stroll along the Seine.
+  {
+    const airportTransportItems = activities.filter(a => classify(a) === 'airport-transport');
+    const anchorAct = securityItems[0] || airportTransportItems[0];
+    if (anchorAct) {
+      const anchorIdx = activities.indexOf(anchorAct);
+      const anchorRole = classify(anchorAct);
+      if (anchorIdx !== -1) {
+        const afterAnchor = activities.slice(anchorIdx + 1);
+        const misplaced = afterAnchor.filter(a => {
+          const role = classify(a);
+          return role !== 'flight' && role !== 'airport-transport' && role !== 'airport-security';
+        });
+        for (const mis of misplaced) {
+          if (lockedIds.has(mis.id)) continue;
+          const misIdx = activities.indexOf(mis);
+          if (misIdx !== -1) {
+            activities.splice(misIdx, 1);
+            const atIdx = activities.findIndex(a => classify(a) === 'airport-transport');
+            const insertAt = atIdx !== -1 ? atIdx : Math.max(0, activities.indexOf(checkoutItems[0]) || 0);
+            activities.splice(insertAt, 0, mis);
+            repairs.push({
+              code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+              action: anchorRole === 'airport-transport'
+                ? 'moved_from_after_airport_transport'
+                : 'moved_before_airport_transport',
+              before: mis.title,
+            });
+          }
         }
       }
     }

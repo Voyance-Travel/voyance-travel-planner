@@ -366,7 +366,26 @@ export function terminalCleanup(
       const isTrain = departureTransportType && /train|rail|eurostar|tgv|thalys/i.test(departureTransportType);
       const bufferMins = isTrain ? 120 : 180;
       const latestEnd = depMins - bufferMins;
-      if (latestEnd > 0) {
+
+      // Find the airport-transport card start time (acts as a hard barrier)
+      const isAirportTransport = (act: any): boolean => {
+        const cat = (act.category || '').toLowerCase();
+        const t = (act.title || '').toLowerCase();
+        return (cat === 'transport' || cat === 'transit' || cat === 'logistics') &&
+          (t.includes('airport') || t.includes('head to airport') ||
+           t.includes('taxi to airport') || t.includes('transfer to'));
+      };
+      let airportTransportStart: number | null = null;
+      for (const act of activities) {
+        if (isAirportTransport(act)) {
+          const m = parseTimeMins(act.startTime || act.start_time || '');
+          if (m !== null && (airportTransportStart === null || m < airportTransportStart)) {
+            airportTransportStart = m;
+          }
+        }
+      }
+
+      if (latestEnd > 0 || airportTransportStart !== null) {
         const result: any[] = [];
         for (const act of activities) {
           const cat = (act.category || '').toLowerCase();
@@ -376,16 +395,22 @@ export function terminalCleanup(
           }
           const startStr = act.startTime || act.start_time || '';
           const startMins = parseTimeMins(startStr);
-          if (startMins !== null && startMins > latestEnd) {
-            // Check if it's a departure-related activity (keep those)
-            const title = (act.title || '').toLowerCase();
-            if (/depart|airport|flight|check.?out/i.test(title)) {
-              result.push(act);
+          const title = (act.title || '').toLowerCase();
+          const isDepartureRelated = /depart|airport|flight|check.?out/i.test(title);
+
+          if (startMins !== null) {
+            const tooLateForBuffer = latestEnd > 0 && startMins > latestEnd;
+            const afterAirportTransport = airportTransportStart !== null && startMins >= airportTransportStart;
+            if (tooLateForBuffer || afterAirportTransport) {
+              if (isDepartureRelated) {
+                result.push(act);
+                continue;
+              }
+              const reason = afterAirportTransport ? 'after airport transfer' : `past departure buffer (departure: ${departureTime24})`;
+              console.warn(`[${label}] Removing post-departure activity "${act.title}" at ${startStr} — ${reason}`);
+              removed++;
               continue;
             }
-            console.warn(`[${label}] Removing post-departure activity "${act.title}" at ${startStr} (departure: ${departureTime24})`);
-            removed++;
-            continue;
           }
           result.push(act);
         }
