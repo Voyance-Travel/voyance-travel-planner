@@ -987,10 +987,19 @@ export function enforceRequiredMealsFinalGuard(
     dinner:    { start: '19:00', end: '20:15', cost: 30, startMins: 1140 },
   };
 
-  // Track which venue names have been used to avoid duplicates within this guard call
-  const usedVenueNamesForInjection = new Set<string>(
-    activities.map(a => (a.title || '').toLowerCase())
-  );
+  // Track which venue names have been used to avoid duplicates within this guard call.
+  // Seed with both raw titles AND canonical venue names + trip-wide blocked names so the
+  // fallback DB (TRY 2) cannot reintroduce a restaurant that was already used on a previous day.
+  const usedVenueNamesForInjection = new Set<string>();
+  for (const a of activities) {
+    const t = (a.title || '').toLowerCase();
+    if (t) usedVenueNamesForInjection.add(t);
+    const canonTitle = extractRestaurantVenueName(a.title || '');
+    if (canonTitle) usedVenueNamesForInjection.add(canonTitle);
+    const canonLoc = extractRestaurantVenueName((a as any).location?.name || '');
+    if (canonLoc) usedVenueNamesForInjection.add(canonLoc);
+  }
+  for (const b of blockedNorm) usedVenueNamesForInjection.add(b);
 
   const result = [...activities];
 
