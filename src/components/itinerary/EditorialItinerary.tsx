@@ -1390,13 +1390,14 @@ export function EditorialItinerary({
             console.log(`[EditorialItinerary] Cleaned ${cleaned} orphaned cost rows`);
           }
           
-           // Compute optimistic total from the data we just wrote to DB
-           const optimisticTotalCents = activitiesForCostTable.reduce(
-             (sum, a) => sum + Math.round(a.costPerPersonUsd * (a.numTravelers || 1) * 100), 0
-           );
-           // Dispatch with optimistic payload for instant UI update
-           window.dispatchEvent(new CustomEvent('booking-changed', { 
-             detail: { tripId, optimisticTotalCents } 
+           // Notify subscribers WITHOUT an optimistic total. Sending an
+           // optimistic total here briefly replaced the snapshot total, which
+           // then "snapped back" to the DB-derived total a beat later — that
+           // back-and-forth was being interpreted as a >25% delta and surfaced
+           // as the persistent "Reconciling…" / "just now" indicator on
+           // Payments. The canonical refetch below is the source of truth.
+           window.dispatchEvent(new CustomEvent('booking-changed', {
+             detail: { tripId }
            }));
         } catch (err) {
           console.error('[EditorialItinerary] Activity cost sync failed:', err);

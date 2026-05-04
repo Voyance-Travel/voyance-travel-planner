@@ -383,15 +383,13 @@ export function usePayableItems({
           .map(p => (p as any)?.assigned_member_id)
           .filter(Boolean) as string[];
 
-        // Orphan rescue: when activity_id no longer exists in the itinerary
-        // JSON, pop a name from the (day, category) queue before falling back
-        // to the generic label. Keeps "Dinner at Sacré Fleur" visible after
-        // a quality-pass swap that re-minted the activity uuid.
-        let rescuedName = '';
-        if (!lookup) {
-          const queue = orphanRescueByDayCat.get(`${row.day_number}|${cat}`);
-          if (queue && queue.length > 0) rescuedName = queue.shift() as string;
-        }
+        // Orphan-rescue name reassignment removed. The orphan guard above
+        // already skips any row whose activity_id is not in the live
+        // itinerary, so by this point we either have a real lookup or this
+        // is a row legitimately missing JSON metadata. Re-using a live
+        // activity's name for an unrelated row was the root cause of the
+        // duplicate "Lunch at Le Comptoir du Relais" symptom.
+        const rescuedName = '';
 
         // If we don't have a JSON name, fall back to a category-derived label.
         // This avoids leaking an opaque UUID into the UI.
@@ -574,18 +572,26 @@ export function usePayableItems({
 
     // (manual activity expenses already added above; do not call addManualGroups('activity') a second time)
 
-    // ─── Orphan payment recovery ───
-    // Surface any non-manual activity payment whose item_id is NOT represented
-    // in the items list. This happens when an activity is removed from the
-    // itinerary after a payment was recorded against it (e.g. L'Arpège lunch
-    // paid, then activity later swapped out). Without this, the payment shows
-    // up in "Paid so far" but the row is missing → 0/N counter mismatch.
+    // ─── Orphan payment recovery (live activities only) ───
+    // Surface non-manual activity payments whose item_id is missing from the
+    // current items list — but ONLY when the underlying activity still
+    // exists in the itinerary. Payments for activities that have since been
+    // removed are intentionally hidden from the live Activities list to
+    // avoid duplicate-looking rows (e.g. the old paid "Lunch at L'Arpège"
+    // appearing alongside the live lunch on Day 1). They remain in the
+    // payments table and continue to count toward "Paid so far" via totals
+    // computed by getTripPayments — they just don't render as a live row.
     const presentItemIds = new Set(result.map(r => r.id));
     const orphanGroups = new Map<string, TripPayment[]>();
     for (const p of payments) {
       if (p.item_type !== 'activity') continue;
       if (!p.item_id || isManualId(p.item_id)) continue;
       if (presentItemIds.has(p.item_id)) continue;
+      // Strip optional composite suffix (_dN) to get the raw activity id.
+      const itemIdStr = String(p.item_id);
+      const rawActivityId = itemIdStr.replace(/_d\d+$/, '');
+      // Only recover if the activity still exists in the live itinerary.
+      if (!activityNameById.has(rawActivityId)) continue;
       const group = orphanGroups.get(p.item_id) || [];
       group.push(p);
       orphanGroups.set(p.item_id, group);
@@ -598,7 +604,7 @@ export function usePayableItems({
       result.push({
         id: itemId,
         type: 'activity',
-        name: primary.item_name || 'Removed activity',
+        name: primary.item_name || 'Activity',
         amountCents: primary.amount_cents * (primary.quantity || 1),
         dayNumber,
         payment: primary,
