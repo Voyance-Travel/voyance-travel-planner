@@ -1,55 +1,51 @@
-## Problem
+## Real bug
 
-Day 1's $161 "Local transit" persists because the previous fix only caught two title patterns:
-- `Transfer/Travel to airport/station/...` (placeholder departure)
-- `Taxi to X` (unconfirmed taxi)
+Payments shows the **correct** $235 group total for "Nightcap at Le Bar" (2 guests in Paris). The itinerary card is the one lying — it labels the same $235 as "$235 /pp" and the tooltip says "Group total: $470" (i.e. it multiplies by travelers a second time).
 
-It misses **mode-less generic hops** like `Travel to Four Seasons` ($76), `Travel to Sébillon Rivoli` ($4), `Travel to Spa` — there's no mode keyword and no airport keyword, so both guards fall through and the cost-reference lookup prices them as taxis.
+### Why
 
-## Fix
+`estimateCostSync(category: 'dining', travelers: 2, …)` in `src/lib/cost-estimation.ts` (line 285) computes:
 
-### 1. Backend: add a generic "unconfirmed transit" rule
-
-In `supabase/functions/generate-itinerary/action-repair-costs.ts`, immediately after the existing `isUnconfirmedTaxi` branch, add:
-
-```ts
-const isGenericUnconfirmedTransit = category === 'transport'
-  && !TRANSPORT_MODE_RE.test(_titleForPlaceholder)
-  && !TRANSPORT_MODE_RE.test(_descForPlaceholder)
-  && !isUserConfirmedCost
-  && activity.booking_required !== true;
+```
+subtotal = perPerson * travelers     // already group total for dining
+total    = round(subtotal * (1 + tax_tip_buffer) / 5) * 5
 ```
 
-If true → write `cost_per_person_usd: 0`, `source: 'unconfirmed_transit'`, `notes: '[Choose a mode — taxi/metro/walk]'`. This is a strict superset of the placeholder-departure and unconfirmed-taxi rules, so they remain harmless but explicit.
+It returns `{ amount: total /* group */, perPerson, … }`.
 
-`TRANSPORT_MODE_RE` already includes: `taxi|cab|uber|lyft|rideshare|private car|car service|metro|subway|train|rer|tgv|shuttle|bus|tram|ferry|boat`. So a leg only earns a price if the user (or the AI) actually committed to a mode.
+In `src/components/itinerary/EditorialItinerary.tsx` (~line 1002), the wrapper takes `result.amount` and returns `{ amount, basis }` where `basis` was defaulted to `'per_person'` higher in the function. Result: card displays the group total but tags it `/pp` and the tooltip helpfully multiplies it by travelers AGAIN to show a phantom "Group total".
 
-### 2. Frontend: extend the same guard
+This affects **every estimated dining/restaurant/bar row** with `travelers > 1` — the visible per-person price in the itinerary is inflated 2× (or 3×, 4× for larger groups).
 
-In `src/lib/cost-estimation.ts`, generalize `isUnconfirmedIntraCityTaxi` → `isUnconfirmedTransitLeg`: same exit conditions (`cost.basis = user/user_override`, `booking_required`, non-transport category) but the title check becomes "no mode keyword anywhere". Keep the old export name as an alias for backward compat.
+## Fix (one place)
 
-In `src/hooks/usePayableItems.ts` both call sites (DB-driven transit branch ~line 291 and JSON-walk fallback ~line 401) use the new helper.
+In `EditorialItinerary.tsx` around lines 1015-1021, when the result came from `estimateCostSync` for a per-person category (dining/restaurant/breakfast/brunch/lunch/dinner/cafe/coffee), return the cost with `basis: 'flat'` — meaning "this number IS the group total, do not show /pp and do not multiply".
 
-### 3. One-time data backfill
+```ts
+const PER_PERSON_CATS = new Set(['dining','restaurant','breakfast','brunch','lunch','dinner','cafe','coffee']);
+const engineBasis: CostBasis = PER_PERSON_CATS.has(category.toLowerCase())
+  ? 'flat'   // engine already multiplied by travelers
+  : basis;   // attractions/activities: engine returns per-person flat anyway
 
-Run a SQL update to zero out existing `activity_costs` rows where:
-- `category IN ('transport','transit','transfer','taxi','rideshare')`
-- `cost_per_person_usd > 0`
-- The matching itinerary activity title/description contains no mode keyword
-- `cost.basis NOT IN ('user','user_override')` and `booking_required != true`
+return { amount, isEstimated: result.isEstimated, estimateReason: result.reason, confidence: result.confidence, basis: engineBasis };
+```
 
-Tag with `source = 'unconfirmed_transit'`.
+Net effect on the card:
+- `basisLabel(basis='flat', travelers=2)` → no "/pp" suffix
+- The "Group total" tooltip line (`travelers > 1 && basis === 'per_person'`) won't render
+- Headline number stays $235 — matches Payments
 
-## Result
+## Why not change the engine
 
-- Day 1 transit drops from $161 → $0 (each leg shown with a "choose a mode" hint).
-- Future generations: any mode-less transport leg the AI invents stays $0 until the user picks taxi/metro/walk.
-- Confirmed legs (user picked taxi, or it's a booked airport transfer with `booking_required=true`) still price normally.
+Other call sites (Payments JSON-walk, budgetLedgerSync) already consume `estimateCostSync().amount` as the group total. Changing the engine would require recalibrating every consumer. The display-side fix is one diff and makes the contract explicit at the boundary.
 
 ## Files
 
-- `supabase/functions/generate-itinerary/action-repair-costs.ts` — add generic branch
-- `src/lib/cost-estimation.ts` — add `isUnconfirmedTransitLeg`
-- `src/hooks/usePayableItems.ts` — swap to new helper at both call sites
-- One-time SQL data update
-- Memory update: rename `unconfirmed-intra-city-taxi-no-cost` → broader scope
+- `src/components/itinerary/EditorialItinerary.tsx` — set `basis: 'flat'` for engine-estimated per-person categories
+- No DB changes; no edge-function changes. The Payments tab is already correct.
+
+## Result
+
+- Itinerary row: `$235` (no `/pp` suffix), tooltip drops the misleading "Group total: $470" line
+- Payments row: unchanged at $235 — they finally agree
+- All other multi-traveler dining estimates also self-correct
