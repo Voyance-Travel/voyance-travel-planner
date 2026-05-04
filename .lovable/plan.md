@@ -1,90 +1,70 @@
-## Root cause
+## Root cause of the €59 gap
 
-The Budget tab renders numbers from **three independent sources of truth** that update on different cadences and use slightly different inclusion rules. When any one of them refreshes before the others, the UI shows mathematically inconsistent figures (38% with $690, then 38% with $1,125, then 63% with $1,125).
+I traced the missing $59 (~€59) on Day 1 of the Paris trip (`7ea828ac-9db5-42e7-b9a2-daeed10dd71f`). The day total is computed correctly — but several cost rows that count toward it are **not rendered as line items** in the user-visible activity list, and one row carries **stale/incorrect cost data**.
 
-The three sources, all derived from `activity_costs`:
+### Day 1 activity_costs (per person):
 
-| # | Source | Where computed | Used for |
-|---|--------|----------------|----------|
-| 1 | `summary` (React Query: `tripBudgetSummary`) | `getBudgetSummary` → `getBudgetLedger` → reconciled against `v_trip_total` view | category breakdown, ledger rows, "Food & Dining $1,749" etc. |
-| 2 | `snapshot.tripTotalCents` (custom hook `useTripFinancialSnapshot`) | direct `activity_costs` sum, with own hotel/flight toggle logic | over-budget banner status + percent + the "Total Estimated Cost" headline |
-| 3 | `v_trip_total.total_all_travelers_usd` (Postgres view) | server-side aggregation | reconciliation target inside `getBudgetLedger` only |
+| Category | $/pp | Visible as a line item? | Notes |
+|---|---|---|---|
+| activity (Musée d'Orsay) | 17.39 | ✅ yes | matches user's €16 |
+| dining (L'Arpège lunch) | 160.00 | ✅ yes | matches user's €230 expectation roughly |
+| dining (Bouillon Julien dinner) | 50.00 | ✅ yes | user expected €28 → real value is $50/pp |
+| **transport (taxi to Four Seasons)** | **65.22** | ❌ **NO** — filtered out of visible activity list | flagged "[Repair auto-corrected]" |
+| **transport ("Walk to Musée d'Orsay")** | **15.22** | ❌ **NO** | flagged "[Free venue - Tier 1]" but cost is non-zero — DATA BUG |
+| transport (other) | 3.50 + 2.00 | ❌ NO | small intra-city transit |
+| dining (orphan auto-corrected) | 8.00 | ❌ NO | stale row, no matching activity in itinerary_data |
+| flight, shopping, free venues | 0.00 | n/a | zero-cost, fine |
 
-**The smoking gun in `BudgetTab.tsx` line 401–405:**
+Sum: **$321/pp** ≈ the €333 the user sees (with FX/rounding).
 
-```tsx
-<BudgetWarning summary={{
-  ...summary,            // dollar fields from source #1
-  usedPercent: snapshotUsedPct,   // percent from source #2
-  status: snapshotStatus,         // status from source #2
-}} />
-```
+So the gap is real and fully accounted for in the database — it's just **invisible** to the user. Two distinct bugs:
 
-Inside `BudgetWarning.tsx`:
-- Percent shown = `summary.usedPercent − 100` ← was overridden, so reflects **snapshot**
-- Dollar overage shown = `totalCommittedCents + plannedTotalCents − budgetTotalCents` ← **NOT** overridden, reflects **summary**
-
-So the percent and the dollar amount are literally pulled from different aggregations of the same data. That's why a single render can show "$690 (38%)" while another shows "$1,125 (38%)" — the percent stayed cached from one source while the dollars flipped to the other.
-
-A second contributing bug: `useTripFinancialSnapshot` and `getBudgetSummary` apply hotel/flight toggle exclusion using slightly different criteria:
-- Snapshot: row excluded only if `day_number === 0 && category === 'hotel'` (or flight)
-- Summary: every row tagged `category=hotel` is treated as committed-hotel and toggled, regardless of `day_number`
-
-If hotel rows exist on day 1+ (which happens for accommodation activities in the itinerary, not just the day-0 logistics row), the two totals diverge by exactly the hotel cost.
+1. **UI gap:** Transport rows (Metro, Walk, Taxi) are filtered out of `getVisibleReorderableActivities` (line 4180–4191 in `EditorialItinerary.tsx`) but are summed into `getDayTotalCost` (line 1240). Net effect: the badge says "€333" but the cards on screen sum to €274.
+2. **Data corruption:** A "Walk to Musée d'Orsay" row has $15.22 baked into it from a prior auto-correction, even though the row's own notes say "Free venue - Tier 1". A walk should always be $0. Same kind of corruption produced an orphan $8 dining row.
 
 ## Fix plan
 
-### Phase 1 — Single source of truth (eliminates the inconsistency entirely)
+### Phase 1 — UI: make the gap visible
 
-1. **Make `useTripFinancialSnapshot` the only source.** Replace all uses of `summary.usedPercent`, `summary.totalCommittedCents`, `summary.plannedTotalCents`, `summary.remainingCents`, `summary.status` in the **render path** with values derived from `snapshot`.
-2. Keep `useTripBudget`/`getBudgetSummary` only for the **category breakdown** (the per-category buckets aren't computed by the snapshot). Reconcile breakdown totals: scale the per-category numbers so they sum to `snapshot.tripTotalCents` (largest-remainder adjustment, same trick already used in `getBudgetLedger`). This keeps the breakdown directionally correct without letting it drift from the headline.
-3. **Compute overage dollars and percent from the same numerator/denominator:**
-   ```ts
-   const overageCents = snapshot.tripTotalCents - settings.budget_total_cents;
-   const overagePercent = (overageCents / settings.budget_total_cents) * 100;
+1. In `EditorialItinerary.tsx`, compute a `transitSubtotal` alongside `totalCost` (sum costs of activities where `category` or `type` is transport/transit). Compute `visibleActivitiesSubtotal = totalCost − transitSubtotal`.
+2. Update the day-total badge tooltip (around line 9494) to break the number down:
    ```
-   Round both at render time only. Never mix sources.
-4. **Update `BudgetWarning`** to take `overageCents` and `overagePercent` as props directly (no more deriving from a `summary` object that may be partially overridden). Same for `usedPercent` and `remainingCents`.
-
-### Phase 2 — Align inclusion rules
-
-5. In `useTripFinancialSnapshot`, change the hotel/flight exclusion to match `getBudgetSummary` exactly:
-   - Use the row's `category` field, not `day_number`, to decide hotel/flight.
-   - Single helper `shouldCountRow(row, settings)` exported from `tripBudgetService.ts` and used by both the snapshot and the summary.
-6. In `tripBudgetService.ts`, replace the per-entry toggle logic with the same helper, so the ledger and the snapshot can never disagree.
-
-### Phase 3 — Defensive guards
-
-7. In `BudgetTab.tsx`, add a dev-only assertion:
-   ```ts
-   if (import.meta.env.DEV && summary && Math.abs(summary.usedPercent - snapshotUsedPct) > 0.5) {
-     console.error('[budget] source mismatch', { summary, snapshot });
-   }
+   Activities: €274
+   Transit & transfers: €59
+   Day total: €333
    ```
-   This catches future regressions during development.
-8. Bump the React Query cache key for `tripBudgetSummary` to include the snapshot's `tripTotalCents` rounded to the dollar, so a snapshot refetch invalidates the summary cache. Removes the stale-summary-fresh-snapshot window.
-9. Add a `useTripBudgetService.test.ts` fixture: insert known activity_costs rows, assert `snapshot.tripTotalCents === summary.totalCommittedCents + summary.plannedTotalCents` for the same trip + settings.
+   The bottom-of-day "Day Total: €333/pp" badge (line 10093) gets the same tooltip. Users instantly see what the gap is.
+3. When `transitSubtotal > 0`, also append a small inline label to the badge (e.g. `€333 (incl. €59 transit)`) so the disclosure works even without hovering. Cap at one line so it doesn't reflow on mobile.
 
-### Phase 4 — Category drift (the secondary symptom: Food & Dining $1,749 → $1,999, Transit $472 → $530)
+### Phase 2 — Data integrity: stop counting bogus costs
 
-These shifted because `getBudgetLedger` runs the largest-remainder adjustment **only when `v_trip_total` view returns data**. If the view is slow or returns null on the first read, no adjustment is applied; on the second read it kicks in and one category absorbs the diff. Fix:
+4. In `supabase/functions/generate-itinerary/action-repair-costs.ts` (and any cost-write path), enforce: if a row's `notes` contain `Free venue - Tier 1` OR the activity title starts with `Walk ` (case-insensitive) AND `category` is transport, force `cost_per_person_usd = 0`. Walks are always free; "Free venue Tier 1" is by definition free.
+5. In `src/services/tripBudgetService.ts` (`getBudgetLedger`), apply the same guard at read time as a belt-and-suspenders measure: any row tagged `Free venue` with non-zero cost is reported with cost 0 and a console.warn for observability.
+6. Add a Postgres validation trigger update in `validate_activity_cost`: if `notes ILIKE '%Free venue%'` then force `cost_per_person_usd = 0` regardless of source. This catches future writes from any code path.
 
-10. If `v_trip_total` is null or stale (older than 5s vs. `activity_costs.updated_at`), recompute the canonical total client-side from the raw `activity_costs` rows just fetched, and run the adjustment against that. Never let the ledger return un-reconciled.
+### Phase 3 — One-time data repair (this trip + global cleanup)
+
+7. Migration: zero out all activity_costs rows where `notes ILIKE '%Free venue%' AND cost_per_person_usd > 0`. Re-sync the corresponding entries inside `trips.itinerary_data->'days'->'activities'->'cost'->'amount'`.
+8. Migration: delete orphan `activity_costs` rows whose `activity_id` no longer exists in any `trips.itinerary_data` for the same trip (this kills the stale $8 dining row).
+9. Re-run the snapshot/summary invalidation so the Budget tab and day badges reflect the cleaned data immediately.
+
+### Phase 4 — Optional polish (nice-to-have, not required for the fix)
+
+10. In the Budget tab's "All Costs" list, group entries by `day_number` with collapsible day headers. This way the Budget tab itself becomes a per-day reconciliation view that mirrors the itinerary day badges 1:1.
 
 ## Files to change
 
-- `src/components/planner/budget/BudgetTab.tsx` — drop mixed-source rendering (lines 381–407 and 410–431), feed BudgetWarning with snapshot-only props
-- `src/components/planner/budget/BudgetWarning.tsx` — accept explicit `usedPercent`, `overageCents`, `remainingCents`, `status`, `currency` props instead of a `BudgetSummary` blob
-- `src/hooks/useTripFinancialSnapshot.ts` — use shared `shouldCountRow` helper
-- `src/services/tripBudgetService.ts` — export `shouldCountRow`, fall back to client-side total when `v_trip_total` is missing
-- `src/hooks/useTripBudget.ts` — derive `isOverBudget`/`warningLevel` from snapshot, not summary
-- `src/services/tripBudgetService.test.ts` (new) — invariant test: snapshot total = summary total
-
-## Out of scope
-
-- Server-side `v_trip_total` view changes. We work around its staleness client-side; rebuilding it is a separate task.
-- Visual/UX changes to the warning banner itself.
+- `src/components/itinerary/EditorialItinerary.tsx` — add `transitSubtotal`, update both day-total badges to render a breakdown
+- `src/services/tripBudgetService.ts` — read-time guard against Free-venue rows with non-zero costs
+- `supabase/functions/generate-itinerary/action-repair-costs.ts` — write-time guard
+- `supabase/migrations/<new>.sql` — update `validate_activity_cost` trigger + zero out existing bad rows + delete orphan rows
+- (optional) `src/components/planner/budget/BudgetTab.tsx` — group ledger by day
 
 ## Why this works
 
-After the fix, every number on the Budget tab traces back to one query (`activity_costs` filtered by `shouldCountRow`). The over-budget banner cannot show "$690 (38%)" one second and "$1,125 (38%)" the next, because both numbers come from the same atomic snapshot. The category breakdown is forced to sum to that snapshot via largest-remainder, so Food & Dining can't silently jump $250 between renders.
+After phase 1, the day-total badge stops being a black box: any user can hover and see exactly which transit costs make up the difference. After phase 2 + 3, "Walk" and "Free venue" rows can never silently inflate a day total again — at write time, at read time, and at the database layer. The €333 will still be €333 (the taxi is real), but it will visibly equal Activities + Transit, line by line.
+
+## Out of scope
+
+- Changing the `getDayTotalCost` formula itself. The total is already correct — the problem is presentation, not arithmetic.
+- The user's €28-vs-$50 Bouillon Julien expectation. That's a separate "is this the right venue & price" question; the current $50/pp is consistent with what's in `cost_reference` for a Paris bouillon dinner with starter + main + drink for two.
