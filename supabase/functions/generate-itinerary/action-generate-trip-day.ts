@@ -364,11 +364,51 @@ async function _handleGenerateTripDayInner(
   } catch (_e) { /* trace-only */ }
 
   const restaurantPoolByCity: Record<string, any[]> = (tripMeta.restaurant_pool as any) || {};
-  const usedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
+  const metaUsedRestaurants: string[] = Array.isArray(tripMeta.used_restaurants) ? (tripMeta.used_restaurants as string[]) : [];
+
+  // ── ROBUST USED-RESTAURANTS DERIVATION ──
+  // Don't trust metadata alone (it can be stale or reset on retry). Walk every
+  // already-saved day and harvest dining venue names from ALL venue-bearing
+  // fields, then merge with metadata via canonical-venue dedup.
+  const usedRestaurants: string[] = [];
+  {
+    const { extractRestaurantVenueName: _extract, venueNamesMatch: _match } = await import('./generation-utils.ts');
+    const seen = new Set<string>();
+    const pushIfNew = (raw: string) => {
+      const canon = _extract(raw || '');
+      if (!canon || canon.length < 2) return;
+      if (seen.has(canon)) return;
+      // Fuzzy-match against existing entries
+      for (const existing of seen) {
+        if (_match(canon, existing)) return;
+      }
+      seen.add(canon);
+      usedRestaurants.push(canon);
+    };
+
+    // Seed from metadata
+    for (const m of metaUsedRestaurants) pushIfNew(m);
+
+    // Harvest from already-saved itinerary days
+    const MEAL_RE_HARVEST = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+    for (const d of existingDays) {
+      for (const a of (d?.activities || [])) {
+        const cat = (a.category || '').toLowerCase();
+        const typ = (a.type || '').toLowerCase();
+        const isDining = cat === 'dining' || cat === 'restaurant' || cat === 'food' ||
+          typ === 'dining' || MEAL_RE_HARVEST.test(a.title || '');
+        if (!isDining) continue;
+        for (const src of [a.title, a.name, a.venue_name, a.restaurant?.name, a.location?.name]) {
+          if (typeof src === 'string' && src.length > 0) pushIfNew(src);
+        }
+      }
+    }
+  }
   // === RESTAURANT DEDUP DEBUG ===
   console.log('=== RESTAURANT DEDUP DEBUG ===');
   console.log(`Day number: ${dayNumber}`);
-  console.log(`usedRestaurants received (${usedRestaurants.length}):`, JSON.stringify(usedRestaurants));
+  console.log(`metaUsedRestaurants (${metaUsedRestaurants.length}):`, JSON.stringify(metaUsedRestaurants));
+  console.log(`usedRestaurants merged from itinerary+metadata (${usedRestaurants.length}):`, JSON.stringify(usedRestaurants));
   console.log(`Type: ${typeof tripMeta.used_restaurants}, IsArray: ${Array.isArray(tripMeta.used_restaurants)}`);
   const allRestaurantParams = Object.keys(tripMeta).filter(k => /restaurant|used|block|previous|dining/i.test(k));
   console.log('All restaurant-related metadata keys:', JSON.stringify(allRestaurantParams.map(k => ({ key: k, count: Array.isArray(tripMeta[k]) ? (tripMeta[k] as any[]).length : 'N/A' }))));
