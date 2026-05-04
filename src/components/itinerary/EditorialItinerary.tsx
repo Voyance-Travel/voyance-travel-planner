@@ -9382,6 +9382,21 @@ function DayCard({
   const canViewPremium = canViewPremiumProp !== undefined ? canViewPremiumProp : !dayIsPreview;
   const allLocked = day.activities.every(a => a.isLocked);
   const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode);
+
+  // Transit subtotal — sum costs of transport/transit activities so the day
+  // badge can break down "visible activities + transit = day total". Without
+  // this, transport rows (filtered out of the visible card list) silently
+  // inflate the day total and create an unaccounted-for gap for users.
+  const transitSubtotal = dayIsPreview ? 0 : day.activities.reduce((sum, act) => {
+    const cat = (act.category || '').toLowerCase();
+    const typ = ((act as any).type || '').toLowerCase();
+    const isTransit = cat === 'transportation' || cat === 'transport' || cat === 'transit'
+      || typ === 'transportation' || typ === 'transport' || typ === 'transit';
+    if (!isTransit) return sum;
+    const info = getActivityCostInfo(act, travelers, budgetTier, destination, destinationCountry, isManualMode);
+    return sum + (isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount));
+  }, 0);
+  const visibleActivitiesSubtotal = Math.max(0, totalCost - transitSubtotal);
   
   // Transport details toggle - collapsed by default to reduce visual noise
   const [showTransportDetails, setShowTransportDetails] = useState(false);
