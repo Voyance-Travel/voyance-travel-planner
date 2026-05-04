@@ -1780,6 +1780,26 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // Trip-wide blocked restaurant accumulator. Seeded with usedRestaurants and
+  // grown as each day is processed so Day N+1 can't reuse a venue that the
+  // guard injected on Day N.
+  const tripBlockedRestaurants: string[] = [...usedRestaurants];
+  const { extractRestaurantVenueName: _extractGuard } = await import('./generation-utils.ts');
+  const _harvestDining = (acts: any[]) => {
+    const MEAL_RE_H = /\b(?:breakfast|brunch|lunch|dinner|supper|cocktails|tapas|nightcap)\b/i;
+    for (const a of acts || []) {
+      const cat = (a.category || '').toLowerCase();
+      const isDining = cat === 'dining' || cat === 'restaurant' || cat === 'food' || MEAL_RE_H.test(a.title || '');
+      if (!isDining) continue;
+      for (const src of [a.title, a.name, a.venue_name, a.restaurant?.name, a.location?.name]) {
+        if (typeof src === 'string' && src.length > 0) {
+          const canon = _extractGuard(src);
+          if (canon && !tripBlockedRestaurants.includes(canon)) tripBlockedRestaurants.push(canon);
+        }
+      }
+    }
+  };
+
   for (let i = 0; i < updatedDays.length; i++) {
     const d = updatedDays[i];
     if (!d?.activities || !Array.isArray(d.activities)) continue;
@@ -1794,7 +1814,10 @@ async function _handleGenerateTripDayInner(
       arrivalTime24: isFirstDayLoop ? savedArrivalTime24 : undefined,
       departureTime24: isLastDayLoop ? savedDepartureTime24 : undefined,
     });
-    if (policy.requiredMeals.length === 0) continue;
+    if (policy.requiredMeals.length === 0) {
+      _harvestDining(d.activities);
+      continue;
+    }
     const detected = detectMealSlots(d.activities);
     const missing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
 
@@ -1804,12 +1827,25 @@ async function _handleGenerateTripDayInner(
 
     if (missing.length > 0) {
       const dest = d.city || cityInfo?.cityName || destination || 'the destination';
-      const result = enforceRequiredMealsFinalGuard(d.activities, policy.requiredMeals, dn, dest, 'USD', policy.dayMode, fallbackVenues, { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop });
+      const result = enforceRequiredMealsFinalGuard(
+        d.activities,
+        policy.requiredMeals,
+        dn,
+        dest,
+        'USD',
+        policy.dayMode,
+        fallbackVenues,
+        { earliestTimeMins: arrMinsLoop, latestTimeMins: depMinsLoop, blockedRestaurants: tripBlockedRestaurants },
+      );
       if (!result.alreadyCompliant) {
         updatedDays[i] = { ...d, activities: result.activities };
         console.warn(`[generate-trip-day] 🍽️ MEAL GUARD: Day ${dn} missing [${result.injectedMeals.join(', ')}] — injected before chain save`);
       }
     }
+
+    // After processing this day (with or without injection), record its
+    // dining venues so subsequent days don't pick the same restaurant.
+    _harvestDining(updatedDays[i].activities);
 
     // Terminal cleanup for each day
     try {
