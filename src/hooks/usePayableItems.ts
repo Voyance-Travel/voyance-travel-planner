@@ -327,7 +327,7 @@ export function usePayableItems({
 
     return result;
     // travelers retained in deps for callers; not used directly because num_travelers is on the row
-  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById]);
+  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, hasManualHotel, hasManualFlight]);
 
   const totalCents = useMemo(() => items.reduce((sum, i) => sum + i.amountCents, 0), [items]);
   const essentialItems = useMemo(() => items.filter(i => i.type === 'flight' || i.type === 'hotel'), [items]);
