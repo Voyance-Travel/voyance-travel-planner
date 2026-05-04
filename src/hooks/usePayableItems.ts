@@ -145,6 +145,36 @@ export function usePayableItems({
     return map;
   }, [days]);
 
+  // Secondary index used to rescue orphaned activity_costs rows whose
+  // activity_id no longer exists in itinerary_data (a late quality pass
+  // swapped the activity and minted a new uuid). We pop a name from the
+  // matching (day, category) queue so the All Costs / Split Bill view
+  // shows the real venue rather than "Meal".
+  const orphanRescueByDayCat = useMemo(() => {
+    const DINING_RE = /\b(breakfast|brunch|lunch|dinner|supper|cafe|café|coffee|bakery|tapas|cocktails?|nightcap|aperitif|drinks?)\b/i;
+    const map = new Map<string, string[]>();
+    days.forEach(day => {
+      day.activities.forEach(a => {
+        const name = (a?.title || a?.name || '').toString().trim();
+        if (!name) return;
+        const rawCat = (a?.category || a?.type || '').toString().toLowerCase();
+        let mapped = '';
+        if (rawCat === 'dining' || rawCat === 'food' || rawCat === 'restaurant' || DINING_RE.test(name)) mapped = 'dining';
+        else if (['transport', 'transportation', 'taxi', 'metro', 'transit', 'transfer'].includes(rawCat)) mapped = 'transport';
+        else if (rawCat === 'nightlife') mapped = 'nightlife';
+        else if (rawCat === 'shopping') mapped = 'shopping';
+        else if (rawCat) mapped = 'activity';
+        if (!mapped) return;
+        const k = `${day.dayNumber}|${mapped}`;
+        const arr = map.get(k) || [];
+        arr.push(name);
+        map.set(k, arr);
+      });
+    });
+    return map;
+  }, [days]);
+
+
   const isManualId = (id: unknown): id is string =>
     typeof id === 'string' && /^manual[-_]/i.test(id.trim());
 
