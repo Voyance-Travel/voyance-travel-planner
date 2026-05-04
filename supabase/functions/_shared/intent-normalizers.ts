@@ -81,15 +81,18 @@ export function intentsFromFineTuneNotes(args: {
 
   for (const p of perDay) {
     const kind = p.kind === 'avoid' ? 'avoid' : normalizeKind(p.kind);
+    const title = p.title || p.raw;
+    const lock = maybeLock({ source: 'fine_tune', dayNumber: p.dayNumber, title, startTime: p.startTime, kind });
     out.push({
       dayNumber: p.dayNumber,
       source: 'fine_tune',
       kind,
-      title: p.title || p.raw,
+      title,
       rawText: p.raw,
       startTime: p.startTime || null,
       priority: kind === 'avoid' ? 'avoid' : (p.priority as IntentPriority),
-      locked: false,
+      locked: lock.locked,
+      lockedSource: lock.lockedSource,
     });
   }
 
