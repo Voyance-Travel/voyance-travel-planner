@@ -52,6 +52,7 @@ import { getTripPayments, type TripPayment } from '@/services/tripPaymentsAPI';
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { rateDisclosure } from '@/lib/currency';
+import { assessBudgetFit, formatMultiplier } from '@/lib/budget-realism';
 
 interface ItineraryActivity {
   id: string;
