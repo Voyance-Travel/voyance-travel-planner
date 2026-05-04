@@ -10242,7 +10242,11 @@ function DayCard({
                           <span className="font-medium text-foreground px-3 py-1 rounded-full bg-primary/10 text-primary cursor-default">
                             Day Total: {formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}{travelers > 1 ? '/pp' : ''}
                             <span className="ml-1.5 text-[11px] font-normal text-primary/70">
-                              (incl. {formatCurrency(Math.floor(displayCost(transitSubtotal)), tripCurrency)} transit)
+                              {airportTransferSubtotal > 0
+                                ? (otherTransitSubtotal > 0
+                                    ? `(incl. ${formatCurrency(Math.floor(displayCost(airportTransferSubtotal)), tripCurrency)} airport taxi + ${formatCurrency(Math.floor(displayCost(otherTransitSubtotal)), tripCurrency)} transit)`
+                                    : `(incl. ${formatCurrency(Math.floor(displayCost(airportTransferSubtotal)), tripCurrency)} airport taxi)`)
+                                : `(incl. ${formatCurrency(Math.floor(displayCost(transitSubtotal)), tripCurrency)} transit)`}
                             </span>
                           </span>
                         </TooltipTrigger>
@@ -10252,10 +10256,18 @@ function DayCard({
                               <span className="text-muted-foreground">Activities</span>
                               <span className="font-medium tabular-nums">{formatCurrency(Math.floor(displayCost(visibleActivitiesSubtotal)), tripCurrency)}</span>
                             </div>
-                            <div className="flex justify-between gap-3">
-                              <span className="text-muted-foreground">Transit & transfers</span>
-                              <span className="font-medium tabular-nums">{formatCurrency(Math.floor(displayCost(transitSubtotal)), tripCurrency)}</span>
-                            </div>
+                            {airportTransferSubtotal > 0 && (
+                              <div className="flex justify-between gap-3">
+                                <span className="text-muted-foreground">Airport transfer</span>
+                                <span className="font-medium tabular-nums">{formatCurrency(Math.floor(displayCost(airportTransferSubtotal)), tripCurrency)}</span>
+                              </div>
+                            )}
+                            {otherTransitSubtotal > 0 && (
+                              <div className="flex justify-between gap-3">
+                                <span className="text-muted-foreground">{airportTransferSubtotal > 0 ? 'Local transit' : 'Transit & transfers'}</span>
+                                <span className="font-medium tabular-nums">{formatCurrency(Math.floor(displayCost(otherTransitSubtotal)), tripCurrency)}</span>
+                              </div>
+                            )}
                             <div className="flex justify-between gap-3 pt-0.5 mt-0.5 border-t border-border">
                               <span className="font-semibold">Day total{travelers > 1 ? ' /pp' : ''}</span>
                               <span className="font-semibold tabular-nums">{formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}</span>
