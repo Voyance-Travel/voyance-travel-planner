@@ -1,0 +1,2 @@
+ALTER TABLE public.trip_payments DROP CONSTRAINT IF EXISTS trip_payments_item_type_check;
+ALTER TABLE public.trip_payments ADD CONSTRAINT trip_payments_item_type_check CHECK (item_type = ANY (ARRAY['flight'::text, 'hotel'::text, 'activity'::text, 'dining'::text, 'transport'::text, 'shopping'::text, 'other'::text]));
