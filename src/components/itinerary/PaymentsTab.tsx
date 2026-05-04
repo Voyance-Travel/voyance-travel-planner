@@ -1662,9 +1662,13 @@ export function PaymentsTab({
               <Input
                 id="expenseName"
                 placeholder={
-                  newExpenseType === 'flight' ? 'e.g., Round-trip to Rome (Delta)' :
-                  newExpenseType === 'hotel' ? 'e.g., The St. Regis Rome (3 nights)' :
-                  'e.g., Colosseum Tour'
+                  newExpenseType === 'flight' ? 'e.g., Round-trip to Paris (Delta)' :
+                  newExpenseType === 'hotel' ? 'e.g., Le Bristol Paris (3 nights)' :
+                  newExpenseType === 'activity' ? 'e.g., Louvre private tour' :
+                  newExpenseType === 'dining' ? "e.g., Dinner at L'Arpège" :
+                  newExpenseType === 'transport' ? 'e.g., Taxi to CDG airport' :
+                  newExpenseType === 'shopping' ? 'e.g., Hermès scarf' :
+                  'e.g., Travel insurance'
                 }
                 value={newExpenseName}
                 onChange={(e) => setNewExpenseName(e.target.value)}
