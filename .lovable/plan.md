@@ -1,57 +1,37 @@
 ## Goal
 
-Stop users from undersizing their budget for the venues the AI then schedules. Two changes:
+Misc bucket reads as broken/dead when it shows $0. Add a single inline empty-state hint inside the Misc row that tells users what it's for and offers a one-click "Add expense" affordance.
 
-1. **Cost-band labels on presets** — turn "Splurge-Forward" from a vibe word into a number.
-2. **Coach upgrade CTA** — when food blows past 45% *and* the trip contains a luxury anchor, surface a one-click "Bump budget to $X" instead of just flagging overrun.
+## Behavior
 
-## Change 1 — Preset labels with $/day bands
+When the discretionary breakdown renders the **Misc** row and `usedCents === 0` and `allocatedCents > 0`, render a compact line directly under the progress bar:
 
-File: `src/components/planner/budget/BudgetSetupDialog.tsx` (~lines 423–446)
+> For tips, market finds, pharmacy, SIM cards.   **+ Add expense**
 
-Replace the three flat preset buttons with stacked labels showing realistic per-person/day spend:
+Clicking **Add expense** jumps the user to the Payments tab with the existing "Add Expense" dialog open and the type preselected to **Other**. No new dialog, no new dependencies.
 
-- **Value-Focused** — $80–150/day pp
-- **Balanced** — $150–300/day pp
-- **Splurge-Forward** — $300–500/day pp
+## Implementation
 
-Add a one-line caption above the row: *"Pick a preset that matches your daily spend, not just your vibe."* Keep the existing tooltip on hover (hostels vs. mid-range vs. 4–5★ + splurge dinner). The Luminary tier is not currently a preset — leaving it out of this change to avoid scope creep, but the captions imply it.
+Cross-tab trigger via a window event (lightweight, mirrors existing patterns like `booking-changed`). No prop drilling through `EditorialItinerary` needed.
 
-No DB or service changes; pure label/UI.
+1. **`src/components/planner/budget/BudgetTab.tsx`** — in the discretionary `.map(...)` (around line 745) render the hint after the Progress bar when `alloc.category === 'misc' && used === 0 && allocated > 0`. Button dispatches `new CustomEvent('open-add-expense', { detail: { type: 'other' } })`.
 
-## Change 2 — Budget Coach "bump tier" suggestion
+2. **`src/components/itinerary/EditorialItinerary.tsx`** — add a `useEffect` listener for `open-add-expense`: switch `setActiveTab('payments')` and re-dispatch the event one tick later so the now-mounted PaymentsTab can pick it up.
 
-Files:
-- `src/components/planner/budget/BudgetCoach.tsx` — add a new "Upgrade budget" banner above the swap list.
-- `src/components/planner/budget/BudgetTab.tsx` — pass `onBumpBudget` prop and persist via existing `updateSettings({ budget_total_cents })`.
-
-Trigger conditions (computed in Coach):
-- `currentTotalCents > budgetTargetCents * 1.10` (real overrun, not noise), AND
-- Food share of total ≥ 45% (computed from itineraryDays' dining/food categories using existing `CATEGORY_GROUPS.Dining` keywords), AND
-- At least one activity title or description matches a luxury anchor regex: `/michelin|plaza athénée|ritz|le bristol|four seasons|wine tasting|tasting menu|caviar/i`.
-
-When all three fire, render a lightweight banner inside the Coach card *above* the swap list:
-
-> **Your plan is bigger than your preset.** This trip has Michelin-tier anchors and food is X% of total. Bump budget to $Y to match your actual plan, or apply the swaps below to fit.
-> [Bump to $Y] [Keep budget, swap items]
-
-`$Y` is computed as `Math.ceil(currentTotalCents * 1.05 / 50000) * 50000` (round up to nearest $500), so the new budget covers the plan with a small cushion. Clicking "Bump to $Y" calls `onBumpBudget(Y)` which writes `budget_total_cents` via the existing settings update path. No new tables or migrations.
-
-The banner is one-shot per session — once dismissed or applied it disappears until the over-budget condition deepens by ≥10%. Stored in localStorage keyed by tripId, mirroring the existing `dismissedStorageKey` pattern.
-
-## Out of scope
-
-- Re-baselining the preset's underlying $/day allocations (option #3 from the discussion). That's a calibration change with persistence implications and stays a separate ticket.
-- Adding a fourth "Luminary" preset — current presets cover the band; tier names already exist in DNA/quiz layer.
+3. **`src/components/itinerary/PaymentsTab.tsx`** — add a `useEffect` listener for `open-add-expense` that sets `setNewExpenseType(detail.type ?? 'other')` and `setShowAddExpenseModal(true)`.
 
 ## Files
 
-- `src/components/planner/budget/BudgetSetupDialog.tsx` — preset button labels + caption.
-- `src/components/planner/budget/BudgetCoach.tsx` — overage banner + bump CTA, dismiss persistence.
-- `src/components/planner/budget/BudgetTab.tsx` — wire `onBumpBudget` to `updateSettings`.
+- `src/components/planner/budget/BudgetTab.tsx` — hint + dispatch.
+- `src/components/itinerary/EditorialItinerary.tsx` — tab switch + re-dispatch.
+- `src/components/itinerary/PaymentsTab.tsx` — listener opens dialog with `type=other` preselected.
+
+## Out of scope
+
+- A separate misc-only dialog (would fragment the manual-expense flow).
+- Toolbar CTA (per discussion: bucket is the right home).
+- Restyling the Add Expense dialog itself.
 
 ## Result
 
-- Setup dialog teaches users what each preset is dimensioned for, before they pick.
-- When their plan outgrows the preset anyway, Coach offers a single click to right-size the budget instead of a wall of swap suggestions they don't want.
-- No data migrations, no new edge functions.
+When a user lands on the Budget tab and sees Misc at $0, the row teaches them what the bucket exists for and gets them to "add one" in a single click — no head-scratching, no extra navigation.
