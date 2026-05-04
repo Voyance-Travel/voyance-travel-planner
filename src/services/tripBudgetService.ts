@@ -482,14 +482,14 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
     let description = (row.activity_id && nameById.get(String(row.activity_id))) || '';
     if (!description && cat === 'hotel' && hotelName) description = hotelName;
     if (!description && cat === 'flight' && flightAirline) description = `Flight (${flightAirline})`;
-    // Orphan rescue: activity_id no longer exists in itinerary_data (a late
-    // quality pass swapped the activity and minted a new uuid). Pop the next
-    // matching name from the (day, category) queue so we still show the real
-    // venue rather than the generic "Meal (Day N)" fallback.
-    if (!description) {
-      const queue = nameQueueByDayCat.get(dayCatKey(row.day_number, cat));
-      if (queue && queue.length > 0) description = queue.shift() as string;
-    }
+    // NOTE: We deliberately do NOT pop a name from the (day, category) queue
+    // here. The orphan filter above already drops any activity-bound row whose
+    // activity_id is missing from the live itinerary, so any remaining row
+    // either matches a live activity (handled above) or is a logistics row.
+    // Reassigning a live venue's name to a different row was the root cause
+    // of the duplicate "Lunch at Le Comptoir du Relais" symptom — once you
+    // dropped the orphan, the rescue logic still re-applied that name to a
+    // different unrelated row.
     if (!description) {
       const cleaned = sanitizeNotes(row.notes);
       if (cleaned) description = cleaned;
