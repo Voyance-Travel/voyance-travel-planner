@@ -146,6 +146,7 @@ export function BudgetCoach({
   onApplySuggestion,
   protectedCategories = [],
   onProtectedCategoriesChange,
+  onBumpBudget,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
