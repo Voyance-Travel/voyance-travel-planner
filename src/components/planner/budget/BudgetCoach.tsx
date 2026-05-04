@@ -536,6 +536,32 @@ export function BudgetCoach({
             transition={{ duration: 0.2 }}
           >
             <CardContent className="space-y-3 pt-0">
+              {/* "Bump tier" CTA — turn a complaint into an action when the
+                  plan has clearly outgrown the preset (food-heavy + luxury anchors). */}
+              {showBumpCta && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Your plan is bigger than your preset.</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Food is {Math.round(foodSharePct)}% of total and your trip includes premium anchors.
+                        Bump budget to {formatCurrency(bumpTargetCents)} to match your actual plan, or apply the swaps below to fit.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Button size="sm" onClick={handleBump} disabled={isBumping}>
+                          {isBumping ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                          Bump to {formatCurrency(bumpTargetCents)}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={dismissBump} disabled={isBumping}>
+                          Keep budget, swap items
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Protected categories chip row */}
               {onProtectedCategoriesChange && (
                 <div className="flex items-start gap-2 flex-wrap pb-1">
