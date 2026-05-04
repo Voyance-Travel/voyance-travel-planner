@@ -535,6 +535,23 @@ function checkLogisticsSequence(activities: StrictActivityMinimal[], depTime24: 
     }
   }
 
+  // R3b: No non-departure activities after airport transport
+  // (covers the common case where there's no explicit "security" card)
+  const airportTransport = roles.find(r => r.role === 'airport-transport');
+  if (airportTransport && (!security || airportTransport.idx < security.idx)) {
+    for (let i = airportTransport.idx + 1; i < activities.length; i++) {
+      const role = classify(activities[i]);
+      if (role === 'flight' || role === 'airport-transport' || role === 'airport-security') continue;
+      results.push({
+        code: FAILURE_CODES.LOGISTICS_SEQUENCE,
+        severity: 'error',
+        message: `"${activities[i].title}" is scheduled after the airport transfer`,
+        activityIndex: i,
+        autoRepairable: true,
+      });
+    }
+  }
+
   // R4: Multiple airport transports
   const transports = roles.filter(r => r.role === 'airport-transport');
   if (transports.length > 1) {
