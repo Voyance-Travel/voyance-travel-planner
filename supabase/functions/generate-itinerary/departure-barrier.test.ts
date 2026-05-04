@@ -66,5 +66,5 @@ Deno.test("terminalCleanup: never removes user-locked activities", () => {
   });
 
   const titles = activities.map((a) => a.title);
-  assertEquals(titles.includes("Locked goodbye lunch"), true, "user-locked items must be preserved");
+  assertEquals(titles.includes("Locked farewell viewpoint"), true, "user-locked items must be preserved");
 });
