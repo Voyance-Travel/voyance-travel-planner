@@ -367,46 +367,56 @@ export function terminalCleanup(
       const bufferMins = isTrain ? 120 : 180;
       const latestEnd = depMins - bufferMins;
 
-      // Find the airport-transport card start time (acts as a hard barrier)
-      const isAirportTransport = (act: any): boolean => {
+      // Any departure-bound logistics card (airport transfer, "depart for flight",
+      // "head to airport", security/boarding, the flight itself) is a HARD BARRIER.
+      // Once the traveler is heading to the airport/station, the only valid
+      // follow-ups are more logistics — never a stroll, lunch, museum, etc.
+      const DEPARTURE_TITLE_RE = /\b(airport|head\s+to\s+airport|taxi\s+to\s+airport|transfer\s+to\b|depart(?:ure|ing|s|\b)|heading?\s+home|to\s+the\s+(?:airport|station|terminal)|security|boarding|check.?in\s+(?:at\s+)?(?:the\s+)?(?:airport|terminal))\b/i;
+      const isDepartureBarrier = (act: any): boolean => {
         const cat = (act.category || '').toLowerCase();
         const t = (act.title || '').toLowerCase();
-        return (cat === 'transport' || cat === 'transit' || cat === 'logistics') &&
-          (t.includes('airport') || t.includes('head to airport') ||
-           t.includes('taxi to airport') || t.includes('transfer to'));
+        if (cat === 'flight') return true;
+        if ((cat === 'transport' || cat === 'transit' || cat === 'logistics') &&
+            DEPARTURE_TITLE_RE.test(t)) return true;
+        return false;
       };
-      let airportTransportStart: number | null = null;
+      let departureBarrierStart: number | null = null;
       for (const act of activities) {
-        if (isAirportTransport(act)) {
+        if (isDepartureBarrier(act)) {
           const m = parseTimeMins(act.startTime || act.start_time || '');
-          if (m !== null && (airportTransportStart === null || m < airportTransportStart)) {
-            airportTransportStart = m;
+          if (m !== null && (departureBarrierStart === null || m < departureBarrierStart)) {
+            departureBarrierStart = m;
           }
         }
       }
 
-      if (latestEnd > 0 || airportTransportStart !== null) {
+      if (latestEnd > 0 || departureBarrierStart !== null) {
         const result: any[] = [];
         for (const act of activities) {
+          // Always preserve user-locked items — never silently delete them.
+          if (act.locked || act.isLocked) { result.push(act); continue; }
           const cat = (act.category || '').toLowerCase();
-          if (['transport', 'flight', 'accommodation', 'logistics'].includes(cat)) {
+          // Keep all true logistics categories
+          if (['transport', 'transit', 'flight', 'accommodation', 'logistics'].includes(cat)) {
             result.push(act);
             continue;
           }
           const startStr = act.startTime || act.start_time || '';
           const startMins = parseTimeMins(startStr);
           const title = (act.title || '').toLowerCase();
-          const isDepartureRelated = /depart|airport|flight|check.?out/i.test(title);
+          const isDepartureRelated = /depart|airport|flight|check.?out|heading?\s+home|security|boarding/i.test(title);
 
           if (startMins !== null) {
             const tooLateForBuffer = latestEnd > 0 && startMins > latestEnd;
-            const afterAirportTransport = airportTransportStart !== null && startMins >= airportTransportStart;
-            if (tooLateForBuffer || afterAirportTransport) {
+            const afterBarrier = departureBarrierStart !== null && startMins >= departureBarrierStart;
+            if (tooLateForBuffer || afterBarrier) {
               if (isDepartureRelated) {
                 result.push(act);
                 continue;
               }
-              const reason = afterAirportTransport ? 'after airport transfer' : `past departure buffer (departure: ${departureTime24})`;
+              const reason = afterBarrier
+                ? 'after departure barrier (heading to airport/station)'
+                : `past departure buffer (departure: ${departureTime24})`;
               console.warn(`[${label}] Removing post-departure activity "${act.title}" at ${startStr} — ${reason}`);
               removed++;
               continue;

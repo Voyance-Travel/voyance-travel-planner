@@ -1611,7 +1611,7 @@ UNIVERSAL QUALITY RULES (applies to ALL cities worldwide):
 
 6. NO SAME ACTIVITY TYPE ON CONSECUTIVE DAYS: If yesterday had a spa, today must not. If yesterday had a museum morning, today should start differently. Vary the rhythm.
 
-7. DEPARTURE DAY: On the last day of the trip, do NOT schedule activities that start within 3 hours of a flight departure or 2 hours of a train departure. The last day should be light — morning checkout, one breakfast, maybe a short walk, then head to the station/airport.
+7. DEPARTURE DAY — HARD TERMINAL SEQUENCE: Once the traveler checks out and heads for the airport/station, NOTHING else may follow except logistics. The ONLY valid sequence on a departure day is: (optional) breakfast / one short nearby item → checkout → transfer to airport/station → security/boarding → flight/train. NEVER schedule a stroll, walk, lunch, museum, shopping, viewpoint, café stop, or any leisure activity AFTER the airport/station transfer. NEVER schedule activities that start within 3 hours of a flight or 2 hours of a train. Wrong: checkout → depart for flight → lunch → stroll → airport. Right: checkout → transfer to airport → flight.
 
 ${(() => {
   if (!paramRestaurantPool || !Array.isArray(paramRestaurantPool) || paramRestaurantPool.length === 0) return '';

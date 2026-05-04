@@ -1902,6 +1902,23 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     }
   }
 
+  // --- 8d. RE-RUN DEPARTURE SEQUENCE AFTER INJECTIONS ---
+  // Steps 8/8b/8c may have just injected the checkout, departure-transport,
+  // and flight cards. Re-run sequence repair so those newly added cards
+  // become hard barriers and any non-logistics card scheduled after them
+  // is pulled back / removed.
+  if (isDepartureDayForSequence) {
+    const seqRepairs2 = repairDepartureSequence(activities, returnDepartureTime24, hotelName, lockedIds);
+    if (seqRepairs2.length > 0) {
+      repairs.push(...seqRepairs2);
+      activities.sort((a: any, b: any) => {
+        const ta = parseTimeToMinutes(a.startTime || '') ?? 99999;
+        const tb = parseTimeToMinutes(b.startTime || '') ?? 99999;
+        return ta - tb;
+      });
+    }
+  }
+
   // --- 9. MISSING_SLOT: bookend validator (with departure-day guards) ---
   // Always inject hotel bookends — use placeholder if no hotel selected yet.
   // "Your Hotel" placeholders get patched with real names via patchItineraryWithHotel.
@@ -2897,8 +2914,13 @@ function repairDepartureSequence(
     if (cat === 'flight' || t.includes('flight departure') || t.includes('departure flight')) return 'flight';
     if (t.includes('airport departure') || t.includes('airport security') || t.includes('security and boarding') ||
         t.includes('check-in at airport') || t.includes('departure and security')) return 'airport-security';
-    if ((cat === 'transport' || cat === 'transit') &&
-        (t.includes('airport') || t.includes('head to airport') || t.includes('taxi to airport'))) return 'airport-transport';
+    // Any logistics card heading to the airport/station/terminal — including
+    // generic "Departure Transfer" or "Heading Home" — is a hard barrier.
+    if ((cat === 'transport' || cat === 'transit' || cat === 'logistics') &&
+        (t.includes('airport') || t.includes('head to airport') || t.includes('taxi to airport') ||
+         t.includes('transfer to') || t.includes('to the airport') || t.includes('to the station') ||
+         t.includes('to the terminal') || t.includes('departure transfer') ||
+         /\bheading?\s+home\b/.test(t) || /\bdepart(?:ure|ing|s)?\b/.test(t))) return 'airport-transport';
     if (t.includes('checkout') || t.includes('check-out') || t.includes('check out')) return 'checkout';
     if ((cat === 'dining' || cat === 'restaurant' || cat === 'food') &&
         (t.includes('breakfast') || t.includes('morning meal'))) return 'breakfast';
