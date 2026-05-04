@@ -241,11 +241,19 @@ export function PaymentsTab({
 
   // ─── Canonical total from DB ledger (single source of truth, matches header + budget) ───
   const financialSnapshot = useTripFinancialSnapshot(tripId);
-  // Use DB-backed snapshot as canonical total; fall back to payableItems sum
-  // when activity_costs table is empty (e.g. fresh trip before sync completes).
-  const estimatedTotal = financialSnapshot.loading
+  // Manually-added expenses live only in trip_payments (not in activity_costs),
+  // so the DB snapshot misses them. Sum them so we can fold them on top.
+  const manualExtraCents = useMemo(() => {
+    return payments
+      .filter(p => typeof p.item_id === 'string' && p.item_id.startsWith('manual-'))
+      .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0);
+  }, [payments]);
+  const baseTotal = financialSnapshot.loading
     ? payableTotalCents
     : (financialSnapshot.tripTotalCents > 0 ? financialSnapshot.tripTotalCents : payableTotalCents);
+  // Add manual entries to the canonical ledger total; payableTotalCents (which
+  // already includes manual entries) acts as a floor in case of stale snapshot.
+  const estimatedTotal = Math.max(baseTotal + manualExtraCents, payableTotalCents);
   // "Paid so far" reflects actual recorded payments from trip_payments
   const paidAmount = totals.paid;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
