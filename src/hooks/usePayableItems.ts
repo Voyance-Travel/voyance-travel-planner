@@ -80,6 +80,10 @@ interface PayableItemsInput {
   activityCosts?: ActivityCostRow[] | null;
   /** When false, suppress canonical hotel/flight rows to avoid flashing duplicates before payments load. */
   paymentsLoaded?: boolean;
+  /** Trip-level inclusion toggles. Must mirror useTripFinancialSnapshot so the
+   *  Payments list and the Trip Total agree on which logistics rows count. */
+  includeHotel?: boolean;
+  includeFlight?: boolean;
 }
 
 const TRANSIT_CATEGORIES = new Set([
