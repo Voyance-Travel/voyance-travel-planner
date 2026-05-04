@@ -26,6 +26,7 @@ import {
   Footprints, Navigation2, History as HistoryIcon, Lightbulb, CheckCircle2,
 } from 'lucide-react';
 import { useSpendCredits, canAffordAction, getActionCost } from '@/hooks/useSpendCredits';
+import { convertFromUSD, convertToUSD, formatCurrency, rateDisclosure } from '@/lib/currency';
 import { toFriendlyError } from '@/utils/friendlyErrors';
 import { enrichAttraction, lookupActivityUrl } from '@/services/enrichmentService';
 import { useCredits } from '@/hooks/useCredits';
@@ -583,180 +584,9 @@ function isFuzzyLocationMatch(
   return false;
 }
 
-// Exchange rates relative to USD (1 USD = X units of target currency)
-// These are approximate rates - updated periodically
-const EXCHANGE_RATES_FROM_USD: Record<string, number> = {
-  USD: 1,
-  EUR: 0.92,
-  GBP: 0.79,
-  JPY: 149.5,
-  CHF: 0.88,
-  CAD: 1.36,
-  AUD: 1.53,
-  NZD: 1.64,
-  CNY: 7.24,
-  HKD: 7.82,
-  SGD: 1.34,
-  THB: 35.8,
-  MXN: 17.2,
-  BRL: 4.97,
-  INR: 83.1,
-  KRW: 1320,
-  ZAR: 18.9,
-  SEK: 10.45,
-  NOK: 10.62,
-  DKK: 6.87,
-  PLN: 4.02,
-  CZK: 23.1,
-  HUF: 358,
-  ILS: 3.65,
-  AED: 3.67,
-  SAR: 3.75,
-  TRY: 30.5,
-  RUB: 92,
-  PHP: 55.8,
-  IDR: 15650,
-  MYR: 4.72,
-  VND: 24500,
-  TWD: 31.5,
-  ARS: 850,
-  CLP: 920,
-  COP: 3950,
-  PEN: 3.72,
-  EGP: 30.9,
-  MAD: 10.1,
-  NGN: 1200,
-  KES: 154,
-  PKR: 278,
-  BDT: 110,
-  UAH: 37.5,
-  RON: 4.58,
-  BGN: 1.80,
-  HRK: 6.93, // Legacy, Croatia uses EUR now
-  ISK: 138,
-  NIO: 36.7,
-  GTQ: 7.82,
-  CRC: 530,
-  PAB: 1,
-  DOP: 57,
-  JMD: 155,
-  TTD: 6.78,
-  BBD: 2,
-  BSD: 1,
-  BZD: 2,
-  XCD: 2.70,
-  AWG: 1.79,
-  ANG: 1.79,
-  BMD: 1,
-  KYD: 0.82,
-  FJD: 2.23,
-  PGK: 3.72,
-  WST: 2.72,
-  TOP: 2.36,
-  VUV: 119,
-  SBD: 8.46,
-  SCR: 13.5,
-  MUR: 45.5,
-  MVR: 15.4,
-  LKR: 325,
-  NPR: 133,
-  BND: 1.34,
-  KHR: 4100,
-  LAK: 20800,
-  MMK: 2100,
-  MNT: 3450,
-  KZT: 450,
-  UZS: 12300,
-  GEL: 2.65,
-  AMD: 405,
-  AZN: 1.70,
-  BYN: 3.27,
-  MDL: 17.8,
-  BAM: 1.80,
-  MKD: 56.5,
-  RSD: 108,
-  ALL: 95,
-  XOF: 603,
-  XAF: 603,
-  GHS: 12.5,
-  TZS: 2500,
-  UGX: 3800,
-  ZMW: 23.5,
-  BWP: 13.6,
-  NAD: 18.9,
-  MZN: 63.5,
-  AOA: 830,
-  ETB: 56.5,
-  SOS: 571,
-  DJF: 178,
-  ERN: 15,
-  GMD: 67,
-  GNF: 8600,
-  LRD: 188,
-  SLL: 22500,
-  CVE: 101,
-  MWK: 1685,
-  STN: 22.5,
-  SZL: 18.9,
-  LSL: 18.9,
-  QAR: 3.64,
-  KWD: 0.31,
-  BHD: 0.377,
-  OMR: 0.385,
-  JOD: 0.71,
-  LBP: 89500,
-  SYP: 13000,
-  IQD: 1310,
-  YER: 250,
-  AFN: 72,
-  IRR: 42000,
-  TMT: 3.50,
-  TJS: 10.9,
-  KGS: 89,
-};
-
-/**
- * Convert an amount from USD to the target currency
- */
-function convertFromUSD(amountInUSD: number, targetCurrency: string): number {
-  const rate = EXCHANGE_RATES_FROM_USD[targetCurrency.toUpperCase()];
-  if (!rate) return amountInUSD; // Fallback to USD if rate not found
-  return amountInUSD * rate;
-}
-
-/**
- * Convert an amount from the source currency to USD
- */
-function convertToUSD(amount: number, sourceCurrency: string): number {
-  const rate = EXCHANGE_RATES_FROM_USD[sourceCurrency.toUpperCase()];
-  if (!rate || rate === 0) return amount; // Fallback if rate not found
-  return amount / rate;
-}
-
-function formatCurrency(amount: number | null | undefined, currency: string = 'USD'): string {
-  if (amount === null || amount === undefined) {
-    return '-'; // Should never happen with smart estimation
-  }
-  if (amount === 0) {
-    return 'Free';
-  }
-  // Use the provided currency (from activity data) for proper localization
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-      minimumFractionDigits: 0,
-      maximumFractionDigits: currency.toUpperCase() === 'JPY' || currency.toUpperCase() === 'KRW' ? 0 : 0,
-    }).format(amount);
-  } catch {
-    // Fallback if currency code is invalid
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  }
-}
+// FX rates, conversion helpers, and `formatCurrency` are imported at the top
+// of this file from `@/lib/currency` — the shared module ensures this header
+// and the Budget tab always render the same converted value.
 
 function normalizeCurrencyCode(input: unknown): string | null {
   if (!input) return null;
@@ -5343,6 +5173,22 @@ export function EditorialItinerary({
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-sm text-muted-foreground shrink-0">Trip Total</span>
                     <span className="text-2xl font-bold text-foreground truncate">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
+                    {tripCurrency !== 'USD' && rateDisclosure(tripCurrency) && (
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="text-muted-foreground/70 hover:text-foreground transition-colors"
+                            aria-label="Exchange rate info"
+                          >
+                            <Info className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-xs">
+                          <span className="text-xs">{rateDisclosure(tripCurrency)}</span>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                     <TripTotalDeltaIndicator
                       delta={financialSnapshot.lastDelta}
                       onDismiss={financialSnapshot.acknowledgeDelta}

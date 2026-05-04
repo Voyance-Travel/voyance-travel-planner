@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { formatMoneyFromUsdCents } from '@/lib/currency';
 import {
   getTripBudgetSettings,
   updateTripBudgetSettings,
@@ -165,16 +166,13 @@ export function useTripBudget({ tripId, totalDays = 7, enabled = true }: UseTrip
   })();
   
   const formatCurrency = useCallback((cents: number) => {
+    // Canonical storage is USD cents. Convert to the user's chosen budget
+    // currency before formatting so the Budget tab matches the itinerary
+    // header (which converts via the same shared FX module).
     const currency = settings?.budget_currency || 'USD';
-    const amount = cents / 100;
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
+    return formatMoneyFromUsdCents(cents, currency);
   }, [settings?.budget_currency]);
-  
+
   // Action handlers
   const updateSettings = async (newSettings: Partial<TripBudgetSettings>) => {
     await updateMutation.mutateAsync(newSettings);
