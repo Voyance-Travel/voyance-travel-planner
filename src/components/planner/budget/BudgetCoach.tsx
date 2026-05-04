@@ -677,19 +677,39 @@ export function BudgetCoach({
 
               {/* Empty state */}
               {!isLoading && !error && suggestions.length === 0 && (
-                <div className="text-center py-6">
-                  <p className="text-sm text-muted-foreground">
-                    No suggestions available yet.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 gap-1.5"
-                    onClick={() => fetchSuggestions(true)}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Get Suggestions
-                  </Button>
+                <div className="text-center py-6 space-y-3">
+                  {allProtected || (protectedCategories.length > 0 && dismissedIds.length === 0) ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        All suggestable items are protected. Loosen a category above to see savings, or adjust your budget target.
+                      </p>
+                      {(protectedCategories.length > 0 || dismissedIds.length > 0) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={clearProtections}
+                        >
+                          Clear protections
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        No suggestions available yet.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => fetchSuggestions(true)}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Get Suggestions
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>
