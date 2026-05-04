@@ -3787,11 +3787,11 @@ export function EditorialItinerary({
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
       toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
 
-      // Async rebuild activity_costs so DB stays in sync for future page loads
-      import('@/services/activityCostService').then(({ repairTripCosts }) => {
-        repairTripCosts(tripId)
-          .catch(err => console.error('[Regeneration] repair-trip-costs failed:', err));
-      });
+      // Note: we used to call repairTripCosts here on every regeneration.
+      // That silently raised prices (Michelin/ticketed/reference floors) and
+      // produced "+$900" total jumps with no attribution. The generation
+      // pipeline already writes correct activity_costs via syncBudgetFromDays,
+      // and a one-shot legacy backfill runs in TripDetail when needed.
     } catch (err: any) {
       console.error('[EditorialItinerary] Regeneration failed:', err);
       if (!err?.message?.startsWith('Not enough credits')) {
@@ -3806,10 +3806,24 @@ export function EditorialItinerary({
   const handleRepairPricing = useCallback(async () => {
     setIsRepairingPricing(true);
     try {
-      const { repairTripCosts } = await import('@/services/activityCostService');
+      const { repairTripCosts, getRecentCostChanges } = await import('@/services/activityCostService');
       const result = await repairTripCosts(tripId);
       if (result.success) {
-        toast.success(`Pricing repaired: ${result.repaired} activities updated${result.corrected > 0 ? `, ${result.corrected} outliers corrected` : ''}`);
+        const changes = await getRecentCostChanges(tripId, 15_000);
+        if (changes.length === 0) {
+          toast.success(`Pricing repaired: ${result.repaired} activities updated`);
+        } else {
+          const top = changes.slice(0, 3).map(c => {
+            const delta = (c.new_cents - c.previous_cents) / 100;
+            const sign = delta >= 0 ? '+' : '−';
+            return `${c.activity_title || 'Activity'} ${sign}$${Math.abs(delta).toFixed(0)}`;
+          }).join(', ');
+          const more = changes.length > 3 ? ` and ${changes.length - 3} more` : '';
+          toast.success(`Pricing repaired: ${changes.length} adjusted`, {
+            description: `${top}${more}`,
+            duration: 8000,
+          });
+        }
         await refetchItineraryFromDb();
       } else {
         toast.error(toFriendlyError(result.error));
