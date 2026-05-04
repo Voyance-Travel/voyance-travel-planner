@@ -398,6 +398,15 @@ export function usePayableItems({
           cost: a.cost,
         })) continue;
 
+        // Skip unconfirmed intra-city taxi/rideshare legs: AI named them
+        // "Taxi to X" but user never confirmed mode. Stays $0 until user picks.
+        if (isUnconfirmedIntraCityTaxi({
+          title: a.title || a.name,
+          category: cat,
+          bookingRequired: (a as any).bookingRequired,
+          cost: a.cost,
+        })) continue;
+
         const explicitRaw = typeof a.cost === 'number' ? a.cost
           : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
           : (typeof a.explicitCost === 'number' ? a.explicitCost : undefined);
