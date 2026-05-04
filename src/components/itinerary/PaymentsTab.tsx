@@ -901,6 +901,18 @@ export function PaymentsTab({
               Mark Paid
             </Button>
           )}
+
+          {item.allPayments.length > 0 && item.allPayments.every(p => p.external_provider === 'manual') && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+              onClick={() => setDeleteTarget(item)}
+              title="Delete expense"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </motion.div>
       {item.subItems && item.subItems.length > 0 && (
