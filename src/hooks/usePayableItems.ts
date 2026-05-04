@@ -291,7 +291,7 @@ export function usePayableItems({
         if (TRANSIT_CATEGORIES.has(cat)) {
           const lookup = activityNameById.get(row.activity_id);
           // Skip placeholder departure transfers — no mode chosen, no committed price.
-          if (lookup && isPlaceholderDepartureTransferTitleSafe(lookup.name)) {
+          if (lookup && isPlaceholderDepartureTransferTitle(lookup.name)) {
             continue;
           }
           const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
