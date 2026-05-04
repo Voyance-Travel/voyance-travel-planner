@@ -139,10 +139,13 @@ serve(async (req) => {
       }
     }
 
-    // Build a concise itinerary summary for the prompt (post-filter)
+    // Build a concise itinerary summary for the prompt (post-filter).
+    // Drop $0 / unknown-cost rows — they aren't candidates for "make cheaper"
+    // and their presence encourages the model to invent items to fill gaps.
     const itinerarySummary = filteredDays
       .map((day) => {
         const acts = day.activities
+          .filter((a) => typeof a.cost === "number" && a.cost > 0)
           .map(
             (a) =>
               `  - [${a.id}] ${a.title} (${a.category || "activity"}) — ${currency} ${(a.cost / 100).toFixed(0)}`
@@ -341,21 +344,45 @@ Rules:
       }
     }
 
-    // Build a lookup of original activity costs (already in cents from the
-    // caller). Use the FULL itinerary so we can validate IDs the model returns
-    // even if they referenced a protected/dismissed item (we'll filter those
-    // out in the post-filter below).
+    // Build lookups for ID-existence + title-match guards. Use the FULL
+    // itinerary so we can validate IDs even if they referenced a protected
+    // or dismissed item (filtered separately below).
     const activityCostCentsById = new Map<string, number>();
+    const activityTitleById = new Map<string, string>();
+    const allValidIds = new Set<string>();
     for (const day of itinerary_days) {
       for (const activity of day.activities ?? []) {
+        const sid = String(activity.id);
+        allValidIds.add(sid);
+        activityTitleById.set(sid, String(activity.title || ""));
         if (typeof activity.cost === "number" && Number.isFinite(activity.cost) && activity.cost > 0) {
-          activityCostCentsById.set(activity.id, Math.round(activity.cost));
+          activityCostCentsById.set(sid, Math.round(activity.cost));
         }
       }
     }
 
+    // Title-match helper: tolerant comparison between AI-claimed item name
+    // and the real activity title for a given ID.
+    const normalize = (s: string) =>
+      s.toLowerCase().replace(/[^a-z0-9\s]+/g, " ").replace(/\s+/g, " ").trim();
+    const tokenize = (s: string) =>
+      new Set(normalize(s).split(" ").filter((t) => t.length >= 4));
+    const titleMatches = (claimed: string, real: string): boolean => {
+      const c = normalize(claimed);
+      const r = normalize(real);
+      if (!c || !r) return false;
+      if (c.includes(r) || r.includes(c)) return true;
+      const ct = tokenize(claimed);
+      const rt = tokenize(real);
+      if (ct.size === 0 || rt.size === 0) return false;
+      let overlap = 0;
+      for (const t of ct) if (rt.has(t)) overlap++;
+      const denom = Math.min(ct.size, rt.size);
+      return denom > 0 && overlap / denom >= 0.6;
+    };
+
     console.log("Activity costs (cents) from caller:", JSON.stringify(Object.fromEntries(activityCostCentsById)));
-    console.log(`Protections: categories=${JSON.stringify(protected_categories)} dismissed=${dismissed_activity_ids.length} preFilteredOut=${protectedActivityIds.size}`);
+    console.log(`Protections: categories=${JSON.stringify(protected_categories)} dismissed=${dismissed_activity_ids.length} preFilteredOut=${protectedActivityIds.size} validIds=${allValidIds.size}`);
 
     // The AI is instructed to return whole-currency values (e.g. 50 for $50).
     // We simply multiply by 100 to get cents. No heuristic.
@@ -368,12 +395,27 @@ Rules:
         // activity (model drift safety net — the prompt should prevent this,
         // but we guard against it anyway).
         const sid = String(s.activity_id);
+
+        // ID-MUST-EXIST GUARD: drop hallucinated IDs that aren't in the trip.
+        if (!allValidIds.has(sid)) {
+          console.log(`  → FILTERED OUT (unknown activity_id "${sid}", claimed item: "${s.current_item}")`);
+          return null;
+        }
+
         if (dismissedSet.has(sid)) {
           console.log(`  → FILTERED OUT (dismissed activity ${sid})`);
           return null;
         }
         if (protectedActivityIds.has(sid)) {
           console.log(`  → FILTERED OUT (protected activity ${sid} in ${protected_categories.join(",")})`);
+          return null;
+        }
+
+        // TITLE-MUST-MATCH GUARD: catches the case where the model reuses a
+        // real ID but writes a fabricated current_item for the user-visible card.
+        const realTitle = activityTitleById.get(sid) || "";
+        if (realTitle && s.current_item && !titleMatches(String(s.current_item), realTitle)) {
+          console.log(`  → FILTERED OUT (title mismatch: claimed "${s.current_item}" vs real "${realTitle}")`);
           return null;
         }
 
@@ -410,6 +452,9 @@ Rules:
 
         return {
           ...s,
+          // Force the rendered title to the real itinerary item so even
+          // a slightly-off AI label can't show a phantom name in the UI.
+          current_item: activityTitleById.get(sid) || s.current_item,
           current_cost: currentCostCents,
           new_cost: newCostCents,
           savings: currentCostCents - newCostCents,
