@@ -682,31 +682,38 @@ export function isPlaceholderDepartureTransfer(activity: {
 }
 
 /**
- * Unconfirmed intra-city taxi/rideshare leg — AI named it "Taxi to X" but the
- * user never picked taxi as their mode. We never auto-cost these; they appear
- * on the day card with a "choose a mode" hint, but stay $0 until the user
- * confirms (cost.basis = 'user'/'user_override') or it's a booked ride.
- * Mirrors the placeholder_departure rule on the backend.
+ * Unconfirmed transit leg — any transport activity whose title/description
+ * contains NO mode keyword (taxi, metro, train, bus, etc.) AND the user has
+ * not confirmed a price (cost.basis !== user/user_override) AND it's not a
+ * booked ride. Stays $0 until the user picks a mode.
+ *
+ * Catches both "Taxi to X" auto-titles and mode-less hops like "Travel to
+ * Four Seasons" or "Transfer to Hotel". Mirrors the unconfirmed_transit
+ * branch in action-repair-costs.ts.
  */
-const UNCONFIRMED_TAXI_TITLE_RE = /^\s*(?:taxi|cab|uber|lyft|rideshare|private\s+car|car\s+service)\b.*\bto\b/i;
-export function isUnconfirmedIntraCityTaxi(activity: {
+export function isUnconfirmedTransitLeg(activity: {
   title?: string;
   name?: string;
+  description?: string;
   category?: string;
   type?: string;
   bookingRequired?: boolean;
   booking_required?: boolean;
   cost?: any;
 }): boolean {
-  const title = activity.title || activity.name || '';
-  if (!UNCONFIRMED_TAXI_TITLE_RE.test(title)) return false;
+  const cat = (activity.category || activity.type || '').toLowerCase();
+  if (cat && !['transport', 'transfer', 'transportation', 'transit', 'taxi', 'rideshare'].includes(cat)) return false;
   if (activity.bookingRequired === true || activity.booking_required === true) return false;
   const basis = activity.cost && typeof activity.cost === 'object' ? (activity.cost as any).basis : undefined;
   if (basis === 'user' || basis === 'user_override') return false;
-  const cat = (activity.category || activity.type || '').toLowerCase();
-  if (cat && !['transport', 'transfer', 'transportation', 'transit', 'taxi', 'rideshare'].includes(cat)) return false;
+  const title = activity.title || activity.name || '';
+  const desc = activity.description || '';
+  if (TRANSPORT_MODE_KEYWORDS.test(title) || TRANSPORT_MODE_KEYWORDS.test(desc)) return false;
   return true;
 }
+
+/** @deprecated use isUnconfirmedTransitLeg — kept for backward compat. */
+export const isUnconfirmedIntraCityTaxi = isUnconfirmedTransitLeg;
 
 /**
  * Pre-warm the cache (call early in app lifecycle)
