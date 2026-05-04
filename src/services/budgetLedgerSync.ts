@@ -180,47 +180,40 @@ export async function syncHotelToLedger(
     return;
   }
 
-  let totalUsd = hotel.totalPrice || 0;
-  let isEstimated = false;
+  // GUARD: if a manual hotel payment already exists for this trip, the user
+  // owns the hotel cost line. Never write a system placeholder on top of it —
+  // that's the bug that caused the "Hotel Accommodation $2,850" + manual
+  // "Four Seasons $2,400" double-billing in Travel Essentials.
+  const { data: manualHotelPayments } = await supabase
+    .from('trip_payments')
+    .select('id')
+    .eq('trip_id', tripId)
+    .eq('item_type', 'hotel')
+    .like('item_id', 'manual-%')
+    .limit(1);
+  if (manualHotelPayments && manualHotelPayments.length > 0) {
+    await removeLogisticsCost(tripId, 'hotel');
+    return;
+  }
 
-  // First fallback: pricePerNight × nights
+  let totalUsd = hotel.totalPrice || 0;
+
+  // First fallback: pricePerNight × nights (still a real user-entered rate)
   if (!totalUsd && hotel.pricePerNight) {
     const nights = getHotelNights(hotel);
     if (nights > 0) totalUsd = hotel.pricePerNight * nights;
   }
 
-  // Second fallback: reference-table estimate (NEVER an AI guess).
-  // Triggered when the user picked a hotel but never entered a rate.
-  if (!totalUsd || totalUsd <= 0) {
-    const nights = getHotelNights(hotel);
-    if (nights > 0) {
-      // Look up the trip's destination + tier for the reference rate
-      const { data: tripRow } = await supabase
-        .from('trips')
-        .select('destination, budget_tier')
-        .eq('id', tripId)
-        .maybeSingle();
-
-      const tier = (tripRow?.budget_tier as 'budget' | 'mid' | 'luxury') || 'mid';
-      // Strip "Trip to " or trailing country, take first city token
-      const rawDest = (tripRow?.destination || '').replace(/^Trip to\s+/i, '').split(/[,;/]/)[0].trim();
-      const refRate = await lookupHotelReferenceRate(rawDest || null, tier);
-
-      if (refRate && refRate > 0) {
-        totalUsd = refRate * nights;
-        isEstimated = true;
-      }
-    }
-  }
-
+  // NO reference-table estimate. A selected hotel without an explicit price
+  // must NOT auto-bill the trip — a $2,850 estimated stay surprised users
+  // and double-counted against their manual entry. If we don't have a real
+  // price, leave the ledger empty (the manual flow is the source of truth).
   if (!totalUsd || totalUsd <= 0) {
     await removeLogisticsCost(tripId, 'hotel');
     return;
   }
 
-  const baseDesc = hotel.name ? `Hotel: ${hotel.name}` : 'Hotel';
-  const description = isEstimated ? `${baseDesc} (estimated)` : baseDesc;
-
+  const description = hotel.name ? `Hotel: ${hotel.name}` : 'Hotel';
   await upsertLogisticsCost(tripId, 'hotel', totalUsd, description);
 }
 
