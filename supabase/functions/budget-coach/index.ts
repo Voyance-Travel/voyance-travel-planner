@@ -436,9 +436,17 @@ Rules:
           return null;
         }
 
+        // PLACEHOLDER-TITLE GUARD: if the real itinerary row is just a generic
+        // placeholder ("Dinner (Day 2)", "transport (Day 2)", "Activity"), the
+        // coach has nothing concrete to swap — reject to avoid phantom suggestions.
+        const realTitle = activityTitleById.get(sid) || "";
+        if (isPlaceholderTitle(realTitle)) {
+          console.log(`  → FILTERED OUT (placeholder real title "${realTitle}" for ${sid})`);
+          return null;
+        }
+
         // TITLE-MUST-MATCH GUARD: catches the case where the model reuses a
         // real ID but writes a fabricated current_item for the user-visible card.
-        const realTitle = activityTitleById.get(sid) || "";
         if (realTitle && s.current_item && !titleMatches(String(s.current_item), realTitle)) {
           console.log(`  → FILTERED OUT (title mismatch: claimed "${s.current_item}" vs real "${realTitle}")`);
           return null;
