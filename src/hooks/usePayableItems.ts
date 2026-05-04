@@ -613,7 +613,7 @@ export function usePayableItems({
     });
 
     return deduped;
-  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, orphanRescueByDayCat, hasManualHotel, hasManualFlight, paymentsLoaded, budgetTier, destination, destinationCountry]);
+  }, [flightSelection, hotelSelection, days, payments, travelers, activityCosts, activityNameById, orphanRescueByDayCat, hasManualHotel, hasManualFlight, paymentsLoaded, budgetTier, destination, destinationCountry, estimateMissingCosts]);
 
   const totalCents = useMemo(() => items.reduce((sum, i) => sum + i.amountCents, 0), [items]);
   const essentialItems = useMemo(() => items.filter(i => i.type === 'flight' || i.type === 'hotel'), [items]);
