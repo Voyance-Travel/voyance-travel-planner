@@ -192,7 +192,46 @@ export async function universalQualityPass(
     enforceMichelinPriceFloor(act, label);
   }
 
-  // ── Step 8: Ensure hotel return at end of day (except departure day) ──
+  // ── Step 7b: Day 1 dining tier mismatch (luxury food audiences) ──
+  // Flag the dinner with `needs_elevation: true` if Day 1 lunch + dinner are
+  // both at/below the configured lunch midpoint — repair pass picks this up.
+  if (dayIndex === 0) {
+    const isLuxuryFood =
+      dnaTier === 'Curator' ||
+      dnaArchetype === 'The Luxury Luminary' ||
+      dnaArchetype === 'The Culinary Cartographer' ||
+      dnaArchetype === 'The VIP Voyager';
+
+    if (isLuxuryFood && (diningConfig.michelinPolicy === 'required' || diningConfig.michelinPolicy === 'encouraged')) {
+      const lunchMid = (diningConfig.priceRange.lunch[0] + diningConfig.priceRange.lunch[1]) / 2;
+      const isMeal = (a: any) => {
+        const cat = (a.category || '').toUpperCase();
+        return cat === 'DINING' || cat === 'RESTAURANT' || cat === 'FOOD';
+      };
+      const priceOf = (a: any): number =>
+        Number(a.cost_per_person ?? a.price_per_person ?? a.cost?.amount ?? a.estimatedCost?.amount ?? 0);
+      const startMins = (a: any): number => {
+        const t = String(a.startTime || a.start_time || '');
+        const m = t.match(/(\d{1,2}):(\d{2})/);
+        if (!m) return 0;
+        let h = parseInt(m[1], 10);
+        const mm = parseInt(m[2], 10);
+        if (/pm/i.test(t) && h < 12) h += 12;
+        if (/am/i.test(t) && h === 12) h = 0;
+        return h * 60 + mm;
+      };
+      const meals = result.filter(isMeal).sort((a, b) => startMins(a) - startMins(b));
+      const lunch = meals.find(a => { const s = startMins(a); return s >= 11 * 60 && s < 16 * 60; });
+      const dinner = meals.find(a => startMins(a) >= 18 * 60);
+      if (lunch && dinner && priceOf(lunch) > 0 && priceOf(dinner) > 0
+          && priceOf(lunch) <= lunchMid && priceOf(dinner) <= lunchMid) {
+        (dinner as any).tags = Array.from(new Set([...(dinner.tags || []), 'needs_elevation', 'grand_entrance']));
+        (dinner as any).needs_elevation = true;
+        console.warn(`[${label}] Day 1 dining tier mismatch: lunch €${priceOf(lunch)} + dinner €${priceOf(dinner)} both ≤ lunch-mid €${lunchMid}. Tagged dinner "${dinner.title}" for elevation.`);
+      }
+    }
+  }
+
   if (dayIndex < totalDays - 1 && result.length > 0) {
     const lastActivity = result[result.length - 1];
     const lastCat = (lastActivity?.category || '').toUpperCase();
