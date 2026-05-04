@@ -452,6 +452,9 @@ Rules:
 
         return {
           ...s,
+          // Force the rendered title to the real itinerary item so even
+          // a slightly-off AI label can't show a phantom name in the UI.
+          current_item: activityTitleById.get(sid) || s.current_item,
           current_cost: currentCostCents,
           new_cost: newCostCents,
           savings: currentCostCents - newCostCents,
