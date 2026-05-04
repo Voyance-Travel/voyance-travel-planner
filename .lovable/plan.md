@@ -1,62 +1,91 @@
-# Make Budget & Itinerary Currency Display Consistent
+# Budget Coach: protect what matters
 
-## What's actually happening
+## Problem
+The coach correctly ranks the most expensive items first, but it has no concept of *trip intent*. For a luxury food trip it cheerfully proposes swapping L'Arpège → Septime and Le Cinq → Café de Flore — the two anchors the entire itinerary was designed around. There's no way to tell it "don't touch dining" or to dismiss a single bad suggestion.
 
-Both the itinerary header ("Trip Total") and the Budget tab read the **same** canonical number — `financialSnapshot.tripTotalCents`, stored in **USD cents**. The discrepancy is purely a **display-layer** problem:
+## Solution
+Three layers of control, smallest commitment first:
 
-| Surface | Value source | What it does to it |
-|---|---|---|
-| Itinerary header | `tripTotalCents / 100` (USD) | Converts USD → EUR via `convertFromUSD` using a hardcoded `EUR: 0.92` rate; renders with `€` |
-| Budget tab | `tripTotalCents / 100` (USD) | Renders directly with the user's `budget_currency` glyph (`$` today). **No conversion applied.** |
+### 1. Trip-level "Protected categories" chips (persisted)
+Above the coach panel, render a small row of toggle chips:
 
-Result: the two surfaces show the **same underlying USD number** dressed in different currency clothing. The `~1.28` "implied rate" the user noticed isn't a real rate — it's an artifact of the budget tab showing raw USD ($2,921) and the header showing a 0.92x converted EUR figure (€2,287 ≈ $2,486). The remaining $435 gap is hotel/flight reconciliation timing (snapshot vs. fallback path on line 3338-3340) which I'll align as part of this fix.
+```
+Don't suggest swaps for:  [ Dining ]  [ Hotels ]  [ Tours ]  [ Transit ]  [ Activities ]
+```
 
-Additional issues found:
+- Multi-select. Default `[]`.
+- Persisted per-trip in `trip_budget_settings.coach_protected_categories text[]` (new column, defaults to `'{}'`).
+- Toggling a chip immediately re-fetches suggestions (cache key includes the protection set).
 
-1. **Static FX table.** `EXCHANGE_RATES_FROM_USD` lives in `EditorialItinerary.tsx` with hardcoded rates from ~2024. EUR is `0.92`, today's mid-market is ~`0.86`. No "rate as of" disclosure.
-2. **Budget tab can lie.** If a user picks `budget_currency = 'EUR'`, the tab will print "€2,921" against a value that's actually 2,921 USD cents. No conversion, no warning.
-3. **No rate disclosure anywhere.** Neither surface tells the user what FX rate they're seeing or that it's an estimate.
+### 2. Auto-seed protections from trip DNA / archetype
+On first render, if `coach_protected_categories` is `null` (never set), seed defaults from the trip's `blended_dna` / `dna_snapshot`:
 
-## Plan
+| DNA signal | Seeded protections |
+|---|---|
+| `gourmand`, `food`, `luminary`, `michelin`, `culinary` | Dining |
+| `luxe`, `luxury`, `palace` | Hotels, Dining |
+| `cultural`, `museums-first` | Tours |
+| (none of the above) | `[]` |
 
-### 1. Single shared currency module
-Extract `EXCHANGE_RATES_FROM_USD`, `convertFromUSD`, `convertToUSD`, and a new `formatMoney(cents, currency)` helper out of `EditorialItinerary.tsx` into `src/lib/currency.ts`. Add a `RATES_AS_OF` constant (e.g. `'2026-05-04'`) exported alongside the table. Refresh EUR/GBP/JPY/CHF/CAD/AUD/MXN to current mid-market rates.
+Seeded values are pre-checked but fully overridable. After the first save, we never auto-mutate the user's set again.
 
-### 2. Make the Budget tab convert, not just relabel
-In `useTripBudget.ts`, change `formatCurrency(cents)` to:
-- Treat input cents as USD (the canonical storage unit).
-- If `settings.budget_currency !== 'USD'`, run the value through `convertFromUSD` before formatting.
-- Use the new shared `formatMoney` helper so both surfaces share one code path.
+### 3. Per-suggestion "Don't suggest again"
+On every suggestion card, add a small `×` next to "Apply":
 
-This means a Paris trip with `budget_currency = 'EUR'` will correctly show **€2,687** for a $2,921 USD trip, not "€2,921".
+```
+[ Apply ] [ × Don't suggest ]
+```
 
-### 3. Align the header and budget total
-The itinerary header total falls back to `totalActivityCost*travelers + flightCost + hotelCost` only while the snapshot is loading (line 3338). Verify the Paris trip's snapshot is actually loaded when the header renders — if it is, both surfaces will read the same `tripTotalCents` and (after step 2) display the same converted number. Add a brief loading skeleton on the header total to prevent the fallback path from flashing a stale value.
+Clicking `×`:
+- Removes the suggestion from the visible list immediately.
+- Adds `{tripId, activityId}` to `localStorage` key `budget-coach:dismissed:{tripId}` (array of activity IDs).
+- Sends `dismissed_activity_ids` to the edge function on next fetch so they never resurface.
 
-### 4. Disclose the rate
-Add a small tooltip/info icon next to both totals (header `Trip Total` and Budget tab `Trip Total`) reading:
-> "Converted at 1 USD = 0.86 EUR (rates as of May 4, 2026). Final charges may vary."
-Only shown when display currency ≠ `USD`. Sourced from the new `RATES_AS_OF` constant so it stays honest when the table is updated.
+This is the lightest-touch escape valve when category-level protection is too blunt (e.g., user wants to keep L'Arpège specifically but is fine letting the coach touch a different lunch).
 
-### 5. (Optional, behind a follow-up) Live rates
-Wire a daily refresh from a free FX endpoint (e.g. exchangerate.host or Frankfurter) into a Supabase edge function that updates a `fx_rates` table; the client reads that instead of the static map. **Not in this turn unless you ask** — current scope is to make the static rates honest and consistent.
+### 4. Edge function changes (`supabase/functions/budget-coach/index.ts`)
+Accept two new optional fields on the request body:
+- `protected_categories: string[]`
+- `dismissed_activity_ids: string[]`
+
+Apply defense-in-depth on the server (don't trust the client filter alone):
+- **Pre-filter** activities whose `category` (normalized) is in `protected_categories` or whose `id` is in `dismissed_activity_ids` — they never enter the prompt.
+- **Reinforce in the system prompt**: append a hard rule listing the protected categories ("These categories are PROTECTED — do not suggest swaps for any item in: Dining, Hotels. The user has explicitly marked them as non-negotiable.").
+- **Post-filter** the model's output as a final safety net (drop any suggestion whose `activity_id` matches a filtered-out item — handles model drift).
+
+Category normalization map (handles the messy mix of `dining`/`breakfast`/`lunch`/`dinner`/`cafe`/`food` all being "Dining" from the user's perspective):
+
+```text
+Dining     → dining, breakfast, lunch, dinner, brunch, cafe, coffee, food, restaurant
+Hotels     → hotel, accommodation, lodging, stay
+Tours      → tour, guided_tour, experience, attraction
+Transit    → transit, transport, taxi, train, flight, transfer
+Activities → activity, sightseeing, museum, gallery, culture, wellness, shopping
+```
+
+### 5. Empty-state UX
+If protection rules + dismissals leave nothing for the coach to suggest, show:
+
+> All suggestable items are protected. Loosen a category above to see savings, or adjust your budget target.
+
+…with a "Clear protections" link.
 
 ## Files touched
 
-- **new** `src/lib/currency.ts` — shared rates table, converters, `formatMoney`, `RATES_AS_OF`
-- `src/components/itinerary/EditorialItinerary.tsx` — import from shared module, drop the inline copy, add rate-disclosure tooltip on the header total
-- `src/hooks/useTripBudget.ts` — convert via `convertFromUSD` when `budget_currency !== 'USD'`
-- `src/components/planner/budget/BudgetTab.tsx` — add the same rate-disclosure tooltip next to the Trip Total row
-
-## What this fixes for the user's Paris trip
-
-- Header and Budget tab will print **the same number** in whatever currency the user picks.
-- EUR rate moves from stale `0.92` to current `~0.86`, bringing the header closer to a defensible number.
-- If they switch the budget currency to EUR, they'll see a real €-converted figure, not USD-with-a-euro-sign.
-- Both totals will show "as of {date}" so the conversion is no longer opaque.
+- **migration** — add `coach_protected_categories text[] not null default '{}'` to `trip_budget_settings`. (No RLS changes; existing policies cover.)
+- `src/services/tripBudgetService.ts` — read/write the new column on `TripBudgetSettings`.
+- `src/components/planner/budget/BudgetCoach.tsx` —
+  - Accept `protectedCategories`, `setProtectedCategories`, `dismissedIds`, `setDismissedIds` (or read/write directly via callbacks).
+  - Render category chip row above suggestions.
+  - Render "× Don't suggest" button per card.
+  - Re-fetch on protection change; include both arrays in cache key + edge call.
+  - Empty-state message.
+- `src/components/planner/budget/BudgetTab.tsx` — wire `settings.coach_protected_categories` ↔ `BudgetCoach`; on first load, derive seed from `blended_dna` if column is `null`.
+- `src/hooks/useTripBudget.ts` — expose update method for `coach_protected_categories`.
+- `supabase/functions/budget-coach/index.ts` — accept new fields, apply pre-filter, reinforce prompt, post-filter.
 
 ## Out of scope
 
-- Live FX feed (separate follow-up).
-- Per-activity native-currency storage (the canonical USD model is fine; this plan only fixes the *display* inconsistency).
-- The Day 2 nightcap $0 / orphan taxi data fix from the prior turn — that's a separate data repair and still pending.
+- Letting users protect a *single named venue* without dismissing it (they can already lock the activity in the itinerary, which the coach already respects).
+- A "trip intent" picker separate from DNA — DNA is already the canonical intent and we shouldn't fork it.
+- Server-side persistence of dismissals — keeping them in `localStorage` is fine for v1; if user clears storage, dismissals reset (acceptable since the chip-level protection still holds).
