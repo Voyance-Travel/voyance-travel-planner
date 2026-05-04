@@ -5173,6 +5173,22 @@ export function EditorialItinerary({
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-sm text-muted-foreground shrink-0">Trip Total</span>
                     <span className="text-2xl font-bold text-foreground truncate">{formatCurrency(displayCost(totalCost), tripCurrency)}</span>
+                    {tripCurrency !== 'USD' && rateDisclosure(tripCurrency) && (
+                      <Tooltip delayDuration={200}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="text-muted-foreground/70 hover:text-foreground transition-colors"
+                            aria-label="Exchange rate info"
+                          >
+                            <Info className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-xs">
+                          <span className="text-xs">{rateDisclosure(tripCurrency)}</span>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                     <TripTotalDeltaIndicator
                       delta={financialSnapshot.lastDelta}
                       onDismiss={financialSnapshot.acknowledgeDelta}
