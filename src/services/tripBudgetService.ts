@@ -443,7 +443,20 @@ export async function getBudgetLedger(tripId: string): Promise<BudgetLedgerEntry
     return CATEGORY_LABEL[k] || (k ? k.charAt(0).toUpperCase() + k.slice(1) : 'Item');
   };
 
-  const rawEntries: BudgetLedgerEntry[] = (costsResult.data || []).map((row: any) => {
+  // Orphan filter: drop activity-bound rows whose activity_id no longer
+  // exists in the itinerary JSON. These are leftover from prior swaps that
+  // skipped cleanupRemovedActivityCosts (e.g. edge-function repair paths)
+  // and would otherwise be re-named via "orphan rescue", producing
+  // duplicate-looking line items (same venue name, two different prices).
+  // Logistics rows (day_number=0, no activity_id) are exempt.
+  const liveCostRows = (costsResult.data || []).filter((row: any) => {
+    if (!row.activity_id) return true;
+    if (row.day_number == null || row.day_number === 0) return true;
+    if (row.source === 'logistics-sync') return true;
+    return nameById.has(String(row.activity_id));
+  });
+
+  const rawEntries: BudgetLedgerEntry[] = liveCostRows.map((row: any) => {
     let costPerPerson = Number(row.cost_per_person_usd) || 0;
     const numTravelers = Number(row.num_travelers) || 1;
 
