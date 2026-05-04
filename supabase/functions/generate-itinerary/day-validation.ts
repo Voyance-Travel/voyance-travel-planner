@@ -1000,6 +1000,10 @@ export function enforceRequiredMealsFinalGuard(
     if (canonLoc) usedVenueNamesForInjection.add(canonLoc);
   }
   for (const b of blockedNorm) usedVenueNamesForInjection.add(b);
+  for (const raw of (options?.blockedRestaurants || [])) {
+    const lower = (raw || '').toLowerCase().trim();
+    if (lower) usedVenueNamesForInjection.add(lower);
+  }
 
   const result = [...activities];
 
