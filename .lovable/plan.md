@@ -1,43 +1,78 @@
-## Problem
+# Two missing Payments rows — root cause + fix
 
-The Budget Coach is producing 7 swap suggestions that don't map to anything the user recognizes in their itinerary. Root cause is two layers of weakness, both visible in the existing data:
+## What's actually happening
 
-1. **Garbage in.** The itinerary contains unresolved placeholder rows like `Dinner (Day 2)`, `Lunch (Day 2)`, `transport (Day 2)` (the same broken rows surfaced in the earlier "All Costs" report). Those rows have real IDs and real costs, so the coach happily targets them as "expensive items to swap."
-2. **Title guard is too loose.** `titleMatches()` in `supabase/functions/budget-coach/index.ts` (lines 370-382) accepts a swap if ≥60% of long tokens overlap. A claimed item `"Dinner at Frenchie"` against a real title `"Dinner (Day 2)"` shares the token `dinner` — overlap 1 / min(2,1) = 100% — so the fabricated name slips through and is what the user sees on the card.
+I queried the trip and the data tells a clear story:
 
-Net effect: the coach is suggesting "Dinner at Frenchie" as a swap for a row whose real title is just `Dinner (Day 2)`, and the user — correctly — reads that as a phantom activity.
+`activity_costs` has rows for both activities, but with `cost_per_person_usd = 0` and `notes = "[Free venue - Tier 1]"`:
 
-## Fix
+| activity_id | day | title (from JSON) | JSON cost | DB cost | DB notes |
+|---|---|---|---|---|---|
+| `b402d7a7…` | 1 | Dinner at Frenchie | $70 | **$0** | [Free venue - Tier 1] |
+| `190ff620…` | 3 | Breakfast at La Fontaine de Belleville | $18 | **$0** | [Free venue - Tier 1] |
+| `8d585833…` | 1 | Lunch at Chez Janou | $40 | **$0** | [Free venue - Tier 1] |
 
-### 1. Drop unresolvable rows from the coach payload (`src/components/planner/budget/BudgetCoach.tsx`)
+(Lunch at Chez Janou is also missing from Payments for the exact same reason — the user only spotted two of three.)
 
-In `buildPayloadDays()`, skip any activity whose title matches a generic-placeholder pattern, e.g.:
+Two compounding bugs in `src/hooks/usePayableItems.ts`:
 
-- `/^(breakfast|lunch|dinner|brunch|meal|activity|transport|transit|hotel)\s*(\(|-|$)/i`
-- empty / `"Activity"` / `"Untitled"`
+1. **DB-driven loop (line 270)**: `if (cents <= 0) continue;` — silently drops the row.
+2. **JSON-walk fallback (line 359)**: `seenActivityIds` is built from `result`, but `seenActivityIds` is also populated implicitly by anything in `activity_costs` because the DB loop adds nothing for $0 rows yet still "claims" the activity… actually no — re-reading: `seenActivityIds` is only populated from items pushed to `result`. So the fallback *should* catch these. Why doesn't it?
 
-Those rows can't be responsibly swapped because we don't know what they actually are.
+   Because the fallback then runs `isLikelyFreePublicVenue({ title, category })` (line 364). For `category: 'dining'` with a restaurant title, this should return false — but if it's returning true for these names, that's the second bug. More likely: the fallback IS running but `estimateCostSync` returns 0 for some reason, OR the activity's `category` is being read as something the fallback's `FREE_CATEGORIES` skips.
 
-### 2. Tighten the server-side title guard (`supabase/functions/budget-coach/index.ts`)
+   I'll instrument-confirm this in the fix branch, but the safe, deterministic fix doesn't depend on knowing which path fails: **stop trusting `cost_per_person_usd = 0` when the source itinerary has an explicit non-zero cost**.
 
-In `titleMatches()`:
+## The fix
 
-- Add a stop-word set of meal/category/day words (`dinner, lunch, breakfast, brunch, meal, activity, transport, transit, hotel, day, paris, restaurant, café, cafe`) that are **excluded** from the overlap count.
-- Require either: (a) a true substring match of the longer side ≥ 8 chars, or (b) ≥ 2 non-stopword tokens overlapping. A single shared category word like "dinner" must no longer be enough.
+### 1. Frontend: `src/hooks/usePayableItems.ts` (deterministic, immediate)
 
-### 3. Guard at the same point against placeholder-titled real activities
+In the DB-driven loop (around line 266–313), when a non-transit row has `cents <= 0`:
+- Look up the matching activity in `activityNameById` extended to also carry `cost`/`estimatedCost` from the JSON.
+- If the JSON has an explicit positive cost for that activity, use it instead of skipping.
+- Tag the resulting `PayableItem` with a `source: 'json-fallback'` field (internal, for debugging) and add it to `result`.
 
-In the post-filter loop (around line 416), if the real title for `sid` matches the generic placeholder pattern from step 1, drop the suggestion with a `console.log` reason. Belt-and-suspenders for items that bypass the client filter (e.g. cached payloads).
+This guarantees: any activity that appears in the itinerary with a real cost will appear in Payments, regardless of how the cost pipeline mislabeled it.
 
-### 4. Surface the real name on the card (already partially done)
+Also: tighten the JSON-walk fallback's free-venue heuristic so `category === 'dining'` is never treated as a free public venue (a restaurant is not a park).
 
-Line 457 already overrides `current_item` to the real title server-side — keep it. No UI change required, since after step 1 the only suggestions reaching the UI will target activities with real names.
+### 2. Backend: stop creating bogus `[Free venue - Tier 1]` rows for restaurants
 
-## Files
+The pipeline that writes `activity_costs` is tagging named restaurants like "Frenchie", "Chez Janou", "La Fontaine de Belleville" as Tier 1 free venues. Search for the writer:
 
-- `supabase/functions/budget-coach/index.ts` — strengthen `titleMatches`, add placeholder-title rejection in post-filter.
-- `src/components/planner/budget/BudgetCoach.tsx` — filter generic-titled activities out of `buildPayloadDays`.
+- `src/services/budgetLedgerSync.ts` and the edge functions that call into it
+- The "Tier 1 / free venue" classifier (likely `lib/cost-estimation` or a server-side equivalent)
 
-## Out of scope
+Fix: the free-venue classifier must short-circuit to `false` whenever `category === 'dining'`. Dining is never free. (Cafés with no entry fee are still paid — you order food.)
 
-Fixing the upstream cause of placeholder rows like `Dinner (Day 2)` lives in the itinerary repair pipeline (see existing `Hallucination Elimination` and `Day Truth Ledger` memories). This change just stops the coach from acting on them.
+Also clean up the existing 3 bad rows on this trip via a one-off update so the user sees the fix immediately without waiting for a re-sync.
+
+### 3. Data backfill (one-off, this trip only)
+
+Update the three offending `activity_costs` rows to use the JSON costs:
+- `b402d7a7…` → $70/pp
+- `190ff620…` → $18/pp
+- `8d585833…` → $40/pp
+
+Clear the `[Free venue - Tier 1]` note and set `source = 'json-rescue'`.
+
+## Why both layers
+
+Frontend-only fix: Payments will be correct, but Budget totals and the Budget Coach (which read from `activity_costs`) will still under-count by ~$256 on this trip alone.
+
+Backend-only fix: future trips correct, but this trip stays broken until something forces a re-sync.
+
+Doing both means: this trip is fixed now, and no future trip has the same problem.
+
+## Files to change
+
+- `src/hooks/usePayableItems.ts` — JSON cost fallback for $0 DB rows; tighten free-venue heuristic for dining.
+- `src/lib/cost-estimation.ts` (and/or its server twin) — `isLikelyFreePublicVenue` returns false when category is dining/restaurant/meal.
+- The cost-sync edge function that classifies "Tier 1 free venue" — same guard.
+- One-off data update for the 3 affected rows on trip `7ea828ac…`.
+
+## Out of scope (already noted in earlier rounds, still pending)
+
+- Generic-named itinerary rows (`Dinner (Day 2)`, `transport (Day 2)`).
+- Hotel committed without `pricePerNight`.
+- All-Costs list collapse bug (#5 from the summary).
