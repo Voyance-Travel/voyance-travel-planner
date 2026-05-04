@@ -139,7 +139,8 @@ export function usePayableItems({
 
     // ─── Flight from selection (UI source) ───
     // Skip canonical flight if user has a manual flight override (avoids double-count).
-    const flightTotal = hasManualFlight ? 0 : (
+    // Also suppress until payments load to prevent a brief duplicate flash.
+    const flightTotal = (hasManualFlight || !paymentsLoaded) ? 0 : (
       flightSelection?.totalPrice
       || (flightSelection?.legs?.reduce((s, l) => s + (l?.price || 0), 0) || 0)
       || ((flightSelection?.outbound?.price || 0) + (flightSelection?.return?.price || 0))
