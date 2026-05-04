@@ -20,6 +20,8 @@ import {
   CheckCircle,
   Sparkles,
   Lock,
+  X,
+  Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -69,7 +71,46 @@ interface BudgetCoachProps {
   travelers?: number;
   /** Called when the user applies a suggestion — parent must update the itinerary. Returns true if swap succeeded. */
   onApplySuggestion?: (suggestion: BudgetSuggestion) => Promise<boolean> | void;
+  /**
+   * User-protected category labels (one of CATEGORY_GROUP_LABELS). Items in
+   * these categories are removed from the coach prompt entirely.
+   */
+  protectedCategories?: string[];
+  /** Persist a change to protectedCategories (writes back to trip settings). */
+  onProtectedCategoriesChange?: (next: string[]) => void;
   className?: string;
+}
+
+/**
+ * User-facing category labels and the keywords each one matches against the
+ * raw `category` / `type` strings on activities. Keep in lockstep with the
+ * server's CATEGORY_GROUPS map in supabase/functions/budget-coach/index.ts.
+ */
+export const CATEGORY_GROUPS: Record<string, string[]> = {
+  Dining: ['dining', 'breakfast', 'lunch', 'dinner', 'brunch', 'cafe', 'café', 'coffee', 'food', 'restaurant', 'meal', 'nightcap', 'drinks', 'bar'],
+  Hotels: ['hotel', 'accommodation', 'lodging', 'stay', 'resort', 'check-in', 'check-out', 'bag-drop'],
+  Tours: ['tour', 'guided_tour', 'guided tour', 'experience', 'attraction', 'excursion'],
+  Transit: ['transit', 'transport', 'transportation', 'taxi', 'train', 'flight', 'transfer', 'metro', 'subway'],
+  Activities: ['activity', 'sightseeing', 'museum', 'gallery', 'culture', 'wellness', 'shopping', 'park', 'landmark'],
+};
+export const CATEGORY_GROUP_LABELS = Object.keys(CATEGORY_GROUPS);
+
+/**
+ * Seed default protections from a trip's DNA / archetype tags. Called by
+ * BudgetTab on first render when `coach_protected_categories` is null.
+ */
+export function seedProtectedCategoriesFromDna(dnaTokens: string[]): string[] {
+  const tokens = dnaTokens.map((t) => (t || '').toLowerCase());
+  const has = (...needles: string[]) =>
+    tokens.some((t) => needles.some((n) => t.includes(n)));
+  const out = new Set<string>();
+  if (has('gourmand', 'food', 'culinary', 'michelin', 'luminary')) out.add('Dining');
+  if (has('luxe', 'luxury', 'palace')) {
+    out.add('Hotels');
+    out.add('Dining');
+  }
+  if (has('cultural', 'museums-first', 'museum-first')) out.add('Tours');
+  return Array.from(out);
 }
 
 // Simple in-memory cache keyed by tripId
@@ -101,6 +142,8 @@ export function BudgetCoach({
   itineraryDays,
   travelers = 1,
   onApplySuggestion,
+  protectedCategories = [],
+  onProtectedCategoriesChange,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
@@ -108,7 +151,33 @@ export function BudgetCoach({
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [allProtected, setAllProtected] = useState(false);
   const fetchedRef = useRef(false);
+
+  // Dismissed activity IDs — persisted in localStorage so they survive
+  // page reloads but are device-local (no DB round-trip needed).
+  const dismissedStorageKey = `budget-coach:dismissed:${tripId}`;
+  const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem(dismissedStorageKey);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const persistDismissed = useCallback(
+    (next: string[]) => {
+      setDismissedIds(next);
+      try {
+        window.localStorage.setItem(dismissedStorageKey, JSON.stringify(next));
+      } catch {
+        /* quota or private mode — ignore */
+      }
+    },
+    [dismissedStorageKey]
+  );
 
   const gapCents = currentTotalCents - budgetTargetCents;
   const isOverBudget = gapCents > 0;
@@ -162,7 +231,11 @@ export function BudgetCoach({
     async (force = false) => {
       if (!isOverBudget) return;
 
-      const currentHash = hashItinerary(itineraryDays);
+      // Cache key includes protections + dismissals so toggling either
+      // invalidates stale results.
+      const protectionsKey = [...protectedCategories].sort().join(',');
+      const dismissedKey = [...dismissedIds].sort().join(',');
+      const currentHash = `${hashItinerary(itineraryDays)}::p=${protectionsKey}::d=${dismissedKey}`;
       const cached = suggestionsCache.get(tripId);
       if (
         !force &&
@@ -171,11 +244,13 @@ export function BudgetCoach({
         Date.now() - cached.ts < 5 * 60 * 1000 // 5min TTL
       ) {
         setSuggestions(cached.suggestions);
+        setAllProtected(cached.suggestions.length === 0 && protectedCategories.length > 0);
         return;
       }
 
       setIsLoading(true);
       setError(null);
+      setAllProtected(false);
 
       try {
         const { data, error: fnError } = await supabase.functions.invoke(
@@ -187,6 +262,8 @@ export function BudgetCoach({
               current_total_cents: currentTotalCents,
               currency,
               destination,
+              protected_categories: protectedCategories,
+              dismissed_activity_ids: dismissedIds,
             },
           }
         );
@@ -196,6 +273,7 @@ export function BudgetCoach({
 
         const fetched: BudgetSuggestion[] = data?.suggestions || [];
         setSuggestions(fetched);
+        setAllProtected(Boolean(data?.all_protected));
         suggestionsCache.set(tripId, {
           suggestions: fetched,
           itineraryHash: currentHash,
@@ -218,6 +296,8 @@ export function BudgetCoach({
       currentTotalCents,
       currency,
       destination,
+      protectedCategories,
+      dismissedIds,
     ]
   );
 
@@ -228,6 +308,50 @@ export function BudgetCoach({
       fetchSuggestions();
     }
   }, [isOverBudget, itineraryDays.length, fetchSuggestions]);
+
+  // Re-fetch when protections or dismissals change (after the initial fetch).
+  const protectionsKey = protectedCategories.join('|');
+  const dismissedKey = dismissedIds.join('|');
+  useEffect(() => {
+    if (fetchedRef.current && isOverBudget) {
+      fetchSuggestions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [protectionsKey, dismissedKey]);
+
+  const toggleProtected = useCallback(
+    (label: string) => {
+      const next = protectedCategories.includes(label)
+        ? protectedCategories.filter((l) => l !== label)
+        : [...protectedCategories, label];
+      onProtectedCategoriesChange?.(next);
+    },
+    [protectedCategories, onProtectedCategoriesChange]
+  );
+
+  const dismissSuggestion = useCallback(
+    (activityId: string) => {
+      // Remove from view immediately
+      setSuggestions((prev) => prev.filter((s) => s.activity_id !== activityId));
+      const cached = suggestionsCache.get(tripId);
+      if (cached) {
+        suggestionsCache.set(tripId, {
+          ...cached,
+          suggestions: cached.suggestions.filter((s) => s.activity_id !== activityId),
+        });
+      }
+      // Persist for future fetches
+      if (!dismissedIds.includes(activityId)) {
+        persistDismissed([...dismissedIds, activityId]);
+      }
+    },
+    [tripId, dismissedIds, persistDismissed]
+  );
+
+  const clearProtections = useCallback(() => {
+    onProtectedCategoriesChange?.([]);
+    persistDismissed([]);
+  }, [onProtectedCategoriesChange, persistDismissed]);
 
   // ─── On-target state ──────────────────────────────────────────
   if (!isOverBudget) {
@@ -342,6 +466,38 @@ export function BudgetCoach({
             transition={{ duration: 0.2 }}
           >
             <CardContent className="space-y-3 pt-0">
+              {/* Protected categories chip row */}
+              {onProtectedCategoriesChange && (
+                <div className="flex items-start gap-2 flex-wrap pb-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1 pt-1.5 shrink-0">
+                    <Shield className="h-3 w-3" />
+                    Don't suggest swaps for:
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {CATEGORY_GROUP_LABELS.map((label) => {
+                      const active = protectedCategories.includes(label);
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => toggleProtected(label)}
+                          className={cn(
+                            'px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+                            active
+                              ? 'bg-primary/10 text-primary border-primary/40'
+                              : 'bg-background text-muted-foreground border-border hover:border-foreground/30'
+                          )}
+                          aria-pressed={active}
+                        >
+                          {active && <Check className="h-3 w-3 inline mr-1" />}
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Loading state */}
               {isLoading && (
                 <div className="flex items-center justify-center py-8 gap-3">
@@ -436,32 +592,45 @@ export function BudgetCoach({
                           </div>
                         </div>
 
-                        {/* Apply button or locked notice */}
+                        {/* Apply button + dismiss, or locked notice */}
                         {isLocked ? (
                           <span className="flex-shrink-0 flex items-center gap-1 text-xs text-muted-foreground italic">
                             <Lock className="h-3 w-3" />
                             Locked
                           </span>
                         ) : (
-                          <Button
-                            variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : 'default'}
-                            size="sm"
-                            disabled={isApplied}
-                            onClick={() => handleApply(s)}
-                            className={cn(
-                              'flex-shrink-0',
-                              isApplied && 'text-emerald-600 dark:text-emerald-400'
+                          <div className="flex-shrink-0 flex items-center gap-1">
+                            <Button
+                              variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : 'default'}
+                              size="sm"
+                              disabled={isApplied}
+                              onClick={() => handleApply(s)}
+                              className={cn(
+                                isApplied && 'text-emerald-600 dark:text-emerald-400'
+                              )}
+                            >
+                              {isApplied ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5 mr-1" />
+                                  Applied
+                                </>
+                              ) : (
+                                'Apply'
+                              )}
+                            </Button>
+                            {!isApplied && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => dismissSuggestion(s.activity_id)}
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                aria-label="Don't suggest this swap again"
+                                title="Don't suggest this again"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
                             )}
-                          >
-                            {isApplied ? (
-                              <>
-                                <Check className="h-3.5 w-3.5 mr-1" />
-                                Applied
-                              </>
-                            ) : (
-                              'Apply'
-                            )}
-                          </Button>
+                          </div>
                         )}
                       </motion.div>
                     );
@@ -508,19 +677,39 @@ export function BudgetCoach({
 
               {/* Empty state */}
               {!isLoading && !error && suggestions.length === 0 && (
-                <div className="text-center py-6">
-                  <p className="text-sm text-muted-foreground">
-                    No suggestions available yet.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 gap-1.5"
-                    onClick={() => fetchSuggestions(true)}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Get Suggestions
-                  </Button>
+                <div className="text-center py-6 space-y-3">
+                  {allProtected || (protectedCategories.length > 0 && dismissedIds.length === 0) ? (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        All suggestable items are protected. Loosen a category above to see savings, or adjust your budget target.
+                      </p>
+                      {(protectedCategories.length > 0 || dismissedIds.length > 0) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={clearProtections}
+                        >
+                          Clear protections
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        No suggestions available yet.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => fetchSuggestions(true)}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Get Suggestions
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>

@@ -476,6 +476,10 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
           itineraryDays={itineraryDays}
           travelers={travelers}
           onApplySuggestion={onApplyBudgetSwap}
+          protectedCategories={settings?.coach_protected_categories ?? []}
+          onProtectedCategoriesChange={(next) => {
+            updateSettings({ coach_protected_categories: next });
+          }}
         />
       )}
 

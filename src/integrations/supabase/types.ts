@@ -8125,6 +8125,7 @@ export type Database = {
           budget_warning_threshold: string | null
           budget_warnings_enabled: boolean | null
           client_id: string | null
+          coach_protected_categories: string[] | null
           created_at: string
           creation_source: string | null
           departure_transfer: Json | null
@@ -8189,6 +8190,7 @@ export type Database = {
           budget_warning_threshold?: string | null
           budget_warnings_enabled?: boolean | null
           client_id?: string | null
+          coach_protected_categories?: string[] | null
           created_at?: string
           creation_source?: string | null
           departure_transfer?: Json | null
@@ -8253,6 +8255,7 @@ export type Database = {
           budget_warning_threshold?: string | null
           budget_warnings_enabled?: boolean | null
           client_id?: string | null
+          coach_protected_categories?: string[] | null
           created_at?: string
           creation_source?: string | null
           departure_transfer?: Json | null
@@ -9639,6 +9642,7 @@ export type Database = {
           budget_warning_threshold: string | null
           budget_warnings_enabled: boolean | null
           client_id: string | null
+          coach_protected_categories: string[] | null
           created_at: string
           creation_source: string | null
           departure_transfer: Json | null

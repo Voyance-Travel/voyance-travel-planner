@@ -38,6 +38,12 @@ export interface TripBudgetSettings {
   budget_warning_threshold: WarningThreshold;
   budget_allocations: BudgetAllocations;
   travelers: number;
+  /**
+   * Categories the Budget Coach must never propose swaps for. `null` means
+   * never set — the UI seeds defaults from trip DNA. Empty array means the
+   * user explicitly cleared all protections (do not re-seed).
+   */
+  coach_protected_categories: string[] | null;
 }
 
 /**
@@ -259,7 +265,8 @@ export async function getTripBudgetSettings(tripId: string): Promise<TripBudgetS
       budget_warnings_enabled,
       budget_warning_threshold,
       budget_allocations,
-      travelers
+      travelers,
+      coach_protected_categories
     `)
     .eq('id', tripId)
     .single();
@@ -279,6 +286,7 @@ export async function getTripBudgetSettings(tripId: string): Promise<TripBudgetS
     budget_warning_threshold: (data.budget_warning_threshold as WarningThreshold) || 'yellow',
     budget_allocations: isValidAllocations(data.budget_allocations) ? (data.budget_allocations as unknown as BudgetAllocations) : DEFAULT_ALLOCATIONS.balanced,
     travelers: data.travelers || 1,
+    coach_protected_categories: (data as any).coach_protected_categories ?? null,
   };
 }
 
@@ -298,6 +306,7 @@ export async function updateTripBudgetSettings(
   if (settings.budget_warnings_enabled !== undefined) updateData.budget_warnings_enabled = settings.budget_warnings_enabled;
   if (settings.budget_warning_threshold !== undefined) updateData.budget_warning_threshold = settings.budget_warning_threshold;
   if (settings.budget_allocations !== undefined) updateData.budget_allocations = settings.budget_allocations;
+  if (settings.coach_protected_categories !== undefined) updateData.coach_protected_categories = settings.coach_protected_categories;
   if ((settings as any).budget_individual_cents !== undefined) updateData.budget_individual_cents = (settings as any).budget_individual_cents;
 
   const { error } = await supabase
