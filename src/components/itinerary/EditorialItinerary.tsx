@@ -6667,7 +6667,7 @@ export function EditorialItinerary({
               // recycled UUID can never wipe an unrelated activity.
               if (suggestion.swap_type === 'drop') {
                 const resolved = resolveDropTarget(days as any, suggestion as any);
-                if (!resolved.ok) {
+                if (resolved.ok === false) {
                   if (resolved.error === 'not-found') {
                     toast.error("Couldn't drop — item is no longer in your itinerary.");
                   } else {
