@@ -485,6 +485,8 @@ export interface EditorialItineraryProps {
   initialItineraryData?: Record<string, unknown> | null;
   /** Current itinerary generation status — hides unlock UI during generation */
   itineraryStatus?: string | null;
+  /** Reason from trip metadata when itinerary_status === 'failed' */
+  generationFailureReason?: string | null;
   /** Journey fields for linked trips */
   journeyId?: string | null;
   journeyName?: string | null;
