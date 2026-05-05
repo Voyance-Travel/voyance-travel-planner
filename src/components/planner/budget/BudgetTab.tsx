@@ -44,6 +44,7 @@ import { JourneyBudgetSummary } from './JourneyBudgetSummary';
 import { BudgetSetupDialog } from './BudgetSetupDialog';
 import { BudgetWarning } from './BudgetWarning';
 import { BudgetCoach, type BudgetSuggestion } from './BudgetCoach';
+import { hasSuggestableContent } from './coachUtils';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BudgetCategory } from '@/services/tripBudgetService';
