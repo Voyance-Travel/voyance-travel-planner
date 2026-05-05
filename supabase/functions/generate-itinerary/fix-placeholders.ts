@@ -378,22 +378,18 @@ export function isPlaceholderWellness(activity: any, cityName: string, hotelName
 
   // VERIFICATION GATE — wellness items with non-generic venue strings still need
   // proof the venue is real. Accept any of:
-  //   • google place id / verified place id
   //   • a street address with a digit (e.g. "228 Rue de Rivoli")
   //   • venue name appears in INLINE_FALLBACK_WELLNESS (known-real allowlist)
   //   • venue name matches the user's confirmed hotel
   //   • metadata.unverified_venue explicitly false
-  const hasPlaceId =
-    !!activity?.metadata?.google_place_id ||
-    !!activity?.metadata?.placeId ||
-    !!activity?.verified?.placeId;
+  // (placeId path already short-circuited above.)
   const hasNumericAddress = address.length >= 8 && /\d/.test(address);
   const matchesKnownVenue = venueLower.length >= 4 && getKnownWellnessVenueSet().has(venueLower);
   const matchesHotel =
     !!hotelName && venueLower.length >= 4 && venueLower === hotelName.toLowerCase().trim();
   const explicitlyVerified = activity?.metadata?.unverified_venue === false;
 
-  if (!hasPlaceId && !hasNumericAddress && !matchesKnownVenue && !matchesHotel && !explicitlyVerified) {
+  if (!hasNumericAddress && !matchesKnownVenue && !matchesHotel && !explicitlyVerified) {
     return true;
   }
 
