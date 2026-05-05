@@ -255,6 +255,11 @@ export function BudgetCoach({
     }));
   }, [itineraryDays, currency]);
 
+  // Tracks the itinerary hash of the LATEST in-flight request. If the
+  // itinerary changes again before this request resolves, the response is
+  // discarded — preventing a stale list from briefly overwriting fresh state.
+  const inFlightHashRef = useRef<string | null>(null);
+
   const fetchSuggestions = useCallback(
     async (force = false) => {
       if (!isOverBudget) return;
@@ -263,7 +268,8 @@ export function BudgetCoach({
       // invalidates stale results.
       const protectionsKey = [...protectedCategories].sort().join(',');
       const dismissedKey = [...dismissedIds].sort().join(',');
-      const currentHash = `${hashItinerary(itineraryDays)}::p=${protectionsKey}::d=${dismissedKey}`;
+      const liveHash = hashItinerary(itineraryDays);
+      const currentHash = `${liveHash}::p=${protectionsKey}::d=${dismissedKey}`;
       const cached = suggestionsCache.get(tripId);
       if (
         !force &&
@@ -279,6 +285,7 @@ export function BudgetCoach({
       setIsLoading(true);
       setError(null);
       setAllProtected(false);
+      inFlightHashRef.current = currentHash;
 
       try {
         const { data, error: fnError } = await supabase.functions.invoke(
@@ -298,6 +305,14 @@ export function BudgetCoach({
 
         if (fnError) throw fnError;
         if (data?.error) throw new Error(data.error);
+
+        // RACE GUARD: if the live itinerary changed while this request was in
+        // flight, drop the response — a newer fetch is or will be running.
+        const liveNowHash = hashItinerary(itineraryDays);
+        if (liveNowHash !== liveHash || inFlightHashRef.current !== currentHash) {
+          console.log('[BudgetCoach] Discarding stale response — itinerary changed mid-flight');
+          return;
+        }
 
         const fetched: BudgetSuggestion[] = data?.suggestions || [];
         setSuggestions(fetched);

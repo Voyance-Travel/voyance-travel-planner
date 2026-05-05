@@ -1,39 +1,58 @@
-## Problem
+I found two connected failure modes:
 
-Budget Coach is showing swap suggestions whose `current_item` (e.g. "Dinner at La Méditerranée", "Breakfast at Ob-La-Di") does not exist in the live Itinerary tab. The live itinerary actually shows Maison Sauvage, Le Comptoir du Relais, Septime, etc. The phantom names match an older itinerary version still reflected in the Payments/activity_costs layer.
+1. **Fresh generation/resume can wipe or rebuild itinerary state**, which changes `trips.itinerary_data.days` and then causes totals to mutate session-to-session.
+2. **Budget/Payments still depend on `activity_costs` as a separate ledger**, while the Itinerary tab renders `trips.itinerary_data.days`. Existing read-time orphan filters help, but stale or mismatched cost rows can still make Budget Coach and Payments behave as if a different itinerary version is current.
 
-## Root cause
+Plan:
 
-`BudgetCoach` (`src/components/planner/budget/BudgetCoach.tsx`) does **not** re-fetch suggestions when the live itinerary content changes:
+1. **Add a stable itinerary fingerprint**
+   - Compute a deterministic fingerprint from the saved live itinerary: day number, activity id, title/name, category, cost, and traveler count.
+   - Store/pass this fingerprint through budget-facing code so Budget Coach suggestions are tied to the exact itinerary snapshot they were generated from.
+   - If the live fingerprint changes, Budget Coach will clear suggestions and refetch from the current live itinerary only.
 
-1. `fetchedRef` gates the auto-fetch to once-per-mount.
-2. The "re-fetch on change" effect (line 343–348) only depends on `protectionsKey` and `dismissedKey` — **not** on the itinerary content hash.
-3. The in-memory `suggestionsCache` is keyed by `tripId` and only checked inside `fetchSuggestions`. Since `fetchSuggestions` is never invoked on itinerary edits, stale suggestions are rendered indefinitely after a regenerate / smart-finish / activity edit.
-4. Even when the server returns a hallucinated `current_item`, the post-filter rewrites it to `activityTitleById.get(sid)` from the **payload at request time** — so a name from an older itinerary snapshot persists in the cache and keeps rendering after the live itinerary has moved on.
+2. **Make Budget Coach read only the live itinerary payload**
+   - Keep using the current client payload path (`BudgetTab -> BudgetCoach -> budget-coach function`) but strengthen it:
+     - Include `itinerary_fingerprint` in the function request.
+     - Return the same fingerprint with suggestions.
+     - Drop rendered suggestions when the returned fingerprint no longer equals the current live fingerprint.
+   - This prevents any cached or delayed response from showing suggestions for Ob-La-Di / La Méditerranée if the live Itinerary tab has already changed to Maison Sauvage / Le Comptoir du Relais / Septime.
 
-The server-side guards (ID-must-exist, title-match, placeholder) are correct. The bug is purely client-side staleness.
+3. **Add server-side Budget Coach guardrails**
+   - In `supabase/functions/budget-coach/index.ts`, validate that every returned suggestion targets an activity id in the incoming payload and that `current_item` matches the incoming title.
+   - Return `itinerary_fingerprint` in the response for client-side race protection.
+   - Make the prompt explicitly state that the model may only reference activities listed in the provided payload, not prior context or payments/ledger rows.
 
-## Fix
+4. **Reconcile `activity_costs` to the live itinerary after saves/regeneration**
+   - Update the sync path so cleanup always runs even when there are zero paid activities in the live itinerary. Today `cleanupRemovedActivityCosts` only runs inside the “there are rows to sync” branch, which can leave stale rows if a regeneration removes all positive-cost activities or changes ids in an edge case.
+   - Use the **full live activity id set** for cleanup, not only the positive-cost rows, so zero-cost live activities are preserved as valid while stale positive-cost rows from old itineraries are deleted.
+   - Dispatch the existing `booking-changed` event after cleanup so Budget, Payments, and snapshot totals refetch together.
 
-Edit `src/components/planner/budget/BudgetCoach.tsx`:
+5. **Stop unapproved fresh regeneration from replacing a saved itinerary**
+   - Harden `handleShowGenerator` / regeneration entry points so “Generate Itinerary” is only a fresh rebuild when the trip truly has no saved itinerary, or when the user explicitly chooses regenerate.
+   - For resume/self-heal flows, require incomplete state before invoking `generate-trip`; do not treat a complete `itinerary_data.days` snapshot as something to regenerate just because status metadata is stale.
+   - Keep the existing no-shrink guard, but add clearer early exits so a stable saved itinerary is not cleared and rebuilt on a later session.
 
-1. **Re-fetch on itinerary content change.** Compute a memoized `itineraryHash` from `itineraryDays` (id + title + cost per activity) and add it to the existing protections/dismissed re-fetch effect. When the hash changes, call `fetchSuggestions()` (it already self-checks the cache and TTL).
+6. **Unify Budget/Payments totals around the live itinerary version**
+   - Ensure `useTripFinancialSnapshot`, `getBudgetLedger`, and `usePayableItems` all filter against the same live activity id set and ignore orphaned activity-bound cost rows.
+   - Remove any remaining orphan-rescue naming behavior that can make old ledger rows appear under current-day labels.
+   - Add a small developer diagnostic log when Payments/Budget counts differ from the live itinerary’s positive-cost activity count, so this regression is easier to catch.
 
-2. **Client-side phantom filter.** Before rendering, derive a `liveActivityIndex = Map<id, title>` from `itineraryDays` and:
-   - Drop any cached suggestion whose `activity_id` is not present in the live itinerary.
-   - Drop any suggestion whose `current_item` no longer fuzzy-matches the live title for that id (re-uses the same token logic as the server's `titleMatches`).
-   This guarantees the UI never shows a swap pointing at an item that's been removed or renamed, even during the brief window between an edit and the next fetch returning.
+7. **Optional targeted cleanup for the affected Paris trip**
+   - After code changes, run a safe reconciliation for the affected trip record only: remove `activity_costs` rows whose `activity_id` is not present in its current `itinerary_data.days`, excluding logistics rows.
+   - This is not a broad migration; it is a one-time cleanup for stale rows already created by the regression.
 
-3. **Invalidate the module-level `suggestionsCache` entry when the hash changes**, so a tab remount or component re-creation doesn't pick up the stale list.
+Files expected to change:
+- `src/components/planner/budget/BudgetCoach.tsx`
+- `src/components/planner/budget/BudgetTab.tsx`
+- `src/components/itinerary/EditorialItinerary.tsx`
+- `src/hooks/useTripFinancialSnapshot.ts`
+- `src/hooks/usePayableItems.ts`
+- `src/services/tripBudgetService.ts`
+- `supabase/functions/budget-coach/index.ts`
+- Potential small guard in `src/pages/TripDetail.tsx`
 
-No server changes are needed. No migration. Behavior for in-budget itineraries is unchanged.
-
-## Files
-
-- `src/components/planner/budget/BudgetCoach.tsx` — add content-hash re-fetch, client-side phantom filter, cache invalidation on hash change.
-
-## Verification
-
-- Open a trip whose itinerary has been edited since the last Budget Coach fetch — open Budget tab, confirm suggestions reference only currently-visible activities.
-- Apply a swap; confirm the next fetch reflects the new state without a manual refresh.
-- Toggle a protected category; confirm re-fetch still works (regression check on existing behavior).
+Validation after implementation:
+- Budget Coach suggestions must only reference activity ids/titles visible in the current Itinerary tab.
+- Payments list must not show restaurants absent from the live itinerary.
+- Trip Expenses total must remain stable across refresh/session reload unless the user explicitly edits, saves, books, pays, or regenerates.
+- Regeneration should not start from a saved completed itinerary unless explicitly requested.
