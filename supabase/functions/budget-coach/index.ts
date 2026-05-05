@@ -198,7 +198,7 @@ CRITICAL COST RULES:
 - If no reference pricing is available for a swap, use the lowest reasonable amount from the reference data for that category.
 - Your new_cost must ALWAYS be strictly LESS than the current_cost. If you can't find a cheaper alternative, skip that item.
 - All costs are in whole currency units (e.g., 50 for $50), NOT cents.
-- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}`;
+- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
