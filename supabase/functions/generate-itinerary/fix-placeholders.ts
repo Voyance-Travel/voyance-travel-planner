@@ -903,7 +903,9 @@ export function nuclearWellnessSweep(
     }
 
     // No fallback DB hit, no hotel — strip entirely. A high-cost spa with no
-    // venue is worse than a missing slot.
+    // venue is worse than a missing slot. Zero the cost first as belt-and-braces.
+    if (act.cost && typeof act.cost === 'object') act.cost.amount = 0;
+    act.cost_per_person = 0;
     activities.splice(i, 1);
     mutated++;
     console.warn(`[WELLNESS NUCLEAR] STRIPPED "${before}" — no venue, no hotel`);
