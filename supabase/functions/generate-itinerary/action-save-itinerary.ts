@@ -636,17 +636,27 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     console.warn('[save-itinerary] Day Brief check failed (non-blocking):', ledgerErr);
   }
 
-  // ── EMPTY-ITINERARY GATE ─────────────────────────────────────
+  // ── EMPTY / INCOMPLETE ITINERARY GATE ────────────────────────
   // Mirror of the Stage 6 gate in generation-core.ts. Manual / assistant
-  // saves should never produce a 'ready' trip with no real activities.
+  // saves should never produce a 'ready' trip with no real activities OR
+  // a degenerate hotel-only / hotel + single filler plan — both cause the
+  // Budget Coach to surface phantom suggestions.
   let emptyItineraryDetected = false;
+  let failureReason: 'empty_itinerary' | 'incomplete_itinerary' | null = null;
   try {
-    const { countMeaningfulActivities } = await import('./day-validation.ts');
-    const probe = countMeaningfulActivities((itinerary as any)?.days || []);
-    if (probe.meaningfulCount === 0 && probe.dayCount > 0) {
+    const { classifyItineraryCompleteness } = await import('./day-validation.ts');
+    const probe = classifyItineraryCompleteness((itinerary as any)?.days || []);
+    if (probe.status === 'empty') {
       emptyItineraryDetected = true;
+      failureReason = 'empty_itinerary';
       console.warn(
         `[save-itinerary] EMPTY ITINERARY DETECTED — meaningfulCount=0, days=${probe.dayCount}, tripId=${tripId}`
+      );
+    } else if (probe.status === 'incomplete') {
+      emptyItineraryDetected = true;
+      failureReason = 'incomplete_itinerary';
+      console.warn(
+        `[save-itinerary] INCOMPLETE ITINERARY DETECTED — paid=${probe.paidMeaningfulCount} meaningful=${probe.meaningfulCount} days=${probe.dayCount}, tripId=${tripId}`
       );
     }
   } catch (e) {
@@ -675,7 +685,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     ...(emptyItineraryDetected && {
       metadata: {
         ...existingMetadataForEmpty,
-        generation_failure_reason: 'empty_itinerary',
+        generation_failure_reason: failureReason,
         empty_itinerary_detected_at: new Date().toISOString(),
       },
     }),

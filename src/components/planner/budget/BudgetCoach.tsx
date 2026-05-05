@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { hasSuggestableContent as hasSuggestableContentUtil } from './coachUtils';
 
 // ─── Types ──────────────────────────────────────────────────────
 export interface BudgetSuggestion {
@@ -596,6 +597,25 @@ export function BudgetCoach({
     onProtectedCategoriesChange?.([]);
     persistDismissed([]);
   }, [onProtectedCategoriesChange, persistDismissed]);
+
+  // ─── No suggestable content (hotel-only / broken generation) ──
+  // Render a single compact card instead of the full Coach shell so the
+  // user never sees over-budget messaging, overrun chips, or restructure
+  // panels for an itinerary that doesn't actually exist yet.
+  if (isOverBudget && suggestableCount === 0) {
+    return (
+      <Card className={cn('border-border', className)}>
+        <CardContent className="py-4">
+          <div className="flex items-start gap-2 text-muted-foreground">
+            <Lightbulb className="h-4 w-4 mt-0.5 shrink-0" />
+            <p className="text-sm">
+              Add activities to your itinerary to get personalized savings advice.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // ─── On-target state ──────────────────────────────────────────
   if (!isOverBudget) {
