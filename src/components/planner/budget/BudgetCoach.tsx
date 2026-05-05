@@ -745,11 +745,9 @@ export function BudgetCoach({
             )}
           </div>
         </button>
-        {!isNowOnTarget && (
+        {!isNowOnTarget && suggestableCount > 0 && (
           <p className="text-sm text-muted-foreground mt-1">
-            {suggestableCount === 0
-              ? `You're ${formatCurrency(gapCents)} over budget, but this itinerary has no swappable activities yet.`
-              : `You're ${formatCurrency(gapCents)} over budget. Here's how to get on target:`}
+            You're {formatCurrency(gapCents)} over budget. Here's how to get on target:
           </p>
         )}
       </CardHeader>
