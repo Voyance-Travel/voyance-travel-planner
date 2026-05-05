@@ -535,25 +535,47 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
       {/* Budget Coach — AI suggestions when over budget (hidden in manual mode) */}
-      {!isManualMode && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && snapshotStatus !== 'yellow' && (
-        <BudgetCoach
-          tripId={tripId}
-          budgetTargetCents={summary.budgetTotalCents}
-          currentTotalCents={snapshot.tripTotalCents}
-          currency={settings?.budget_currency || 'USD'}
-          destination={destination}
-          itineraryDays={itineraryDays}
-          travelers={travelers}
-          onApplySuggestion={onApplyBudgetSwap}
-          protectedCategories={settings?.coach_protected_categories ?? []}
-          onProtectedCategoriesChange={(next) => {
-            updateSettings({ coach_protected_categories: next });
-          }}
-          onBumpBudget={async (newTotalCents) => {
-            await updateSettings({ budget_total_cents: newTotalCents });
-          }}
-        />
-      )}
+      {!isManualMode && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && snapshotStatus !== 'yellow' && (() => {
+        // Compute per-category overruns (planned - allocated, in cents) and
+        // translate BudgetCategory → Coach's user-facing labels.
+        const CATEGORY_LABEL_MAP: Record<BudgetCategory, string> = {
+          food: 'Dining',
+          activities: 'Activities',
+          transit: 'Transit',
+          misc: 'Activities',
+          hotel: 'Hotels',
+          flight: 'Hotels',
+        };
+        const overruns: Record<string, number> = {};
+        for (const a of allocations) {
+          if (a.kind !== 'discretionary') continue;
+          const over = (a.usedCents || 0) - (a.allocatedCents || 0);
+          if (over > 0) {
+            const label = CATEGORY_LABEL_MAP[a.category];
+            if (label) overruns[label] = (overruns[label] || 0) + over;
+          }
+        }
+        return (
+          <BudgetCoach
+            tripId={tripId}
+            budgetTargetCents={summary.budgetTotalCents}
+            currentTotalCents={snapshot.tripTotalCents}
+            currency={settings?.budget_currency || 'USD'}
+            destination={destination}
+            itineraryDays={itineraryDays}
+            travelers={travelers}
+            onApplySuggestion={onApplyBudgetSwap}
+            protectedCategories={settings?.coach_protected_categories ?? []}
+            onProtectedCategoriesChange={(next) => {
+              updateSettings({ coach_protected_categories: next });
+            }}
+            onBumpBudget={async (newTotalCents) => {
+              await updateSettings({ budget_total_cents: newTotalCents });
+            }}
+            categoryOverruns={overruns}
+          />
+        );
+      })()}
 
       {/* Missing items warning */}
       {(() => {
