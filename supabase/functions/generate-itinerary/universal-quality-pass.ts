@@ -191,6 +191,7 @@ export async function universalQualityPass(
     enforceVenueTypePriceCap(act, label);
     enforceTicketedAttractionPricing(act, label);
     enforceMichelinPriceFloor(act, label);
+    enforceHighCostBookingGuidance(act, label);
   }
 
   // ── Step 7b: Day 1 dining tier mismatch (luxury food audiences) ──
