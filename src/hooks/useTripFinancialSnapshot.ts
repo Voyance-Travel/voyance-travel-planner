@@ -153,6 +153,9 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       // manual override delta (manual replaces canonical, doesn't add to it).
       if (row.day_number === 0 && cat === 'hotel') canonicalHotelCents += rowCents;
       if (row.day_number === 0 && cat === 'flight') canonicalFlightCents += rowCents;
+      if (cat === 'hotel') committedHotelCents += rowCents;
+      else if (cat === 'flight') committedFlightCents += rowCents;
+      else if (cat === 'misc') loggedMiscCents += rowCents;
 
       // Use shared inclusion rule — must match getBudgetSummary exactly,
       // otherwise snapshot total and summary total drift apart.
