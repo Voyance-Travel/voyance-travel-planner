@@ -50,6 +50,7 @@ export interface UniversalQualityOptions {
   apiKey?: string;
   lockedActivities?: any[];
   usedRestaurants?: string[];
+  hotelName?: string;
 }
 
 // Categories to skip for cross-day venue dedup (these repeat legitimately)
