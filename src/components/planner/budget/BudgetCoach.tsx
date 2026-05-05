@@ -376,6 +376,8 @@ export function BudgetCoach({
       protectedCategories,
       dismissedIds,
       categoryOverruns,
+      anchorActivityIds,
+      gapCents,
     ]
   );
 
