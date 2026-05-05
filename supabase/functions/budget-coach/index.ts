@@ -247,6 +247,36 @@ At least your TOP ${Math.min(overrunEntries.length + 1, 4)} suggestions MUST tar
       ? `\nANCHOR ACTIVITY IDS — never drop these (signature experiences):\n${anchor_activity_ids.map((id) => `  • ${id}`).join("\n")}`
       : "";
 
+    // ─── COVERAGE CONTRACT ─────────────────────────────────────────
+    // Sum of positive-cost, non-anchor, non-protected, non-logistics
+    // candidates. The model is asked to deliver savings ≥ min(gap, 70%
+    // of discretionary). Without this the model returns 5–8 small swaps
+    // that never close a $2k+ overrun.
+    let discretionaryCents = 0;
+    for (const day of filteredDays) {
+      for (const a of day.activities) {
+        if (typeof a.cost !== "number" || !(a.cost > 0)) continue;
+        if (anchorIdSet.has(String(a.id))) continue;
+        if (isPlaceholderPre(a.title)) continue;
+        discretionaryCents += a.cost;
+      }
+    }
+    const targetSavingsCents = Math.min(
+      gap_cents,
+      Math.round(discretionaryCents * 0.7),
+    );
+    const targetSavingsUnits = Math.round(targetSavingsCents / 100);
+
+    // Adaptive suggestion count: bigger gaps need more suggestions to be
+    // capable of summing to the target.
+    let countLow = 5, countHigh = 8;
+    if (deepCutsMode) {
+      if (gap_cents >= 250000) { countLow = 16; countHigh = 24; }
+      else if (gap_cents >= 100000) { countLow = 12; countHigh = 18; }
+      else { countLow = 8; countHigh = 12; }
+    }
+    const countRange = `${countLow}-${countHigh}`;
+
     const deepCutsClause = deepCutsMode
       ? `\n\nDEEP-CUTS MODE (gap is too large for swap-only):
 The user is ${currency} ${(gap_cents / 100).toFixed(0)} over a ${currency} ${(current_total_cents / 100).toFixed(0)} total. Swap-only suggestions cannot realistically close this gap.
@@ -257,9 +287,14 @@ Drop rules:
   • NEVER drop hotel/accommodation, flights, check-in/out, bag-drop, transfers, anchor IDs (above), or items in protected categories.
   • NEVER drop the only meal of a meal-slot (the only breakfast on a day, the only dinner, etc.). Dropping a second optional meal/drink stop is fine.
   • Prefer dropping: nightcaps, optional museums beyond the daily anchor, paid sightseeing duplicates, secondary tours, premium add-ons.
-  • Aim for at most 1 drop per day.
-Return 8-12 suggestions in this mode, mixing drops and swaps. Rank by absolute savings.${anchorIdList}`
+  • Up to 2 drops per day are acceptable when needed to hit the coverage target.
+Return ${countRange} suggestions in this mode, mixing drops and swaps. Rank by absolute savings.${anchorIdList}`
       : "";
+
+    const coverageClause = `\n\nCOVERAGE CONTRACT (HARD REQUIREMENT):
+The sum of \`savings\` across your returned suggestions MUST be >= ${currency} ${targetSavingsUnits}.
+That is the user's gap (${currency} ${(gap_cents / 100).toFixed(0)}) capped at 70% of their discretionary spend (${currency} ${Math.round(discretionaryCents / 100)}).
+If swaps alone can't reach this number, ${deepCutsMode ? "use `drop` suggestions on optional discretionary items (nightcaps, secondary museums, duplicate sightseeing, premium add-ons) to make up the difference" : "you should still return cheaper swaps for every paid discretionary item you can"}. Returning fewer suggestions to "stay safe" is the worst possible outcome — under-coverage leaves the user with no actionable path.`;
 
     const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. ${deepCutsMode ? "When the gap is large you may also suggest dropping non-anchor optional activities." : "You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience."}
 
@@ -276,7 +311,7 @@ CRITICAL COST RULES:
 - If no reference pricing is available for a swap, use the lowest reasonable amount from the reference data for that category.
 - For swap_type="swap" the new_cost MUST be strictly LESS than current_cost. For swap_type="drop" new_cost MUST be 0.
 - All costs are in whole currency units (e.g., 50 for $50), NOT cents.
-- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}${deepCutsClause}`;
+- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}${deepCutsClause}${coverageClause}`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
@@ -285,7 +320,7 @@ Here is the full itinerary (items in protected categories have been removed):
 ${itinerarySummary}
 ${costRefLookup}
 
-Suggest ${deepCutsMode ? "8-12" : "5-8"} specific cost-cutting changes. For each:
+Suggest ${countRange} specific cost-cutting changes whose combined savings reach AT LEAST ${currency} ${targetSavingsUnits}. For each:
 1. Identify the expensive item (name + current cost)
 2. Choose swap_type: "swap" (default), ${deepCutsMode ? '"drop" (deep-cuts mode), or "consolidate"' : 'only "swap" is allowed'}.
 3. For swaps: suggest a cheaper alternative that gives a similar experience; new_cost MUST come from reference pricing.
@@ -308,142 +343,83 @@ Rules:
 - All costs in ${currency} as integers (no decimals)
 - NEVER suggest the same replacement venue/restaurant in more than one suggestion. Each swap must recommend a DIFFERENT specific place, even if multiple items are in the same category (e.g., if two breakfasts need swaps, suggest two different affordable cafés).`;
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
+    // ── AI call (factored so we can re-prompt for coverage) ───────
+    const TOOL_SCHEMA = {
+      type: "function" as const,
+      function: {
+        name: "return_budget_suggestions",
+        description: "Return an array of budget-cutting swap suggestions for the itinerary.",
+        parameters: {
+          type: "object",
+          properties: {
+            suggestions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  current_item: { type: "string", description: "Name of the expensive item" },
+                  current_cost: { type: "number", description: "Current cost in whole currency units (e.g. 50 for $50)" },
+                  suggested_swap: { type: "string", description: "The specific name of a real venue, restaurant, or experience to replace the current one. Must be a concrete, real place name (e.g. 'Trattoria da Mario', 'Self-guided walk through Montmartre') — NOT a generic description like 'lower cost restaurant' or 'cheaper option'." },
+                  new_cost: { type: "number", description: "New cost in whole currency units (e.g. 30 for $30)" },
+                  savings: { type: "number", description: "Savings in whole currency units" },
+                  reason: { type: "string", description: "Brief explanation of why this swap saves money (shown in coach panel only)" },
+                  suggested_description: { type: "string", description: "A short, experience-focused description of the replacement activity as it should appear on the itinerary card (e.g. 'Grab gourmet sandwiches from Lenwich and enjoy a picnic in Central Park'). Do NOT include budget reasoning here." },
+                  day_number: { type: "number", description: "Which day this activity is on" },
+                  activity_id: { type: "string", description: "The ID of the activity to swap or drop" },
+                  swap_type: { type: "string", enum: ["swap", "drop", "consolidate"], description: "swap = replace with cheaper alternative (default). drop = remove the activity entirely (deep-cuts mode only). consolidate = swap-merge with another same-day item." },
+                },
+                required: ["current_item", "current_cost", "suggested_swap", "new_cost", "savings", "reason", "suggested_description", "day_number", "activity_id", "swap_type"],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ["suggestions"],
+          additionalProperties: false,
         },
+      },
+    };
+
+    const callAI = async (sysPrompt: string, usrPrompt: string): Promise<any[]> => {
+      const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
+            { role: "system", content: sysPrompt },
+            { role: "user", content: usrPrompt },
           ],
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "return_budget_suggestions",
-                description:
-                  "Return an array of budget-cutting swap suggestions for the itinerary.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    suggestions: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          current_item: {
-                            type: "string",
-                            description: "Name of the expensive item",
-                          },
-                          current_cost: {
-                            type: "number",
-                            description:
-                              "Current cost in whole currency units (e.g. 50 for $50)",
-                          },
-                          suggested_swap: {
-                            type: "string",
-                            description:
-                              "The specific name of a real venue, restaurant, or experience to replace the current one. Must be a concrete, real place name (e.g. 'Trattoria da Mario', 'Self-guided walk through Montmartre') — NOT a generic description like 'lower cost restaurant' or 'cheaper option'.",
-                          },
-                          new_cost: {
-                            type: "number",
-                            description:
-                              "New cost in whole currency units (e.g. 30 for $30)",
-                          },
-                          savings: {
-                            type: "number",
-                            description: "Savings in whole currency units",
-                          },
-                          reason: {
-                            type: "string",
-                            description:
-                              "Brief explanation of why this swap saves money (shown in coach panel only)",
-                          },
-                          suggested_description: {
-                            type: "string",
-                            description:
-                              "A short, experience-focused description of the replacement activity as it should appear on the itinerary card (e.g. 'Grab gourmet sandwiches from Lenwich and enjoy a picnic in Central Park'). Do NOT include budget reasoning here.",
-                          },
-                          day_number: {
-                            type: "number",
-                            description: "Which day this activity is on",
-                          },
-                          activity_id: {
-                            type: "string",
-                            description: "The ID of the activity to swap or drop",
-                          },
-                          swap_type: {
-                            type: "string",
-                            enum: ["swap", "drop", "consolidate"],
-                            description:
-                              "swap = replace with cheaper alternative (default). drop = remove the activity entirely (deep-cuts mode only). consolidate = swap-merge with another same-day item.",
-                          },
-                        },
-                        required: [
-                          "current_item",
-                          "current_cost",
-                          "suggested_swap",
-                          "new_cost",
-                          "savings",
-                          "reason",
-                          "suggested_description",
-                          "day_number",
-                          "activity_id",
-                          "swap_type",
-                        ],
-                        additionalProperties: false,
-                      },
-                    },
-                  },
-                  required: ["suggestions"],
-                  additionalProperties: false,
-                },
-              },
-            },
-          ],
-          tool_choice: {
-            type: "function",
-            function: { name: "return_budget_suggestions" },
-          },
+          tools: [TOOL_SCHEMA],
+          tool_choice: { type: "function", function: { name: "return_budget_suggestions" } },
         }),
+      });
+      if (!r.ok) {
+        if (r.status === 429) throw new Error("__RATE_LIMITED__");
+        if (r.status === 402) throw new Error("__CREDITS_EXHAUSTED__");
+        const text = await r.text();
+        console.error("AI gateway error:", r.status, text);
+        throw new Error(`AI gateway error: ${r.status}`);
       }
-    );
+      const j = await r.json();
+      const tc = j.choices?.[0]?.message?.tool_calls?.[0];
+      if (!tc?.function?.arguments) return [];
+      try { return JSON.parse(tc.function.arguments).suggestions || []; }
+      catch { console.error("Failed to parse tool call arguments"); return []; }
+    };
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limited, please try again shortly." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+    let suggestions: any[];
+    try {
+      suggestions = await callAI(systemPrompt, userPrompt);
+    } catch (callErr: any) {
+      if (callErr?.message === "__RATE_LIMITED__") {
+        return new Response(JSON.stringify({ error: "Rate limited, please try again shortly." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (callErr?.message === "__CREDITS_EXHAUSTED__") {
+        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      const text = await response.text();
-      console.error("AI gateway error:", response.status, text);
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    
-    let suggestions: any[] = [];
-    if (toolCall?.function?.arguments) {
-      try {
-        const parsed = JSON.parse(toolCall.function.arguments);
-        suggestions = parsed.suggestions || [];
-      } catch {
-        console.error("Failed to parse tool call arguments");
-      }
+      throw callErr;
     }
 
     // Build lookups for ID-existence + title-match guards. Use the FULL
@@ -513,131 +489,140 @@ Rules:
 
     // The AI is instructed to return whole-currency values (e.g. 50 for $50).
     // We simply multiply by 100 to get cents. No heuristic.
-    suggestions = suggestions
-      .map((s: any) => {
-        const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
-        if (rawNew === null || rawNew < 0) return null;
+    const filterSuggestions = (raw: any[]): any[] =>
+      raw
+        .map((s: any) => {
+          const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
+          if (rawNew === null || rawNew < 0) return null;
 
-        const swapType: "swap" | "drop" | "consolidate" =
-          s.swap_type === "drop" || s.swap_type === "consolidate" ? s.swap_type : "swap";
+          const swapType: "swap" | "drop" | "consolidate" =
+            s.swap_type === "drop" || s.swap_type === "consolidate" ? s.swap_type : "swap";
 
-        // POST-FILTER: drop any suggestion targeting a protected or dismissed
-        // activity (model drift safety net — the prompt should prevent this,
-        // but we guard against it anyway).
-        const sid = String(s.activity_id);
+          const sid = String(s.activity_id);
 
-        // ID-MUST-EXIST GUARD: drop hallucinated IDs that aren't in the trip.
-        if (!allValidIds.has(sid)) {
-          console.log(`  → FILTERED OUT (unknown activity_id "${sid}", claimed item: "${s.current_item}")`);
-          return null;
-        }
-
-        if (dismissedSet.has(sid)) {
-          console.log(`  → FILTERED OUT (dismissed activity ${sid})`);
-          return null;
-        }
-        if (protectedActivityIds.has(sid)) {
-          console.log(`  → FILTERED OUT (protected activity ${sid} in ${protected_categories.join(",")})`);
-          return null;
-        }
-
-        // ANCHOR GUARD: drops are never allowed on anchor activities.
-        if (swapType === "drop" && anchorIdSet.has(sid)) {
-          console.log(`  → FILTERED OUT (drop on anchor activity ${sid})`);
-          return null;
-        }
-
-        // DEEP-CUTS GATE: drops/consolidates only accepted in deep-cuts mode.
-        if ((swapType === "drop" || swapType === "consolidate") && !deepCutsMode) {
-          console.log(`  → FILTERED OUT (${swapType} not allowed outside deep-cuts mode for ${sid})`);
-          return null;
-        }
-
-        // PLACEHOLDER-TITLE GUARD: if the real itinerary row is just a generic
-        // placeholder ("Dinner (Day 2)", "transport (Day 2)", "Activity"), the
-        // coach has nothing concrete to swap — reject to avoid phantom suggestions.
-        const realTitle = activityTitleById.get(sid) || "";
-        if (isPlaceholderTitle(realTitle)) {
-          console.log(`  → FILTERED OUT (placeholder real title "${realTitle}" for ${sid})`);
-          return null;
-        }
-
-        // TITLE-MUST-MATCH GUARD: catches the case where the model reuses a
-        // real ID but writes a fabricated current_item for the user-visible card.
-        if (realTitle && s.current_item && !titleMatches(String(s.current_item), realTitle)) {
-          console.log(`  → FILTERED OUT (title mismatch: claimed "${s.current_item}" vs real "${realTitle}")`);
-          return null;
-        }
-
-        // GENERIC NAME FILTER (skip for drops — their swap name is a fixed sentinel)
-        if (swapType !== "drop") {
-          const swapName = (s.suggested_swap || "").toLowerCase();
-          const GENERIC_PATTERNS = [
-            "lower cost", "cheaper", "budget", "affordable", "inexpensive",
-            "alternative option", "similar restaurant", "similar cafe", "similar café",
-            "local eatery", "local restaurant", "local cafe", "local café",
-            "generic", "another option", "different restaurant", "different cafe",
-            "mid-range", "moderately priced", "less expensive", "cost-effective",
-            "economy", "no-frills",
-          ];
-          const isGeneric = GENERIC_PATTERNS.some((p) => swapName.includes(p));
-          if (isGeneric) {
-            console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
+          if (!allValidIds.has(sid)) {
+            console.log(`  → FILTERED OUT (unknown activity_id "${sid}", claimed item: "${s.current_item}")`);
             return null;
           }
-        }
-
-        // Convert AI's whole-currency value to cents (drops force 0)
-        const newCostCents = swapType === "drop" ? 0 : Math.round(rawNew * 100);
-
-        // Use the known activity cost as ground truth (already in cents)
-        const knownCostCents = activityCostCentsById.get(sid);
-        const currentCostCents = knownCostCents ?? Math.round((typeof s.current_cost === "number" ? s.current_cost : 0) * 100);
-
-        console.log(`Suggestion [${swapType}] "${s.suggested_swap}": AI current=${s.current_cost}, AI new=${s.new_cost}, knownCents=${knownCostCents}, newCents=${newCostCents}, currentCents=${currentCostCents}`);
-
-        // STRICT GUARD: for swap/consolidate the new cost must be strictly lower.
-        // For drops, currentCostCents must be > 0 (don't drop free items).
-        if (swapType === "drop") {
-          if (currentCostCents <= 0) {
-            console.log(`  → FILTERED OUT (drop on $0 item ${sid})`);
+          if (dismissedSet.has(sid)) {
+            console.log(`  → FILTERED OUT (dismissed activity ${sid})`);
             return null;
           }
-        } else if (newCostCents >= currentCostCents) {
-          console.log(`  → FILTERED OUT (new ${newCostCents} >= current ${currentCostCents})`);
-          return null;
-        }
+          if (protectedActivityIds.has(sid)) {
+            console.log(`  → FILTERED OUT (protected activity ${sid} in ${protected_categories.join(",")})`);
+            return null;
+          }
+          if (swapType === "drop" && anchorIdSet.has(sid)) {
+            console.log(`  → FILTERED OUT (drop on anchor activity ${sid})`);
+            return null;
+          }
+          if ((swapType === "drop" || swapType === "consolidate") && !deepCutsMode) {
+            console.log(`  → FILTERED OUT (${swapType} not allowed outside deep-cuts mode for ${sid})`);
+            return null;
+          }
 
-        const finalSwap = swapType === "drop"
-          ? "Drop — free time / use saved budget elsewhere"
-          : s.suggested_swap;
+          const realTitle = activityTitleById.get(sid) || "";
+          if (isPlaceholderTitle(realTitle)) {
+            console.log(`  → FILTERED OUT (placeholder real title "${realTitle}" for ${sid})`);
+            return null;
+          }
+          if (realTitle && s.current_item && !titleMatches(String(s.current_item), realTitle)) {
+            console.log(`  → FILTERED OUT (title mismatch: claimed "${s.current_item}" vs real "${realTitle}")`);
+            return null;
+          }
 
-        return {
-          ...s,
-          swap_type: swapType,
-          // Force the rendered title to the real itinerary item so even
-          // a slightly-off AI label can't show a phantom name in the UI.
-          current_item: activityTitleById.get(sid) || s.current_item,
-          suggested_swap: finalSwap,
-          current_cost: currentCostCents,
-          new_cost: newCostCents,
-          savings: currentCostCents - newCostCents,
-        };
-      })
-      .filter(Boolean) as any[];
+          if (swapType !== "drop") {
+            const swapName = (s.suggested_swap || "").toLowerCase();
+            const GENERIC_PATTERNS = [
+              "lower cost", "cheaper", "budget", "affordable", "inexpensive",
+              "alternative option", "similar restaurant", "similar cafe", "similar café",
+              "local eatery", "local restaurant", "local cafe", "local café",
+              "generic", "another option", "different restaurant", "different cafe",
+              "mid-range", "moderately priced", "less expensive", "cost-effective",
+              "economy", "no-frills",
+            ];
+            if (GENERIC_PATTERNS.some((p) => swapName.includes(p))) {
+              console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
+              return null;
+            }
+          }
+
+          const newCostCents = swapType === "drop" ? 0 : Math.round(rawNew * 100);
+          const knownCostCents = activityCostCentsById.get(sid);
+          const currentCostCents = knownCostCents ?? Math.round((typeof s.current_cost === "number" ? s.current_cost : 0) * 100);
+
+          if (swapType === "drop") {
+            if (currentCostCents <= 0) {
+              console.log(`  → FILTERED OUT (drop on $0 item ${sid})`);
+              return null;
+            }
+          } else if (newCostCents >= currentCostCents) {
+            console.log(`  → FILTERED OUT (new ${newCostCents} >= current ${currentCostCents})`);
+            return null;
+          }
+
+          return {
+            ...s,
+            swap_type: swapType,
+            current_item: activityTitleById.get(sid) || s.current_item,
+            suggested_swap: swapType === "drop"
+              ? "Drop — free time / use saved budget elsewhere"
+              : s.suggested_swap,
+            current_cost: currentCostCents,
+            new_cost: newCostCents,
+            savings: currentCostCents - newCostCents,
+          };
+        })
+        .filter(Boolean) as any[];
+
+    let filtered = filterSuggestions(suggestions);
+
+    const sumSavings = (arr: any[]) => arr.reduce((s, x) => s + (x?.savings || 0), 0);
+    let totalSavingsCents = sumSavings(filtered);
+    let coverageRatio = targetSavingsCents > 0 ? totalSavingsCents / targetSavingsCents : 1;
+    let retryAttempted = false;
+
+    // ── Retry once if coverage < 50% in deep-cuts mode ───────────
+    if (deepCutsMode && coverageRatio < 0.5 && filtered.length > 0) {
+      retryAttempted = true;
+      const usedIds = new Set(filtered.map((s: any) => String(s.activity_id)));
+      const usedIdList = [...usedIds].join(", ") || "(none)";
+      const retryUserPrompt = `Your previous suggestions only covered ${Math.round(coverageRatio * 100)}% of the user's gap (${currency} ${(totalSavingsCents / 100).toFixed(0)} of the required ${currency} ${targetSavingsUnits}).
+
+Return a NEW list (do NOT repeat any of these activity_ids: ${usedIdList}) of ${countLow}-${countHigh} additional swaps and drops that, combined with the previous list, reach the coverage target. Drops are STRONGLY preferred for high-cost discretionary items (nightcaps, secondary museums, duplicate sightseeing, premium add-ons). Same itinerary as before:
+
+${itinerarySummary}
+${costRefLookup}`;
+      try {
+        const retryRaw = await callAI(systemPrompt, retryUserPrompt);
+        const retryFiltered = filterSuggestions(retryRaw)
+          .filter((s: any) => !usedIds.has(String(s.activity_id)));
+        filtered = [...filtered, ...retryFiltered];
+        totalSavingsCents = sumSavings(filtered);
+        coverageRatio = targetSavingsCents > 0 ? totalSavingsCents / targetSavingsCents : 1;
+        console.log(`[budget-coach] Retry added ${retryFiltered.length} suggestions; coverage now ${Math.round(coverageRatio * 100)}%`);
+      } catch (retryErr) {
+        console.warn("[budget-coach] Retry failed, returning first-pass suggestions:", retryErr);
+      }
+    }
 
     // Sort by savings desc
-    suggestions.sort((a: any, b: any) => b.savings - a.savings);
+    filtered.sort((a: any, b: any) => b.savings - a.savings);
 
-    console.log(`Returning ${suggestions.length} valid suggestions (deepCutsMode=${deepCutsMode})`);
+    console.log(`[budget-coach] final_count=${filtered.length} total_savings_cents=${totalSavingsCents} target_savings_cents=${targetSavingsCents} coverage_ratio=${coverageRatio.toFixed(2)} discretionary_cents=${discretionaryCents} retry_attempted=${retryAttempted} deepCutsMode=${deepCutsMode}`);
 
     return new Response(
       JSON.stringify({
-        suggestions,
+        suggestions: filtered,
         on_target: false,
         deep_cuts_mode: deepCutsMode,
-        filtered_empty: suggestions.length === 0,
-        no_candidates: suggestions.length === 0,
+        filtered_empty: filtered.length === 0,
+        no_candidates: filtered.length === 0,
+        coverage_ratio: coverageRatio,
+        target_savings_cents: targetSavingsCents,
+        discretionary_cents: discretionaryCents,
+        retry_attempted: retryAttempted,
+        total_savings_cents: totalSavingsCents,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

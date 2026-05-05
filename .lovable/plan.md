@@ -1,62 +1,61 @@
 ## Problem
 
-The Trash icon on each row in **Budget tab → All Costs** is a destructive action with no validation, no confirmation, and a misleading success toast.
+Across every test session, total Coach savings cover only **9–24%** of a $2.3k–$3.1k gap. There are three structural causes:
 
-Tracing the path:
+1. **No coverage contract with the model.** `supabase/functions/budget-coach/index.ts` tells the AI "cut $X" but never sets a *target sum* the suggestions must reach. The model returns 5–8 (or 8–12 in deep-cuts) cheap-swap suggestions averaging $40–$80 each. Even at the ceiling that's ~$960 — nowhere near a $2.5k gap.
+2. **Drop cap is too tight.** Deep-cuts mode says "at most 1 drop per day" with `8-12` suggestions total. On a 6-day trip that's ≤ 6 drops; combined with small swaps it can't realistically close a 25%+ overrun.
+3. **No bulk-apply path.** Even if the user accepts every swap, they have to click each one individually. The restructure panel offers "Raise budget" / "Shorten trip" / "Drop optional activities" (which just scrolls the list) but no "Apply all" button that closes the gap in one move.
 
-1. `BudgetTab.tsx` `PayableCostsList` (line ~236): the icon strips the `_dN` suffix from `item.id` and calls `onActivityRemove(rawActivityId)`.
-2. `EditorialItinerary.tsx` (line 6649): the handler does `days.activities.filter(act => act.id !== activityId)` across **every day** and unconditionally fires `toast.success('Activity removed from itinerary')` and `setHasChanges(true)`.
-
-Failure modes today:
-- **Stale id after regen** → `filter` matches nothing, no day changes, but the user sees "Activity removed from itinerary". They'll think it worked.
-- **No confirmation** → a misclick on the trash icon nukes a real activity instantly. There is no "are you sure?" and no in-app undo from this screen.
-- **No row-name in the toast** → the user can't tell *which* item they just removed (or thought they removed).
-- **Manual / orphan-payment rows** look identical visually but `canRemove` is already false for them — that part is OK; we just need to make the live-id path correct.
-
-This was previously hardened for the Budget Coach **swap suggestion drop** path (`resolveDropTarget` in `src/components/itinerary/budgetDropResolver.ts` + tests). The All Costs trash button was missed because it goes through a different handler.
+The "Swaps alone won't bridge" warning is honest but the path forward it offers is weak.
 
 ## Fix
 
-### 1. Validate the id before mutating + add confirmation + name the row in the toast
+### 1. Coverage contract + adaptive suggestion count (server)
 
-`src/components/itinerary/EditorialItinerary.tsx` — replace the `onActivityRemove` callback passed to `<BudgetTab>` (around line 6649) with a version that:
+`supabase/functions/budget-coach/index.ts`:
 
-- Walks `days` once, captures `{ dayIdx, title }` for the matching activity id.
-- If not found → `toast.error("Couldn't drop — that item is no longer in your itinerary. The list may have been regenerated.")` and return. **No state mutation. No success toast.**
-- Otherwise call `window.confirm("Remove \"<title>\" from your itinerary?\n\nThis can't be undone from this screen.")`. On cancel → return.
-- On confirm → filter only the matching day (instead of mapping every day, which is a needless full-tree rebuild) and fire `toast.success(\`Removed "<title>" from itinerary\`)`.
+- Compute `discretionaryCents` = sum of all positive-cost, non-anchor, non-protected, non-logistics activities.
+- Compute `targetSavingsCents = min(gap_cents, Math.round(discretionaryCents * 0.7))`. (We can't promise more than ~70% of discretionary; nobody wants to drop everything.)
+- Compute `targetSuggestionCount`:
+  - default: 5–8 (unchanged)
+  - deep-cuts with `gap < $1000`: 8–12 (unchanged)
+  - deep-cuts with `gap >= $1000`: **12–18**
+  - deep-cuts with `gap >= $2500`: **16–24**
+- Add a hard clause to the system prompt:
+  > **COVERAGE CONTRACT:** The sum of `savings` across your returned suggestions MUST be ≥ `${targetSavingsCents/100}` (currency units). If you cannot reach that with swaps alone, prioritize `drop` suggestions on optional discretionary items (nightcaps, secondary museums, duplicate sightseeing, premium add-ons). Return more suggestions, not fewer — under-delivering on coverage is the worst possible outcome.
+- Lift "at most 1 drop per day" → **"at most 2 drops per day; never drop the only meal of a slot"** in deep-cuts mode.
+- After post-filter, log `coverageRatio = totalSavings / targetSavings` and include `coverage_ratio`, `target_savings_cents`, and `discretionary_cents` in the response payload so the client can reason about it.
 
-### 2. Pass the row's display name into the trash handler so the confirm/toast text is correct even for orphan-rescued names
+### 2. Auto-retry once if coverage is poor (server)
 
-`src/components/planner/budget/BudgetTab.tsx` — extend the `onActivityRemove` prop signature in `PayableCostsList` to `(activityId: string, displayName: string) => void` (BudgetTab keeps the wider signature too) and update the `onClick` to pass `item.name`.
+If `coverageRatio < 0.5` after filtering AND deep-cuts mode is on AND we haven't retried, fire one re-prompt with the model:
 
-`src/components/itinerary/EditorialItinerary.tsx` — accept the optional second arg and prefer the live-day title when present, falling back to the passed-in displayName.
+> Your previous suggestions only covered ${coveragePct}% of the gap. Return a NEW list (do not repeat any prior `activity_id`) of additional swaps and drops that, combined with the previous list, reach the coverage target. Drops are strongly preferred for high-cost discretionary items.
 
-### 3. Tests
+Merge the two response sets, dedupe by `activity_id`, re-sort by savings. Cap total work at 2 model calls per request to keep cost and latency bounded.
 
-Add `src/components/itinerary/__tests__/activityRemove.test.ts` with a tiny pure helper extracted from the new logic:
+### 3. "Apply all" + better restructure CTA wording (client)
 
-```ts
-// resolveLiveActivity(days, activityId) -> { found: true; dayIdx; title } | { found: false }
-```
+`src/components/planner/budget/BudgetCoach.tsx`:
 
-Cases:
-- Real id present on day 2 → `{ found: true, dayIdx: 1, title: 'Le Jules Verne' }`
-- Stale id after regen (id not in any day) → `{ found: false }`
-- Empty days → `{ found: false }`
-- Multiple days, id only in last day → resolves to last index
+- In the restructure panel (around line 996), add a primary button **"Apply all suggestions"** that iterates `visibleSuggestions` and calls `onApplySuggestion` for each unapplied, non-locked item (with a `window.confirm` summarising the count + total savings + how many drops are included).
+- Update the warning copy when the server returns `coverage_ratio < 0.5`:
+  > "The swaps below cover only X% of your $Y overrun, even after accepting drops. To reach your target you'll need to combine the suggestions with one of the structural changes below."
+- Re-order the CTAs: **Apply all** → **Raise budget to $Z** (where Z = `currentTotal` rounded up to the nearest $50, telegraphed as "fully closes the gap") → **Shorten trip 1 day**. The current 2% bump under-sells what the budget raise actually does.
+- Show a tiny `(closes the gap)` hint next to the raise-budget button when `restructureBumpTargetCents >= currentTotalCents`.
 
-Wire `EditorialItinerary` to use this helper and unit-test the helper directly (we don't need to render the whole 11k-line component).
+### 4. Telemetry
+
+Log `coverage_ratio`, `target_savings_cents`, `discretionary_cents`, `retry_attempted`, and `final_suggestion_count` on every coach response. This lets us measure whether the change moved coverage from <25% toward >70% in production.
 
 ## Files touched
 
-- `src/components/itinerary/EditorialItinerary.tsx` — rewrite the BudgetTab `onActivityRemove` callback (~13 lines → ~30 lines)
-- `src/components/planner/budget/BudgetTab.tsx` — extend signature + pass `item.name` from the trash button
-- `src/components/itinerary/activityRemoveResolver.ts` — new pure helper (mirrors the structure of the existing `budgetDropResolver.ts`)
-- `src/components/itinerary/__tests__/activityRemove.test.ts` — new tests (4 cases)
+- `supabase/functions/budget-coach/index.ts` — coverage contract, adaptive suggestion count, drop cap lift, optional retry, response payload extension
+- `src/components/planner/budget/BudgetCoach.tsx` — Apply-all button, restructure panel copy, CTA ordering, "closes the gap" hint
+- `mem://features/budget/budget-coach-system.md` — append the coverage contract + adaptive count + apply-all section so future agents don't regress these guarantees
 
 ## What this does NOT change
 
-- The composite-id parsing in `BudgetTab.tsx` (`item.id.replace(/_d\d+$/, '')`) stays the same — it correctly strips `_dN` to get the underlying activity id.
-- Manual entries / hotel / flight / grouped-transit rows already cannot show the trash button (the existing `canRemove` gate handles that).
-- The Budget Coach AI "Drop" suggestion path (`resolveDropTarget`) is already validated and tested. This plan covers the *other* drop button — the one in All Costs.
+- Anchor protection, dismissed-id logic, protected categories, placeholder-title guards, generic-name filter, ID-must-exist guard — all kept as-is.
+- The "hotel-dominant" panel and its raise-budget CTA — already correct for that distinct failure mode.
+- Empty/incomplete-itinerary gating from the prior fix — Coach still hides on those trips.

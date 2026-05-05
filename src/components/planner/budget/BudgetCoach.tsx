@@ -190,6 +190,8 @@ export function BudgetCoach({
   const [error, setError] = useState<string | null>(null);
   const [allProtected, setAllProtected] = useState(false);
   const [deepCutsMode, setDeepCutsMode] = useState(false);
+  const [serverCoverageRatio, setServerCoverageRatio] = useState<number | null>(null);
+  const [isApplyingAll, setIsApplyingAll] = useState(false);
   const fetchedRef = useRef(false);
 
   // ⚠️ Hook-order safety: these two hooks must be declared BEFORE any
@@ -440,6 +442,9 @@ export function BudgetCoach({
         setSuggestions(fetched);
         setAllProtected(Boolean(data?.all_protected));
         setDeepCutsMode(Boolean(data?.deep_cuts_mode));
+        setServerCoverageRatio(
+          typeof data?.coverage_ratio === 'number' ? data.coverage_ratio : null
+        );
         suggestionsCache.set(tripId, {
           suggestions: fetched,
           itineraryHash: currentHash,
@@ -676,7 +681,8 @@ export function BudgetCoach({
   const coveragePct = gapCents > 0 && totalPotentialSavings > 0
     ? totalPotentialSavings / gapCents
     : 0;
-  const restructureBumpTargetCents = Math.ceil((currentTotalCents * 1.02) / 50000) * 50000;
+  // Bump enough to FULLY close the gap (current total + 1%, rounded up to $50).
+  const restructureBumpTargetCents = Math.ceil((currentTotalCents * 1.01) / 5000) * 5000;
   const showRestructurePanel =
     !isLoading &&
     !isNowOnTarget &&
@@ -764,6 +770,54 @@ export function BudgetCoach({
     } else {
       toast.success(`Saved ${formatCurrency(suggestion.savings)}`);
     }
+  };
+
+  // ─── Apply ALL pending suggestions in one click ───────────────
+  // Used by the restructure panel when swap-only coverage is poor.
+  // Applies sequentially so the parent's syncBudgetFromDays sees a
+  // consistent state between calls. Skips already-applied/locked items.
+  const handleApplyAll = async () => {
+    const pending = visibleSuggestions.filter(
+      (s) => !appliedIds.has(s.activity_id) && !lockedActivityIds.has(s.activity_id)
+    );
+    if (pending.length === 0) {
+      toast.info('No pending suggestions to apply.');
+      return;
+    }
+    const dropCount = pending.filter((s) => s.swap_type === 'drop').length;
+    const totalSavings = pending.reduce((sum, s) => sum + s.savings, 0) * travelers;
+    const summary = `Apply all ${pending.length} suggestion${pending.length === 1 ? '' : 's'}?\n\n` +
+      `• ${pending.length - dropCount} swap${pending.length - dropCount === 1 ? '' : 's'} to cheaper alternatives\n` +
+      `• ${dropCount} drop${dropCount === 1 ? '' : 's'} (activities removed)\n` +
+      `• Total savings: ${formatCurrency(totalSavings)}\n\n` +
+      `You can undo by re-adding any dropped activity.`;
+    if (typeof window !== 'undefined' && !window.confirm(summary)) return;
+
+    setIsApplyingAll(true);
+    let applied = 0;
+    let failed = 0;
+    for (const s of pending) {
+      try {
+        const res = await onApplySuggestion?.(s);
+        if (res === false) { failed++; continue; }
+        setAppliedIds((prev) => new Set(prev).add(s.activity_id));
+        setSuggestions((prev) => prev.filter((x) => x.activity_id !== s.activity_id));
+        applied++;
+      } catch {
+        failed++;
+      }
+    }
+    setIsApplyingAll(false);
+    const cached = suggestionsCache.get(tripId);
+    if (cached) {
+      const appliedSet = new Set(pending.map((p) => p.activity_id));
+      suggestionsCache.set(tripId, {
+        ...cached,
+        suggestions: cached.suggestions.filter((s) => !appliedSet.has(s.activity_id)),
+      });
+    }
+    if (failed === 0) toast.success(`Applied ${applied} suggestion${applied === 1 ? '' : 's'}.`);
+    else toast.warning(`Applied ${applied}, ${failed} couldn't be applied (locked or stale).`);
   };
 
   return (
@@ -1002,16 +1056,26 @@ export function BudgetCoach({
                         Swaps alone won't bridge this gap.
                       </p>
                       <p className="text-xs text-amber-800 dark:text-amber-200">
-                        The swaps below cover only {Math.round(coveragePct * 100)}% of your{' '}
-                        {formatCurrency(gapCents)} overrun. To get on target, you'll likely need to:
+                        The suggestions below cover only {Math.round(coveragePct * 100)}% of your{' '}
+                        {formatCurrency(gapCents)} overrun{deepCutsMode ? ' even with drops' : ''}. To reach your target you'll need to combine them with one of the structural changes below.
                       </p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 pl-6">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      disabled={isApplyingAll}
+                      onClick={handleApplyAll}
+                      className="gap-1.5"
+                    >
+                      {isApplyingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                      Apply all suggestions ({formatCurrency(totalPotentialSavings * travelers)})
+                    </Button>
                     {onBumpBudget && (
                       <Button
                         size="sm"
-                        variant="default"
+                        variant="outline"
                         onClick={async () => {
                           try {
                             await onBumpBudget(restructureBumpTargetCents);
@@ -1022,20 +1086,9 @@ export function BudgetCoach({
                         }}
                       >
                         Raise budget to {formatCurrency(restructureBumpTargetCents)}
-                      </Button>
-                    )}
-                    {deepCutsMode && visibleSuggestions.some((s) => s.swap_type === 'drop') && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const el = document.getElementById('budget-coach-suggestions');
-                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }}
-                        className="gap-1.5"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Drop optional activities
+                        {restructureBumpTargetCents >= currentTotalCents && (
+                          <span className="ml-1 text-xs text-emerald-600 dark:text-emerald-400">(closes the gap)</span>
+                        )}
                       </Button>
                     )}
                     {onShortenTrip && (
