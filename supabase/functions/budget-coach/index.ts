@@ -471,6 +471,9 @@ Rules:
         const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
         if (rawNew === null || rawNew < 0) return null;
 
+        const swapType: "swap" | "drop" | "consolidate" =
+          s.swap_type === "drop" || s.swap_type === "consolidate" ? s.swap_type : "swap";
+
         // POST-FILTER: drop any suggestion targeting a protected or dismissed
         // activity (model drift safety net — the prompt should prevent this,
         // but we guard against it anyway).
@@ -491,6 +494,18 @@ Rules:
           return null;
         }
 
+        // ANCHOR GUARD: drops are never allowed on anchor activities.
+        if (swapType === "drop" && anchorIdSet.has(sid)) {
+          console.log(`  → FILTERED OUT (drop on anchor activity ${sid})`);
+          return null;
+        }
+
+        // DEEP-CUTS GATE: drops/consolidates only accepted in deep-cuts mode.
+        if ((swapType === "drop" || swapType === "consolidate") && !deepCutsMode) {
+          console.log(`  → FILTERED OUT (${swapType} not allowed outside deep-cuts mode for ${sid})`);
+          return null;
+        }
+
         // PLACEHOLDER-TITLE GUARD: if the real itinerary row is just a generic
         // placeholder ("Dinner (Day 2)", "transport (Day 2)", "Activity"), the
         // coach has nothing concrete to swap — reject to avoid phantom suggestions.
@@ -507,42 +522,56 @@ Rules:
           return null;
         }
 
-        // GENERIC NAME FILTER: reject vague swap names
-        const swapName = (s.suggested_swap || "").toLowerCase();
-        const GENERIC_PATTERNS = [
-          "lower cost", "cheaper", "budget", "affordable", "inexpensive",
-          "alternative option", "similar restaurant", "similar cafe", "similar café",
-          "local eatery", "local restaurant", "local cafe", "local café",
-          "generic", "another option", "different restaurant", "different cafe",
-          "mid-range", "moderately priced", "less expensive", "cost-effective",
-          "economy", "no-frills",
-        ];
-        const isGeneric = GENERIC_PATTERNS.some((p) => swapName.includes(p));
-        if (isGeneric) {
-          console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
-          return null;
+        // GENERIC NAME FILTER (skip for drops — their swap name is a fixed sentinel)
+        if (swapType !== "drop") {
+          const swapName = (s.suggested_swap || "").toLowerCase();
+          const GENERIC_PATTERNS = [
+            "lower cost", "cheaper", "budget", "affordable", "inexpensive",
+            "alternative option", "similar restaurant", "similar cafe", "similar café",
+            "local eatery", "local restaurant", "local cafe", "local café",
+            "generic", "another option", "different restaurant", "different cafe",
+            "mid-range", "moderately priced", "less expensive", "cost-effective",
+            "economy", "no-frills",
+          ];
+          const isGeneric = GENERIC_PATTERNS.some((p) => swapName.includes(p));
+          if (isGeneric) {
+            console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
+            return null;
+          }
         }
 
-        // Convert AI's whole-currency value to cents
-        const newCostCents = Math.round(rawNew * 100);
+        // Convert AI's whole-currency value to cents (drops force 0)
+        const newCostCents = swapType === "drop" ? 0 : Math.round(rawNew * 100);
 
         // Use the known activity cost as ground truth (already in cents)
         const knownCostCents = activityCostCentsById.get(sid);
         const currentCostCents = knownCostCents ?? Math.round((typeof s.current_cost === "number" ? s.current_cost : 0) * 100);
 
-        console.log(`Suggestion "${s.suggested_swap}": AI current=${s.current_cost}, AI new=${s.new_cost}, knownCents=${knownCostCents}, newCents=${newCostCents}, currentCents=${currentCostCents}`);
+        console.log(`Suggestion [${swapType}] "${s.suggested_swap}": AI current=${s.current_cost}, AI new=${s.new_cost}, knownCents=${knownCostCents}, newCents=${newCostCents}, currentCents=${currentCostCents}`);
 
-        // STRICT GUARD: new cost must be strictly less than current cost
-        if (newCostCents >= currentCostCents) {
+        // STRICT GUARD: for swap/consolidate the new cost must be strictly lower.
+        // For drops, currentCostCents must be > 0 (don't drop free items).
+        if (swapType === "drop") {
+          if (currentCostCents <= 0) {
+            console.log(`  → FILTERED OUT (drop on $0 item ${sid})`);
+            return null;
+          }
+        } else if (newCostCents >= currentCostCents) {
           console.log(`  → FILTERED OUT (new ${newCostCents} >= current ${currentCostCents})`);
           return null;
         }
 
+        const finalSwap = swapType === "drop"
+          ? "Drop — free time / use saved budget elsewhere"
+          : s.suggested_swap;
+
         return {
           ...s,
+          swap_type: swapType,
           // Force the rendered title to the real itinerary item so even
           // a slightly-off AI label can't show a phantom name in the UI.
           current_item: activityTitleById.get(sid) || s.current_item,
+          suggested_swap: finalSwap,
           current_cost: currentCostCents,
           new_cost: newCostCents,
           savings: currentCostCents - newCostCents,
