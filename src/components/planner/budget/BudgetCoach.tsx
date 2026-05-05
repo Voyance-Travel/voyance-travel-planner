@@ -414,8 +414,10 @@ export function BudgetCoach({
 
         // RACE GUARD: if the live itinerary changed while this request was in
         // flight, drop the response — a newer fetch is or will be running.
+        // Also drop if the live suggestable set is now empty (regen → bare itinerary).
         const liveNowHash = hashItinerary(itineraryDays);
-        if (liveNowHash !== liveHash || inFlightHashRef.current !== currentHash) {
+        const liveSuggestableNow = itineraryDays.flatMap(d => d.activities.filter(isSuggestable)).length;
+        if (liveNowHash !== liveHash || inFlightHashRef.current !== currentHash || liveSuggestableNow === 0) {
           console.log('[BudgetCoach] Discarding stale response — itinerary changed mid-flight');
           return;
         }
@@ -470,7 +472,10 @@ export function BudgetCoach({
   useEffect(() => {
     if (suggestableCount === 0) {
       setSuggestions([]);
+      setAllProtected(false);
+      setError(null);
       suggestionsCache.delete(tripId);
+      inFlightHashRef.current = null;
       fetchedRef.current = false;
     }
   }, [suggestableCount, tripId]);
@@ -740,11 +745,9 @@ export function BudgetCoach({
             )}
           </div>
         </button>
-        {!isNowOnTarget && (
+        {!isNowOnTarget && suggestableCount > 0 && (
           <p className="text-sm text-muted-foreground mt-1">
-            {suggestableCount === 0
-              ? `You're ${formatCurrency(gapCents)} over budget, but this itinerary has no swappable activities yet.`
-              : `You're ${formatCurrency(gapCents)} over budget. Here's how to get on target:`}
+            You're {formatCurrency(gapCents)} over budget. Here's how to get on target:
           </p>
         )}
       </CardHeader>
@@ -1140,31 +1143,9 @@ export function BudgetCoach({
               {!isLoading && !error && visibleSuggestions.length === 0 && (
                 <div className="text-center py-6 space-y-3">
                   {suggestableCount === 0 ? (
-                    <>
-                      <p className="text-sm font-medium">
-                        Nothing to optimize yet
-                      </p>
-                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                        This itinerary doesn't have any restaurants, experiences, or local transit Budget Coach can swap. Add activities to your days, or raise your budget to cover the fixed hotel and flight costs.
-                      </p>
-                      {onBumpBudget && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={async () => {
-                            try {
-                              await onBumpBudget(restructureBumpTargetCents);
-                              toast.success(`Budget raised to ${formatCurrency(restructureBumpTargetCents)}`);
-                            } catch {
-                              toast.error('Could not update budget.');
-                            }
-                          }}
-                        >
-                          Raise budget to {formatCurrency(restructureBumpTargetCents)}
-                        </Button>
-                      )}
-                    </>
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                      Your itinerary looks empty — add activities to get personalized savings advice.
+                    </p>
                   ) : allProtected || (protectedCategories.length > 0 && dismissedIds.length === 0) ? (
                     <>
                       <p className="text-sm text-muted-foreground">
