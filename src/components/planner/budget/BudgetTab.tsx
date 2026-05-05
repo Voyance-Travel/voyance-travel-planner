@@ -1040,30 +1040,47 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                           </div>
                         </div>
                         {alloc.category === 'misc' && used === 0 && allocated > 0 ? (
-                          // Reserve treatment — a 0% bar reads as broken. The itinerary
-                          // never auto-fills this category; surface it as an explicit
-                          // manual cash reserve with a real CTA.
-                          <div className="flex items-center justify-between gap-2 pl-8">
-                            <div className="text-xs text-muted-foreground">
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted/60 text-foreground/80">
-                                <Wallet className="h-3 w-3" />
-                                {formatCurrency(allocated)} reserved · 0 logged
-                              </span>
-                              <span className="ml-2">For tips, pharmacy, SIMs, market finds.</span>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 px-2 text-xs shrink-0"
-                              onClick={() => {
-                                window.dispatchEvent(
-                                  new CustomEvent('open-add-expense', { detail: { type: 'other' } })
-                                );
-                              }}
+                          // Reserve treatment — the misc allocation is a
+                          // committed cash reserve folded into the trip
+                          // total. Show it as fully reserved (not 0%) so
+                          // users understand it's already counted against
+                          // their budget headroom, with a clear CTA to log
+                          // real cash spend.
+                          <div className="space-y-2">
+                            <div
+                              className="h-2 rounded-full bg-muted overflow-hidden"
+                              title="Cash reserved for tips, SIMs, pharmacy, market finds. Counts against your trip total — log expenses to track what's left."
                             >
-                              <Plus className="h-3 w-3 mr-1" />Add expense
-                            </Button>
+                              <div
+                                className="h-full w-full bg-slate-400/70 dark:bg-slate-500/60"
+                                style={{
+                                  backgroundImage:
+                                    'repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,0.25) 4px 8px)',
+                                }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between gap-2 pl-8">
+                              <div className="text-xs text-muted-foreground">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted/60 text-foreground/80">
+                                  <Wallet className="h-3 w-3" />
+                                  {formatCurrency(allocated)} reserved · 0 logged
+                                </span>
+                                <span className="ml-2">Counted in your trip total. Log cash expenses as you go.</span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-xs shrink-0"
+                                onClick={() => {
+                                  window.dispatchEvent(
+                                    new CustomEvent('open-add-expense', { detail: { type: 'other' } })
+                                  );
+                                }}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />Add expense
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <Progress

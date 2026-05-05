@@ -754,11 +754,6 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
     + (settings.budget_include_flight ? summary.committedFlightCents : 0);
   const discretionaryRemainder = Math.max(budgetTotal - committedFixed, 0);
 
-  // When fixed costs have swallowed the entire budget, the discretionary
-  // remainder is $0 — which makes every category's "allocated" read as $0
-  // even though the user clearly intended the saved 35/35/10/5 split. Fall
-  // back to the original budget total × saved percentages so the per-category
-  // targets stay meaningful, and tag the rows so the UI can explain the state.
   const plannedDiscretionary = summary.plannedFoodCents + summary.plannedActivitiesCents
     + summary.plannedTransitCents + summary.plannedMiscCents;
   const underwater = discretionaryRemainder === 0 && plannedDiscretionary > 0 && budgetTotal > 0;

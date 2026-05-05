@@ -23,6 +23,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { shouldCountRow } from '@/services/tripBudgetService';
+import { computeMiscReserve } from '@/services/budgetReserve';
 
 export interface FinancialDelta {
   previousTotalCents: number;
@@ -82,12 +83,15 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // session-to-session drift and a permanent "Reconciling…" mismatch.
     const { data: tripData } = await supabase
       .from('trips')
-      .select('budget_total_cents, budget_include_hotel, budget_include_flight, itinerary_data')
+      .select('budget_total_cents, budget_include_hotel, budget_include_flight, budget_allocations, itinerary_data')
       .eq('id', tripId)
       .single();
 
     const includeHotel = tripData?.budget_include_hotel ?? true;
     const includeFlight = tripData?.budget_include_flight ?? false;
+    const miscPercent = Number(
+      (tripData as any)?.budget_allocations?.misc_percent ?? 0
+    ) || 0;
 
     // Build the live activity ID set from the rendered itinerary JSON.
     const liveActivityIds = new Set<string>();
@@ -118,6 +122,11 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     let paidTotal = 0;
     let canonicalHotelCents = 0;
     let canonicalFlightCents = 0;
+    // Track committed hotel/flight + already-logged misc spend so we can fold
+    // the unspent portion of the misc reserve into the trip total.
+    let committedHotelCents = 0;
+    let committedFlightCents = 0;
+    let loggedMiscCents = 0;
 
     for (const row of costs || []) {
       // Orphan filter: drop activity-bound rows whose activity_id no longer
@@ -145,6 +154,9 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       // manual override delta (manual replaces canonical, doesn't add to it).
       if (row.day_number === 0 && cat === 'hotel') canonicalHotelCents += rowCents;
       if (row.day_number === 0 && cat === 'flight') canonicalFlightCents += rowCents;
+      if (cat === 'hotel') committedHotelCents += rowCents;
+      else if (cat === 'flight') committedFlightCents += rowCents;
+      else if (cat === 'misc') loggedMiscCents += rowCents;
 
       // Use shared inclusion rule — must match getBudgetSummary exactly,
       // otherwise snapshot total and summary total drift apart.
@@ -181,6 +193,24 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     totalCents += manualOtherCents;
     totalCents = Math.max(0, totalCents);
     paidTotal += manualPaidCents;
+
+    // Misc reserve — the user explicitly set aside cash for tips / SIM /
+    // pharmacy / market finds. The itinerary never auto-fills it, so without
+    // folding the unspent portion into the total the headline budget reads
+    // as having phantom headroom equal to the slider value.
+    const budgetTotalForReserve = tripData?.budget_total_cents || 0;
+    if (budgetTotalForReserve > 0 && miscPercent > 0) {
+      const reserve = computeMiscReserve({
+        budgetTotalCents: budgetTotalForReserve,
+        miscPercent,
+        committedHotelCents,
+        committedFlightCents,
+        includeHotel,
+        includeFlight,
+        loggedMiscCents,
+      });
+      totalCents += reserve.contributionToTotalCents;
+    }
 
     // Compute delta against the previous fetch (skip on initial load and
     // during the brief stabilization window where hydration / logistics-sync
