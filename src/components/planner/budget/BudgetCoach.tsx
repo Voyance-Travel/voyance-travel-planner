@@ -951,7 +951,55 @@ export function BudgetCoach({
                   </div>
                 );
               })()}
-              {showRestructurePanel && (
+              {showHotelDominantPanel && (
+                <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                        {hotelOverrunsBudget
+                          ? 'Your hotel exceeds your entire budget.'
+                          : 'Hotel & flights leave little room for the rest of the trip.'}
+                      </p>
+                      <p className="text-xs text-amber-800 dark:text-amber-200">
+                        {hotelOverrunsBudget ? (
+                          <>
+                            Your hotel ({formatCurrency(hotelCents)}) alone is more than your full budget of {formatCurrency(budgetTargetCents)}. Swapping restaurants or taxis can&rsquo;t close a gap that size. To get on target you&rsquo;d need to raise the budget to about {formatCurrency(hotelDominantBumpCents)} or choose a different accommodation.
+                          </>
+                        ) : (
+                          <>
+                            Your hotel{flightCents > 0 ? ' + flights' : ''} ({formatCurrency(fixedCents)}, ~{fixedSharePct}% of budget) leave only {formatCurrency(discretionaryRoomCents)} for food, activities &amp; transit. The swaps below can shave {formatCurrency(totalPotentialSavings)} off, but to comfortably fit this trip you&rsquo;d need a smaller hotel/flight bill or a higher overall budget.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pl-6">
+                    {onBumpBudget && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={async () => {
+                          try {
+                            await onBumpBudget(hotelDominantBumpCents);
+                            toast.success(`Budget raised to ${formatCurrency(hotelDominantBumpCents)}`);
+                          } catch {
+                            toast.error('Could not update budget.');
+                          }
+                        }}
+                      >
+                        Raise budget to {formatCurrency(hotelDominantBumpCents)}
+                      </Button>
+                    )}
+                    {onEditAccommodation && (
+                      <Button size="sm" variant="outline" onClick={onEditAccommodation}>
+                        Change accommodation
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {showRestructurePanel && !showHotelDominantPanel && (
                 <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
