@@ -703,7 +703,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
 
-      {!isManualMode && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && snapshotStatus !== 'yellow' && (() => {
+      {!isManualMode && !isEmptyItineraryFailure && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && snapshotStatus !== 'yellow' && (() => {
         // Compute per-category overruns (planned - allocated, in cents) and
         // translate BudgetCategory → Coach's user-facing labels.
         const CATEGORY_LABEL_MAP: Record<BudgetCategory, string> = {
