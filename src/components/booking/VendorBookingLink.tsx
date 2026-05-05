@@ -175,7 +175,8 @@ export function VendorBookingTextLink({
   const hasDirectUrl = !!externalBookingUrl;
   const bookingUrl = externalBookingUrl || generateVendorSearchUrl(preferredVendor, activityName, destination);
   const detectedVendor = hasDirectUrl ? detectVendorFromUrl(externalBookingUrl!) : detectVendorFromUrl(bookingUrl);
-  const vendorName = getVendorDisplayName(detectedVendor);
+  const vendorName = detectedVendor ? getVendorDisplayName(detectedVendor) : prettyHostname(bookingUrl);
+  const ctaPrefix = hasDirectUrl && detectedVendor === null ? 'Reserve on' : 'Book on';
 
   return (
     <a
