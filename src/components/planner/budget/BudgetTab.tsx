@@ -1065,24 +1065,29 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </Card>
       )}
 
-      {/* Recent Expenses (hidden in manual mode — auto-synced costs don't apply) */}
-      {!isManualMode && ledger.length > 0 && (
+      {/* All Costs — derived from the same payable-items source as the Payments tab,
+          so item count, names, and totals match exactly. */}
+      {!isManualMode && unifiedCostList.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-medium flex items-center gap-2">
               <Calendar className="h-4 w-4" />
-              All Costs ({ledger.length})
+              All Costs ({unifiedCostList.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <CostsList
-              ledger={ledger}
+            <PayableCostsList
+              items={unifiedCostList}
               formatCurrency={formatCurrency}
               categoryColors={categoryColors}
               categoryIcons={categoryIcons}
               onActivityRemove={onActivityRemove}
-              removeEntry={removeEntry}
             />
+            {hiddenFreeCount > 0 && (
+              <p className="text-xs text-muted-foreground mt-3">
+                + {hiddenFreeCount} free venue{hiddenFreeCount === 1 ? '' : 's'} not shown
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
