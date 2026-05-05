@@ -23,7 +23,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
 
   const { data: tripData, error: tripErr } = await supabase
     .from("trips")
-    .select("id, destination, travelers, itinerary_data")
+    .select("id, destination, travelers, itinerary_data, budget_total_cents, budget_allocations, flight_selection, hotel_selection")
     .eq("id", tripId)
     .single();
 
@@ -410,6 +410,86 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
     }
   }
 
+  // ─── TRANSIT CAP PASS ─────────────────────────────────────────────
+  // Demote excess taxi rows to public-transit pricing when the day's
+  // transit total exceeds the user's allocated transit budget × 1.25.
+  try {
+    const totalCents = (tripData as any).budget_total_cents || 0;
+    const alloc: any = (tripData as any).budget_allocations || {};
+    const transitPct = typeof alloc.transit_percent === 'number' ? alloc.transit_percent : 0;
+    const totalDays = days.length || 1;
+    if (totalCents > 0 && transitPct > 0) {
+      const flightCents = (tripData as any).flight_selection?.legs
+        ? ((tripData as any).flight_selection.legs as any[]).reduce((s: number, l: any) => s + (l.price || 0), 0) * 100
+        : 0;
+      const hotelCents = (tripData as any).hotel_selection?.pricePerNight
+        ? Math.round((tripData as any).hotel_selection.pricePerNight * totalDays * 100)
+        : 0;
+      const discretionary = Math.max(0, totalCents - flightCents - hotelCents);
+      const dailyTransitCapPP = (discretionary * (transitPct / 100)) / totalDays / numTravelers / 100;
+      const cap = dailyTransitCapPP * 1.25;
+
+      const metroRef = refMap.get(`${destination}|transport|metro`)
+        || refMap.get(`${destination}|transport|bus`)
+        || refMap.get(`${destination}|transport|`);
+      const metroFare = metroRef?.cost_low_usd ?? metroRef?.cost_mid_usd ?? 3;
+
+      const actById = new Map<string, any>();
+      for (const day of days) for (const a of (day.activities || [])) actById.set(a.id, a);
+
+      const byDay = new Map<number, any[]>();
+      for (const r of rows) {
+        if (r.category !== 'transport') continue;
+        const arr = byDay.get(r.day_number) || [];
+        arr.push(r);
+        byDay.set(r.day_number, arr);
+      }
+
+      const AIRPORT_RE = /\b(airport|terminal|cdg|orly|jfk|lhr|gare|station)\b/i;
+      for (const [dayNum, dayRows] of byDay.entries()) {
+        let dayTotal = dayRows.reduce((s, r) => s + (r.cost_per_person_usd || 0), 0);
+        if (dayTotal <= cap) continue;
+
+        const candidates = dayRows
+          .map(r => ({ r, act: actById.get(r.activity_id) }))
+          .filter(({ r, act }) => {
+            if (!act) return false;
+            if (act.isLocked || act.booking_required) return false;
+            if (act.cost?.basis === 'user' || act.cost?.basis === 'user_override') return false;
+            const text = `${act.title || ''} ${act.description || ''}`;
+            if (AIRPORT_RE.test(text)) return false;
+            if ((r.cost_per_person_usd || 0) <= metroFare * 1.5) return false;
+            return true;
+          })
+          .sort((a, b) => (b.r.cost_per_person_usd || 0) - (a.r.cost_per_person_usd || 0));
+
+        for (const { r } of candidates) {
+          if (dayTotal <= cap) break;
+          const prev = r.cost_per_person_usd || 0;
+          const prevCents = Math.round(prev * numTravelers * 100);
+          const newCost = Math.round(metroFare * 100) / 100;
+          dayTotal -= (prev - newCost);
+          r.cost_per_person_usd = newCost;
+          r.source = 'transit_cap_repair';
+          r.confidence = 'medium';
+          r.cost_reference_id = metroRef?.id || null;
+          r.notes = `[Capped to public transit — was $${prev.toFixed(0)}/pp]`;
+          changeLog.push({
+            activity_id: r.activity_id,
+            activity_title: actById.get(r.activity_id)?.title || null,
+            previous_cents: prevCents,
+            new_cents: Math.round(newCost * numTravelers * 100),
+            reason: 'transit_cap_repair',
+          });
+          corrected++;
+        }
+        console.log(`[repair-trip-costs] Transit cap day ${dayNum}: cap=$${cap.toFixed(0)}/pp, final=$${dayTotal.toFixed(0)}/pp`);
+      }
+    }
+  } catch (e) {
+    console.warn('[repair-trip-costs] transit cap pass failed:', e);
+  }
+
   let inserted = 0;
   if (rows.length > 0) {
     const { data: upserted, error: upsertErr } = await supabase
@@ -434,7 +514,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
   let jsonbPatched = 0;
   const correctedById = new Map<string, { totalUsd: number; reason: string }>();
   for (const r of rows) {
-    if (r.source === 'michelin_floor' || r.source === 'ticketed_attraction_floor' || r.source === 'auto_corrected') {
+    if (r.source === 'michelin_floor' || r.source === 'ticketed_attraction_floor' || r.source === 'auto_corrected' || r.source === 'transit_cap_repair') {
       correctedById.set(r.activity_id, {
         totalUsd: Math.round((r.cost_per_person_usd || 0) * (r.num_travelers || 1)),
         reason: r.source,

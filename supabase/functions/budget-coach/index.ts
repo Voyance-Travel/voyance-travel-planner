@@ -30,6 +30,8 @@ interface RequestBody {
   protected_categories?: string[];
   /** Activity IDs the user has explicitly dismissed via "Don't suggest". */
   dismissed_activity_ids?: string[];
+  /** Per-category overrun in cents (planned - allocated). Positive = over. */
+  category_overruns?: Partial<Record<"Dining" | "Hotels" | "Tours" | "Transit" | "Activities", number>>;
 }
 
 // ─── Category normalization ─────────────────────────────────────
@@ -73,6 +75,7 @@ serve(async (req) => {
       destination,
       protected_categories = [],
       dismissed_activity_ids = [],
+      category_overruns = {},
     } = (await req.json()) as RequestBody;
 
     const gap_cents = current_total_cents - budget_target_cents;
@@ -167,6 +170,20 @@ Items in these categories have already been removed from the itinerary you see b
 This trip's identity is built around those categories. Suggesting swaps for them is a hard failure.`
       : "";
 
+    // ─── Priority overruns clause ──────────────────────────────────
+    // Per-category overruns supplied by the client. Force the model to
+    // prioritize swaps in over-allocated categories (e.g. Transit at 131%).
+    const overrunEntries = Object.entries(category_overruns)
+      .filter(([label, cents]) => typeof cents === "number" && cents > 0 && !protected_categories.includes(label))
+      .sort((a, b) => (b[1] as number) - (a[1] as number))
+      .slice(0, 3);
+    const priorityOverrunsClause = overrunEntries.length > 0
+      ? `\n\nPRIORITY OVERRUNS (must address first):
+The following categories are OVER their per-trip allocation:
+${overrunEntries.map(([label, cents]) => `  • ${label}: $${Math.round((cents as number) / 100)} over allocated budget`).join("\n")}
+At least your TOP ${Math.min(overrunEntries.length + 1, 4)} suggestions MUST target items in these overrun categories before suggesting swaps elsewhere. For Transit overruns, prefer demoting taxi/private-car legs to metro, bus, or walking. Use reference pricing for the new mode.`
+      : "";
+
     const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience.
 
 CRITICAL NAMING RULE:
@@ -181,7 +198,7 @@ CRITICAL COST RULES:
 - If no reference pricing is available for a swap, use the lowest reasonable amount from the reference data for that category.
 - Your new_cost must ALWAYS be strictly LESS than the current_cost. If you can't find a cheaper alternative, skip that item.
 - All costs are in whole currency units (e.g., 50 for $50), NOT cents.
-- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}`;
+- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
