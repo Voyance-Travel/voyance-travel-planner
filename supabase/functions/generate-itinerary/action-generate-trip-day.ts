@@ -1477,6 +1477,7 @@ async function _handleGenerateTripDayInner(
       apiKey: Deno.env.get("LOVABLE_API_KEY") || undefined,
       lockedActivities: lockedActivitiesForDay,
       usedRestaurants: usedRestaurants,
+      hotelName: cityInfo?.hotelName || tripHotelName || undefined,
     });
     // Sync usedVenues back from the Set for subsequent days
     for (const v of usedVenueSet) {
