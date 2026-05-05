@@ -530,14 +530,36 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     });
   }
 
+  // Failed/empty itinerary state — replaces over-budget UI with a recovery banner.
+  const isEmptyItineraryFailure =
+    tripStatus === 'failed' && generationFailureReason === 'empty_itinerary';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 py-6"
     >
-      {/* Over-budget Warning Banner — snapshot is the only source (hidden in manual mode) */}
-      {!isManualMode && (() => {
+      {/* Failed/empty itinerary banner — replaces over-budget messaging */}
+      {isEmptyItineraryFailure && (
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30">
+          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-destructive" />
+          <div className="flex-1 space-y-2">
+            <p className="font-semibold text-foreground">Your itinerary didn't generate properly</p>
+            <p className="text-sm text-muted-foreground">
+              Generation finished without any restaurants, activities, or transit. Tap Regenerate to try again.
+            </p>
+            {onRegenerate && (
+              <Button size="sm" variant="default" onClick={onRegenerate} className="mt-1">
+                Regenerate itinerary
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Over-budget Warning Banner — snapshot is the only source (hidden in manual mode and on empty-itinerary failure) */}
+      {!isManualMode && !isEmptyItineraryFailure && (() => {
         const showWarning = settings?.budget_warnings_enabled !== false
           && settings?.budget_warning_threshold !== 'off'
           && (snapshotStatus === 'red' || (snapshotStatus === 'yellow' && settings?.budget_warning_threshold !== 'red_only'));
