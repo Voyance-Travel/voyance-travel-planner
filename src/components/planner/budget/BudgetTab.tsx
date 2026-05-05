@@ -682,6 +682,11 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               await updateSettings({ budget_total_cents: newTotalCents });
             }}
             categoryOverruns={overruns}
+            miscReserveCents={allocations.find((a) => a.category === 'misc')?.allocatedCents || 0}
+            miscUsedCents={allocations.find((a) => a.category === 'misc')?.usedCents || 0}
+            onAddMiscExpense={() => {
+              window.dispatchEvent(new CustomEvent('open-add-expense', { detail: { type: 'other' } }));
+            }}
           />
         );
       })()}
