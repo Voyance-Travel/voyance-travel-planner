@@ -1,58 +1,58 @@
-I found two connected failure modes:
+## Problem
 
-1. **Fresh generation/resume can wipe or rebuild itinerary state**, which changes `trips.itinerary_data.days` and then causes totals to mutate session-to-session.
-2. **Budget/Payments still depend on `activity_costs` as a separate ledger**, while the Itinerary tab renders `trips.itinerary_data.days`. Existing read-time orphan filters help, but stale or mismatched cost rows can still make Budget Coach and Payments behave as if a different itinerary version is current.
+The transit allocation ($180 / 10% of trip budget) was exceeded by 131% ($417 generated) because:
 
-Plan:
+1. **Generator awareness only — no enforcement.** `compile-prompt.ts` writes `Local transit: ~$X` into the prompt, but the model frequently ignores it and routes everything via taxi.
+2. **No post-generation transit cap.** `action-repair-costs.ts` only repairs *unconfirmed* transit legs to $0; it never trims confirmed taxi cards even when the day's transit total is wildly over the per-day allocation.
+3. **Budget Coach is category-blind.** The coach prompt lists generic "swap types" (taxi → metro is one of many bullets) and ranks suggestions purely by absolute savings. With expensive food/activity items present, transit swaps never make the top 8.
 
-1. **Add a stable itinerary fingerprint**
-   - Compute a deterministic fingerprint from the saved live itinerary: day number, activity id, title/name, category, cost, and traveler count.
-   - Store/pass this fingerprint through budget-facing code so Budget Coach suggestions are tied to the exact itinerary snapshot they were generated from.
-   - If the live fingerprint changes, Budget Coach will clear suggestions and refetch from the current live itinerary only.
+## Fix
 
-2. **Make Budget Coach read only the live itinerary payload**
-   - Keep using the current client payload path (`BudgetTab -> BudgetCoach -> budget-coach function`) but strengthen it:
-     - Include `itinerary_fingerprint` in the function request.
-     - Return the same fingerprint with suggestions.
-     - Drop rendered suggestions when the returned fingerprint no longer equals the current live fingerprint.
-   - This prevents any cached or delayed response from showing suggestions for Ob-La-Di / La Méditerranée if the live Itinerary tab has already changed to Maison Sauvage / Le Comptoir du Relais / Septime.
+### 1. Server-side transit cap during generation (`action-repair-costs.ts`)
 
-3. **Add server-side Budget Coach guardrails**
-   - In `supabase/functions/budget-coach/index.ts`, validate that every returned suggestion targets an activity id in the incoming payload and that `current_item` matches the incoming title.
-   - Return `itinerary_fingerprint` in the response for client-side race protection.
-   - Make the prompt explicitly state that the model may only reference activities listed in the provided payload, not prior context or payments/ledger rows.
+After per-day costs are normalized, compute the day's confirmed transit total. If it exceeds the allocated per-day transit target by >25%:
+- Demote the most expensive `taxi` legs to `metro` / `walk` (preserve the activity, swap mode + cost from `cost_reference`).
+- Stop demoting once the day's transit total is within the cap.
+- Skip legs flagged `isLocked`, `bookingRequired`, or anchored to flights/airport transfers (those genuinely need a taxi).
+- Log each demotion to `cost_change_log` with source `transit_cap_repair` so the snapshot toast can attribute the delta.
 
-4. **Reconcile `activity_costs` to the live itinerary after saves/regeneration**
-   - Update the sync path so cleanup always runs even when there are zero paid activities in the live itinerary. Today `cleanupRemovedActivityCosts` only runs inside the “there are rows to sync” branch, which can leave stale rows if a regeneration removes all positive-cost activities or changes ids in an edge case.
-   - Use the **full live activity id set** for cleanup, not only the positive-cost rows, so zero-cost live activities are preserved as valid while stale positive-cost rows from old itineraries are deleted.
-   - Dispatch the existing `booking-changed` event after cleanup so Budget, Payments, and snapshot totals refetch together.
+The per-day transit target is recomputed from `trips.budget_allocations.transit_percent` × per-day budget (same math as `compile-prompt.ts`).
 
-5. **Stop unapproved fresh regeneration from replacing a saved itinerary**
-   - Harden `handleShowGenerator` / regeneration entry points so “Generate Itinerary” is only a fresh rebuild when the trip truly has no saved itinerary, or when the user explicitly chooses regenerate.
-   - For resume/self-heal flows, require incomplete state before invoking `generate-trip`; do not treat a complete `itinerary_data.days` snapshot as something to regenerate just because status metadata is stale.
-   - Keep the existing no-shrink guard, but add clearer early exits so a stable saved itinerary is not cleared and rebuilt on a later session.
+### 2. Pass transit overrun to Budget Coach (`BudgetTab.tsx` + `BudgetCoach.tsx`)
 
-6. **Unify Budget/Payments totals around the live itinerary version**
-   - Ensure `useTripFinancialSnapshot`, `getBudgetLedger`, and `usePayableItems` all filter against the same live activity id set and ignore orphaned activity-bound cost rows.
-   - Remove any remaining orphan-rescue naming behavior that can make old ledger rows appear under current-day labels.
-   - Add a small developer diagnostic log when Payments/Budget counts differ from the live itinerary’s positive-cost activity count, so this regression is easier to catch.
+- Compute `transitOverrunCents = plannedTransitCents - allocatedTransitCents` from `getCategoryAllocations`.
+- Forward `category_overruns: { transit: cents, food: cents, ... }` into the `budget-coach` request body.
 
-7. **Optional targeted cleanup for the affected Paris trip**
-   - After code changes, run a safe reconciliation for the affected trip record only: remove `activity_costs` rows whose `activity_id` is not present in its current `itinerary_data.days`, excluding logistics rows.
-   - This is not a broad migration; it is a one-time cleanup for stale rows already created by the regression.
+### 3. Coach prompt prioritizes overrun categories (`supabase/functions/budget-coach/index.ts`)
 
-Files expected to change:
-- `src/components/planner/budget/BudgetCoach.tsx`
-- `src/components/planner/budget/BudgetTab.tsx`
-- `src/components/itinerary/EditorialItinerary.tsx`
-- `src/hooks/useTripFinancialSnapshot.ts`
-- `src/hooks/usePayableItems.ts`
-- `src/services/tripBudgetService.ts`
-- `supabase/functions/budget-coach/index.ts`
-- Potential small guard in `src/pages/TripDetail.tsx`
+- Accept `category_overruns` in the request schema.
+- Inject a `PRIORITY OVERRUNS` clause into the system prompt:
+  > "The following categories are over their allocated budget: Transit by $237. At least the top N suggestions MUST target items in these overrun categories before suggesting swaps elsewhere."
+- Where N = number of overrun categories (capped at 3).
+- Validate server-side: if `category_overruns.transit > 0` and zero returned suggestions match Transit, append a synthesized fallback ("Switch Day X taxi to metro — $Y → $Z") drawn from `cost_reference`.
 
-Validation after implementation:
-- Budget Coach suggestions must only reference activity ids/titles visible in the current Itinerary tab.
-- Payments list must not show restaurants absent from the live itinerary.
-- Trip Expenses total must remain stable across refresh/session reload unless the user explicitly edits, saves, books, pays, or regenerates.
-- Regeneration should not start from a saved completed itinerary unless explicitly requested.
+### 4. Coach UI surfaces overrun chips (`BudgetCoach.tsx`)
+
+Add a small chip row above the suggestion list when overruns exist:
+> ⚠ Transit is $237 over (allocated $180, planned $417)
+
+Clicking the chip filters the suggestion list to that category. Purely cosmetic; requires no schema change.
+
+### 5. One-time reconciliation for the affected Paris trip
+
+After deploy, run the transit cap repair against the affected trip via the same code path (`action-repair-costs` invoked from the existing self-heal trigger).
+
+## Files to change
+
+- `supabase/functions/generate-itinerary/action-repair-costs.ts` — new transit-cap pass
+- `supabase/functions/budget-coach/index.ts` — accept `category_overruns`, prompt + validation
+- `src/components/planner/budget/BudgetTab.tsx` — compute and pass overruns
+- `src/components/planner/budget/BudgetCoach.tsx` — overrun chips + pass-through
+- `src/services/tripBudgetService.ts` — expose `allocatedTransitCents` (and others) on the summary for reuse
+
+## Validation
+
+- Generate a Paris trip with 10% transit allocation; confirm post-generation transit total ≤ allocated × 1.25.
+- Confirm Budget Coach surfaces ≥1 transit suggestion when transit is over.
+- Confirm a synthesized fallback appears when the AI returns zero transit suggestions despite an overrun.
+- Confirm `cost_change_log` rows are attributed to `transit_cap_repair`.
