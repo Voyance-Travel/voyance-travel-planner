@@ -841,12 +841,23 @@ export function BudgetCoach({
 
               {/* Suggestions */}
               {!isLoading && !error && visibleSuggestions.length > 0 && (
-                <>
+                <div id="budget-coach-suggestions" className="space-y-2">
                   {visibleSuggestions.map((s, i) => {
                     const isApplied = appliedIds.has(s.activity_id);
                     const isLocked = lockedActivityIds.has(s.activity_id);
+                    const isDrop = s.swap_type === 'drop';
                     // When on target, de-emphasize remaining unapplied instead of hiding
                     const isDeemphasized = isNowOnTarget && !isApplied;
+
+                    const handleClick = async () => {
+                      if (isDrop) {
+                        const ok = window.confirm(
+                          `Drop "${s.current_item}" from your itinerary?\n\nThis frees the slot and saves ${formatCurrency(s.savings * travelers)}.`
+                        );
+                        if (!ok) return;
+                      }
+                      handleApply(s);
+                    };
 
                     return (
                       <motion.div
@@ -860,7 +871,9 @@ export function BudgetCoach({
                             ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
                             : isDeemphasized
                               ? 'bg-muted/50 border-border'
-                              : 'bg-card border-border hover:border-primary/30'
+                              : isDrop
+                                ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 hover:border-amber-400'
+                                : 'bg-card border-border hover:border-primary/30'
                         )}
                       >
                         {/* Number */}
@@ -869,7 +882,9 @@ export function BudgetCoach({
                             'flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold',
                             isApplied
                               ? 'bg-emerald-500 text-white'
-                              : 'bg-primary/10 text-primary'
+                              : isDrop
+                                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                : 'bg-primary/10 text-primary'
                           )}
                         >
                           {isApplied ? <Check className="h-3.5 w-3.5" /> : i + 1}
@@ -879,18 +894,20 @@ export function BudgetCoach({
                         <div className="flex-1 min-w-0 space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap text-sm">
                             <span className="flex items-center gap-1 text-muted-foreground">
-                              <Scissors className="h-3 w-3" />
+                              {isDrop ? <Trash2 className="h-3 w-3 text-amber-600 dark:text-amber-400" /> : <Scissors className="h-3 w-3" />}
                               {s.current_item}
                               <span className="font-medium text-foreground">
                                 ({formatCurrency(s.current_cost)}{travelers > 1 ? '/pp' : ''})
                               </span>
                             </span>
                             <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                            <span className="font-medium text-foreground">
-                              {s.suggested_swap}
-                              <span className="text-primary ml-1">
-                                ({formatCurrency(s.new_cost)}{travelers > 1 ? '/pp' : ''})
-                              </span>
+                            <span className={cn('font-medium', isDrop ? 'text-amber-700 dark:text-amber-300' : 'text-foreground')}>
+                              {isDrop ? 'Drop activity' : s.suggested_swap}
+                              {!isDrop && (
+                                <span className="text-primary ml-1">
+                                  ({formatCurrency(s.new_cost)}{travelers > 1 ? '/pp' : ''})
+                                </span>
+                              )}
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground">{s.reason}</p>
@@ -916,12 +933,13 @@ export function BudgetCoach({
                         ) : (
                           <div className="flex-shrink-0 flex items-center gap-1">
                             <Button
-                              variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : 'default'}
+                              variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : isDrop ? 'outline' : 'default'}
                               size="sm"
                               disabled={isApplied}
-                              onClick={() => handleApply(s)}
+                              onClick={handleClick}
                               className={cn(
-                                isApplied && 'text-emerald-600 dark:text-emerald-400'
+                                isApplied && 'text-emerald-600 dark:text-emerald-400',
+                                !isApplied && isDrop && 'border-amber-400 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-950/40'
                               )}
                             >
                               {isApplied ? (
@@ -929,6 +947,8 @@ export function BudgetCoach({
                                   <Check className="h-3.5 w-3.5 mr-1" />
                                   Applied
                                 </>
+                              ) : isDrop ? (
+                                'Drop'
                               ) : (
                                 'Apply'
                               )}
@@ -939,7 +959,7 @@ export function BudgetCoach({
                                 size="icon"
                                 onClick={() => dismissSuggestion(s.activity_id)}
                                 className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                aria-label="Don't suggest this swap again"
+                                aria-label="Don't suggest this again"
                                 title="Don't suggest this again"
                               >
                                 <X className="h-3.5 w-3.5" />
