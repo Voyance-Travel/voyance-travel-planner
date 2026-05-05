@@ -80,6 +80,8 @@ interface BudgetCoachProps {
   onProtectedCategoriesChange?: (next: string[]) => void;
   /** Persist a bumped budget total (cents). When provided, Coach may surface a one-click "Bump to $Y" CTA. */
   onBumpBudget?: (newTotalCents: number) => Promise<void> | void;
+  /** Per-category overruns in cents (planned - allocated). Drives priority + chips. */
+  categoryOverruns?: Partial<Record<string, number>>;
   className?: string;
 }
 
