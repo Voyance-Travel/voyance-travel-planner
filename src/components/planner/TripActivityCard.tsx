@@ -82,11 +82,11 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
           <div className="flex items-start justify-between gap-2">
             <div>
               <h4 className="font-medium text-foreground">{sanitizeActivityName(activity.name)}</h4>
-              {activity.description?.trim() && (
+              {(() => { const d = sanitizeActivityText(activity.description); return d ? (
                 <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
-                  {activity.description}
+                  {d}
                 </p>
-              )}
+              ) : null; })()}
             </div>
 
             {/* Action Buttons */}
