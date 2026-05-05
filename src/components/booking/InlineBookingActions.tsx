@@ -288,10 +288,42 @@ export function InlineBookingActions({
     return null;
   }
 
+  // Helper: render high-cost guidance cluster (search + concierge) for premium experiences
+  // that would otherwise have no actionable affordance.
+  const renderHighCostGuidance = () => {
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${activity.title} ${destination} booking`)}`;
+    return (
+      <div className="inline-flex flex-wrap items-center gap-2">
+        <a
+          href={searchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
+          title={`Premium experience (${formatPrice(price * 100, activity.currency || 'USD')}) — confirm booking on the official site`}
+        >
+          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+          <span className="sm:hidden">Find site</span>
+          <span className="hidden sm:inline">Find on official site</span>
+        </a>
+        {onAskConcierge && (
+          <button
+            type="button"
+            onClick={onAskConcierge}
+            className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
+          >
+            <Sparkles className="h-3 w-3 flex-shrink-0" />
+            <span>Ask concierge</span>
+          </button>
+        )}
+      </div>
+    );
+  };
+
   // If booking is not required, show appropriate link based on type
   if (!activity.bookingRequired) {
     const directUrl = activity.website || activity.externalBookingUrl || activity.bookingUrl;
-    
+    const isHighCost = price >= HIGH_COST_USD;
+
     if (linkType === 'view_details' && directUrl) {
       return (
         <a
@@ -320,21 +352,26 @@ export function InlineBookingActions({
         </a>
       );
     }
-    
+
     if (linkType === 'find_restaurant') {
       return (
-        <RestaurantLink 
-          restaurantName={activity.title} 
-          destination={destination} 
+        <RestaurantLink
+          restaurantName={activity.title}
+          destination={destination}
         />
       );
     }
-    
+
+    // High-cost safety net: never let a premium item render as a dead-end
+    if (isHighCost && !directUrl) {
+      return renderHighCostGuidance();
+    }
+
     // For hotel amenities without URL, show nothing
     if (isHotelAmenityActivity(activity.title, activity.category)) {
       return null;
     }
-    
+
     // Otherwise show view details if we have a URL
     if (directUrl) {
       return (
@@ -350,7 +387,7 @@ export function InlineBookingActions({
         </a>
       );
     }
-    
+
     return null;
   }
 
