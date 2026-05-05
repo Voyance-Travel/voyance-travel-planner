@@ -73,14 +73,25 @@ function getVendorDisplayName(vendor: 'viator' | 'getyourguide' | 'tripadvisor')
 }
 
 /**
- * Detect vendor from a URL
+ * Detect vendor from a URL. Returns null for unknown hosts so we can render
+ * an honest "Reserve on {hostname}" label rather than mislabel the venue's
+ * own site as Viator.
  */
-function detectVendorFromUrl(url: string): 'viator' | 'getyourguide' | 'tripadvisor' {
+function detectVendorFromUrl(url: string): 'viator' | 'getyourguide' | 'tripadvisor' | null {
   const lowerUrl = url.toLowerCase();
   if (lowerUrl.includes('viator.com')) return 'viator';
   if (lowerUrl.includes('getyourguide.com')) return 'getyourguide';
   if (lowerUrl.includes('tripadvisor.com')) return 'tripadvisor';
-  return 'viator'; // Default to Viator for direct URLs
+  return null;
+}
+
+/** Extract a clean hostname for display (e.g. "louvre.fr"). */
+function prettyHostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'official site';
+  }
 }
 
 export function VendorBookingLink({
