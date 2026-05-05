@@ -514,7 +514,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
   let jsonbPatched = 0;
   const correctedById = new Map<string, { totalUsd: number; reason: string }>();
   for (const r of rows) {
-    if (r.source === 'michelin_floor' || r.source === 'ticketed_attraction_floor' || r.source === 'auto_corrected') {
+    if (r.source === 'michelin_floor' || r.source === 'ticketed_attraction_floor' || r.source === 'auto_corrected' || r.source === 'transit_cap_repair') {
       correctedById.set(r.activity_id, {
         totalUsd: Math.round((r.cost_per_person_usd || 0) * (r.num_travelers || 1)),
         reason: r.source,
