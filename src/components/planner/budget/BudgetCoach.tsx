@@ -345,6 +345,7 @@ export function BudgetCoach({
       destination,
       protectedCategories,
       dismissedIds,
+      categoryOverruns,
     ]
   );
 
