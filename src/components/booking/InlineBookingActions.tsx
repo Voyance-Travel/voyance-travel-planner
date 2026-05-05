@@ -115,18 +115,28 @@ const NON_BOOKABLE_KEYWORDS = [
   'rest', 'relax at hotel', 'hotel rest',
 ];
 
-// Activities that are part of a hotel/accommodation and shouldn't show external booking
-// These are hotel amenities, not separate bookable experiences
-const HOTEL_AMENITY_KEYWORDS = [
-  'spa', 'lounge', 'pool', 'gym', 'fitness', 'sauna', 'steam room',
-  'relaxation', 'wellness', 'massage', 'treatment',
-  'rooftop', 'terrace', 'bar at', 'hotel bar', 'lobby',
+// Strong signals that this is hotel-bound (always treat as hotel amenity)
+const STRONG_HOTEL_SIGNALS = [
+  'at the hotel', 'hotel spa', 'hotel bar', 'hotel pool', 'hotel gym',
+  'hotel lounge', 'lobby', 'rooftop bar at', 'in-room',
   'st regis', 'ritz', 'four seasons', 'w hotel', 'marriott', 'hilton',
   'hyatt', 'waldorf', 'peninsula', 'mandarin oriental', 'shangri-la',
 ];
 
-// Categories that indicate accommodation-based activities
-const ACCOMMODATION_CATEGORIES = ['accommodation', 'hotel', 'lodging', 'resort', 'spa', 'wellness'];
+// Ambiguous amenity words — only treat as hotel amenity when paired with a hotel cue
+const AMBIGUOUS_AMENITY_KEYWORDS = [
+  'spa', 'wellness', 'treatment', 'massage', 'relaxation',
+  'pool', 'gym', 'fitness', 'sauna', 'steam room', 'lounge',
+];
+
+const HOTEL_CUE_RE = /\b(hotel|resort|st regis|ritz|four seasons|marriott|hilton|hyatt|waldorf|peninsula|mandarin oriental|shangri-la|w hotel)\b/i;
+
+// Categories that indicate accommodation-based activities (NOTE: 'spa' / 'wellness' are
+// first-class standalone categories elsewhere in the app and intentionally excluded here)
+const ACCOMMODATION_CATEGORIES = ['accommodation', 'hotel', 'lodging', 'resort'];
+
+// Premium experiences that need explicit booking guidance even without bookingRequired flag
+const HIGH_COST_USD = 150;
 
 function isDiningActivity(title: string): boolean {
   const lowerTitle = (title || '').toLowerCase();
