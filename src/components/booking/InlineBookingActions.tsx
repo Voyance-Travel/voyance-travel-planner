@@ -435,30 +435,102 @@ export function InlineBookingActions({
         );
       }
       
-      // MODE 2: External link only - use actual URL if available, otherwise vendor search
+      // MODE 2: External link / official site / concierge fallback (priority chain)
       if (canShowViatorLink) {
-        // Prioritize actual booking URL from activity data over generated search
         const actualBookingUrl = activity.externalBookingUrl || activity.bookingUrl || activity.website;
-        
+        const isOfficialSite = !!actualBookingUrl && !OTA_HOST_RE.test(actualBookingUrl);
+
+        // PRIORITY 1: Official venue site (Places-verified) → branded primary CTA
+        if (isOfficialSite && actualBookingUrl) {
+          const host = prettyHostname(actualBookingUrl);
+          return (
+            <TooltipProvider>
+              <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => window.open(actualBookingUrl, '_blank', 'noopener,noreferrer')}
+                      className="gap-1 sm:gap-1.5 text-xs bg-primary px-2 sm:px-3 h-7 sm:h-8"
+                    >
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                      <span className="sm:hidden">Reserve</span>
+                      <span className="hidden sm:inline">{compact ? `Reserve · ${host}` : `Reserve on ${host}`}</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">Opens the venue's official reservation page</p>
+                  </TooltipContent>
+                </Tooltip>
+                {price > 0 && (
+                  <span className="hidden sm:inline text-xs text-muted-foreground">
+                    ~{formatPrice(price)}
+                  </span>
+                )}
+              </div>
+            </TooltipProvider>
+          );
+        }
+
+        // PRIORITY 2: We have an OTA URL → keep existing vendor link (now correctly labeled)
+        if (actualBookingUrl) {
+          return (
+            <div className="flex items-center gap-1 sm:gap-2">
+              <VendorBookingLink
+                activityName={activity.title}
+                destination={destination}
+                externalBookingUrl={actualBookingUrl}
+                estimatedPrice={price}
+                preferredVendor="viator"
+                size="sm"
+              />
+            </div>
+          );
+        }
+
+        // PRIORITY 3: No URL at all → concierge-led lookup (premium fallback)
+        // with discreet GetYourGuide search as a secondary text link.
+        const gygUrl = `https://www.getyourguide.com/s/?q=${encodeURIComponent(`${activity.title} ${destination}`)}`;
         return (
-          <div className="flex items-center gap-1 sm:gap-2">
-            <VendorBookingLink
-              activityName={activity.title}
-              destination={destination}
-              externalBookingUrl={actualBookingUrl} // Pass actual URL to avoid wrong search results
-              estimatedPrice={price}
-              preferredVendor="viator"
-              size="sm"
-            />
-            {!actualBookingUrl && (
-              <span className="hidden sm:inline text-[10px] text-muted-foreground">
-                Search
-              </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {onAskConcierge ? (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={onAskConcierge}
+                className="gap-1 sm:gap-1.5 text-xs bg-primary px-2 sm:px-3 h-7 sm:h-8"
+              >
+                <Sparkles className="h-3 w-3 flex-shrink-0" />
+                <span className="sm:hidden">Find link</span>
+                <span className="hidden sm:inline">Find official booking link</span>
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => window.open(gygUrl, '_blank', 'noopener,noreferrer')}
+                className="gap-1 sm:gap-1.5 text-xs px-2 sm:px-3 h-7 sm:h-8"
+              >
+                <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                <span className="sm:hidden">Browse</span>
+                <span className="hidden sm:inline">Browse tours</span>
+              </Button>
+            )}
+            {onAskConcierge && (
+              <a
+                href={gygUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline text-[11px] text-muted-foreground hover:text-primary hover:underline"
+              >
+                or browse tours
+              </a>
             )}
           </div>
         );
       }
-      
+
       // No booking integration available - show nothing rather than broken UI
       return null;
 
