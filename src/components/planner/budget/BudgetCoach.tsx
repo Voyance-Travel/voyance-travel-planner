@@ -226,6 +226,25 @@ export function BudgetCoach({
     itineraryDays.flatMap(d => d.activities.filter(a => a.isLocked).map(a => a.id))
   );
 
+  // Anchor activity IDs — drops are forbidden on these. Detection mirrors the
+  // luxury-anchor pattern used by the Bump-tier CTA below + Day-1 dinner rule
+  // (see mem://features/itinerary/grand-entrance-dinner).
+  const ANCHOR_LUXURY_RE = /michelin|plaza athénée|plaza athenee|ritz|le bristol|four seasons|wine tasting|tasting menu|caviar|george v|le meurice|cheval blanc|mandarin oriental|chef.s table/i;
+  const anchorActivityIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const day of itineraryDays) {
+      const isDay1 = day.dayNumber === 1;
+      for (const a of day.activities) {
+        const haystack = `${a.title || a.name || ''} ${a.description || ''}`;
+        const cat = `${a.category || ''} ${a.type || ''}`.toLowerCase();
+        const isDinner = /dinner/.test(haystack) || cat.includes('dinner');
+        if (ANCHOR_LUXURY_RE.test(haystack)) ids.push(a.id);
+        else if (isDay1 && isDinner) ids.push(a.id);
+      }
+    }
+    return ids;
+  }, [itineraryDays]);
+
   // Build the payload activities in the format the edge function expects
   // Exclude locked activities — they should not be suggested for swaps
   const buildPayloadDays = useCallback(() => {
