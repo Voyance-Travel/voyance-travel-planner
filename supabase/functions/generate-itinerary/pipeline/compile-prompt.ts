@@ -1738,7 +1738,8 @@ For the departure day lunch specifically, here are SAFE options that are unlikel
   • Tasca do Chico (Alfama fado restaurant)
   • Cervejaria Trindade (historic beer hall)
 If your first restaurant choice matches ANY name in the used list above, REPLACE it immediately with one from the safe options list.
-DO NOT use generic placeholders like "a bistro" or "a café" — always use a specific real restaurant name.`;
+DO NOT use generic placeholders like "a bistro" or "a café" — always use a specific real restaurant name.
+WELLNESS/SPA: any spa, wellness, massage, hammam, or thermal activity MUST name a real, bookable venue (e.g., "Spa Valmont at Le Meurice", "AIRE Ancient Baths", "Hammam Pacha"). Generic titles like "Private Wellness Refresh", "Spa Time", "Wellness Moment", or "Spa at Your Hotel" with no real venue are FORBIDDEN — they cost money but cannot be booked. If you cannot name a real spa, omit the activity.`;
 })()}
 
 CRITICAL REMINDERS:
