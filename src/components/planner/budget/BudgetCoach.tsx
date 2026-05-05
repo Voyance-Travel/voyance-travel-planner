@@ -350,6 +350,7 @@ export function BudgetCoach({
         const fetched: BudgetSuggestion[] = data?.suggestions || [];
         setSuggestions(fetched);
         setAllProtected(Boolean(data?.all_protected));
+        setDeepCutsMode(Boolean(data?.deep_cuts_mode));
         suggestionsCache.set(tripId, {
           suggestions: fetched,
           itineraryHash: currentHash,
