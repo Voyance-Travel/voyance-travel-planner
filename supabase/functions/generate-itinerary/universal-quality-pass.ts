@@ -16,7 +16,7 @@
  */
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
-import { fixPlaceholdersForDay, nuclearPlaceholderSweep } from './fix-placeholders.ts';
+import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep } from './fix-placeholders.ts';
 import {
   checkAndApplyFreeVenue,
   enforceMarketDiningCap,
