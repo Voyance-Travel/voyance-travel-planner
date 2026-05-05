@@ -164,6 +164,9 @@ export function BudgetCoach({
   onBumpBudget,
   categoryOverruns,
   onShortenTrip,
+  miscReserveCents = 0,
+  miscUsedCents = 0,
+  onAddMiscExpense,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
