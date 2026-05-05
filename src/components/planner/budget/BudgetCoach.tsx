@@ -85,6 +85,8 @@ interface BudgetCoachProps {
   onBumpBudget?: (newTotalCents: number) => Promise<void> | void;
   /** Per-category overruns in cents (planned - allocated). Drives priority + chips. */
   categoryOverruns?: Partial<Record<string, number>>;
+  /** Optional: callback to drop the last day from the trip. If absent, the restructuring panel hides this option. */
+  onShortenTrip?: () => void | Promise<void>;
   className?: string;
 }
 
