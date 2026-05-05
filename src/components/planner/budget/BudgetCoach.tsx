@@ -1007,7 +1007,8 @@ export function BudgetCoach({
                       </span>
                     )}
                   </div>
-                </>
+                </div>
+
               )}
 
               {/* Empty state */}
