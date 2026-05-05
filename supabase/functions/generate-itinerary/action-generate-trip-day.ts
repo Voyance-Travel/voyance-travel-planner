@@ -1134,28 +1134,47 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // ── CROSS-DAY VENUE DEDUP SAFETY NET — remove non-dining activities that repeat a previous day's venue ──
+  // ── CROSS-DAY VENUE DEDUP SAFETY NET ─────────────────────────────────────
+  // Catches "same venue, different qualifier" pairs like:
+  //   Day 1: "Louvre Museum Exploration"   Day 2: "Louvre Museum Priority Visit"
+  // Strategy: canonicalize each candidate (strip activity-style verbs/qualifiers
+  // like "Exploration", "Priority Visit", "Tour", "Experience") and compare with
+  // word-overlap fuzzy matching, not just substring containment.
   if (usedVenues.length > 0 && Array.isArray(dayResult?.activities)) {
-    const normalizeVenue = (s: string) => s.toLowerCase().replace(/[''`]/g, "'").replace(/\s+/g, ' ').trim();
-    const prevVenuesNorm = usedVenues.map(normalizeVenue);
+    const { normalizeVenueName, venueNamesMatch } = await import('./generation-utils.ts');
+    const ACTIVITY_QUALIFIER_RE = /\s+(?:exploration|exploring|experience|priority\s+visit|skip[-\s]the[-\s]line|guided\s+tour|guided\s+visit|private\s+tour|tour|visit|stroll|walk|wander|tasting|workshop|class)$/i;
+    const ACTIVITY_PREFIX_RE = /^(?:morning|afternoon|evening|final|early|late|leisurely|scenic|guided|private|exclusive)\s+(?:at|in|visit\s+to|stroll\s+(?:at|in|through)|walk\s+(?:at|in|through|around))\s+/i;
+    const ACTIVITY_VERB_PREFIX_RE = /^(?:visit(?:\s+to)?|explore|exploring|discover|stroll(?:\s+through)?|walk(?:\s+through)?|wander|tour(?:\s+of)?|enjoy|see)\s+(?:at|in|through|around|along|the)?\s*/i;
+    const canonVenue = (s: string): string => {
+      if (!s) return '';
+      let v = String(s).trim();
+      v = v.replace(ACTIVITY_PREFIX_RE, '').replace(ACTIVITY_VERB_PREFIX_RE, '');
+      let prev = '';
+      while (prev !== v) { prev = v; v = v.replace(ACTIVITY_QUALIFIER_RE, '').trim(); }
+      return normalizeVenueName(v);
+    };
+    const prevVenuesCanon = usedVenues
+      .map(canonVenue)
+      .filter(s => s && s.length > 3 && !/your hotel/i.test(s));
     const beforeVenueDedup = dayResult.activities.length;
     dayResult.activities = dayResult.activities.filter((act: any) => {
-      if (act.locked) return true; // Never filter locked user-specified activities
+      if (act.locked) return true;
       const cat = (act.category || '').toLowerCase();
-      if (cat === 'dining' || cat === 'restaurant' || cat === 'food') return true; // dining has its own dedup
+      if (cat === 'dining' || cat === 'restaurant' || cat === 'food') return true;
       if (cat === 'accommodation' || cat === 'transport' || cat === 'logistics') return true;
-      const vName = normalizeVenue(act.venueName || act.title || '');
-      const locName = normalizeVenue(
-        typeof act.location === 'object' ? (act.location?.name || '') : ''
-      );
-      const isDuplicate = prevVenuesNorm.some(prev => {
-        if (prev.length < 4) return false;
-        return vName.includes(prev) || prev.includes(vName) ||
-               (locName && (locName.includes(prev) || prev.includes(locName)));
-      });
-      if (isDuplicate) {
-        console.log(`[VENUE DEDUP FILTER] Removed cross-day duplicate: "${act.title}" (already visited on a previous day)`);
-        return false;
+      const candidates = [
+        act.title || '',
+        act.venueName || '',
+        act.venue_name || '',
+        typeof act.location === 'object' ? (act.location?.name || '') : '',
+      ].map(canonVenue).filter(s => s && s.length > 3);
+      for (const cand of candidates) {
+        for (const prev of prevVenuesCanon) {
+          if (venueNamesMatch(cand, prev)) {
+            console.log(`[VENUE DEDUP FILTER] Removed cross-day duplicate: "${act.title}" — canonical "${cand}" matches previous-day "${prev}"`);
+            return false;
+          }
+        }
       }
       return true;
     });
