@@ -97,6 +97,12 @@ interface BudgetCoachProps {
   onAddMiscExpense?: () => void;
   /** Open the Edit Budget dialog (for structural fixes like raising the transit allocation). */
   onEditBudget?: () => void;
+  /** Total committed hotel cost (cents) — used to detect hotel-dominant overruns. */
+  hotelCents?: number;
+  /** Total committed flight cost (cents) — used to detect fixed-cost-dominant overruns. */
+  flightCents?: number;
+  /** Open the Flight & Hotel editor — surfaced when hotel/flights dominate the overrun. */
+  onEditAccommodation?: () => void;
   className?: string;
 }
 
