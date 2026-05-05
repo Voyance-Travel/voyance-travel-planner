@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { formatTime12h, parseTimeToMinutes } from '@/utils/timeFormat';
 
