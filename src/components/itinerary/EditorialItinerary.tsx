@@ -1223,6 +1223,7 @@ export function EditorialItinerary({
   navigateToSection,
   initialItineraryData,
   itineraryStatus,
+  generationFailureReason,
   journeyId,
   journeyName,
   onDateChange,
