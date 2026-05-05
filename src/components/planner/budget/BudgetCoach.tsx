@@ -1137,7 +1137,33 @@ export function BudgetCoach({
               {/* Empty state */}
               {!isLoading && !error && visibleSuggestions.length === 0 && (
                 <div className="text-center py-6 space-y-3">
-                  {allProtected || (protectedCategories.length > 0 && dismissedIds.length === 0) ? (
+                  {suggestableCount === 0 ? (
+                    <>
+                      <p className="text-sm font-medium">
+                        Nothing to optimize yet
+                      </p>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        This itinerary doesn't have any restaurants, experiences, or local transit Budget Coach can swap. Add activities to your days, or raise your budget to cover the fixed hotel and flight costs.
+                      </p>
+                      {onBumpBudget && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={async () => {
+                            try {
+                              await onBumpBudget(restructureBumpTargetCents);
+                              toast.success(`Budget raised to ${formatCurrency(restructureBumpTargetCents)}`);
+                            } catch {
+                              toast.error('Could not update budget.');
+                            }
+                          }}
+                        >
+                          Raise budget to {formatCurrency(restructureBumpTargetCents)}
+                        </Button>
+                      )}
+                    </>
+                  ) : allProtected || (protectedCategories.length > 0 && dismissedIds.length === 0) ? (
                     <>
                       <p className="text-sm text-muted-foreground">
                         All suggestable items are protected. Loosen a category above to see savings, or adjust your budget target.
