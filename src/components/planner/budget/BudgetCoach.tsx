@@ -267,25 +267,62 @@ export function BudgetCoach({
     return ids;
   }, [itineraryDays]);
 
+  // ─── Suggestable activity detection ─────────────────────────────
+  // Hotels/flights/check-in-out/return-to-hotel/free-or-zero-cost rows are
+  // never candidates for swap or drop suggestions. Without this guard the
+  // coach is happy to call AI against an empty or hotel-only itinerary and
+  // hallucinate restaurants from prior generations (phantom suggestions).
+  const GENERIC_TITLE_RE = /^(breakfast|lunch|dinner|brunch|meal|activity|activities|transport|transit|hotel|accommodation|untitled)\s*(\(|-|–|—|$)/i;
+  const isGenericTitle = useCallback((t?: string) => {
+    const s = (t || '').trim();
+    if (!s) return true;
+    if (/^(activity|untitled|tbd|n\/a)$/i.test(s)) return true;
+    return GENERIC_TITLE_RE.test(s);
+  }, []);
+  const NON_SUGGESTABLE_CATS = new Set([
+    'hotel', 'accommodation', 'lodging', 'stay', 'flight', 'flights',
+    'check-in', 'check-out', 'checkin', 'checkout', 'bag-drop', 'bag drop',
+    'departure', 'arrival',
+  ]);
+  const NON_SUGGESTABLE_TITLE_RE = /\b(check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|back\s+to\s+(?:your\s+)?hotel|freshen\s*up\s+at\s+(?:your\s+)?hotel|hotel\s+checkout|hotel\s+check-?in)\b/i;
+  const activityCostCentsLocal = (a: ItineraryActivity): number => {
+    if (typeof a.cost === 'number' && Number.isFinite(a.cost)) return Math.max(0, Math.round(a.cost * 100));
+    if (a.cost && typeof a.cost === 'object' && Number.isFinite((a.cost as any).amount)) {
+      return Math.max(0, Math.round((a.cost as any).amount * 100));
+    }
+    return 0;
+  };
+  const isSuggestable = useCallback((a: ItineraryActivity): boolean => {
+    if (!a?.id) return false;
+    if (a.isLocked) return false;
+    const cat = `${a.category || ''} ${a.type || ''}`.toLowerCase().trim();
+    if ([...NON_SUGGESTABLE_CATS].some((c) => cat.includes(c))) return false;
+    const title = (a.title || a.name || '').trim();
+    if (NON_SUGGESTABLE_TITLE_RE.test(title)) return false;
+    if (isGenericTitle(title)) return false;
+    if (activityCostCentsLocal(a) <= 0) return false;
+    return true;
+  }, [isGenericTitle]);
+
+  const suggestableActivityIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const day of itineraryDays) {
+      for (const a of day.activities) {
+        if (isSuggestable(a)) ids.push(a.id);
+      }
+    }
+    return ids;
+  }, [itineraryDays, isSuggestable]);
+  const suggestableCount = suggestableActivityIds.length;
+
   // Build the payload activities in the format the edge function expects
   // Exclude locked activities — they should not be suggested for swaps
   const buildPayloadDays = useCallback(() => {
-    // Reject placeholder/generic titles that the coach cannot meaningfully swap
-    // (e.g. "Dinner (Day 2)", "transport (Day 2)", "Activity"). Targeting these
-    // produces phantom suggestions because the AI has nothing concrete to anchor to.
-    const GENERIC_TITLE_RE = /^(breakfast|lunch|dinner|brunch|meal|activity|activities|transport|transit|hotel|accommodation|untitled)\s*(\(|-|–|—|$)/i;
-    const isGenericTitle = (t?: string) => {
-      const s = (t || '').trim();
-      if (!s) return true;
-      if (/^(activity|untitled|tbd|n\/a)$/i.test(s)) return true;
-      return GENERIC_TITLE_RE.test(s);
-    };
     return itineraryDays.map((day) => ({
       dayNumber: day.dayNumber,
       date: day.date,
       activities: day.activities
-        .filter((a) => !a.isLocked)
-        .filter((a) => !isGenericTitle(a.title || a.name))
+        .filter((a) => isSuggestable(a))
         .map((a) => {
           let costCents = 0;
           if (typeof a.cost === 'number' && Number.isFinite(a.cost)) {
@@ -304,7 +341,7 @@ export function BudgetCoach({
           };
         }),
     }));
-  }, [itineraryDays, currency]);
+  }, [itineraryDays, currency, isSuggestable]);
 
   // Tracks the itinerary hash of the LATEST in-flight request. If the
   // itinerary changes again before this request resolves, the response is
@@ -315,12 +352,26 @@ export function BudgetCoach({
     async (force = false) => {
       if (!isOverBudget) return;
 
+      // ZERO-CANDIDATE GUARD: never call AI when there are no suggestable
+      // activities. This is the root cause of phantom suggestions on bare /
+      // hotel-only itineraries — without this guard, the cache or the AI
+      // fabricates restaurants from a previous generation.
+      if (suggestableCount === 0) {
+        setSuggestions([]);
+        setAllProtected(false);
+        setError(null);
+        suggestionsCache.delete(tripId);
+        setIsLoading(false);
+        return;
+      }
+
       // Cache key includes protections + dismissals so toggling either
       // invalidates stale results.
       const protectionsKey = [...protectedCategories].sort().join(',');
       const dismissedKey = [...dismissedIds].sort().join(',');
       const liveHash = hashItinerary(itineraryDays);
-      const currentHash = `${liveHash}::p=${protectionsKey}::d=${dismissedKey}`;
+      const suggestableKey = [...suggestableActivityIds].sort().join(',');
+      const currentHash = `${liveHash}::p=${protectionsKey}::d=${dismissedKey}::s=${suggestableKey}`;
       const cached = suggestionsCache.get(tripId);
       if (
         !force &&
@@ -400,16 +451,29 @@ export function BudgetCoach({
       categoryOverruns,
       anchorActivityIds,
       gapCents,
+      suggestableCount,
+      suggestableActivityIds,
     ]
   );
 
-  // Auto-fetch on mount if over budget
+  // Auto-fetch on mount if over budget AND there's something to suggest swaps for
   useEffect(() => {
-    if (isOverBudget && !fetchedRef.current && itineraryDays.length > 0) {
+    if (isOverBudget && !fetchedRef.current && suggestableCount > 0) {
       fetchedRef.current = true;
       fetchSuggestions();
     }
-  }, [isOverBudget, itineraryDays.length, fetchSuggestions]);
+  }, [isOverBudget, suggestableCount, fetchSuggestions]);
+
+  // When the itinerary collapses to zero suggestable activities, clear any
+  // existing in-memory suggestions and the module cache so a previous
+  // generation's restaurants can't keep showing as "swap" candidates.
+  useEffect(() => {
+    if (suggestableCount === 0) {
+      setSuggestions([]);
+      suggestionsCache.delete(tripId);
+      fetchedRef.current = false;
+    }
+  }, [suggestableCount, tripId]);
 
   // Re-fetch when protections, dismissals, OR live itinerary content change.
   // The itinerary hash captures id+title+cost so any edit/swap/regen invalidates
@@ -419,13 +483,13 @@ export function BudgetCoach({
   const dismissedKey = dismissedIds.join('|');
   const itineraryContentHash = useMemo(() => hashItinerary(itineraryDays), [itineraryDays]);
   useEffect(() => {
-    if (fetchedRef.current && isOverBudget) {
+    if (fetchedRef.current && isOverBudget && suggestableCount > 0) {
       // Drop the module-level cache entry so a stale list can't be re-served.
       suggestionsCache.delete(tripId);
       fetchSuggestions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [protectionsKey, dismissedKey, itineraryContentHash]);
+  }, [protectionsKey, dismissedKey, itineraryContentHash, suggestableCount]);
 
   // Client-side phantom filter: even if the cache has a suggestion whose
   // activity_id was removed or renamed in the live itinerary, never render it.
@@ -465,16 +529,21 @@ export function BudgetCoach({
     return overlap >= 1;
   };
 
+  const suggestableIdSet = useMemo(() => new Set(suggestableActivityIds), [suggestableActivityIds]);
   const visibleSuggestions = useMemo(() => {
+    if (suggestableCount === 0) return [];
     return suggestions.filter(s => {
+      // Activity must currently be in the live itinerary AND still be a
+      // valid swap/drop candidate (not a hotel/flight/$0 row).
+      if (!suggestableIdSet.has(s.activity_id)) return false;
       const realTitle = liveActivityTitleById.get(s.activity_id);
-      if (!realTitle) return false; // activity no longer in itinerary
+      if (!realTitle) return false;
       // If the suggestion's current_item doesn't match the live title, it's
       // pointing at an old version of that slot — drop it.
       if (s.current_item && !titlesMatch(s.current_item, realTitle)) return false;
       return true;
     });
-  }, [suggestions, liveActivityTitleById]);
+  }, [suggestions, liveActivityTitleById, suggestableIdSet, suggestableCount]);
 
   const toggleProtected = useCallback(
     (label: string) => {
@@ -673,7 +742,9 @@ export function BudgetCoach({
         </button>
         {!isNowOnTarget && (
           <p className="text-sm text-muted-foreground mt-1">
-            You're {formatCurrency(gapCents)} over budget. Here's how to get on target:
+            {suggestableCount === 0
+              ? `You're ${formatCurrency(gapCents)} over budget, but this itinerary has no swappable activities yet.`
+              : `You're ${formatCurrency(gapCents)} over budget. Here's how to get on target:`}
           </p>
         )}
       </CardHeader>
@@ -1068,7 +1139,33 @@ export function BudgetCoach({
               {/* Empty state */}
               {!isLoading && !error && visibleSuggestions.length === 0 && (
                 <div className="text-center py-6 space-y-3">
-                  {allProtected || (protectedCategories.length > 0 && dismissedIds.length === 0) ? (
+                  {suggestableCount === 0 ? (
+                    <>
+                      <p className="text-sm font-medium">
+                        Nothing to optimize yet
+                      </p>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        This itinerary doesn't have any restaurants, experiences, or local transit Budget Coach can swap. Add activities to your days, or raise your budget to cover the fixed hotel and flight costs.
+                      </p>
+                      {onBumpBudget && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={async () => {
+                            try {
+                              await onBumpBudget(restructureBumpTargetCents);
+                              toast.success(`Budget raised to ${formatCurrency(restructureBumpTargetCents)}`);
+                            } catch {
+                              toast.error('Could not update budget.');
+                            }
+                          }}
+                        >
+                          Raise budget to {formatCurrency(restructureBumpTargetCents)}
+                        </Button>
+                      )}
+                    </>
+                  ) : allProtected || (protectedCategories.length > 0 && dismissedIds.length === 0) ? (
                     <>
                       <p className="text-sm text-muted-foreground">
                         All suggestable items are protected. Loosen a category above to see savings, or adjust your budget target.
