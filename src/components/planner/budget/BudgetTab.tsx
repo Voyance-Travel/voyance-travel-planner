@@ -643,7 +643,38 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         );
       })()}
 
-      {/* Budget Coach — AI suggestions when over budget (hidden in manual mode) */}
+      {/* Bare-itinerary warning — itinerary has hotel/flight but no real activities */}
+      {!isManualMode && itineraryDays && itineraryDays.length > 0 && (() => {
+        const NON_ACTIVITY_CATS = new Set([
+          'hotel', 'accommodation', 'lodging', 'stay', 'flight', 'flights',
+          'check-in', 'check-out', 'checkin', 'checkout', 'bag-drop', 'departure', 'arrival',
+        ]);
+        const NON_ACTIVITY_TITLE_RE = /\b(check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|hotel\s+checkout|hotel\s+check-?in|airport\s+transfer|departure)\b/i;
+        let meaningfulCount = 0;
+        for (const day of itineraryDays) {
+          for (const a of (day.activities || [])) {
+            const cat = `${(a as any).category || ''} ${(a as any).type || ''}`.toLowerCase();
+            const title = ((a as any).title || (a as any).name || '').trim();
+            if ([...NON_ACTIVITY_CATS].some((c) => cat.includes(c))) continue;
+            if (NON_ACTIVITY_TITLE_RE.test(title)) continue;
+            meaningfulCount++;
+          }
+        }
+        if (meaningfulCount > 0) return null;
+        return (
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="text-sm space-y-1">
+              <p className="font-medium">This itinerary has no activities yet</p>
+              <p>
+                Food, Activities, and Local Transit will stay at $0 until restaurants, experiences, or transit are added. Open the Itinerary tab to add or regenerate.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
+
       {!isManualMode && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && snapshotStatus !== 'yellow' && (() => {
         // Compute per-category overruns (planned - allocated, in cents) and
         // translate BudgetCategory → Coach's user-facing labels.
