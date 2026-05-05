@@ -95,12 +95,29 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // ─── Pre-filter: drop protected & dismissed activities entirely ───
+    // ─── Pre-filter: drop logistics, protected & dismissed activities entirely ───
     const dismissedSet = new Set(dismissed_activity_ids.map(String));
     const protectedActivityIds = new Set<string>();
+    const NON_SUGGESTABLE_CATS = [
+      "hotel", "accommodation", "lodging", "stay", "flight", "flights",
+      "check-in", "check-out", "checkin", "checkout", "bag-drop", "bag drop",
+      "departure", "arrival",
+    ];
+    const NON_SUGGESTABLE_TITLE_RE = /\b(check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|back\s+to\s+(?:your\s+)?hotel|freshen\s*up\s+at\s+(?:your\s+)?hotel|hotel\s+checkout|hotel\s+check-?in|airport\s+transfer)\b/i;
+    const isLogisticsRow = (a: Activity): boolean => {
+      const cat = `${a.category || ""}`.toLowerCase();
+      if (NON_SUGGESTABLE_CATS.some((c) => cat.includes(c))) return true;
+      if (NON_SUGGESTABLE_TITLE_RE.test(String(a.title || ""))) return true;
+      return false;
+    };
+
+    let totalIncomingCount = 0;
+    let logisticsDropped = 0;
     const filteredDays = itinerary_days.map((day) => ({
       ...day,
       activities: (day.activities ?? []).filter((a) => {
+        totalIncomingCount++;
+        if (isLogisticsRow(a)) { logisticsDropped++; return false; }
         if (dismissedSet.has(String(a.id))) return false;
         if (activityMatchesProtectedGroup(a, protected_categories)) {
           protectedActivityIds.add(String(a.id));
@@ -114,17 +131,6 @@ serve(async (req) => {
       (n, d) => n + d.activities.length,
       0
     );
-
-    if (remainingActivityCount === 0) {
-      return new Response(
-        JSON.stringify({
-          suggestions: [],
-          on_target: false,
-          all_protected: true,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // ZERO-CANDIDATE GUARD: even with activities present, the AI needs at
     // least one positively-priced, non-placeholder item it can swap. Without
@@ -144,14 +150,24 @@ serve(async (req) => {
         ).length,
       0
     );
-    if (positiveCandidateCount === 0) {
-      console.log("[budget-coach] No positive-cost, non-placeholder candidates — skipping AI call");
+
+    if (remainingActivityCount === 0 || positiveCandidateCount === 0) {
+      // Only flag all_protected when protections actually removed every
+      // would-be candidate — not when the itinerary is empty/logistics-only.
+      const onlyProtectionsCausedEmpty =
+        protectedActivityIds.size > 0 &&
+        (totalIncomingCount - logisticsDropped) > 0 &&
+        protectedActivityIds.size >= (totalIncomingCount - logisticsDropped - dismissedSet.size);
+      console.log(`[budget-coach] No candidates (incoming=${totalIncomingCount} logistics=${logisticsDropped} protected=${protectedActivityIds.size} positive=${positiveCandidateCount}) — skipping AI call`);
       return new Response(
         JSON.stringify({
           suggestions: [],
           on_target: false,
           no_candidates: true,
-          reason: "No paid itinerary activities available to optimize",
+          all_protected: onlyProtectionsCausedEmpty,
+          reason: onlyProtectionsCausedEmpty
+            ? "All candidate activities are in protected categories"
+            : "No paid itinerary activities available to optimize",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
