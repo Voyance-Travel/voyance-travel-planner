@@ -190,21 +190,46 @@ ${overrunEntries.map(([label, cents]) => `  • ${label}: $${Math.round((cents a
 At least your TOP ${Math.min(overrunEntries.length + 1, 4)} suggestions MUST target items in these overrun categories before suggesting swaps elsewhere. For Transit overruns, prefer demoting taxi/private-car legs to metro, bus, or walking. Use reference pricing for the new mode.`
       : "";
 
-    const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience.
+    // ─── Deep-cuts mode ────────────────────────────────────────────
+    // When the gap is too large to bridge by swapping alone, allow the model
+    // to recommend dropping non-anchor discretionary activities outright.
+    const gapPctOfTotal = current_total_cents > 0 ? gap_cents / current_total_cents : 0;
+    const deepCutsMode = deep_cuts_requested || gapPctOfTotal > 0.25 || gap_cents > 150000; // > $1500
+    const anchorIdSet = new Set(anchor_activity_ids.map(String));
+    const anchorIdList = anchor_activity_ids.length > 0
+      ? `\nANCHOR ACTIVITY IDS — never drop these (signature experiences):\n${anchor_activity_ids.map((id) => `  • ${id}`).join("\n")}`
+      : "";
+
+    const deepCutsClause = deepCutsMode
+      ? `\n\nDEEP-CUTS MODE (gap is too large for swap-only):
+The user is ${currency} ${(gap_cents / 100).toFixed(0)} over a ${currency} ${(current_total_cents / 100).toFixed(0)} total. Swap-only suggestions cannot realistically close this gap.
+You may now use TWO additional swap_type values:
+  • "drop" — recommend removing a single non-anchor, non-protected, paid discretionary activity entirely. Set new_cost = 0, suggested_swap = "Drop — free time / use saved budget elsewhere", and put a one-line trade-off explanation in "reason" (e.g. "Frees the afternoon and saves $${"{X}"}; the morning museum still anchors the day").
+  • "consolidate" — replace one activity with a cheaper combo or merged version that subsumes another same-day item. Use "swap" semantics on the kept item; mention the consolidated item in "reason".
+Drop rules:
+  • NEVER drop hotel/accommodation, flights, check-in/out, bag-drop, transfers, anchor IDs (above), or items in protected categories.
+  • NEVER drop the only meal of a meal-slot (the only breakfast on a day, the only dinner, etc.). Dropping a second optional meal/drink stop is fine.
+  • Prefer dropping: nightcaps, optional museums beyond the daily anchor, paid sightseeing duplicates, secondary tours, premium add-ons.
+  • Aim for at most 1 drop per day.
+Return 8-12 suggestions in this mode, mixing drops and swaps. Rank by absolute savings.${anchorIdList}`
+      : "";
+
+    const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. ${deepCutsMode ? "When the gap is large you may also suggest dropping non-anchor optional activities." : "You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience."}
 
 CRITICAL NAMING RULE:
 - Every "suggested_swap" MUST be a specific, real venue or experience name (e.g., "Joe's Pizza on Carmine St", "Self-guided walk through Montmartre", "Trattoria da Mario").
+- For swap_type="drop", suggested_swap is the literal string "Drop — free time / use saved budget elsewhere".
 - NEVER use generic descriptions like "Lower cost restaurant", "Cheaper option", "Budget alternative", "Similar restaurant", "Local eatery", or "Affordable café".
 - If you cannot name a specific real venue, describe a specific experience (e.g., "Street food at Jemaa el-Fnaa night market" or "Picnic with provisions from Marché d'Aligre").
 
 CRITICAL COST RULES:
 - You must NEVER invent, guess, or calculate prices yourself. Use ONLY the reference pricing data provided below.
-- You must NEVER directly modify or set an activity's cost value. You can only SUGGEST SWAPS to cheaper alternatives.
+- You must NEVER directly modify or set an activity's cost value. You can only SUGGEST SWAPS to cheaper alternatives or DROPS (in deep-cuts mode).
 - When suggesting a swap, the new_cost MUST come from the reference pricing table, not from your own estimation.
 - If no reference pricing is available for a swap, use the lowest reasonable amount from the reference data for that category.
-- Your new_cost must ALWAYS be strictly LESS than the current_cost. If you can't find a cheaper alternative, skip that item.
+- For swap_type="swap" the new_cost MUST be strictly LESS than current_cost. For swap_type="drop" new_cost MUST be 0.
 - All costs are in whole currency units (e.g., 50 for $50), NOT cents.
-- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}`;
+- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}${deepCutsClause}`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
@@ -213,12 +238,13 @@ Here is the full itinerary (items in protected categories have been removed):
 ${itinerarySummary}
 ${costRefLookup}
 
-Suggest 5-8 specific cost-cutting swaps. For each:
+Suggest ${deepCutsMode ? "8-12" : "5-8"} specific cost-cutting changes. For each:
 1. Identify the expensive item (name + current cost)
-2. Suggest a cheaper alternative that gives a similar experience
-3. The new_cost MUST come from the reference pricing above, not from your own estimates
-4. Calculate the exact savings
-5. Write a suggested_description that reads like an itinerary activity description — focus on the experience, not the budget reasoning
+2. Choose swap_type: "swap" (default), ${deepCutsMode ? '"drop" (deep-cuts mode), or "consolidate"' : 'only "swap" is allowed'}.
+3. For swaps: suggest a cheaper alternative that gives a similar experience; new_cost MUST come from reference pricing.
+4. For drops: new_cost = 0; only target non-anchor, non-protected, optional discretionary items.
+5. Calculate the exact savings (current_cost - new_cost).
+6. Write a suggested_description that reads like an itinerary activity description — focus on the experience, not the budget reasoning.
 
 Types of swaps to consider:
 - Private/guided tours → general admission or self-guided
@@ -229,7 +255,6 @@ Types of swaps to consider:
 - Premium experiences → mid-range alternatives
 
 Rules:
-- NEVER suggest removing an activity — always suggest a cheaper replacement
 - Suggestions must be specific to THIS itinerary and destination
 - Include real venue/restaurant names when possible
 - Rank by savings amount (biggest first)
