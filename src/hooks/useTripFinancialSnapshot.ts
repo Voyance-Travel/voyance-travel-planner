@@ -200,7 +200,6 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // as having phantom headroom equal to the slider value.
     const budgetTotalForReserve = tripData?.budget_total_cents || 0;
     if (budgetTotalForReserve > 0 && miscPercent > 0) {
-      const { computeMiscReserve } = await import('@/services/budgetReserve');
       const reserve = computeMiscReserve({
         budgetTotalCents: budgetTotalForReserve,
         miscPercent,
