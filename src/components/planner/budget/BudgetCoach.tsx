@@ -192,6 +192,17 @@ export function BudgetCoach({
   });
   const [isBumping, setIsBumping] = useState(false);
 
+  // Misc reserve nudge dismissal (device-local, keyed per trip)
+  const miscNudgeDismissKey = `budget-coach:misc-nudge-dismissed:${tripId}`;
+  const [miscNudgeDismissed, setMiscNudgeDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try { return window.localStorage.getItem(miscNudgeDismissKey) === '1'; } catch { return false; }
+  });
+  const dismissMiscNudge = useCallback(() => {
+    setMiscNudgeDismissed(true);
+    try { window.localStorage.setItem(miscNudgeDismissKey, '1'); } catch { /* ignore */ }
+  }, [miscNudgeDismissKey]);
+
   // Dismissed activity IDs — persisted in localStorage so they survive
   // page reloads but are device-local (no DB round-trip needed).
   const dismissedStorageKey = `budget-coach:dismissed:${tripId}`;
