@@ -347,6 +347,14 @@ export function isPlaceholderWellness(activity: any, cityName: string, hotelName
   const isWellnessTitle = WELLNESS_KEYWORD_RE.test(title);
   if (!isWellnessCat && !isWellnessTitle) return false;
 
+  // Hard verification short-circuit — a confirmed placeId means the venue is real,
+  // regardless of how generic the title sounds.
+  const hasPlaceId =
+    !!activity?.metadata?.google_place_id ||
+    !!activity?.metadata?.placeId ||
+    !!activity?.verified?.placeId;
+  if (hasPlaceId) return false;
+
   // Title is generic placeholder
   if (GENERIC_WELLNESS_TITLE_PATTERNS.some(re => re.test(title))) return true;
 
