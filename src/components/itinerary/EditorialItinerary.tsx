@@ -6653,6 +6653,35 @@ export function EditorialItinerary({
               toast.success('Activity removed from itinerary');
             }}
             onApplyBudgetSwap={async (suggestion) => {
+              // ─── DROP path ──────────────────────────────────────────
+              // Deep-cuts mode may return swap_type === 'drop'. Remove
+              // the activity entirely and resync the budget — same path
+              // as a manual delete from the budget list.
+              if (suggestion.swap_type === 'drop') {
+                let dropped = false;
+                let updatedDays: typeof days = [];
+                setDays((prev) => {
+                  const updated = prev.map((day) => {
+                    if (day.dayNumber !== suggestion.day_number) return day;
+                    const next = day.activities.filter((a) => a.id !== suggestion.activity_id);
+                    if (next.length !== day.activities.length) dropped = true;
+                    return { ...day, activities: next };
+                  });
+                  updatedDays = updated;
+                  return updated;
+                });
+                if (dropped && updatedDays.length > 0) {
+                  syncBudgetFromDays(updatedDays);
+                  setHasChanges(true);
+                  queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
+                  queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
+                  queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
+                  return true;
+                }
+                return false;
+              }
+
+              // ─── SWAP path (default) ───────────────────────────────
               // suggestion.new_cost is in CENTS from the edge function.
               // Activity costs are stored in WHOLE currency units.
               const newCostWhole = Math.round(suggestion.new_cost / 100);
@@ -6715,21 +6744,15 @@ export function EditorialItinerary({
               });
 
               // Let syncBudgetFromDays handle ALL writes to activity_costs.
-              // Do NOT call upsertActivityCost directly — it ignores cost basis
-              // and can double-count flat-rate items.
               if (updatedDays.length > 0) {
                 syncBudgetFromDays(updatedDays);
               }
 
               if (applied) {
                 setHasChanges(true);
-
-                // Budget is derived from activity_costs — syncBudgetFromDays already handled the write above.
-                // Just invalidate the budget queries so the UI refreshes.
                 queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
                 queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
                 queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
-
                 return true; // Signal success to BudgetCoach
               } else {
                 return false; // Signal failure — swap was blocked
