@@ -138,3 +138,52 @@ Deno.test("GENERIC_VENUE_TEMPLATES: every meal slot has at least 3 options", () 
     assertEquals(list.length >= 3, true, `slot ${slot} needs >=3 templates`);
   }
 });
+
+// ---------- isPlaceholderWellness ----------
+
+Deno.test("wellness: 'Private Wellness Refresh' with no venue is flagged", () => {
+  const act = { title: "Private Wellness Refresh", category: "wellness", location: { name: "" } };
+  assertEquals(isPlaceholderWellness(act, "Paris"), true);
+});
+
+Deno.test("wellness: 'Spa Time at Your Hotel' is flagged", () => {
+  const act = { title: "Spa Time", category: "wellness", location: { name: "Your Hotel" } };
+  assertEquals(isPlaceholderWellness(act, "Paris", "Your Hotel"), true);
+});
+
+Deno.test("wellness: real named spa is NOT flagged", () => {
+  const act = {
+    title: "Spa Session at Spa Valmont at Le Meurice",
+    category: "wellness",
+    location: { name: "Spa Valmont at Le Meurice" },
+  };
+  assertEquals(isPlaceholderWellness(act, "Paris"), false);
+});
+
+Deno.test("wellness: non-wellness activity is NOT flagged", () => {
+  const act = { title: "Dinner at Septime", category: "dining", location: { name: "Septime" } };
+  assertEquals(isPlaceholderWellness(act, "Paris"), false);
+});
+
+Deno.test("wellness fallback: Paris returns a real named venue", () => {
+  const used = new Set<string>();
+  const fb = getRandomFallbackWellness("Paris", used);
+  if (!fb) throw new Error("expected a Paris fallback wellness venue");
+  assertEquals(typeof fb.name, "string");
+  assertEquals(fb.name.length > 3, true);
+  assertEquals(fb.price > 0, true);
+});
+
+Deno.test("wellness fallback: unknown city returns null", () => {
+  assertEquals(getRandomFallbackWellness("Atlantis", new Set()), null);
+});
+
+Deno.test("applyFallbackWellnessToActivity rewrites title, venue, cost", () => {
+  const act: any = { title: "Private Wellness Refresh", cost: { amount: 261 }, cost_per_person: 261 };
+  const fb = { name: "Spa Test", address: "1 Test St", price: 200, description: "Test spa." };
+  applyFallbackWellnessToActivity(act, fb, new Set());
+  assertEquals(act.title, "Spa Session at Spa Test");
+  assertEquals(act.location.name, "Spa Test");
+  assertEquals(act.cost.amount, 200);
+  assertEquals(act.cost_per_person, 200);
+});
