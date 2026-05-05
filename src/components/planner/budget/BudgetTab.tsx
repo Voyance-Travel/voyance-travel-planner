@@ -1009,13 +1009,21 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                             </Badge>
                           </div>
                           <div className="flex items-center gap-2 text-right">
-                            <span className={cn("font-medium", isOver && "text-destructive")}>
-                              {formatCurrency(used)}
-                            </span>
-                            <span className="text-muted-foreground">/</span>
-                            <span className="text-muted-foreground">
-                              {formatCurrency(allocated)}
-                            </span>
+                            {alloc.category === 'misc' && used === 0 && allocated > 0 ? (
+                              <span className="text-muted-foreground text-xs">
+                                {formatCurrency(allocated)} reserved
+                              </span>
+                            ) : (
+                              <>
+                                <span className={cn("font-medium", isOver && !(alloc.category === 'misc' && used === 0) && "text-destructive")}>
+                                  {formatCurrency(used)}
+                                </span>
+                                <span className="text-muted-foreground">/</span>
+                                <span className="text-muted-foreground">
+                                  {formatCurrency(allocated)}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                         {alloc.category === 'misc' && used === 0 && allocated > 0 ? (

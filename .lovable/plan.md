@@ -1,98 +1,36 @@
-## Goal
+## Problem
 
-Stop unnamed wellness/spa items like "Private Wellness Refresh" ($261) and "Personalized Wellness Treatment" ($391) from reaching the user. The detection already exists in `fix-placeholders.ts` (`isPlaceholderWellness`) and the per-day repair path tries to swap them with real Paris/Rome/etc. venues — but items are still surfacing. We'll harden three layers so a wellness item without a real, named venue can never end up in the final itinerary with a non-zero cost.
+The Budget Coach surfaces a "Set aside spending money" nudge as the **first** card in its list, ahead of actionable swap suggestions, consuming prime real estate with a meta-task. Separately, the Spending Money & Tips category in the All Costs list can read as a "broken red zero" on every load.
 
-## Why these still leak through
-
-1. **Stage timing** — Smart Finish, weather-backup substitutions, and post-repair AI passes can introduce wellness items *after* `pipeline/repair-day.ts` runs for that day.
-2. **No terminal sweep** — Dining has `nuclearPlaceholderSweep` running again in `universal-quality-pass.ts` Step 4b. Wellness has no equivalent last-mile catch.
-3. **Cost-keeping** — When the per-day repair finds no fallback (e.g. unfamiliar city), it strips title/description but the *cost* may already have been written to `activity_costs` snapshot earlier. The user sees a $391 line for "Spa Time — find a venue".
+A reserved-state visual is already in place for the category row in `BudgetTab.tsx` (lines 1021–1052: replaces the progress bar with a muted "$X reserved · 0 logged" chip + Add expense CTA when `misc && used === 0 && allocated > 0`). The remaining gap is **render order in the Coach** plus a small polish pass on the chip.
 
 ## Changes
 
-### 1. New terminal wellness sweep (`fix-placeholders.ts`)
+### 1. Reorder the misc nudge in `BudgetCoach.tsx`
 
-Add a synchronous helper alongside `nuclearPlaceholderSweep`:
+Move the "Set aside spending money" nudge block (currently lines 797–828, rendered as the **first** child of `CardContent`) to render **after** the `visibleSuggestions.map(...)` list (after line ~1090, before the on-target/empty-state footer). This keeps actionable swaps in the prime slot and demotes the meta-task to a secondary nudge below them.
 
-```ts
-export function nuclearWellnessSweep(
-  activities: any[],
-  city: string,
-  hotelName?: string,
-): number
-```
+Additional safeguards on the same block:
+- Only render the nudge when **`!isLoading`** and **`!error`** (avoid stacking it above a spinner).
+- Suppress the nudge entirely when `showHotelDominantPanel` is true — the structural restructuring panel already owns the user's attention; a $90 reserve nudge under it is noise.
+- Lower visual weight: drop the `Sparkles` icon (reserve `Sparkles` for primary CTAs like the Bump-tier panel) and switch to a plain `Wallet` icon for consistency with the BudgetTab reserve chip.
 
-For each activity where `isPlaceholderWellness(act, city, hotelName)` is true:
+### 2. Confirm the reserve chip in `BudgetTab.tsx`
 
-1. Try `getRandomFallbackWellness(cityKey, usedSet)` — if hit, apply via `applyFallbackWellnessToActivity` (real venue + price). Stamp `act.source = 'wellness-nuclear-sweep-replaced'`.
-2. Else if `hotelName` provided — downgrade to free `Spa Time at ${hotelName}`, cost forced to 0. Stamp `act.source = 'wellness-nuclear-sweep-downgraded'`. Mark `act.metadata.unverified_venue = true`.
-3. Else — **strip the activity entirely** (filter out of array). High-cost-no-venue items must never ship. Log `[WELLNESS NUCLEAR] STRIPPED "<title>" — no venue, no hotel`.
+The reserved-state branch already exists. Two small refinements while we're here:
 
-Return number of items mutated/removed.
+- The right-hand value text on line 1012 (`{formatCurrency(used)} / {formatCurrency(allocated)}`) currently still reads `$0 / $90` in default foreground. For the misc reserve case, render that as `formatCurrency(allocated) + " reserved"` in `text-muted-foreground` instead of `$0 / $90`, so there is no "0" character at all in the row when nothing is logged.
+- Ensure `isOver` styling on the value text never fires for misc when `used === 0` (it already doesn't, but assert with an explicit `!(alloc.category === 'misc' && used === 0)` guard for safety against future refactors).
 
-### 2. Wire the sweep into `universal-quality-pass.ts`
-
-Right after the dining nuclear sweep at Step 4b (~line 172), call `nuclearWellnessSweep(result, city, hotelName)` and log the count. This guarantees every day passes through wellness sweep before the day is considered complete, regardless of which stage produced the item.
-
-This requires `hotelName` — already available at the call sites (it's threaded through `processActivities` / quality-pass invocations). Plumb it as a new optional param on the existing `processActivities` signature; default to `undefined`. Existing callers pass it where they have it.
-
-### 3. Pre-save guarantee in `generation-core.ts` / `action-save-itinerary.ts`
-
-Before persisting the final `tripData.days`, walk every day's activities one last time and run the same `nuclearWellnessSweep`. This is belt-and-braces — if a future stage reintroduces a wellness placeholder, the save layer rejects it. The sweep mutates the array in place and returns count; if `count > 0`, log a warning with the trip id so we can spot regressions.
-
-### 4. Cost guarantee — stop $391 phantom rows
-
-In `action-repair-costs.ts` (and wherever activity costs are snapshotted into `activity_costs`), before writing a row check:
-
-```ts
-if ((category === 'wellness' || category === 'spa') &&
-    isPlaceholderWellness(activity, city, hotelName)) {
-  // Force $0; do not snapshot a cost for an unverified wellness slot.
-  cost = 0;
-  basis = 'unverified_venue';
-}
-```
-
-Pair this with the existing `metadata.needs_venue_replacement` flag set in `sanitization.ts` line 1980 — treat that flag as another reason to force cost to 0.
-
-This means if any future stage somehow lets the placeholder reach the save step, the *cost* still won't be charged to the budget — eliminating the misleading $652-in-one-session impact.
-
-### 5. Tighten title patterns
-
-Add two more patterns to `GENERIC_WELLNESS_TITLE_PATTERNS` in `fix-placeholders.ts`:
-
-```ts
-// Bare two/three-word titles like "Wellness Treatment", "Spa Refresh"
-/^(wellness|spa)\s+(refresh|moment|break|session|time|experience|treatment|ritual|escape|visit)$/i,
-// Adjective + noun without venue context, e.g. "Curated Spa Experience", "Bespoke Wellness Visit"
-/^(curated|bespoke|signature|personalized|personalised|premium|luxury|private|exclusive)\s+(wellness|spa)\s+(visit|stop|appointment)\b/i,
-```
-
-These are belt-and-braces; the current patterns already match the two reported titles, but defending against minor variants is cheap.
-
-### 6. Tests
-
-Extend `fix-placeholders.test.ts` with cases covering:
-- "Personalized Wellness Treatment" with empty venue — flagged.
-- `nuclearWellnessSweep` with a Paris activity → replaced with a real Paris venue from the inline DB.
-- `nuclearWellnessSweep` with no fallback DB hit + no hotel → activity removed entirely.
-- Cost-snapshot path forces $0 when `metadata.needs_venue_replacement` is true.
+### 3. No changes to allocation math, edge functions, or the budget-coach service.
 
 ## Files touched
 
-- `supabase/functions/generate-itinerary/fix-placeholders.ts` — add `nuclearWellnessSweep`, extra title patterns.
-- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — invoke sweep at Step 4b.
-- `supabase/functions/generate-itinerary/generation-core.ts` and/or `action-save-itinerary.ts` — final pre-save sweep.
-- `supabase/functions/generate-itinerary/action-repair-costs.ts` — cost gate for unverified wellness/spa.
-- `supabase/functions/generate-itinerary/fix-placeholders.test.ts` — tests.
-
-## Memory update
-
-Append a Core rule:
-
-> **Wellness Venue Integrity:** Any wellness/spa activity must name a real venue from `INLINE_FALLBACK_WELLNESS` or live data. Placeholders are stripped or downgraded to free hotel-spa time before save; no unverified wellness item ever ships with a non-zero cost.
+- `src/components/planner/budget/BudgetCoach.tsx` — move the misc nudge below `visibleSuggestions`, gate on `!isLoading/!error/!showHotelDominantPanel`, swap icon.
+- `src/components/planner/budget/BudgetTab.tsx` — replace the `$0 / $90` numeric line with a muted "$90 reserved" label when misc has zero usage.
 
 ## Out of scope
 
-- Expanding `INLINE_FALLBACK_WELLNESS` city coverage (separate content task; current strip-on-no-fallback behaviour is acceptable).
-- Allowing the assistant to suggest a replacement spa from chat (future enhancement once stripping is in place).
+- Auto-populating the Spending Money category from the itinerary (the category is intentionally manual-only — see prior memory).
+- Renaming or merging the category.
+- Changing allocation percentages or default $90 reserve.

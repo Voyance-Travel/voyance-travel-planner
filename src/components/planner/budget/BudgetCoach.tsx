@@ -25,6 +25,7 @@ import {
   AlertTriangle,
   Trash2,
   CalendarMinus,
+  Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -794,38 +795,7 @@ export function BudgetCoach({
             transition={{ duration: 0.2 }}
           >
             <CardContent className="space-y-3 pt-0">
-              {/* Misc reserve info nudge — the itinerary doesn't auto-fill misc,
-                  so when there's an unspent reserve, prompt the user to log
-                  cash expenses. Distinct visual (info, not warning); not counted
-                  in potential savings. */}
-              {miscReserveCents > 0 && miscUsedCents === 0 && !miscNudgeDismissed && (
-                <div className="rounded-lg border border-border bg-muted/40 p-3">
-                  <div className="flex items-start gap-2">
-                    <Sparkles className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Set aside spending money</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Your spending-money reserve is {formatCurrency(miscReserveCents)}. Log your first cash expense (tip, SIM, snack) so this category reflects reality — the itinerary doesn't auto-fill it.
-                      </p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            onAddMiscExpense?.();
-                            dismissMiscNudge();
-                          }}
-                        >
-                          Add expense
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={dismissMiscNudge}>
-                          Dismiss
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Misc reserve nudge moved below suggestions — see end of CardContent. */}
 
 
               {/* "Bump tier" CTA — turn a complaint into an action when the
@@ -1302,6 +1272,44 @@ export function BudgetCoach({
                   )}
                 </div>
               )}
+
+              {/* Misc reserve nudge — secondary meta-task. Rendered LAST so
+                  actionable swap suggestions own the prime slot. Suppressed
+                  while loading/erroring or when the structural restructuring
+                  panel is already addressing a much larger overrun. */}
+              {!isLoading &&
+                !error &&
+                !showHotelDominantPanel &&
+                miscReserveCents > 0 &&
+                miscUsedCents === 0 &&
+                !miscNudgeDismissed && (
+                  <div className="rounded-lg border border-border bg-muted/40 p-3">
+                    <div className="flex items-start gap-2">
+                      <Wallet className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">Set aside spending money</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Your spending-money reserve is {formatCurrency(miscReserveCents)}. Log your first cash expense (tip, SIM, snack) so this category reflects reality — the itinerary doesn't auto-fill it.
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              onAddMiscExpense?.();
+                              dismissMiscNudge();
+                            }}
+                          >
+                            Add expense
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={dismissMiscNudge}>
+                            Dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
             </CardContent>
           </motion.div>
         )}
