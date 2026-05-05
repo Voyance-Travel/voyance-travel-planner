@@ -113,10 +113,12 @@ export function VendorBookingLink({
   const bookingUrl = externalBookingUrl || generateVendorSearchUrl(preferredVendor, activityName, destination);
   
   // Detect vendor from URL or booking URL for correct display name
-  const detectedVendor = hasDirectUrl 
-    ? detectVendorFromUrl(externalBookingUrl!) 
+  const detectedVendor = hasDirectUrl
+    ? detectVendorFromUrl(externalBookingUrl!)
     : detectVendorFromUrl(bookingUrl);
-  const vendorName = getVendorDisplayName(detectedVendor);
+  // Unknown direct URLs (e.g. louvre.fr) → label with hostname instead of "Viator"
+  const isOfficialDirect = hasDirectUrl && detectedVendor === null;
+  const vendorName = detectedVendor ? getVendorDisplayName(detectedVendor) : prettyHostname(bookingUrl);
 
   const handleClick = () => {
     window.open(bookingUrl, '_blank', 'noopener,noreferrer');
@@ -124,18 +126,17 @@ export function VendorBookingLink({
   };
 
   // Format estimated price if provided
-  const formattedPrice = estimatedPrice 
+  const formattedPrice = estimatedPrice
     ? new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(estimatedPrice)
     : null;
 
-  // Determine label based on whether we have a direct URL or are searching
-  // Use shorter labels on mobile
-  const linkLabel = hasDirectUrl 
-    ? `View on ${vendorName}` 
-    : `Find on ${vendorName}`;
-  
-  // Mobile-friendly short labels
-  const shortLabel = hasDirectUrl ? 'View' : 'Find';
+  const linkLabel = isOfficialDirect
+    ? `Reserve on ${vendorName}`
+    : hasDirectUrl
+      ? `View on ${vendorName}`
+      : `Find on ${vendorName}`;
+
+  const shortLabel = isOfficialDirect ? 'Reserve' : hasDirectUrl ? 'View' : 'Find';
 
   return (
     <Button
