@@ -1006,7 +1006,13 @@ export function PaymentsTab({
             )}
           </>
         ) : (
-          <Progress value={progressPercent} className="h-2 mb-4" />
+          <Progress
+            value={Math.min(progressPercent, 100)}
+            className={cn(
+              "h-2 mb-4",
+              isOverpaid && "[&>div]:bg-amber-500"
+            )}
+          />
         )}
         
         <div className="grid grid-cols-2 gap-4">
@@ -1019,15 +1025,34 @@ export function PaymentsTab({
               <p className="text-xs text-muted-foreground">Paid so far</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <Wallet className="h-4 w-4 text-amber-600" />
+          {isOverpaid ? (
+            <div
+              className="flex items-center gap-2"
+              title="Some payments may not be linked to current itinerary items. Review Recent Payments to reconcile."
+            >
+              <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                  Overpaid by {formatCurrency(overpaidAmount)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Recorded payments exceed itinerary total
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium">{formatCurrency(unpaidAmount)}</p>
-              <p className="text-xs text-muted-foreground">Remaining to pay</p>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <Wallet className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">{formatCurrency(unpaidAmount)}</p>
+                <p className="text-xs text-muted-foreground">Remaining to pay</p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
