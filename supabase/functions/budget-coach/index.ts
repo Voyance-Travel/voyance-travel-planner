@@ -126,6 +126,37 @@ serve(async (req) => {
       );
     }
 
+    // ZERO-CANDIDATE GUARD: even with activities present, the AI needs at
+    // least one positively-priced, non-placeholder item it can swap. Without
+    // this the model invents venues to fill the response.
+    const PLACEHOLDER_TITLE_RE_PRE = /^(breakfast|lunch|dinner|brunch|meal|activity|activities|transport|transit|hotel|accommodation|untitled)\s*(\(|-|–|—|$)/i;
+    const isPlaceholderPre = (t?: string) => {
+      const s = (t || "").trim();
+      if (!s) return true;
+      if (/^(activity|untitled|tbd|n\/a)$/i.test(s)) return true;
+      return PLACEHOLDER_TITLE_RE_PRE.test(s);
+    };
+    const positiveCandidateCount = filteredDays.reduce(
+      (n, d) =>
+        n +
+        (d.activities ?? []).filter(
+          (a) => typeof a.cost === "number" && a.cost > 0 && !isPlaceholderPre(a.title)
+        ).length,
+      0
+    );
+    if (positiveCandidateCount === 0) {
+      console.log("[budget-coach] No positive-cost, non-placeholder candidates — skipping AI call");
+      return new Response(
+        JSON.stringify({
+          suggestions: [],
+          on_target: false,
+          no_candidates: true,
+          reason: "No paid itinerary activities available to optimize",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ─── Look up cost_reference for this destination to ground AI suggestions ───
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
     const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
