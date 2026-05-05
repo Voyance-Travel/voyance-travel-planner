@@ -2890,6 +2890,30 @@ export async function finalSaveItinerary(
       }
     }
 
+    // ── PRE-SAVE WELLNESS SWEEP ──
+    // Belt-and-braces: any wellness placeholder reintroduced after the per-day
+    // quality pass (e.g. by enrichment, weather backups, or late repairs)
+    // gets one final pass before persistence.
+    try {
+      const { nuclearWellnessSweep } = await import('./fix-placeholders.ts');
+      const hotelNameForSweep = (context as any)?.hotelSelection?.name
+        || (context as any)?.hotelName
+        || undefined;
+      const cityForSweep = String(context.destination || '');
+      let totalWellnessSwept = 0;
+      const daysForSweep = enrichedData?.days || [];
+      for (const d of daysForSweep) {
+        if (Array.isArray(d?.activities)) {
+          totalWellnessSwept += nuclearWellnessSweep(d.activities, cityForSweep, hotelNameForSweep);
+        }
+      }
+      if (totalWellnessSwept > 0) {
+        console.warn(`[Stage 6] PRE-SAVE WELLNESS SWEEP: mutated/removed ${totalWellnessSwept} placeholder(s) for trip ${tripId}`);
+      }
+    } catch (e) {
+      console.warn('[Stage 6] Pre-save wellness sweep failed (non-blocking):', e);
+    }
+
     const frontendReadyData = {
       success: true,
       status: 'ready',
