@@ -322,6 +322,11 @@ export function PaymentsTab({
   // "Paid so far" reflects actual recorded payments from trip_payments
   const paidAmount = totals.paid;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
+  // Surface overpayment as an explicit anomaly instead of silently clamping
+  // "Remaining to pay" at $0 (e.g. orphaned payments left over from a prior
+  // itinerary version still count toward `paidAmount`).
+  const overpaidAmount = Math.max(0, paidAmount - estimatedTotal);
+  const isOverpaid = overpaidAmount > 0 && estimatedTotal > 0;
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
   /**
