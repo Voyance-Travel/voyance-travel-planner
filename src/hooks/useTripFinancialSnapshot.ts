@@ -193,6 +193,25 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     totalCents = Math.max(0, totalCents);
     paidTotal += manualPaidCents;
 
+    // Misc reserve — the user explicitly set aside cash for tips / SIM /
+    // pharmacy / market finds. The itinerary never auto-fills it, so without
+    // folding the unspent portion into the total the headline budget reads
+    // as having phantom headroom equal to the slider value.
+    const budgetTotalForReserve = tripData?.budget_total_cents || 0;
+    if (budgetTotalForReserve > 0 && miscPercent > 0) {
+      const { computeMiscReserve } = await import('@/services/budgetReserve');
+      const reserve = computeMiscReserve({
+        budgetTotalCents: budgetTotalForReserve,
+        miscPercent,
+        committedHotelCents,
+        committedFlightCents,
+        includeHotel,
+        includeFlight,
+        loggedMiscCents,
+      });
+      totalCents += reserve.contributionToTotalCents;
+    }
+
     // Compute delta against the previous fetch (skip on initial load and
     // during the brief stabilization window where hydration / logistics-sync
     // can legitimately move the total without it being a user-perceived change).
