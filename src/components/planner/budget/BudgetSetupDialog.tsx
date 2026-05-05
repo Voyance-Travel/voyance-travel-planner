@@ -462,10 +462,10 @@ export function BudgetSetupDialog({
                   size="sm"
                   className="flex-col h-auto py-2 items-start"
                   onClick={() => setAllocations(DEFAULT_ALLOCATIONS.splurge_forward)}
-                  title="4–5★ hotels, 1 splurge dinner, premium activities. Not Michelin-every-night."
+                  title="4–5★ hotels, 1 splurge dinner, premium activities, private/airport transfers and frequent taxis. Not Michelin-every-night."
                 >
                   <span className="font-medium">Splurge-Forward</span>
-                  <span className="text-[10px] text-muted-foreground">$300–500/day pp</span>
+                  <span className="text-[10px] text-muted-foreground">$300–500/day pp · ~20% transit</span>
                 </Button>
               </div>
               {/* Hotel realism note — fires when the chosen hotel alone exceeds the typed budget */}

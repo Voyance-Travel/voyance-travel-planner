@@ -426,8 +426,13 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         ? Math.round((tripData as any).hotel_selection.pricePerNight * totalDays * 100)
         : 0;
       const discretionary = Math.max(0, totalCents - flightCents - hotelCents);
-      const dailyTransitCapPP = (discretionary * (transitPct / 100)) / totalDays / numTravelers / 100;
-      const cap = dailyTransitCapPP * 1.25;
+      // When fixed costs swallow the budget, fall back to the full total ×
+      // transit_percent — matches the UI's underwater allocation basis so the
+      // cap stays meaningful (and isn't $0/day for luxury hotel trips).
+      const allocBase = discretionary > 0 ? discretionary : totalCents;
+      const dailyTransitCapPP = (allocBase * (transitPct / 100)) / totalDays / numTravelers / 100;
+      // Allow 1.5× headroom so we only demote the genuinely outsized days.
+      const cap = dailyTransitCapPP * 1.5;
 
       const metroRef = refMap.get(`${destination}|transport|metro`)
         || refMap.get(`${destination}|transport|bus`)

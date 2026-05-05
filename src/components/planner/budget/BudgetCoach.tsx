@@ -95,6 +95,8 @@ interface BudgetCoachProps {
   miscUsedCents?: number;
   /** Called when the misc nudge "Add expense" is clicked. */
   onAddMiscExpense?: () => void;
+  /** Open the Edit Budget dialog (for structural fixes like raising the transit allocation). */
+  onEditBudget?: () => void;
   className?: string;
 }
 
@@ -167,6 +169,7 @@ export function BudgetCoach({
   miscReserveCents = 0,
   miscUsedCents = 0,
   onAddMiscExpense,
+  onEditBudget,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
@@ -876,7 +879,48 @@ export function BudgetCoach({
                 </div>
               )}
 
-              {/* Restructuring panel — when swaps cannot bridge the gap */}
+              {/* Structural transit warning — when the Transit overrun exceeds
+                  what every taxi-to-metro swap could plausibly save, no amount
+                  of swap suggestions will turn the bar green. Tell the user
+                  honestly and route them to raise the transit allocation. */}
+              {(() => {
+                const transitOver = (categoryOverruns?.['Transit'] || 0);
+                if (transitOver <= 0) return null;
+                // Estimated max savings = sum over visible Transit swap suggestions
+                // of (current - new). If we don't yet have suggestions, fall back
+                // to assuming a $15/pp/leg swap × number of taxi-like activities.
+                const TRANSIT_KEYWORDS_RE = /\b(taxi|cab|uber|lyft|rideshare|private\s+car|car\s+service)\b/i;
+                const taxiLegs = itineraryDays.flatMap(d => d.activities).filter(a => {
+                  const cat = `${a.category || ''} ${a.type || ''}`.toLowerCase();
+                  if (!/transit|transport|transfer|taxi/.test(cat)) return false;
+                  const text = `${a.title || a.name || ''} ${a.description || ''}`;
+                  return TRANSIT_KEYWORDS_RE.test(text);
+                });
+                const estMaxSavingsCents = taxiLegs.reduce((s, a) => s + Math.max(0, activityCostCentsLocal(a) - 8 * 100 * Math.max(1, travelers)), 0);
+                if (estMaxSavingsCents >= transitOver) return null;
+                return (
+                  <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                          Transit allocation is too low for this trip.
+                        </p>
+                        <p className="text-xs text-amber-800 dark:text-amber-200">
+                          Even swapping every remaining taxi to metro can't bring Local Transit inside its allocation. For a luxury trip with airport transfers and premium ground transport, raise Local Transit to about 15–20% of the budget.
+                        </p>
+                      </div>
+                    </div>
+                    {onEditBudget && (
+                      <div className="flex flex-wrap gap-2 pl-6">
+                        <Button size="sm" variant="default" onClick={onEditBudget}>
+                          Edit budget allocation
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {showRestructurePanel && (
                 <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
                   <div className="flex items-start gap-2">

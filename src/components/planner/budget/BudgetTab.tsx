@@ -718,6 +718,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
             onAddMiscExpense={() => {
               window.dispatchEvent(new CustomEvent('open-add-expense', { detail: { type: 'other' } }));
             }}
+            onEditBudget={() => setShowSetupDialog(true)}
           />
         );
       })()}
