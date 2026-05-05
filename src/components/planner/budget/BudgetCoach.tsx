@@ -89,6 +89,12 @@ interface BudgetCoachProps {
   categoryOverruns?: Partial<Record<string, number>>;
   /** Optional: callback to drop the last day from the trip. If absent, the restructuring panel hides this option. */
   onShortenTrip?: () => void | Promise<void>;
+  /** Misc reserve allocated cents — when >0 and unused, Coach surfaces an info nudge. */
+  miscReserveCents?: number;
+  /** Misc cents already logged. When >0, the misc nudge is suppressed. */
+  miscUsedCents?: number;
+  /** Called when the misc nudge "Add expense" is clicked. */
+  onAddMiscExpense?: () => void;
   className?: string;
 }
 
