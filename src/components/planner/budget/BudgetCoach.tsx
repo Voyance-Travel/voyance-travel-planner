@@ -529,16 +529,21 @@ export function BudgetCoach({
     return overlap >= 1;
   };
 
+  const suggestableIdSet = useMemo(() => new Set(suggestableActivityIds), [suggestableActivityIds]);
   const visibleSuggestions = useMemo(() => {
+    if (suggestableCount === 0) return [];
     return suggestions.filter(s => {
+      // Activity must currently be in the live itinerary AND still be a
+      // valid swap/drop candidate (not a hotel/flight/$0 row).
+      if (!suggestableIdSet.has(s.activity_id)) return false;
       const realTitle = liveActivityTitleById.get(s.activity_id);
-      if (!realTitle) return false; // activity no longer in itinerary
+      if (!realTitle) return false;
       // If the suggestion's current_item doesn't match the live title, it's
       // pointing at an old version of that slot — drop it.
       if (s.current_item && !titlesMatch(s.current_item, realTitle)) return false;
       return true;
     });
-  }, [suggestions, liveActivityTitleById]);
+  }, [suggestions, liveActivityTitleById, suggestableIdSet, suggestableCount]);
 
   const toggleProtected = useCallback(
     (label: string) => {
