@@ -8,6 +8,9 @@ import {
   isPlaceholderMeal,
   applyFallbackToActivity,
   GENERIC_VENUE_TEMPLATES,
+  isPlaceholderWellness,
+  getRandomFallbackWellness,
+  applyFallbackWellnessToActivity,
 } from "./fix-placeholders.ts";
 
 const matchesAnyTitle = (s: string) =>
