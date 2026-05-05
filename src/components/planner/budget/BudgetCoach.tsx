@@ -6,7 +6,7 @@
  * renders them with one-tap "Apply" buttons.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Lightbulb,
