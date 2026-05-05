@@ -18,6 +18,7 @@ import Head from '@/components/common/Head';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { getItineraryBySlug } from '@/data/sampleItineraries';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
