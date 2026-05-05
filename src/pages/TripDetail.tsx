@@ -2987,6 +2987,7 @@ export default function TripDetail() {
                    creationSource={trip.creation_source}
                    viewMode={viewMode}
                   itineraryStatus={trip.itinerary_status}
+                  generationFailureReason={(trip.metadata as Record<string, unknown> | null)?.generation_failure_reason as string | null ?? null}
                   journeyId={trip.journey_id}
                   journeyName={trip.journey_name}
                   onDateChange={handleDateChange}
