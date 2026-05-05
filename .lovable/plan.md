@@ -1,64 +1,62 @@
+# High-Cost Wellness Activities: Booking Guidance Fix
+
 ## Problem
 
-The Misc allocation (5% of every preset) never lights up because the itinerary generator only emits dining/activity/transit/hotel/flight categories. Nothing in the system maps to `misc` automatically. The category mapper does forward `shopping`, `nightlife`, `bar`, and `club` → `misc`, but those rarely show up either. Result: users see a permanently empty "Miscellaneous" row that reads as broken.
+A $293 "Biologique Recherche" wellness treatment renders with no description, no booking flag, and no booking link. Root cause is two-fold:
 
-There's already a tiny in-row nudge ("For tips, market finds… Add expense") but it's easy to miss and the row still looks dead in the progress bars.
+1. **Misclassification** (`src/components/booking/InlineBookingActions.tsx`): the keyword list `HOTEL_AMENITY_KEYWORDS` includes generic words like `wellness`, `treatment`, `massage`, `spa`, `relaxation`. Any standalone wellness venue (Biologique Recherche, Aire Ancient Baths, etc.) gets flagged as a "hotel amenity" → `linkType === 'view_details'`, and because there's no `website`/`bookingUrl` → the component returns `null`. No link, no concierge prompt, nothing.
+2. **No high-cost guard** during generation: the sanitizer/repair pass enforces booking guidance for dining + Viator-bookable items but never checks "this single experience costs more than X — does it have description + booking guidance?"
 
-## Recommendation
+Result: the most expensive item on Day 3 looks less actionable than a $33 museum entry.
 
-**Keep the allocation, reframe it as an explicit cash reserve, and make the empty-state actionable.** Removing the bucket would silently merge tips/pharmacy/SIM/market spend into the buffer line and hurt budget realism. The cleaner fix: be honest that this category is a manual reserve, not an itinerary-driven spend, and surface that throughout.
+## Fix
 
-### 1. Rename + relabel — `BudgetTab.tsx`, `BudgetSetupDialog.tsx`
+### 1. Reclassify wellness venues (UI)
 
-- `categoryLabels.misc`: `'Miscellaneous'` → `'Spending Money & Tips'`.
-- In `BudgetSetupDialog`, add a one-line caption under the slider: *"Cash reserve for tips, pharmacy, SIMs, market finds. Not auto-filled by the itinerary — log expenses as you go."*
+In `src/components/booking/InlineBookingActions.tsx`:
 
-### 2. Replace the misc progress bar with a "reserve" treatment — `BudgetTab.tsx`
+- Split `HOTEL_AMENITY_KEYWORDS` into two groups:
+  - `STRONG_HOTEL_SIGNALS` (definitely hotel-bound): `at the hotel`, `hotel spa`, `hotel bar`, `hotel pool`, `lobby`, `rooftop bar at`, plus the existing branded chains (St Regis, Ritz, Four Seasons, etc.).
+  - `AMENITY_KEYWORDS` (ambiguous on their own): `spa`, `wellness`, `treatment`, `massage`, `relaxation`, `pool`, `gym`, `sauna`, `lounge`.
+- Update `isHotelAmenityActivity` to return `true` only when:
+  - category is explicitly `accommodation` / `hotel` / `lodging` / `resort`, OR
+  - title contains a `STRONG_HOTEL_SIGNAL`, OR
+  - title contains an `AMENITY_KEYWORD` **and** also contains a hotel cue (`hotel`, `resort`, branded chain).
+- Drop `spa` and `wellness` from `ACCOMMODATION_CATEGORIES` (those are legit standalone activity categories in the rest of the app: see `EditorialItinerary.tsx`, `ActivityModal.tsx`, `ActivityAlternativesDrawer.tsx` which all treat wellness as a first-class activity type).
 
-When `category === 'misc'` and `used === 0` and `allocated > 0`:
+### 2. High-cost guarantee (UI safety net)
 
-- Hide the 0% progress bar (it visually reads as broken).
-- Show in its place a small inline pill: **"$X reserved · 0 logged"** with an "+ Add expense" button on the same line, large enough to be the obvious affordance (current text-link CTA is too quiet).
-- When `used > 0`, render the normal progress bar.
+Still in `InlineBookingActions.tsx`:
 
-This keeps the allocation visible without giving users the false impression that the system "should" be populating it.
+- Add `HIGH_COST_USD = 150`.
+- In the `!activity.bookingRequired` branch, if `price >= HIGH_COST_USD` and `linkType` would otherwise be `'none'` or `'view_details'` without a URL:
+  - Render a small "Booking guidance" cluster: a `RestaurantLink`-style search button ("Find on official site") that opens `https://www.google.com/search?q={encodeURIComponent(activity.title + ' ' + destination + ' booking')}` plus an "Ask concierge" button wired to `onAskConcierge` with a prefilled prompt ("How do I book {title}? It's listed at ${price}.").
+- This guarantees no premium item ever renders as a dead-end.
 
-### 3. Wire the empty-state CTA to actually open the modal — `BudgetTab.tsx` + `PaymentsTab.tsx`
+### 3. Generation-side enforcement
 
-Today the button dispatches `open-add-expense` but `PaymentsTab` only listens for `open-add-expense:mounted`. If the user is on the Budget tab when they click, nothing opens until they navigate to Payments. Fix:
+In `supabase/functions/generate-itinerary/sanitization.ts` (existing `bookingRequired && currentPrice === 0` block already proves this pattern):
 
-- `PaymentsTab.tsx`: also listen for `open-add-expense` (mirror the existing `:mounted` handler) and call `setShowAddExpenseModal(true)` immediately.
-- `BudgetTab.tsx`: when the misc CTA is clicked, also switch the active itinerary tab to **Payments** so the modal is in view. Use the existing tab-switching event the assistant uses (`window.dispatchEvent(new CustomEvent('switch-itinerary-tab', { detail: 'payments' }))`) — verify it exists; if not, add an `onSwitchToPayments` prop wired from `EditorialItinerary`.
-- Pre-select the modal's category to **"Other"** via the event detail.
+- Add a post-pass: for any activity where `(quoted price OR estimated cost) >= 150` AND category in `['wellness','spa','experience','tour','class','workshop','show','performance']`:
+  - Force `booking_required = true`.
+  - If `description` is empty/very short (< 60 chars), enqueue a fallback line: `"Premium ${category} experience — reservations are typically required well in advance. Use the official site or our concierge to confirm availability."`
+  - Tag the activity with `metadata.booking_guidance_required = true` so the UI can show a stronger CTA.
 
-### 4. Coach: add a one-time "Reserve cash for tips/extras" nudge — `BudgetCoach.tsx`
+### 4. Card surface
 
-When the coach opens and `categoryOverruns.misc` is null/0 AND the misc allocation has zero logged spend AND coverage is low, prepend a non-AI synthetic suggestion card:
+In `src/components/itinerary/EditorialItinerary.tsx` (or whichever card renders the activity row — confirm via the activity-render path), if `metadata.booking_guidance_required === true` and there's no description block today, render a one-line italic helper: *"High-value experience — confirm booking before you go."*
 
-- Title: *"Set aside spending money"*
-- Body: *"Misc reserve is $X. Log your first expense (tip, SIM, snack) so this category reflects reality — the itinerary doesn't auto-fill it."*
-- Single CTA: **Add expense** → same handler as #3.
-- Distinct visual (info, not warning); not counted in "potential savings"; auto-hides once any misc expense is logged or the user dismisses.
+## Technical notes
 
-This is purely client-side — no edge-function change.
+- `HIGH_COST_USD` lives next to existing constants in `InlineBookingActions.tsx`; pulled from cost-reference if we want a tier later.
+- The sanitizer change is idempotent (only fires when fields are missing) and respects the universal locking protocol — locked / user-edited activities are skipped via the existing `isLocked`/`metadata.user_edited` checks already used in that file.
+- No DB migration needed; `metadata` is already a JSON column on activities.
+- No memory updates required — this refines existing rules in `mem://constraints/itinerary/believable-human-pacing-principle` and `mem://features/booking/booking-cta-priority` rather than introducing new ones.
 
-### 5. Memory
+## Files to change
 
-Update `mem://features/budget/budget-coach-system`: "Misc category is intentionally manual-fill. Coach surfaces a one-time info nudge when misc reserve is unspent. UI renders 'reserve pill' instead of a 0% progress bar to avoid the dead-row reading."
+- `src/components/booking/InlineBookingActions.tsx` (reclassification + high-cost safety net)
+- `supabase/functions/generate-itinerary/sanitization.ts` (high-cost description + booking_required guard)
+- `src/components/itinerary/EditorialItinerary.tsx` (one-line helper when guidance flag set)
 
-## Files touched
-
-- `src/services/tripBudgetService.ts` (label only — no schema/preset change)
-- `src/components/planner/budget/BudgetTab.tsx` (label, reserve pill, CTA wiring, propagate tab switch)
-- `src/components/planner/budget/BudgetSetupDialog.tsx` (caption under slider)
-- `src/components/itinerary/PaymentsTab.tsx` (also listen for `open-add-expense` directly)
-- `src/components/itinerary/EditorialItinerary.tsx` (relay tab switch if no existing event)
-- `src/components/planner/budget/BudgetCoach.tsx` (synthetic info nudge)
-
-## Out of scope
-
-- Removing the misc preset (would worsen realism).
-- Auto-categorising shopping/nightlife into misc beyond what we already do.
-- Adding new misc-generating activities to the AI prompt.
-
-**Approve to implement?**
+Approve to implement.

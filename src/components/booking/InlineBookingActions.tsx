@@ -115,18 +115,28 @@ const NON_BOOKABLE_KEYWORDS = [
   'rest', 'relax at hotel', 'hotel rest',
 ];
 
-// Activities that are part of a hotel/accommodation and shouldn't show external booking
-// These are hotel amenities, not separate bookable experiences
-const HOTEL_AMENITY_KEYWORDS = [
-  'spa', 'lounge', 'pool', 'gym', 'fitness', 'sauna', 'steam room',
-  'relaxation', 'wellness', 'massage', 'treatment',
-  'rooftop', 'terrace', 'bar at', 'hotel bar', 'lobby',
+// Strong signals that this is hotel-bound (always treat as hotel amenity)
+const STRONG_HOTEL_SIGNALS = [
+  'at the hotel', 'hotel spa', 'hotel bar', 'hotel pool', 'hotel gym',
+  'hotel lounge', 'lobby', 'rooftop bar at', 'in-room',
   'st regis', 'ritz', 'four seasons', 'w hotel', 'marriott', 'hilton',
   'hyatt', 'waldorf', 'peninsula', 'mandarin oriental', 'shangri-la',
 ];
 
-// Categories that indicate accommodation-based activities
-const ACCOMMODATION_CATEGORIES = ['accommodation', 'hotel', 'lodging', 'resort', 'spa', 'wellness'];
+// Ambiguous amenity words — only treat as hotel amenity when paired with a hotel cue
+const AMBIGUOUS_AMENITY_KEYWORDS = [
+  'spa', 'wellness', 'treatment', 'massage', 'relaxation',
+  'pool', 'gym', 'fitness', 'sauna', 'steam room', 'lounge',
+];
+
+const HOTEL_CUE_RE = /\b(hotel|resort|st regis|ritz|four seasons|marriott|hilton|hyatt|waldorf|peninsula|mandarin oriental|shangri-la|w hotel)\b/i;
+
+// Categories that indicate accommodation-based activities (NOTE: 'spa' / 'wellness' are
+// first-class standalone categories elsewhere in the app and intentionally excluded here)
+const ACCOMMODATION_CATEGORIES = ['accommodation', 'hotel', 'lodging', 'resort'];
+
+// Premium experiences that need explicit booking guidance even without bookingRequired flag
+const HIGH_COST_USD = 150;
 
 function isDiningActivity(title: string): boolean {
   const lowerTitle = (title || '').toLowerCase();
@@ -136,17 +146,25 @@ function isDiningActivity(title: string): boolean {
 function isHotelAmenityActivity(title: string, category?: string): boolean {
   const lowerTitle = (title || '').toLowerCase();
   const lowerCategory = (category || '').toLowerCase();
-  
-  // Check if category indicates accommodation/spa
+
+  // Explicit accommodation category
   if (ACCOMMODATION_CATEGORIES.some(cat => lowerCategory.includes(cat))) {
     return true;
   }
-  
-  // Check for hotel brand names or amenity keywords in title
-  if (HOTEL_AMENITY_KEYWORDS.some(keyword => lowerTitle.includes(keyword))) {
+
+  // Strong hotel signals in the title (chains, "hotel spa", etc.)
+  if (STRONG_HOTEL_SIGNALS.some(keyword => lowerTitle.includes(keyword))) {
     return true;
   }
-  
+
+  // Ambiguous amenity word ONLY counts when paired with a hotel cue in the same title
+  if (
+    AMBIGUOUS_AMENITY_KEYWORDS.some(keyword => lowerTitle.includes(keyword)) &&
+    HOTEL_CUE_RE.test(lowerTitle)
+  ) {
+    return true;
+  }
+
   return false;
 }
 
@@ -270,10 +288,42 @@ export function InlineBookingActions({
     return null;
   }
 
+  // Helper: render high-cost guidance cluster (search + concierge) for premium experiences
+  // that would otherwise have no actionable affordance.
+  const renderHighCostGuidance = () => {
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${activity.title} ${destination} booking`)}`;
+    return (
+      <div className="inline-flex flex-wrap items-center gap-2">
+        <a
+          href={searchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
+          title={`Premium experience (${formatPrice(price * 100, activity.currency || 'USD')}) — confirm booking on the official site`}
+        >
+          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+          <span className="sm:hidden">Find site</span>
+          <span className="hidden sm:inline">Find on official site</span>
+        </a>
+        {onAskConcierge && (
+          <button
+            type="button"
+            onClick={onAskConcierge}
+            className="inline-flex items-center gap-1 sm:gap-1.5 text-xs text-primary hover:underline min-h-[44px] sm:min-h-0 py-2 sm:py-0"
+          >
+            <Sparkles className="h-3 w-3 flex-shrink-0" />
+            <span>Ask concierge</span>
+          </button>
+        )}
+      </div>
+    );
+  };
+
   // If booking is not required, show appropriate link based on type
   if (!activity.bookingRequired) {
     const directUrl = activity.website || activity.externalBookingUrl || activity.bookingUrl;
-    
+    const isHighCost = price >= HIGH_COST_USD;
+
     if (linkType === 'view_details' && directUrl) {
       return (
         <a
@@ -302,21 +352,26 @@ export function InlineBookingActions({
         </a>
       );
     }
-    
+
     if (linkType === 'find_restaurant') {
       return (
-        <RestaurantLink 
-          restaurantName={activity.title} 
-          destination={destination} 
+        <RestaurantLink
+          restaurantName={activity.title}
+          destination={destination}
         />
       );
     }
-    
+
+    // High-cost safety net: never let a premium item render as a dead-end
+    if (isHighCost && !directUrl) {
+      return renderHighCostGuidance();
+    }
+
     // For hotel amenities without URL, show nothing
     if (isHotelAmenityActivity(activity.title, activity.category)) {
       return null;
     }
-    
+
     // Otherwise show view details if we have a URL
     if (directUrl) {
       return (
@@ -332,7 +387,7 @@ export function InlineBookingActions({
         </a>
       );
     }
-    
+
     return null;
   }
 
