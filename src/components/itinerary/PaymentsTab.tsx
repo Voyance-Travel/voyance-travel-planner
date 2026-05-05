@@ -780,6 +780,20 @@ export function PaymentsTab({
     );
   }
 
+  // Display normalizer: append hotel name to titles that end with a generic
+  // hotel-bar/lounge phrase (e.g. "Nightcap at Le Bar") so Payments labels
+  // match the All Costs view ("Nightcap at Le Bar at Four Seasons George V").
+  const GENERIC_BAR_TAIL = /\bat\s+(Le\s+Bar|The\s+Bar|the\s+Lobby\s+Bar|the\s+Lobby|the\s+Rooftop(?:\s+Bar)?|the\s+Hotel\s+Bar)\s*$/i;
+  const decorateItemName = (item: PayableItem): string => {
+    const hotelName = hotelSelection?.name;
+    if (!hotelName || item.type === 'hotel') return item.name;
+    const name = item.name || '';
+    if (GENERIC_BAR_TAIL.test(name) && !name.toLowerCase().includes(hotelName.toLowerCase())) {
+      return `${name} at ${hotelName}`;
+    }
+    return name;
+  };
+
   const renderPayableItem = (item: PayableItem) => {
     const isPaid = item.payment?.status === 'paid';
     const assignedMembers = item.assignedMemberIds
