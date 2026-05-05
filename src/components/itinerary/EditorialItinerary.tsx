@@ -169,6 +169,7 @@ import { AISavedNotes } from '@/components/itinerary/AISavedNotes';
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 import SortableFlightLegCards from './SortableFlightLegCards';
 import { resolveDropTarget } from './budgetDropResolver';
+import { resolveLiveActivity } from './activityRemoveResolver';
 
 // =============================================================================
 // BOARDING PASS VIEW BUTTON (inline helper)
@@ -6646,18 +6647,34 @@ export function EditorialItinerary({
             hotelSelection={hotelSelection}
             journeyId={journeyId}
             journeyName={journeyName}
-            onActivityRemove={(activityId) => {
-              // Remove the activity from itinerary days when deleted from budget
-              setDays(prev => {
-                const updated = prev.map(day => ({
-                  ...day,
-                  activities: day.activities.filter(act => act.id !== activityId),
-                }));
+            onActivityRemove={(activityId, displayName) => {
+              // Validate the id against the live itinerary BEFORE mutating.
+              // A stale id (post-regen) used to silently no-op while still
+              // firing a success toast — see activityRemoveResolver.ts.
+              const resolved = resolveLiveActivity(days as any, activityId);
+              if (!resolved.found) {
+                toast.error(
+                  "Couldn't drop — that item is no longer in your itinerary. The list may have been regenerated."
+                );
+                return;
+              }
+              const title = resolved.title || displayName || 'activity';
+              if (typeof window !== 'undefined') {
+                const ok = window.confirm(
+                  `Remove "${title}" from your itinerary?\n\nThis can't be undone from this screen.`
+                );
+                if (!ok) return;
+              }
+              setDays((prev) => {
+                const updated = prev.map((day, idx) => {
+                  if (idx !== resolved.dayIdx) return day;
+                  return { ...day, activities: day.activities.filter((a) => a.id !== activityId) };
+                });
                 syncBudgetFromDays(updated);
                 return updated;
               });
               setHasChanges(true);
-              toast.success('Activity removed from itinerary');
+              toast.success(`Removed "${title}" from itinerary`);
             }}
             onApplyBudgetSwap={async (suggestion) => {
               // ─── DROP path ──────────────────────────────────────────
