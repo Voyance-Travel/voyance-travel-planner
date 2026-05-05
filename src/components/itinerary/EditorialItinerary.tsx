@@ -6625,6 +6625,9 @@ export function EditorialItinerary({
             travelers={travelers}
             totalDays={days.length}
             isManualMode={isManualMode}
+            tripStatus={itineraryStatus ?? null}
+            generationFailureReason={generationFailureReason ?? null}
+            onRegenerate={handleRegenerateItinerary}
             itineraryDays={days}
             hasHotel={
               !!(hotelSelection?.pricePerNight || hotelSelection?.name) ||
