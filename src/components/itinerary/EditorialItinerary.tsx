@@ -6661,32 +6661,47 @@ export function EditorialItinerary({
             }}
             onApplyBudgetSwap={async (suggestion) => {
               // ─── DROP path ──────────────────────────────────────────
-              // Deep-cuts mode may return swap_type === 'drop'. Remove
-              // the activity entirely and resync the budget — same path
-              // as a manual delete from the budget list.
+              // Match by activity_id ACROSS ALL DAYS (not just
+              // suggestion.day_number, which can be stale) and verify
+              // the live title still loosely matches current_item so a
+              // recycled UUID can never wipe an unrelated activity.
               if (suggestion.swap_type === 'drop') {
-                let dropped = false;
+                const resolved = resolveDropTarget(days as any, suggestion as any);
+                if (!resolved.ok) {
+                  if (resolved.error === 'not-found') {
+                    toast.error("Couldn't drop — item is no longer in your itinerary.");
+                  } else {
+                    toast.error("Couldn't drop — that suggestion no longer matches your itinerary. Refresh suggestions.");
+                  }
+                  return false;
+                }
+
+                const { dayIdx, activity: foundActivity } = resolved;
+                const targetId = suggestion.activity_id;
                 let updatedDays: typeof days = [];
                 setDays((prev) => {
-                  const updated = prev.map((day) => {
-                    if (day.dayNumber !== suggestion.day_number) return day;
-                    const next = day.activities.filter((a) => a.id !== suggestion.activity_id);
-                    if (next.length !== day.activities.length) dropped = true;
-                    return { ...day, activities: next };
+                  const updated = prev.map((day, idx) => {
+                    if (idx !== dayIdx) return day;
+                    return { ...day, activities: day.activities.filter((a) => a.id !== targetId) };
                   });
                   updatedDays = updated;
                   return updated;
                 });
-                if (dropped && updatedDays.length > 0) {
+                if (updatedDays.length > 0) {
                   syncBudgetFromDays(updatedDays);
                   setHasChanges(true);
                   queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
                   queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
                   queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
+                  const savedAmount = (suggestion.savings || 0) * (travelers || 1);
+                  toast.success(
+                    `Dropped "${foundActivity.title || 'activity'}" — saved ${formatCurrency(savedAmount)}`
+                  );
                   return true;
                 }
                 return false;
               }
+
 
               // ─── SWAP path (default) ───────────────────────────────
               // suggestion.new_cost is in CENTS from the edge function.
