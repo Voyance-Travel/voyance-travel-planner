@@ -247,6 +247,36 @@ At least your TOP ${Math.min(overrunEntries.length + 1, 4)} suggestions MUST tar
       ? `\nANCHOR ACTIVITY IDS — never drop these (signature experiences):\n${anchor_activity_ids.map((id) => `  • ${id}`).join("\n")}`
       : "";
 
+    // ─── COVERAGE CONTRACT ─────────────────────────────────────────
+    // Sum of positive-cost, non-anchor, non-protected, non-logistics
+    // candidates. The model is asked to deliver savings ≥ min(gap, 70%
+    // of discretionary). Without this the model returns 5–8 small swaps
+    // that never close a $2k+ overrun.
+    let discretionaryCents = 0;
+    for (const day of filteredDays) {
+      for (const a of day.activities) {
+        if (typeof a.cost !== "number" || !(a.cost > 0)) continue;
+        if (anchorIdSet.has(String(a.id))) continue;
+        if (isPlaceholderPre(a.title)) continue;
+        discretionaryCents += a.cost;
+      }
+    }
+    const targetSavingsCents = Math.min(
+      gap_cents,
+      Math.round(discretionaryCents * 0.7),
+    );
+    const targetSavingsUnits = Math.round(targetSavingsCents / 100);
+
+    // Adaptive suggestion count: bigger gaps need more suggestions to be
+    // capable of summing to the target.
+    let countLow = 5, countHigh = 8;
+    if (deepCutsMode) {
+      if (gap_cents >= 250000) { countLow = 16; countHigh = 24; }
+      else if (gap_cents >= 100000) { countLow = 12; countHigh = 18; }
+      else { countLow = 8; countHigh = 12; }
+    }
+    const countRange = `${countLow}-${countHigh}`;
+
     const deepCutsClause = deepCutsMode
       ? `\n\nDEEP-CUTS MODE (gap is too large for swap-only):
 The user is ${currency} ${(gap_cents / 100).toFixed(0)} over a ${currency} ${(current_total_cents / 100).toFixed(0)} total. Swap-only suggestions cannot realistically close this gap.
@@ -257,9 +287,14 @@ Drop rules:
   • NEVER drop hotel/accommodation, flights, check-in/out, bag-drop, transfers, anchor IDs (above), or items in protected categories.
   • NEVER drop the only meal of a meal-slot (the only breakfast on a day, the only dinner, etc.). Dropping a second optional meal/drink stop is fine.
   • Prefer dropping: nightcaps, optional museums beyond the daily anchor, paid sightseeing duplicates, secondary tours, premium add-ons.
-  • Aim for at most 1 drop per day.
-Return 8-12 suggestions in this mode, mixing drops and swaps. Rank by absolute savings.${anchorIdList}`
+  • Up to 2 drops per day are acceptable when needed to hit the coverage target.
+Return ${countRange} suggestions in this mode, mixing drops and swaps. Rank by absolute savings.${anchorIdList}`
       : "";
+
+    const coverageClause = `\n\nCOVERAGE CONTRACT (HARD REQUIREMENT):
+The sum of \`savings\` across your returned suggestions MUST be >= ${currency} ${targetSavingsUnits}.
+That is the user's gap (${currency} ${(gap_cents / 100).toFixed(0)}) capped at 70% of their discretionary spend (${currency} ${Math.round(discretionaryCents / 100)}).
+If swaps alone can't reach this number, ${deepCutsMode ? "use `drop` suggestions on optional discretionary items (nightcaps, secondary museums, duplicate sightseeing, premium add-ons) to make up the difference" : "you should still return cheaper swaps for every paid discretionary item you can"}. Returning fewer suggestions to "stay safe" is the worst possible outcome — under-coverage leaves the user with no actionable path.`;
 
     const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. ${deepCutsMode ? "When the gap is large you may also suggest dropping non-anchor optional activities." : "You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience."}
 
@@ -276,7 +311,7 @@ CRITICAL COST RULES:
 - If no reference pricing is available for a swap, use the lowest reasonable amount from the reference data for that category.
 - For swap_type="swap" the new_cost MUST be strictly LESS than current_cost. For swap_type="drop" new_cost MUST be 0.
 - All costs are in whole currency units (e.g., 50 for $50), NOT cents.
-- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}${deepCutsClause}`;
+- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}${deepCutsClause}${coverageClause}`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
@@ -285,7 +320,7 @@ Here is the full itinerary (items in protected categories have been removed):
 ${itinerarySummary}
 ${costRefLookup}
 
-Suggest ${deepCutsMode ? "8-12" : "5-8"} specific cost-cutting changes. For each:
+Suggest ${countRange} specific cost-cutting changes whose combined savings reach AT LEAST ${currency} ${targetSavingsUnits}. For each:
 1. Identify the expensive item (name + current cost)
 2. Choose swap_type: "swap" (default), ${deepCutsMode ? '"drop" (deep-cuts mode), or "consolidate"' : 'only "swap" is allowed'}.
 3. For swaps: suggest a cheaper alternative that gives a similar experience; new_cost MUST come from reference pricing.
