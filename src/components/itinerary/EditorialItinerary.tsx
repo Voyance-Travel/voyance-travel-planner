@@ -11350,6 +11350,11 @@ function ActivityRow({
                   estimatedCost={cost}
                   onPaymentRequest={onPaymentRequest}
                   onStateChange={onBookingStateChange}
+                  onAskConcierge={
+                    onOpenConcierge
+                      ? () => onOpenConcierge!(activity, dayIndex, activityIndex)
+                      : undefined
+                  }
                   compact
                 />
               </>
