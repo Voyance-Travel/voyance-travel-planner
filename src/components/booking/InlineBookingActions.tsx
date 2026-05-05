@@ -215,6 +215,7 @@ export function InlineBookingActions({
   estimatedCost = 0,
   onPaymentRequest,
   onStateChange,
+  onAskConcierge,
   showVendorLink = true,
   compact = false,
 }: InlineBookingActionsProps) {
