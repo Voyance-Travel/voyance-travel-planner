@@ -264,7 +264,10 @@ export function isPlaceholderMeal(activity: any, cityName: string): boolean {
 }
 
 // =============================================================================
-// GENERIC VENUE TEMPLATE POOL — for cities without fallback data
+// GENERIC VENUE TEMPLATE POOL — DEPRECATED
+// Kept for back-compat with day-validation legacy paths and tests, but no
+// runtime path should ever ship these names to the user. Both nuclearPlaceholderSweep
+// and day-validation TRY 3 now recycle real fallback-DB venues or mark unverified.
 // =============================================================================
 export const GENERIC_VENUE_TEMPLATES: Record<string, string[]> = {
   breakfast: [
