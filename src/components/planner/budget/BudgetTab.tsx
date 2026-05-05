@@ -377,7 +377,57 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     enabled: !!tripId && hasBudget,
   });
 
-  // Budget ledger is now derived from activity_costs (single source of truth).
+  // ─── Unified payable items (mirror PaymentsTab so the All Costs list and
+  //     the Payments list always agree on count, naming, and groupings) ───
+  const { data: activityCostsForList } = useQuery({
+    queryKey: ['activity-costs-payable', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('activity_costs')
+        .select('cost_per_person_usd, num_travelers, category, day_number, activity_id')
+        .eq('trip_id', tripId);
+      return data || [];
+    },
+    enabled: !!tripId,
+  });
+
+  const { data: tripInclusion } = useQuery({
+    queryKey: ['trip-inclusion-toggles', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('trips')
+        .select('budget_include_hotel, budget_include_flight')
+        .eq('id', tripId)
+        .single();
+      return {
+        includeHotel: data?.budget_include_hotel ?? true,
+        includeFlight: data?.budget_include_flight ?? false,
+      };
+    },
+    enabled: !!tripId,
+  });
+
+  const { items: payableItems, essentialItems, activityItems } = usePayableItems({
+    days: itineraryDays || [],
+    flightSelection,
+    hotelSelection,
+    travelers,
+    payments,
+    activityCosts: activityCostsForList,
+    budgetTier,
+    destination,
+    destinationCountry,
+    paymentsLoaded: true,
+    includeHotel: tripInclusion?.includeHotel ?? true,
+    includeFlight: tripInclusion?.includeFlight ?? false,
+  });
+
+  const unifiedCostList = useMemo<PayableItem[]>(
+    () => [...essentialItems, ...activityItems],
+    [essentialItems, activityItems]
+  );
+  const hiddenFreeCount = Math.max(0, ledger.length - unifiedCostList.length);
+
   // No separate sync needed — activity_costs are written by EditorialItinerary's syncBudgetFromDays.
 
   // Hotel/flight costs are now synced to activity_costs via budgetLedgerSync
