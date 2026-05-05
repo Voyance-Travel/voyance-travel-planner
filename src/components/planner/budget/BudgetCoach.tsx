@@ -267,19 +267,57 @@ export function BudgetCoach({
     return ids;
   }, [itineraryDays]);
 
+  // ─── Suggestable activity detection ─────────────────────────────
+  // Hotels/flights/check-in-out/return-to-hotel/free-or-zero-cost rows are
+  // never candidates for swap or drop suggestions. Without this guard the
+  // coach is happy to call AI against an empty or hotel-only itinerary and
+  // hallucinate restaurants from prior generations (phantom suggestions).
+  const GENERIC_TITLE_RE = /^(breakfast|lunch|dinner|brunch|meal|activity|activities|transport|transit|hotel|accommodation|untitled)\s*(\(|-|–|—|$)/i;
+  const isGenericTitle = useCallback((t?: string) => {
+    const s = (t || '').trim();
+    if (!s) return true;
+    if (/^(activity|untitled|tbd|n\/a)$/i.test(s)) return true;
+    return GENERIC_TITLE_RE.test(s);
+  }, []);
+  const NON_SUGGESTABLE_CATS = new Set([
+    'hotel', 'accommodation', 'lodging', 'stay', 'flight', 'flights',
+    'check-in', 'check-out', 'checkin', 'checkout', 'bag-drop', 'bag drop',
+    'departure', 'arrival',
+  ]);
+  const NON_SUGGESTABLE_TITLE_RE = /\b(check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|back\s+to\s+(?:your\s+)?hotel|freshen\s*up\s+at\s+(?:your\s+)?hotel|hotel\s+checkout|hotel\s+check-?in)\b/i;
+  const activityCostCentsLocal = (a: ItineraryActivity): number => {
+    if (typeof a.cost === 'number' && Number.isFinite(a.cost)) return Math.max(0, Math.round(a.cost * 100));
+    if (a.cost && typeof a.cost === 'object' && Number.isFinite((a.cost as any).amount)) {
+      return Math.max(0, Math.round((a.cost as any).amount * 100));
+    }
+    return 0;
+  };
+  const isSuggestable = useCallback((a: ItineraryActivity): boolean => {
+    if (!a?.id) return false;
+    if (a.isLocked) return false;
+    const cat = `${a.category || ''} ${a.type || ''}`.toLowerCase().trim();
+    if ([...NON_SUGGESTABLE_CATS].some((c) => cat.includes(c))) return false;
+    const title = (a.title || a.name || '').trim();
+    if (NON_SUGGESTABLE_TITLE_RE.test(title)) return false;
+    if (isGenericTitle(title)) return false;
+    if (activityCostCentsLocal(a) <= 0) return false;
+    return true;
+  }, [isGenericTitle]);
+
+  const suggestableActivityIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const day of itineraryDays) {
+      for (const a of day.activities) {
+        if (isSuggestable(a)) ids.push(a.id);
+      }
+    }
+    return ids;
+  }, [itineraryDays, isSuggestable]);
+  const suggestableCount = suggestableActivityIds.length;
+
   // Build the payload activities in the format the edge function expects
   // Exclude locked activities — they should not be suggested for swaps
   const buildPayloadDays = useCallback(() => {
-    // Reject placeholder/generic titles that the coach cannot meaningfully swap
-    // (e.g. "Dinner (Day 2)", "transport (Day 2)", "Activity"). Targeting these
-    // produces phantom suggestions because the AI has nothing concrete to anchor to.
-    const GENERIC_TITLE_RE = /^(breakfast|lunch|dinner|brunch|meal|activity|activities|transport|transit|hotel|accommodation|untitled)\s*(\(|-|–|—|$)/i;
-    const isGenericTitle = (t?: string) => {
-      const s = (t || '').trim();
-      if (!s) return true;
-      if (/^(activity|untitled|tbd|n\/a)$/i.test(s)) return true;
-      return GENERIC_TITLE_RE.test(s);
-    };
     return itineraryDays.map((day) => ({
       dayNumber: day.dayNumber,
       date: day.date,
