@@ -1121,3 +1121,41 @@ export function enforceRequiredMealsFinalGuard(
 
   return { activities: result, injectedMeals: missing, alreadyCompliant: false };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMPTY ITINERARY DETECTION
+// Mirror of NON_ACTIVITY_CATS / NON_ACTIVITY_TITLE_RE in
+// src/components/planner/budget/BudgetTab.tsx — keep these in sync.
+// Returns the count of "meaningful" activities (excluding hotel stays,
+// flights, check-in/out, bag drop, airport transfers, return-to-hotel, etc.).
+// Used as a presentation gate before saving itinerary_status='ready'.
+// ─────────────────────────────────────────────────────────────────────────────
+const EMPTY_NON_ACTIVITY_CATS = [
+  'hotel', 'accommodation', 'lodging', 'stay', 'flight', 'flights',
+  'check-in', 'check-out', 'checkin', 'checkout', 'bag-drop', 'departure', 'arrival',
+];
+const EMPTY_NON_ACTIVITY_TITLE_RE = /\b(check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|hotel\s+checkout|hotel\s+check-?in|airport\s+transfer|departure)\b/i;
+
+export function countMeaningfulActivities(days: any[]): {
+  meaningfulCount: number;
+  dayCount: number;
+  daysWithZeroMeaningful: number[];
+} {
+  let meaningfulCount = 0;
+  const daysWithZero: number[] = [];
+  const dayList = Array.isArray(days) ? days : [];
+  for (const day of dayList) {
+    const acts = Array.isArray(day?.activities) ? day.activities : [];
+    let dayMeaningful = 0;
+    for (const a of acts) {
+      const cat = `${a?.category || ''} ${a?.type || ''}`.toLowerCase();
+      const title = String(a?.title || a?.name || '').trim();
+      if (EMPTY_NON_ACTIVITY_CATS.some((c) => cat.includes(c))) continue;
+      if (EMPTY_NON_ACTIVITY_TITLE_RE.test(title)) continue;
+      dayMeaningful++;
+    }
+    if (dayMeaningful === 0) daysWithZero.push(Number(day?.dayNumber) || 0);
+    meaningfulCount += dayMeaningful;
+  }
+  return { meaningfulCount, dayCount: dayList.length, daysWithZeroMeaningful: daysWithZero };
+}
