@@ -85,8 +85,21 @@ interface InlineBookingActionsProps {
   estimatedCost?: number;
   onPaymentRequest?: (activityId: string) => void;
   onStateChange?: (activityId: string, newState: BookingItemState) => void;
+  /** Open AI Concierge sheet for this activity (used as concierge-led booking fallback) */
+  onAskConcierge?: () => void;
   showVendorLink?: boolean;
   compact?: boolean;
+}
+
+/** Hostnames that indicate an OTA, not the venue's own site. */
+const OTA_HOST_RE = /viator\.com|getyourguide\.com|tripadvisor\.com|tiqets\.com|klook\.com|booking\.com|expedia\./i;
+
+function prettyHostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return 'official site';
+  }
 }
 // Activity types that cannot be booked on Viator (dining, restaurants, etc.)
 const DINING_KEYWORDS = ['dinner', 'lunch', 'breakfast', 'brunch', 'dining', 'restaurant', 'cafe', 'coffee', 'meal', 'eat at', 'food tour'];
