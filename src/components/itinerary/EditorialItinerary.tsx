@@ -1384,30 +1384,33 @@ export function EditorialItinerary({
         }
       }
 
-      if (activitiesForCostTable.length > 0) {
-        try {
+      // ALWAYS run cleanup against the FULL live activity id set, even if no
+      // positive-cost rows were synced. This drops cost rows from prior
+      // generations (e.g. Ob-La-Di / La Méditerranée from an earlier itinerary
+      // version) that no longer exist on the live Itinerary tab — which is
+      // the root cause of phantom Budget Coach suggestions and Payments rows.
+      try {
+        if (activitiesForCostTable.length > 0) {
           const synced = await syncActivitiesToCostTable(tripId, activitiesForCostTable);
           console.log(`[EditorialItinerary] Synced ${synced}/${activitiesForCostTable.length} activity costs`);
-          
-          // Clean up orphaned rows (stale activities no longer in the itinerary)
-          const currentIds = activitiesForCostTable.map(a => a.id);
-          const cleaned = await cleanupRemovedActivityCosts(tripId, currentIds);
-          if (cleaned > 0) {
-            console.log(`[EditorialItinerary] Cleaned ${cleaned} orphaned cost rows`);
-          }
-          
-           // Notify subscribers WITHOUT an optimistic total. Sending an
-           // optimistic total here briefly replaced the snapshot total, which
-           // then "snapped back" to the DB-derived total a beat later — that
-           // back-and-forth was being interpreted as a >25% delta and surfaced
-           // as the persistent "Reconciling…" / "just now" indicator on
-           // Payments. The canonical refetch below is the source of truth.
-           window.dispatchEvent(new CustomEvent('booking-changed', {
-             detail: { tripId }
-           }));
-        } catch (err) {
-          console.error('[EditorialItinerary] Activity cost sync failed:', err);
         }
+
+        const cleaned = await cleanupRemovedActivityCosts(tripId, liveActivityIds);
+        if (cleaned > 0) {
+          console.log(`[EditorialItinerary] Cleaned ${cleaned} orphaned cost rows (live ids: ${liveActivityIds.length})`);
+        }
+
+         // Notify subscribers WITHOUT an optimistic total. Sending an
+         // optimistic total here briefly replaced the snapshot total, which
+         // then "snapped back" to the DB-derived total a beat later — that
+         // back-and-forth was being interpreted as a >25% delta and surfaced
+         // as the persistent "Reconciling…" / "just now" indicator on
+         // Payments. The canonical refetch below is the source of truth.
+         window.dispatchEvent(new CustomEvent('booking-changed', {
+           detail: { tripId }
+         }));
+      } catch (err) {
+        console.error('[EditorialItinerary] Activity cost sync failed:', err);
       }
     });
   }, [tripId, queryClient, travelers, creationSource]);
