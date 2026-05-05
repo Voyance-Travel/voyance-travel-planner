@@ -1,79 +1,81 @@
 
-Two breakfast issues, two fixes.
+For luxury activities the "Booking Required" badge today drops users into a Viator search box (or nothing). When we already have the venue's official website from Google Places enrichment, we should send the user straight there with a clear, branded CTA. Viator becomes a *secondary* fallback, never the only option.
 
-## Issue 1 — Day 1 has no breakfast on morning arrivals
+## Root cause
 
-`meal-policy.ts:143` only requires breakfast on Day 1 if `arrivalMins < 540` (i.e. before 9:00 AM). Most "morning arrivals" (9:00–12:00) drop straight into lunch + dinner.
+In `src/components/booking/InlineBookingActions.tsx` MODE 2 (`not_selected` + `vendor_booking`):
+- We pass `actualBookingUrl = activity.externalBookingUrl || activity.bookingUrl || activity.website` into `VendorBookingLink`.
+- But `VendorBookingLink.detectVendorFromUrl` (`src/components/booking/VendorBookingLink.tsx:78–84`) treats *any unknown host* as "viator" → button label reads **"View on Viator"** even when the underlying URL is `louvre.fr` / `septime-charonne.fr`.
+- When no direct URL exists, the same component generates a hash-bucketed Viator/GetYourGuide *search query* — exactly the "budget-oriented fallback" the user is complaining about.
 
-**Fix:** raise the threshold to `arrivalMins < 630` (10:30 AM). Travelers arriving before 10:30 AM still have a real morning window for a café/coffee + croissant before checking in. After 10:30, keep current behavior (lunch + dinner only).
+## Fix
 
-```ts
-// meal-policy.ts ~line 143
-const meals: RequiredMeal[] = arrivalMins < 630
-  ? ['breakfast', 'lunch', 'dinner']
-  : ['lunch', 'dinner'];
+### 1. Promote official-site CTA in `InlineBookingActions.tsx`
+
+In MODE 2 / `not_selected` (lines ~424–446), branch BEFORE falling to `VendorBookingLink`:
+
+```tsx
+// New: prefer official venue site
+const officialUrl = activity.website || activity.externalBookingUrl || activity.bookingUrl;
+const isOTA = officialUrl && /viator\.com|getyourguide\.com|tripadvisor\.com|tiqets\.com|klook\.com|booking\.com/i.test(officialUrl);
+
+if (officialUrl && !isOTA) {
+  return (
+    <OfficialBookingLink url={officialUrl} estimatedPrice={price} currency={activity.currency} />
+  );
+}
 ```
 
-This keeps late-morning arrivals realistic (no forced breakfast at 11:30) but covers genuine early arrivals.
+`OfficialBookingLink` (new tiny component, same file or sibling): renders a primary-tinted button **"Reserve on {hostname}"** (e.g. "Reserve on louvre.fr"), `ExternalLink` icon, optional `~price` on desktop. Uses `new URL(url).hostname.replace(/^www\./,'')` for label.
 
-## Issue 2 — "Café Matinal" placeholder reached the user
+### 2. Fix vendor detection + label fallback in `VendorBookingLink.tsx`
 
-Two emergency code paths ship stub names instead of real venues:
+`detectVendorFromUrl` currently returns `'viator'` for unknown hosts — change so unknown hosts return `null` and the button label falls back to **"Reserve on {hostname}"** instead of "View on Viator". This makes the existing component honest even where it's still in the path.
 
-- `fix-placeholders.ts:269–296` — `GENERIC_VENUE_TEMPLATES` ("Café Matinal", "Bistrot du Marché", …) used by `nuclearPlaceholderSweep` when `getRandomFallbackRestaurant` returns null.
-- `day-validation.ts:1066–1088` — TRY 3 falls to the same template pool, then to a hardcoded `emergencyNames.breakfast = 'Café Matinal'`.
+### 3. Replace Viator-only search fallback with concierge-led lookup
 
-For supported cities (Paris, Rome, Berlin, Barcelona, London, Lisbon) this should never trigger — but it does when the per-day `usedNames` Set overlaps the pool too aggressively, or when blocked-restaurants seeding exhausts the pool.
+When there is NO direct URL AND NO Viator product (current line 425+ branch with `canShowViatorLink`), instead of `VendorBookingLink` doing a Viator search, render:
 
-**Fix:** make both emergency paths recycle a real venue from the fallback DB before ever using a generic template name.
+```tsx
+<button onClick={() => onAskConcierge?.('Find me the official reservation link for ' + activity.title)}>
+  <Sparkles /> Find official booking link
+</button>
+```
 
-### A. `fix-placeholders.ts` — `nuclearPlaceholderSweep`
+Plus a small text link: "or browse tours" → opens GetYourGuide search (not Viator) as a secondary option, since the user is for-luxury looking for unique experiences not the typical Viator catalogue.
 
-Already calls `getRandomFallbackRestaurant(..., ignoreUsed=true)` — but if the city isn't in the inline DB, falls to template. Add a second pass: if the template would name "Café Matinal" / "Bistrot du Marché" / etc., refuse and instead leave the activity flagged with `__needs_breakfast_swap = true` and mark `description` with a clear "We couldn't find a verified breakfast spot here — tap to suggest one." string. This keeps the UI honest rather than fake.
+The concierge prompt routes through the existing AI Concierge sheet (`onAskConcierge` prop already exists on the row — wire it through `InlineBookingActions` props).
 
-### B. `day-validation.ts` — TRY 3
+### 4. Server-side defensive: surface Places website on `bookingUrl` when no Viator match
 
-Replace the GENERIC_VENUE_TEMPLATES fallback + hardcoded emergency block (lines 1066–1088) with:
+In `supabase/functions/generate-itinerary/venue-enrichment.ts` ~line 691: when `venueData.website` is set AND there was no Viator match, also copy it to `(enriched as any).bookingUrl` so any downstream code that only reads `bookingUrl` still gets a real link. Keep `website` separate for the "official site" check above.
 
 ```ts
-// TRY 3: Recycle a fallback DB venue (allow repeats) before any generic template
-if (!venueName) {
-  const recycled = getRandomFallbackRestaurant(destination, mealType, new Set(), /*ignoreUsed*/ true);
-  if (recycled) {
-    venueName = `${label} at ${recycled.name}`;
-    venueAddress = recycled.address || `${recycled.name}, ${destination}`;
-    venueDescription = recycled.description || `${label} at ${recycled.name}`;
-    usedRealVenue = true;
-    console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Recycling fallback DB venue "${recycled.name}" for ${mealType} (pool exhausted with unique names)`);
+if (venueData.website) {
+  enriched.website = venueData.website;
+  if (!(enriched as any).bookingUrl && !(enriched as any).viatorProductCode) {
+    (enriched as any).bookingUrl = venueData.website;
   }
 }
-
-// TRY 4 (true last resort, only if city has no DB at all): mark as unverified
-if (!venueName) {
-  venueName = `${label} — find a local spot`;
-  venueAddress = destination;
-  venueDescription = `We couldn't verify a ${mealType} venue in our local database. Tap to ask the assistant for a suggestion.`;
-  console.error(`[MEAL FINAL GUARD] Day ${dayNumber}: NO fallback DB for ${destination} — left unverified slot for ${mealType}`);
-}
 ```
 
-This eliminates "Café Matinal" / "Bistrot du Marché" as user-visible names entirely.
+### 5. Memory
 
-### C. Deprecate `GENERIC_VENUE_TEMPLATES` (defensive)
-
-Keep the export (test depends on it) but stop calling it from `nuclearPlaceholderSweep`. Replace template-pool use there with the same recycle-or-mark-unverified pattern. Add a comment marking the export deprecated.
+Add `mem://features/booking/booking-cta-priority` describing the priority chain:
+**Viator-API product → Official venue site (Places `website`) → Concierge lookup → GetYourGuide search (last resort).**
 
 ## Files
 
-- `supabase/functions/generate-itinerary/meal-policy.ts` — raise breakfast threshold to 10:30 AM
-- `supabase/functions/generate-itinerary/day-validation.ts` — replace TRY 3 emergency block with recycle-then-unverified
-- `supabase/functions/generate-itinerary/fix-placeholders.ts` — `nuclearPlaceholderSweep` no longer falls to templates; uses recycle-or-mark-unverified
-- `mem://core` — update Meal Rules entry: "Arrival day breakfast required if arrival < 10:30; emergency template names ('Café Matinal' etc.) banned — recycle real venues."
+- `src/components/booking/InlineBookingActions.tsx` — promote official-site CTA, replace Viator search fallback with concierge prompt + GYG secondary link, add `onAskConcierge` prop
+- `src/components/booking/VendorBookingLink.tsx` — fix `detectVendorFromUrl` to return `null` for unknown hosts; new "Reserve on {hostname}" label fallback
+- `src/components/itinerary/EditorialItinerary.tsx` — pass `onAskConcierge` callback through to `InlineBookingActions` (use existing concierge open handler)
+- `supabase/functions/generate-itinerary/venue-enrichment.ts` — copy Places website into `bookingUrl` when no Viator match
+- `mem://features/booking/booking-cta-priority` — new memory + index entry
 
 ## Out of scope
 
-- No new fallback DB entries (Paris already has 10 breakfasts).
-- No re-rendering of existing trips — applies to next regen only.
-- Dinner / lunch fallbacks unchanged (same pattern works for them; same fix applies because both code paths handle all meal types — the fix is mealType-agnostic).
+- No new affiliate program signup or commission rework.
+- Hotel/flight booking flows untouched (already use Booking.com / direct vendor).
+- Existing Viator-API-bookable items (with productCode) keep current "Book Now" instant flow — we only change the *fallback* path.
 
 Approve?
