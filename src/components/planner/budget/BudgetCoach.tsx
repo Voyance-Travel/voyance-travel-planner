@@ -541,6 +541,21 @@ export function BudgetCoach({
   const dismissedRecently = bumpDismissedAtTotal !== null && currentTotalCents <= bumpDismissedAtTotal * 1.10;
   const showBumpCta = !!onBumpBudget && isMaterialOverrun && foodSharePct >= 45 && hasLuxuryAnchor && !dismissedRecently && !isNowOnTarget;
 
+  // ─── Honest restructuring panel ───────────────────────────────
+  // When suggested swaps fundamentally can't bridge the gap, surface
+  // structural options instead of leaving the user with a passive amber line.
+  const coveragePct = gapCents > 0 && totalPotentialSavings > 0
+    ? totalPotentialSavings / gapCents
+    : 0;
+  const restructureBumpTargetCents = Math.ceil((currentTotalCents * 1.02) / 50000) * 50000;
+  const showRestructurePanel =
+    !isLoading &&
+    !isNowOnTarget &&
+    !showBumpCta &&
+    visibleSuggestions.length > 0 &&
+    gapCents > currentTotalCents * 0.10 &&
+    coveragePct < 0.5;
+
   const dismissBump = () => {
     setBumpDismissedAtTotal(currentTotalCents);
     try { window.localStorage.setItem(bumpDismissKey, String(currentTotalCents)); } catch { /* ignore */ }
