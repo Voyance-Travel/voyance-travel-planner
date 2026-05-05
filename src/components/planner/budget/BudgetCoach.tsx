@@ -681,7 +681,8 @@ export function BudgetCoach({
   const coveragePct = gapCents > 0 && totalPotentialSavings > 0
     ? totalPotentialSavings / gapCents
     : 0;
-  const restructureBumpTargetCents = Math.ceil((currentTotalCents * 1.02) / 50000) * 50000;
+  // Bump enough to FULLY close the gap (current total + 1%, rounded up to $50).
+  const restructureBumpTargetCents = Math.ceil((currentTotalCents * 1.01) / 5000) * 5000;
   const showRestructurePanel =
     !isLoading &&
     !isNowOnTarget &&
