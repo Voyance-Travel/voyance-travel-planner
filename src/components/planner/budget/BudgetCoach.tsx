@@ -341,7 +341,7 @@ export function BudgetCoach({
           };
         }),
     }));
-  }, [itineraryDays, currency]);
+  }, [itineraryDays, currency, isSuggestable]);
 
   // Tracks the itinerary hash of the LATEST in-flight request. If the
   // itinerary changes again before this request resolves, the response is
