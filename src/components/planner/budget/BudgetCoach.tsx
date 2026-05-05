@@ -664,6 +664,27 @@ export function BudgetCoach({
     gapCents > currentTotalCents * 0.10 &&
     coveragePct < 0.5;
 
+  // ─── Hotel/fixed-cost dominant overrun ───────────────────────
+  // When the hotel alone (or hotel + flights) eats the entire budget,
+  // discretionary swaps cannot bridge the gap. Surface honest structural
+  // options instead of small-dollar suggestions.
+  const fixedCents = (hotelCents || 0) + (flightCents || 0);
+  const hotelOverrunsBudget =
+    !isNowOnTarget && budgetTargetCents > 0 && (hotelCents || 0) >= budgetTargetCents;
+  const fixedDominantOverrun =
+    !isNowOnTarget &&
+    budgetTargetCents > 0 &&
+    gapCents > 0 &&
+    fixedCents > 0 &&
+    fixedCents >= budgetTargetCents * 0.85;
+  const showHotelDominantPanel = hotelOverrunsBudget || fixedDominantOverrun;
+  // Suggested raised budget = current total + 5%, rounded up to nearest $500.
+  const hotelDominantBumpCents = Math.ceil((currentTotalCents * 1.05) / 50000) * 50000;
+  const fixedSharePct = budgetTargetCents > 0
+    ? Math.round((fixedCents / budgetTargetCents) * 100)
+    : 0;
+  const discretionaryRoomCents = Math.max(0, budgetTargetCents - fixedCents);
+
   const dismissBump = () => {
     setBumpDismissedAtTotal(currentTotalCents);
     try { window.localStorage.setItem(bumpDismissKey, String(currentTotalCents)); } catch { /* ignore */ }
