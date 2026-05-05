@@ -451,16 +451,29 @@ export function BudgetCoach({
       categoryOverruns,
       anchorActivityIds,
       gapCents,
+      suggestableCount,
+      suggestableActivityIds,
     ]
   );
 
-  // Auto-fetch on mount if over budget
+  // Auto-fetch on mount if over budget AND there's something to suggest swaps for
   useEffect(() => {
-    if (isOverBudget && !fetchedRef.current && itineraryDays.length > 0) {
+    if (isOverBudget && !fetchedRef.current && suggestableCount > 0) {
       fetchedRef.current = true;
       fetchSuggestions();
     }
-  }, [isOverBudget, itineraryDays.length, fetchSuggestions]);
+  }, [isOverBudget, suggestableCount, fetchSuggestions]);
+
+  // When the itinerary collapses to zero suggestable activities, clear any
+  // existing in-memory suggestions and the module cache so a previous
+  // generation's restaurants can't keep showing as "swap" candidates.
+  useEffect(() => {
+    if (suggestableCount === 0) {
+      setSuggestions([]);
+      suggestionsCache.delete(tripId);
+      fetchedRef.current = false;
+    }
+  }, [suggestableCount, tripId]);
 
   // Re-fetch when protections, dismissals, OR live itinerary content change.
   // The itinerary hash captures id+title+cost so any edit/swap/regen invalidates
@@ -470,13 +483,13 @@ export function BudgetCoach({
   const dismissedKey = dismissedIds.join('|');
   const itineraryContentHash = useMemo(() => hashItinerary(itineraryDays), [itineraryDays]);
   useEffect(() => {
-    if (fetchedRef.current && isOverBudget) {
+    if (fetchedRef.current && isOverBudget && suggestableCount > 0) {
       // Drop the module-level cache entry so a stale list can't be re-served.
       suggestionsCache.delete(tripId);
       fetchSuggestions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [protectionsKey, dismissedKey, itineraryContentHash]);
+  }, [protectionsKey, dismissedKey, itineraryContentHash, suggestableCount]);
 
   // Client-side phantom filter: even if the cache has a suggestion whose
   // activity_id was removed or renamed in the live itinerary, never render it.
