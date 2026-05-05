@@ -636,11 +636,49 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     console.warn('[save-itinerary] Day Brief check failed (non-blocking):', ledgerErr);
   }
 
+  // ── EMPTY-ITINERARY GATE ─────────────────────────────────────
+  // Mirror of the Stage 6 gate in generation-core.ts. Manual / assistant
+  // saves should never produce a 'ready' trip with no real activities.
+  let emptyItineraryDetected = false;
+  try {
+    const { countMeaningfulActivities } = await import('./day-validation.ts');
+    const probe = countMeaningfulActivities((itinerary as any)?.days || []);
+    if (probe.meaningfulCount === 0 && probe.dayCount > 0) {
+      emptyItineraryDetected = true;
+      console.warn(
+        `[save-itinerary] EMPTY ITINERARY DETECTED — meaningfulCount=0, days=${probe.dayCount}, tripId=${tripId}`
+      );
+    }
+  } catch (e) {
+    console.warn('[save-itinerary] empty-itinerary probe failed (non-blocking):', e);
+  }
+
+  let existingMetadataForEmpty: Record<string, any> = {};
+  if (emptyItineraryDetected) {
+    try {
+      const { data: tRow } = await supabase
+        .from('trips')
+        .select('metadata')
+        .eq('id', tripId)
+        .single();
+      existingMetadataForEmpty = (tRow?.metadata as any) || {};
+    } catch {
+      existingMetadataForEmpty = {};
+    }
+  }
+
   // ── STEP 3: PERSIST TO trips.itinerary_data ─────────────────────
   const updatePayload: Record<string, any> = {
     itinerary_data: itinerary,
-    itinerary_status: 'ready',
+    itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
     updated_at: new Date().toISOString(),
+    ...(emptyItineraryDetected && {
+      metadata: {
+        ...existingMetadataForEmpty,
+        generation_failure_reason: 'empty_itinerary',
+        empty_itinerary_detected_at: new Date().toISOString(),
+      },
+    }),
   };
 
   const { error } = await supabase
