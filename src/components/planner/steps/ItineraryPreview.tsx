@@ -148,7 +148,7 @@ function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean })
               </div>
               <div className="flex-1">
                 <p className="font-medium text-foreground">{sanitizeActivityName(activity.title)}</p>
-                <p className="text-sm text-muted-foreground">{activity.description}</p>
+                <p className="text-sm text-muted-foreground">{sanitizeActivityText(activity.description)}</p>
                 {activity.location && (
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <MapPin className="w-3 h-3" />
