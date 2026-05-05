@@ -837,7 +837,7 @@ export function PaymentsTab({
           </div>
           <div className="min-w-0">
             <p className={cn("font-medium text-sm truncate", isPaid && "text-muted-foreground line-through")}>
-              {item.name}
+              {decorateItemName(item)}
             </p>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {item.dayNumber && <span>Day {item.dayNumber}</span>}
