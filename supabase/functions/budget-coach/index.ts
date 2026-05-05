@@ -489,131 +489,140 @@ Rules:
 
     // The AI is instructed to return whole-currency values (e.g. 50 for $50).
     // We simply multiply by 100 to get cents. No heuristic.
-    suggestions = suggestions
-      .map((s: any) => {
-        const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
-        if (rawNew === null || rawNew < 0) return null;
+    const filterSuggestions = (raw: any[]): any[] =>
+      raw
+        .map((s: any) => {
+          const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
+          if (rawNew === null || rawNew < 0) return null;
 
-        const swapType: "swap" | "drop" | "consolidate" =
-          s.swap_type === "drop" || s.swap_type === "consolidate" ? s.swap_type : "swap";
+          const swapType: "swap" | "drop" | "consolidate" =
+            s.swap_type === "drop" || s.swap_type === "consolidate" ? s.swap_type : "swap";
 
-        // POST-FILTER: drop any suggestion targeting a protected or dismissed
-        // activity (model drift safety net — the prompt should prevent this,
-        // but we guard against it anyway).
-        const sid = String(s.activity_id);
+          const sid = String(s.activity_id);
 
-        // ID-MUST-EXIST GUARD: drop hallucinated IDs that aren't in the trip.
-        if (!allValidIds.has(sid)) {
-          console.log(`  → FILTERED OUT (unknown activity_id "${sid}", claimed item: "${s.current_item}")`);
-          return null;
-        }
-
-        if (dismissedSet.has(sid)) {
-          console.log(`  → FILTERED OUT (dismissed activity ${sid})`);
-          return null;
-        }
-        if (protectedActivityIds.has(sid)) {
-          console.log(`  → FILTERED OUT (protected activity ${sid} in ${protected_categories.join(",")})`);
-          return null;
-        }
-
-        // ANCHOR GUARD: drops are never allowed on anchor activities.
-        if (swapType === "drop" && anchorIdSet.has(sid)) {
-          console.log(`  → FILTERED OUT (drop on anchor activity ${sid})`);
-          return null;
-        }
-
-        // DEEP-CUTS GATE: drops/consolidates only accepted in deep-cuts mode.
-        if ((swapType === "drop" || swapType === "consolidate") && !deepCutsMode) {
-          console.log(`  → FILTERED OUT (${swapType} not allowed outside deep-cuts mode for ${sid})`);
-          return null;
-        }
-
-        // PLACEHOLDER-TITLE GUARD: if the real itinerary row is just a generic
-        // placeholder ("Dinner (Day 2)", "transport (Day 2)", "Activity"), the
-        // coach has nothing concrete to swap — reject to avoid phantom suggestions.
-        const realTitle = activityTitleById.get(sid) || "";
-        if (isPlaceholderTitle(realTitle)) {
-          console.log(`  → FILTERED OUT (placeholder real title "${realTitle}" for ${sid})`);
-          return null;
-        }
-
-        // TITLE-MUST-MATCH GUARD: catches the case where the model reuses a
-        // real ID but writes a fabricated current_item for the user-visible card.
-        if (realTitle && s.current_item && !titleMatches(String(s.current_item), realTitle)) {
-          console.log(`  → FILTERED OUT (title mismatch: claimed "${s.current_item}" vs real "${realTitle}")`);
-          return null;
-        }
-
-        // GENERIC NAME FILTER (skip for drops — their swap name is a fixed sentinel)
-        if (swapType !== "drop") {
-          const swapName = (s.suggested_swap || "").toLowerCase();
-          const GENERIC_PATTERNS = [
-            "lower cost", "cheaper", "budget", "affordable", "inexpensive",
-            "alternative option", "similar restaurant", "similar cafe", "similar café",
-            "local eatery", "local restaurant", "local cafe", "local café",
-            "generic", "another option", "different restaurant", "different cafe",
-            "mid-range", "moderately priced", "less expensive", "cost-effective",
-            "economy", "no-frills",
-          ];
-          const isGeneric = GENERIC_PATTERNS.some((p) => swapName.includes(p));
-          if (isGeneric) {
-            console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
+          if (!allValidIds.has(sid)) {
+            console.log(`  → FILTERED OUT (unknown activity_id "${sid}", claimed item: "${s.current_item}")`);
             return null;
           }
-        }
-
-        // Convert AI's whole-currency value to cents (drops force 0)
-        const newCostCents = swapType === "drop" ? 0 : Math.round(rawNew * 100);
-
-        // Use the known activity cost as ground truth (already in cents)
-        const knownCostCents = activityCostCentsById.get(sid);
-        const currentCostCents = knownCostCents ?? Math.round((typeof s.current_cost === "number" ? s.current_cost : 0) * 100);
-
-        console.log(`Suggestion [${swapType}] "${s.suggested_swap}": AI current=${s.current_cost}, AI new=${s.new_cost}, knownCents=${knownCostCents}, newCents=${newCostCents}, currentCents=${currentCostCents}`);
-
-        // STRICT GUARD: for swap/consolidate the new cost must be strictly lower.
-        // For drops, currentCostCents must be > 0 (don't drop free items).
-        if (swapType === "drop") {
-          if (currentCostCents <= 0) {
-            console.log(`  → FILTERED OUT (drop on $0 item ${sid})`);
+          if (dismissedSet.has(sid)) {
+            console.log(`  → FILTERED OUT (dismissed activity ${sid})`);
             return null;
           }
-        } else if (newCostCents >= currentCostCents) {
-          console.log(`  → FILTERED OUT (new ${newCostCents} >= current ${currentCostCents})`);
-          return null;
-        }
+          if (protectedActivityIds.has(sid)) {
+            console.log(`  → FILTERED OUT (protected activity ${sid} in ${protected_categories.join(",")})`);
+            return null;
+          }
+          if (swapType === "drop" && anchorIdSet.has(sid)) {
+            console.log(`  → FILTERED OUT (drop on anchor activity ${sid})`);
+            return null;
+          }
+          if ((swapType === "drop" || swapType === "consolidate") && !deepCutsMode) {
+            console.log(`  → FILTERED OUT (${swapType} not allowed outside deep-cuts mode for ${sid})`);
+            return null;
+          }
 
-        const finalSwap = swapType === "drop"
-          ? "Drop — free time / use saved budget elsewhere"
-          : s.suggested_swap;
+          const realTitle = activityTitleById.get(sid) || "";
+          if (isPlaceholderTitle(realTitle)) {
+            console.log(`  → FILTERED OUT (placeholder real title "${realTitle}" for ${sid})`);
+            return null;
+          }
+          if (realTitle && s.current_item && !titleMatches(String(s.current_item), realTitle)) {
+            console.log(`  → FILTERED OUT (title mismatch: claimed "${s.current_item}" vs real "${realTitle}")`);
+            return null;
+          }
 
-        return {
-          ...s,
-          swap_type: swapType,
-          // Force the rendered title to the real itinerary item so even
-          // a slightly-off AI label can't show a phantom name in the UI.
-          current_item: activityTitleById.get(sid) || s.current_item,
-          suggested_swap: finalSwap,
-          current_cost: currentCostCents,
-          new_cost: newCostCents,
-          savings: currentCostCents - newCostCents,
-        };
-      })
-      .filter(Boolean) as any[];
+          if (swapType !== "drop") {
+            const swapName = (s.suggested_swap || "").toLowerCase();
+            const GENERIC_PATTERNS = [
+              "lower cost", "cheaper", "budget", "affordable", "inexpensive",
+              "alternative option", "similar restaurant", "similar cafe", "similar café",
+              "local eatery", "local restaurant", "local cafe", "local café",
+              "generic", "another option", "different restaurant", "different cafe",
+              "mid-range", "moderately priced", "less expensive", "cost-effective",
+              "economy", "no-frills",
+            ];
+            if (GENERIC_PATTERNS.some((p) => swapName.includes(p))) {
+              console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
+              return null;
+            }
+          }
+
+          const newCostCents = swapType === "drop" ? 0 : Math.round(rawNew * 100);
+          const knownCostCents = activityCostCentsById.get(sid);
+          const currentCostCents = knownCostCents ?? Math.round((typeof s.current_cost === "number" ? s.current_cost : 0) * 100);
+
+          if (swapType === "drop") {
+            if (currentCostCents <= 0) {
+              console.log(`  → FILTERED OUT (drop on $0 item ${sid})`);
+              return null;
+            }
+          } else if (newCostCents >= currentCostCents) {
+            console.log(`  → FILTERED OUT (new ${newCostCents} >= current ${currentCostCents})`);
+            return null;
+          }
+
+          return {
+            ...s,
+            swap_type: swapType,
+            current_item: activityTitleById.get(sid) || s.current_item,
+            suggested_swap: swapType === "drop"
+              ? "Drop — free time / use saved budget elsewhere"
+              : s.suggested_swap,
+            current_cost: currentCostCents,
+            new_cost: newCostCents,
+            savings: currentCostCents - newCostCents,
+          };
+        })
+        .filter(Boolean) as any[];
+
+    let filtered = filterSuggestions(suggestions);
+
+    const sumSavings = (arr: any[]) => arr.reduce((s, x) => s + (x?.savings || 0), 0);
+    let totalSavingsCents = sumSavings(filtered);
+    let coverageRatio = targetSavingsCents > 0 ? totalSavingsCents / targetSavingsCents : 1;
+    let retryAttempted = false;
+
+    // ── Retry once if coverage < 50% in deep-cuts mode ───────────
+    if (deepCutsMode && coverageRatio < 0.5 && filtered.length > 0) {
+      retryAttempted = true;
+      const usedIds = new Set(filtered.map((s: any) => String(s.activity_id)));
+      const usedIdList = [...usedIds].join(", ") || "(none)";
+      const retryUserPrompt = `Your previous suggestions only covered ${Math.round(coverageRatio * 100)}% of the user's gap (${currency} ${(totalSavingsCents / 100).toFixed(0)} of the required ${currency} ${targetSavingsUnits}).
+
+Return a NEW list (do NOT repeat any of these activity_ids: ${usedIdList}) of ${countLow}-${countHigh} additional swaps and drops that, combined with the previous list, reach the coverage target. Drops are STRONGLY preferred for high-cost discretionary items (nightcaps, secondary museums, duplicate sightseeing, premium add-ons). Same itinerary as before:
+
+${itinerarySummary}
+${costRefLookup}`;
+      try {
+        const retryRaw = await callAI(systemPrompt, retryUserPrompt);
+        const retryFiltered = filterSuggestions(retryRaw)
+          .filter((s: any) => !usedIds.has(String(s.activity_id)));
+        filtered = [...filtered, ...retryFiltered];
+        totalSavingsCents = sumSavings(filtered);
+        coverageRatio = targetSavingsCents > 0 ? totalSavingsCents / targetSavingsCents : 1;
+        console.log(`[budget-coach] Retry added ${retryFiltered.length} suggestions; coverage now ${Math.round(coverageRatio * 100)}%`);
+      } catch (retryErr) {
+        console.warn("[budget-coach] Retry failed, returning first-pass suggestions:", retryErr);
+      }
+    }
 
     // Sort by savings desc
-    suggestions.sort((a: any, b: any) => b.savings - a.savings);
+    filtered.sort((a: any, b: any) => b.savings - a.savings);
 
-    console.log(`Returning ${suggestions.length} valid suggestions (deepCutsMode=${deepCutsMode})`);
+    console.log(`[budget-coach] final_count=${filtered.length} total_savings_cents=${totalSavingsCents} target_savings_cents=${targetSavingsCents} coverage_ratio=${coverageRatio.toFixed(2)} discretionary_cents=${discretionaryCents} retry_attempted=${retryAttempted} deepCutsMode=${deepCutsMode}`);
 
     return new Response(
       JSON.stringify({
-        suggestions,
+        suggestions: filtered,
         on_target: false,
         deep_cuts_mode: deepCutsMode,
-        filtered_empty: suggestions.length === 0,
-        no_candidates: suggestions.length === 0,
+        filtered_empty: filtered.length === 0,
+        no_candidates: filtered.length === 0,
+        coverage_ratio: coverageRatio,
+        target_savings_cents: targetSavingsCents,
+        discretionary_cents: discretionaryCents,
+        retry_attempted: retryAttempted,
+        total_savings_cents: totalSavingsCents,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
