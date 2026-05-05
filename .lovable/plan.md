@@ -1,49 +1,44 @@
 ## Problem
 
-In `PaymentsTab.tsx` (line 324), `unpaidAmount` clamps at zero:
+In the "Just Tell Us" chat flow (`supabase/functions/chat-trip-planner/index.ts`), the assistant is heavily incentivized to **call `extract_trip_details` as soon as it can fill the required fields** (`destination`, `startDate`, `endDate`, `travelers`). The system prompt is full of warnings like "NEVER refuse to generate" and "extract immediately" — none of which contemplate the case where the user's request is **open-ended on destination** ("the best and most affordable Four Seasons" — but where?).
 
-```ts
-const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
-```
+What happens today:
+- User says: "best and most affordable Four Seasons."
+- The assistant treats this as solved intent, picks (or echoes) a destination from thin air, gathers dates/travelers, and pushes the user to the confirm-and-pay screen.
+- We never actually **discover** which Four Seasons fits, never present options, never let the user choose. The trip then generates against a destination the user never agreed to.
 
-When recorded payments exceed the itinerary total (e.g. $2,900 paid against a $2,400 hotel-only trip), the UI silently shows "Remaining to pay: $0" with no acknowledgement of the $500 overpayment. The orphaned payment still appears under Recent Payments but the summary never flags the mismatch — confusing for real users.
+This is a trust-breaking bug: we asked "where to?" implicitly via the brand request, then skipped past the answer.
 
 ## Changes
 
-### 1. Compute and surface an `overpaidAmount` — `src/components/itinerary/PaymentsTab.tsx`
+### 1. Add a "Discovery Mode" rule to the system prompt — `supabase/functions/chat-trip-planner/index.ts`
 
-Around line 324:
+Insert a new section near the top of `buildSystemPrompt()` (above the existing "CRITICAL RULES FOR CALLING THE TOOL" block) called **DESTINATION DISCOVERY — DO NOT SKIP**:
 
-```ts
-const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
-const overpaidAmount = Math.max(0, paidAmount - estimatedTotal);
-const isOverpaid = overpaidAmount > 0 && estimatedTotal > 0;
-```
+- If the user's message expresses a **brand / property / experience preference but no concrete destination** ("best Four Seasons", "nicest Aman", "any Michelin-3-star city", "somewhere warm in February", "a wine region we haven't been to"), the assistant MUST enter Discovery Mode.
+- In Discovery Mode the assistant:
+  1. **Does NOT call `extract_trip_details`** even if it could guess a destination.
+  2. Proposes **2–4 specific candidate destinations** that match the stated criteria, with a one-line reason each. Bias toward affordability when "affordable" is mentioned (e.g., for Four Seasons: Marrakech, Bali, Mexico City, Buenos Aires often beat Paris/NYC on rate).
+  3. Asks the user to pick one (or invites them to add criteria like region, climate, length, budget cap).
+- Only after the user **explicitly picks a destination** does the flow proceed to dates/travelers and extraction.
+- The assistant must never invent or assume a destination. "I'll pick one for you" is forbidden.
 
-(The `estimatedTotal > 0` guard prevents flagging an empty itinerary as "overpaid" — that's a different empty-state, not an anomaly.)
+### 2. Tighten the extraction guard — same file, `extract_trip_details` description
 
-### 2. Replace the right-hand summary tile when overpaid (lines 1017–1025)
+Add an explicit precondition to the tool description:
+> "Do NOT call this tool if the user's destination intent is brand/experience-only (e.g. 'best Four Seasons', 'somewhere warm') without a concrete city or region they have agreed to. In that case, propose candidates first and call this tool only after the user selects one."
 
-When `isOverpaid`:
+### 3. Belt-and-braces guard in the system prompt's self-check (lines 126–132)
 
-- Swap icon to `AlertTriangle` in amber.
-- Primary line: `Overpaid by {formatCurrency(overpaidAmount)}` (amber-700).
-- Secondary line (smaller, muted): `Recorded payments exceed itinerary total` with a tooltip: "Some payments may not be linked to current itinerary items. Review Recent Payments to reconcile."
-
-When not overpaid, render the existing "Remaining to pay" tile unchanged.
-
-### 3. Cap the progress bar visually
-
-`progressPercent` already exceeds 100 when overpaid. Keep the calc as-is for accuracy but:
-- Clamp the `<Progress value=...>` (line 1004) to `Math.min(progressPercent, 100)`.
-- When `isOverpaid`, tint the progress bar amber: `[&>div]:bg-amber-500`.
+Add a new self-check item:
+> "0. Did the user actually name a destination they agreed to, or did they only describe a brand/criteria? If only criteria, STOP — go to Discovery Mode. Do not call the tool."
 
 ### 4. Out of scope
 
-- Auto-reconciling orphaned payments (would require linking historical `trip_payments` to deleted/changed activities — separate, larger fix).
-- Editing the Recent Payments list itself.
-- Backend changes to `v_payments_summary` — the data already shows the overpayment correctly; this is a UI surfacing fix.
+- Building a real "Four Seasons inventory + price" lookup. Step 1 just makes the assistant **ask** instead of inventing. A future iteration can wire candidate suggestions to a real hotel/property API.
+- Changing the post-confirm pay flow.
+- Frontend changes — the chat UI already handles assistant-only turns where the tool isn't called; no client work needed.
 
 ## Files touched
 
-- `src/components/itinerary/PaymentsTab.tsx` — ~25 lines changed across the totals computation, summary tile, and progress bar.
+- `supabase/functions/chat-trip-planner/index.ts` — system prompt edits and tool-description tightening (~25–35 added lines, no logic changes).
