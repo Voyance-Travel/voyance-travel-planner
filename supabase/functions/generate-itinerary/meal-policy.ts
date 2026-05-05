@@ -140,7 +140,8 @@ export function deriveMealPolicy(input: MealPolicyInput): MealPolicy {
           buildMealText(meals, 'midday/afternoon arrival'));
       }
       // Before noon — morning arrival, nearly full day
-      const meals: RequiredMeal[] = arrivalMins < 540 ? ['breakfast', 'lunch', 'dinner'] : ['lunch', 'dinner'];
+      // Breakfast required if arrival < 10:30 AM (real morning window for café/coffee).
+      const meals: RequiredMeal[] = arrivalMins < 630 ? ['breakfast', 'lunch', 'dinner'] : ['lunch', 'dinner'];
       return meal('morning_arrival', meals, usableHours,
         buildMealText(meals, 'morning arrival'));
     }

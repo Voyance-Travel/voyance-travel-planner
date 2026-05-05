@@ -1063,29 +1063,27 @@ export function enforceRequiredMealsFinalGuard(
       } catch (_e) { /* fix-placeholders failed, continue */ }
     }
 
-    // TRY 3 (LAST RESORT): Use generic cultural template — NEVER "at a bistro/neighborhood café"
+    // TRY 3: Recycle a real venue from the fallback DB (allow repeats) before any generic template.
+    // We refuse to ship "Café Matinal" / "Bistrot du Marché"-style stubs to the user.
     if (!venueName) {
-      const templates = GENERIC_VENUE_TEMPLATES[mealType] || GENERIC_VENUE_TEMPLATES['dinner'] || [];
-      const unused = templates.filter((t: string) => !usedVenueNamesForInjection.has(t.toLowerCase()));
-      const pick = unused.length > 0 ? unused[Math.floor(Math.random() * unused.length)] : templates[0];
-      if (pick) {
-        venueName = `${label} at ${pick}`;
-        venueAddress = `${pick}, ${destination}`;
-        venueDescription = `${label} at ${pick} — a local spot worth trying`;
-        usedVenueNamesForInjection.add(pick.toLowerCase());
-        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Using GENERIC TEMPLATE "${pick}" for ${mealType}`);
-      } else {
-        // Absolute last resort — but NEVER use "at a bistro" style text
-        const emergencyNames: Record<RequiredMeal, string> = {
-          breakfast: 'Café Matinal',
-          lunch: 'Bistrot du Marché',
-          dinner: 'Restaurant Le Jardin',
-        };
-        venueName = `${label} at ${emergencyNames[mealType]}`;
-        venueAddress = `${emergencyNames[mealType]}, ${destination}`;
-        venueDescription = `${label} at a local favorite`;
-        console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Emergency fallback for ${mealType}: "${venueName}"`);
-      }
+      try {
+        const recycled = getRandomFallbackRestaurant(destination, mealType, new Set<string>(), true);
+        if (recycled) {
+          venueName = `${label} at ${recycled.name}`;
+          venueAddress = recycled.address || `${recycled.name}, ${destination}`;
+          venueDescription = recycled.description || `${label} at ${recycled.name}`;
+          usedRealVenue = true;
+          console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Recycling fallback DB venue "${recycled.name}" for ${mealType} (pool exhausted with unique-name filter)`);
+        }
+      } catch (_e) { /* fallback DB lookup failed, continue */ }
+    }
+
+    // TRY 4 (true last resort, only if city has no DB at all): mark as unverified — never invent a name.
+    if (!venueName) {
+      venueName = `${label} — find a local spot`;
+      venueAddress = destination;
+      venueDescription = `We couldn't verify a ${mealType} venue in our local database. Tap the assistant to suggest one.`;
+      console.error(`[MEAL FINAL GUARD] Day ${dayNumber}: NO fallback DB for "${destination}" — left unverified ${mealType} slot`);
     }
 
     result.push({

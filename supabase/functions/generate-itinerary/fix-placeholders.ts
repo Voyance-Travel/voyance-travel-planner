@@ -264,7 +264,10 @@ export function isPlaceholderMeal(activity: any, cityName: string): boolean {
 }
 
 // =============================================================================
-// GENERIC VENUE TEMPLATE POOL — for cities without fallback data
+// GENERIC VENUE TEMPLATE POOL — DEPRECATED
+// Kept for back-compat with day-validation legacy paths and tests, but no
+// runtime path should ever ship these names to the user. Both nuclearPlaceholderSweep
+// and day-validation TRY 3 now recycle real fallback-DB venues or mark unverified.
 // =============================================================================
 export const GENERIC_VENUE_TEMPLATES: Record<string, string[]> = {
   breakfast: [
@@ -319,19 +322,19 @@ export function nuclearPlaceholderSweep(
     if (fallback) {
       applyFallbackToActivity(activity, fallback, mealType, usedNames, diningConfig);
     } else {
-      // No fallback DB for this city — use template pool
-      const templateName = getNextTemplateVenue(mealType);
+      // No fallback DB for this city — refuse to ship a generic stub like "Café Matinal".
+      // Mark slot as unverified so the UI can surface a swap CTA instead of a fake venue.
       const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : mealType === 'drinks' ? 'Drinks' : 'Dinner';
-      activity.title = `${mealLabel} at ${templateName}`;
+      activity.title = `${mealLabel} — find a local spot`;
       activity.name = activity.title;
-      activity.venue_name = templateName;
+      activity.venue_name = '';
       if (activity.location) {
-        activity.location.name = templateName;
-      } else {
-        activity.location = { name: templateName };
+        activity.location.name = '';
       }
-      activity.description = `A curated ${mealType} experience at ${templateName}.`;
-      usedNames.add(templateName.toLowerCase());
+      activity.description = `We couldn't verify a ${mealType} venue here. Tap the assistant to suggest one.`;
+      (activity as any).__needs_meal_swap = true;
+      (activity as any).needsRefinement = true;
+      console.error(`[NUCLEAR] No fallback DB for "${city}" — marked ${mealType} slot as unverified instead of using template stub`);
     }
 
     activity._placeholder_replaced = true;
