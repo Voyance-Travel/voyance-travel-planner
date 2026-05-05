@@ -329,7 +329,13 @@ Rules:
                           },
                           activity_id: {
                             type: "string",
-                            description: "The ID of the activity to swap",
+                            description: "The ID of the activity to swap or drop",
+                          },
+                          swap_type: {
+                            type: "string",
+                            enum: ["swap", "drop", "consolidate"],
+                            description:
+                              "swap = replace with cheaper alternative (default). drop = remove the activity entirely (deep-cuts mode only). consolidate = swap-merge with another same-day item.",
                           },
                         },
                         required: [
@@ -342,6 +348,7 @@ Rules:
                           "suggested_description",
                           "day_number",
                           "activity_id",
+                          "swap_type",
                         ],
                         additionalProperties: false,
                       },
