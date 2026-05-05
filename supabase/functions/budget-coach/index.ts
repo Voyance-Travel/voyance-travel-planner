@@ -616,7 +616,12 @@ Rules:
     console.log(`Returning ${suggestions.length} valid suggestions (deepCutsMode=${deepCutsMode})`);
 
     return new Response(
-      JSON.stringify({ suggestions, on_target: false, deep_cuts_mode: deepCutsMode }),
+      JSON.stringify({
+        suggestions,
+        on_target: false,
+        deep_cuts_mode: deepCutsMode,
+        filtered_empty: suggestions.length === 0,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
