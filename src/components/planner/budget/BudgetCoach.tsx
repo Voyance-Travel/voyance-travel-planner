@@ -834,7 +834,7 @@ export function BudgetCoach({
               )}
 
               {/* Empty state */}
-              {!isLoading && !error && suggestions.length === 0 && (
+              {!isLoading && !error && visibleSuggestions.length === 0 && (
                 <div className="text-center py-6 space-y-3">
                   {allProtected || (protectedCategories.length > 0 && dismissedIds.length === 0) ? (
                     <>
