@@ -676,6 +676,29 @@ export function BudgetCoach({
                 </div>
               )}
 
+              {/* Overrun chips — surface category-level breaches the model must address */}
+              {categoryOverruns && Object.entries(categoryOverruns).filter(([, c]) => (c || 0) > 0).length > 0 && (
+                <div className="flex items-start gap-2 flex-wrap pb-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1 pt-1.5 shrink-0">
+                    <AlertTriangle className="h-3 w-3 text-amber-500" />
+                    Over budget:
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {Object.entries(categoryOverruns)
+                      .filter(([, cents]) => (cents || 0) > 0)
+                      .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+                      .map(([label, cents]) => (
+                        <span
+                          key={label}
+                          className="px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                        >
+                          {label} +{formatCurrency(cents || 0)}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* Loading state */}
               {isLoading && (
                 <div className="flex items-center justify-center py-8 gap-3">
