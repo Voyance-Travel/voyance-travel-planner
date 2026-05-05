@@ -352,12 +352,26 @@ export function BudgetCoach({
     async (force = false) => {
       if (!isOverBudget) return;
 
+      // ZERO-CANDIDATE GUARD: never call AI when there are no suggestable
+      // activities. This is the root cause of phantom suggestions on bare /
+      // hotel-only itineraries — without this guard, the cache or the AI
+      // fabricates restaurants from a previous generation.
+      if (suggestableCount === 0) {
+        setSuggestions([]);
+        setAllProtected(false);
+        setError(null);
+        suggestionsCache.delete(tripId);
+        setIsLoading(false);
+        return;
+      }
+
       // Cache key includes protections + dismissals so toggling either
       // invalidates stale results.
       const protectionsKey = [...protectedCategories].sort().join(',');
       const dismissedKey = [...dismissedIds].sort().join(',');
       const liveHash = hashItinerary(itineraryDays);
-      const currentHash = `${liveHash}::p=${protectionsKey}::d=${dismissedKey}`;
+      const suggestableKey = [...suggestableActivityIds].sort().join(',');
+      const currentHash = `${liveHash}::p=${protectionsKey}::d=${dismissedKey}::s=${suggestableKey}`;
       const cached = suggestionsCache.get(tripId);
       if (
         !force &&
