@@ -683,9 +683,9 @@ export function BudgetCoach({
               )}
 
               {/* Suggestions */}
-              {!isLoading && !error && suggestions.length > 0 && (
+              {!isLoading && !error && visibleSuggestions.length > 0 && (
                 <>
-                  {suggestions.map((s, i) => {
+                  {visibleSuggestions.map((s, i) => {
                     const isApplied = appliedIds.has(s.activity_id);
                     const isLocked = lockedActivityIds.has(s.activity_id);
                     // When on target, de-emphasize remaining unapplied instead of hiding
