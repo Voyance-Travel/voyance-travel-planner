@@ -690,6 +690,12 @@ export async function enrichActivity(
       }
       if (venueData.website) {
         enriched.website = venueData.website;
+        // If we have no Viator product, surface the official site as the
+        // booking URL so downstream UI can render a "Reserve on {venue}" CTA
+        // instead of falling back to a generic Viator search.
+        if (!(enriched as any).bookingUrl && !(enriched as any).viatorProductCode) {
+          (enriched as any).bookingUrl = venueData.website;
+        }
       }
       if (venueData.googleMapsUrl) {
         enriched.googleMapsUrl = venueData.googleMapsUrl;
