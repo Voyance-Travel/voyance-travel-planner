@@ -360,7 +360,7 @@ serve(async (req) => {
               function: {
                 name: "extract_trip_details",
                 description:
-                  "Extract ALL trip details from the conversation, capturing every preference, constraint, flight detail, and specific time the user mentioned. Missing any detail the user cared about = broken trip. At minimum: destination, dates, travelers.",
+                  "Extract ALL trip details from the conversation, capturing every preference, constraint, flight detail, and specific time the user mentioned. Missing any detail the user cared about = broken trip. At minimum: destination, dates, travelers. DO NOT call this tool if the user's destination intent is brand/experience/criteria-only (e.g. 'best Four Seasons', 'an Aman somewhere', 'somewhere warm', 'a wine region') without a concrete city or region they have explicitly agreed to. In that case, propose 2–4 candidate destinations first and call this tool ONLY after the user picks one. Inventing a destination they did not choose is a critical bug.",
                 parameters: {
                   type: "object",
                   properties: {
