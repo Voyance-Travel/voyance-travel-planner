@@ -166,7 +166,7 @@ function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons
   formatCurrency: (cents: number) => string;
   categoryColors: Record<string, string>;
   categoryIcons: Record<string, React.ReactNode>;
-  onActivityRemove?: (activityId: string) => void;
+  onActivityRemove?: (activityId: string, displayName?: string) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const [expandedTransit, setExpandedTransit] = useState<Set<string>>(new Set());
@@ -235,7 +235,7 @@ function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons
                     className="h-6 w-6"
                     onClick={() => {
                       const activityId = item.id.replace(/_d\d+$/, '');
-                      onActivityRemove?.(activityId);
+                      onActivityRemove?.(activityId, item.name);
                     }}
                   >
                     <Trash2 className="h-3 w-3" />
