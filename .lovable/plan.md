@@ -1,62 +1,37 @@
-# High-Cost Wellness Activities: Booking Guidance Fix
-
 ## Problem
 
-A $293 "Biologique Recherche" wellness treatment renders with no description, no booking flag, and no booking link. Root cause is two-fold:
+This session's "Personalized Wellness Treatment" ($391) is the same class of bug as last session's "Private Wellness Refresh" — a generic, unnamed wellness placeholder slipping past `isPlaceholderWellness`. The detector in `supabase/functions/generate-itinerary/fix-placeholders.ts` already catches "private/relaxing/rejuvenating/luxurious/quick/brief/short" wellness treatments, but the adjective list misses the AI's newest favorite leak words: **"personalized," "customized," "bespoke," "signature," "tailored," "curated," "exclusive,"** plus bare nouns like "personalised treatment" / "wellness experience" with no venue.
 
-1. **Misclassification** (`src/components/booking/InlineBookingActions.tsx`): the keyword list `HOTEL_AMENITY_KEYWORDS` includes generic words like `wellness`, `treatment`, `massage`, `spa`, `relaxation`. Any standalone wellness venue (Biologique Recherche, Aire Ancient Baths, etc.) gets flagged as a "hotel amenity" → `linkType === 'view_details'`, and because there's no `website`/`bookingUrl` → the component returns `null`. No link, no concierge prompt, nothing.
-2. **No high-cost guard** during generation: the sanitizer/repair pass enforces booking guidance for dining + Viator-bookable items but never checks "this single experience costs more than X — does it have description + booking guidance?"
-
-Result: the most expensive item on Day 3 looks less actionable than a $33 museum entry.
+Secondary minor issue: "Nightcap at Le Bar" ($76, Day 1) shows in Payments without the hotel context that exists in All Costs ("Le Bar at Four Seasons George V"). Just a display normalization.
 
 ## Fix
 
-### 1. Reclassify wellness venues (UI)
+### 1. Expand wellness placeholder detector — `fix-placeholders.ts`
 
-In `src/components/booking/InlineBookingActions.tsx`:
+In `GENERIC_WELLNESS_TITLE_PATTERNS` (line 297):
 
-- Split `HOTEL_AMENITY_KEYWORDS` into two groups:
-  - `STRONG_HOTEL_SIGNALS` (definitely hotel-bound): `at the hotel`, `hotel spa`, `hotel bar`, `hotel pool`, `lobby`, `rooftop bar at`, plus the existing branded chains (St Regis, Ritz, Four Seasons, etc.).
-  - `AMENITY_KEYWORDS` (ambiguous on their own): `spa`, `wellness`, `treatment`, `massage`, `relaxation`, `pool`, `gym`, `sauna`, `lounge`.
-- Update `isHotelAmenityActivity` to return `true` only when:
-  - category is explicitly `accommodation` / `hotel` / `lodging` / `resort`, OR
-  - title contains a `STRONG_HOTEL_SIGNAL`, OR
-  - title contains an `AMENITY_KEYWORD` **and** also contains a hotel cue (`hotel`, `resort`, branded chain).
-- Drop `spa` and `wellness` from `ACCOMMODATION_CATEGORIES` (those are legit standalone activity categories in the rest of the app: see `EditorialItinerary.tsx`, `ActivityModal.tsx`, `ActivityAlternativesDrawer.tsx` which all treat wellness as a first-class activity type).
+- Extend the adjective regex (line 300) to include: `personalized|personalised|customized|customised|bespoke|signature|tailored|curated|exclusive|premium|deluxe|indulgent|restorative|holistic`.
+- Add a new pattern catching standalone "[adjective] (treatment|experience|ritual|session)" without a venue: e.g. `/^(personalized|bespoke|signature|tailored|curated|exclusive|premium|deluxe|indulgent|holistic|restorative)\s+(wellness|spa|massage|treatment|experience|ritual|session)\b/i`.
+- Add: `/^(wellness|spa)\s+(experience|treatment|ritual|session)\s+(at|in)\s+(a|an|the|your)\s+/i` to catch "Wellness Treatment at the spa" style stubs that lack a proper noun.
 
-### 2. High-cost guarantee (UI safety net)
+The downstream replacer (`replaceWithFallbackWellness` around line 280) already swaps to a real fallback-DB venue with name/address/price — so widening detection automatically routes these to a real venue without further changes.
 
-Still in `InlineBookingActions.tsx`:
+### 2. Belt-and-suspenders: high-cost wellness sanity check
 
-- Add `HIGH_COST_USD = 150`.
-- In the `!activity.bookingRequired` branch, if `price >= HIGH_COST_USD` and `linkType` would otherwise be `'none'` or `'view_details'` without a URL:
-  - Render a small "Booking guidance" cluster: a `RestaurantLink`-style search button ("Find on official site") that opens `https://www.google.com/search?q={encodeURIComponent(activity.title + ' ' + destination + ' booking')}` plus an "Ask concierge" button wired to `onAskConcierge` with a prefilled prompt ("How do I book {title}? It's listed at ${price}.").
-- This guarantees no premium item ever renders as a dead-end.
+In `supabase/functions/generate-itinerary/sanitization.ts`, in the existing high-cost guidance pass added last turn (`enforceHighCostBookingGuidance`):
 
-### 3. Generation-side enforcement
+- For wellness/spa category items ≥ $150 where the venue name is missing, equals "your hotel", equals the city, or matches `PLACEHOLDER_VENUE_PATTERNS`, mark `metadata.needs_venue_replacement = true` and log a warning. The next repair-day pass already calls `isPlaceholderWellness` — flagging here ensures that when the title slips through (because it contains a real-sounding word like "Personalized") we still catch it via the venue side.
 
-In `supabase/functions/generate-itinerary/sanitization.ts` (existing `bookingRequired && currentPrice === 0` block already proves this pattern):
+### 3. Hotel-bar title normalization (display-side, small)
 
-- Add a post-pass: for any activity where `(quoted price OR estimated cost) >= 150` AND category in `['wellness','spa','experience','tour','class','workshop','show','performance']`:
-  - Force `booking_required = true`.
-  - If `description` is empty/very short (< 60 chars), enqueue a fallback line: `"Premium ${category} experience — reservations are typically required well in advance. Use the official site or our concierge to confirm availability."`
-  - Tag the activity with `metadata.booking_guidance_required = true` so the UI can show a stronger CTA.
-
-### 4. Card surface
-
-In `src/components/itinerary/EditorialItinerary.tsx` (or whichever card renders the activity row — confirm via the activity-render path), if `metadata.booking_guidance_required === true` and there's no description block today, render a one-line italic helper: *"High-value experience — confirm booking before you go."*
-
-## Technical notes
-
-- `HIGH_COST_USD` lives next to existing constants in `InlineBookingActions.tsx`; pulled from cost-reference if we want a tier later.
-- The sanitizer change is idempotent (only fires when fields are missing) and respects the universal locking protocol — locked / user-edited activities are skipped via the existing `isLocked`/`metadata.user_edited` checks already used in that file.
-- No DB migration needed; `metadata` is already a JSON column on activities.
-- No memory updates required — this refines existing rules in `mem://constraints/itinerary/believable-human-pacing-principle` and `mem://features/booking/booking-cta-priority` rather than introducing new ones.
+In `src/components/itinerary/PaymentsTab.tsx` (and any Activities-list helper that renders the title): when an activity title contains `"at Le Bar"`, `"at The Bar"`, `"at the Lobby Bar"`, `"at the Rooftop"`, etc., AND the activity has `metadata.hotel_name` (or an `accommodation` link for that day), append ` at {hotel_name}` if not already present. Keeps Payments and All Costs labels consistent.
 
 ## Files to change
 
-- `src/components/booking/InlineBookingActions.tsx` (reclassification + high-cost safety net)
-- `supabase/functions/generate-itinerary/sanitization.ts` (high-cost description + booking_required guard)
-- `src/components/itinerary/EditorialItinerary.tsx` (one-line helper when guidance flag set)
+- `supabase/functions/generate-itinerary/fix-placeholders.ts` — broaden `GENERIC_WELLNESS_TITLE_PATTERNS`.
+- `supabase/functions/generate-itinerary/sanitization.ts` — flag high-cost wellness with placeholder venue inside `enforceHighCostBookingGuidance`.
+- `src/components/itinerary/PaymentsTab.tsx` — append hotel name to generic bar titles for display.
+
+No DB migration. No memory updates required (refines the existing `mem://constraints/itinerary/believable-human-pacing-principle` rule about generic stub names).
 
 Approve to implement.

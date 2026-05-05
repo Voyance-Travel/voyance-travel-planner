@@ -1966,6 +1966,23 @@ export function enforceHighCostBookingGuidance(
     mutated = true;
   }
 
+  // High-cost wellness/spa with placeholder venue → flag for replacement.
+  // Catches cases where the title slips past isPlaceholderWellness (e.g. "Personalized
+  // Wellness Treatment") because of a real-sounding adjective, but venue is missing.
+  if (cat === 'WELLNESS' || cat === 'SPA') {
+    const venue = (activity?.location?.name || activity?.venue_name || '').trim().toLowerCase();
+    const PLACEHOLDER_VENUES = /^(your hotel|the destination|the city|the hotel|hotel spa|a spa|the spa|spa|wellness center|wellness centre|)$/;
+    const isPlaceholderVenue =
+      venue.length < 4 ||
+      PLACEHOLDER_VENUES.test(venue) ||
+      /^(a|an|the|your)\s+(hotel|spa|wellness|destination)/.test(venue);
+    if (isPlaceholderVenue && !activity.metadata.needs_venue_replacement) {
+      activity.metadata.needs_venue_replacement = true;
+      mutated = true;
+      console.warn(`HIGH-COST WELLNESS PLACEHOLDER VENUE [${logPrefix}]: "${activity.title}" ($${price.toFixed(0)}) venue="${venue}" — flagged for replacement.`);
+    }
+  }
+
   if (mutated) {
     console.log(`HIGH-COST GUIDANCE [${logPrefix}]: "${activity.title}" ($${price.toFixed(0)}) flagged for booking guidance.`);
   }

@@ -297,7 +297,9 @@ export function applyFallbackWellnessToActivity(
 export const GENERIC_WELLNESS_TITLE_PATTERNS = [
   /^(private\s+)?(wellness|spa)\s+(refresh|moment|break|session|time|experience|treatment|ritual|escape)\.?$/i,
   /^(spa|wellness|massage|hammam|sauna|thermal)(\s+(at|in)\s+(a|an|the|your)\s+.+)?$/i,
-  /^(relaxing|rejuvenating|luxurious|private|quick|brief|short)\s+(spa|wellness|massage|treatment|hammam)\b/i,
+  /^(relaxing|rejuvenating|luxurious|private|quick|brief|short|personalized|personalised|customized|customised|bespoke|signature|tailored|curated|exclusive|premium|deluxe|indulgent|restorative|holistic)\s+(spa|wellness|massage|treatment|hammam|experience|ritual|session)\b/i,
+  /^(personalized|personalised|customized|customised|bespoke|signature|tailored|curated|exclusive|premium|deluxe|indulgent|holistic|restorative)\s+(wellness|spa|massage|treatment|experience|ritual|session)\b/i,
+  /^(wellness|spa)\s+(experience|treatment|ritual|session)\s+(at|in)\s+(a|an|the|your)\s+/i,
   /^(hotel\s+)?(spa|wellness)\s+(time|break|stop|moment)$/i,
   /^pamper\s+yourself/i,
   /^unwind\s+(at\s+)?(the\s+)?(spa|hotel|hammam)?\.?$/i,
