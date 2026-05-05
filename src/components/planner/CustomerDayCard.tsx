@@ -246,7 +246,7 @@ export default function CustomerDayCard({
                               <div>
                                 <p className={cn("font-medium", style.text)}>{sanitizeActivityName(activity.title)}</p>
                                 <p className="text-sm text-muted-foreground mt-0.5">
-                                  {activity.description}
+                                  {sanitizeActivityText(activity.description)}
                                 </p>
                               </div>
 
