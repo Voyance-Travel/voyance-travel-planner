@@ -42,6 +42,8 @@ export interface BudgetSuggestion {
   suggested_description?: string; // experience-focused description of the replacement
   day_number: number;
   activity_id: string;
+  /** "swap" (default cheaper replacement), "drop" (remove activity, deep-cuts only), "consolidate" (merge with same-day item). */
+  swap_type?: 'swap' | 'drop' | 'consolidate';
 }
 
 interface ItineraryActivity {
