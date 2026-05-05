@@ -1,61 +1,62 @@
-## Problem
+# Fix: "Spending Money & Tips" always $0
 
-Across every test session, total Coach savings cover only **9–24%** of a $2.3k–$3.1k gap. There are three structural causes:
+## The bug
 
-1. **No coverage contract with the model.** `supabase/functions/budget-coach/index.ts` tells the AI "cut $X" but never sets a *target sum* the suggestions must reach. The model returns 5–8 (or 8–12 in deep-cuts) cheap-swap suggestions averaging $40–$80 each. Even at the ceiling that's ~$960 — nowhere near a $2.5k gap.
-2. **Drop cap is too tight.** Deep-cuts mode says "at most 1 drop per day" with `8-12` suggestions total. On a 6-day trip that's ≤ 6 drops; combined with small swaps it can't realistically close a 25%+ overrun.
-3. **No bulk-apply path.** Even if the user accepts every swap, they have to click each one individually. The restructure panel offers "Raise budget" / "Shorten trip" / "Drop optional activities" (which just scrolls the list) but no "Apply all" button that closes the gap in one move.
+`misc` (Spending Money & Tips) is sliced out of the budget (e.g. $90) but `usedCents` is permanently $0 because:
 
-The "Swaps alone won't bridge" warning is honest but the path forward it offers is weak.
+1. The itinerary generator never writes `category = 'misc'` rows into `activity_costs` — by design, "tips/cash" can't be planned per-activity.
+2. `getCategoryAllocations` (`src/services/tripBudgetService.ts:788`) feeds `summary.plannedMiscCents` into `usedCents`, which is always 0.
+3. The "trip total" snapshot (`useTripFinancialSnapshot`) only sums `activity_costs`, so the misc reserve is **not** counted against the budget either.
+
+Result: the user sees `$0 / $90` with a 0% bar, AND has $90 of phantom headroom in the headline budget math. The current "0 logged · Add expense" pill (BudgetTab line 1042) only treats the symptom — the bar still reads as unused budget.
 
 ## Fix
 
-### 1. Coverage contract + adaptive suggestion count (server)
+Treat the misc allocation as a **committed cash reserve** for cost/headroom math, while keeping it manually loggable.
 
-`supabase/functions/budget-coach/index.ts`:
+### 1. Count the reserve in trip totals
 
-- Compute `discretionaryCents` = sum of all positive-cost, non-anchor, non-protected, non-logistics activities.
-- Compute `targetSavingsCents = min(gap_cents, Math.round(discretionaryCents * 0.7))`. (We can't promise more than ~70% of discretionary; nobody wants to drop everything.)
-- Compute `targetSuggestionCount`:
-  - default: 5–8 (unchanged)
-  - deep-cuts with `gap < $1000`: 8–12 (unchanged)
-  - deep-cuts with `gap >= $1000`: **12–18**
-  - deep-cuts with `gap >= $2500`: **16–24**
-- Add a hard clause to the system prompt:
-  > **COVERAGE CONTRACT:** The sum of `savings` across your returned suggestions MUST be ≥ `${targetSavingsCents/100}` (currency units). If you cannot reach that with swaps alone, prioritize `drop` suggestions on optional discretionary items (nightcaps, secondary museums, duplicate sightseeing, premium add-ons). Return more suggestions, not fewer — under-delivering on coverage is the worst possible outcome.
-- Lift "at most 1 drop per day" → **"at most 2 drops per day; never drop the only meal of a slot"** in deep-cuts mode.
-- After post-filter, log `coverageRatio = totalSavings / targetSavings` and include `coverage_ratio`, `target_savings_cents`, and `discretionary_cents` in the response payload so the client can reason about it.
+`src/hooks/useTripFinancialSnapshot.ts`
+- After summing `activity_costs`, add `miscReserveCents` (read from `trip_budget_settings.budget_allocations.misc_percent` × discretionary base, mirroring `getCategoryAllocations`'s `allocBase` logic) into `totalCents`.
+- Subtract any **logged** misc expenses already in `activity_costs` (don't double-count once the user logs real cash spend, the reserve shrinks to `max(reserve - logged, 0)`).
 
-### 2. Auto-retry once if coverage is poor (server)
+`src/services/tripBudgetService.ts` (`getBudgetSummary`)
+- Add `reservedMiscCents` to the `BudgetSummary` shape.
+- Include it in `totalUsed` / `usedPercent` so warning banners and the snapshot agree.
 
-If `coverageRatio < 0.5` after filtering AND deep-cuts mode is on AND we haven't retried, fire one re-prompt with the model:
+Extract the reserve-vs-logged math into a small helper (`computeMiscReserve(settings, summary)`) so the snapshot hook, the summary, and `getCategoryAllocations` all use one source.
 
-> Your previous suggestions only covered ${coveragePct}% of the gap. Return a NEW list (do not repeat any prior `activity_id`) of additional swaps and drops that, combined with the previous list, reach the coverage target. Drops are strongly preferred for high-cost discretionary items.
+### 2. Honest UI for the misc row
 
-Merge the two response sets, dedupe by `activity_id`, re-sort by savings. Cap total work at 2 model calls per request to keep cost and latency bounded.
+`src/components/planner/budget/BudgetTab.tsx` (lines 1003–1075)
+- Replace the "0 logged" pill with a row that always renders the bar as **filled to the reserve amount** with a distinct neutral fill (e.g. striped / muted), labelled `$X reserved · $Y logged`.
+- Tooltip: "Cash budget for tips, SIMs, pharmacy, market finds. Counts against your total even before you log it — log real expenses to track what's left."
+- Keep the "Add expense" CTA.
+- When `logged > 0`: show `logged / reserved` with the standard progress fill, switching to destructive only if `logged > reserved`.
 
-### 3. "Apply all" + better restructure CTA wording (client)
+### 3. Optional seeded estimate (low risk, opt-in)
 
-`src/components/planner/budget/BudgetCoach.tsx`:
+If `cost_reference` has a `category = 'misc'` / `subcategory = 'daily_spending'` row for the trip's destination, surface it as a hint under the row: `"Typical for {city}: ~$X/day per traveler"`. No write — display only. Skip if no row exists.
 
-- In the restructure panel (around line 996), add a primary button **"Apply all suggestions"** that iterates `visibleSuggestions` and calls `onApplySuggestion` for each unapplied, non-locked item (with a `window.confirm` summarising the count + total savings + how many drops are included).
-- Update the warning copy when the server returns `coverage_ratio < 0.5`:
-  > "The swaps below cover only X% of your $Y overrun, even after accepting drops. To reach your target you'll need to combine the suggestions with one of the structural changes below."
-- Re-order the CTAs: **Apply all** → **Raise budget to $Z** (where Z = `currentTotal` rounded up to the nearest $50, telegraphed as "fully closes the gap") → **Shorten trip 1 day**. The current 2% bump under-sells what the budget raise actually does.
-- Show a tiny `(closes the gap)` hint next to the raise-budget button when `restructureBumpTargetCents >= currentTotalCents`.
+### 4. Tests
 
-### 4. Telemetry
+- `src/services/__tests__/tripBudgetService.test.ts` (new or extend): reserve is included in `totalUsed`; logged misc reduces remaining reserve, never double-counts.
+- `src/hooks/__tests__/useTripFinancialSnapshot.test.ts`: snapshot total = activity_costs + max(reserve - loggedMisc, 0).
+- BudgetTab render test: misc row shows "reserved" treatment when logged=0; standard bar when logged>0.
 
-Log `coverage_ratio`, `target_savings_cents`, `discretionary_cents`, `retry_attempted`, and `final_suggestion_count` on every coach response. This lets us measure whether the change moved coverage from <25% toward >70% in production.
+## Out of scope
 
-## Files touched
+- Auto-generating per-day misc activity rows (would conflict with the "itinerary doesn't plan cash" principle and the existing memory rule about generic stub names).
+- Changing the slider max or default %.
 
-- `supabase/functions/budget-coach/index.ts` — coverage contract, adaptive suggestion count, drop cap lift, optional retry, response payload extension
-- `src/components/planner/budget/BudgetCoach.tsx` — Apply-all button, restructure panel copy, CTA ordering, "closes the gap" hint
-- `mem://features/budget/budget-coach-system.md` — append the coverage contract + adaptive count + apply-all section so future agents don't regress these guarantees
+## Files
 
-## What this does NOT change
+- `src/hooks/useTripFinancialSnapshot.ts`
+- `src/services/tripBudgetService.ts`
+- `src/components/planner/budget/BudgetTab.tsx`
+- new: `src/services/budgetReserve.ts` (shared helper)
+- tests as above
 
-- Anchor protection, dismissed-id logic, protected categories, placeholder-title guards, generic-name filter, ID-must-exist guard — all kept as-is.
-- The "hotel-dominant" panel and its raise-budget CTA — already correct for that distinct failure mode.
-- Empty/incomplete-itinerary gating from the prior fix — Coach still hides on those trips.
+## Memory update
+
+Add to `mem://features/budget/budget-coach-system` (or new `budget-misc-reserve-policy`): "Misc/Spending allocation is a committed cash reserve — counted in tripTotalCents, displayed as 'reserved' until user-logged expenses exceed it."
