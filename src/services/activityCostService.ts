@@ -404,7 +404,11 @@ export async function cleanupRemovedActivityCosts(
   tripId: string,
   currentActivityIds: string[],
 ): Promise<number> {
-  if (!currentActivityIds.length) return 0;
+  // NOTE: do NOT short-circuit when currentActivityIds is empty. An empty
+  // list means "the live itinerary has zero activity-bound rows" — every
+  // non-logistics row is then an orphan and should be removed. Bailing out
+  // here was the source of phantom Budget Coach + Payments items pointing at
+  // venues from a previous itinerary version.
 
   // Fetch all non-logistics activity_cost rows for this trip
   const { data: existingRows, error: fetchError } = await supabase
