@@ -151,13 +151,68 @@ Deno.test("wellness: 'Spa Time at Your Hotel' is flagged", () => {
   assertEquals(isPlaceholderWellness(act, "Paris", "Your Hotel"), true);
 });
 
-Deno.test("wellness: real named spa is NOT flagged", () => {
+Deno.test("wellness: real named spa with numeric address is NOT flagged", () => {
   const act = {
     title: "Spa Session at Spa Valmont at Le Meurice",
     category: "wellness",
-    location: { name: "Spa Valmont at Le Meurice" },
+    location: { name: "Spa Valmont at Le Meurice", address: "228 Rue de Rivoli, 75001 Paris" },
   };
   assertEquals(isPlaceholderWellness(act, "Paris"), false);
+});
+
+Deno.test("wellness: known fallback venue (no address) is NOT flagged via allowlist", () => {
+  const act = {
+    title: "Spa Session at Hammam Pacha",
+    category: "wellness",
+    location: { name: "Hammam Pacha", address: "" },
+  };
+  assertEquals(isPlaceholderWellness(act, "Paris"), false);
+});
+
+Deno.test("wellness: activity with google_place_id is NOT flagged", () => {
+  const act = {
+    title: "Personalized Facial",
+    category: "wellness",
+    location: { name: "Some Real Spa", address: "" },
+    metadata: { google_place_id: "ChIJ_xyz" },
+  };
+  assertEquals(isPlaceholderWellness(act, "Paris"), false);
+});
+
+Deno.test("wellness: 'Glow & Wellness Facial Ritual' with no venue is flagged", () => {
+  const act = {
+    title: "Glow & Wellness Facial Ritual",
+    category: "wellness",
+    location: { name: "" },
+  };
+  assertEquals(isPlaceholderWellness(act, "Paris"), true);
+});
+
+Deno.test("wellness: 'Personalized Facial Ritual' (no spa keyword) is flagged", () => {
+  const act = {
+    title: "Personalized Facial Ritual",
+    category: "wellness",
+    location: { name: "" },
+  };
+  assertEquals(isPlaceholderWellness(act, "Paris"), true);
+});
+
+Deno.test("wellness: 'Signature Facial' with venue 'Hotel Spa' is flagged", () => {
+  const act = {
+    title: "Signature Facial",
+    category: "wellness",
+    location: { name: "Hotel Spa", address: "" },
+  };
+  assertEquals(isPlaceholderWellness(act, "Paris"), true);
+});
+
+Deno.test("wellness: invented long venue name without place id or address is flagged", () => {
+  const act = {
+    title: "Hot Stone Massage",
+    category: "wellness",
+    location: { name: "The Serenity Spa Lounge", address: "" },
+  };
+  assertEquals(isPlaceholderWellness(act, "Paris"), true);
 });
 
 Deno.test("wellness: non-wellness activity is NOT flagged", () => {
