@@ -16,7 +16,7 @@
  */
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
-import { fixPlaceholdersForDay, nuclearPlaceholderSweep } from './fix-placeholders.ts';
+import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep } from './fix-placeholders.ts';
 import {
   checkAndApplyFreeVenue,
   enforceMarketDiningCap,
@@ -50,6 +50,7 @@ export interface UniversalQualityOptions {
   apiKey?: string;
   lockedActivities?: any[];
   usedRestaurants?: string[];
+  hotelName?: string;
 }
 
 // Categories to skip for cross-day venue dedup (these repeat legitimately)
@@ -68,7 +69,7 @@ export async function universalQualityPass(
   const {
     city, country, dnaTier, dnaArchetype, dayIndex, totalDays,
     usedVenueNames, arrivalTime, departureTime, departureTransportType,
-    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants,
+    dayTitle, budgetTier, apiKey, lockedActivities, usedRestaurants, hotelName,
   } = options;
 
   // Compute DNA-aware dining config internally
@@ -172,6 +173,12 @@ export async function universalQualityPass(
   const nuclearCount = nuclearPlaceholderSweep(result, city, diningConfig);
   if (nuclearCount > 0) {
     console.warn(`[QUALITY] Nuclear sweep replaced ${nuclearCount} surviving placeholder(s) in Day ${dayIndex + 1}`);
+  }
+
+  // ── Step 4c: Nuclear WELLNESS sweep — terminal safety net for spa/wellness placeholders ──
+  const wellnessSweepCount = nuclearWellnessSweep(result, city, hotelName);
+  if (wellnessSweepCount > 0) {
+    console.warn(`[QUALITY] Wellness nuclear sweep mutated/removed ${wellnessSweepCount} placeholder(s) in Day ${dayIndex + 1}`);
   }
 
   // ── Step 5: Free venue pricing ──

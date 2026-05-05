@@ -537,6 +537,7 @@ export async function handleGenerateDay(
         apiKey: LOVABLE_API_KEY,
         lockedActivities: lockedActivities,
         usedRestaurants: paramUsedRestaurants || [],
+        hotelName: (flightContext as any)?.hotelName || paramHotelName || params.hotelOverride?.name || undefined,
       });
     }
 

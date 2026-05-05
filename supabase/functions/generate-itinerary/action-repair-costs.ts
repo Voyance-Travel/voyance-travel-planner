@@ -5,6 +5,7 @@
 
 import { type ActionContext, verifyTripAccess, okJson, errorJson } from './action-types.ts';
 import { ALWAYS_FREE_VENUE_PATTERNS, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS, FINE_DINING_MIN_PRICE_DEFAULT, KNOWN_MICHELIN_HIGH, KNOWN_MICHELIN_MID, KNOWN_UPSCALE, MICHELIN_FLOOR, KNOWN_TICKETED_ATTRACTIONS } from './sanitization.ts';
+import { isPlaceholderWellness } from './fix-placeholders.ts';
 
 export async function handleRepairTripCosts(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
@@ -192,6 +193,33 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
 
 
       const title = activity.title || activity.name || "";
+
+      // ── UNVERIFIED WELLNESS GATE ──
+      // Spa/wellness items without a real, named venue must never snapshot a
+      // non-zero cost — they're not bookable, so charging the budget for them
+      // is misleading. Force $0 with an explicit basis so UI can flag them.
+      if (category === 'wellness' || category === 'spa') {
+        const flaggedByMeta = !!activity?.metadata?.needs_venue_replacement
+          || !!activity?.metadata?.unverified_venue;
+        const flaggedByDetector = isPlaceholderWellness(activity, destination, undefined);
+        if (flaggedByMeta || flaggedByDetector) {
+          console.warn(`[repair-trip-costs] UNVERIFIED WELLNESS: "${title}" — forcing $0 (meta=${flaggedByMeta}, detector=${flaggedByDetector})`);
+          rows.push({
+            trip_id: tripId,
+            activity_id: activity.id,
+            day_number: dayNum,
+            cost_per_person_usd: 0,
+            num_travelers: numTravelers,
+            category,
+            source: 'unverified_venue',
+            confidence: 'low',
+            cost_reference_id: null,
+            notes: '[Unverified wellness venue — name a real spa to enable pricing]',
+          });
+          continue;
+        }
+      }
+
       const subcategory = inferSub(title, category);
       let costPerPerson = typeof activity.estimatedCost === "number" ? activity.estimatedCost
         : typeof activity.estimated_cost === "number" ? activity.estimated_cost

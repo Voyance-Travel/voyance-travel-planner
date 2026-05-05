@@ -1,100 +1,98 @@
 ## Goal
 
-Make the Budget Coach honest when the hotel alone (or hotel + flights) blows past the budget. Today the Coach can only suggest swaps inside the discretionary slice — restaurants, taxis, activities — so when a $2,400 hotel sits inside a $1,796 budget, the suggestions feel like rearranging furniture: $19 metro swaps against a $1,900 gap.
+Stop unnamed wellness/spa items like "Private Wellness Refresh" ($261) and "Personalized Wellness Treatment" ($391) from reaching the user. The detection already exists in `fix-placeholders.ts` (`isPlaceholderWellness`) and the per-day repair path tries to swap them with real Paris/Rome/etc. venues — but items are still surfacing. We'll harden three layers so a wellness item without a real, named venue can never end up in the final itinerary with a non-zero cost.
 
-The fix is a new "honest restructuring" path that detects fixed-cost-dominant overruns and surfaces structural advice, while keeping the existing swap suggestions visible (they're still useful for the discretionary slice).
+## Why these still leak through
 
-## Root cause
-
-`BudgetCoach.tsx` (lines 643–656) computes `coveragePct = totalPotentialSavings / gapCents` and surfaces `showRestructurePanel` when coverage <50%. The panel offers three actions: raise budget, drop optional activities, shorten the trip. None of them speak to the actual cause when the hotel is the problem.
-
-`BudgetTab.tsx` already has `summary.committedHotelCents`, the discretionary breakdown, and a "hotel multiplier" calculation. We just don't pass any of it to the Coach.
+1. **Stage timing** — Smart Finish, weather-backup substitutions, and post-repair AI passes can introduce wellness items *after* `pipeline/repair-day.ts` runs for that day.
+2. **No terminal sweep** — Dining has `nuclearPlaceholderSweep` running again in `universal-quality-pass.ts` Step 4b. Wellness has no equivalent last-mile catch.
+3. **Cost-keeping** — When the per-day repair finds no fallback (e.g. unfamiliar city), it strips title/description but the *cost* may already have been written to `activity_costs` snapshot earlier. The user sees a $391 line for "Spa Time — find a venue".
 
 ## Changes
 
-### 1. New props on `BudgetCoach`
+### 1. New terminal wellness sweep (`fix-placeholders.ts`)
 
-In `src/components/planner/budget/BudgetCoach.tsx`:
-
-```ts
-hotelCents?: number;            // committed hotel cost (cents)
-flightCents?: number;           // committed flight cost (cents)
-onEditAccommodation?: () => void; // opens Flight & Hotel editor
-```
-
-### 2. Hotel-dominant overrun detection
-
-Compute alongside the existing `coveragePct`:
+Add a synchronous helper alongside `nuclearPlaceholderSweep`:
 
 ```ts
-const fixedCents = (hotelCents ?? 0) + (flightCents ?? 0);
-const hotelOverrunsBudget = (hotelCents ?? 0) > 0 && (hotelCents ?? 0) >= budgetTargetCents;
-const fixedDominantOverrun =
-  budgetTargetCents > 0 &&
-  gapCents > 0 &&
-  fixedCents > 0 &&
-  fixedCents >= budgetTargetCents * 0.85;   // hotel/flight already eats ≥85% of budget
+export function nuclearWellnessSweep(
+  activities: any[],
+  city: string,
+  hotelName?: string,
+): number
 ```
 
-When `hotelOverrunsBudget` is true (hotel alone ≥ entire budget), the Coach is mathematically incapable of bridging the gap with swaps. When `fixedDominantOverrun` is true (hotel + flight take ≥85% of budget), the discretionary slice is too small to matter.
+For each activity where `isPlaceholderWellness(act, city, hotelName)` is true:
 
-### 3. New "Hotel exceeds your budget" panel
+1. Try `getRandomFallbackWellness(cityKey, usedSet)` — if hit, apply via `applyFallbackWellnessToActivity` (real venue + price). Stamp `act.source = 'wellness-nuclear-sweep-replaced'`.
+2. Else if `hotelName` provided — downgrade to free `Spa Time at ${hotelName}`, cost forced to 0. Stamp `act.source = 'wellness-nuclear-sweep-downgraded'`. Mark `act.metadata.unverified_venue = true`.
+3. Else — **strip the activity entirely** (filter out of array). High-cost-no-venue items must never ship. Log `[WELLNESS NUCLEAR] STRIPPED "<title>" — no venue, no hotel`.
 
-Render this panel **above** the existing `showRestructurePanel` and **suppress** the misleading "Swaps alone won't bridge this gap" panel when this one is showing (otherwise we double-stack two amber boxes).
+Return number of items mutated/removed.
 
-Two variants based on severity:
+### 2. Wire the sweep into `universal-quality-pass.ts`
 
-**Variant A — Hotel alone exceeds budget** (`hotelOverrunsBudget`):
-> "Your hotel ({formatCurrency(hotelCents)}) alone exceeds your entire budget of {formatCurrency(budgetTargetCents)}. Swapping restaurants or taxis won't get you on target. To balance this trip you'd need to raise the budget to about {formatCurrency(suggestedBudgetCents)} or choose a different accommodation."
+Right after the dining nuclear sweep at Step 4b (~line 172), call `nuclearWellnessSweep(result, city, hotelName)` and log the count. This guarantees every day passes through wellness sweep before the day is considered complete, regardless of which stage produced the item.
 
-CTAs:
-- "Raise budget to {X}" — wires to existing `onBumpBudget` (target = `ceil((hotel + discretionary committed) * 1.05 / $500)`).
-- "Change accommodation" — wires to new `onEditAccommodation` callback.
+This requires `hotelName` — already available at the call sites (it's threaded through `processActivities` / quality-pass invocations). Plumb it as a new optional param on the existing `processActivities` signature; default to `undefined`. Existing callers pass it where they have it.
 
-**Variant B — Fixed costs dominate** (`fixedDominantOverrun` && !hotelOverrunsBudget):
-> "Your hotel + flights ({formatCurrency(fixedCents)}, {Math.round(fixedCents/budgetTargetCents*100)}% of budget) leave only {formatCurrency(budgetTargetCents - fixedCents)} for food, activities, and transit. Swaps below can shave {formatCurrency(totalPotentialSavings)} off, but to comfortably fit this trip you'd need a smaller hotel/flight bill or a higher overall budget."
+### 3. Pre-save guarantee in `generation-core.ts` / `action-save-itinerary.ts`
 
-CTAs: same as Variant A.
+Before persisting the final `tripData.days`, walk every day's activities one last time and run the same `nuclearWellnessSweep`. This is belt-and-braces — if a future stage reintroduces a wellness placeholder, the save layer rejects it. The sweep mutates the array in place and returns count; if `count > 0`, log a warning with the trip id so we can spot regressions.
 
-### 4. Wire from `BudgetTab.tsx`
+### 4. Cost guarantee — stop $391 phantom rows
 
-At the `<BudgetCoach …/>` call site (lines 727–750), add:
+In `action-repair-costs.ts` (and wherever activity costs are snapshotted into `activity_costs`), before writing a row check:
 
-```tsx
-hotelCents={summary.committedHotelCents || 0}
-flightCents={summary.committedFlightCents || 0}
-onEditAccommodation={() => {
-  // Existing pattern: dispatch a global event that EditorialItinerary listens to.
-  window.dispatchEvent(new CustomEvent('open-flight-hotel-editor'));
-}}
+```ts
+if ((category === 'wellness' || category === 'spa') &&
+    isPlaceholderWellness(activity, city, hotelName)) {
+  // Force $0; do not snapshot a cost for an unverified wellness slot.
+  cost = 0;
+  basis = 'unverified_venue';
+}
 ```
 
-If a "Flight & Hotel" editor open-event isn't already wired (verify with `rg "open-flight-hotel"`), fall back to navigating to the `flights-hotels` section using the existing `navigateToSection` mechanism in EditorialItinerary, or simply call `setShowSetupDialog(true)` is **not** correct here — that's the budget dialog. If no opener exists, pass through a callback prop that EditorialItinerary supplies (`onOpenFlightHotelEditor`).
+Pair this with the existing `metadata.needs_venue_replacement` flag set in `sanitization.ts` line 1980 — treat that flag as another reason to force cost to 0.
 
-### 5. Suppress the misleading "Swaps alone" panel when the new panel is showing
+This means if any future stage somehow lets the placeholder reach the save step, the *cost* still won't be charged to the budget — eliminating the misleading $652-in-one-session impact.
 
-In `BudgetCoach.tsx` line ~924:
+### 5. Tighten title patterns
 
-```tsx
-{!fixedDominantOverrun && !hotelOverrunsBudget && showRestructurePanel && (
-  // existing "Swaps alone won't bridge this gap" panel
-)}
+Add two more patterns to `GENERIC_WELLNESS_TITLE_PATTERNS` in `fix-placeholders.ts`:
+
+```ts
+// Bare two/three-word titles like "Wellness Treatment", "Spa Refresh"
+/^(wellness|spa)\s+(refresh|moment|break|session|time|experience|treatment|ritual|escape|visit)$/i,
+// Adjective + noun without venue context, e.g. "Curated Spa Experience", "Bespoke Wellness Visit"
+/^(curated|bespoke|signature|personalized|personalised|premium|luxury|private|exclusive)\s+(wellness|spa)\s+(visit|stop|appointment)\b/i,
 ```
 
-### 6. Keep the swap list visible
+These are belt-and-braces; the current patterns already match the two reported titles, but defending against minor variants is cheap.
 
-Don't hide the swap suggestions. Even if the gap is structural, $170 of savings is still real and the user might want to apply some of them. The new panel is additive context, not a replacement.
+### 6. Tests
+
+Extend `fix-placeholders.test.ts` with cases covering:
+- "Personalized Wellness Treatment" with empty venue — flagged.
+- `nuclearWellnessSweep` with a Paris activity → replaced with a real Paris venue from the inline DB.
+- `nuclearWellnessSweep` with no fallback DB hit + no hotel → activity removed entirely.
+- Cost-snapshot path forces $0 when `metadata.needs_venue_replacement` is true.
 
 ## Files touched
 
-- `src/components/planner/budget/BudgetCoach.tsx` — add props, detection logic, new panel, suppress old panel when new is active.
-- `src/components/planner/budget/BudgetTab.tsx` — pass `hotelCents`, `flightCents`, `onEditAccommodation`.
-- `src/components/itinerary/EditorialItinerary.tsx` — wire `onOpenFlightHotelEditor` event listener if one doesn't exist (fallback: scroll to `data-section="flights-hotels"`).
+- `supabase/functions/generate-itinerary/fix-placeholders.ts` — add `nuclearWellnessSweep`, extra title patterns.
+- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — invoke sweep at Step 4b.
+- `supabase/functions/generate-itinerary/generation-core.ts` and/or `action-save-itinerary.ts` — final pre-save sweep.
+- `supabase/functions/generate-itinerary/action-repair-costs.ts` — cost gate for unverified wellness/spa.
+- `supabase/functions/generate-itinerary/fix-placeholders.test.ts` — tests.
 
-No backend changes. No schema changes. The `budget-coach` edge function already correctly returns small-dollar swaps for the discretionary slice; we don't need to ask the AI to "suggest dropping the hotel" because that's a structural decision better surfaced as a UI panel with explicit CTAs.
+## Memory update
+
+Append a Core rule:
+
+> **Wellness Venue Integrity:** Any wellness/spa activity must name a real venue from `INLINE_FALLBACK_WELLNESS` or live data. Placeholders are stripped or downgraded to free hotel-spa time before save; no unverified wellness item ever ships with a non-zero cost.
 
 ## Out of scope
 
-- Auto-suggesting alternate hotels at lower price points (would need integrations + new flow).
-- Adjusting trip duration as a fix (already covered by existing `onShortenTrip`).
-- Server-side detection in `budget-coach/index.ts` (the data needed lives client-side already; a second source of truth would just drift).
+- Expanding `INLINE_FALLBACK_WELLNESS` city coverage (separate content task; current strip-on-no-fallback behaviour is acceptable).
+- Allowing the assistant to suggest a replacement spa from chat (future enhancement once stripping is in place).

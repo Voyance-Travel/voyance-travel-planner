@@ -303,6 +303,8 @@ export const GENERIC_WELLNESS_TITLE_PATTERNS = [
   /^(hotel\s+)?(spa|wellness)\s+(time|break|stop|moment)$/i,
   /^pamper\s+yourself/i,
   /^unwind\s+(at\s+)?(the\s+)?(spa|hotel|hammam)?\.?$/i,
+  /^(wellness|spa)\s+(refresh|moment|break|session|time|experience|treatment|ritual|escape|visit|stop)$/i,
+  /^(curated|bespoke|signature|personalized|personalised|premium|luxury|private|exclusive)\s+(wellness|spa)\s+(visit|stop|appointment|hour|hours)\b/i,
 ];
 
 const WELLNESS_KEYWORD_RE = /\b(spa|wellness|massage|hammam|sauna|onsen|thermal|treatment|hot\s*spring|hot\s*tub|jacuzzi)\b/i;
@@ -785,4 +787,81 @@ export async function fixPlaceholdersForDay(
   } else {
     console.log(`[QUALITY] Day ${dayIndex}: Fixed ${placeholderCount} placeholder(s)`);
   }
+}
+
+// =============================================================================
+// NUCLEAR WELLNESS SWEEP — terminal wellness placeholder safety net
+// Mirrors nuclearPlaceholderSweep for the wellness/spa category. Runs late in
+// the pipeline so that any wellness item that slipped past per-day repair
+// (e.g. introduced by Smart Finish or weather backups) gets one final pass:
+//   1. Replace with a real venue from INLINE_FALLBACK_WELLNESS, OR
+//   2. Downgrade to free hotel-spa time, OR
+//   3. Strip the activity entirely (high-cost no-venue items must never ship).
+// Returns the number of activities mutated or removed (mutates `activities` in place).
+// =============================================================================
+export function nuclearWellnessSweep(
+  activities: any[],
+  city: string,
+  hotelName?: string,
+): number {
+  if (!Array.isArray(activities) || activities.length === 0) return 0;
+
+  const cityKey = (city || '').toLowerCase().trim();
+  const used = new Set<string>();
+  let mutated = 0;
+
+  // First pass: collect names of already-real wellness venues to avoid dup repick.
+  for (const a of activities) {
+    const cat = String(a?.category || '').toLowerCase();
+    if (cat === 'wellness' || cat === 'spa') {
+      const v = String(a?.location?.name || a?.venue_name || '').toLowerCase().trim();
+      if (v.length >= 4) used.add(v);
+    }
+  }
+
+  // Walk in reverse so we can splice.
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const act = activities[i];
+    if (!act) continue;
+    if (!isPlaceholderWellness(act, city, hotelName)) continue;
+
+    const before = act.title || '';
+    const fb = getRandomFallbackWellness(cityKey, used);
+
+    if (fb) {
+      applyFallbackWellnessToActivity(act, fb, used);
+      act.source = 'wellness-nuclear-sweep-replaced';
+      mutated++;
+      console.log(`[WELLNESS NUCLEAR] REPLACED "${before}" → "${act.title}"`);
+      continue;
+    }
+
+    if (hotelName) {
+      act.title = `Spa Time at ${hotelName}`;
+      act.name = act.title;
+      if (act.location) {
+        act.location.name = hotelName;
+      } else {
+        act.location = { name: hotelName, address: '' };
+      }
+      act.venue_name = hotelName;
+      act.description = 'Use the hotel spa or wellness facilities. Confirm availability and any service charge with the front desk.';
+      if (act.cost && typeof act.cost === 'object') act.cost.amount = 0;
+      act.cost_per_person = 0;
+      act.metadata = act.metadata || {};
+      act.metadata.unverified_venue = true;
+      act.source = 'wellness-nuclear-sweep-downgraded';
+      mutated++;
+      console.warn(`[WELLNESS NUCLEAR] DOWNGRADED "${before}" → "${act.title}" ($0)`);
+      continue;
+    }
+
+    // No fallback DB hit, no hotel — strip entirely. A high-cost spa with no
+    // venue is worse than a missing slot.
+    activities.splice(i, 1);
+    mutated++;
+    console.warn(`[WELLNESS NUCLEAR] STRIPPED "${before}" — no venue, no hotel`);
+  }
+
+  return mutated;
 }
