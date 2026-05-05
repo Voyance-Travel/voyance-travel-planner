@@ -1,72 +1,66 @@
-# Fix: Wellness activities with treatment names but no real venue
+# Fix: "Explore the of Paris Museum" — orphaned-article copy reaching the UI
 
-## The bug
+## What's happening
 
-Activities like "Glow & Wellness Facial Ritual" ($239), "Personalized Wellness Treatment", "Bespoke Beauty Ritual" ship with a treatment name and a price, but no real spa attached. They're material — these are the most expensive single line items of the day — and unbookable as written.
+The Petit Palais description renders as "Explore the of Paris Museum". This is a known orphaned-article artifact (the AI dropped "City" between "the" and "of"). Two repair sites already exist:
 
-The infrastructure already exists: `INLINE_FALLBACK_WELLNESS`, `nuclearWellnessSweep` (run during quality pass AND pre-save), and the **Wellness Venue Integrity** core rule. The bug is in the detector — `isPlaceholderWellness` (`supabase/functions/generate-itinerary/fix-placeholders.ts:315`) under-matches.
+- `supabase/functions/generate-itinerary/sanitization.ts:1077` (server, write-time)
+- `src/utils/activityNameSanitizer.ts:182` (client, read-time, via `sanitizeActivityText`)
 
-Two concrete gaps confirmed by replay test:
+Both regexes (`/\bthe\s+of\s+(?=[A-Z])/g` → `'the City of '`) work — verified with a node repl on the exact string.
 
-1. **Title keyword regex too narrow.** `WELLNESS_KEYWORD_RE` requires `spa|wellness|massage|hammam|sauna|onsen|thermal|treatment|hot spring|hot tub|jacuzzi`. Titles like "Personalized Facial Ritual", "Bespoke Beauty Ritual", "Signature Facial" — all classic luxury spa naming — slip through entirely.
-2. **Generic-venue heuristic too lenient.** Common AI fillers like "Hotel Spa", "On-site Spa", "Spa", "The Spa" pass `length >= 4` and don't match the existing regex, so a wellness-titled activity with a fake-but-non-empty venue is accepted.
-3. **No verification gate.** A wellness item with a long, plausible-but-unverified venue name and no `placeId`/`google_place_id`/`verified.placeId` still passes — the sweep trusts whatever the AI invented.
+So why did this slip through? Two real gaps:
+
+1. **The server-side repair sits inside an `if (destination)` block** (sanitization.ts line 1072–1098). If the per-day sanitize call is invoked without a destination string (which happens in some sub-flows and in tests), the orphan-article repair is skipped entirely. The Petit Palais description was written to the DB without ever being repaired.
+2. **The customer-facing day card renders `activity.description` raw**, with no client-side sanitization fallback. Specifically `src/components/planner/CustomerDayCard.tsx:249` outputs `{activity.description}` directly. Same in `ItinerarySummaryCard.tsx:229`, `TripActivityCard.tsx:87`, `FullItinerary.tsx:514`, `ItineraryPreview.tsx:151`, `SampleItinerary.tsx:623`, `ConsumerTripShare.tsx:228`. `EditorialItinerary.tsx` already wraps in `sanitizeActivityText` — that's why the bug is visible in some views and not others.
+
+The result: any itinerary generated before the server repair was added — or generated when the destination param wasn't passed — keeps shipping the broken copy to every non-Editorial view.
 
 ## Fix
 
-All edits in `supabase/functions/generate-itinerary/fix-placeholders.ts`. No DB migration. The sweep is already wired into universalQualityPass + pre-save, so widening detection is sufficient.
+### 1. Server: make the orphan-article repairs unconditional
 
-### 1. Broaden the wellness title detector
+In `supabase/functions/generate-itinerary/sanitization.ts`, move the four destination-agnostic repairs out of the `if (destination)` block so they always run:
 
-Extend `WELLNESS_KEYWORD_RE` to cover the missing luxury-spa nouns:
-```
-\b(spa|wellness|massage|hammam|sauna|onsen|thermal|treatment|ritual|facial|skincare|beauty|pampering|hot\s*spring|hot\s*tub|jacuzzi|cryotherapy|reflexology|aromatherapy)\b
-```
+- `\bthe\s+of\s+(?=[A-Z])` → `the City of ` (line 1077)
+- `,\s*the\s+of\b` → `, the City of` (line 1080)
+- `\bthe'\s?s\b` → `the city's` (already unconditional at 1069, leave as is)
 
-Add patterns to `GENERIC_WELLNESS_TITLE_PATTERNS`:
-```
-/^(glow|radiance|bliss|escape|serenity|tranquility|harmony|balance|renewal|refresh)\s*[&+]?\s*(wellness|spa|beauty|skincare)\b/i
-/^(personalized|personalised|bespoke|signature|tailored|curated|customized|customised|exclusive|premium|luxury|private|holistic|restorative|indulgent|deluxe)\s+(facial|skincare|beauty|pampering|treatment|ritual|massage|hammam)\b/i
-/^(facial|beauty|skincare|pampering)\s+(ritual|session|experience|treatment|moment|escape)\b/i
-```
+The destination-dependent rewrites ("in the of X" → "in Lisbon, the City of X", trailing "in the." → city name, etc.) stay inside the `if (destination)` block.
 
-### 2. Tighten the generic-venue heuristic
+### 2. Client: wrap raw description renders in `sanitizeActivityText`
 
-Add to `isGenericVenue` (around line 331):
-```
-/^(hotel|on-?site|in-?house|on\s+property)\s+(spa|wellness|salon|gym)$/i
-/^(the\s+)?(spa|wellness|salon|hammam|sauna)$/i
-/\b(spa|wellness)\s+(in|at|near|by)\s+(the\s+)?(hotel|property)\b/i
-```
+Add `sanitizeActivityText` import and wrap `{activity.description}` in:
 
-### 3. Add a verification gate for wellness
+- `src/components/planner/CustomerDayCard.tsx` (line 249) — primary fix for the reported view
+- `src/components/planner/TripActivityCard.tsx` (line 87)
+- `src/components/planner/ItinerarySummaryCard.tsx` (line 229)
+- `src/components/planner/steps/ItineraryPreview.tsx` (line 151)
+- `src/components/itinerary/FullItinerary.tsx` (line 514)
+- `src/pages/ConsumerTripShare.tsx` (line 228)
+- `src/pages/SampleItinerary.tsx` (line 623)
 
-After the existing checks in `isPlaceholderWellness`, add: if `isWellnessCat || isWellnessTitle`, the activity must have at least one of:
-- `activity.metadata?.google_place_id`
-- `activity.metadata?.placeId`
-- `activity.verified?.placeId`
-- a `location.address` of length ≥ 8 with at least one digit (a real street address)
+These are all defensive — the server repair is the source of truth, but client wrapping ensures already-persisted broken data is repaired on read until it's regenerated.
 
-If none of those, treat as placeholder. The existing nuclearWellnessSweep then handles the cleanup path (real fallback → free hotel-spa → strip).
+### 3. Test
 
-### 4. Also tag `cost.amount = 0` in the strip path
+Add a unit test in `src/utils/activityNameSanitizer.ts`'s sibling test (or co-located) covering:
+- "Explore the of Paris Museum" → "Explore the City of Paris Museum"
+- "Visit the of Lisbon palace" → "Visit the City of Lisbon palace"
+- "Walk the of dogs" (lowercase after "of") → unchanged (regex requires `[A-Z]`)
 
-When `nuclearWellnessSweep` strips an activity (line 861), defensively zero its cost first if there's a chance the row leaked into `activity_costs` upstream. Cost write happens AFTER the sweep, so this is belt-and-braces only.
-
-### 5. Tests
-
-Extend `supabase/functions/generate-itinerary/fix-placeholders.test.ts`:
-- "Glow & Wellness Facial Ritual" with no venue → detected
-- "Personalized Facial Ritual" with no venue → detected
-- "Signature Facial" + venue "Hotel Spa" → detected
-- "Hot Stone Massage at Spa Valmont" + address "228 Rue de Rivoli" → NOT detected
-- Wellness activity with `metadata.google_place_id` set → NOT detected (verification gate works)
+If no test file exists for `activityNameSanitizer.ts`, create `src/utils/__tests__/activityNameSanitizer.test.ts`.
 
 ## Files
 
-- `supabase/functions/generate-itinerary/fix-placeholders.ts`
-- `supabase/functions/generate-itinerary/fix-placeholders.test.ts`
+- `supabase/functions/generate-itinerary/sanitization.ts`
+- `src/components/planner/CustomerDayCard.tsx`
+- `src/components/planner/TripActivityCard.tsx`
+- `src/components/planner/ItinerarySummaryCard.tsx`
+- `src/components/planner/steps/ItineraryPreview.tsx`
+- `src/components/itinerary/FullItinerary.tsx`
+- `src/pages/ConsumerTripShare.tsx`
+- `src/pages/SampleItinerary.tsx`
+- `src/utils/__tests__/activityNameSanitizer.test.ts` (new)
 
-## Memory
-
-Update existing core rule **Wellness Venue Integrity** (already in `mem://index.md`) to record the verification gate: "Wellness items must have placeId or a real numbered address; treatment-name-only titles (Facial Ritual, Beauty Treatment, Glow & Wellness…) are placeholders even without 'spa/wellness' in the title." No new memory file needed.
+No DB migration. No memory change — the existing **Text Sanitization Layer** memory already covers this category.
