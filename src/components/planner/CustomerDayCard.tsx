@@ -16,7 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { DayItinerary, ItineraryActivity } from '@/types/itinerary';
 import { formatWeatherCondition } from '@/utils/textFormatting';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import ActivityAlternativesDrawer from './ActivityAlternativesDrawer';
 import { useVersionHistory } from '@/hooks/useVersionHistory';
