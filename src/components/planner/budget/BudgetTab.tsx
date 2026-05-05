@@ -79,7 +79,7 @@ interface BudgetTabProps {
   /** Pass itinerary days to auto-sync planned costs to budget ledger */
   itineraryDays?: ItineraryDay[];
   /** Called when a planned budget entry is removed so the linked activity can be removed from the itinerary */
-  onActivityRemove?: (activityId: string) => void;
+  onActivityRemove?: (activityId: string, displayName?: string) => void;
   /** Called when the Budget Coach applies a swap suggestion */
   onApplyBudgetSwap?: (suggestion: BudgetSuggestion) => void;
   /** Whether hotel selection exists */
