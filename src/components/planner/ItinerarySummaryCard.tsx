@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
 import { formatTime12h, parseTimeToMinutes } from '@/utils/timeFormat';
 
@@ -224,11 +225,11 @@ export default function ItinerarySummaryCard({
                                         </span>
                                       )}
                                     </div>
-                                    {activity.description && (
+                                    {(() => { const d = sanitizeActivityText(activity.description); return d ? (
                                       <p className="text-sm text-muted-foreground mt-2">
-                                        {activity.description}
+                                        {d}
                                       </p>
-                                    )}
+                                    ) : null; })()}
                                   </div>
                                   {activity.price && (
                                     <span className="text-sm font-medium text-foreground flex items-center gap-1">

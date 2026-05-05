@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { formatEnumDisplay, formatWeatherCondition } from '@/utils/textFormatting';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import type { 
   DayItinerary, TripSummary, DestinationInfo, 
   FlightInfo, FlightSegment, HotelInfo, ItineraryActivity, ActivityType, WeatherCondition 
@@ -511,7 +511,7 @@ function ActivityCard({
               </span>
             </div>
           )}
-          <p className="text-xs mt-1 opacity-80">{activity.description}</p>
+          <p className="text-xs mt-1 opacity-80">{sanitizeActivityText(activity.description)}</p>
           <div className="flex items-center gap-2 mt-2">
             <MapPin className="h-3 w-3 opacity-60" />
             <span className="text-xs opacity-60">

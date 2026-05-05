@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getActivityIconName, getActivityColor, formatDuration } from '@/utils/plannerUtils';
 import { trackActivityClick } from '@/services/behaviorTrackingService';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import { ExplainableActivity } from '@/components/itinerary/ExplainableActivity';
 import type { TripActivity } from '@/types/trip';
@@ -82,11 +82,11 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
           <div className="flex items-start justify-between gap-2">
             <div>
               <h4 className="font-medium text-foreground">{sanitizeActivityName(activity.name)}</h4>
-              {activity.description?.trim() && (
+              {(() => { const d = sanitizeActivityText(activity.description); return d ? (
                 <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
-                  {activity.description}
+                  {d}
                 </p>
-              )}
+              ) : null; })()}
             </div>
 
             {/* Action Buttons */}

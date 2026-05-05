@@ -1068,16 +1068,17 @@ export function sanitizeAITextField(text: string | undefined | null, destination
   // natural regardless of destination, avoids ugly forms like "Paris's").
   result = result.replace(/\bthe'\s?s\b/gi, "the city's");
 
+  // Destination-agnostic orphan-article repairs — must always run, even if no
+  // destination is supplied to this sanitize call. Repairs AI dropouts where
+  // "City" is missing between "the" and "of" in titles like
+  // "Explore the of Paris Museum" → "Explore the City of Paris Museum".
+  result = result.replace(/\bthe\s+of\s+(?=[A-Z])/g, 'the City of ');
+  result = result.replace(/,\s*the\s+of\b/gi, ', the City of');
+
   // Replace generic "the destination" with actual city name
   if (destination) {
     result = result.replace(/\b(?:the destination|the city|this destination|this city)\b/gi, destination);
 
-    // Generic orphaned "City" repair: "Explore the of Paris Museum…" → "Explore the City of Paris Museum…"
-    // Only fires when followed by a capital letter (i.e. a proper noun follows).
-    result = result.replace(/\bthe\s+of\s+(?=[A-Z])/g, 'the City of ');
-    // "in the of [Noun]" title pattern → "in Lisbon, the City of [Noun]"
-    // ", the of [Noun]" → ", the City of [Noun]" (comma-prefixed variant)
-    result = result.replace(/,\s*the\s+of\b/gi, ', the City of');
     // "in the of [Noun]" → "in Lisbon, the City of [Noun]"
     result = result.replace(/\bin the of\b/gi, 'in ' + destination + ', the City of');
 

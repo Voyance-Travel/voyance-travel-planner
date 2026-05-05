@@ -12,7 +12,7 @@ import { useEntitlements, canUse, getRemainingQuota, useConsumeUsage } from '@/h
 import { useAuth } from '@/contexts/AuthContext';
 import { isQuizCompleted } from '@/utils/quizUtils';
 import { formatWeatherCondition } from '@/utils/textFormatting';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { formatTime12h } from '@/utils/timeFormat';
 import { useLovableItinerary } from '@/hooks/useLovableItinerary';
 import { AnimatePresence } from 'framer-motion';
@@ -148,7 +148,7 @@ function StreamingDayCard({ day, isNew }: { day: DayItinerary; isNew: boolean })
               </div>
               <div className="flex-1">
                 <p className="font-medium text-foreground">{sanitizeActivityName(activity.title)}</p>
-                <p className="text-sm text-muted-foreground">{activity.description}</p>
+                <p className="text-sm text-muted-foreground">{sanitizeActivityText(activity.description)}</p>
                 {activity.location && (
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <MapPin className="w-3 h-3" />

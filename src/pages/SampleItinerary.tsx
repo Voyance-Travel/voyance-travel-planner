@@ -18,6 +18,7 @@ import Head from '@/components/common/Head';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { getItineraryBySlug } from '@/data/sampleItineraries';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -620,7 +621,7 @@ function ActivityRow({ activity, isLast }: ActivityRowProps) {
               )}
             </div>
             <h4 className="font-medium text-foreground">{activity.title}</h4>
-            <p className="text-sm text-muted-foreground mt-1">{activity.description}</p>
+            <p className="text-sm text-muted-foreground mt-1">{sanitizeActivityText(activity.description)}</p>
             <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3" />
               {typeof activity.location === 'string' 

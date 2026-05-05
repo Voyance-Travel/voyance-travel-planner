@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 
 interface SharedActivity {
@@ -224,9 +225,9 @@ export default function ConsumerTripShare() {
                               )}
                             </div>
                             <h3 className="font-medium text-foreground text-sm">{title}</h3>
-                            {activity.description && (
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{activity.description}</p>
-                            )}
+                            {(() => { const d = sanitizeActivityText(activity.description); return d ? (
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{d}</p>
+                            ) : null; })()}
                             {activity.location?.address && (
                               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                                 <MapPin className="h-3 w-3 flex-shrink-0" />
