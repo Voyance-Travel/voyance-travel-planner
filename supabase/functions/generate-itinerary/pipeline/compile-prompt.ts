@@ -925,12 +925,21 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
               : isValue
                 ? `VALUE-FOCUSED: Lean on free landmarks, walking routes, markets. Limit paid activities to 1/day and keep them under $${actsPP}/pp.`
                 : `BALANCED: At least 1 paid ticketed experience most days, mixed with free landmarks. Stay near $${actsPP}/pp on activities.`;
+            // Transit guidance — without this the model defaults to "Taxi to X"
+            // for every hop and blows the transit allocation before the day
+            // even starts. Tier the rules off the per-day per-person target.
+            const transitGuidance = transitPP >= 25
+              ? `Transit budget allows premium ground transport: airport transfers may be private car/taxi, and 1–2 taxis per day between premium venues are fine. Still default to walking when venues are <1km apart.`
+              : transitPP >= 12
+                ? `Transit budget is moderate: use metro/walking for in-city hops; reserve taxis for late-night returns, rain, or hops >2km. Airport transfer may be taxi or shuttle.`
+                : `Transit budget is tight: prefer walking and metro/bus for nearly all hops. Avoid taxis except for the airport transfer or accessibility needs. Do NOT title hops "Taxi to …" by default.`;
             allocationPromptBlock = `
 SPEND ALLOCATION TARGETS (per person, per day, in ${cur}, derived from the user's "${isSplurge ? 'Splurge-Forward' : isValue ? 'Value-Focused' : 'Balanced'}" preset):
 - Food: ~$${foodPP}
 - Paid activities/experiences: ~$${actsPP}
 - Local transit: ~$${transitPP}
 ${styleGuidance}
+TRANSIT: ${transitGuidance}
 The Activities target is REAL spend on bookable experiences — free venues do NOT count toward it.`;
           }
         } catch (e) {
