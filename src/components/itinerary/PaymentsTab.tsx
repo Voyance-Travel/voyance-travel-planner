@@ -15,7 +15,7 @@ import { FirstUseHint } from './FirstUseHint';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
   CheckCircle2, Users, ChevronDown, Receipt,
-  Wallet, X, User, Plus, UserPlus, AlertCircle, Split,
+  Wallet, X, User, Plus, UserPlus, AlertCircle, AlertTriangle, Split,
   Utensils, Car, ShoppingBag, Trash2
 } from 'lucide-react';
 import {
@@ -322,6 +322,11 @@ export function PaymentsTab({
   // "Paid so far" reflects actual recorded payments from trip_payments
   const paidAmount = totals.paid;
   const unpaidAmount = Math.max(0, estimatedTotal - paidAmount);
+  // Surface overpayment as an explicit anomaly instead of silently clamping
+  // "Remaining to pay" at $0 (e.g. orphaned payments left over from a prior
+  // itinerary version still count toward `paidAmount`).
+  const overpaidAmount = Math.max(0, paidAmount - estimatedTotal);
+  const isOverpaid = overpaidAmount > 0 && estimatedTotal > 0;
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
   /**
@@ -1001,7 +1006,13 @@ export function PaymentsTab({
             )}
           </>
         ) : (
-          <Progress value={progressPercent} className="h-2 mb-4" />
+          <Progress
+            value={Math.min(progressPercent, 100)}
+            className={cn(
+              "h-2 mb-4",
+              isOverpaid && "[&>div]:bg-amber-500"
+            )}
+          />
         )}
         
         <div className="grid grid-cols-2 gap-4">
@@ -1014,15 +1025,34 @@ export function PaymentsTab({
               <p className="text-xs text-muted-foreground">Paid so far</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <Wallet className="h-4 w-4 text-amber-600" />
+          {isOverpaid ? (
+            <div
+              className="flex items-center gap-2"
+              title="Some payments may not be linked to current itinerary items. Review Recent Payments to reconcile."
+            >
+              <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                  Overpaid by {formatCurrency(overpaidAmount)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Recorded payments exceed itinerary total
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium">{formatCurrency(unpaidAmount)}</p>
-              <p className="text-xs text-muted-foreground">Remaining to pay</p>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <Wallet className="h-4 w-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">{formatCurrency(unpaidAmount)}</p>
+                <p className="text-xs text-muted-foreground">Remaining to pay</p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
