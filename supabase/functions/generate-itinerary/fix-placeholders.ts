@@ -303,6 +303,8 @@ export const GENERIC_WELLNESS_TITLE_PATTERNS = [
   /^(hotel\s+)?(spa|wellness)\s+(time|break|stop|moment)$/i,
   /^pamper\s+yourself/i,
   /^unwind\s+(at\s+)?(the\s+)?(spa|hotel|hammam)?\.?$/i,
+  /^(wellness|spa)\s+(refresh|moment|break|session|time|experience|treatment|ritual|escape|visit|stop)$/i,
+  /^(curated|bespoke|signature|personalized|personalised|premium|luxury|private|exclusive)\s+(wellness|spa)\s+(visit|stop|appointment|hour|hours)\b/i,
 ];
 
 const WELLNESS_KEYWORD_RE = /\b(spa|wellness|massage|hammam|sauna|onsen|thermal|treatment|hot\s*spring|hot\s*tub|jacuzzi)\b/i;
