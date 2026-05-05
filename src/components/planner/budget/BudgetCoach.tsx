@@ -155,6 +155,7 @@ export function BudgetCoach({
   onProtectedCategoriesChange,
   onBumpBudget,
   categoryOverruns,
+  onShortenTrip,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
@@ -163,6 +164,7 @@ export function BudgetCoach({
   const [isExpanded, setIsExpanded] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [allProtected, setAllProtected] = useState(false);
+  const [deepCutsMode, setDeepCutsMode] = useState(false);
   const fetchedRef = useRef(false);
 
   // ⚠️ Hook-order safety: these two hooks must be declared BEFORE any
