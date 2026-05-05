@@ -175,6 +175,12 @@ export async function universalQualityPass(
     console.warn(`[QUALITY] Nuclear sweep replaced ${nuclearCount} surviving placeholder(s) in Day ${dayIndex + 1}`);
   }
 
+  // ── Step 4c: Nuclear WELLNESS sweep — terminal safety net for spa/wellness placeholders ──
+  const wellnessSweepCount = nuclearWellnessSweep(result, city, hotelName);
+  if (wellnessSweepCount > 0) {
+    console.warn(`[QUALITY] Wellness nuclear sweep mutated/removed ${wellnessSweepCount} placeholder(s) in Day ${dayIndex + 1}`);
+  }
+
   // ── Step 5: Free venue pricing ──
   for (const act of result) {
     checkAndApplyFreeVenue(act, label);
