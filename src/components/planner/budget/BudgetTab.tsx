@@ -273,7 +273,7 @@ function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons
   );
 }
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName, isManualMode = false }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName, isManualMode = false, tripStatus, generationFailureReason, onRegenerate }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [payments, setPayments] = useState<TripPayment[]>([]);
   
