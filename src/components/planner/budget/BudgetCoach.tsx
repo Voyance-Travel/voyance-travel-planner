@@ -712,9 +712,13 @@ export function BudgetCoach({
     // Call parent handler and wait for success/failure
     try {
       const result = await onApplySuggestion?.(suggestion);
-      // If the handler explicitly returned false, the swap was blocked
+      // If the handler explicitly returned false, the swap was blocked.
+      // For drops, the handler emits its own specific toast — stay quiet
+      // here so we don't surface the misleading "cost not lower" message.
       if (result === false) {
-        toast.error('Swap was blocked — the suggested cost was not lower.');
+        if (suggestion.swap_type !== 'drop') {
+          toast.error('Swap was blocked — the suggested cost was not lower.');
+        }
         return;
       }
     } catch (e) {
