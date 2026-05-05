@@ -453,13 +453,13 @@ export function BudgetCoach({
     );
   }
 
-  // ─── Applied savings calc ─────────────────────────────────────
-  const appliedSavings = suggestions
+  // ─── Applied savings calc (use phantom-filtered list) ─────────
+  const appliedSavings = visibleSuggestions
     .filter((s) => appliedIds.has(s.activity_id))
     .reduce((sum, s) => sum + s.savings, 0);
 
   const remainingGap = gapCents - appliedSavings;
-  const totalPotentialSavings = suggestions.reduce((sum, s) => sum + s.savings, 0);
+  const totalPotentialSavings = visibleSuggestions.reduce((sum, s) => sum + s.savings, 0);
   const isNowOnTarget = remainingGap <= 0;
 
   // ─── "Bump tier" CTA — when the user's plan has clearly outgrown the preset ──
