@@ -776,25 +776,11 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
     };
   };
 
-  // Misc is a cash reserve — its "used" amount is the reserve itself (logged
-  // expenses consume it but never exceed it for display purposes), so the
-  // category bar reflects an honest commitment instead of a permanent 0%.
-  const miscAllocatedCents = Math.round(allocBase * (allocations.misc_percent / 100));
-  const miscUsedForDisplay = Math.max(summary.plannedMiscCents, miscAllocatedCents);
-
   result.push(
     buildDiscretionary('food', allocations.food_percent, summary.plannedFoodCents),
     buildDiscretionary('activities', allocations.activities_percent, summary.plannedActivitiesCents),
     buildDiscretionary('transit', allocations.transit_percent, summary.plannedTransitCents),
-    {
-      category: 'misc',
-      allocatedCents: miscAllocatedCents,
-      usedCents: miscUsedForDisplay,
-      remainingCents: Math.max(0, miscAllocatedCents - summary.plannedMiscCents),
-      percent: allocations.misc_percent,
-      kind: 'discretionary',
-      discretionaryUnderwater: underwater || undefined,
-    },
+    buildDiscretionary('misc', allocations.misc_percent, summary.plannedMiscCents),
   );
 
   return result;
