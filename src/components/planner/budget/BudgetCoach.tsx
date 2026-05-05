@@ -322,8 +322,7 @@ export function BudgetCoach({
       dayNumber: day.dayNumber,
       date: day.date,
       activities: day.activities
-        .filter((a) => !a.isLocked)
-        .filter((a) => !isGenericTitle(a.title || a.name))
+        .filter((a) => isSuggestable(a))
         .map((a) => {
           let costCents = 0;
           if (typeof a.cost === 'number' && Number.isFinite(a.cost)) {
