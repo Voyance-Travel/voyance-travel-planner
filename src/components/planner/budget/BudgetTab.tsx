@@ -943,26 +943,37 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                             </span>
                           </div>
                         </div>
-                        <Progress
-                          value={percent}
-                          className={cn("h-2", isOver && "[&>div]:bg-destructive")}
-                        />
-                        {/* Empty-state affordance — Misc reads as broken/dead at $0.
-                            Tell users what it's for and offer a one-click "Add expense"
-                            that opens the existing manual-expense flow on Payments. */}
-                        {alloc.category === 'misc' && used === 0 && allocated > 0 && (
-                          <div className="flex items-start justify-between gap-2 text-xs text-muted-foreground pl-8 -mt-0.5">
-                            <span>For tips, market finds, pharmacy, SIM cards.</span>
-                            <button
+                        {alloc.category === 'misc' && used === 0 && allocated > 0 ? (
+                          // Reserve treatment — a 0% bar reads as broken. The itinerary
+                          // never auto-fills this category; surface it as an explicit
+                          // manual cash reserve with a real CTA.
+                          <div className="flex items-center justify-between gap-2 pl-8">
+                            <div className="text-xs text-muted-foreground">
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted/60 text-foreground/80">
+                                <Wallet className="h-3 w-3" />
+                                {formatCurrency(allocated)} reserved · 0 logged
+                              </span>
+                              <span className="ml-2">For tips, pharmacy, SIMs, market finds.</span>
+                            </div>
+                            <Button
                               type="button"
-                              className="text-primary hover:underline shrink-0 inline-flex items-center gap-1"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2 text-xs shrink-0"
                               onClick={() => {
-                                window.dispatchEvent(new CustomEvent('open-add-expense', { detail: { type: 'other' } }));
+                                window.dispatchEvent(
+                                  new CustomEvent('open-add-expense', { detail: { type: 'other' } })
+                                );
                               }}
                             >
-                              <Plus className="h-3 w-3" />Add expense
-                            </button>
+                              <Plus className="h-3 w-3 mr-1" />Add expense
+                            </Button>
                           </div>
+                        ) : (
+                          <Progress
+                            value={percent}
+                            className={cn("h-2", isOver && "[&>div]:bg-destructive")}
+                          />
                         )}
                       </div>
                     );
