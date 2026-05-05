@@ -168,6 +168,7 @@ import { AISavedNotes } from '@/components/itinerary/AISavedNotes';
 
 import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 import SortableFlightLegCards from './SortableFlightLegCards';
+import { resolveDropTarget } from './budgetDropResolver';
 
 // =============================================================================
 // BOARDING PASS VIEW BUTTON (inline helper)
