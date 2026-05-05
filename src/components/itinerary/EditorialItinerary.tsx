@@ -1330,8 +1330,14 @@ export function EditorialItinerary({
         source?: string;
       }> = [];
 
+      // Track EVERY live activity id (including $0 ones) so cleanup preserves
+      // free venues / placeholder rows that legitimately exist in the live
+      // itinerary while still removing rows from prior generations whose
+      // activity_id no longer exists at all.
+      const liveActivityIds: string[] = [];
       for (const day of currentDays) {
         for (const act of day.activities) {
+          if (act?.id) liveActivityIds.push(act.id);
           // Try act.cost first, then fall back to act.estimatedCost
           const costInput = act.cost || (act as any).estimatedCost || null;
           const costPerPerson = resolvePerPersonForDb(costInput as any, travelers || 1);
