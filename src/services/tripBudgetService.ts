@@ -170,11 +170,15 @@ export const DEFAULT_ALLOCATIONS: Record<string, BudgetAllocations> = {
     buffer_percent: 25,
   },
   splurge_forward: {
+    // Luxury patterns include private/airport transfers, premium ground
+    // transport, and frequent taxis between premium venues. Transit is bumped
+    // from 10% → 20% so the category target is actually achievable; buffer
+    // and activities each give up 5% to fund it.
     food_percent: 35,
-    activities_percent: 35,
-    transit_percent: 10,
+    activities_percent: 30,
+    transit_percent: 20,
     misc_percent: 5,
-    buffer_percent: 15,
+    buffer_percent: 10,
   },
 };
 
