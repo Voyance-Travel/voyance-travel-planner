@@ -11240,6 +11240,12 @@ function ActivityRow({
                       !canViewPremium && "blur-sm pointer-events-none select-none"
                     )}>{d}</p>
                   ) : null; })()}
+                  {/* High-cost booking guidance helper */}
+                  {!compact && (activity as any)?.metadata?.booking_guidance_required && (
+                    <p className="text-xs italic text-amber-700 dark:text-amber-300 mt-1">
+                      High-value experience — confirm booking before you go.
+                    </p>
+                  )}
 
                   {/* Location — in compact mode show only location name, no full address */}
                   {(() => {
