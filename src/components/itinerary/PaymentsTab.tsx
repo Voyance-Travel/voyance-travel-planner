@@ -15,7 +15,7 @@ import { FirstUseHint } from './FirstUseHint';
 import { 
   Plane, Hotel, Camera, Check, CreditCard, ExternalLink, 
   CheckCircle2, Users, ChevronDown, Receipt,
-  Wallet, X, User, Plus, UserPlus, AlertCircle, Split,
+  Wallet, X, User, Plus, UserPlus, AlertCircle, AlertTriangle, Split,
   Utensils, Car, ShoppingBag, Trash2
 } from 'lucide-react';
 import {
