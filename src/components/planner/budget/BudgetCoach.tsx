@@ -190,6 +190,8 @@ export function BudgetCoach({
   const [error, setError] = useState<string | null>(null);
   const [allProtected, setAllProtected] = useState(false);
   const [deepCutsMode, setDeepCutsMode] = useState(false);
+  const [serverCoverageRatio, setServerCoverageRatio] = useState<number | null>(null);
+  const [isApplyingAll, setIsApplyingAll] = useState(false);
   const fetchedRef = useRef(false);
 
   // ⚠️ Hook-order safety: these two hooks must be declared BEFORE any
@@ -440,6 +442,9 @@ export function BudgetCoach({
         setSuggestions(fetched);
         setAllProtected(Boolean(data?.all_protected));
         setDeepCutsMode(Boolean(data?.deep_cuts_mode));
+        setServerCoverageRatio(
+          typeof data?.coverage_ratio === 'number' ? data.coverage_ratio : null
+        );
         suggestionsCache.set(tripId, {
           suggestions: fetched,
           itineraryHash: currentHash,
