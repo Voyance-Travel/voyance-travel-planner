@@ -30,6 +30,8 @@ interface RequestBody {
   protected_categories?: string[];
   /** Activity IDs the user has explicitly dismissed via "Don't suggest". */
   dismissed_activity_ids?: string[];
+  /** Per-category overrun in cents (planned - allocated). Positive = over. */
+  category_overruns?: Partial<Record<"Dining" | "Hotels" | "Tours" | "Transit" | "Activities", number>>;
 }
 
 // ─── Category normalization ─────────────────────────────────────
