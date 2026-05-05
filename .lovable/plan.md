@@ -1,36 +1,51 @@
 ## Problem
 
-The Budget Coach surfaces a "Set aside spending money" nudge as the **first** card in its list, ahead of actionable swap suggestions, consuming prime real estate with a meta-task. Separately, the Spending Money & Tips category in the All Costs list can read as a "broken red zero" on every load.
+The Budget Coach's "Drop" button has never been verified end-to-end. Reading the handler in `EditorialItinerary.tsx` (lines 6661–6688) reveals real risks:
 
-A reserved-state visual is already in place for the category row in `BudgetTab.tsx` (lines 1021–1052: replaces the progress bar with a muted "$X reserved · 0 logged" chip + Add expense CTA when `misc && used === 0 && allocated > 0`). The remaining gap is **render order in the Coach** plus a small polish pass on the chip.
+1. **Day-number gating is brittle.** Drop only succeeds when `day.dayNumber === suggestion.day_number` AND `a.id === suggestion.activity_id`. If the edge function returns a stale or wrong `day_number` (very plausible when activities have been moved between days), the filter matches no day, no activity is removed, the handler returns `false`, and the Coach surfaces the misleading toast `"Swap was blocked — the suggested cost was not lower."` (BudgetCoach line 717) — which is wrong: the cost wasn't the issue; the wrong day was.
+2. **No title verification at delete-time.** Suggestions are filtered for stale matches in `visibleSuggestions` (line 561), but only with the `current_item` text vs live title. If a UUID is reused (rare but possible after regen) and the live title check at fetch-time passed but the activity was just edited, the drop still fires blindly.
+3. **No success toast.** Successful drops are silent — the user has to scroll the itinerary to confirm.
+
+The result: a Drop click can either silently no-op (with a misleading "blocked" toast) or, in a worst-case stale-state scenario, drop an unrelated activity.
 
 ## Changes
 
-### 1. Reorder the misc nudge in `BudgetCoach.tsx`
+### 1. Harden the drop handler — `src/components/itinerary/EditorialItinerary.tsx` (~lines 6661–6688)
 
-Move the "Set aside spending money" nudge block (currently lines 797–828, rendered as the **first** child of `CardContent`) to render **after** the `visibleSuggestions.map(...)` list (after line ~1090, before the on-target/empty-state footer). This keeps actionable swaps in the prime slot and demotes the meta-task to a secondary nudge below them.
+Rewrite the `swap_type === 'drop'` branch to:
 
-Additional safeguards on the same block:
-- Only render the nudge when **`!isLoading`** and **`!error`** (avoid stacking it above a spinner).
-- Suppress the nudge entirely when `showHotelDominantPanel` is true — the structural restructuring panel already owns the user's attention; a $90 reserve nudge under it is noise.
-- Lower visual weight: drop the `Sparkles` icon (reserve `Sparkles` for primary CTAs like the Bump-tier panel) and switch to a plain `Wallet` icon for consistency with the BudgetTab reserve chip.
+- **Find by id across ALL days**, not just `suggestion.day_number`. Survives day-number drift.
+- **Verify the live title still matches `suggestion.current_item`** with a loose check (case-insensitive substring containment OR ≥1 shared 4+ char token). If not, abort with a clear toast: `"Couldn't drop — that suggestion no longer matches your itinerary. Refresh suggestions."`
+- **Bail with a clear toast when the id is missing entirely** from the live state: `"Couldn't drop — item is no longer in your itinerary."`
+- **Emit a success toast** on confirmed drop: `Dropped "<title>" — saved $X`.
+- Continue to invalidate budget queries and call `syncBudgetFromDays`.
 
-### 2. Confirm the reserve chip in `BudgetTab.tsx`
+### 2. Don't surface a misleading "blocked" message for drops — `src/components/planner/budget/BudgetCoach.tsx` (line 717)
 
-The reserved-state branch already exists. Two small refinements while we're here:
+When `handleApply` receives `result === false` for a `swap_type === 'drop'` suggestion, suppress the generic `"Swap was blocked — the suggested cost was not lower."` toast. The drop handler now emits its own specific error, so the Coach should stay quiet on `false` for drops.
 
-- The right-hand value text on line 1012 (`{formatCurrency(used)} / {formatCurrency(allocated)}`) currently still reads `$0 / $90` in default foreground. For the misc reserve case, render that as `formatCurrency(allocated) + " reserved"` in `text-muted-foreground` instead of `$0 / $90`, so there is no "0" character at all in the row when nothing is logged.
-- Ensure `isOver` styling on the value text never fires for misc when `used === 0` (it already doesn't, but assert with an explicit `!(alloc.category === 'misc' && used === 0)` guard for safety against future refactors).
+### 3. Unit-test the drop logic
 
-### 3. No changes to allocation math, edge functions, or the budget-coach service.
+Extract the drop-target resolution into a small pure helper (`resolveDropTarget(days, suggestion)` returning `{ dayIdx, activity } | { error: 'not-found' | 'title-mismatch' }`) and add `src/components/itinerary/__tests__/budgetDropResolver.test.ts` covering:
+
+- Happy path: id present, title matches → returns target.
+- Wrong `day_number` in suggestion but id present somewhere → still resolves (regression test for the brittle gating).
+- Id missing from all days → `not-found`.
+- Id present but live title is unrelated → `title-mismatch`.
+- Loose match: punctuation/case differences, single shared token ≥4 chars → resolves.
+- Missing/empty `current_item` → resolves on id alone (no false rejects).
+
+Tests use plain object fixtures — no React rendering required, so they're fast and stable.
+
+### 4. Out of scope
+
+- Edge function changes to `budget-coach` (the suggestions themselves are fine; the bug is the apply path).
+- Confirm dialog wording (already explicit about which item).
+- Coach refresh-on-stale; existing `visibleSuggestions` filter already drops stale entries on next fetch.
 
 ## Files touched
 
-- `src/components/planner/budget/BudgetCoach.tsx` — move the misc nudge below `visibleSuggestions`, gate on `!isLoading/!error/!showHotelDominantPanel`, swap icon.
-- `src/components/planner/budget/BudgetTab.tsx` — replace the `$0 / $90` numeric line with a muted "$90 reserved" label when misc has zero usage.
-
-## Out of scope
-
-- Auto-populating the Spending Money category from the itinerary (the category is intentionally manual-only — see prior memory).
-- Renaming or merging the category.
-- Changing allocation percentages or default $90 reserve.
+- `src/components/itinerary/EditorialItinerary.tsx` — rewrite drop branch (~70 lines).
+- `src/components/itinerary/budgetDropResolver.ts` — new pure helper (~40 lines).
+- `src/components/itinerary/__tests__/budgetDropResolver.test.ts` — new test file (~80 lines).
+- `src/components/planner/budget/BudgetCoach.tsx` — suppress generic blocked-toast for drops (~3 lines).
