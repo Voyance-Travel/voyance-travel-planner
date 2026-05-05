@@ -137,61 +137,118 @@ const categoryColors: Record<BudgetCategory, string> = {
   misc: 'bg-slate-500',
 };
 
-function CostsList({ ledger, formatCurrency, categoryColors, categoryIcons, onActivityRemove, removeEntry }: {
-  ledger: any[];
+// Map a PayableItem.type to BudgetTab's category color/icon keys
+function payableTypeToCategoryKey(item: PayableItem): BudgetCategory {
+  switch (item.type) {
+    case 'flight': return 'flight';
+    case 'hotel': return 'hotel';
+    case 'dining': return 'food';
+    case 'transport': return 'transit';
+    case 'shopping': return 'misc';
+    case 'other': return 'misc';
+    case 'activity':
+    default:
+      // Grouped transit row uses transport-style id
+      if (item.id.startsWith('transit-d')) return 'transit';
+      return 'activities';
+  }
+}
+
+function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons, onActivityRemove }: {
+  items: PayableItem[];
   formatCurrency: (cents: number) => string;
   categoryColors: Record<string, string>;
   categoryIcons: Record<string, React.ReactNode>;
   onActivityRemove?: (activityId: string) => void;
-  removeEntry: (id: string) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const displayed = showAll ? ledger : ledger.slice(0, 10);
-  const hasMore = ledger.length > 10;
+  const [expandedTransit, setExpandedTransit] = useState<Set<string>>(new Set());
+  const displayed = showAll ? items : items.slice(0, 10);
+  const hasMore = items.length > 10;
+
+  const toggleTransit = (id: string) => {
+    setExpandedTransit((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-2">
-      {displayed.map((entry) => (
-        <div
-          key={entry.id}
-          className="flex items-center justify-between py-2 border-b border-border last:border-0"
-        >
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "w-8 h-8 rounded flex items-center justify-center",
-              categoryColors[entry.category as BudgetCategory] || 'bg-muted'
-            )}>
-              <span className="text-white text-sm">
-                {categoryIcons[entry.category as BudgetCategory] || <DollarSign className="h-4 w-4" />}
-              </span>
+      {displayed.map((item) => {
+        const catKey = payableTypeToCategoryKey(item);
+        const isTransitGroup = item.id.startsWith('transit-d') && (item.subItems?.length || 0) > 0;
+        // Only activity-typed line items support inline removal — flight/hotel/manual/grouped-transit do not.
+        const canRemove =
+          item.type === 'activity' &&
+          !isTransitGroup &&
+          item.id.includes('_d') &&
+          !!onActivityRemove;
+        const subLabel = item.dayNumber ? `Day ${item.dayNumber}` : (item.type === 'flight' ? 'Flight' : item.type === 'hotel' ? 'Hotel' : '');
+        return (
+          <div key={item.id} className="border-b border-border last:border-0">
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={cn(
+                  "w-8 h-8 rounded flex items-center justify-center shrink-0",
+                  categoryColors[catKey] || 'bg-muted'
+                )}>
+                  <span className="text-white text-sm">
+                    {categoryIcons[catKey] || <DollarSign className="h-4 w-4" />}
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{item.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {item.type}{subLabel ? ` • ${subLabel}` : ''}
+                    {isTransitGroup ? ` • ${item.subItems!.length} legs` : ''}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{formatCurrency(item.amountCents)}</span>
+                {isTransitGroup && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => toggleTransit(item.id)}
+                    aria-label="Toggle transit legs"
+                  >
+                    {expandedTransit.has(item.id)
+                      ? <ChevronUp className="h-3 w-3" />
+                      : <ChevronDown className="h-3 w-3" />}
+                  </Button>
+                )}
+                {canRemove && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => {
+                      const activityId = item.id.replace(/_d\d+$/, '');
+                      onActivityRemove?.(activityId);
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium">{entry.description}</p>
-              <p className="text-xs text-muted-foreground capitalize">
-                {entry.category} • {entry.entry_type === 'committed' ? 'Committed' : 'Planned'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{formatCurrency(entry.amount_cents)}</span>
-            {!entry.external_booking_id && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => {
-                  if (entry.entry_type === 'planned' && entry.activity_id && onActivityRemove) {
-                    onActivityRemove(entry.activity_id);
-                  }
-                  removeEntry(entry.id);
-                }}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
+            {isTransitGroup && expandedTransit.has(item.id) && (
+              <div className="pl-11 pb-2 space-y-1">
+                {item.subItems!.map((sub) => (
+                  <div key={sub.id} className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="truncate pr-2">{sub.name}</span>
+                    <span>{formatCurrency(sub.amountCents)}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
       {hasMore && (
         <Button
           variant="ghost"
@@ -202,7 +259,7 @@ function CostsList({ ledger, formatCurrency, categoryColors, categoryIcons, onAc
           {showAll ? (
             <><ChevronUp className="h-4 w-4 mr-1" /> Show less</>
           ) : (
-            <><ChevronDown className="h-4 w-4 mr-1" /> Show all {ledger.length} items</>
+            <><ChevronDown className="h-4 w-4 mr-1" /> Show all {items.length} items</>
           )}
         </Button>
       )}
