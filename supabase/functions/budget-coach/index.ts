@@ -637,6 +637,7 @@ Rules:
         on_target: false,
         deep_cuts_mode: deepCutsMode,
         filtered_empty: suggestions.length === 0,
+        no_candidates: suggestions.length === 0,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
