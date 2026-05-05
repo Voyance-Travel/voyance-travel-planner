@@ -287,6 +287,27 @@ function checkGenericVenues(activities: StrictActivityMinimal[], results: Valida
   }
 }
 
+function checkGenericWellness(
+  activities: StrictActivityMinimal[],
+  results: ValidationResult[],
+  destination?: string,
+  hotelName?: string,
+): void {
+  for (let i = 0; i < activities.length; i++) {
+    const a: any = activities[i];
+    if (isPlaceholderWellness(a, destination || '', hotelName)) {
+      results.push({
+        code: FAILURE_CODES.GENERIC_VENUE,
+        severity: 'error',
+        message: `"${a.title}" is a generic wellness/spa placeholder — must name a real, bookable venue`,
+        activityIndex: i,
+        field: 'title',
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
 function checkLabelLeaks(activities: StrictActivityMinimal[], results: ValidationResult[]): void {
   for (let i = 0; i < activities.length; i++) {
     const title = activities[i].title || '';
