@@ -95,6 +95,8 @@ interface BudgetCoachProps {
   miscUsedCents?: number;
   /** Called when the misc nudge "Add expense" is clicked. */
   onAddMiscExpense?: () => void;
+  /** Open the Edit Budget dialog (for structural fixes like raising the transit allocation). */
+  onEditBudget?: () => void;
   className?: string;
 }
 
