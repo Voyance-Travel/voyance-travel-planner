@@ -297,17 +297,42 @@ export function applyFallbackWellnessToActivity(
 export const GENERIC_WELLNESS_TITLE_PATTERNS = [
   /^(private\s+)?(wellness|spa)\s+(refresh|moment|break|session|time|experience|treatment|ritual|escape)\.?$/i,
   /^(spa|wellness|massage|hammam|sauna|thermal)(\s+(at|in)\s+(a|an|the|your)\s+.+)?$/i,
-  /^(relaxing|rejuvenating|luxurious|private|quick|brief|short|personalized|personalised|customized|customised|bespoke|signature|tailored|curated|exclusive|premium|deluxe|indulgent|restorative|holistic)\s+(spa|wellness|massage|treatment|hammam|experience|ritual|session)\b/i,
-  /^(personalized|personalised|customized|customised|bespoke|signature|tailored|curated|exclusive|premium|deluxe|indulgent|holistic|restorative)\s+(wellness|spa|massage|treatment|experience|ritual|session)\b/i,
+  /^(relaxing|rejuvenating|luxurious|private|quick|brief|short|personalized|personalised|customized|customised|bespoke|signature|tailored|curated|exclusive|premium|deluxe|indulgent|restorative|holistic)\s+(spa|wellness|massage|treatment|hammam|experience|ritual|session|facial|skincare|beauty|pampering)\b/i,
+  /^(personalized|personalised|customized|customised|bespoke|signature|tailored|curated|exclusive|premium|deluxe|indulgent|holistic|restorative)\s+(wellness|spa|massage|treatment|experience|ritual|session|facial|skincare|beauty|pampering)\b/i,
   /^(wellness|spa)\s+(experience|treatment|ritual|session)\s+(at|in)\s+(a|an|the|your)\s+/i,
   /^(hotel\s+)?(spa|wellness)\s+(time|break|stop|moment)$/i,
   /^pamper\s+yourself/i,
   /^unwind\s+(at\s+)?(the\s+)?(spa|hotel|hammam)?\.?$/i,
   /^(wellness|spa)\s+(refresh|moment|break|session|time|experience|treatment|ritual|escape|visit|stop)$/i,
   /^(curated|bespoke|signature|personalized|personalised|premium|luxury|private|exclusive)\s+(wellness|spa)\s+(visit|stop|appointment|hour|hours)\b/i,
+  // Treatment-name-only titles (no spa/wellness keyword but clearly a spa offering)
+  /^(glow|radiance|bliss|escape|serenity|tranquility|tranquillity|harmony|balance|renewal|refresh|zen|aura)\s*[&+]?\s*(wellness|spa|beauty|skincare|facial|ritual)\b/i,
+  /^(facial|beauty|skincare|pampering)\s+(ritual|session|experience|treatment|moment|escape)\b/i,
 ];
 
-const WELLNESS_KEYWORD_RE = /\b(spa|wellness|massage|hammam|sauna|onsen|thermal|treatment|hot\s*spring|hot\s*tub|jacuzzi)\b/i;
+const WELLNESS_KEYWORD_RE = /\b(spa|wellness|massage|hammam|sauna|onsen|thermal|treatment|ritual|facial|skincare|beauty|pampering|hot\s*spring|hot\s*tub|jacuzzi|cryotherapy|reflexology|aromatherapy)\b/i;
+
+// Generic / unverified venue strings the AI tends to invent for wellness items.
+const GENERIC_WELLNESS_VENUE_PATTERNS = [
+  /^(the\s+)?(spa|wellness|salon|hammam|sauna)$/i,
+  /^(hotel|on-?site|in-?house|on\s+property|property|resort)\s+(spa|wellness|salon|gym)$/i,
+  /^(a|the|your)\s+(hotel|spa|wellness|destination|salon)/i,
+  /\b(spa|wellness)\s+(in|at|near|by)\s+(the\s+)?(hotel|property|resort)\b/i,
+  /^(luxury|boutique|upscale|premium|local|nearby|popular|recommended)\s+(spa|wellness|salon)\b/i,
+];
+
+// Pre-built lowercase set of every real wellness venue we ship with, used as a
+// "known-real" allowlist when neither placeId nor a numeric address is present.
+let _knownWellnessVenues: Set<string> | null = null;
+function getKnownWellnessVenueSet(): Set<string> {
+  if (_knownWellnessVenues) return _knownWellnessVenues;
+  const s = new Set<string>();
+  for (const list of Object.values(INLINE_FALLBACK_WELLNESS)) {
+    for (const v of list) s.add(v.name.toLowerCase());
+  }
+  _knownWellnessVenues = s;
+  return s;
+}
 
 /**
  * Returns true if the activity is a generic/placeholder wellness entry.
@@ -316,6 +341,7 @@ export function isPlaceholderWellness(activity: any, cityName: string, hotelName
   const category = (activity.category || '').toLowerCase();
   const title = (activity.title || '').trim();
   const venue = ((activity.location?.name) || activity.venue_name || '').trim();
+  const address = String(activity.location?.address || '').trim();
 
   const isWellnessCat = category === 'wellness' || category === 'spa';
   const isWellnessTitle = WELLNESS_KEYWORD_RE.test(title);
@@ -327,20 +353,40 @@ export function isPlaceholderWellness(activity: any, cityName: string, hotelName
   // Title mentions wellness/spa but venue is empty / placeholder / city / "Your Hotel"
   const venueLower = venue.toLowerCase();
   const cityLower = (cityName || '').toLowerCase().trim();
-  const hotelLower = (hotelName || '').toLowerCase().trim();
   const isGenericVenue =
     venue.length < 4 ||
     venueLower === 'your hotel' ||
     venueLower === 'the destination' ||
     venueLower === 'the city' ||
     (cityLower && venueLower === cityLower) ||
-    /^(a|the|your)\s+(hotel|spa|wellness|destination)/i.test(venue);
+    GENERIC_WELLNESS_VENUE_PATTERNS.some(re => re.test(venue));
 
-  if (isWellnessTitle && isGenericVenue) {
+  if (isGenericVenue) {
     // Only flag if title doesn't already include a specific named venue marker.
     // Heuristic: a title like "Spa Valmont at Le Meurice" has a proper-noun chain after "at".
     const hasNamedVenue = / at [A-Z][\w'’-]+(?:\s+[A-Z&][\w'’-]+){0,5}/.test(title);
     if (!hasNamedVenue) return true;
+  }
+
+  // VERIFICATION GATE — wellness items with non-generic venue strings still need
+  // proof the venue is real. Accept any of:
+  //   • google place id / verified place id
+  //   • a street address with a digit (e.g. "228 Rue de Rivoli")
+  //   • venue name appears in INLINE_FALLBACK_WELLNESS (known-real allowlist)
+  //   • venue name matches the user's confirmed hotel
+  //   • metadata.unverified_venue explicitly false
+  const hasPlaceId =
+    !!activity?.metadata?.google_place_id ||
+    !!activity?.metadata?.placeId ||
+    !!activity?.verified?.placeId;
+  const hasNumericAddress = address.length >= 8 && /\d/.test(address);
+  const matchesKnownVenue = venueLower.length >= 4 && getKnownWellnessVenueSet().has(venueLower);
+  const matchesHotel =
+    !!hotelName && venueLower.length >= 4 && venueLower === hotelName.toLowerCase().trim();
+  const explicitlyVerified = activity?.metadata?.unverified_venue === false;
+
+  if (!hasPlaceId && !hasNumericAddress && !matchesKnownVenue && !matchesHotel && !explicitlyVerified) {
+    return true;
   }
 
   return false;
