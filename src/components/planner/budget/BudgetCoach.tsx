@@ -562,7 +562,7 @@ export function BudgetCoach({
             )}
           </CardTitle>
           <div className="flex items-center gap-2">
-            {!isLoading && suggestions.length > 0 && (
+            {!isLoading && visibleSuggestions.length > 0 && (
               <Button
                 variant="ghost"
                 size="icon"
