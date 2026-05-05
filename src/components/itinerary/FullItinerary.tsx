@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { formatEnumDisplay, formatWeatherCondition } from '@/utils/textFormatting';
-import { sanitizeActivityName } from '@/utils/activityNameSanitizer';
+import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
 import type { 
   DayItinerary, TripSummary, DestinationInfo, 
   FlightInfo, FlightSegment, HotelInfo, ItineraryActivity, ActivityType, WeatherCondition 
