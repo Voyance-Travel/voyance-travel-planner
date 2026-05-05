@@ -25,6 +25,7 @@ import {
   enforceVenueTypePriceCap,
   enforceTicketedAttractionPricing,
   enforceMichelinPriceFloor,
+  enforceHighCostBookingGuidance,
 } from './sanitization.ts';
 import { normalizeVenueName, venueNamesMatch } from './generation-utils.ts';
 import { getDiningConfig } from './dining-config.ts';
