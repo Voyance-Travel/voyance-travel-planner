@@ -1136,12 +1136,35 @@ const EMPTY_NON_ACTIVITY_CATS = [
 ];
 const EMPTY_NON_ACTIVITY_TITLE_RE = /\b(check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|hotel\s+checkout|hotel\s+check-?in|airport\s+transfer|departure)\b/i;
 
+// Generic placeholder titles that the AI sometimes emits to "fill" a day
+// without any real venue. Mirrors the GENERIC_TITLE_RE used by BudgetCoach
+// (src/components/planner/budget/coachUtils.ts).
+const PLACEHOLDER_TITLE_RE = /^(breakfast|lunch|dinner|brunch|meal|activity|activities|transport|transit|hotel|accommodation|untitled|free\s+time|explore\s+the\s+neighborhood)\s*(\(|-|–|—|$)/i;
+const isPlaceholderTitle = (t: string): boolean => {
+  const s = (t || '').trim();
+  if (!s) return true;
+  if (/^(activity|untitled|tbd|n\/a|free\s+time)$/i.test(s)) return true;
+  return PLACEHOLDER_TITLE_RE.test(s);
+};
+
+const numericCost = (a: any): number => {
+  if (typeof a?.cost === 'number' && Number.isFinite(a.cost)) return a.cost;
+  if (a?.cost && typeof a.cost === 'object') {
+    const amt = (a.cost as any).amount;
+    if (typeof amt === 'number' && Number.isFinite(amt)) return amt;
+  }
+  return 0;
+};
+
 export function countMeaningfulActivities(days: any[]): {
   meaningfulCount: number;
+  /** Meaningful activities that ALSO have a positive cost AND a non-placeholder title. */
+  paidMeaningfulCount: number;
   dayCount: number;
   daysWithZeroMeaningful: number[];
 } {
   let meaningfulCount = 0;
+  let paidMeaningfulCount = 0;
   const daysWithZero: number[] = [];
   const dayList = Array.isArray(days) ? days : [];
   for (const day of dayList) {
@@ -1153,9 +1176,45 @@ export function countMeaningfulActivities(days: any[]): {
       if (EMPTY_NON_ACTIVITY_CATS.some((c) => cat.includes(c))) continue;
       if (EMPTY_NON_ACTIVITY_TITLE_RE.test(title)) continue;
       dayMeaningful++;
+      if (numericCost(a) > 0 && !isPlaceholderTitle(title)) {
+        paidMeaningfulCount++;
+      }
     }
     if (dayMeaningful === 0) daysWithZero.push(Number(day?.dayNumber) || 0);
     meaningfulCount += dayMeaningful;
   }
-  return { meaningfulCount, dayCount: dayList.length, daysWithZeroMeaningful: daysWithZero };
+  return {
+    meaningfulCount,
+    paidMeaningfulCount,
+    dayCount: dayList.length,
+    daysWithZeroMeaningful: daysWithZero,
+  };
+}
+
+/**
+ * Classifies a generated itinerary as 'ok', 'empty' (no meaningful activities
+ * at all) or 'incomplete' (degenerate: hotel-only or hotel + a single filler).
+ * Used by the save / Stage 6 gates to flip itinerary_status to 'failed' so
+ * the Budget Coach and other downstream UI know not to operate on it.
+ */
+export function classifyItineraryCompleteness(days: any[]): {
+  status: 'ok' | 'empty' | 'incomplete';
+  meaningfulCount: number;
+  paidMeaningfulCount: number;
+  dayCount: number;
+} {
+  const probe = countMeaningfulActivities(days);
+  const { meaningfulCount, paidMeaningfulCount, dayCount } = probe;
+  if (dayCount === 0) {
+    return { status: 'ok', meaningfulCount, paidMeaningfulCount, dayCount };
+  }
+  if (meaningfulCount === 0) {
+    return { status: 'empty', meaningfulCount, paidMeaningfulCount, dayCount };
+  }
+  // Multi-day trips with zero or only one paid/non-placeholder activity in
+  // the entire plan are degenerate — almost certainly a broken generation.
+  if (dayCount >= 2 && paidMeaningfulCount <= 1) {
+    return { status: 'incomplete', meaningfulCount, paidMeaningfulCount, dayCount };
+  }
+  return { status: 'ok', meaningfulCount, paidMeaningfulCount, dayCount };
 }
