@@ -31,6 +31,7 @@ import {
   addMinutesToHHMM,
 } from '../flight-hotel-context.ts';
 import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
+import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
 
 // =============================================================================
 // INPUT TYPES
