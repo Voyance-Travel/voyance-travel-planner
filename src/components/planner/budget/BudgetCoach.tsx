@@ -169,6 +169,7 @@ export function BudgetCoach({
   miscReserveCents = 0,
   miscUsedCents = 0,
   onAddMiscExpense,
+  onEditBudget,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
