@@ -7,6 +7,7 @@
 
 import { FAILURE_CODES, type ValidationResult, type FailureCode } from './types.ts';
 import { extractRestaurantVenueName } from '../generation-utils.ts';
+import { isPlaceholderWellness } from '../fix-placeholders.ts';
 import {
   CHAIN_RESTAURANT_BLOCKLIST,
   isChainRestaurant,
@@ -114,6 +115,9 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
 
   // --- GENERIC_VENUE ---
   checkGenericVenues(activities, results, destination);
+
+  // --- GENERIC_WELLNESS (spa/wellness placeholders like "Private Wellness Refresh") ---
+  checkGenericWellness(activities, results, destination, hotelName);
 
   // --- TITLE_LABEL_LEAK ---
   checkLabelLeaks(activities, results);
@@ -277,6 +281,27 @@ function checkGenericVenues(activities: StrictActivityMinimal[], results: Valida
         message: `Dining activity "${title}" has placeholder location "${locationName || '(empty)'}" — must use a real venue name`,
         activityIndex: i,
         field: 'location',
+        autoRepairable: true,
+      });
+    }
+  }
+}
+
+function checkGenericWellness(
+  activities: StrictActivityMinimal[],
+  results: ValidationResult[],
+  destination?: string,
+  hotelName?: string,
+): void {
+  for (let i = 0; i < activities.length; i++) {
+    const a: any = activities[i];
+    if (isPlaceholderWellness(a, destination || '', hotelName)) {
+      results.push({
+        code: FAILURE_CODES.GENERIC_VENUE,
+        severity: 'error',
+        message: `"${a.title}" is a generic wellness/spa placeholder — must name a real, bookable venue`,
+        activityIndex: i,
+        field: 'title',
         autoRepairable: true,
       });
     }

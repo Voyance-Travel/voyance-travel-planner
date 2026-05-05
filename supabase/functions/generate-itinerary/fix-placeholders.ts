@@ -202,6 +202,147 @@ export function applyFallbackToActivity(
 }
 
 // =============================================================================
+// FALLBACK WELLNESS DATABASE — Real, named spa/wellness venues by city
+// Mirrors INLINE_FALLBACK_RESTAURANTS for the wellness category so we never
+// ship generic placeholders like "Private Wellness Refresh".
+// =============================================================================
+
+export interface FallbackWellness {
+  name: string;
+  address: string;
+  price: number; // USD per person, real reference price
+  description: string;
+}
+
+export const INLINE_FALLBACK_WELLNESS: Record<string, FallbackWellness[]> = {
+  paris: [
+    { name: "Spa Valmont at Le Meurice", address: "228 Rue de Rivoli, 75001 Paris", price: 280, description: "Swiss luxury skincare rituals in a refined hotel spa overlooking the Tuileries." },
+    { name: "Spa My Blend by Clarins", address: "37 Av. Hoche, 75008 Paris (Le Royal Monceau)", price: 260, description: "Signature Clarins treatments inside Le Royal Monceau Raffles Paris, with indoor pool access." },
+    { name: "Hammam Pacha", address: "17 Rue Mayet, 75006 Paris", price: 75, description: "Traditional Moroccan hammam ritual with steam rooms, gommage and mint tea." },
+  ],
+  rome: [
+    { name: "Cristallo Spa at Palazzo Manfredi", address: "Via Labicana 125, 00184 Rome", price: 220, description: "Boutique hotel spa near the Colosseum with hammam, sauna and bespoke treatments." },
+    { name: "AcquaMadre Hammam", address: "Via di S. Ambrogio 17, 00186 Rome", price: 65, description: "Tranquil Roman-Jewish-quarter hammam with a hot pool, steam rooms and scrubs." },
+  ],
+  berlin: [
+    { name: "Vabali Spa Berlin", address: "Seydlitzstraße 6, 10557 Berlin", price: 60, description: "Bali-inspired thermal spa with saunas, pools and gardens minutes from Hauptbahnhof." },
+    { name: "Liquidrom", address: "Möckernstraße 10, 10963 Berlin", price: 45, description: "Saltwater flotation pool with underwater music, plus saunas and steam rooms." },
+  ],
+  barcelona: [
+    { name: "Aire Ancient Baths", address: "Passeig de Picasso 22, 08003 Barcelona", price: 95, description: "Candle-lit thermal baths in a restored 19th-century factory in Born." },
+    { name: "Spa Mayan Secret at Hotel Claris", address: "Carrer de Pau Claris 150, 08009 Barcelona", price: 180, description: "Mayan-inspired rooftop hotel spa with pool and skyline views." },
+  ],
+  london: [
+    { name: "ESPA Life at Corinthia", address: "Whitehall Pl, London SW1A 2BD", price: 295, description: "Four-floor wellness destination with sleep pods, vitality pool and signature ESPA rituals." },
+    { name: "Akasha Holistic Wellbeing at Hotel Café Royal", address: "68 Regent St, London W1B 4DY", price: 240, description: "Earth/Air/Fire/Water-themed treatments, hammam and 18m pool in Mayfair." },
+    { name: "AIRE Ancient Baths London", address: "1 Saint Thomas St, London SE1 9RY", price: 105, description: "Thermal bath circuit in a restored 19th-century warehouse near London Bridge." },
+  ],
+  lisbon: [
+    { name: "Six Senses Spa at Tivoli Avenida Liberdade", address: "Av. da Liberdade 185, 1269-050 Lisbon", price: 220, description: "Six Senses signature spa with thermal circuit, vitality pool and tailored facials." },
+    { name: "Spa at Bairro Alto Hotel", address: "Praça Luís de Camões 2, 1200-243 Lisbon", price: 160, description: "Intimate Chiado hotel spa with Aromatherapy Associates rituals." },
+  ],
+};
+
+// =============================================================================
+// HELPER: Get a random fallback wellness venue
+// =============================================================================
+export function getRandomFallbackWellness(
+  city: string,
+  usedNames: Set<string>,
+  ignoreUsed?: boolean,
+): FallbackWellness | null {
+  const cityKey = (city || '').toLowerCase().trim();
+  let options: FallbackWellness[] | undefined;
+  for (const [key, list] of Object.entries(INLINE_FALLBACK_WELLNESS)) {
+    if (cityKey.includes(key) || key.includes(cityKey)) {
+      options = list;
+      break;
+    }
+  }
+  if (!options || options.length === 0) return null;
+  if (ignoreUsed) return options[Math.floor(Math.random() * options.length)];
+  const available = options.filter(r => !usedNames.has(r.name.toLowerCase()));
+  if (available.length === 0) return options[0];
+  return available[Math.floor(Math.random() * available.length)];
+}
+
+// =============================================================================
+// HELPER: Apply fallback wellness to an activity
+// =============================================================================
+export function applyFallbackWellnessToActivity(
+  activity: any,
+  fallback: FallbackWellness,
+  usedVenueNamesInDay: Set<string>,
+): void {
+  activity.title = `Spa Session at ${fallback.name}`;
+  activity.name = activity.title;
+  if (activity.location) {
+    activity.location.name = fallback.name;
+    activity.location.address = fallback.address;
+  } else {
+    activity.location = { name: fallback.name, address: fallback.address };
+  }
+  activity.venue_name = fallback.name;
+  if (fallback.description) activity.description = fallback.description;
+  if (activity.cost) activity.cost.amount = fallback.price;
+  activity.cost_per_person = fallback.price;
+  activity.category = activity.category || 'wellness';
+  usedVenueNamesInDay.add(fallback.name.toLowerCase());
+  console.log(`[PLACEHOLDER WELLNESS] REPLACED → "${activity.title}" at "${fallback.address}" ($${fallback.price}/pp)`);
+}
+
+// =============================================================================
+// WELLNESS PLACEHOLDER DETECTION
+// =============================================================================
+export const GENERIC_WELLNESS_TITLE_PATTERNS = [
+  /^(private\s+)?(wellness|spa)\s+(refresh|moment|break|session|time|experience|treatment|ritual|escape)\.?$/i,
+  /^(spa|wellness|massage|hammam|sauna|thermal)(\s+(at|in)\s+(a|an|the|your)\s+.+)?$/i,
+  /^(relaxing|rejuvenating|luxurious|private|quick|brief|short)\s+(spa|wellness|massage|treatment|hammam)\b/i,
+  /^(hotel\s+)?(spa|wellness)\s+(time|break|stop|moment)$/i,
+  /^pamper\s+yourself/i,
+  /^unwind\s+(at\s+)?(the\s+)?(spa|hotel|hammam)?\.?$/i,
+];
+
+const WELLNESS_KEYWORD_RE = /\b(spa|wellness|massage|hammam|sauna|onsen|thermal|treatment|hot\s*spring|hot\s*tub|jacuzzi)\b/i;
+
+/**
+ * Returns true if the activity is a generic/placeholder wellness entry.
+ */
+export function isPlaceholderWellness(activity: any, cityName: string, hotelName?: string): boolean {
+  const category = (activity.category || '').toLowerCase();
+  const title = (activity.title || '').trim();
+  const venue = ((activity.location?.name) || activity.venue_name || '').trim();
+
+  const isWellnessCat = category === 'wellness' || category === 'spa';
+  const isWellnessTitle = WELLNESS_KEYWORD_RE.test(title);
+  if (!isWellnessCat && !isWellnessTitle) return false;
+
+  // Title is generic placeholder
+  if (GENERIC_WELLNESS_TITLE_PATTERNS.some(re => re.test(title))) return true;
+
+  // Title mentions wellness/spa but venue is empty / placeholder / city / "Your Hotel"
+  const venueLower = venue.toLowerCase();
+  const cityLower = (cityName || '').toLowerCase().trim();
+  const hotelLower = (hotelName || '').toLowerCase().trim();
+  const isGenericVenue =
+    venue.length < 4 ||
+    venueLower === 'your hotel' ||
+    venueLower === 'the destination' ||
+    venueLower === 'the city' ||
+    (cityLower && venueLower === cityLower) ||
+    /^(a|the|your)\s+(hotel|spa|wellness|destination)/i.test(venue);
+
+  if (isWellnessTitle && isGenericVenue) {
+    // Only flag if title doesn't already include a specific named venue marker.
+    // Heuristic: a title like "Spa Valmont at Le Meurice" has a proper-noun chain after "at".
+    const hasNamedVenue = / at [A-Z][\w'’-]+(?:\s+[A-Z&][\w'’-]+){0,5}/.test(title);
+    if (!hasNamedVenue) return true;
+  }
+
+  return false;
+}
+
+// =============================================================================
 // PLACEHOLDER DETECTION PATTERNS
 // =============================================================================
 export const PLACEHOLDER_TITLE_PATTERNS = [
