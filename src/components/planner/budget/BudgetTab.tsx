@@ -747,6 +747,16 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
               window.dispatchEvent(new CustomEvent('open-add-expense', { detail: { type: 'other' } }));
             }}
             onEditBudget={() => setShowSetupDialog(true)}
+            hotelCents={summary.committedHotelCents || 0}
+            flightCents={summary.committedFlightCents || 0}
+            onEditAccommodation={() => {
+              const el = document.querySelector('[data-section="hotels"]');
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              } else {
+                window.dispatchEvent(new CustomEvent('navigate-to-section', { detail: 'hotels' }));
+              }
+            }}
           />
         );
       })()}

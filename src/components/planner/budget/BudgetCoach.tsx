@@ -97,6 +97,12 @@ interface BudgetCoachProps {
   onAddMiscExpense?: () => void;
   /** Open the Edit Budget dialog (for structural fixes like raising the transit allocation). */
   onEditBudget?: () => void;
+  /** Total committed hotel cost (cents) — used to detect hotel-dominant overruns. */
+  hotelCents?: number;
+  /** Total committed flight cost (cents) — used to detect fixed-cost-dominant overruns. */
+  flightCents?: number;
+  /** Open the Flight & Hotel editor — surfaced when hotel/flights dominate the overrun. */
+  onEditAccommodation?: () => void;
   className?: string;
 }
 
@@ -170,6 +176,9 @@ export function BudgetCoach({
   miscUsedCents = 0,
   onAddMiscExpense,
   onEditBudget,
+  hotelCents = 0,
+  flightCents = 0,
+  onEditAccommodation,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
@@ -655,6 +664,27 @@ export function BudgetCoach({
     gapCents > currentTotalCents * 0.10 &&
     coveragePct < 0.5;
 
+  // ─── Hotel/fixed-cost dominant overrun ───────────────────────
+  // When the hotel alone (or hotel + flights) eats the entire budget,
+  // discretionary swaps cannot bridge the gap. Surface honest structural
+  // options instead of small-dollar suggestions.
+  const fixedCents = (hotelCents || 0) + (flightCents || 0);
+  const hotelOverrunsBudget =
+    !isNowOnTarget && budgetTargetCents > 0 && (hotelCents || 0) >= budgetTargetCents;
+  const fixedDominantOverrun =
+    !isNowOnTarget &&
+    budgetTargetCents > 0 &&
+    gapCents > 0 &&
+    fixedCents > 0 &&
+    fixedCents >= budgetTargetCents * 0.85;
+  const showHotelDominantPanel = hotelOverrunsBudget || fixedDominantOverrun;
+  // Suggested raised budget = current total + 5%, rounded up to nearest $500.
+  const hotelDominantBumpCents = Math.ceil((currentTotalCents * 1.05) / 50000) * 50000;
+  const fixedSharePct = budgetTargetCents > 0
+    ? Math.round((fixedCents / budgetTargetCents) * 100)
+    : 0;
+  const discretionaryRoomCents = Math.max(0, budgetTargetCents - fixedCents);
+
   const dismissBump = () => {
     setBumpDismissedAtTotal(currentTotalCents);
     try { window.localStorage.setItem(bumpDismissKey, String(currentTotalCents)); } catch { /* ignore */ }
@@ -921,7 +951,55 @@ export function BudgetCoach({
                   </div>
                 );
               })()}
-              {showRestructurePanel && (
+              {showHotelDominantPanel && (
+                <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                        {hotelOverrunsBudget
+                          ? 'Your hotel exceeds your entire budget.'
+                          : 'Hotel & flights leave little room for the rest of the trip.'}
+                      </p>
+                      <p className="text-xs text-amber-800 dark:text-amber-200">
+                        {hotelOverrunsBudget ? (
+                          <>
+                            Your hotel ({formatCurrency(hotelCents)}) alone is more than your full budget of {formatCurrency(budgetTargetCents)}. Swapping restaurants or taxis can&rsquo;t close a gap that size. To get on target you&rsquo;d need to raise the budget to about {formatCurrency(hotelDominantBumpCents)} or choose a different accommodation.
+                          </>
+                        ) : (
+                          <>
+                            Your hotel{flightCents > 0 ? ' + flights' : ''} ({formatCurrency(fixedCents)}, ~{fixedSharePct}% of budget) leave only {formatCurrency(discretionaryRoomCents)} for food, activities &amp; transit. The swaps below can shave {formatCurrency(totalPotentialSavings)} off, but to comfortably fit this trip you&rsquo;d need a smaller hotel/flight bill or a higher overall budget.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pl-6">
+                    {onBumpBudget && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={async () => {
+                          try {
+                            await onBumpBudget(hotelDominantBumpCents);
+                            toast.success(`Budget raised to ${formatCurrency(hotelDominantBumpCents)}`);
+                          } catch {
+                            toast.error('Could not update budget.');
+                          }
+                        }}
+                      >
+                        Raise budget to {formatCurrency(hotelDominantBumpCents)}
+                      </Button>
+                    )}
+                    {onEditAccommodation && (
+                      <Button size="sm" variant="outline" onClick={onEditAccommodation}>
+                        Change accommodation
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {showRestructurePanel && !showHotelDominantPanel && (
                 <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
