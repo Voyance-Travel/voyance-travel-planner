@@ -132,7 +132,13 @@ export function PaymentsTab({
       setShowAddExpenseModal(true);
     };
     window.addEventListener('open-add-expense:mounted', handler);
-    return () => window.removeEventListener('open-add-expense:mounted', handler);
+    // Also listen for the immediate-fire variant — dispatched from BudgetTab
+    // when the user clicks "Add expense" while Payments is already mounted.
+    window.addEventListener('open-add-expense', handler);
+    return () => {
+      window.removeEventListener('open-add-expense:mounted', handler);
+      window.removeEventListener('open-add-expense', handler);
+    };
   }, []);
   // Fetch real trip members and collaborators
   const { data: rawTripMembers = [], isLoading: membersLoading } = useTripMembers(tripId);

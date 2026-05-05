@@ -396,7 +396,7 @@ export function BudgetSetupDialog({
               {/* Misc */}
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <Label>Miscellaneous</Label>
+                  <Label>Spending Money & Tips</Label>
                   <span className="text-sm text-muted-foreground">{allocations.misc_percent}%</span>
                 </div>
                 <Slider
@@ -405,6 +405,9 @@ export function BudgetSetupDialog({
                   max={20}
                   step={5}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Cash reserve for tips, pharmacy, SIMs, market finds. Not auto-filled by the itinerary — log expenses as you go.
+                </p>
               </div>
 
               {/* Buffer */}

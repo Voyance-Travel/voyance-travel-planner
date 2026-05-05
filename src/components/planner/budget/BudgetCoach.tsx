@@ -89,6 +89,12 @@ interface BudgetCoachProps {
   categoryOverruns?: Partial<Record<string, number>>;
   /** Optional: callback to drop the last day from the trip. If absent, the restructuring panel hides this option. */
   onShortenTrip?: () => void | Promise<void>;
+  /** Misc reserve allocated cents — when >0 and unused, Coach surfaces an info nudge. */
+  miscReserveCents?: number;
+  /** Misc cents already logged. When >0, the misc nudge is suppressed. */
+  miscUsedCents?: number;
+  /** Called when the misc nudge "Add expense" is clicked. */
+  onAddMiscExpense?: () => void;
   className?: string;
 }
 
@@ -158,6 +164,9 @@ export function BudgetCoach({
   onBumpBudget,
   categoryOverruns,
   onShortenTrip,
+  miscReserveCents = 0,
+  miscUsedCents = 0,
+  onAddMiscExpense,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
@@ -182,6 +191,17 @@ export function BudgetCoach({
     } catch { return null; }
   });
   const [isBumping, setIsBumping] = useState(false);
+
+  // Misc reserve nudge dismissal (device-local, keyed per trip)
+  const miscNudgeDismissKey = `budget-coach:misc-nudge-dismissed:${tripId}`;
+  const [miscNudgeDismissed, setMiscNudgeDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try { return window.localStorage.getItem(miscNudgeDismissKey) === '1'; } catch { return false; }
+  });
+  const dismissMiscNudge = useCallback(() => {
+    setMiscNudgeDismissed(true);
+    try { window.localStorage.setItem(miscNudgeDismissKey, '1'); } catch { /* ignore */ }
+  }, [miscNudgeDismissKey]);
 
   // Dismissed activity IDs — persisted in localStorage so they survive
   // page reloads but are device-local (no DB round-trip needed).
@@ -667,6 +687,40 @@ export function BudgetCoach({
             transition={{ duration: 0.2 }}
           >
             <CardContent className="space-y-3 pt-0">
+              {/* Misc reserve info nudge — the itinerary doesn't auto-fill misc,
+                  so when there's an unspent reserve, prompt the user to log
+                  cash expenses. Distinct visual (info, not warning); not counted
+                  in potential savings. */}
+              {miscReserveCents > 0 && miscUsedCents === 0 && !miscNudgeDismissed && (
+                <div className="rounded-lg border border-border bg-muted/40 p-3">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Set aside spending money</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Your spending-money reserve is {formatCurrency(miscReserveCents)}. Log your first cash expense (tip, SIM, snack) so this category reflects reality — the itinerary doesn't auto-fill it.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            onAddMiscExpense?.();
+                            dismissMiscNudge();
+                          }}
+                        >
+                          Add expense
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={dismissMiscNudge}>
+                          Dismiss
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+
               {/* "Bump tier" CTA — turn a complaint into an action when the
                   plan has clearly outgrown the preset (food-heavy + luxury anchors). */}
               {showBumpCta && (
