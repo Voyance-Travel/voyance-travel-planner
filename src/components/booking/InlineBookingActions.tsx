@@ -146,17 +146,25 @@ function isDiningActivity(title: string): boolean {
 function isHotelAmenityActivity(title: string, category?: string): boolean {
   const lowerTitle = (title || '').toLowerCase();
   const lowerCategory = (category || '').toLowerCase();
-  
-  // Check if category indicates accommodation/spa
+
+  // Explicit accommodation category
   if (ACCOMMODATION_CATEGORIES.some(cat => lowerCategory.includes(cat))) {
     return true;
   }
-  
-  // Check for hotel brand names or amenity keywords in title
-  if (HOTEL_AMENITY_KEYWORDS.some(keyword => lowerTitle.includes(keyword))) {
+
+  // Strong hotel signals in the title (chains, "hotel spa", etc.)
+  if (STRONG_HOTEL_SIGNALS.some(keyword => lowerTitle.includes(keyword))) {
     return true;
   }
-  
+
+  // Ambiguous amenity word ONLY counts when paired with a hotel cue in the same title
+  if (
+    AMBIGUOUS_AMENITY_KEYWORDS.some(keyword => lowerTitle.includes(keyword)) &&
+    HOTEL_CUE_RE.test(lowerTitle)
+  ) {
+    return true;
+  }
+
   return false;
 }
 
