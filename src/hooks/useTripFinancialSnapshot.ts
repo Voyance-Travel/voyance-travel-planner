@@ -121,6 +121,11 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     let paidTotal = 0;
     let canonicalHotelCents = 0;
     let canonicalFlightCents = 0;
+    // Track committed hotel/flight + already-logged misc spend so we can fold
+    // the unspent portion of the misc reserve into the trip total.
+    let committedHotelCents = 0;
+    let committedFlightCents = 0;
+    let loggedMiscCents = 0;
 
     for (const row of costs || []) {
       // Orphan filter: drop activity-bound rows whose activity_id no longer
