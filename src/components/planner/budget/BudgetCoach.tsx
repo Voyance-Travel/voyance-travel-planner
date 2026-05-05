@@ -414,8 +414,10 @@ export function BudgetCoach({
 
         // RACE GUARD: if the live itinerary changed while this request was in
         // flight, drop the response — a newer fetch is or will be running.
+        // Also drop if the live suggestable set is now empty (regen → bare itinerary).
         const liveNowHash = hashItinerary(itineraryDays);
-        if (liveNowHash !== liveHash || inFlightHashRef.current !== currentHash) {
+        const liveSuggestableNow = itineraryDays.flatMap(d => d.activities.filter(isSuggestable)).length;
+        if (liveNowHash !== liveHash || inFlightHashRef.current !== currentHash || liveSuggestableNow === 0) {
           console.log('[BudgetCoach] Discarding stale response — itinerary changed mid-flight');
           return;
         }
