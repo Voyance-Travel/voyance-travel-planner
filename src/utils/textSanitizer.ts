@@ -23,7 +23,17 @@ export function sanitizeText(text: string | undefined | null): string {
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
     // Fix orphaned possessive artifact: "the's" / "the' s" → "the city's"
-    .replace(/\bthe'\s?s\b/gi, "the city's");
+    .replace(/\bthe'\s?s\b/gi, "the city's")
+    // Repair orphaned "City" before a proper noun:
+    //   "the of Paris"        → "the City of Paris"
+    //   "the of Light Museum" → "the City of Light Museum"
+    .replace(/\bthe\s+of\s+(?=[A-Z])/g, 'the City of ')
+    // Repair dangling articles before punctuation that escaped generation:
+    //   "in the." / "of the!" → "in the city." / "of the city!"
+    .replace(
+      /\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the([.!?,;])/gi,
+      '$1 the city$2'
+    );
 }
 
 /**
