@@ -1913,10 +1913,37 @@ async function _handleGenerateTripDayInner(
     : true;
   const dayCountMatches = updatedDays.length >= totalDays;
   const noFailedDays = failedDayNumbers.length === 0;
-  
-  const isComplete = dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && noFailedDays;
+
+  // BARE-ITINERARY GUARD: count "meaningful" activities (not hotel/flight/
+  // check-in/return-to-hotel logistics). A trip with just a hotel checkin and
+  // checkout is not a complete itinerary even if every "day" technically has
+  // some entries. Without this, the UI shows $0 Food/Activities/Transit and
+  // Budget Coach has no candidates to suggest swaps for.
+  const NON_MEANINGFUL_CATS_FINAL = new Set([
+    'hotel', 'accommodation', 'lodging', 'stay', 'flight', 'flights',
+    'check-in', 'check-out', 'checkin', 'checkout', 'bag-drop',
+    'departure', 'arrival',
+  ]);
+  const NON_MEANINGFUL_TITLE_RE_FINAL = /\b(check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|hotel\s+checkout|hotel\s+check-?in|airport\s+transfer|departure)\b/i;
+  let meaningfulActivityCount = 0;
+  if (dayNumber >= totalDays) {
+    for (const d of updatedDays) {
+      for (const a of (d?.activities || [])) {
+        const cat = `${(a?.category || '')} ${(a?.type || '')}`.toLowerCase();
+        const title = String(a?.title || a?.name || '').trim();
+        if ([...NON_MEANINGFUL_CATS_FINAL].some(c => cat.includes(c))) continue;
+        if (NON_MEANINGFUL_TITLE_RE_FINAL.test(title)) continue;
+        meaningfulActivityCount++;
+      }
+    }
+  }
+  const MIN_MEANINGFUL_PER_DAY = 2; // ≥2 real things per day on avg
+  const meaningfulThreshold = totalDays * MIN_MEANINGFUL_PER_DAY;
+  const hasEnoughMeaningful = dayNumber < totalDays || meaningfulActivityCount >= meaningfulThreshold;
+
+  const isComplete = dayNumber >= totalDays && allDaysHaveActivities && dayCountMatches && noFailedDays && hasEnoughMeaningful;
   const computedStatus = isComplete ? 'ready' : (dayNumber >= totalDays ? 'partial' : 'generating');
-  
+
   if (dayNumber >= totalDays && !isComplete) {
     const issues: string[] = [];
     if (!allDaysHaveActivities) {
@@ -1927,6 +1954,7 @@ async function _handleGenerateTripDayInner(
     }
     if (!dayCountMatches) issues.push(`day count ${updatedDays.length} < expected ${totalDays}`);
     if (!noFailedDays) issues.push(`failed days: ${failedDayNumbers.join(', ')}`);
+    if (!hasEnoughMeaningful) issues.push(`bare itinerary: only ${meaningfulActivityCount} real activities for ${totalDays} days (need ≥${meaningfulThreshold})`);
     console.error(`[generate-trip-day] ⚠️ INCOMPLETE at chain end: ${issues.join('; ')}. Marking as partial.`);
   }
 
