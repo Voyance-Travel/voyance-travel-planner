@@ -170,6 +170,20 @@ Items in these categories have already been removed from the itinerary you see b
 This trip's identity is built around those categories. Suggesting swaps for them is a hard failure.`
       : "";
 
+    // ─── Priority overruns clause ──────────────────────────────────
+    // Per-category overruns supplied by the client. Force the model to
+    // prioritize swaps in over-allocated categories (e.g. Transit at 131%).
+    const overrunEntries = Object.entries(category_overruns)
+      .filter(([label, cents]) => typeof cents === "number" && cents > 0 && !protected_categories.includes(label))
+      .sort((a, b) => (b[1] as number) - (a[1] as number))
+      .slice(0, 3);
+    const priorityOverrunsClause = overrunEntries.length > 0
+      ? `\n\nPRIORITY OVERRUNS (must address first):
+The following categories are OVER their per-trip allocation:
+${overrunEntries.map(([label, cents]) => `  • ${label}: $${Math.round((cents as number) / 100)} over allocated budget`).join("\n")}
+At least your TOP ${Math.min(overrunEntries.length + 1, 4)} suggestions MUST target items in these overrun categories before suggesting swaps elsewhere. For Transit overruns, prefer demoting taxi/private-car legs to metro, bus, or walking. Use reference pricing for the new mode.`
+      : "";
+
     const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience.
 
 CRITICAL NAMING RULE:
