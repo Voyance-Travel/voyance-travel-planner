@@ -748,6 +748,71 @@ export function BudgetCoach({
                 </div>
               )}
 
+              {/* Restructuring panel — when swaps cannot bridge the gap */}
+              {showRestructurePanel && (
+                <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                        Swaps alone won't bridge this gap.
+                      </p>
+                      <p className="text-xs text-amber-800 dark:text-amber-200">
+                        The swaps below cover only {Math.round(coveragePct * 100)}% of your{' '}
+                        {formatCurrency(gapCents)} overrun. To get on target, you'll likely need to:
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pl-6">
+                    {onBumpBudget && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={async () => {
+                          try {
+                            await onBumpBudget(restructureBumpTargetCents);
+                            toast.success(`Budget raised to ${formatCurrency(restructureBumpTargetCents)}`);
+                          } catch {
+                            toast.error('Could not update budget.');
+                          }
+                        }}
+                      >
+                        Raise budget to {formatCurrency(restructureBumpTargetCents)}
+                      </Button>
+                    )}
+                    {deepCutsMode && visibleSuggestions.some((s) => s.swap_type === 'drop') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const el = document.getElementById('budget-coach-suggestions');
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className="gap-1.5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Drop optional activities
+                      </Button>
+                    )}
+                    {onShortenTrip && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (window.confirm('Shorten the trip by removing the last day? This is reversible.')) {
+                            void onShortenTrip();
+                          }
+                        }}
+                        className="gap-1.5"
+                      >
+                        <CalendarMinus className="h-3.5 w-3.5" />
+                        Shorten trip by 1 day
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Loading state */}
               {isLoading && (
                 <div className="flex items-center justify-center py-8 gap-3">
