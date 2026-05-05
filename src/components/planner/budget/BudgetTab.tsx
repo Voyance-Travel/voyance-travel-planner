@@ -672,7 +672,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
       {/* Bare-itinerary warning — itinerary has hotel/flight but no real activities */}
-      {!isManualMode && itineraryDays && itineraryDays.length > 0 && (() => {
+      {!isManualMode && !isEmptyItineraryFailure && itineraryDays && itineraryDays.length > 0 && (() => {
         const NON_ACTIVITY_CATS = new Set([
           'hotel', 'accommodation', 'lodging', 'stay', 'flight', 'flights',
           'check-in', 'check-out', 'checkin', 'checkout', 'bag-drop', 'departure', 'arrival',
