@@ -582,10 +582,10 @@ Rules:
     // Sort by savings desc
     suggestions.sort((a: any, b: any) => b.savings - a.savings);
 
-    console.log(`Returning ${suggestions.length} valid suggestions`);
+    console.log(`Returning ${suggestions.length} valid suggestions (deepCutsMode=${deepCutsMode})`);
 
     return new Response(
-      JSON.stringify({ suggestions, on_target: false }),
+      JSON.stringify({ suggestions, on_target: false, deep_cuts_mode: deepCutsMode }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
