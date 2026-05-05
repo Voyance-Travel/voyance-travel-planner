@@ -1,54 +1,79 @@
 
-On Day 1 for luxury food archetypes the LLM currently produces: arrival → hotel freshen-up → one cultural stop (Petit Palais) → lunch → spa → dinner. There's no second iconic / sensory "you-are-in-Paris" moment. The Grand Entrance Dinner directive already covers the dinner; this fix adds a sibling **"Grand Entrance Afternoon Anchor"** directive so Day 1 has at least one additional iconic experiential beat between the museum and dinner.
+Two breakfast issues, two fixes.
 
-## Fix
+## Issue 1 — Day 1 has no breakfast on morning arrivals
 
-### 1. Add a sibling prompt block in `dining-config.ts`
+`meal-policy.ts:143` only requires breakfast on Day 1 if `arrivalMins < 540` (i.e. before 9:00 AM). Most "morning arrivals" (9:00–12:00) drop straight into lunch + dinner.
 
-New exported function `buildArrivalCulturalAnchorBlock(config, destination)`:
-- Returns `null` unless `michelinPolicy === 'required' || 'encouraged'` (same gate as Grand Entrance Dinner — these are the luxury food tiers).
-- Returns a directive that mandates **one additional 60–90 min iconic cultural/sensory experience** scheduled in late afternoon (≈16:00–18:30), between any spa/freshen-up and dinner. Examples to suggest (destination-aware where practical, but framed as archetypes the LLM picks venues for):
-  - "Sunset stroll along an iconic waterway (Seine, Tagus, Thames…)"
-  - "Champagne or rooftop-bar toast at a landmark hotel/terrace"
-  - "Quick visit to a flagship cultural building open late (Grand Palais, Centre Pompidou-equivalent, gallery district walk)"
-  - "Golden-hour viewpoint walk (Trocadéro, Pincio, Hampstead Heath…)"
-- Tag requirement: `tags: ["arrival_anchor"]`.
-- Hard rules: must NOT replace lunch or dinner; must be a real named venue (no placeholders); cost reasonable (free–€60/pp); explicitly does NOT count as the third meal.
+**Fix:** raise the threshold to `arrivalMins < 630` (10:30 AM). Travelers arriving before 10:30 AM still have a real morning window for a café/coffee + croissant before checking in. After 10:30, keep current behavior (lunch + dinner only).
 
-### 2. Wire it in `pipeline/compile-prompt.ts`
-
-Right after the existing Grand Entrance Dinner injection (line 990), call the new builder with the same gate and append its block to `timingInstructions`:
 ```ts
-const anchor = buildArrivalCulturalAnchorBlock(diningConfig, resolvedDestination || destination || '');
-if (anchor) {
-  timingInstructions = `${timingInstructions}\n${anchor}\n`;
-  console.log(`[compile-prompt] Day 1 Arrival Cultural Anchor injected`);
+// meal-policy.ts ~line 143
+const meals: RequiredMeal[] = arrivalMins < 630
+  ? ['breakfast', 'lunch', 'dinner']
+  : ['lunch', 'dinner'];
+```
+
+This keeps late-morning arrivals realistic (no forced breakfast at 11:30) but covers genuine early arrivals.
+
+## Issue 2 — "Café Matinal" placeholder reached the user
+
+Two emergency code paths ship stub names instead of real venues:
+
+- `fix-placeholders.ts:269–296` — `GENERIC_VENUE_TEMPLATES` ("Café Matinal", "Bistrot du Marché", …) used by `nuclearPlaceholderSweep` when `getRandomFallbackRestaurant` returns null.
+- `day-validation.ts:1066–1088` — TRY 3 falls to the same template pool, then to a hardcoded `emergencyNames.breakfast = 'Café Matinal'`.
+
+For supported cities (Paris, Rome, Berlin, Barcelona, London, Lisbon) this should never trigger — but it does when the per-day `usedNames` Set overlaps the pool too aggressively, or when blocked-restaurants seeding exhausts the pool.
+
+**Fix:** make both emergency paths recycle a real venue from the fallback DB before ever using a generic template name.
+
+### A. `fix-placeholders.ts` — `nuclearPlaceholderSweep`
+
+Already calls `getRandomFallbackRestaurant(..., ignoreUsed=true)` — but if the city isn't in the inline DB, falls to template. Add a second pass: if the template would name "Café Matinal" / "Bistrot du Marché" / etc., refuse and instead leave the activity flagged with `__needs_breakfast_swap = true` and mark `description` with a clear "We couldn't find a verified breakfast spot here — tap to suggest one." string. This keeps the UI honest rather than fake.
+
+### B. `day-validation.ts` — TRY 3
+
+Replace the GENERIC_VENUE_TEMPLATES fallback + hardcoded emergency block (lines 1066–1088) with:
+
+```ts
+// TRY 3: Recycle a fallback DB venue (allow repeats) before any generic template
+if (!venueName) {
+  const recycled = getRandomFallbackRestaurant(destination, mealType, new Set(), /*ignoreUsed*/ true);
+  if (recycled) {
+    venueName = `${label} at ${recycled.name}`;
+    venueAddress = recycled.address || `${recycled.name}, ${destination}`;
+    venueDescription = recycled.description || `${label} at ${recycled.name}`;
+    usedRealVenue = true;
+    console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Recycling fallback DB venue "${recycled.name}" for ${mealType} (pool exhausted with unique names)`);
+  }
+}
+
+// TRY 4 (true last resort, only if city has no DB at all): mark as unverified
+if (!venueName) {
+  venueName = `${label} — find a local spot`;
+  venueAddress = destination;
+  venueDescription = `We couldn't verify a ${mealType} venue in our local database. Tap to ask the assistant for a suggestion.`;
+  console.error(`[MEAL FINAL GUARD] Day ${dayNumber}: NO fallback DB for ${destination} — left unverified slot for ${mealType}`);
 }
 ```
 
-### 3. Soft post-gen guard in `universal-quality-pass.ts`
+This eliminates "Café Matinal" / "Bistrot du Marché" as user-visible names entirely.
 
-Right after Step 7b (Grand Entrance dinner check, line 233):
-- Only when `dayIndex === 0` AND `isLuxuryFood` AND policy is required/encouraged.
-- Count Day 1 non-meal experiential activities — categories in `{ATTRACTION, CULTURE, MUSEUM, OUTDOOR, ENTERTAINMENT, SIGHTSEEING, NIGHTLIFE}`.
-- If `< 2`, log a warning and append a synthetic activity-level tag on the day metadata (`(result as any).__missingArrivalAnchor = true`) so the repair pass can later prompt-augment a regen. **Do not** insert a fake card client-side (we have no real venue lookup here, and inventing one violates the "no placeholders" mandate).
-- This soft signal mirrors the existing `needs_elevation` pattern; cheaper than adding a full repair path right now and matches how Grand Entrance Dinner shipped.
+### C. Deprecate `GENERIC_VENUE_TEMPLATES` (defensive)
 
-### 4. Memory
+Keep the export (test depends on it) but stop calling it from `nuclearPlaceholderSweep`. Replace template-pool use there with the same recycle-or-mark-unverified pattern. Add a comment marking the export deprecated.
 
-Update `mem://features/itinerary/grand-entrance-dinner` (rename in body to "Grand Entrance Day 1") to also describe the afternoon anchor as a sibling rule under the same gate.
+## Files
+
+- `supabase/functions/generate-itinerary/meal-policy.ts` — raise breakfast threshold to 10:30 AM
+- `supabase/functions/generate-itinerary/day-validation.ts` — replace TRY 3 emergency block with recycle-then-unverified
+- `supabase/functions/generate-itinerary/fix-placeholders.ts` — `nuclearPlaceholderSweep` no longer falls to templates; uses recycle-or-mark-unverified
+- `mem://core` — update Meal Rules entry: "Arrival day breakfast required if arrival < 10:30; emergency template names ('Café Matinal' etc.) banned — recycle real venues."
 
 ## Out of scope
 
-- No new repair-day venue insertion. The directive runs at generation time; existing trips don't auto-heal.
-- No archetype recalibration; only the existing luxury food tiers (Curator, Luxury Luminary, Culinary Cartographer, VIP Voyager) are affected.
-- Petit Palais and the chosen lunch/dinner are untouched — we only ensure a 2nd cultural beat exists.
-
-## Files touched
-
-- `supabase/functions/generate-itinerary/dining-config.ts` — add `buildArrivalCulturalAnchorBlock`
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — wire anchor block into Day 1 directive
-- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — soft `__missingArrivalAnchor` flag
-- `mem://features/itinerary/grand-entrance-dinner` — note the new sibling rule
+- No new fallback DB entries (Paris already has 10 breakfasts).
+- No re-rendering of existing trips — applies to next regen only.
+- Dinner / lunch fallbacks unchanged (same pattern works for them; same fix applies because both code paths handle all meal types — the fix is mealType-agnostic).
 
 Approve?
