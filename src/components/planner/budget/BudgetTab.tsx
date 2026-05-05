@@ -108,6 +108,12 @@ interface BudgetTabProps {
   journeyName?: string | null;
   /** Manual builder mode — skip auto-calculated expenses */
   isManualMode?: boolean;
+  /** Trip generation status — used to surface failed/empty states */
+  tripStatus?: string | null;
+  /** Reason from trip metadata when generation failed */
+  generationFailureReason?: string | null;
+  /** Trigger a fresh itinerary regeneration (used in failed/empty banner CTA) */
+  onRegenerate?: () => void;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
