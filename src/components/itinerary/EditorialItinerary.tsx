@@ -485,6 +485,8 @@ export interface EditorialItineraryProps {
   initialItineraryData?: Record<string, unknown> | null;
   /** Current itinerary generation status — hides unlock UI during generation */
   itineraryStatus?: string | null;
+  /** Reason from trip metadata when itinerary_status === 'failed' */
+  generationFailureReason?: string | null;
   /** Journey fields for linked trips */
   journeyId?: string | null;
   journeyName?: string | null;
@@ -1221,6 +1223,7 @@ export function EditorialItinerary({
   navigateToSection,
   initialItineraryData,
   itineraryStatus,
+  generationFailureReason,
   journeyId,
   journeyName,
   onDateChange,
@@ -6622,6 +6625,9 @@ export function EditorialItinerary({
             travelers={travelers}
             totalDays={days.length}
             isManualMode={isManualMode}
+            tripStatus={itineraryStatus ?? null}
+            generationFailureReason={generationFailureReason ?? null}
+            onRegenerate={handleRegenerateItinerary}
             itineraryDays={days}
             hasHotel={
               !!(hotelSelection?.pricePerNight || hotelSelection?.name) ||

@@ -2984,12 +2984,51 @@ export async function finalSaveItinerary(
       console.warn('[Stage 6] Could not compute end_date:', e);
     }
 
+    // ── EMPTY-ITINERARY GATE ──────────────────────────────────────
+    // Detect skeleton itineraries (hotel-only / no real activities) and
+    // mark trip as 'failed' instead of 'ready' so the UI can prompt retry.
+    let emptyItineraryDetected = false;
+    try {
+      const { countMeaningfulActivities } = await import('./day-validation.ts');
+      const probe = countMeaningfulActivities(daysArray as any[]);
+      if (probe.meaningfulCount === 0 && probe.dayCount > 0) {
+        emptyItineraryDetected = true;
+        console.warn(
+          `[Stage 6] EMPTY ITINERARY DETECTED — meaningfulCount=0, days=${probe.dayCount}, tripId=${tripId}`
+        );
+      }
+    } catch (e) {
+      console.warn('[Stage 6] empty-itinerary probe failed (non-blocking):', e);
+    }
+
+    // Read current metadata to preserve existing keys
+    let existingMetadata: Record<string, any> = {};
+    if (emptyItineraryDetected) {
+      try {
+        const { data: tRow } = await supabase
+          .from('trips')
+          .select('metadata')
+          .eq('id', tripId)
+          .single();
+        existingMetadata = (tRow?.metadata as any) || {};
+      } catch {
+        existingMetadata = {};
+      }
+    }
+
     const updatePayload: Record<string, unknown> = {
       itinerary_data: frontendReadyData,
-      itinerary_status: 'ready',
+      itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
       dna_snapshot: dnaSnapshot,
       updated_at: new Date().toISOString(),
       ...(context.blendedDnaSnapshot && { blended_dna: context.blendedDnaSnapshot }),
+      ...(emptyItineraryDetected && {
+        metadata: {
+          ...existingMetadata,
+          generation_failure_reason: 'empty_itinerary',
+          empty_itinerary_detected_at: new Date().toISOString(),
+        },
+      }),
     };
     if (computedEndDate) {
       updatePayload.end_date = computedEndDate;

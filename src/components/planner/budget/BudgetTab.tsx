@@ -108,6 +108,12 @@ interface BudgetTabProps {
   journeyName?: string | null;
   /** Manual builder mode — skip auto-calculated expenses */
   isManualMode?: boolean;
+  /** Trip generation status — used to surface failed/empty states */
+  tripStatus?: string | null;
+  /** Reason from trip metadata when generation failed */
+  generationFailureReason?: string | null;
+  /** Trigger a fresh itinerary regeneration (used in failed/empty banner CTA) */
+  onRegenerate?: () => void;
 }
 
 const categoryIcons: Record<BudgetCategory, React.ReactNode> = {
@@ -267,7 +273,7 @@ function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons
   );
 }
 
-export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName, isManualMode = false }: BudgetTabProps) {
+export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName, isManualMode = false, tripStatus, generationFailureReason, onRegenerate }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [payments, setPayments] = useState<TripPayment[]>([]);
   
@@ -524,14 +530,36 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     });
   }
 
+  // Failed/empty itinerary state — replaces over-budget UI with a recovery banner.
+  const isEmptyItineraryFailure =
+    tripStatus === 'failed' && generationFailureReason === 'empty_itinerary';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 py-6"
     >
-      {/* Over-budget Warning Banner — snapshot is the only source (hidden in manual mode) */}
-      {!isManualMode && (() => {
+      {/* Failed/empty itinerary banner — replaces over-budget messaging */}
+      {isEmptyItineraryFailure && (
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30">
+          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-destructive" />
+          <div className="flex-1 space-y-2">
+            <p className="font-semibold text-foreground">Your itinerary didn't generate properly</p>
+            <p className="text-sm text-muted-foreground">
+              Generation finished without any restaurants, activities, or transit. Tap Regenerate to try again.
+            </p>
+            {onRegenerate && (
+              <Button size="sm" variant="default" onClick={onRegenerate} className="mt-1">
+                Regenerate itinerary
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Over-budget Warning Banner — snapshot is the only source (hidden in manual mode and on empty-itinerary failure) */}
+      {!isManualMode && !isEmptyItineraryFailure && (() => {
         const showWarning = settings?.budget_warnings_enabled !== false
           && settings?.budget_warning_threshold !== 'off'
           && (snapshotStatus === 'red' || (snapshotStatus === 'yellow' && settings?.budget_warning_threshold !== 'red_only'));
@@ -644,7 +672,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
       {/* Bare-itinerary warning — itinerary has hotel/flight but no real activities */}
-      {!isManualMode && itineraryDays && itineraryDays.length > 0 && (() => {
+      {!isManualMode && !isEmptyItineraryFailure && itineraryDays && itineraryDays.length > 0 && (() => {
         const NON_ACTIVITY_CATS = new Set([
           'hotel', 'accommodation', 'lodging', 'stay', 'flight', 'flights',
           'check-in', 'check-out', 'checkin', 'checkout', 'bag-drop', 'departure', 'arrival',
@@ -675,7 +703,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
 
-      {!isManualMode && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && snapshotStatus !== 'yellow' && (() => {
+      {!isManualMode && !isEmptyItineraryFailure && hasBudget && itineraryDays && itineraryDays.length > 0 && summary && snapshotStatus !== 'yellow' && (() => {
         // Compute per-category overruns (planned - allocated, in cents) and
         // translate BudgetCategory → Coach's user-facing labels.
         const CATEGORY_LABEL_MAP: Record<BudgetCategory, string> = {
