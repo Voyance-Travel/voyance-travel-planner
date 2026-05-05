@@ -2488,8 +2488,14 @@ async function _handleGenerateTripDayInner(
         generation_total_days: totalDays,
         generation_current_city: null,
         chain_broken_at_day: isComplete ? null : emptyDaysList[0],
-        chain_error: isComplete ? null : `Shell days detected: ${emptyDaysList.join(', ')} have 0 activities`,
+        chain_error: isComplete ? null : (
+          !hasEnoughMeaningful
+            ? `Bare itinerary: only ${meaningfulActivityCount} real activities for ${totalDays} days`
+            : `Shell days detected: ${emptyDaysList.join(', ')} have 0 activities`
+        ),
         empty_days_at_completion: emptyDaysList.length > 0 ? emptyDaysList : null,
+        bare_itinerary_detected: !hasEnoughMeaningful || null,
+        meaningful_activity_count: meaningfulActivityCount,
       },
     }).eq('id', tripId);
 
