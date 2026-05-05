@@ -3008,17 +3008,27 @@ export async function finalSaveItinerary(
       console.warn('[Stage 6] Could not compute end_date:', e);
     }
 
-    // ── EMPTY-ITINERARY GATE ──────────────────────────────────────
-    // Detect skeleton itineraries (hotel-only / no real activities) and
-    // mark trip as 'failed' instead of 'ready' so the UI can prompt retry.
+    // ── EMPTY / INCOMPLETE ITINERARY GATE ────────────────────────
+    // Detect skeleton itineraries (hotel-only / no real activities) AND
+    // degenerate ones (hotel + a single placeholder filler) and mark the
+    // trip as 'failed' so downstream UI (Budget Coach, etc.) knows not to
+    // operate on a broken plan.
     let emptyItineraryDetected = false;
+    let failureReason: 'empty_itinerary' | 'incomplete_itinerary' | null = null;
     try {
-      const { countMeaningfulActivities } = await import('./day-validation.ts');
-      const probe = countMeaningfulActivities(daysArray as any[]);
-      if (probe.meaningfulCount === 0 && probe.dayCount > 0) {
+      const { classifyItineraryCompleteness } = await import('./day-validation.ts');
+      const probe = classifyItineraryCompleteness(daysArray as any[]);
+      if (probe.status === 'empty') {
         emptyItineraryDetected = true;
+        failureReason = 'empty_itinerary';
         console.warn(
           `[Stage 6] EMPTY ITINERARY DETECTED — meaningfulCount=0, days=${probe.dayCount}, tripId=${tripId}`
+        );
+      } else if (probe.status === 'incomplete') {
+        emptyItineraryDetected = true;
+        failureReason = 'incomplete_itinerary';
+        console.warn(
+          `[Stage 6] INCOMPLETE ITINERARY DETECTED — paid=${probe.paidMeaningfulCount} meaningful=${probe.meaningfulCount} days=${probe.dayCount}, tripId=${tripId}`
         );
       }
     } catch (e) {
@@ -3049,7 +3059,7 @@ export async function finalSaveItinerary(
       ...(emptyItineraryDetected && {
         metadata: {
           ...existingMetadata,
-          generation_failure_reason: 'empty_itinerary',
+          generation_failure_reason: failureReason,
           empty_itinerary_detected_at: new Date().toISOString(),
         },
       }),
