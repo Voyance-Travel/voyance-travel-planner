@@ -80,6 +80,8 @@ serve(async (req) => {
       protected_categories = [],
       dismissed_activity_ids = [],
       category_overruns = {},
+      anchor_activity_ids = [],
+      deep_cuts_requested = false,
     } = (await req.json()) as RequestBody;
 
     const gap_cents = current_total_cents - budget_target_cents;
