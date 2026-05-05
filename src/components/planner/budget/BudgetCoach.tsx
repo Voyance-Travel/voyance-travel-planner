@@ -771,6 +771,54 @@ export function BudgetCoach({
     }
   };
 
+  // ─── Apply ALL pending suggestions in one click ───────────────
+  // Used by the restructure panel when swap-only coverage is poor.
+  // Applies sequentially so the parent's syncBudgetFromDays sees a
+  // consistent state between calls. Skips already-applied/locked items.
+  const handleApplyAll = async () => {
+    const pending = visibleSuggestions.filter(
+      (s) => !appliedIds.has(s.activity_id) && !lockedActivityIds.has(s.activity_id)
+    );
+    if (pending.length === 0) {
+      toast.info('No pending suggestions to apply.');
+      return;
+    }
+    const dropCount = pending.filter((s) => s.swap_type === 'drop').length;
+    const totalSavings = pending.reduce((sum, s) => sum + s.savings, 0) * travelers;
+    const summary = `Apply all ${pending.length} suggestion${pending.length === 1 ? '' : 's'}?\n\n` +
+      `• ${pending.length - dropCount} swap${pending.length - dropCount === 1 ? '' : 's'} to cheaper alternatives\n` +
+      `• ${dropCount} drop${dropCount === 1 ? '' : 's'} (activities removed)\n` +
+      `• Total savings: ${formatCurrency(totalSavings)}\n\n` +
+      `You can undo by re-adding any dropped activity.`;
+    if (typeof window !== 'undefined' && !window.confirm(summary)) return;
+
+    setIsApplyingAll(true);
+    let applied = 0;
+    let failed = 0;
+    for (const s of pending) {
+      try {
+        const res = await onApplySuggestion?.(s);
+        if (res === false) { failed++; continue; }
+        setAppliedIds((prev) => new Set(prev).add(s.activity_id));
+        setSuggestions((prev) => prev.filter((x) => x.activity_id !== s.activity_id));
+        applied++;
+      } catch {
+        failed++;
+      }
+    }
+    setIsApplyingAll(false);
+    const cached = suggestionsCache.get(tripId);
+    if (cached) {
+      const appliedSet = new Set(pending.map((p) => p.activity_id));
+      suggestionsCache.set(tripId, {
+        ...cached,
+        suggestions: cached.suggestions.filter((s) => !appliedSet.has(s.activity_id)),
+      });
+    }
+    if (failed === 0) toast.success(`Applied ${applied} suggestion${applied === 1 ? '' : 's'}.`);
+    else toast.warning(`Applied ${applied}, ${failed} couldn't be applied (locked or stale).`);
+  };
+
   return (
     <Card className={cn('border-primary/30', className)}>
       <CardHeader className="pb-3">
