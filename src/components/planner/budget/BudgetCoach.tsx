@@ -337,15 +337,70 @@ export function BudgetCoach({
     }
   }, [isOverBudget, itineraryDays.length, fetchSuggestions]);
 
-  // Re-fetch when protections or dismissals change (after the initial fetch).
+  // Re-fetch when protections, dismissals, OR live itinerary content change.
+  // The itinerary hash captures id+title+cost so any edit/swap/regen invalidates
+  // the cached suggestions and forces a fresh fetch — preventing phantom
+  // suggestions that point at activities no longer in the live itinerary.
   const protectionsKey = protectedCategories.join('|');
   const dismissedKey = dismissedIds.join('|');
+  const itineraryContentHash = useMemo(() => hashItinerary(itineraryDays), [itineraryDays]);
   useEffect(() => {
     if (fetchedRef.current && isOverBudget) {
+      // Drop the module-level cache entry so a stale list can't be re-served.
+      suggestionsCache.delete(tripId);
       fetchSuggestions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [protectionsKey, dismissedKey]);
+  }, [protectionsKey, dismissedKey, itineraryContentHash]);
+
+  // Client-side phantom filter: even if the cache has a suggestion whose
+  // activity_id was removed or renamed in the live itinerary, never render it.
+  const liveActivityTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const day of itineraryDays) {
+      for (const a of day.activities) {
+        m.set(a.id, (a.title || a.name || '').trim());
+      }
+    }
+    return m;
+  }, [itineraryDays]);
+
+  const SUGG_TITLE_STOPWORDS = new Set([
+    'dinner','lunch','breakfast','brunch','meal','snack','drinks',
+    'activity','activities','transport','transit','taxi','metro',
+    'hotel','accommodation','stay','checkin','checkout',
+    'day','evening','morning','afternoon','night',
+    'restaurant','cafe','café','bar','tour','visit','at','the','a','an','of',
+  ]);
+  const normalizeTitle = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const tokensOf = (s: string) =>
+    new Set(normalizeTitle(s).split(' ').filter(t => t.length >= 4 && !SUGG_TITLE_STOPWORDS.has(t)));
+  const titlesMatch = (claimed: string, real: string): boolean => {
+    const c = normalizeTitle(claimed);
+    const r = normalizeTitle(real);
+    if (!c || !r) return false;
+    const shorter = c.length <= r.length ? c : r;
+    const longer = shorter === c ? r : c;
+    if (shorter.length >= 8 && longer.includes(shorter)) return true;
+    const ct = tokensOf(claimed);
+    const rt = tokensOf(real);
+    if (ct.size === 0 || rt.size === 0) return false;
+    let overlap = 0;
+    for (const t of ct) if (rt.has(t)) overlap++;
+    return overlap >= 1;
+  };
+
+  const visibleSuggestions = useMemo(() => {
+    return suggestions.filter(s => {
+      const realTitle = liveActivityTitleById.get(s.activity_id);
+      if (!realTitle) return false; // activity no longer in itinerary
+      // If the suggestion's current_item doesn't match the live title, it's
+      // pointing at an old version of that slot — drop it.
+      if (s.current_item && !titlesMatch(s.current_item, realTitle)) return false;
+      return true;
+    });
+  }, [suggestions, liveActivityTitleById]);
 
   const toggleProtected = useCallback(
     (label: string) => {
