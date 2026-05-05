@@ -125,7 +125,7 @@ const categoryLabels: Record<BudgetCategory, string> = {
   food: 'Food & Dining',
   activities: 'Activities',
   transit: 'Local Transit',
-  misc: 'Miscellaneous',
+  misc: 'Spending Money & Tips',
 };
 
 const categoryColors: Record<BudgetCategory, string> = {
