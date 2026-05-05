@@ -343,142 +343,83 @@ Rules:
 - All costs in ${currency} as integers (no decimals)
 - NEVER suggest the same replacement venue/restaurant in more than one suggestion. Each swap must recommend a DIFFERENT specific place, even if multiple items are in the same category (e.g., if two breakfasts need swaps, suggest two different affordable cafés).`;
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
+    // ── AI call (factored so we can re-prompt for coverage) ───────
+    const TOOL_SCHEMA = {
+      type: "function" as const,
+      function: {
+        name: "return_budget_suggestions",
+        description: "Return an array of budget-cutting swap suggestions for the itinerary.",
+        parameters: {
+          type: "object",
+          properties: {
+            suggestions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  current_item: { type: "string", description: "Name of the expensive item" },
+                  current_cost: { type: "number", description: "Current cost in whole currency units (e.g. 50 for $50)" },
+                  suggested_swap: { type: "string", description: "The specific name of a real venue, restaurant, or experience to replace the current one. Must be a concrete, real place name (e.g. 'Trattoria da Mario', 'Self-guided walk through Montmartre') — NOT a generic description like 'lower cost restaurant' or 'cheaper option'." },
+                  new_cost: { type: "number", description: "New cost in whole currency units (e.g. 30 for $30)" },
+                  savings: { type: "number", description: "Savings in whole currency units" },
+                  reason: { type: "string", description: "Brief explanation of why this swap saves money (shown in coach panel only)" },
+                  suggested_description: { type: "string", description: "A short, experience-focused description of the replacement activity as it should appear on the itinerary card (e.g. 'Grab gourmet sandwiches from Lenwich and enjoy a picnic in Central Park'). Do NOT include budget reasoning here." },
+                  day_number: { type: "number", description: "Which day this activity is on" },
+                  activity_id: { type: "string", description: "The ID of the activity to swap or drop" },
+                  swap_type: { type: "string", enum: ["swap", "drop", "consolidate"], description: "swap = replace with cheaper alternative (default). drop = remove the activity entirely (deep-cuts mode only). consolidate = swap-merge with another same-day item." },
+                },
+                required: ["current_item", "current_cost", "suggested_swap", "new_cost", "savings", "reason", "suggested_description", "day_number", "activity_id", "swap_type"],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ["suggestions"],
+          additionalProperties: false,
         },
+      },
+    };
+
+    const callAI = async (sysPrompt: string, usrPrompt: string): Promise<any[]> => {
+      const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
+            { role: "system", content: sysPrompt },
+            { role: "user", content: usrPrompt },
           ],
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "return_budget_suggestions",
-                description:
-                  "Return an array of budget-cutting swap suggestions for the itinerary.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    suggestions: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          current_item: {
-                            type: "string",
-                            description: "Name of the expensive item",
-                          },
-                          current_cost: {
-                            type: "number",
-                            description:
-                              "Current cost in whole currency units (e.g. 50 for $50)",
-                          },
-                          suggested_swap: {
-                            type: "string",
-                            description:
-                              "The specific name of a real venue, restaurant, or experience to replace the current one. Must be a concrete, real place name (e.g. 'Trattoria da Mario', 'Self-guided walk through Montmartre') — NOT a generic description like 'lower cost restaurant' or 'cheaper option'.",
-                          },
-                          new_cost: {
-                            type: "number",
-                            description:
-                              "New cost in whole currency units (e.g. 30 for $30)",
-                          },
-                          savings: {
-                            type: "number",
-                            description: "Savings in whole currency units",
-                          },
-                          reason: {
-                            type: "string",
-                            description:
-                              "Brief explanation of why this swap saves money (shown in coach panel only)",
-                          },
-                          suggested_description: {
-                            type: "string",
-                            description:
-                              "A short, experience-focused description of the replacement activity as it should appear on the itinerary card (e.g. 'Grab gourmet sandwiches from Lenwich and enjoy a picnic in Central Park'). Do NOT include budget reasoning here.",
-                          },
-                          day_number: {
-                            type: "number",
-                            description: "Which day this activity is on",
-                          },
-                          activity_id: {
-                            type: "string",
-                            description: "The ID of the activity to swap or drop",
-                          },
-                          swap_type: {
-                            type: "string",
-                            enum: ["swap", "drop", "consolidate"],
-                            description:
-                              "swap = replace with cheaper alternative (default). drop = remove the activity entirely (deep-cuts mode only). consolidate = swap-merge with another same-day item.",
-                          },
-                        },
-                        required: [
-                          "current_item",
-                          "current_cost",
-                          "suggested_swap",
-                          "new_cost",
-                          "savings",
-                          "reason",
-                          "suggested_description",
-                          "day_number",
-                          "activity_id",
-                          "swap_type",
-                        ],
-                        additionalProperties: false,
-                      },
-                    },
-                  },
-                  required: ["suggestions"],
-                  additionalProperties: false,
-                },
-              },
-            },
-          ],
-          tool_choice: {
-            type: "function",
-            function: { name: "return_budget_suggestions" },
-          },
+          tools: [TOOL_SCHEMA],
+          tool_choice: { type: "function", function: { name: "return_budget_suggestions" } },
         }),
+      });
+      if (!r.ok) {
+        if (r.status === 429) throw new Error("__RATE_LIMITED__");
+        if (r.status === 402) throw new Error("__CREDITS_EXHAUSTED__");
+        const text = await r.text();
+        console.error("AI gateway error:", r.status, text);
+        throw new Error(`AI gateway error: ${r.status}`);
       }
-    );
+      const j = await r.json();
+      const tc = j.choices?.[0]?.message?.tool_calls?.[0];
+      if (!tc?.function?.arguments) return [];
+      try { return JSON.parse(tc.function.arguments).suggestions || []; }
+      catch { console.error("Failed to parse tool call arguments"); return []; }
+    };
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limited, please try again shortly." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+    let suggestions: any[];
+    try {
+      suggestions = await callAI(systemPrompt, userPrompt);
+    } catch (callErr: any) {
+      if (callErr?.message === "__RATE_LIMITED__") {
+        return new Response(JSON.stringify({ error: "Rate limited, please try again shortly." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (callErr?.message === "__CREDITS_EXHAUSTED__") {
+        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      const text = await response.text();
-      console.error("AI gateway error:", response.status, text);
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    
-    let suggestions: any[] = [];
-    if (toolCall?.function?.arguments) {
-      try {
-        const parsed = JSON.parse(toolCall.function.arguments);
-        suggestions = parsed.suggestions || [];
-      } catch {
-        console.error("Failed to parse tool call arguments");
-      }
+      throw callErr;
     }
 
     // Build lookups for ID-existence + title-match guards. Use the FULL
