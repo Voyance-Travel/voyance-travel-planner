@@ -82,24 +82,14 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // session-to-session drift and a permanent "Reconciling…" mismatch.
     const { data: tripData } = await supabase
       .from('trips')
-      .select('budget_total_cents, budget_include_hotel, budget_include_flight, itinerary_data')
+      .select('budget_total_cents, budget_include_hotel, budget_include_flight, budget_allocations, itinerary_data')
       .eq('id', tripId)
       .single();
 
     const includeHotel = tripData?.budget_include_hotel ?? true;
     const includeFlight = tripData?.budget_include_flight ?? false;
-
-    // Misc reserve — read separately so the snapshot can fold the unspent
-    // cash reserve into the trip total. Without this the slider value (e.g.
-    // $90 "Spending Money & Tips") is invisible to budget math and the user
-    // sees phantom headroom equal to the reserve.
-    const { data: budgetSettingsRow } = await supabase
-      .from('trip_budget_settings')
-      .select('budget_allocations')
-      .eq('trip_id', tripId)
-      .maybeSingle();
     const miscPercent = Number(
-      (budgetSettingsRow as any)?.budget_allocations?.misc_percent ?? 0
+      (tripData as any)?.budget_allocations?.misc_percent ?? 0
     ) || 0;
 
     // Build the live activity ID set from the rendered itinerary JSON.
