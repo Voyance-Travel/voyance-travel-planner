@@ -189,7 +189,7 @@ export function VendorBookingTextLink({
       )}
     >
       <ExternalLink className="h-3 w-3" />
-      Book on {vendorName}
+      {ctaPrefix} {vendorName}
     </a>
   );
 }
