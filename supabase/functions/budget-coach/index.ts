@@ -75,6 +75,7 @@ serve(async (req) => {
       destination,
       protected_categories = [],
       dismissed_activity_ids = [],
+      category_overruns = {},
     } = (await req.json()) as RequestBody;
 
     const gap_cents = current_total_cents - budget_target_cents;
