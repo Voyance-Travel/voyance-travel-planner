@@ -408,6 +408,7 @@ export function BudgetSetupDialog({
                 <p className="text-xs text-muted-foreground">
                   Cash reserve for tips, pharmacy, SIMs, market finds. Not auto-filled by the itinerary — log expenses as you go.
                 </p>
+              </div>
 
               {/* Buffer */}
               <div className="space-y-2">
