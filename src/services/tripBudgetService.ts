@@ -754,11 +754,6 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
     + (settings.budget_include_flight ? summary.committedFlightCents : 0);
   const discretionaryRemainder = Math.max(budgetTotal - committedFixed, 0);
 
-  // When fixed costs have swallowed the entire budget, the discretionary
-  // remainder is $0 — which makes every category's "allocated" read as $0
-  // even though the user clearly intended the saved 35/35/10/5 split. Fall
-  // back to the original budget total × saved percentages so the per-category
-  // targets stay meaningful, and tag the rows so the UI can explain the state.
   const plannedDiscretionary = summary.plannedFoodCents + summary.plannedActivitiesCents
     + summary.plannedTransitCents + summary.plannedMiscCents;
   const underwater = discretionaryRemainder === 0 && plannedDiscretionary > 0 && budgetTotal > 0;
@@ -781,11 +776,25 @@ export async function getCategoryAllocations(tripId: string): Promise<CategoryAl
     };
   };
 
+  // Misc is a cash reserve — its "used" amount is the reserve itself (logged
+  // expenses consume it but never exceed it for display purposes), so the
+  // category bar reflects an honest commitment instead of a permanent 0%.
+  const miscAllocatedCents = Math.round(allocBase * (allocations.misc_percent / 100));
+  const miscUsedForDisplay = Math.max(summary.plannedMiscCents, miscAllocatedCents);
+
   result.push(
     buildDiscretionary('food', allocations.food_percent, summary.plannedFoodCents),
     buildDiscretionary('activities', allocations.activities_percent, summary.plannedActivitiesCents),
     buildDiscretionary('transit', allocations.transit_percent, summary.plannedTransitCents),
-    buildDiscretionary('misc', allocations.misc_percent, summary.plannedMiscCents),
+    {
+      category: 'misc',
+      allocatedCents: miscAllocatedCents,
+      usedCents: miscUsedForDisplay,
+      remainingCents: Math.max(0, miscAllocatedCents - summary.plannedMiscCents),
+      percent: allocations.misc_percent,
+      kind: 'discretionary',
+      discretionaryUnderwater: underwater || undefined,
+    },
   );
 
   return result;
