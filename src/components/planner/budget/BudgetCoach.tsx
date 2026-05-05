@@ -1056,16 +1056,26 @@ export function BudgetCoach({
                         Swaps alone won't bridge this gap.
                       </p>
                       <p className="text-xs text-amber-800 dark:text-amber-200">
-                        The swaps below cover only {Math.round(coveragePct * 100)}% of your{' '}
-                        {formatCurrency(gapCents)} overrun. To get on target, you'll likely need to:
+                        The suggestions below cover only {Math.round(coveragePct * 100)}% of your{' '}
+                        {formatCurrency(gapCents)} overrun{deepCutsMode ? ' even with drops' : ''}. To reach your target you'll need to combine them with one of the structural changes below.
                       </p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 pl-6">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      disabled={isApplyingAll}
+                      onClick={handleApplyAll}
+                      className="gap-1.5"
+                    >
+                      {isApplyingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                      Apply all suggestions ({formatCurrency(totalPotentialSavings * travelers)})
+                    </Button>
                     {onBumpBudget && (
                       <Button
                         size="sm"
-                        variant="default"
+                        variant="outline"
                         onClick={async () => {
                           try {
                             await onBumpBudget(restructureBumpTargetCents);
@@ -1076,20 +1086,9 @@ export function BudgetCoach({
                         }}
                       >
                         Raise budget to {formatCurrency(restructureBumpTargetCents)}
-                      </Button>
-                    )}
-                    {deepCutsMode && visibleSuggestions.some((s) => s.swap_type === 'drop') && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const el = document.getElementById('budget-coach-suggestions');
-                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }}
-                        className="gap-1.5"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Drop optional activities
+                        {restructureBumpTargetCents >= currentTotalCents && (
+                          <span className="ml-1 text-xs text-emerald-600 dark:text-emerald-400">(closes the gap)</span>
+                        )}
                       </Button>
                     )}
                     {onShortenTrip && (
