@@ -532,8 +532,14 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   }
 
   // Failed/empty itinerary state — replaces over-budget UI with a recovery banner.
+  // Covers both 'empty_itinerary' (zero meaningful activities) and the new
+  // 'incomplete_itinerary' (degenerate: hotel-only or hotel + single filler).
   const isEmptyItineraryFailure =
-    tripStatus === 'failed' && generationFailureReason === 'empty_itinerary';
+    tripStatus === 'failed' &&
+    (generationFailureReason === 'empty_itinerary' ||
+      generationFailureReason === 'incomplete_itinerary');
+  const isIncompleteItineraryFailure =
+    tripStatus === 'failed' && generationFailureReason === 'incomplete_itinerary';
 
   return (
     <motion.div
@@ -546,9 +552,15 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30">
           <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-destructive" />
           <div className="flex-1 space-y-2">
-            <p className="font-semibold text-foreground">Your itinerary didn't generate properly</p>
+            <p className="font-semibold text-foreground">
+              {isIncompleteItineraryFailure
+                ? 'Your itinerary is missing activities'
+                : "Your itinerary didn't generate properly"}
+            </p>
             <p className="text-sm text-muted-foreground">
-              Generation finished without any restaurants, activities, or transit. Tap Regenerate to try again.
+              {isIncompleteItineraryFailure
+                ? 'Generation finished without a full plan of restaurants and activities. The Budget Coach is paused until your itinerary is complete. Tap Regenerate to try again.'
+                : 'Generation finished without any restaurants, activities, or transit. Tap Regenerate to try again.'}
             </p>
             {onRegenerate && (
               <Button size="sm" variant="default" onClick={onRegenerate} className="mt-1">
