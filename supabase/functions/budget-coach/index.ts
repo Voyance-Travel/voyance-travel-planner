@@ -32,6 +32,10 @@ interface RequestBody {
   dismissed_activity_ids?: string[];
   /** Per-category overrun in cents (planned - allocated). Positive = over. */
   category_overruns?: Partial<Record<"Dining" | "Hotels" | "Tours" | "Transit" | "Activities", number>>;
+  /** Activity IDs that must NEVER be dropped (Day-1 dinner, Michelin, palace hotel anchors). */
+  anchor_activity_ids?: string[];
+  /** Client signal: gap is large enough that swap-only won't bridge it. Allows drop / consolidate. */
+  deep_cuts_requested?: boolean;
 }
 
 // ─── Category normalization ─────────────────────────────────────
