@@ -472,7 +472,10 @@ export function BudgetCoach({
   useEffect(() => {
     if (suggestableCount === 0) {
       setSuggestions([]);
+      setAllProtected(false);
+      setError(null);
       suggestionsCache.delete(tripId);
+      inFlightHashRef.current = null;
       fetchedRef.current = false;
     }
   }, [suggestableCount, tripId]);
