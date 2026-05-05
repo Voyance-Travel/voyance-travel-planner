@@ -115,6 +115,9 @@ export function validateDay(input: ValidateDayInput): ValidationResult[] {
   // --- GENERIC_VENUE ---
   checkGenericVenues(activities, results, destination);
 
+  // --- GENERIC_WELLNESS (spa/wellness placeholders like "Private Wellness Refresh") ---
+  checkGenericWellness(activities, results, destination, hotelName);
+
   // --- TITLE_LABEL_LEAK ---
   checkLabelLeaks(activities, results);
 
