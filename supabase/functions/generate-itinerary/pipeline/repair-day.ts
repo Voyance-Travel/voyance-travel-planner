@@ -599,6 +599,71 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
     }
 
+    // --- 2b.0 WELLNESS placeholders: replace with real spa or downgrade to free hotel-spa ---
+    const wellnessUsed = new Set<string>();
+    for (const vr of genericResults) {
+      if (vr.activityIndex === undefined) continue;
+      const act: any = activities[vr.activityIndex];
+      if (!act || lockedIds.has(act.id)) continue;
+      const cat = (act.category || '').toLowerCase();
+      const titleLower = (act.title || '').toLowerCase();
+      const isWellness = cat === 'wellness' || cat === 'spa' ||
+        /\b(spa|wellness|massage|hammam|sauna|onsen|thermal)\b/.test(titleLower);
+      if (!isWellness) continue;
+
+      const cityKey = (resolvedDestination || '').toLowerCase().trim();
+      const fb = getRandomFallbackWellness(cityKey, wellnessUsed);
+      const before = act.title;
+      if (fb) {
+        applyFallbackWellnessToActivity(act, fb, wellnessUsed);
+        act.source = 'wellness-placeholder-repair';
+        repairs.push({
+          code: FAILURE_CODES.GENERIC_VENUE,
+          activityIndex: vr.activityIndex,
+          action: 'replaced_wellness_placeholder',
+          before,
+          after: act.title,
+        });
+        console.log(`[Repair] WELLNESS_PLACEHOLDER: "${before}" → "${act.title}"`);
+      } else if (hotelName) {
+        // No curated venue for this city — downgrade to free hotel spa time
+        act.title = `Spa Time at ${hotelName}`;
+        act.name = act.title;
+        if (act.location) act.location.name = hotelName;
+        else act.location = { name: hotelName, address: '' };
+        act.venue_name = hotelName;
+        act.description = 'Use the hotel spa or wellness facilities. Confirm availability and any service charge with the front desk.';
+        if (act.cost) act.cost.amount = 0;
+        act.cost_per_person = 0;
+        act.source = 'wellness-placeholder-downgrade';
+        repairs.push({
+          code: FAILURE_CODES.GENERIC_VENUE,
+          activityIndex: vr.activityIndex,
+          action: 'downgraded_wellness_placeholder',
+          before,
+          after: act.title,
+        });
+        console.warn(`[Repair] WELLNESS_PLACEHOLDER: No fallback for "${cityKey}" — downgraded "${before}" → "${act.title}" ($0)`);
+      } else {
+        // No fallback DB and no hotel — strip cost, mark for refinement
+        act.cost_per_person = 0;
+        if (act.cost) act.cost.amount = 0;
+        act.title = 'Spa Time — find a venue';
+        act.name = act.title;
+        act.description = "We couldn't verify a spa venue here. Tap the assistant to suggest one.";
+        (act as any).needsRefinement = true;
+        act.source = 'wellness-placeholder-stripped';
+        repairs.push({
+          code: FAILURE_CODES.GENERIC_VENUE,
+          activityIndex: vr.activityIndex,
+          action: 'stripped_wellness_placeholder',
+          before,
+          after: act.title,
+        });
+        console.warn(`[Repair] WELLNESS_PLACEHOLDER: No fallback or hotel — stripped "${before}"`);
+      }
+    }
+
     for (const vr of genericResults) {
       if (vr.activityIndex === undefined) continue;
       const act = activities[vr.activityIndex];
