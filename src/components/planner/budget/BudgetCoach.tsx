@@ -329,6 +329,9 @@ export function BudgetCoach({
               protected_categories: protectedCategories,
               dismissed_activity_ids: dismissedIds,
               category_overruns: categoryOverruns || {},
+              anchor_activity_ids: anchorActivityIds,
+              deep_cuts_requested:
+                gapCents > currentTotalCents * 0.25 || gapCents > 1500_00,
             },
           }
         );
