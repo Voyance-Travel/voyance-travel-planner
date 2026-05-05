@@ -53,6 +53,8 @@ import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { rateDisclosure } from '@/lib/currency';
 import { assessBudgetFit, formatMultiplier } from '@/lib/budget-realism';
+import { supabase } from '@/integrations/supabase/client';
+import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
 
 interface ItineraryActivity {
   id: string;
@@ -135,61 +137,118 @@ const categoryColors: Record<BudgetCategory, string> = {
   misc: 'bg-slate-500',
 };
 
-function CostsList({ ledger, formatCurrency, categoryColors, categoryIcons, onActivityRemove, removeEntry }: {
-  ledger: any[];
+// Map a PayableItem.type to BudgetTab's category color/icon keys
+function payableTypeToCategoryKey(item: PayableItem): BudgetCategory {
+  switch (item.type) {
+    case 'flight': return 'flight';
+    case 'hotel': return 'hotel';
+    case 'dining': return 'food';
+    case 'transport': return 'transit';
+    case 'shopping': return 'misc';
+    case 'other': return 'misc';
+    case 'activity':
+    default:
+      // Grouped transit row uses transport-style id
+      if (item.id.startsWith('transit-d')) return 'transit';
+      return 'activities';
+  }
+}
+
+function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons, onActivityRemove }: {
+  items: PayableItem[];
   formatCurrency: (cents: number) => string;
   categoryColors: Record<string, string>;
   categoryIcons: Record<string, React.ReactNode>;
   onActivityRemove?: (activityId: string) => void;
-  removeEntry: (id: string) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const displayed = showAll ? ledger : ledger.slice(0, 10);
-  const hasMore = ledger.length > 10;
+  const [expandedTransit, setExpandedTransit] = useState<Set<string>>(new Set());
+  const displayed = showAll ? items : items.slice(0, 10);
+  const hasMore = items.length > 10;
+
+  const toggleTransit = (id: string) => {
+    setExpandedTransit((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-2">
-      {displayed.map((entry) => (
-        <div
-          key={entry.id}
-          className="flex items-center justify-between py-2 border-b border-border last:border-0"
-        >
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "w-8 h-8 rounded flex items-center justify-center",
-              categoryColors[entry.category as BudgetCategory] || 'bg-muted'
-            )}>
-              <span className="text-white text-sm">
-                {categoryIcons[entry.category as BudgetCategory] || <DollarSign className="h-4 w-4" />}
-              </span>
+      {displayed.map((item) => {
+        const catKey = payableTypeToCategoryKey(item);
+        const isTransitGroup = item.id.startsWith('transit-d') && (item.subItems?.length || 0) > 0;
+        // Only activity-typed line items support inline removal — flight/hotel/manual/grouped-transit do not.
+        const canRemove =
+          item.type === 'activity' &&
+          !isTransitGroup &&
+          item.id.includes('_d') &&
+          !!onActivityRemove;
+        const subLabel = item.dayNumber ? `Day ${item.dayNumber}` : (item.type === 'flight' ? 'Flight' : item.type === 'hotel' ? 'Hotel' : '');
+        return (
+          <div key={item.id} className="border-b border-border last:border-0">
+            <div className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={cn(
+                  "w-8 h-8 rounded flex items-center justify-center shrink-0",
+                  categoryColors[catKey] || 'bg-muted'
+                )}>
+                  <span className="text-white text-sm">
+                    {categoryIcons[catKey] || <DollarSign className="h-4 w-4" />}
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{item.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {item.type}{subLabel ? ` • ${subLabel}` : ''}
+                    {isTransitGroup ? ` • ${item.subItems!.length} legs` : ''}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{formatCurrency(item.amountCents)}</span>
+                {isTransitGroup && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => toggleTransit(item.id)}
+                    aria-label="Toggle transit legs"
+                  >
+                    {expandedTransit.has(item.id)
+                      ? <ChevronUp className="h-3 w-3" />
+                      : <ChevronDown className="h-3 w-3" />}
+                  </Button>
+                )}
+                {canRemove && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => {
+                      const activityId = item.id.replace(/_d\d+$/, '');
+                      onActivityRemove?.(activityId);
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium">{entry.description}</p>
-              <p className="text-xs text-muted-foreground capitalize">
-                {entry.category} • {entry.entry_type === 'committed' ? 'Committed' : 'Planned'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{formatCurrency(entry.amount_cents)}</span>
-            {!entry.external_booking_id && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => {
-                  if (entry.entry_type === 'planned' && entry.activity_id && onActivityRemove) {
-                    onActivityRemove(entry.activity_id);
-                  }
-                  removeEntry(entry.id);
-                }}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
+            {isTransitGroup && expandedTransit.has(item.id) && (
+              <div className="pl-11 pb-2 space-y-1">
+                {item.subItems!.map((sub) => (
+                  <div key={sub.id} className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="truncate pr-2">{sub.name}</span>
+                    <span>{formatCurrency(sub.amountCents)}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-        </div>
-      ))}
+        );
+      })}
       {hasMore && (
         <Button
           variant="ghost"
@@ -200,7 +259,7 @@ function CostsList({ ledger, formatCurrency, categoryColors, categoryIcons, onAc
           {showAll ? (
             <><ChevronUp className="h-4 w-4 mr-1" /> Show less</>
           ) : (
-            <><ChevronDown className="h-4 w-4 mr-1" /> Show all {ledger.length} items</>
+            <><ChevronDown className="h-4 w-4 mr-1" /> Show all {items.length} items</>
           )}
         </Button>
       )}
@@ -318,7 +377,57 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     enabled: !!tripId && hasBudget,
   });
 
-  // Budget ledger is now derived from activity_costs (single source of truth).
+  // ─── Unified payable items (mirror PaymentsTab so the All Costs list and
+  //     the Payments list always agree on count, naming, and groupings) ───
+  const { data: activityCostsForList } = useQuery({
+    queryKey: ['activity-costs-payable', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('activity_costs')
+        .select('cost_per_person_usd, num_travelers, category, day_number, activity_id')
+        .eq('trip_id', tripId);
+      return data || [];
+    },
+    enabled: !!tripId,
+  });
+
+  const { data: tripInclusion } = useQuery({
+    queryKey: ['trip-inclusion-toggles', tripId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('trips')
+        .select('budget_include_hotel, budget_include_flight')
+        .eq('id', tripId)
+        .single();
+      return {
+        includeHotel: data?.budget_include_hotel ?? true,
+        includeFlight: data?.budget_include_flight ?? false,
+      };
+    },
+    enabled: !!tripId,
+  });
+
+  const { items: payableItems, essentialItems, activityItems } = usePayableItems({
+    days: itineraryDays || [],
+    flightSelection,
+    hotelSelection,
+    travelers,
+    payments,
+    activityCosts: activityCostsForList,
+    budgetTier,
+    destination,
+    destinationCountry,
+    paymentsLoaded: true,
+    includeHotel: tripInclusion?.includeHotel ?? true,
+    includeFlight: tripInclusion?.includeFlight ?? false,
+  });
+
+  const unifiedCostList = useMemo<PayableItem[]>(
+    () => [...essentialItems, ...activityItems],
+    [essentialItems, activityItems]
+  );
+  const hiddenFreeCount = Math.max(0, ledger.length - unifiedCostList.length);
+
   // No separate sync needed — activity_costs are written by EditorialItinerary's syncBudgetFromDays.
 
   // Hotel/flight costs are now synced to activity_costs via budgetLedgerSync
@@ -956,24 +1065,29 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
         </Card>
       )}
 
-      {/* Recent Expenses (hidden in manual mode — auto-synced costs don't apply) */}
-      {!isManualMode && ledger.length > 0 && (
+      {/* All Costs — derived from the same payable-items source as the Payments tab,
+          so item count, names, and totals match exactly. */}
+      {!isManualMode && unifiedCostList.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-medium flex items-center gap-2">
               <Calendar className="h-4 w-4" />
-              All Costs ({ledger.length})
+              All Costs ({unifiedCostList.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <CostsList
-              ledger={ledger}
+            <PayableCostsList
+              items={unifiedCostList}
               formatCurrency={formatCurrency}
               categoryColors={categoryColors}
               categoryIcons={categoryIcons}
               onActivityRemove={onActivityRemove}
-              removeEntry={removeEntry}
             />
+            {hiddenFreeCount > 0 && (
+              <p className="text-xs text-muted-foreground mt-3">
+                + {hiddenFreeCount} free venue{hiddenFreeCount === 1 ? '' : 's'} not shown
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
