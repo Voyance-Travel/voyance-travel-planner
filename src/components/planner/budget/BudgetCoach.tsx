@@ -302,6 +302,7 @@ export function BudgetCoach({
               destination,
               protected_categories: protectedCategories,
               dismissed_activity_ids: dismissedIds,
+              category_overruns: categoryOverruns || {},
             },
           }
         );
