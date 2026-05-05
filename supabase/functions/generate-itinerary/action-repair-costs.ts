@@ -23,7 +23,7 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
 
   const { data: tripData, error: tripErr } = await supabase
     .from("trips")
-    .select("id, destination, travelers, itinerary_data")
+    .select("id, destination, travelers, itinerary_data, budget_total_cents, budget_allocations, flight_selection, hotel_selection")
     .eq("id", tripId)
     .single();
 
