@@ -1,67 +1,72 @@
 ## Problem
 
-The generator is producing wellness/spa activities with generic, non-bookable titles ("Private Wellness Refresh", "Spa Treatment", "Wellness Moment") and no venue identity, but with real cost ($261). Existing placeholder detection (`fix-placeholders.ts`, `validate-day.ts → checkGenericVenues`) only targets **dining** — it has no rules for wellness, and no fallback DB for spa venues. So these slip through validation untouched.
+Budget Coach surfaces ~$517 in swaps against a $2,784 overrun (~18% coverage), then leaves the user stranded with a passive "Still $2,268 over" line. Two structural reasons:
 
-This is the same class of bug as the previously fixed "Café Matinal" / "Table du Quartier" generic-meal placeholders, just in the wellness category.
+1. **The coach is swap-only by design.** The prompt says: *"You NEVER suggest removing an activity entirely — always suggest a cheaper replacement."* So even when a $300 private tour or a $150 nightcap would be the obvious cut, the model can only down-shift it, capping savings at the delta between premium and mid-tier.
+2. **The "honest restructuring" CTA is gated too narrowly.** The "Bump tier" panel only fires when food share ≥45% AND a luxury anchor is present AND overrun >10%. A trip that's just generally over-scoped (no Michelin, no palace hotel) gets zero structural guidance — only the weak swap list.
 
 ## Fix
 
-Three layers, mirroring the dining placeholder pipeline.
+Three changes; all surgical.
 
-### 1. Detect generic wellness/spa titles & venues
+### 1. Allow drop / consolidate suggestions when the gap is large (server)
 
-`supabase/functions/generate-itinerary/pipeline/validate-day.ts`
+`supabase/functions/budget-coach/index.ts`
 
-- Add `GENERIC_WELLNESS_TITLE_PATTERNS`:
-  - `/^(private\s+)?(wellness|spa)\s+(refresh|moment|break|session|time|experience|treatment)$/i`
-  - `/^(spa|wellness|massage|hammam|sauna|thermal)\s+(at\s+(a|the|your)\s+.*)?$/i` (no proper noun)
-  - `/^(relaxing|rejuvenating|luxurious|private)\s+(spa|wellness|massage|treatment)/i` when the activity has no `location.name` or location equals "Your Hotel"/destination
-- Add a new `checkGenericWellness()` invoked after `checkGenericVenues`. It flags `category === 'wellness'` (or title matching spa/massage/hammam/onsen) when **either**:
-  - title matches a generic pattern, OR
-  - `location.name` is empty / equals destination / equals "Your Hotel" / fewer than 4 chars,
-  with `severity: 'error'`, `code: FAILURE_CODES.GENERIC_VENUE`, `autoRepairable: true`.
+- Add a `swap_type: "swap" | "drop" | "consolidate"` field to the tool schema. Default `"swap"`.
+- When `gap_cents > totalDiscretionarySwapCeilingCents` (rough estimate: sum of top-half discretionary items × 0.4) **OR** the gap is >25% of `current_total_cents`, switch the prompt to *"deep cuts mode"*:
+  - Permit `swap_type: "drop"` for non-anchor discretionary activities (paid tours, nightcaps, optional experiences). For drops, `new_cost = 0` and `suggested_swap` becomes `"Drop — free time / use saved budget elsewhere"` plus a one-line `reason` explaining trade-off.
+  - Permit `swap_type: "consolidate"` (merge two same-day meals into one, or replace a day's three-stop tour-hopping with a single combo ticket).
+  - Still forbid drops on protected categories, locked items, hotels, flights, and meals tagged as anchor (Day-1 dinner, Michelin, etc. — detected via `LUXURY_ANCHOR_RE` already in the client; pass `anchor_activity_ids` from the client into the request).
+  - Raise the suggestion count from 5–8 to 8–12 in deep-cuts mode.
+- In the post-filter: drops are allowed (skip the `newCostCents >= currentCostCents` guard when `swap_type === "drop"` and `new_cost === 0`); enforce the protected/anchor/locked guards as before.
 
-### 2. Repair: replace with a real wellness venue (or downgrade)
+### 2. Pass anchor IDs and request deep-cuts mode from the client
 
-`supabase/functions/generate-itinerary/fix-placeholders.ts`
+`src/components/planner/budget/BudgetCoach.tsx`
 
-- Extend `INLINE_FALLBACK_RESTAURANTS` with a parallel `INLINE_FALLBACK_WELLNESS` map keyed by city → array of `{ name, address, price, description }` for the cities currently covered (paris, rome, berlin, barcelona, london, lisbon). Seed 2–3 vetted, real, named venues per city (e.g., Paris: Spa My Blend by Clarins at Le Royal Monceau, Spa Valmont at Le Meurice, Hammam Pacha; London: ESPA Life at Corinthia, Akasha at Hotel Café Royal; etc.).
-- Export `getRandomFallbackWellness(city, usedNames)` and `applyFallbackWellnessToActivity(activity, fallback)` that set `title = "Spa Session at <Name>"`, `location.name/address`, `venue_name`, `description`, and clamp `cost.amount` / `cost_per_person` to the fallback price (which is also a real cost reference, not a hallucination).
+- Compute `anchorActivityIds` using the existing `LUXURY_ANCHOR_RE` plus Day-1 dinner detection (already wired in `feature/itinerary/grand-entrance-dinner`).
+- Add `anchor_activity_ids` and a derived `deep_cuts_requested: boolean` (true when `gapCents > currentTotalCents * 0.25` OR `gapCents > 1500_00`) to the edge-function payload.
+- Render `swap_type === "drop"` suggestions with a different visual: `Scissors` → `Trash2` icon, "Drop" label, and a confirm-step on Apply (`onApplySuggestion` parent must accept removal — see step 3).
 
-`supabase/functions/generate-itinerary/pipeline/repair-day.ts`
+### 3. Honest restructuring panel when swaps fundamentally can't close the gap
 
-- In the validator-driven repair dispatch (the same path that handles generic dining), add a wellness branch: when a `GENERIC_VENUE` failure is on a wellness activity:
-  1. Try the wellness fallback DB for the day's city.
-  2. If no city match, **downgrade the activity**: zero out the cost, retitle to `"Hotel Spa Time"` only when the trip has a real hotel name (use it: `"Spa Time at <Hotel>"`); otherwise drop the activity (it was a hallucinated line item).
-- Log the repair as `{ action: 'replaced_wellness_placeholder' | 'downgraded_wellness_placeholder', before, after }` so it appears in `cost_change_log` / stage logs (per existing memory: silent repair attribution).
+`src/components/planner/budget/BudgetCoach.tsx`
 
-### 3. Prompt guardrail (preventive)
+- After fetch, compute `coveragePct = totalPotentialSavings / gapCents`.
+- When `coveragePct < 0.5` AND `gapCents > currentTotalCents * 0.10`, replace the soft amber "Still over" line with a **prominent restructuring panel** above the suggestion list:
+  - Headline: *"Swaps alone won't bridge this gap."*
+  - Body: *"Suggested swaps cover only X% of your $Y overrun. To get on target, you'll need to either:"*
+  - Three actions side-by-side (always visible, no DNA gating):
+    1. **Bump budget to {currentTotalCents rounded to nearest $500}** (uses existing `onBumpBudget`).
+    2. **Drop optional activities** — scrolls to / expands the drop suggestions in the list (anchor-link).
+    3. **Shorten trip by 1 day** — opens a confirm dialog (callback `onShortenTrip?: () => void`; if not provided, link to itinerary editor).
+- Keep the existing narrow Bump-tier CTA as a fallback for the food-luxury pattern; don't show both.
 
-`supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` and `meal-policy.ts`-adjacent wellness guidance:
+### 4. Wire the parent to accept "drop" applies
 
-- Add a one-liner to the existing "no generic names" block: *"Wellness/spa activities must name a real, bookable venue (hotel spa, named day spa, or hammam). Generic titles like 'Private Wellness Refresh', 'Spa Time', 'Wellness Moment' are FORBIDDEN — use the venue name (e.g., 'Spa Valmont at Le Meurice')."*
+`src/components/itinerary/EditorialItinerary.tsx` (or whichever file owns `onApplySuggestion`)
 
-### 4. Tests
+- In the apply handler, branch on `swap_type`:
+  - `swap` (default): existing path — replace title/cost/description.
+  - `drop`: call the existing `removeActivity(activity_id)` flow + log to `cost_change_log` with `source: 'budget_coach_drop'` so attribution is preserved (per `silent-repair-attribution` memory).
+  - `consolidate`: treat as a swap on activity A and a drop on activity B (the model returns both `activity_id` and `consolidate_with_activity_id`).
 
-`supabase/functions/generate-itinerary/fix-placeholders.test.ts`
+### 5. Memory update
 
-- Add cases:
-  - `"Private Wellness Refresh"` with no location → flagged as generic wellness.
-  - `"Spa Session at Spa Valmont"` → NOT flagged.
-  - Repair pass on a Paris wellness placeholder produces a named venue from the fallback DB.
-  - Repair on a city without fallback data downgrades to `"Spa Time at <Hotel>"` with $0 cost.
+Update `mem://features/budget/budget-coach-system` to note: drops + consolidations allowed in deep-cuts mode; restructuring panel triggers at <50% coverage of >10% overrun; anchor IDs gate drops.
 
 ## Files touched
 
-- `supabase/functions/generate-itinerary/pipeline/validate-day.ts` — add wellness detector
-- `supabase/functions/generate-itinerary/fix-placeholders.ts` — wellness fallback DB + apply helper
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — wire wellness repair into existing GENERIC_VENUE dispatch
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` — prompt guardrail line
-- `supabase/functions/generate-itinerary/fix-placeholders.test.ts` — coverage
+- `supabase/functions/budget-coach/index.ts` — schema + deep-cuts prompt + drop guard
+- `src/components/planner/budget/BudgetCoach.tsx` — anchors, deep-cuts flag, restructuring panel, drop UI
+- `src/components/itinerary/EditorialItinerary.tsx` — drop/consolidate apply branch
+- `src/components/planner/budget/BudgetTab.tsx` — pass `onShortenTrip` if available
+- `mem://features/budget/budget-coach-system` — updated rules
 
 ## Out of scope
 
-- Adding a global wellness Google-Places lookup (we mirror the existing dining pattern: curated fallback DB only, no new external API spend).
-- Touching already-locked / user-pinned wellness activities — universal locking protocol is preserved; the repair only mutates AI-generated entries.
+- Re-running itinerary generation against a tighter budget (already covered by the "Regenerate" flow on the planner — we just link to it from the panel).
+- Auto-applying drops without user confirmation.
 
 **Approve to implement?**

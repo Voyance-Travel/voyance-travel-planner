@@ -23,6 +23,8 @@ import {
   X,
   Shield,
   AlertTriangle,
+  Trash2,
+  CalendarMinus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,6 +44,8 @@ export interface BudgetSuggestion {
   suggested_description?: string; // experience-focused description of the replacement
   day_number: number;
   activity_id: string;
+  /** "swap" (default cheaper replacement), "drop" (remove activity, deep-cuts only), "consolidate" (merge with same-day item). */
+  swap_type?: 'swap' | 'drop' | 'consolidate';
 }
 
 interface ItineraryActivity {
@@ -83,6 +87,8 @@ interface BudgetCoachProps {
   onBumpBudget?: (newTotalCents: number) => Promise<void> | void;
   /** Per-category overruns in cents (planned - allocated). Drives priority + chips. */
   categoryOverruns?: Partial<Record<string, number>>;
+  /** Optional: callback to drop the last day from the trip. If absent, the restructuring panel hides this option. */
+  onShortenTrip?: () => void | Promise<void>;
   className?: string;
 }
 
@@ -151,6 +157,7 @@ export function BudgetCoach({
   onProtectedCategoriesChange,
   onBumpBudget,
   categoryOverruns,
+  onShortenTrip,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
@@ -159,6 +166,7 @@ export function BudgetCoach({
   const [isExpanded, setIsExpanded] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [allProtected, setAllProtected] = useState(false);
+  const [deepCutsMode, setDeepCutsMode] = useState(false);
   const fetchedRef = useRef(false);
 
   // ⚠️ Hook-order safety: these two hooks must be declared BEFORE any
@@ -219,6 +227,25 @@ export function BudgetCoach({
   const lockedActivityIds = new Set(
     itineraryDays.flatMap(d => d.activities.filter(a => a.isLocked).map(a => a.id))
   );
+
+  // Anchor activity IDs — drops are forbidden on these. Detection mirrors the
+  // luxury-anchor pattern used by the Bump-tier CTA below + Day-1 dinner rule
+  // (see mem://features/itinerary/grand-entrance-dinner).
+  const ANCHOR_LUXURY_RE = /michelin|plaza athénée|plaza athenee|ritz|le bristol|four seasons|wine tasting|tasting menu|caviar|george v|le meurice|cheval blanc|mandarin oriental|chef.s table/i;
+  const anchorActivityIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const day of itineraryDays) {
+      const isDay1 = day.dayNumber === 1;
+      for (const a of day.activities) {
+        const haystack = `${a.title || a.name || ''} ${a.description || ''}`;
+        const cat = `${a.category || ''} ${a.type || ''}`.toLowerCase();
+        const isDinner = /dinner/.test(haystack) || cat.includes('dinner');
+        if (ANCHOR_LUXURY_RE.test(haystack)) ids.push(a.id);
+        else if (isDay1 && isDinner) ids.push(a.id);
+      }
+    }
+    return ids;
+  }, [itineraryDays]);
 
   // Build the payload activities in the format the edge function expects
   // Exclude locked activities — they should not be suggested for swaps
@@ -304,6 +331,9 @@ export function BudgetCoach({
               protected_categories: protectedCategories,
               dismissed_activity_ids: dismissedIds,
               category_overruns: categoryOverruns || {},
+              anchor_activity_ids: anchorActivityIds,
+              deep_cuts_requested:
+                gapCents > currentTotalCents * 0.25 || gapCents > 1500_00,
             },
           }
         );
@@ -322,6 +352,7 @@ export function BudgetCoach({
         const fetched: BudgetSuggestion[] = data?.suggestions || [];
         setSuggestions(fetched);
         setAllProtected(Boolean(data?.all_protected));
+        setDeepCutsMode(Boolean(data?.deep_cuts_mode));
         suggestionsCache.set(tripId, {
           suggestions: fetched,
           itineraryHash: currentHash,
@@ -347,6 +378,8 @@ export function BudgetCoach({
       protectedCategories,
       dismissedIds,
       categoryOverruns,
+      anchorActivityIds,
+      gapCents,
     ]
   );
 
@@ -509,6 +542,21 @@ export function BudgetCoach({
   // (hooks declared above the early return; see top of component)
   const dismissedRecently = bumpDismissedAtTotal !== null && currentTotalCents <= bumpDismissedAtTotal * 1.10;
   const showBumpCta = !!onBumpBudget && isMaterialOverrun && foodSharePct >= 45 && hasLuxuryAnchor && !dismissedRecently && !isNowOnTarget;
+
+  // ─── Honest restructuring panel ───────────────────────────────
+  // When suggested swaps fundamentally can't bridge the gap, surface
+  // structural options instead of leaving the user with a passive amber line.
+  const coveragePct = gapCents > 0 && totalPotentialSavings > 0
+    ? totalPotentialSavings / gapCents
+    : 0;
+  const restructureBumpTargetCents = Math.ceil((currentTotalCents * 1.02) / 50000) * 50000;
+  const showRestructurePanel =
+    !isLoading &&
+    !isNowOnTarget &&
+    !showBumpCta &&
+    visibleSuggestions.length > 0 &&
+    gapCents > currentTotalCents * 0.10 &&
+    coveragePct < 0.5;
 
   const dismissBump = () => {
     setBumpDismissedAtTotal(currentTotalCents);
@@ -700,6 +748,71 @@ export function BudgetCoach({
                 </div>
               )}
 
+              {/* Restructuring panel — when swaps cannot bridge the gap */}
+              {showRestructurePanel && (
+                <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                        Swaps alone won't bridge this gap.
+                      </p>
+                      <p className="text-xs text-amber-800 dark:text-amber-200">
+                        The swaps below cover only {Math.round(coveragePct * 100)}% of your{' '}
+                        {formatCurrency(gapCents)} overrun. To get on target, you'll likely need to:
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pl-6">
+                    {onBumpBudget && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={async () => {
+                          try {
+                            await onBumpBudget(restructureBumpTargetCents);
+                            toast.success(`Budget raised to ${formatCurrency(restructureBumpTargetCents)}`);
+                          } catch {
+                            toast.error('Could not update budget.');
+                          }
+                        }}
+                      >
+                        Raise budget to {formatCurrency(restructureBumpTargetCents)}
+                      </Button>
+                    )}
+                    {deepCutsMode && visibleSuggestions.some((s) => s.swap_type === 'drop') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const el = document.getElementById('budget-coach-suggestions');
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className="gap-1.5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Drop optional activities
+                      </Button>
+                    )}
+                    {onShortenTrip && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (window.confirm('Shorten the trip by removing the last day? This is reversible.')) {
+                            void onShortenTrip();
+                          }
+                        }}
+                        className="gap-1.5"
+                      >
+                        <CalendarMinus className="h-3.5 w-3.5" />
+                        Shorten trip by 1 day
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Loading state */}
               {isLoading && (
                 <div className="flex items-center justify-center py-8 gap-3">
@@ -728,12 +841,23 @@ export function BudgetCoach({
 
               {/* Suggestions */}
               {!isLoading && !error && visibleSuggestions.length > 0 && (
-                <>
+                <div id="budget-coach-suggestions" className="space-y-2">
                   {visibleSuggestions.map((s, i) => {
                     const isApplied = appliedIds.has(s.activity_id);
                     const isLocked = lockedActivityIds.has(s.activity_id);
+                    const isDrop = s.swap_type === 'drop';
                     // When on target, de-emphasize remaining unapplied instead of hiding
                     const isDeemphasized = isNowOnTarget && !isApplied;
+
+                    const handleClick = async () => {
+                      if (isDrop) {
+                        const ok = window.confirm(
+                          `Drop "${s.current_item}" from your itinerary?\n\nThis frees the slot and saves ${formatCurrency(s.savings * travelers)}.`
+                        );
+                        if (!ok) return;
+                      }
+                      handleApply(s);
+                    };
 
                     return (
                       <motion.div
@@ -747,7 +871,9 @@ export function BudgetCoach({
                             ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
                             : isDeemphasized
                               ? 'bg-muted/50 border-border'
-                              : 'bg-card border-border hover:border-primary/30'
+                              : isDrop
+                                ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 hover:border-amber-400'
+                                : 'bg-card border-border hover:border-primary/30'
                         )}
                       >
                         {/* Number */}
@@ -756,7 +882,9 @@ export function BudgetCoach({
                             'flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold',
                             isApplied
                               ? 'bg-emerald-500 text-white'
-                              : 'bg-primary/10 text-primary'
+                              : isDrop
+                                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                : 'bg-primary/10 text-primary'
                           )}
                         >
                           {isApplied ? <Check className="h-3.5 w-3.5" /> : i + 1}
@@ -766,18 +894,20 @@ export function BudgetCoach({
                         <div className="flex-1 min-w-0 space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap text-sm">
                             <span className="flex items-center gap-1 text-muted-foreground">
-                              <Scissors className="h-3 w-3" />
+                              {isDrop ? <Trash2 className="h-3 w-3 text-amber-600 dark:text-amber-400" /> : <Scissors className="h-3 w-3" />}
                               {s.current_item}
                               <span className="font-medium text-foreground">
                                 ({formatCurrency(s.current_cost)}{travelers > 1 ? '/pp' : ''})
                               </span>
                             </span>
                             <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                            <span className="font-medium text-foreground">
-                              {s.suggested_swap}
-                              <span className="text-primary ml-1">
-                                ({formatCurrency(s.new_cost)}{travelers > 1 ? '/pp' : ''})
-                              </span>
+                            <span className={cn('font-medium', isDrop ? 'text-amber-700 dark:text-amber-300' : 'text-foreground')}>
+                              {isDrop ? 'Drop activity' : s.suggested_swap}
+                              {!isDrop && (
+                                <span className="text-primary ml-1">
+                                  ({formatCurrency(s.new_cost)}{travelers > 1 ? '/pp' : ''})
+                                </span>
+                              )}
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground">{s.reason}</p>
@@ -803,12 +933,13 @@ export function BudgetCoach({
                         ) : (
                           <div className="flex-shrink-0 flex items-center gap-1">
                             <Button
-                              variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : 'default'}
+                              variant={isApplied ? 'ghost' : isDeemphasized ? 'outline' : isDrop ? 'outline' : 'default'}
                               size="sm"
                               disabled={isApplied}
-                              onClick={() => handleApply(s)}
+                              onClick={handleClick}
                               className={cn(
-                                isApplied && 'text-emerald-600 dark:text-emerald-400'
+                                isApplied && 'text-emerald-600 dark:text-emerald-400',
+                                !isApplied && isDrop && 'border-amber-400 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-950/40'
                               )}
                             >
                               {isApplied ? (
@@ -816,6 +947,8 @@ export function BudgetCoach({
                                   <Check className="h-3.5 w-3.5 mr-1" />
                                   Applied
                                 </>
+                              ) : isDrop ? (
+                                'Drop'
                               ) : (
                                 'Apply'
                               )}
@@ -826,7 +959,7 @@ export function BudgetCoach({
                                 size="icon"
                                 onClick={() => dismissSuggestion(s.activity_id)}
                                 className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                aria-label="Don't suggest this swap again"
+                                aria-label="Don't suggest this again"
                                 title="Don't suggest this again"
                               >
                                 <X className="h-3.5 w-3.5" />
@@ -874,7 +1007,8 @@ export function BudgetCoach({
                       </span>
                     )}
                   </div>
-                </>
+                </div>
+
               )}
 
               {/* Empty state */}

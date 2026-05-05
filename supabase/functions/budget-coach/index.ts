@@ -32,6 +32,10 @@ interface RequestBody {
   dismissed_activity_ids?: string[];
   /** Per-category overrun in cents (planned - allocated). Positive = over. */
   category_overruns?: Partial<Record<"Dining" | "Hotels" | "Tours" | "Transit" | "Activities", number>>;
+  /** Activity IDs that must NEVER be dropped (Day-1 dinner, Michelin, palace hotel anchors). */
+  anchor_activity_ids?: string[];
+  /** Client signal: gap is large enough that swap-only won't bridge it. Allows drop / consolidate. */
+  deep_cuts_requested?: boolean;
 }
 
 // ─── Category normalization ─────────────────────────────────────
@@ -76,6 +80,8 @@ serve(async (req) => {
       protected_categories = [],
       dismissed_activity_ids = [],
       category_overruns = {},
+      anchor_activity_ids = [],
+      deep_cuts_requested = false,
     } = (await req.json()) as RequestBody;
 
     const gap_cents = current_total_cents - budget_target_cents;
@@ -184,21 +190,46 @@ ${overrunEntries.map(([label, cents]) => `  • ${label}: $${Math.round((cents a
 At least your TOP ${Math.min(overrunEntries.length + 1, 4)} suggestions MUST target items in these overrun categories before suggesting swaps elsewhere. For Transit overruns, prefer demoting taxi/private-car legs to metro, bus, or walking. Use reference pricing for the new mode.`
       : "";
 
-    const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience.
+    // ─── Deep-cuts mode ────────────────────────────────────────────
+    // When the gap is too large to bridge by swapping alone, allow the model
+    // to recommend dropping non-anchor discretionary activities outright.
+    const gapPctOfTotal = current_total_cents > 0 ? gap_cents / current_total_cents : 0;
+    const deepCutsMode = deep_cuts_requested || gapPctOfTotal > 0.25 || gap_cents > 150000; // > $1500
+    const anchorIdSet = new Set(anchor_activity_ids.map(String));
+    const anchorIdList = anchor_activity_ids.length > 0
+      ? `\nANCHOR ACTIVITY IDS — never drop these (signature experiences):\n${anchor_activity_ids.map((id) => `  • ${id}`).join("\n")}`
+      : "";
+
+    const deepCutsClause = deepCutsMode
+      ? `\n\nDEEP-CUTS MODE (gap is too large for swap-only):
+The user is ${currency} ${(gap_cents / 100).toFixed(0)} over a ${currency} ${(current_total_cents / 100).toFixed(0)} total. Swap-only suggestions cannot realistically close this gap.
+You may now use TWO additional swap_type values:
+  • "drop" — recommend removing a single non-anchor, non-protected, paid discretionary activity entirely. Set new_cost = 0, suggested_swap = "Drop — free time / use saved budget elsewhere", and put a one-line trade-off explanation in "reason" (e.g. "Frees the afternoon and saves $${"{X}"}; the morning museum still anchors the day").
+  • "consolidate" — replace one activity with a cheaper combo or merged version that subsumes another same-day item. Use "swap" semantics on the kept item; mention the consolidated item in "reason".
+Drop rules:
+  • NEVER drop hotel/accommodation, flights, check-in/out, bag-drop, transfers, anchor IDs (above), or items in protected categories.
+  • NEVER drop the only meal of a meal-slot (the only breakfast on a day, the only dinner, etc.). Dropping a second optional meal/drink stop is fine.
+  • Prefer dropping: nightcaps, optional museums beyond the daily anchor, paid sightseeing duplicates, secondary tours, premium add-ons.
+  • Aim for at most 1 drop per day.
+Return 8-12 suggestions in this mode, mixing drops and swaps. Rank by absolute savings.${anchorIdList}`
+      : "";
+
+    const systemPrompt = `You are a travel budget coach. You analyze itineraries and suggest specific cost-cutting swaps. ${deepCutsMode ? "When the gap is large you may also suggest dropping non-anchor optional activities." : "You NEVER suggest removing an activity entirely — always suggest a cheaper replacement that gives a similar experience."}
 
 CRITICAL NAMING RULE:
 - Every "suggested_swap" MUST be a specific, real venue or experience name (e.g., "Joe's Pizza on Carmine St", "Self-guided walk through Montmartre", "Trattoria da Mario").
+- For swap_type="drop", suggested_swap is the literal string "Drop — free time / use saved budget elsewhere".
 - NEVER use generic descriptions like "Lower cost restaurant", "Cheaper option", "Budget alternative", "Similar restaurant", "Local eatery", or "Affordable café".
 - If you cannot name a specific real venue, describe a specific experience (e.g., "Street food at Jemaa el-Fnaa night market" or "Picnic with provisions from Marché d'Aligre").
 
 CRITICAL COST RULES:
 - You must NEVER invent, guess, or calculate prices yourself. Use ONLY the reference pricing data provided below.
-- You must NEVER directly modify or set an activity's cost value. You can only SUGGEST SWAPS to cheaper alternatives.
+- You must NEVER directly modify or set an activity's cost value. You can only SUGGEST SWAPS to cheaper alternatives or DROPS (in deep-cuts mode).
 - When suggesting a swap, the new_cost MUST come from the reference pricing table, not from your own estimation.
 - If no reference pricing is available for a swap, use the lowest reasonable amount from the reference data for that category.
-- Your new_cost must ALWAYS be strictly LESS than the current_cost. If you can't find a cheaper alternative, skip that item.
+- For swap_type="swap" the new_cost MUST be strictly LESS than current_cost. For swap_type="drop" new_cost MUST be 0.
 - All costs are in whole currency units (e.g., 50 for $50), NOT cents.
-- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}`;
+- NEVER output a cost number without it being sourced from the reference pricing data.${protectedClause}${priorityOverrunsClause}${deepCutsClause}`;
 
     const userPrompt = `The user's travel itinerary to ${destination || "their destination"} costs ${currency} ${currentTotal} but their budget is ${currency} ${budgetTarget}. They need to cut ${currency} ${gap}.
 
@@ -207,12 +238,13 @@ Here is the full itinerary (items in protected categories have been removed):
 ${itinerarySummary}
 ${costRefLookup}
 
-Suggest 5-8 specific cost-cutting swaps. For each:
+Suggest ${deepCutsMode ? "8-12" : "5-8"} specific cost-cutting changes. For each:
 1. Identify the expensive item (name + current cost)
-2. Suggest a cheaper alternative that gives a similar experience
-3. The new_cost MUST come from the reference pricing above, not from your own estimates
-4. Calculate the exact savings
-5. Write a suggested_description that reads like an itinerary activity description — focus on the experience, not the budget reasoning
+2. Choose swap_type: "swap" (default), ${deepCutsMode ? '"drop" (deep-cuts mode), or "consolidate"' : 'only "swap" is allowed'}.
+3. For swaps: suggest a cheaper alternative that gives a similar experience; new_cost MUST come from reference pricing.
+4. For drops: new_cost = 0; only target non-anchor, non-protected, optional discretionary items.
+5. Calculate the exact savings (current_cost - new_cost).
+6. Write a suggested_description that reads like an itinerary activity description — focus on the experience, not the budget reasoning.
 
 Types of swaps to consider:
 - Private/guided tours → general admission or self-guided
@@ -223,7 +255,6 @@ Types of swaps to consider:
 - Premium experiences → mid-range alternatives
 
 Rules:
-- NEVER suggest removing an activity — always suggest a cheaper replacement
 - Suggestions must be specific to THIS itinerary and destination
 - Include real venue/restaurant names when possible
 - Rank by savings amount (biggest first)
@@ -298,7 +329,13 @@ Rules:
                           },
                           activity_id: {
                             type: "string",
-                            description: "The ID of the activity to swap",
+                            description: "The ID of the activity to swap or drop",
+                          },
+                          swap_type: {
+                            type: "string",
+                            enum: ["swap", "drop", "consolidate"],
+                            description:
+                              "swap = replace with cheaper alternative (default). drop = remove the activity entirely (deep-cuts mode only). consolidate = swap-merge with another same-day item.",
                           },
                         },
                         required: [
@@ -311,6 +348,7 @@ Rules:
                           "suggested_description",
                           "day_number",
                           "activity_id",
+                          "swap_type",
                         ],
                         additionalProperties: false,
                       },
@@ -433,6 +471,9 @@ Rules:
         const rawNew = typeof s.new_cost === "number" ? s.new_cost : null;
         if (rawNew === null || rawNew < 0) return null;
 
+        const swapType: "swap" | "drop" | "consolidate" =
+          s.swap_type === "drop" || s.swap_type === "consolidate" ? s.swap_type : "swap";
+
         // POST-FILTER: drop any suggestion targeting a protected or dismissed
         // activity (model drift safety net — the prompt should prevent this,
         // but we guard against it anyway).
@@ -453,6 +494,18 @@ Rules:
           return null;
         }
 
+        // ANCHOR GUARD: drops are never allowed on anchor activities.
+        if (swapType === "drop" && anchorIdSet.has(sid)) {
+          console.log(`  → FILTERED OUT (drop on anchor activity ${sid})`);
+          return null;
+        }
+
+        // DEEP-CUTS GATE: drops/consolidates only accepted in deep-cuts mode.
+        if ((swapType === "drop" || swapType === "consolidate") && !deepCutsMode) {
+          console.log(`  → FILTERED OUT (${swapType} not allowed outside deep-cuts mode for ${sid})`);
+          return null;
+        }
+
         // PLACEHOLDER-TITLE GUARD: if the real itinerary row is just a generic
         // placeholder ("Dinner (Day 2)", "transport (Day 2)", "Activity"), the
         // coach has nothing concrete to swap — reject to avoid phantom suggestions.
@@ -469,42 +522,56 @@ Rules:
           return null;
         }
 
-        // GENERIC NAME FILTER: reject vague swap names
-        const swapName = (s.suggested_swap || "").toLowerCase();
-        const GENERIC_PATTERNS = [
-          "lower cost", "cheaper", "budget", "affordable", "inexpensive",
-          "alternative option", "similar restaurant", "similar cafe", "similar café",
-          "local eatery", "local restaurant", "local cafe", "local café",
-          "generic", "another option", "different restaurant", "different cafe",
-          "mid-range", "moderately priced", "less expensive", "cost-effective",
-          "economy", "no-frills",
-        ];
-        const isGeneric = GENERIC_PATTERNS.some((p) => swapName.includes(p));
-        if (isGeneric) {
-          console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
-          return null;
+        // GENERIC NAME FILTER (skip for drops — their swap name is a fixed sentinel)
+        if (swapType !== "drop") {
+          const swapName = (s.suggested_swap || "").toLowerCase();
+          const GENERIC_PATTERNS = [
+            "lower cost", "cheaper", "budget", "affordable", "inexpensive",
+            "alternative option", "similar restaurant", "similar cafe", "similar café",
+            "local eatery", "local restaurant", "local cafe", "local café",
+            "generic", "another option", "different restaurant", "different cafe",
+            "mid-range", "moderately priced", "less expensive", "cost-effective",
+            "economy", "no-frills",
+          ];
+          const isGeneric = GENERIC_PATTERNS.some((p) => swapName.includes(p));
+          if (isGeneric) {
+            console.log(`  → FILTERED OUT generic swap name: "${s.suggested_swap}"`);
+            return null;
+          }
         }
 
-        // Convert AI's whole-currency value to cents
-        const newCostCents = Math.round(rawNew * 100);
+        // Convert AI's whole-currency value to cents (drops force 0)
+        const newCostCents = swapType === "drop" ? 0 : Math.round(rawNew * 100);
 
         // Use the known activity cost as ground truth (already in cents)
         const knownCostCents = activityCostCentsById.get(sid);
         const currentCostCents = knownCostCents ?? Math.round((typeof s.current_cost === "number" ? s.current_cost : 0) * 100);
 
-        console.log(`Suggestion "${s.suggested_swap}": AI current=${s.current_cost}, AI new=${s.new_cost}, knownCents=${knownCostCents}, newCents=${newCostCents}, currentCents=${currentCostCents}`);
+        console.log(`Suggestion [${swapType}] "${s.suggested_swap}": AI current=${s.current_cost}, AI new=${s.new_cost}, knownCents=${knownCostCents}, newCents=${newCostCents}, currentCents=${currentCostCents}`);
 
-        // STRICT GUARD: new cost must be strictly less than current cost
-        if (newCostCents >= currentCostCents) {
+        // STRICT GUARD: for swap/consolidate the new cost must be strictly lower.
+        // For drops, currentCostCents must be > 0 (don't drop free items).
+        if (swapType === "drop") {
+          if (currentCostCents <= 0) {
+            console.log(`  → FILTERED OUT (drop on $0 item ${sid})`);
+            return null;
+          }
+        } else if (newCostCents >= currentCostCents) {
           console.log(`  → FILTERED OUT (new ${newCostCents} >= current ${currentCostCents})`);
           return null;
         }
 
+        const finalSwap = swapType === "drop"
+          ? "Drop — free time / use saved budget elsewhere"
+          : s.suggested_swap;
+
         return {
           ...s,
+          swap_type: swapType,
           // Force the rendered title to the real itinerary item so even
           // a slightly-off AI label can't show a phantom name in the UI.
           current_item: activityTitleById.get(sid) || s.current_item,
+          suggested_swap: finalSwap,
           current_cost: currentCostCents,
           new_cost: newCostCents,
           savings: currentCostCents - newCostCents,
@@ -515,10 +582,10 @@ Rules:
     // Sort by savings desc
     suggestions.sort((a: any, b: any) => b.savings - a.savings);
 
-    console.log(`Returning ${suggestions.length} valid suggestions`);
+    console.log(`Returning ${suggestions.length} valid suggestions (deepCutsMode=${deepCutsMode})`);
 
     return new Response(
-      JSON.stringify({ suggestions, on_target: false }),
+      JSON.stringify({ suggestions, on_target: false, deep_cuts_mode: deepCutsMode }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
