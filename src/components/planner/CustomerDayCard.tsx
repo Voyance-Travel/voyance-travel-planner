@@ -373,7 +373,7 @@ export default function CustomerDayCard({
           onClose={() => setConciergeActivity(null)}
           activity={conciergeActivity}
           dayDate={day.date}
-          dayTitle={day.theme}
+          dayTitle={getDisplayDayTitle(day as any, destination)}
           previousActivity={
             (() => {
               const idx = day.activities.findIndex(a => a.id === conciergeActivity.id);
