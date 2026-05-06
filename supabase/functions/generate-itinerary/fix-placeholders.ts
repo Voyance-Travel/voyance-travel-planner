@@ -435,6 +435,27 @@ export const PLACEHOLDER_VENUE_PATTERNS = [
   /^neighborhood\s+(restaurant|café|cafe|bistro|spot)/i,
 ];
 
+// =============================================================================
+// AI STUB VENUE PATTERNS
+// Catches French/Italian-styled stub names the AI loves to invent
+// (e.g. "Café Matinal", "Table du Quartier", "Bistrot du Marché",
+// "Le Comptoir du Midi", "Brasserie de la Gare", "Boulangerie du Quartier").
+// Per the Meal Rules core memory these are BANNED — every guard should call
+// matchesAIStubVenue() and treat a hit as a placeholder.
+// =============================================================================
+export const AI_STUB_VENUE_PATTERNS: RegExp[] = [
+  // <Venue-noun> (du|de la|des|de|del|della) <generic filler>
+  /^(le |la |il |el )?(table|bistrot|brasserie|caf[eé]|comptoir|boulangerie|p[âa]tisserie|trattoria|osteria|taverna|restaurant|maison|petit|grand|bar|cave)\s+(du|de la|des|de|del|della|dei)\s+(quartier|march[ée]|coin|place|soir|midi|matin|gare|arts|jardin|vins|coeur|nord|sud|est|ouest|centre|village|port|pont)\b/i,
+  // "Café Matinal" / "Le Petit Matin" / "La Petite Place"
+  /^(le |la )?(petit|petite|grand|grande|caf[eé])\s+(matin|matinal|matinale|soir|midi|jardin|comptoir|march[ée]|place|coin)\b/i,
+  // Catch-all for the legacy template strings (case-insensitive exact)
+  /^(caf[eé] matinal|boulangerie du quartier|le petit matin|caf[eé] des arts|p[âa]tisserie du coin|bistrot du march[ée]|le comptoir du midi|brasserie du coin|caf[eé] de la place|table du quartier|restaurant le jardin|la table du soir|le petit comptoir|brasserie de la gare|restaurant du march[ée]|le bar du coin|comptoir des vins|le petit bar|bar de la place|cave [àa] vins)$/i,
+];
+
+export function matchesAIStubVenue(name: string): boolean {
+  return AI_STUB_VENUE_PATTERNS.some((re) => re.test((name || '').trim()));
+}
+
 /**
  * Universal placeholder meal detection.
  * Returns true if the activity looks like a generic/placeholder dining entry.
@@ -454,44 +475,16 @@ export function isPlaceholderMeal(activity: any, cityName: string): boolean {
   if (/get a restaurant recommendation/i.test(venue)) return true;
   // Venue name equals title (e.g. both are "Lunch at a bistro")
   if (venue && title && venue.toLowerCase() === title.toLowerCase()) return true;
+  // AI-generated French/Italian stub names ("Café Matinal", "Table du Quartier", …)
+  if (matchesAIStubVenue(title)) return true;
+  if (matchesAIStubVenue(venue)) return true;
+  // Strip leading meal label ("Lunch at <stub>") and re-test
+  const titleNoLabel = title.replace(/^(breakfast|brunch|lunch|dinner|supper|drinks|meal)\s*[:\-—–]?\s*(at\s+)?/i, '').trim();
+  if (titleNoLabel && titleNoLabel !== title && matchesAIStubVenue(titleNoLabel)) return true;
 
   return false;
 }
 
-// =============================================================================
-// GENERIC VENUE TEMPLATE POOL — DEPRECATED
-// Kept for back-compat with day-validation legacy paths and tests, but no
-// runtime path should ever ship these names to the user. Both nuclearPlaceholderSweep
-// and day-validation TRY 3 now recycle real fallback-DB venues or mark unverified.
-// =============================================================================
-export const GENERIC_VENUE_TEMPLATES: Record<string, string[]> = {
-  breakfast: [
-    "Café Matinal", "Boulangerie du Quartier", "Le Petit Matin",
-    "Café des Arts", "Pâtisserie du Coin",
-  ],
-  lunch: [
-    "Bistrot du Marché", "Le Comptoir du Midi", "Brasserie du Coin",
-    "Café de la Place", "Table du Quartier",
-  ],
-  dinner: [
-    "Restaurant Le Jardin", "La Table du Soir", "Le Petit Comptoir",
-    "Brasserie de la Gare", "Restaurant du Marché",
-  ],
-  drinks: [
-    "Le Bar du Coin", "Comptoir des Vins", "Le Petit Bar",
-    "Bar de la Place", "Cave à Vins",
-  ],
-};
-
-let _templateIndex: Record<string, number> = { breakfast: 0, lunch: 0, dinner: 0, drinks: 0 };
-
-function getNextTemplateVenue(mealType: string): string {
-  const mt = (mealType === 'drinks' ? 'drinks' : mealType) as keyof typeof GENERIC_VENUE_TEMPLATES;
-  const pool = GENERIC_VENUE_TEMPLATES[mt] || GENERIC_VENUE_TEMPLATES.dinner;
-  const idx = (_templateIndex[mt] || 0) % pool.length;
-  _templateIndex[mt] = idx + 1;
-  return pool[idx];
-}
 
 // =============================================================================
 // NUCLEAR PLACEHOLDER SWEEP — synchronous, zero-API last line of defense
