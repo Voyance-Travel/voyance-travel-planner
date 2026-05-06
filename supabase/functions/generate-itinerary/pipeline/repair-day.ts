@@ -491,6 +491,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     isTransitionDay, isMultiCity, isLastDayInCity,
     resolvedDestination, nextLegTransport, nextLegTransportDetails, hotelOverride,
     isHotelChange, previousHotelName } = input;
+  const paceScore: number = typeof input.paceScore === 'number' ? input.paceScore : 0;
+  const isFastPaced = paceScore >= 4;
 
   // Clone activities array to mutate
   let activities: any[] = [...(input.day.activities || [])];
