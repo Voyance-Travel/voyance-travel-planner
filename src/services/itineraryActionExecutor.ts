@@ -813,6 +813,15 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
     console.warn('[ActionExecutor] Meal guard failed, skipping:', e);
   }
 
+  // Final stub sweep — mirrors the server's nuclearPlaceholderSweep so no
+  // generic "Breakfast at a café near your hotel" string can hit the DB.
+  try {
+    const { preSaveMealStubSweep } = await import('@/utils/preSaveMealSweep');
+    preSaveMealStubSweep(updatedDays as any);
+  } catch (e) {
+    console.warn('[ActionExecutor] Pre-save meal sweep failed, skipping:', e);
+  }
+
   const sortedDays = sortActivitiesChronologically(updatedDays);
   try {
     // Fetch existing itinerary metadata to preserve it
