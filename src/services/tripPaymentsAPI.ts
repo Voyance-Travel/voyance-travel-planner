@@ -111,7 +111,8 @@ export async function getTripPayments(tripId: string): Promise<{
     const { data: payments, error } = await supabase
       .from('trip_payments')
       .select('*')
-      .eq('trip_id', tripId);
+      .eq('trip_id', tripId)
+      .is('archived_at', null);
 
     if (error) {
       // Suppress common errors silently — RLS, permission, or relation-not-found are expected
