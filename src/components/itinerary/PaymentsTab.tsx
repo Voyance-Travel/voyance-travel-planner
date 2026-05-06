@@ -256,7 +256,23 @@ export function PaymentsTab({
       return data || [];
     },
     enabled: !!tripId,
+    staleTime: 0,
   });
+
+  // Keep the Payments-side caches in lockstep with useTripFinancialSnapshot.
+  // Without this, the headline Trip Total refetches on `booking-changed` while
+  // the bucket sum (built from this cached query) stays frozen on stale rows,
+  // producing a permanent "Reconciling…" badge after Fix Timing / autosave.
+  useEffect(() => {
+    if (!tripId) return;
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ['activity-costs-payable', tripId] });
+      queryClient.invalidateQueries({ queryKey: ['trip-inclusion-toggles', tripId] });
+      fetchPayments();
+    };
+    window.addEventListener('booking-changed', handler);
+    return () => window.removeEventListener('booking-changed', handler);
+  }, [tripId, queryClient, fetchPayments]);
 
   // Fetch trip-level inclusion toggles so the Payments list and the Trip Total
   // share the exact same row-inclusion contract (matches useTripFinancialSnapshot).
