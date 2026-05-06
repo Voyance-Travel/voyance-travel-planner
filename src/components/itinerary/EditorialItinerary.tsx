@@ -5539,6 +5539,24 @@ export function EditorialItinerary({
                     </div>
                   );
                 })()}
+                {/* Reconciliation strip — exposes the unallocated bucket
+                    (Day-0 logistics + reserve + manual override delta) so the
+                    sum of day-card badges plus this line equals Trip Total. */}
+                {tripLevelCents > 0 && daysSubtotalCents > 0 && (() => {
+                  const daysSubUsd = daysSubtotalCents / 100;
+                  const tripLevelUsd = tripLevelCents / 100;
+                  const includeHotel = (financialSnapshot as any).budget_include_hotel; // not exposed, fallback by toggles below
+                  const label = (hotelCost > 0 || flightCost > 0)
+                    ? 'Hotel, flight & reserve'
+                    : 'Reserve & adjustments';
+                  return (
+                    <div className="flex items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground flex-wrap justify-center">
+                      <span><span className="text-muted-foreground/70">Days subtotal</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(daysSubUsd), tripCurrency)}</span></span>
+                      <span className="text-muted-foreground/40">+</span>
+                      <span><span className="text-muted-foreground/70">{label}</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(tripLevelUsd), tripCurrency)}</span></span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* ROW 2: Action Buttons */}
