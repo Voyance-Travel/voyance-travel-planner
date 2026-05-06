@@ -191,6 +191,8 @@ export function BudgetCoach({
   onEditAccommodation,
   lastRaise,
   onUndoRaise,
+  tripStatus,
+  generationFailureReason,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
