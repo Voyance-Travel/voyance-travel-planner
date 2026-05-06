@@ -172,6 +172,7 @@ import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 import SortableFlightLegCards from './SortableFlightLegCards';
 import { resolveDropTarget } from './budgetDropResolver';
 import { resolveLiveActivity } from './activityRemoveResolver';
+import { mergeNeedToKnowInfo } from './needToKnow';
 
 // =============================================================================
 // BOARDING PASS VIEW BUTTON (inline helper)
@@ -8234,26 +8235,10 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
   };
 
   // Static essentials only — currency, tipping, transit live in Travel Intel
+  // NOTE: AI/static merge is delegated to mergeNeedToKnowInfo so partial
+  // Perplexity responses fall back per-field instead of leaking generic
+  // placeholders like "Local language" / "Local time".
   const getDefaultInfo = () => {
-    // If we have AI-generated insights, use those
-    if (aiInsights) {
-      return {
-        language: aiInsights.language?.primary || 'Local language',
-        languageTips: aiInsights.language?.phrases?.map((p: any) => 
-          `"${p.phrase}" = "${p.translation}" (${p.pronunciation})`
-        ) || ['Learn basic greetings'],
-        languageEnglishFriendly: aiInsights.language?.englishFriendly,
-        timezone: aiInsights.timezone?.zone || 'Local time',
-        timezoneTips: aiInsights.timezone?.tips || ['Check local business hours'],
-        water: aiInsights.water?.description || (aiInsights.water?.safe ? 'Tap water is safe' : 'Check local advisories'),
-        waterTips: aiInsights.water?.tips || ['When in doubt, use bottled water'],
-        voltage: `${aiInsights.voltage?.voltage || '230V'}, ${aiInsights.voltage?.plugType || 'Check adapter requirements'}`,
-        voltageTips: aiInsights.voltage?.tips || ['Universal adapters are convenient'],
-        emergency: aiInsights.emergency?.number || 'Contact local authorities',
-        emergencyTips: aiInsights.emergency?.tips || ['Save emergency numbers in your phone'],
-      };
-    }
-
     const country = destinationCountry?.toLowerCase() || '';
     const dest = (destination || '').toLowerCase();
     
@@ -8474,7 +8459,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
           'No visa required for tourism (US/EU citizens)',
           'Must show proof of return/onward travel',
           'May need to show proof of accommodation',
-          'Electronic Travel Authorisation (ETA) required from 2024 for some nationalities'
+          'UK ETA is now required for most non-EU/non-Irish visitors — apply online before travel'
         ],
         passport: 'Valid passport required',
         passportTips: [
@@ -8485,7 +8470,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         ],
         health: 'No required vaccinations',
         healthTips: [
-          'COVID restrictions may apply - check before travel',
+          "Check current health advisories with your country's foreign-travel office",
           'NHS available for emergencies (may incur charges)',
           'European Health Insurance Card (EHIC) no longer valid for UK',
           'Travel insurance strongly recommended'
@@ -8499,7 +8484,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS authorization required from 2025 for US citizens',
+          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Count all Schengen countries toward 90-day limit'
         ],
@@ -8526,7 +8511,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS authorization required from 2025 for US citizens',
+          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Register at local police station if staying 8+ days (handled by hotels)'
         ],
@@ -8553,7 +8538,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS authorization required from 2025 for US citizens',
+          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Count all Schengen countries toward 90-day limit'
         ],
@@ -8580,7 +8565,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS authorization required from 2025 for US citizens',
+          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Count all Schengen countries toward 90-day limit'
         ],
@@ -8629,7 +8614,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
 
   const entryInfo = getEntryRequirements();
 
-  const info = getDefaultInfo();
+  const info = mergeNeedToKnowInfo(aiInsights, getDefaultInfo() as any) as any;
 
   const infoCategories = [
     // Entry Requirements - Most important first
