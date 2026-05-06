@@ -634,6 +634,57 @@ export function BudgetCoach({
     const headroomPct = budgetTargetCents > 0 ? (remainingCents / budgetTargetCents) * 100 : 100;
     const isCloseToBudget = headroomPct < 15;
 
+    // Celebratory raise card — when the user's most recent in-session action
+    // was a successful "Raise budget", acknowledge the change and offer Undo
+    // so the Coach panel doesn't appear to silently vanish.
+    const showRaiseCard =
+      !!lastRaise &&
+      lastRaise.toCents === budgetTargetCents &&
+      lastRaise.fromCents < lastRaise.toCents;
+
+    if (showRaiseCard) {
+      return (
+        <Card className={cn('border-emerald-200 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20', className)}>
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle className="h-5 w-5 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex-1 space-y-1">
+                <p className="font-medium text-emerald-900 dark:text-emerald-100">
+                  Budget raised — you're on target
+                </p>
+                <p className="text-sm text-emerald-800/90 dark:text-emerald-200/90">
+                  Raised from {formatCurrency(lastRaise!.fromCents)} to {formatCurrency(lastRaise!.toCents)}.
+                  You now have {formatCurrency(remainingCents)} ({Math.round(headroomPct)}%) of headroom.
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {onUndoRaise && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={onUndoRaise}
+                    >
+                      Undo raise
+                    </Button>
+                  )}
+                  {onEditBudget && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-emerald-900 dark:text-emerald-100 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40"
+                      onClick={onEditBudget}
+                    >
+                      Edit budget…
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
     if (isCloseToBudget) {
       return (
         <Card className={cn('border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20', className)}>
