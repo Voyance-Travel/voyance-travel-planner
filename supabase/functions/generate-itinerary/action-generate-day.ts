@@ -74,6 +74,7 @@ import type { LockedActivity } from './pipeline/types.ts';
 import { validateDay, type ValidateDayInput } from './pipeline/validate-day.ts';
 import { repairDay, type RepairDayInput } from './pipeline/repair-day.ts';
 import { compilePrompt, type LockedCard } from './pipeline/compile-prompt.ts';
+import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { persistDay } from './pipeline/persist-day.ts';
 import { callAI, AICallError } from './pipeline/ai-call.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
