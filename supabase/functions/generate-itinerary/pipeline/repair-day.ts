@@ -32,6 +32,7 @@ import {
 } from '../flight-hotel-context.ts';
 import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
+import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 
 // =============================================================================
 // INPUT TYPES
