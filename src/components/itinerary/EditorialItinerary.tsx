@@ -90,6 +90,7 @@ import { useTripBudget } from '@/hooks/useTripBudget';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+import { useTripDayBreakdown, type DayBreakdown } from '@/hooks/useTripDayBreakdown';
 import { resolveCountry } from '@/utils/cityCountryMap';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
@@ -3364,7 +3365,16 @@ export function EditorialItinerary({
 
   // ─── Canonical trip total from useTripFinancialSnapshot (single source of truth) ───
   const financialSnapshot = useTripFinancialSnapshot(tripId);
-  
+
+  // ─── Per-day breakdown from the same activity_costs table — guarantees that
+  // the sum of day badges + day-0 logistics + reserve == trip total. ───
+  const visibleActivityIdList = useMemo(() => {
+    const ids: string[] = [];
+    for (const d of days) for (const a of d.activities || []) if (a?.id) ids.push(String(a.id));
+    return ids;
+  }, [days]);
+  const tripDayBreakdown = useTripDayBreakdown(tripId, visibleActivityIdList);
+
   // Calculate totals with smart estimation using destination-aware pricing
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode), 0);
   const flightCost = allFlightLegs.reduce((sum, leg) => sum + (leg.price || 0), 0);
@@ -3397,7 +3407,40 @@ export function EditorialItinerary({
   const totalCost = snapshotTotalUsd > 0
     ? snapshotTotalUsd
     : (totalActivityCost * (travelers || 1) + flightCost + hotelCost);
-  
+
+  // ─── Reconciliation between per-day badges and the trip total ───
+  // tripLevelCents = trip total − Σ day(d≥1) totals
+  // Captures Day-0 logistics (hotel/flight/transfers), unspent misc reserve,
+  // and manual-payment override deltas — i.e. anything not attributed to a
+  // specific day. Surfaced as its own line so day badges sum to trip total.
+  const daysSubtotalCents = useMemo(() => {
+    let sum = 0;
+    for (const d of days) {
+      const b = tripDayBreakdown.byDay[d.dayNumber];
+      if (b) sum += b.totalCents;
+    }
+    return sum;
+  }, [days, tripDayBreakdown.byDay]);
+  const tripLevelCents = Math.max(
+    0,
+    financialSnapshot.tripTotalCents - daysSubtotalCents,
+  );
+
+  // Dev guard: warn when day totals exceed trip total (indicates the snapshot
+  // dropped rows the day breakdown still counts — e.g. orphan filter mismatch).
+  useEffect(() => {
+    if (financialSnapshot.loading || tripDayBreakdown.loading) return;
+    if (financialSnapshot.tripTotalCents <= 0) return;
+    if (daysSubtotalCents > financialSnapshot.tripTotalCents + 1) {
+      // eslint-disable-next-line no-console
+      console.warn('[EditorialItinerary] Day totals exceed trip total', {
+        tripTotalCents: financialSnapshot.tripTotalCents,
+        daysSubtotalCents,
+        diffCents: daysSubtotalCents - financialSnapshot.tripTotalCents,
+      });
+    }
+  }, [financialSnapshot.loading, financialSnapshot.tripTotalCents, daysSubtotalCents, tripDayBreakdown.loading]);
+
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
   const countryCurrency = inferCurrencyFromCountry(destinationCountry);
@@ -5496,6 +5539,24 @@ export function EditorialItinerary({
                     </div>
                   );
                 })()}
+                {/* Reconciliation strip — exposes the unallocated bucket
+                    (Day-0 logistics + reserve + manual override delta) so the
+                    sum of day-card badges plus this line equals Trip Total. */}
+                {tripLevelCents > 0 && daysSubtotalCents > 0 && (() => {
+                  const daysSubUsd = daysSubtotalCents / 100;
+                  const tripLevelUsd = tripLevelCents / 100;
+                  const includeHotel = (financialSnapshot as any).budget_include_hotel; // not exposed, fallback by toggles below
+                  const label = (hotelCost > 0 || flightCost > 0)
+                    ? 'Hotel, flight & reserve'
+                    : 'Reserve & adjustments';
+                  return (
+                    <div className="flex items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground flex-wrap justify-center">
+                      <span><span className="text-muted-foreground/70">Days subtotal</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(daysSubUsd), tripCurrency)}</span></span>
+                      <span className="text-muted-foreground/40">+</span>
+                      <span><span className="text-muted-foreground/70">{label}</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(tripLevelUsd), tripCurrency)}</span></span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* ROW 2: Action Buttons */}
@@ -6559,6 +6620,7 @@ export function EditorialItinerary({
                           isManualMode={isManualMode}
                           onOpenConcierge={handleOpenConcierge}
                           onDeleteAINote={handleDeleteAINote}
+                          dayBreakdown={tripDayBreakdown.byDay[selectedDay.dayNumber]}
                         />
                       )}
                     </>
@@ -9503,6 +9565,8 @@ interface DayCardProps {
    onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
    /** Handler to delete an AI saved note */
    onDeleteAINote?: (activityId: string, noteId: string) => void;
+   /** Canonical per-day breakdown from activity_costs (single source of truth) */
+   dayBreakdown?: DayBreakdown;
 }
 
 function DayCard({
@@ -9567,6 +9631,7 @@ function DayCard({
   isManualMode = false,
   onOpenConcierge,
   onDeleteAINote,
+  dayBreakdown,
 }: DayCardProps) {
   // Per-day preview: a day is preview only if the global flag is set AND the day itself is a preview
   // Fully generated days (e.g., first 2 free days) should NOT be gated even if other days are locked
@@ -9574,7 +9639,18 @@ function DayCard({
   // Premium content visibility: use entitlement prop, fallback to !dayIsPreview for backward compat
   const canViewPremium = canViewPremiumProp !== undefined ? canViewPremiumProp : !dayIsPreview;
   const allLocked = day.activities.every(a => a.isLocked);
-  const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode);
+  // Day badge cost: prefer the canonical activity_costs breakdown (group cost,
+  // matches trip-total source). Falls back to the JS estimator while the
+  // breakdown is loading or unavailable. We render per-person to match the
+  // existing /pp UI when travelers > 1.
+  const breakdownGroupUsd = dayBreakdown ? dayBreakdown.totalCents / 100 : null;
+  const breakdownPerPersonUsd = breakdownGroupUsd != null
+    ? breakdownGroupUsd / Math.max(1, travelers || 1)
+    : null;
+  const fallbackPerPersonUsd = getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode);
+  const totalCost = dayIsPreview
+    ? 0
+    : (breakdownPerPersonUsd != null ? breakdownPerPersonUsd : fallbackPerPersonUsd);
 
   // Transit subtotal — sum costs of transport/transit activities so the day
   // badge can break down "visible activities + transit = day total". Without

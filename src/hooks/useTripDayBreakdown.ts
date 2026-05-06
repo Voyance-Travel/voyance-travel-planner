@@ -24,6 +24,7 @@ import { shouldCountRow } from '@/services/tripBudgetService';
 export interface DayBreakdownRow {
   id: string;
   activityId: string | null;
+  dayNumber: number;
   category: string | null;
   costPerPersonUsd: number;
   numTravelers: number;
@@ -89,6 +90,7 @@ export function useTripDayBreakdown(
       return {
         id: r.id,
         activityId: r.activity_id || null,
+        dayNumber: r.day_number == null ? 0 : Number(r.day_number),
         category: r.category || null,
         costPerPersonUsd: perPerson,
         numTravelers: trav,
@@ -96,10 +98,7 @@ export function useTripDayBreakdown(
         notes: r.notes || null,
         source: r.source || null,
         isPaid: r.is_paid === true,
-        // day_number stays accessible via the row index below
-        // we attach it dynamically since it's not in the typed shape
-        ...(r.day_number != null ? { dayNumber: r.day_number } : {}),
-      } as DayBreakdownRow & { dayNumber?: number };
+      };
     });
 
     setRows(mapped);
@@ -120,9 +119,9 @@ export function useTripDayBreakdown(
 
   const byDay = useMemo<Record<number, DayBreakdown>>(() => {
     const acc: Record<number, DayBreakdown> = {};
-    for (const row of rows as Array<DayBreakdownRow & { dayNumber?: number }>) {
+    for (const row of rows) {
       if (!shouldCountRow({ category: row.category }, includeHotel, includeFlight)) continue;
-      const day = (row as any).dayNumber ?? 0;
+      const day = row.dayNumber ?? 0;
       if (!acc[day]) acc[day] = { totalCents: 0, visibleCents: 0, otherCents: 0, rows: [], otherRows: [] };
       const bucket = acc[day];
       bucket.totalCents += row.totalUsdCents;
