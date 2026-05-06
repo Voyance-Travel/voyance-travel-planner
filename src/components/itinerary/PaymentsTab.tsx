@@ -416,10 +416,14 @@ export function PaymentsTab({
 
       if (error) throw error;
 
-      // Sync activity_costs.is_paid so v_payments_summary reflects the payment
-      // Strip composite suffix (_dN) to get the real activity_id stored in activity_costs
+      // Mirror onto activity_costs.is_paid (best-effort — snapshot now reads
+      // trip_payments authoritatively, so a silent no-op here no longer
+      // causes BudgetTab/PaymentsTab drift).
       const realActivityId = markPaidModal.id.replace(/_d\d+$/, '');
-      await markActivityPaid(tripId, realActivityId, markPaidModal.amountCents / 100);
+      const mirrored = await markActivityPaid(tripId, realActivityId, markPaidModal.amountCents / 100);
+      if (!mirrored) {
+        console.warn('[PaymentsTab] activity_costs.is_paid mirror no-op for', realActivityId);
+      }
 
       // Optimistic update — immediately reflect in the UI
       const optimisticPayment: TripPayment = {
