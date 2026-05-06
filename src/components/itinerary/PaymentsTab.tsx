@@ -455,7 +455,9 @@ export function PaymentsTab({
       setSelectedMemberId('');
       // Background refetch to sync real IDs and summary
       fetchPayments(300);
-      window.dispatchEvent(new CustomEvent('booking-changed'));
+      window.dispatchEvent(new CustomEvent('booking-changed', {
+        detail: { optimisticPaidDeltaCents: markPaidModal.amountCents }
+      }));
     } catch (err) {
       console.error('Error marking paid:', err);
       toast.error('Failed to update');
