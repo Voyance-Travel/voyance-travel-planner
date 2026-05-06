@@ -9,6 +9,11 @@ import {
   stubFallbackLabel,
   type MealType,
 } from './stubVenueDetection';
+import {
+  isClientPlaceholderWellness,
+  WELLNESS_PLACEHOLDER_FALLBACK,
+  type WellnessActivityShape,
+} from './wellnessPlaceholderDetection';
 
 // Strip AI search qualifiers from names/locations
 // e.g. "(Satellite or High-End alternative in Chiyoda/Minato)"
