@@ -3542,7 +3542,7 @@ export function EditorialItinerary({
     if (financialSnapshot.tripTotalCents <= 0) return;
     if (daysSubtotalCents > financialSnapshot.tripTotalCents + 1) {
       // eslint-disable-next-line no-console
-      console.warn('[EditorialItinerary] Day totals exceed trip total', {
+      console.warn('[Itinerary reconcile] Day totals exceed trip total', {
         tripTotalCents: financialSnapshot.tripTotalCents,
         daysSubtotalCents,
         diffCents: daysSubtotalCents - financialSnapshot.tripTotalCents,
