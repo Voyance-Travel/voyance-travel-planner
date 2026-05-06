@@ -4,7 +4,7 @@
 
 import { isRecurringEvent } from './currency-utils.ts';
 import type { RequiredMeal } from './meal-policy.ts';
-import { getRandomFallbackRestaurant } from './fix-placeholders.ts';
+import { getRandomFallbackRestaurant, resolveAnyMealFallback } from './fix-placeholders.ts';
 import { extractRestaurantVenueName, venueNamesMatch } from './generation-utils.ts';
 
 // =============================================================================
@@ -1078,12 +1078,15 @@ export function enforceRequiredMealsFinalGuard(
       } catch (_e) { /* fallback DB lookup failed, continue */ }
     }
 
-    // TRY 4 (true last resort, only if city has no DB at all): mark as unverified — never invent a name.
+    // TRY 4 (true last resort): regional/global emergency fallback — guaranteed real, named venue.
     if (!venueName) {
-      venueName = `${label} — find a local spot`;
-      venueAddress = destination;
-      venueDescription = `We couldn't verify a ${mealType} venue in our local database. Tap the assistant to suggest one.`;
-      console.error(`[MEAL FINAL GUARD] Day ${dayNumber}: NO fallback DB for "${destination}" — left unverified ${mealType} slot`);
+      const emergency = resolveAnyMealFallback(destination, mealType, new Set<string>(usedVenueNamesForInjection));
+      venueName = `${label} at ${emergency.name}`;
+      venueAddress = emergency.address;
+      venueDescription = emergency.description || `${label} at ${emergency.name}`;
+      usedVenueNamesForInjection.add(emergency.name.toLowerCase());
+      usedRealVenue = true;
+      console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Used regional/global emergency fallback "${emergency.name}" for ${mealType} in "${destination}"`);
     }
 
     result.push({

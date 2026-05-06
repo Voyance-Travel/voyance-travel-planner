@@ -51,58 +51,108 @@ export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, Fallback
     breakfast: [
       { name: "Sciascia Caffè", address: "Via Fabio Massimo 80/A, 00192 Rome", price: 12, description: "Roman institution since 1919. Their caffè with chocolate cream is legendary. Standing at the bar for the full Italian experience." },
       { name: "Roscioli Caffè Pasticceria", address: "Piazza Benedetto Cairoli 16, 00186 Rome", price: 15, description: "Gourmet pastry bar near Campo de' Fiori. Incredible cornetti and artisanal coffee." },
+      { name: "Caffè Sant'Eustachio", address: "Piazza di S. Eustachio 82, 00186 Rome", price: 10, description: "Rome's most iconic espresso bar since 1938. The Gran Caffè is a closely-guarded recipe — order it 'senza zucchero' if you don't want it sweet." },
+      { name: "Marigold Roma", address: "Via Giovanni da Empoli 37, 00154 Rome", price: 18, description: "Scandi-Italian bakery in Ostiense. Sourdough cinnamon buns, perfect filter coffee, and the best brunch eggs in the city." },
+      { name: "Faro – Caffè Specialty", address: "Via Piave 55, 00187 Rome", price: 14, description: "Third-wave specialty roastery near Porta Pia. Single-origin pour-overs and pastries from a rotating roster of Roman bakers." },
+      { name: "Antico Forno Roscioli", address: "Via dei Chiavari 34, 00186 Rome", price: 10, description: "Working bakery since 1824. Pizza bianca straight from the oven, maritozzi with cream, and the city's most coveted morning queue." },
+      { name: "Pergamino Caffè", address: "Piazza del Risorgimento 7, 00192 Rome", price: 12, description: "Specialty coffee bar near the Vatican. Excellent flat whites and homemade granola — a calm reprieve from the basilica crowds." },
+      { name: "Tiramisù Zum", address: "Piazza di Pietra 39, 00186 Rome", price: 13, description: "Compact bar tucked behind the Pantheon serving the city's best classical tiramisù alongside espresso and cornetti." },
     ],
     lunch: [
       { name: "Roscioli Salumeria", address: "Via dei Giubbonari 21, 00186 Rome", price: 45, description: "Legendary deli-restaurant. Outstanding cacio e pepe and curated wine list in a gourmet food temple." },
       { name: "Supplizio", address: "Via dei Banchi Vecchi 143, 00186 Rome", price: 15, description: "Gourmet supplì (Roman rice croquettes). The cacio e pepe version is unforgettable. Perfect quick lunch." },
       { name: "Pizzarium", address: "Via della Meloria 43, 00136 Rome", price: 15, description: "Gabriele Bonci's world-famous pizza al taglio. Creative toppings on impossibly light, crispy dough." },
+      { name: "Trattoria Pennestri", address: "Via Giovanni da Empoli 5, 00154 Rome", price: 35, description: "Modern Roman trattoria in Ostiense. Family-run, ingredient-driven, and reliably one of the best lunch tables in the city." },
+      { name: "Mordi e Vai", address: "Via Galvani, 00153 Rome (Testaccio Market, Box 15)", price: 10, description: "Sergio Esposito's Testaccio market stand. Allesso di bollito panini dunked in beef gravy — the most Roman lunch you'll have." },
+      { name: "Da Cesare al Casaletto", address: "Via del Casaletto 45, 00151 Rome", price: 35, description: "Beloved neighborhood trattoria in Monteverde. Classic Roman primi, stellar fritti, and a leafy garden in summer." },
+      { name: "Forno Campo de' Fiori", address: "Vicolo del Gallo 14, 00186 Rome", price: 8, description: "Pizza-by-the-slice institution. The pizza bianca and pizza rossa are the canonical takeaway lunch." },
     ],
     dinner: [
       { name: "Da Enzo al 29", address: "Via dei Vascellari 29, 00153 Rome", price: 35, description: "Trastevere institution. Perfect cacio e pepe, carbonara, and seasonal artichokes. No reservations — queue early." },
       { name: "Armando al Pantheon", address: "Salita dei Crescenzi 31, 00186 Rome", price: 50, description: "Family-run trattoria steps from the Pantheon. Classic Roman cuisine perfected over decades." },
       { name: "Salumeria Roscioli", address: "Via dei Giubbonari 21/22, 00186 Rome", price: 55, description: "Wine-bar-meets-deli in the historic center. Exceptional pasta, rare cheeses, and a stunning wine cellar." },
+      { name: "Trattoria Da Teo", address: "Piazza dei Ponziani 7A, 00153 Rome", price: 40, description: "Cult Trastevere trattoria. The amatriciana and saltimbocca alla romana are perfect; book ahead or eat at the bar." },
+      { name: "Flavio al Velavevodetto", address: "Via di Monte Testaccio 97, 00153 Rome", price: 45, description: "Cavernous Testaccio dining room carved into Monte dei Cocci. The rigatoni alla gricia is benchmark." },
+      { name: "Pianostrada", address: "Via delle Zoccolette 22, 00186 Rome", price: 50, description: "All-female-led kitchen near Campo de' Fiori. Inventive focacce, vegetable-forward plates, and a hidden garden." },
+      { name: "Trattoria Pennestri", address: "Via Giovanni da Empoli 5, 00154 Rome", price: 45, description: "Ostiense neighborhood favorite for thoughtful Roman cooking. Quietly one of the city's most consistent dinners." },
     ],
   },
   berlin: {
     breakfast: [
       { name: "House of Small Wonder", address: "Johannisstraße 20, 10117 Berlin", price: 18, description: "Japanese-inspired brunch in Mitte. Beautiful multi-level space with matcha lattes and okonomiyaki pancakes." },
       { name: "Café Einstein Stammhaus", address: "Kurfürstenstraße 58, 10785 Berlin", price: 20, description: "Grand Viennese-style café in a historic villa. Excellent Frühstück (German breakfast) and legendary apple strudel." },
+      { name: "Father Carpenter", address: "Münzstraße 21, 10178 Berlin", price: 16, description: "Hidden courtyard café in Mitte. Australian-style flat whites, sourdough toast, and one of the best brunches in town." },
+      { name: "Distrikt Coffee", address: "Bergstraße 68, 10115 Berlin", price: 17, description: "Bright Mitte specialty coffee bar. Excellent eggs Florentine and shakshuka with house-baked bread." },
+      { name: "Roamers", address: "Pannierstraße 64, 12047 Berlin", price: 18, description: "Cult Neukölln brunch spot. Floral interiors, generous bowls, and impeccable lattes — expect a wait." },
+      { name: "Benedict", address: "Uhlandstraße 49, 10719 Berlin", price: 22, description: "All-day breakfast institution near Ku'damm. The shakshuka and Eggs Royale are reliably superb." },
     ],
     lunch: [
       { name: "Curry 36", address: "Mehringdamm 36, 10961 Berlin", price: 8, description: "Iconic currywurst stand at Mehringdamm. The quintessential Berlin street food experience since 1980." },
       { name: "Markthalle Neun", address: "Eisenbahnstraße 42/43, 10997 Berlin", price: 18, description: "Kreuzberg's historic market hall. Street food stalls, craft beer, and artisan producers under a stunning iron roof." },
+      { name: "Mustafa's Gemüse Kebap", address: "Mehringdamm 32, 10961 Berlin", price: 7, description: "Berlin's most famous kebab. Roasted vegetables, herbed chicken, feta — the queue is part of the ritual." },
+      { name: "Standard – Serious Pizza", address: "Templiner Str. 7, 10119 Berlin", price: 18, description: "Wood-fired Neapolitan pizza in Prenzlauer Berg. Quietly one of the best lunches in the city." },
+      { name: "Lon Men's Noodle House", address: "Kantstraße 33, 10625 Berlin", price: 15, description: "Tiny Taiwanese noodle house in Charlottenburg. The dan dan noodles and beef soup are iconic." },
+      { name: "Zur Letzten Instanz", address: "Waisenstraße 14-16, 10179 Berlin", price: 25, description: "Berlin's oldest restaurant (1621). Classic Berliner pork knuckle and Königsberger Klopse in wood-paneled rooms." },
     ],
     dinner: [
       { name: "Nobelhart & Schmutzig", address: "Friedrichstraße 218, 10969 Berlin", price: 120, description: "Michelin-starred 'vocally local' dining. Counter-seating only, seasonal Berlin-Brandenburg ingredients." },
       { name: "Katz Orange", address: "Bergstraße 22, 10115 Berlin", price: 55, description: "Farm-to-table in a gorgeous courtyard. Their 12-hour slow-roasted pulled pork is legendary." },
+      { name: "Lode & Stijn", address: "Lausitzer Straße 25, 10999 Berlin", price: 70, description: "Dutch-led tasting-menu restaurant in Kreuzberg. Hyper-seasonal, technical, and personal — book ahead." },
+      { name: "Mrs Robinson's", address: "Pappelallee 29, 10437 Berlin", price: 65, description: "Prenzlauer Berg neighborhood favorite. Asian-inflected small plates and an exceptional natural wine list." },
+      { name: "Hartmanns Restaurant", address: "Fichtestraße 31, 10967 Berlin", price: 75, description: "Long-running modern German restaurant in Kreuzberg. Refined cooking, warm service, prix-fixe driven." },
+      { name: "Pauly Saal", address: "Auguststraße 11-13, 10117 Berlin", price: 95, description: "Glamorous Mitte dining room inside a former Jewish girls' school. Modern German cuisine in a Michelin-starred setting." },
     ],
   },
   barcelona: {
     breakfast: [
       { name: "Federal Café", address: "Passatge de la Pau 11, 08002 Barcelona", price: 16, description: "Australian-style café in El Gòtic. Excellent flat whites and smashed avo in a light-filled corner space." },
       { name: "Flax & Kale", address: "Carrer dels Tallers 74b, 08001 Barcelona", price: 20, description: "Health-conscious restaurant with flexitarian menu. Smoothie bowls, poached eggs, and plant-based options." },
+      { name: "Granja M. Viader", address: "Carrer d'en Xuclà 4-6, 08001 Barcelona", price: 10, description: "Historic dairy bar (1870) in El Raval. Birthplace of Cacaolat — order a thick hot chocolate with melindros." },
+      { name: "Caravelle", address: "Carrer del Pintor Fortuny 31, 08001 Barcelona", price: 17, description: "Cult Raval brunch spot. Huevos rancheros, pulled pork tacos, and excellent in-house pastries." },
+      { name: "Syra Coffee", address: "Carrer d'Astúries 50, 08012 Barcelona", price: 9, description: "Specialty coffee bar with multiple Gràcia outposts. Perfect flat whites and rotating single-origin filters." },
+      { name: "Cafés El Magnífico", address: "Carrer de l'Argenteria 64, 08003 Barcelona", price: 8, description: "Born neighborhood roastery since 1919. Old-school espresso bar with a cult following." },
     ],
     lunch: [
-      { name: "La Boqueria Market Stalls", address: "La Rambla 91, 08001 Barcelona", price: 20, description: "Iconic market. Skip the tourist stands — head to Bar Pinotxo or El Quim for authentic market dining." },
+      { name: "La Boqueria – Bar Pinotxo", address: "La Rambla 91, 08001 Barcelona (Stall 466-470)", price: 25, description: "Juanito Bayén's iconic counter inside La Boqueria. Chickpeas with morcilla and the freshest market seafood." },
       { name: "Can Paixano (La Xampanyeria)", address: "Carrer de la Reina Cristina 7, 08003 Barcelona", price: 15, description: "Standing-room cava bar in Barceloneta. Cava and tapas at unbeatable prices. Chaotic, fun, authentic." },
+      { name: "Bar del Pla", address: "Carrer de Montcada 2, 08003 Barcelona", price: 30, description: "Born neighborhood tapas bar. Modern takes on Catalan classics — ox cheek with potato foam, tuna tartare." },
+      { name: "Bar Cañete", address: "Carrer de la Unió 17, 08001 Barcelona", price: 45, description: "Glittering Raval tapas bar. Counter seating, white-jacketed waiters, and pristine seafood." },
+      { name: "Quimet & Quimet", address: "Carrer del Poeta Cabanyes 25, 08004 Barcelona", price: 25, description: "Tiny Poble-sec montadito bar. Stacked tinned-fish bites with a stunning vermouth and wine selection." },
+      { name: "Bodega 1900", address: "Carrer de Tamarit 91, 08015 Barcelona", price: 50, description: "Albert Adrià's vermouth-bar take on classic tapas. Liquid olives, perfect anchovies, technical brilliance." },
     ],
     dinner: [
       { name: "Cal Pep", address: "Plaça de les Olles 8, 08003 Barcelona", price: 55, description: "Counter-seating tapas bar near Born. Chef Pep's seafood is extraordinary — the fried fish and clams are legendary." },
       { name: "Cervecería Catalana", address: "Carrer de Mallorca 236, 08008 Barcelona", price: 40, description: "Locals' favorite tapas in Eixample. Outstanding patatas bravas, jamón ibérico, and seafood montaditos." },
+      { name: "Disfrutar", address: "Carrer de Villarroel 163, 08036 Barcelona", price: 220, description: "Three-Michelin-starred temple from elBulli alumni. Among the world's best tasting menus — book months out." },
+      { name: "Suculent", address: "Rambla del Raval 43, 08001 Barcelona", price: 60, description: "Carles Abellán's intimate Raval bistro. Inventive Catalan cooking with a deep regional wine list." },
+      { name: "Estimar", address: "Carrer de Sant Antoni dels Sombrerers 3, 08003 Barcelona", price: 90, description: "Born seafood gem from the Iglesias family. Pristine fish, simple preparations, an insider favorite." },
+      { name: "Mont Bar", address: "Carrer de la Diputació 220, 08011 Barcelona", price: 65, description: "Eixample tapas bar with Michelin-level technique. The bikini and seasonal small plates are extraordinary." },
     ],
   },
   london: {
     breakfast: [
       { name: "Dishoom", address: "12 Upper St Martin's Ln, WC2H 9FB London", price: 20, description: "Bombay café reimagined. Bacon naan roll and chai are breakfast perfection. Expect queues at weekends." },
       { name: "The Wolseley", address: "160 Piccadilly, W1J 9EB London", price: 35, description: "Grand café-restaurant in a former car showroom. Viennese-style breakfast with impeccable service." },
+      { name: "Granger & Co.", address: "175 Westbourne Grove, W11 2SB London", price: 22, description: "Bill Granger's airy Notting Hill flagship. The ricotta hotcakes are a London brunch institution." },
+      { name: "St. JOHN Bakery", address: "72 Druid St, SE1 2HQ London", price: 8, description: "Bermondsey bakery from Fergus Henderson. Warm doughnuts, eccles cakes, and the best sourdough loaf in town." },
+      { name: "Pavilion Bakery", address: "190 Victoria Park Rd, E9 7HD London", price: 10, description: "East London neighborhood bakery. Cardamom buns, sourdough, and excellent flat whites by the park." },
+      { name: "E5 Bakehouse", address: "395 Mentmore Terrace, E8 3PH London", price: 12, description: "London Fields canal-side bakery. Stone-milled sourdough, croissants, and a calm sit-down café." },
     ],
     lunch: [
+      { name: "Borough Market – Padella", address: "6 Southwark St, SE1 1TQ London", price: 18, description: "Hand-rolled pasta at Borough Market. The pici cacio e pepe is extraordinary. No reservations — worth the queue." },
       { name: "Borough Market", address: "8 Southwark St, SE1 1TL London", price: 20, description: "London's legendary food market. Artisan producers, street food, and specialist ingredients under Victorian railway arches." },
-      { name: "Padella", address: "6 Southwark St, SE1 1TQ London", price: 18, description: "Hand-rolled pasta at Borough Market. The pici cacio e pepe is extraordinary. No reservations — worth the queue." },
+      { name: "Koya Soho", address: "50 Frith St, W1D 4SQ London", price: 18, description: "Udon counter in Soho. Hot or cold dashi udon, exceptional tempura — minimalist and reliably superb." },
+      { name: "Rochelle Canteen", address: "16 Playground Gardens, E2 7FA London", price: 35, description: "Hidden Shoreditch lunch spot in a former bike shed. Margot Henderson's seasonal British plates and a leafy courtyard." },
+      { name: "Kiln", address: "58 Brewer St, W1F 9TL London", price: 30, description: "Soho counter serving live-fire Northern Thai cooking. The clay-pot glass noodles and lamb skewers are killers." },
+      { name: "Quo Vadis", address: "26-29 Dean St, W1D 3LL London", price: 40, description: "Soho institution from Jeremy Lee. The smoked eel sandwich at the bar is a perfect London lunch." },
     ],
     dinner: [
       { name: "Brat", address: "4 Redchurch St, E1 6JL London", price: 65, description: "Michelin-starred Basque-inspired grill in Shoreditch. Whole turbot and padron peppers cooked over fire." },
       { name: "Gymkhana", address: "42 Albemarle St, W1S 4JH London", price: 75, description: "Michelin-starred Indian restaurant in Mayfair. Colonial hunting-lodge décor with extraordinary modern Indian cuisine." },
+      { name: "St. JOHN", address: "26 St John St, EC1M 4AY London", price: 60, description: "Fergus Henderson's nose-to-tail manifesto. Roast bone marrow with parsley salad is essential. Whitewashed, joyful, definitive." },
+      { name: "Lyle's", address: "Tea Building, 56 Shoreditch High St, E1 6JJ London", price: 70, description: "James Lowe's Michelin-starred British tasting menu. Hyper-seasonal, technical, and quietly thrilling." },
+      { name: "Smoking Goat", address: "64 Shoreditch High St, E1 6JJ London", price: 45, description: "Loud Shoreditch Thai bar. The fish-sauce wings, lardo fried rice, and natural wines are unbeatable." },
+      { name: "Trullo", address: "300-302 St Paul's Rd, N1 2LH London", price: 50, description: "Highbury neighborhood Italian. Hand-cut pasta, charcoal-grilled meats, and a perfect pre-Arsenal dinner." },
     ],
   },
   lisbon: {
@@ -123,6 +173,94 @@ export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, Fallback
     ],
   },
 };
+
+// =============================================================================
+// REGIONAL EMERGENCY FALLBACK — country-level real venues used when the
+// city-specific INLINE_FALLBACK_RESTAURANTS pool is missing or exhausted.
+// Goal: NEVER ship a "find a local spot" stub mid-itinerary. Every chain
+// terminates in a real, named venue rather than a template.
+// =============================================================================
+const REGIONAL_EMERGENCY_FALLBACK: Record<string, Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant>> = {
+  italy: {
+    breakfast: { name: "Sant'Eustachio Il Caffè", address: "Piazza di S. Eustachio 82, Rome, Italy", price: 10, description: "Italy's most iconic espresso bar. Order the Gran Caffè at the counter — Roman ritual perfected." },
+    lunch: { name: "All'Antico Vinaio", address: "Via dei Neri 65, Florence, Italy", price: 12, description: "Italy's most-loved schiacciata sandwich shop. Cured meats, pecorino, and creamy spreads on warm bread." },
+    dinner: { name: "Trattoria Sostanza", address: "Via del Porcellana 25, Florence, Italy", price: 50, description: "Florentine institution since 1869. Bistecca alla fiorentina, butter chicken, artichoke tortino — a Tuscan benchmark." },
+  },
+  france: {
+    breakfast: { name: "Du Pain et des Idées", address: "34 Rue Yves Toudic, 75010 Paris, France", price: 12, description: "Christophe Vasseur's cult bakery. Pain des amis and escargot pistache-chocolat — the city's best morning queue." },
+    lunch: { name: "Bouillon Pigalle", address: "22 Bd de Clichy, 75018 Paris, France", price: 25, description: "Stunning Belle Époque brasserie. Classic French comfort food at honest prices — no reservations." },
+    dinner: { name: "Le Comptoir du Relais", address: "9 Carrefour de l'Odéon, 75006 Paris, France", price: 65, description: "Yves Camdeborde's iconic bistro. The bistronomy template — refined French cooking in a buzzing room." },
+  },
+  spain: {
+    breakfast: { name: "Granja M. Viader", address: "Carrer d'en Xuclà 4, Barcelona, Spain", price: 10, description: "Historic dairy bar (1870). Birthplace of Cacaolat — order thick hot chocolate with melindros." },
+    lunch: { name: "Bar Pinotxo", address: "La Boqueria, La Rambla 91, Barcelona, Spain", price: 25, description: "Juanito Bayén's market counter. Chickpeas with morcilla, cuttlefish with beans — quintessential Catalan." },
+    dinner: { name: "Casa Lucio", address: "Calle Cava Baja 35, Madrid, Spain", price: 60, description: "Madrid institution famous for huevos rotos. The Spanish power-dinner spot since 1974." },
+  },
+  germany: {
+    breakfast: { name: "Café Einstein Stammhaus", address: "Kurfürstenstraße 58, 10785 Berlin, Germany", price: 20, description: "Grand Viennese-style café in a historic villa. The Frühstück platter is a Berlin classic." },
+    lunch: { name: "Curry 36", address: "Mehringdamm 36, 10961 Berlin, Germany", price: 8, description: "Iconic Berlin currywurst stand since 1980." },
+    dinner: { name: "Zur Letzten Instanz", address: "Waisenstraße 14-16, 10179 Berlin, Germany", price: 35, description: "Berlin's oldest restaurant (1621). Classic Berliner pork knuckle in wood-paneled rooms." },
+  },
+  uk: {
+    breakfast: { name: "Dishoom", address: "12 Upper St Martin's Ln, WC2H 9FB London, UK", price: 20, description: "Bombay café reimagined. The bacon naan roll is a London breakfast institution." },
+    lunch: { name: "Padella", address: "6 Southwark St, SE1 1TQ London, UK", price: 18, description: "Borough Market hand-rolled pasta. Pici cacio e pepe is essential — no reservations, worth the queue." },
+    dinner: { name: "St. JOHN", address: "26 St John St, EC1M 4AY London, UK", price: 60, description: "Fergus Henderson's nose-to-tail manifesto. Roast bone marrow with parsley salad — definitively British." },
+  },
+  portugal: {
+    breakfast: { name: "Manteigaria", address: "R. do Loreto 2, 1200-242 Lisbon, Portugal", price: 4, description: "Pastéis de nata baked all day at the counter. Warm, perfect, dusted with cinnamon." },
+    lunch: { name: "Cervejaria Ramiro", address: "Av. Almirante Reis 1H, 1150-007 Lisbon, Portugal", price: 45, description: "Legendary seafood beer hall. Tiger prawns, percebes, finished with a prego steak sandwich." },
+    dinner: { name: "Solar dos Presuntos", address: "R. das Portas de Santo Antão 150, Lisbon, Portugal", price: 55, description: "Minho-style cooking. Legendary presunto and seafood rice in a lively, family-run dining room." },
+  },
+  usa: {
+    breakfast: { name: "Russ & Daughters Cafe", address: "127 Orchard St, New York, NY 10002, USA", price: 25, description: "Lower East Side bagel-and-lox temple. Smoked fish boards, latkes, egg creams — pure NYC." },
+    lunch: { name: "Katz's Delicatessen", address: "205 E Houston St, New York, NY 10002, USA", price: 25, description: "1888 deli landmark. Hand-carved pastrami on rye is the canonical American sandwich." },
+    dinner: { name: "Gramercy Tavern", address: "42 E 20th St, New York, NY 10003, USA", price: 90, description: "Danny Meyer's seasonal American flagship. Warm, polished, a benchmark dinner since 1994." },
+  },
+  japan: {
+    breakfast: { name: "Tsukiji Sushi Sei", address: "4-13-9 Tsukiji, Chuo City, Tokyo, Japan", price: 30, description: "Edomae sushi for breakfast at Tsukiji outer market. Counter-only, traditional, transcendent." },
+    lunch: { name: "Tsuta", address: "1-14-1 Sugamo, Toshima City, Tokyo, Japan", price: 20, description: "First Michelin-starred ramen. Truffle-oil shoyu broth and house-made noodles." },
+    dinner: { name: "Kagari", address: "6-4-12 Ginza, Chuo City, Tokyo, Japan", price: 25, description: "Ginza tori-paitan ramen. Silky chicken broth and perfect noodles — quietly the city's best bowl." },
+  },
+  mexico: {
+    breakfast: { name: "Lalo!", address: "Zacatecas 173, Roma Norte, Mexico City, Mexico", price: 18, description: "Eduardo García's all-day spot. Chilaquiles, smoked salmon tortas, excellent espresso." },
+    lunch: { name: "El Turix", address: "Emilio Castelar 212, Polanco, Mexico City, Mexico", price: 12, description: "Cult Yucatecan cochinita pibil counter. Order the panucho and the torta." },
+    dinner: { name: "Contramar", address: "Calle de Durango 200, Roma Norte, Mexico City, Mexico", price: 50, description: "Gabriela Cámara's seafood lunch-room. The tuna tostada and pescado a la talla are essential." },
+  },
+};
+
+const CITY_COUNTRY_MAP: Record<string, keyof typeof REGIONAL_EMERGENCY_FALLBACK> = {
+  rome: 'italy', milan: 'italy', florence: 'italy', venice: 'italy', naples: 'italy', bologna: 'italy', turin: 'italy',
+  paris: 'france', nice: 'france', lyon: 'france', marseille: 'france', bordeaux: 'france', strasbourg: 'france',
+  barcelona: 'spain', madrid: 'spain', seville: 'spain', valencia: 'spain', granada: 'spain', bilbao: 'spain', malaga: 'spain',
+  berlin: 'germany', munich: 'germany', hamburg: 'germany', frankfurt: 'germany', cologne: 'germany',
+  london: 'uk', manchester: 'uk', edinburgh: 'uk', glasgow: 'uk', dublin: 'uk', liverpool: 'uk', oxford: 'uk',
+  lisbon: 'portugal', porto: 'portugal',
+  'new york': 'usa', 'los angeles': 'usa', chicago: 'usa', 'san francisco': 'usa', miami: 'usa', boston: 'usa', 'new orleans': 'usa', seattle: 'usa', austin: 'usa', washington: 'usa',
+  tokyo: 'japan', kyoto: 'japan', osaka: 'japan', sapporo: 'japan', fukuoka: 'japan',
+  'mexico city': 'mexico', cdmx: 'mexico', oaxaca: 'mexico', guadalajara: 'mexico',
+};
+
+const GLOBAL_EMERGENCY_FALLBACK: Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant> = {
+  breakfast: { name: "Local specialty café", address: "Top-rated café near your hotel", price: 12, description: "Pick a 4.5+ star specialty café within a 5-min walk of your hotel. Order the local pastry plus a strong espresso or pour-over." },
+  lunch: { name: "Highly-rated neighborhood restaurant", address: "Top-rated lunch spot near your morning activity", price: 25, description: "Pick a 4.5+ star neighborhood restaurant near your morning activity. The concierge can confirm the booking." },
+  dinner: { name: "Highly-rated neighborhood restaurant", address: "Top-rated dinner spot near your evening activity", price: 45, description: "Pick a 4.5+ star restaurant within walking distance of your evening plans. The concierge can lock the booking." },
+};
+
+function regionalEmergencyFallback(city: string, mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks'): FallbackRestaurant {
+  const m = mealType === 'drinks' ? 'dinner' : mealType;
+  const cityKey = (city || '').toLowerCase().trim().split(',')[0].trim();
+  for (const [needle, country] of Object.entries(CITY_COUNTRY_MAP)) {
+    if (cityKey.includes(needle) || needle.includes(cityKey)) {
+      const region = REGIONAL_EMERGENCY_FALLBACK[country];
+      if (region && region[m]) {
+        console.warn(`[PLACEHOLDER_GAP] city="${city}" meal=${mealType} → regional ${country} fallback`);
+        return region[m];
+      }
+    }
+  }
+  console.warn(`[PLACEHOLDER_GAP] city="${city}" meal=${mealType} → global fallback`);
+  return GLOBAL_EMERGENCY_FALLBACK[m];
+}
 
 // =============================================================================
 // HELPER: Get a random fallback restaurant from the hardcoded pool
@@ -158,6 +296,23 @@ export function getRandomFallbackRestaurant(
   if (available.length === 0) return options[0];
 
   return available[Math.floor(Math.random() * available.length)];
+}
+
+/**
+ * GUARANTEED resolver — ALWAYS returns a real, named venue. Walks
+ *   city pool → city pool (recycled) → regional country pool → global emergency.
+ * Use this anywhere we would otherwise emit a "find a local spot" stub.
+ */
+export function resolveAnyMealFallback(
+  city: string,
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
+  usedNames: Set<string>,
+): FallbackRestaurant {
+  return (
+    getRandomFallbackRestaurant(city, mealType, usedNames, false) ||
+    getRandomFallbackRestaurant(city, mealType, new Set<string>(), true) ||
+    regionalEmergencyFallback(city, mealType)
+  );
 }
 
 // =============================================================================
@@ -462,23 +617,34 @@ export function matchesAIStubVenue(name: string): boolean {
  */
 export function isPlaceholderMeal(activity: any, cityName: string): boolean {
   const category = (activity.category || '').toUpperCase();
-  if (category !== 'DINING' && category !== 'RESTAURANT') return false;
-
   const title = (activity.title || '').trim();
   const venue = (activity.location?.name || activity.venue_name || '').trim();
   const description = (activity.description || '').trim();
+
+  // Title-shape detection FIRST — many meal-shaped placeholders ship with a
+  // non-DINING category (e.g. "experience", "food", or empty). We treat any
+  // meal-labeled activity as a candidate, then defer category gating.
+  const looksLikeMeal =
+    category === 'DINING' ||
+    category === 'RESTAURANT' ||
+    /^(breakfast|brunch|lunch|dinner|supper|drinks|meal)\b/i.test(title);
+  if (!looksLikeMeal) return false;
 
   if (PLACEHOLDER_TITLE_PATTERNS.some(p => p.test(title))) return true;
   if (cityName.length > 2 && venue.toLowerCase() === cityName.toLowerCase()) return true;
   if (PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venue))) return true;
   if (/get a restaurant recommendation/i.test(description)) return true;
   if (/get a restaurant recommendation/i.test(venue)) return true;
+  // Legacy "find a local spot" stubs from prior generations
+  if (/find a local spot/i.test(title)) return true;
+  if (/find a local spot/i.test(venue)) return true;
   // Venue name equals title (e.g. both are "Lunch at a bistro")
   if (venue && title && venue.toLowerCase() === title.toLowerCase()) return true;
-  // AI-generated French/Italian stub names ("Café Matinal", "Table du Quartier", …)
+  // Empty venue on a meal-labeled activity = placeholder
+  if (looksLikeMeal && !venue) return true;
+  // AI-generated French/Italian stub names
   if (matchesAIStubVenue(title)) return true;
   if (matchesAIStubVenue(venue)) return true;
-  // Strip leading meal label ("Lunch at <stub>") and re-test
   const titleNoLabel = title.replace(/^(breakfast|brunch|lunch|dinner|supper|drinks|meal)\s*[:\-—–]?\s*(at\s+)?/i, '').trim();
   if (titleNoLabel && titleNoLabel !== title && matchesAIStubVenue(titleNoLabel)) return true;
 
@@ -504,41 +670,11 @@ export function nuclearPlaceholderSweep(
     const startTimeStr = activity.startTime || activity.start_time || '12:00';
     const mealType = parseMealType(startTimeStr);
 
-    // Try hardcoded fallback first (ignore used filter as last resort)
-    const fallback = getRandomFallbackRestaurant(city, mealType, usedNames, true);
-
-    if (fallback) {
-      applyFallbackToActivity(activity, fallback, mealType, usedNames, diningConfig);
-    } else {
-      // No fallback DB for this city — refuse to ship a generic stub like "Café Matinal".
-      // Mark slot as unverified so the UI can surface a swap CTA instead of a fake venue.
-      const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : mealType === 'drinks' ? 'Drinks' : 'Dinner';
-      activity.title = `${mealLabel} — find a local spot`;
-      activity.name = activity.title;
-      activity.venue_name = '';
-      if (activity.location) {
-        activity.location.name = '';
-      }
-      activity.description = `We couldn't verify a ${mealType} venue here. Tap the assistant to suggest one.`;
-      (activity as any).__needs_meal_swap = true;
-      (activity as any).needsRefinement = true;
-      // Trim duration to 30 min so this unverified slot stops eating a 60-90 min
-      // block in the timeline (especially painful on Fast-Paced days).
-      const startStr: string = activity.startTime || activity.start_time || '';
-      const sm = startStr.match(/^(\d{1,2}):(\d{2})$/);
-      if (sm) {
-        const startMin = parseInt(sm[1], 10) * 60 + parseInt(sm[2], 10);
-        const endMin = startMin + 30;
-        const eh = Math.floor(endMin / 60) % 24;
-        const em = endMin % 60;
-        const endStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
-        activity.endTime = endStr;
-        if (activity.end_time !== undefined) activity.end_time = endStr;
-        activity.durationMinutes = 30;
-        if (activity.duration !== undefined) activity.duration = '30 min';
-      }
-      console.error(`[NUCLEAR] No fallback DB for "${city}" — marked ${mealType} slot as unverified instead of using template stub`);
-    }
+    // GUARANTEED resolver: city pool → recycled → regional → global. Never null.
+    const fallback = resolveAnyMealFallback(city, mealType, usedNames);
+    applyFallbackToActivity(activity, fallback, mealType, usedNames, diningConfig);
+    // Force category=DINING so downstream pricing/UI handle it correctly.
+    activity.category = 'dining';
 
     activity._placeholder_replaced = true;
     replaced++;

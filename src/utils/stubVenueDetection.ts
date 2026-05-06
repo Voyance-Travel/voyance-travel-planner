@@ -57,13 +57,13 @@ export function inferMealTypeFromTime(startTime: string | undefined | null): Mea
 
 export function stubFallbackLabel(meal: MealType | null | undefined): string {
   switch (meal) {
-    case 'breakfast': return 'Breakfast — find a local spot';
-    case 'brunch': return 'Brunch — find a local spot';
-    case 'lunch': return 'Lunch — find a local spot';
-    case 'dinner': return 'Dinner — find a local spot';
-    case 'drinks': return 'Drinks — find a local spot';
-    default: return 'Meal — find a local spot';
+    case 'breakfast': return 'Breakfast — tap to choose a venue';
+    case 'brunch': return 'Brunch — tap to choose a venue';
+    case 'lunch': return 'Lunch — tap to choose a venue';
+    case 'dinner': return 'Dinner — tap to choose a venue';
+    case 'drinks': return 'Drinks — tap to choose a venue';
+    default: return 'Meal — tap to choose a venue';
   }
 }
 
-export const STUB_VENUE_DISPLAY = 'Find a local spot';
+export const STUB_VENUE_DISPLAY = 'Tap to choose a venue';

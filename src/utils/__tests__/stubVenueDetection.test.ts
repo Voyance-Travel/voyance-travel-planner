@@ -41,11 +41,11 @@ describe('inferMealTypeFromTime', () => {
 describe('sanitizeActivityName + stub mask', () => {
   it('masks stub dining title with meal-aware fallback', () => {
     expect(sanitizeActivityName('Table du Quartier', { category: 'dining', startTime: '13:00' }))
-      .toBe('Lunch — find a local spot');
+      .toBe('Lunch — tap to choose a venue');
     expect(sanitizeActivityName('Lunch at Table du Quartier', { category: 'dining' }))
-      .toBe('Lunch — find a local spot');
+      .toBe('Lunch — tap to choose a venue');
     expect(sanitizeActivityName('Café Matinal', { category: 'restaurant', startTime: '08:30' }))
-      .toBe('Breakfast — find a local spot');
+      .toBe('Breakfast — tap to choose a venue');
   });
 
   it('does NOT mask real restaurant names', () => {
@@ -60,22 +60,22 @@ describe('sanitizeActivityName + stub mask', () => {
 
   it('masks stub on breakfast/cafe categories', () => {
     expect(sanitizeActivityName('Café Matinal', { category: 'breakfast' }))
-      .toBe('Breakfast — find a local spot');
+      .toBe('Breakfast — tap to choose a venue');
     expect(sanitizeActivityName('Café Matinal', { category: 'cafe', startTime: '08:30' }))
-      .toBe('Breakfast — find a local spot');
+      .toBe('Breakfast — tap to choose a venue');
   });
 
   it('masks stub when category is missing but title implies a meal', () => {
     expect(sanitizeActivityName('Breakfast at Café Matinal'))
-      .toBe('Breakfast — find a local spot');
+      .toBe('Breakfast — tap to choose a venue');
   });
 
   it('masks stub when only startTime is provided', () => {
     expect(sanitizeActivityName('Café Matinal', { startTime: '08:30' }))
-      .toBe('Breakfast — find a local spot');
+      .toBe('Breakfast — tap to choose a venue');
   });
 
   it('default fallback when no meal info available', () => {
-    expect(stubFallbackLabel(null)).toBe('Meal — find a local spot');
+    expect(stubFallbackLabel(null)).toBe('Meal — tap to choose a venue');
   });
 });
