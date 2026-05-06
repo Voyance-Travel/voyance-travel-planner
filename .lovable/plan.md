@@ -1,54 +1,55 @@
 ## Root cause
 
-`PaymentsTab` has two parallel data paths into the Trip Total header:
+The generator pipeline's overlap repair (`repair-day.ts` section 13, `TIME_OVERLAP CASCADE`) only fires when `currStart < prevEnd` — a true overlap. Every Rome/Paris day still ships with **two classes of conflict the generator never resolves**, both of which `refresh-day` then flags as errors:
 
-1. **`tripTotalCents`** — `useTripFinancialSnapshot` reads `activity_costs` directly via `supabase`, listens for `window`-level `booking-changed`, and refetches on every dispatch.
-2. **`bucketSumCents`** — built by `usePayableItems` from a React Query cache `['activity-costs-payable', tripId]` (`PaymentsTab.tsx` line 249).
+1. **Same-start conflicts** (`refresh-day` lines 551-559, `isSameStart`). When two consecutive cards have `startTime === startTime` (typically a 0-duration transit stub jammed in front of its target), the cascade's `currStart < prevEnd` test misses it (equality fails strict less-than).
+2. **Transit-gap / insufficient-buffer** (`refresh-day` lines 599-645). For two distinct-coordinate cards back-to-back, refresh-day requires `gap >= estimateTransit + getEffectiveMinBuffer`. The generator never runs this haversine-based check; it just schedules e.g. `10:00–11:00 Vatican` followed by `11:00–12:30 Trastevere lunch` and emits the day. refresh-day flags the missing 15-25 min walk/taxi as `insufficient_buffer` (severity error if `gap < transit alone`).
 
-Nothing invalidates query #2 when `booking-changed` fires. So after Fix Timing → autosave → `action-save-itinerary` → DB trigger reprojects `activity_costs` and the JSON `cost` blocks (slightly different `perPerson`/`synced_at` recomputation, plus the orphan-payment archival path inside the snapshot can shift the canonical total), the headline `tripTotalCents` updates while `bucketSumCents` stays frozen on the stale cached rows. Drift is non-zero indefinitely → the debounced "Reconciling…" badge latches on.
+That's exactly why a Rome day ships with 2 issues, Paris with 3 — it's deterministic per the venue spread, not random.
 
-It also affects, to a lesser extent, every other `booking-changed` dispatch (Mark Paid, swaps, regen) — they all re-fetch the snapshot but leave the Payments rows behind for whatever the React Query staleTime allows.
+## Fix — bring the validator's algorithm forward into the generator
 
-## Fix
+We already have the canonical algorithm in `supabase/functions/refresh-day/index.ts`. Lift the conflict-detection + safe-cascade core into a shared helper and run it as a final pass on every generated day, before persistence.
 
-Invalidate the Payments-side caches whenever the snapshot is told to refetch. Two clean options exist; we'll do **both** because they reinforce each other and neither is sufficient alone.
+### 1. Extract shared helper
 
-### 1. Invalidate `activity-costs-payable` on `booking-changed` (PaymentsTab.tsx)
+Create `supabase/functions/_shared/timing-cascade.ts` exporting:
+- `enforceTimingAndBuffers(activities, opts)` — sorts chronologically, then for each consecutive pair:
+  - **Same-start fix**: if `currStart === nextStart`, push `next` to `currEnd + 5`.
+  - **Overlap fix**: if `currEnd > nextStart`, push `next` (and cascade subsequent) to `currEnd + 5`.
+  - **Transit-buffer fix**: if both have coordinates, compute `estimateTransit + getEffectiveMinBuffer`; if gap < required, push `next` (and cascade) forward.
+  - Skip locked / structural cards as the targets of pushes (`accommodation`, departures, `lockedIds`) — same exemption set repair-day already uses.
+  - Drop activities pushed past `23:30` (mirror existing `cutoff` rule), exempting end-of-day hotel-return cards.
+- Returns `{ activities, repairs[], droppedIds[] }`.
 
-Add a `useEffect` in `PaymentsTab` that listens for `booking-changed` and calls:
-```ts
-queryClient.invalidateQueries({ queryKey: ['activity-costs-payable', tripId] });
-queryClient.invalidateQueries({ queryKey: ['trip-inclusion-toggles', tripId] });
-fetchPayments();
-```
-This pulls the fresh `activity_costs` rows that `usePayableItems` consumes, in lockstep with the snapshot refetch.
+The pure helpers (`parseTime`, `minutesToTime`, `haversineMeters`, `estimateTransit`, `isSamePlace`, `getEffectiveMinBuffer`) move into the same file. `refresh-day/index.ts` is rewritten to import them so we don't fork the algorithm.
 
-### 2. Make Fix Timing dispatch `booking-changed` only once, after autosave commits
+### 2. Wire the pass into the generator
 
-Currently `handleApplyRefreshChanges` flips `setHasChanges(true)` → 3-second debounced autosave → backend reprojection. The Payments tab refetch happens whenever `booking-changed` fires from inside the cost-sync chain (`syncBudgetFromDays` line 1474). Fix Timing doesn't change costs, but the autosave path still calls into `action-save-itinerary` whose preserve/repair pipeline may emit a recomputed cost block that triggers the trigger.
+Two integration points (both needed; first is per-day, second is the catch-all):
 
-Add a defensive guard inside `useTripFinancialSnapshot.fetchData`: if the new `totalCents` matches the previous fetched `totalCents` exactly, skip the `setData` (already a no-op) **and also skip the `setLastDelta`** — already the case. No code change needed here; just confirm.
+- **`pipeline/repair-day.ts`** — after the existing section 13 (TIME_OVERLAP CASCADE) and 13b (MIN DURATION), call `enforceTimingAndBuffers(activities, { lockedIds, dayNumber })`. Append its `repairs` to the local `repairs` array. This keeps repair-stage logging identical and avoids re-doing work in two places.
+- **`action-save-itinerary.ts`** — just before the final write, run the same helper across each day's activities once more. This is the safety net for the manual-paste / non-generator save paths and for any future action that bypasses the per-day repair (e.g. assistant tool edits).
 
-The real change is to make Fix Timing's downstream re-render path explicit: after the apply path's `setHasChanges(true)`, also invalidate the Payments queries so the bucket recomputes against the same activity_costs the snapshot will see, even if the autosave hasn't fired yet.
+### 3. Verification
 
-In `EditorialItinerary.tsx` `handleApplyRefreshChanges` (~line 2566): after `setHasChanges(true)`, dispatch `window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }))`. With the new listener in #1, this synchronizes both sides immediately.
+Add `supabase/functions/_shared/timing-cascade.test.ts` with three fixtures:
+- Two same-start activities → next pushed to `prev.end + 5`.
+- Vatican (lat 41.902, lng 12.453) at `10:00–11:00` + Trastevere lunch (41.890, 12.467) at `11:00–12:30` with no buffer → next pushed by ~estimated walk + 15 min buffer.
+- Locked card + AI card overlap → AI is the one that moves, not the locked card.
 
-### 3. Drop the `'activity-costs-payable'` cache `staleTime` to 0 (PaymentsTab.tsx line 249)
-
-Belt-and-braces: ensure the query is always considered stale so any external invalidation re-fetches without delay.
+After deploy, regenerate the existing Rome trip and confirm `refresh-day` returns `issues: []` for every day on first call (no Fix Timing required). Health Score should land at 100 absent operating-hours / venue closure issues.
 
 ## Out of scope
 
-- The trigger / reprojection logic itself is correct; we only need the UI caches to track it.
-- The 1.5 s debounce on the badge stays as-is; it's correct behavior for transient flicker, just couldn't survive a permanent stale-cache mismatch.
+- Operating-hours conflicts (`type: 'operating_hours'`) — these depend on live venue hours and the existing repair already handles them where data is present. They'll continue to surface as warnings on `refresh-day` when the generator places a card outside posted hours; that's a venue-data problem, not a scheduling-bug.
+- Minimum-duration enforcement (already covered by 13b).
+- The Fix Timing button itself stays — it's still useful when the user manually drags cards.
 
-## Files to edit
+## Files
 
-- `src/components/itinerary/PaymentsTab.tsx` — add `booking-changed` listener that invalidates the Payments queries; set `staleTime: 0` on `activity-costs-payable`.
-- `src/components/itinerary/EditorialItinerary.tsx` — in `handleApplyRefreshChanges`, dispatch `booking-changed` after `setHasChanges(true)`.
-
-## Verification
-
-1. Trigger Fix Timing on a Rome day with overlap; confirm Payments header transitions through "Matches itinerary" → (nothing visible) → "Matches itinerary" without the badge ever sticking.
-2. Mark an activity Paid; confirm header still resolves to "Matches itinerary" within ~1 s.
-3. Regenerate a day; confirm same.
+- create `supabase/functions/_shared/timing-cascade.ts`
+- create `supabase/functions/_shared/timing-cascade.test.ts`
+- edit `supabase/functions/refresh-day/index.ts` (delete duplicated helpers + cascade body, import from shared)
+- edit `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (append final pass at end of section 13b)
+- edit `supabase/functions/generate-itinerary/action-save-itinerary.ts` (run pass once per day before persistence)
