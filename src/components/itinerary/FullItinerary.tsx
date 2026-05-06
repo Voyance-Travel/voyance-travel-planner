@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { formatEnumDisplay, formatWeatherCondition } from '@/utils/textFormatting';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
+import { coerceDurationString } from '@/utils/plannerUtils';
 import type { 
   DayItinerary, TripSummary, DestinationInfo, 
   FlightInfo, FlightSegment, HotelInfo, ItineraryActivity, ActivityType, WeatherCondition 
@@ -491,7 +492,7 @@ function ActivityCard({
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-mono">{activity.time}</span>
             <span className="text-xs">•</span>
-            <span className="text-xs">{activity.duration}</span>
+            <span className="text-xs">{coerceDurationString(activity.duration, (activity as any).durationMinutes)}</span>
             {activity.rating && (
               <>
                 <span className="text-xs">•</span>

@@ -10,6 +10,7 @@
  */
 
 import { format, parseISO, addDays } from 'date-fns';
+import { coerceDurationString } from './plannerUtils';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
 const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
@@ -410,7 +411,10 @@ function parseSingleActivity(
     startTime: extractString(activityData, ['startTime', 'start_time', 'time']),
     endTime: extractString(activityData, ['endTime', 'end_time']),
     time: extractString(activityData, ['time', 'startTime', 'start_time']),
-    duration: extractString(activityData, ['duration']),
+    duration: coerceDurationString(
+      extractString(activityData, ['duration']),
+      extractNumber(activityData, ['durationMinutes', 'duration_minutes'])
+    ),
     durationMinutes: extractNumber(activityData, ['durationMinutes', 'duration_minutes']),
     location: parseLocation(activityData.location),
     imageUrl: extractString(activityData, ['imageUrl', 'image_url', 'image'])

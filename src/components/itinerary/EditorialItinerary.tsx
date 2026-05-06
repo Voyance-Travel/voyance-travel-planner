@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { coerceDurationString } from '@/utils/plannerUtils';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -3669,7 +3670,7 @@ export function EditorialItinerary({
       title: activity.title || 'Activity',
       description: activity.description || '',
       time,
-      duration: activity.duration || '2 hours',
+      duration: coerceDurationString(activity.duration, (activity as any).durationMinutes) || '2 hours',
       type,
       cost,
       location: { name: locName, address: locAddress },
@@ -3756,7 +3757,7 @@ export function EditorialItinerary({
             type: newActivity.type,
             time: preservedTime,
             startTime: preservedStartTime,
-            duration: newActivity.duration,
+            duration: coerceDurationString(newActivity.duration, (newActivity as any).durationMinutes),
             cost: { amount: newActivity.cost, currency: tripCurrency },
             location: {
               name: newActivity.location?.name,

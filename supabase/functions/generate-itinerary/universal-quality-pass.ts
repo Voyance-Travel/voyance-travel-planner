@@ -29,6 +29,7 @@ import {
 } from './sanitization.ts';
 import { normalizeVenueName, venueNamesMatch } from './generation-utils.ts';
 import { getDiningConfig } from './dining-config.ts';
+import { normalizeActivityDuration } from './_shared/duration-format.ts';
 
 // =============================================================================
 // OPTIONS INTERFACE
@@ -287,6 +288,9 @@ export async function universalQualityPass(
   // NOTE: Timing overlap resolution is now handled exclusively by pipeline/repair-day.ts.
   // The cascading overlap fixer was removed from here to prevent stacked timing passes
   // that push activities into pre-dawn hours (the AM/PM timing collapse bug).
+
+  // ── Step N: Normalize duration strings (kill HH:MM:SS leakage from the LLM) ──
+  for (const a of result) normalizeActivityDuration(a);
 
   console.log(`[QUALITY] Day ${dayIndex + 1} complete: ${result.length} activities ======\n`);
   return result;
