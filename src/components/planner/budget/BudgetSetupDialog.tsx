@@ -125,7 +125,9 @@ export function BudgetSetupDialog({
     const newAllocations = { ...allocations, [key]: value };
     
     // Ensure allocations sum to 100
-    const total = Object.values(newAllocations).reduce((a, b) => a + b, 0);
+    const total = Object.values(newAllocations)
+      .filter((v): v is number => typeof v === 'number')
+      .reduce((a, b) => a + b, 0);
     if (total !== 100) {
       const diff = 100 - total;
       newAllocations.buffer_percent = Math.max(0, newAllocations.buffer_percent + diff);
