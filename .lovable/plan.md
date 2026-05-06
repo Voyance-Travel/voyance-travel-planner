@@ -1,92 +1,56 @@
-# Reconcile Payments buckets to the Trip Total ($987 vs $1,035 bug)
+# La Pergola Display vs Ledger Mismatch
+
+## Root cause
+
+Two distinct bugs are stacked:
+
+1. **JSONB writeback is being clobbered post-repair.** `action-repair-costs.ts` correctly raised La Pergola to **$250/pp ($500 total)** in `activity_costs` AND wrote `{cost: {amount: 500}}` back into `trips.itinerary_data` (line 566). But `trips.updated_at` is **30 minutes after** the repair, while every `activity_costs.updated_at` is frozen at the repair time. Something — most likely an autosave path in `EditorialItinerary` / `TripDetail` that rewrites `itinerary_data` from in-memory React state — overwrote `cost.amount` back to the original AI-generated `$30`. The activity card then renders that stale `$30` (which displays as ~€26).
+
+2. **The display layer trusts JSONB before the ledger.** `getDisplayCost` in `EditorialItinerary.tsx` reads `activity.cost?.amount` first (line 948). It never consults `activity_costs`, even though that table is declared the single source of truth ([Table-Driven Cost Architecture](mem://technical/finance/table-driven-cost-architecture)). So *any* drift in JSONB silently surfaces in the UI even though Budget/Payments are showing the correct $500.
+
+The category over-allocation ($860 Food & Dining vs $360 budget) is the *correct* downstream consequence once the ledger has $500 for La Pergola + $240 for Imàgo. That's a separate "Luxury Luminary allocation %" calibration discussion — not a bug.
+
+## Fix scope
+
+Two surgical changes, no business-logic refactors.
+
+### 1. Stop the JSONB clobber on autosave (root cause)
+
+In every code path that writes `trips.itinerary_data` from in-memory React state, preserve `cost`/`estimatedCost` for activities that have a non-AI repair source recorded. Implementation:
+
+- Stamp each repaired activity in JSONB with `cost.basis = 'repair_floor'` and `cost.source = 'michelin_floor' | 'reference_fallback' | 'auto_corrected'` during writeback in `action-repair-costs.ts`. (Already partially there — extend the patched object.)
+- Add a small helper `preserveLedgerCosts(prevDays, nextDays)` in `src/utils/preserveLedgerCosts.ts`. For every activity in `nextDays`, if `prevDays` has the same id with `cost.basis === 'repair_floor'` (or matching `costSource`), force-keep the previous `cost` and `estimatedCost`.
+- Apply that helper in the three autosave funnels that touch `itinerary_data` outside the repair pipeline:
+  - `src/contexts/TripPlannerContext.tsx` (~line 289)
+  - `src/pages/TripDetail.tsx` (~lines 1227, 1354, 1406, 1763, 1808)
+  - `src/components/itinerary/EditorialItinerary.tsx` save funnels around line 1360 and 1470
+- The helper is a no-op for activities without a ledger-protected basis, so manual/extracted/user-edited rows are untouched.
+
+### 2. Defense-in-depth: display reads ledger when JSONB is suspiciously low
+
+In `EditorialItinerary.tsx#getDisplayCost`:
+
+- Accept the existing `activityCostsByActivity` map (already present in the file; consumed for per-day breakdown ~line 9683) and pass it down to the per-card cost resolver.
+- Before returning `costAmount` from JSONB, compare to ledger: if `ledger.cost_per_person_usd > 0` AND `ledger.source` is in `{michelin_floor, ticketed_attraction_floor, auto_corrected, reference_fallback}` AND it is materially higher than JSONB (≥ 2×), prefer the ledger value and log once. This guarantees the card matches Payments/Budget even if a future code path forgets to preserve.
+
+### 3. Backfill the existing trip
+
+Run `repair-trip-costs` once for trip `a5f41a2b-…` so the JSONB writeback re-applies with the new `basis` stamp. (Server-side only; no migration.)
+
+## Out of scope (explicitly)
+
+- The "Luxury Luminary 30% dining allocation feels low" framing. That's an allocation-math conversation, not a bug; flagging via the existing [feasibility-warning-system](mem://features/budget/feasibility-warning-system) would be the right venue if we want to surface it.
+- Any change to `michelin_floor` thresholds or the `KNOWN_FINE_DINING_STARS` map — La Pergola is correctly listed at 3 stars / $250 floor.
+
+## Files touched
+
+- `supabase/functions/generate-itinerary/action-repair-costs.ts` (stamp basis/source on JSONB writeback)
+- `src/utils/preserveLedgerCosts.ts` (new)
+- `src/contexts/TripPlannerContext.tsx`
+- `src/pages/TripDetail.tsx`
+- `src/components/itinerary/EditorialItinerary.tsx` (save funnels + getDisplayCost ledger fallback)
+- `src/utils/__tests__/preserveLedgerCosts.test.ts` (new)
 
 ## Why this keeps happening
 
-Two hooks compute totals from the **same** ledger but apply **different** rules:
-
-| Rule | `useTripFinancialSnapshot` (header $987) | `usePayableItems` (rows $1,035) |
-|---|---|---|
-| Toggles (hotel/flight) | ✅ | ✅ |
-| Drops rows whose `activity_id` is gone from `itinerary_data` | ✅ drops them | ❌ orphan-**rescues** by reassigning to a live activity, then counts |
-| `$0` DB row + positive JSON `cost` (paid category) | uses DB `$0` | rewrites cents to **JSON cost × travelers** |
-| Adds **Misc / Spending Money reserve** | ✅ adds to total | ❌ never appears as a row |
-| Manual `activity` payments | ✅ via `manualOtherCents` | ✅ via `addManualGroups('activity')` |
-
-Net effect on this trip: the JSON-cost rescue and/or orphan-rescue inflate the activity bucket above what the snapshot counts, while the misc reserve quietly inflates the snapshot above the visible row sum. Either direction can win — yesterday it was Paris (rows < total), today it's $1,035 > $987.
-
-This is the same shape of "AI/extraction inconsistency" pattern: two consumers of the same data apply slightly different cleanup heuristics and end up with two answers.
-
-## Fix Plan
-
-Make the two hooks **share a single canonical pricing function** so a bucket sum is mathematically forced to equal the headline.
-
-### 1. Extract `resolveCanonicalCostRows(args)`
-New file: `src/services/canonicalCostRows.ts`. Pure function. Inputs: `activityCosts`, `liveActivityIds`, `liveActivityById` (for JSON-cost rescue), `includeHotel`, `includeFlight`, `manualPayments`, `miscReserveCents`. Output:
-
-```ts
-{
-  rows: Array<{
-    kind: 'activity-cost' | 'manual' | 'reserve',
-    sourceRowId: string,
-    effectiveActivityId?: string,        // post-rescue
-    dayNumber: number,
-    category: string,
-    cents: number,
-    rescueTag?: 'orphan-id' | 'json-zero-rescue',
-  }>,
-  totalCents: number,
-  hotelCents: number,
-  flightCents: number,
-  reserveCents: number,
-}
-```
-
-The function applies in this exact order: toggle filter → orphan-id rescue or drop (one shared decision) → `$0` JSON rescue (one shared decision) → reserve injection.
-
-### 2. Rewire both hooks to consume it
-- `useTripFinancialSnapshot` replaces its inline `for (const row of costs)` block with `const canonical = resolveCanonicalCostRows(...)` and uses `canonical.totalCents` directly.
-- `usePayableItems` builds its `result` array from `canonical.rows` instead of re-walking `activityCosts`. Transit grouping, naming, and orphan-payment recovery layer on top of the same rows.
-
-### 3. Surface the Misc Reserve as a real line item
-In `usePayableItems`, when `canonical.reserveCents > 0`, push a synthetic `essentialItems` row:
-
-```
-{ id: 'misc-reserve', type: 'other', name: 'Spending money & tips reserve', amountCents: reserveCents }
-```
-
-Now the buckets visibly add up to the header — no invisible delta. (The reserve already counts toward the budget; this just stops it from hiding.)
-
-### 4. Add a runtime invariant
-In `PaymentsTab.tsx`, after computing `estimatedTotal` and the bucket sum, assert:
-
-```ts
-const bucketSum = essentialItems.reduce(...) + activityItems.reduce(...);
-if (Math.abs(bucketSum - estimatedTotal) > 100) {  // > $1
-  console.warn('[PaymentsTab] reconciliation drift', { bucketSum, estimatedTotal, diff });
-  // existing "Reconciling…" badge already triggers off this discrepancy;
-  // strengthen its tooltip with the actual delta and direction.
-}
-```
-
-This is the safety net: any future regression that re-introduces a divergent rule fires immediately in console + tooltip instead of silently skewing the breakdown.
-
-### 5. Make the header label honest
-The "Matches itinerary" badge under "Trip Total" currently fires whenever `tripTotalCents > 0`. Change it to fire only when the invariant in step 4 passes (`|bucketSum − estimatedTotal| ≤ $1`). Otherwise show "Reconciling…" with the delta tooltip we already built.
-
-## Files to change
-- `src/services/canonicalCostRows.ts` *(new)* — single source of truth
-- `src/hooks/useTripFinancialSnapshot.ts` — delegate the activity-cost loop to canonical
-- `src/hooks/usePayableItems.ts` — build rows from canonical instead of re-walking
-- `src/components/itinerary/PaymentsTab.tsx` — runtime invariant, honest "Matches itinerary" badge
-- `src/hooks/__tests__/canonicalCostRows.test.ts` *(new)* — covers: orphan-rescue parity, JSON-zero rescue parity, misc reserve appears as a row, sum-of-rows = totalCents.
-
-## Verification
-- Open the Rome trip showing $987/$1,035: header and "Activities & Experiences" + "Spending money reserve" rows must add to the same dollar.
-- Toggle Include Hotel / Include Flight: header and bucket sum stay in lockstep on every toggle.
-- Add a manual activity expense: it appears as a row AND moves the header by exactly its amount.
-- Force an orphan row in the DB: the row is either dropped from both views or rescued in both views — never one-sided.
-- Unit test `bucketSum === totalCents` across 6 fixture trips (clean, with-orphans, with-zero-cost-dining, with-misc-reserve, hotel-toggled-off, flight-toggled-on).
-
-## Out of scope
-- Migration / backfill of orphaned `activity_costs` rows. The shared resolver makes them harmless either way; cleanup can be a separate maintenance task.
-- Changing how the AI itself prices activities (this is a **reconciliation** fix, not an estimation fix).
+This is the third time we've seen "ledger correct, card wrong" (Paris hotel, Paris dining, Rome La Pergola). The pattern is always the same: a repair writes the truth, then a downstream autosave round-trips React state through `itinerary_data` and silently strips it. Step 1 closes the leak at the source; step 2 makes the UI honest even if a fourth funnel slips through later.
