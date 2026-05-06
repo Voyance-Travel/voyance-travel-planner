@@ -119,9 +119,9 @@ export function useTripDayBreakdown(
 
   const byDay = useMemo<Record<number, DayBreakdown>>(() => {
     const acc: Record<number, DayBreakdown> = {};
-    for (const row of rows as Array<DayBreakdownRow & { dayNumber?: number }>) {
+    for (const row of rows) {
       if (!shouldCountRow({ category: row.category }, includeHotel, includeFlight)) continue;
-      const day = (row as any).dayNumber ?? 0;
+      const day = row.dayNumber ?? 0;
       if (!acc[day]) acc[day] = { totalCents: 0, visibleCents: 0, otherCents: 0, rows: [], otherRows: [] };
       const bucket = acc[day];
       bucket.totalCents += row.totalUsdCents;
