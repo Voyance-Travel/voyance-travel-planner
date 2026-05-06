@@ -353,6 +353,20 @@ export function PaymentsTab({
     activityItems.reduce((s, i) => s + i.amountCents, 0);
   const reconciliationDriftCents = bucketSumCents - estimatedTotal;
   const reconciles = Math.abs(reconciliationDriftCents) <= 100;
+
+  // Debounce the "Reconciling…" badge: brief drift during snapshot/bucket
+  // refetch (e.g. after a Fix Timing re-sync) is normal and self-clears in
+  // a few hundred ms. Only surface the badge when drift persists ≥1.5s.
+  const [showDriftBadge, setShowDriftBadge] = useState(false);
+  useEffect(() => {
+    if (reconciles || financialSnapshot.loading || estimatedTotal <= 0) {
+      setShowDriftBadge(false);
+      return;
+    }
+    const t = setTimeout(() => setShowDriftBadge(true), 1500);
+    return () => clearTimeout(t);
+  }, [reconciles, financialSnapshot.loading, estimatedTotal, bucketSumCents]);
+
   if (!reconciles && !financialSnapshot.loading && estimatedTotal > 0) {
     // Single warn per render burst (browser dedupes by line)
     console.warn('[PaymentsTab] reconciliation drift', {
@@ -1031,14 +1045,14 @@ export function PaymentsTab({
                   <CheckCircle2 className="h-3 w-3 text-green-600" />
                   Matches itinerary
                 </p>
-              ) : (
+              ) : showDriftBadge ? (
                 <p
                   className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1 justify-end"
                   title={`Bucket sum ${formatCurrency(bucketSumCents)} differs from total by ${formatCurrency(Math.abs(reconciliationDriftCents))}`}
                 >
                   Reconciling…
                 </p>
-              )
+              ) : null
             )}
           </div>
         </div>
