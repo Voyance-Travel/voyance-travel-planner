@@ -180,7 +180,7 @@ export function calculateItineraryValueStats(
         timingDetails.push({
           title: activityName,
           reason: intelligence.timingReason || 'Scheduled to beat crowds',
-          savingsTime: '20-30 min',
+          // savingsTime intentionally omitted — we don't have a verifiable per-item estimate
         });
       }
       
@@ -204,17 +204,13 @@ export function calculateItineraryValueStats(
 
   const touristTrapsAvoided = skippedItems?.length || 0;
 
-  // Only show savings if we have real data to back it up
-  const hasRealIntelligence = voyanceFinds > 0 || timingOptimizations > 0 || touristTrapsAvoided > 0 || insiderTips > 0;
-
   return {
     voyanceFinds,
     timingOptimizations,
     touristTrapsAvoided,
     insiderTips,
-    estimatedSavings: hasRealIntelligence 
-      ? calculateEstimatedSavings(timingOptimizations, touristTrapsAvoided, voyanceFinds)
-      : undefined,
+    // Savings come ONLY from real skippedItems[].savingsEstimate — never fabricated
+    estimatedSavings: aggregateSkippedSavings(skippedItems),
     voyanceFindsDetails: voyanceFindsDetails.slice(0, 5),
     timingDetails: timingDetails.slice(0, 5),
     trapsAvoidedDetails: trapsAvoidedDetails.slice(0, 5),
@@ -223,41 +219,65 @@ export function calculateItineraryValueStats(
 }
 
 /**
- * Estimate time and money savings — only from verified intelligence items
+ * Parse a money string like "$40", "€25", "$1,200" → number of dollars.
+ * Returns 0 for unparseable input. Currency symbol is informational only.
  */
-function calculateEstimatedSavings(
-  timingOptimizations: number,
-  localPicks: number,
-  hiddenGems: number,
+export function parseMoneySavings(s?: string): number {
+  if (!s || typeof s !== 'string') return 0;
+  const m = s.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+/**
+ * Parse a time savings string like "45 min", "3 hours", "1 hour", "2 hrs" → minutes.
+ * Returns 0 for unparseable input.
+ */
+export function parseTimeSavings(s?: string): number {
+  if (!s || typeof s !== 'string') return 0;
+  const lower = s.toLowerCase();
+  const num = lower.match(/(\d+(?:\.\d+)?)/);
+  if (!num) return 0;
+  const n = parseFloat(num[1]);
+  if (/\bhour|\bhr/.test(lower)) return Math.round(n * 60);
+  if (/\bday/.test(lower)) return Math.round(n * 60 * 24);
+  // default to minutes
+  return Math.round(n);
+}
+
+/**
+ * Aggregate verifiable savings from skipped items only. No multipliers, no
+ * fabricated per-category constants. Returns undefined when nothing is real.
+ */
+function aggregateSkippedSavings(
+  skippedItems?: SkippedItem[],
 ): { time: string; money?: string } | undefined {
-  const timingMinutes = timingOptimizations * 25;
-  const localPickMoney = localPicks * 35;
-  const hiddenGemMoney = hiddenGems * 18;
-  
-  const totalMinutes = timingMinutes;
-  const totalMoney = localPickMoney + hiddenGemMoney;
-  
+  if (!skippedItems || skippedItems.length === 0) return undefined;
+
+  let totalMinutes = 0;
+  let totalMoney = 0;
+  for (const item of skippedItems) {
+    totalMinutes += parseTimeSavings(item.savingsEstimate?.time);
+    totalMoney += parseMoneySavings(item.savingsEstimate?.money);
+  }
+
   if (totalMinutes === 0 && totalMoney === 0) return undefined;
-  
+
   let timeStr: string | undefined;
   if (totalMinutes > 0) {
     const hours = Math.floor(totalMinutes / 60);
-    if (hours >= 2) {
-      timeStr = `${hours}+ hours`;
-    } else if (hours === 1) {
-      timeStr = `${hours}+ hour`;
-    } else {
-      timeStr = `${Math.round(totalMinutes / 5) * 5}+ min`;
-    }
+    if (hours >= 2) timeStr = `${hours}+ hours`;
+    else if (hours === 1) timeStr = `1+ hour`;
+    else timeStr = `${Math.round(totalMinutes / 5) * 5}+ min`;
   }
-  
-  if (!timeStr && totalMoney === 0) return undefined;
 
   return {
-    time: timeStr || 'Smart routing',
-    money: totalMoney > 0 ? `~$${totalMoney}` : undefined,
+    time: timeStr || '',
+    money: totalMoney > 0 ? `~$${Math.round(totalMoney)}` : undefined,
   };
 }
+
+// (calculateEstimatedSavings removed: savings now come exclusively from
+//  real skippedItems[].savingsEstimate via aggregateSkippedSavings.)
 
 /**
  * Get default local alternatives for a destination

@@ -21,6 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { sanitizeTravelIntel } from './travelIntel';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -245,9 +246,13 @@ export default function TravelIntelCard({
       if (fnError) throw fnError;
 
       if (data?.success && data?.data) {
-        setIntel(data.data);
-        
-        fetchedRef.current = true;
+        const cleaned = sanitizeTravelIntel(data.data);
+        if (cleaned) {
+          setIntel(cleaned);
+          fetchedRef.current = true;
+        } else {
+          setError('Travel intelligence is temporarily unavailable.');
+        }
       } else {
         setError(data?.error || 'Failed to load intel');
       }
@@ -402,11 +407,19 @@ export default function TravelIntelCard({
                     {intel.moneyAndSpending.tippingCustom && (
                       <TipLine icon={HandCoins} label={intel.moneyAndSpending.tippingCustom} iconColor="text-emerald-600" />
                     )}
-                    <div className="grid grid-cols-3 gap-2 py-1">
-                      <MealCostPill label="Budget" cost={intel.moneyAndSpending.mealCosts.budget} />
-                      <MealCostPill label="Mid-range" cost={intel.moneyAndSpending.mealCosts.midRange} />
-                      <MealCostPill label="Fine dining" cost={intel.moneyAndSpending.mealCosts.fineDining} />
-                    </div>
+                    {intel.moneyAndSpending.mealCosts && (intel.moneyAndSpending.mealCosts.budget || intel.moneyAndSpending.mealCosts.midRange || intel.moneyAndSpending.mealCosts.fineDining) && (
+                      <div className="grid grid-cols-3 gap-2 py-1">
+                        {intel.moneyAndSpending.mealCosts.budget && (
+                          <MealCostPill label="Budget" cost={intel.moneyAndSpending.mealCosts.budget} />
+                        )}
+                        {intel.moneyAndSpending.mealCosts.midRange && (
+                          <MealCostPill label="Mid-range" cost={intel.moneyAndSpending.mealCosts.midRange} />
+                        )}
+                        {intel.moneyAndSpending.mealCosts.fineDining && (
+                          <MealCostPill label="Fine dining" cost={intel.moneyAndSpending.mealCosts.fineDining} />
+                        )}
+                      </div>
+                    )}
                     <TipLine icon={AlertTriangle} label={intel.moneyAndSpending.moneyTrap} highlight iconColor="text-amber-500" />
                     <TipLine icon={Brain} label={intel.moneyAndSpending.savingHack} iconColor="text-purple-500" />
                   </div>
@@ -571,6 +584,7 @@ function Section({ icon: Icon, title, iconColor, children }: {
 }
 
 function TipLine({ icon: Icon, label, highlight, iconColor }: { icon: React.ElementType; label: string; highlight?: boolean; iconColor?: string }) {
+  if (!label || !label.trim()) return null;
   return (
     <div className={cn(
       'flex items-start gap-2 text-xs',

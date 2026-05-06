@@ -106,6 +106,9 @@ export function WhyWeSkippedSection({
             <div className="px-4 pb-4 space-y-3">
               {skippedItems.map((item, index) => {
                 const alternative = item.localAlternative || item.betterAlternative;
+                const safeCategory = (item.category && categoryLabels[item.category])
+                  ? item.category
+                  : 'local-favorite';
                 return (
                   <motion.div
                     key={item.name}
@@ -116,7 +119,7 @@ export function WhyWeSkippedSection({
                   >
                     <div className="flex items-start gap-3">
                       <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                        {categoryIcons[item.category || 'local-favorite']}
+                        {categoryIcons[safeCategory]}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -129,11 +132,9 @@ export function WhyWeSkippedSection({
                               {item.name}
                             </h5>
                           )}
-                          {item.category && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                              {categoryLabels[item.category]}
-                            </span>
-                          )}
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                            {categoryLabels[safeCategory]}
+                          </span>
                         </div>
                         {alternative && (
                           <p className="text-xs text-muted-foreground mb-1">

@@ -1,88 +1,107 @@
-# Need to Know tab — audit and lock down
+# Intelligence panels — audit & lock down
 
 ## What I found
 
-`NeedToKnowSection` (lines 8182–8810 of `EditorialItinerary.tsx`) hydrates from two sources:
+The four collapsible panels on the Itinerary tab pull from very different sources, with very different risk profiles:
 
-1. **`lookup-destination-insights` edge function** (Perplexity `sonar`) — fills language, timezone, water, voltage, emergency.
-2. **Hardcoded static fallbacks** in `getDefaultInfo()` and `getEntryRequirements()` for UK / France / Italy / Spain / Germany, with a generic default.
+| Panel | Source | Real data? | Risk |
+|---|---|---|---|
+| **Voyance Intelligence** | Heuristic keyword scan over activities (`calculateItineraryValueStats`) | Counts are real, but **savings strings are fabricated** | Medium |
+| **Trip Completion** | Live derivation from `days`/flights/hotel (`TripHealthPanel`) | Real | Low |
+| **Travel Intelligence** | Perplexity `sonar-pro` via `generate-travel-intel`, cached in `travel_intel_cache` | Real, AI-generated | High — no payload validation, sub-fields can crash or render blanks |
+| **Better Alternatives** | Lovable AI Gemini via `generate-skip-list`, sessionStorage cache + hardcoded fallback for 6 cities | Real-ish | Medium — no validation, unknown categories render as empty label |
 
-Three concrete risks the user is right to worry about:
+### Specific bugs / placeholder leaks
 
-### Risk 1 — Outdated future-tense copy
-The fallback text is now stale in 2026:
-- `"ETIAS authorization required from 2025 for US citizens"` (lines 8502, 8529, 8556, 8583)
-- `"Electronic Travel Authorisation (ETA) required from 2024 for some nationalities"` (line 8477)
-- `"COVID restrictions may apply - check before travel"` (line 8488) — generation-era artifact
+1. **Voyance Intelligence "estimated savings" is invented.** `calculateEstimatedSavings` in `src/utils/intelligenceAnalytics.ts` multiplies counts by hardcoded constants: `timing × 25min`, `localPicks × $35`, `gems × $18`, then renders e.g. "1+ hour saved · ~$53 vs. typical itinerary". There is no actual basis. Savings claims must come from real data (the `skippedItems[].savingsEstimate` already carries them) or be removed. Same for the per-item `savingsTime: '20-30 min'` literal in `timingDetails`.
 
-These render verbatim in the tab. ETIAS hasn't actually launched (it's been pushed to late 2026 / 2027); ETA is now live for most. Either way, "from 2025" reads as a bug.
+2. **Travel Intelligence renders blank/undefined sub-fields.** `TravelIntelCard.tsx` lines 405–409 directly access `intel.moneyAndSpending.mealCosts.budget/midRange/fineDining` without nullish guards. If Perplexity returns `moneyAndSpending` but omits `mealCosts`, the page crashes; if it returns `mealCosts` with empty strings, the pills render blank. Same for `gettingAround.doNotDo/bestOption/...` (line 385+) — if any field is missing from the AI response, the `TipLine` shows just an icon. The truncation-repair in the edge function is heroic but doesn't validate semantic completeness.
 
-### Risk 2 — Placeholder leak from partial AI responses
-When `aiInsights` loads but the model returns an incomplete object, the merge in `getDefaultInfo()` (lines 8239–8255) silently substitutes generic placeholders that look like UI bugs:
-- `aiInsights.language?.primary || 'Local language'`
-- `aiInsights.timezone?.zone || 'Local time'`
-- `aiInsights.emergency?.number || 'Contact local authorities'`
-- `aiInsights.water?.description || 'Check local advisories'`
+3. **Travel Intelligence cache key is stale-by-design.** `travel_intel_cache` keys on `trip_id` (single row, upsert with `onConflict: 'trip_id'`). Cache hit only if `destination` AND `start_date` AND `end_date` all match exactly. So if the user changes dates, the cache row is overwritten on next fetch — fine. But the cache hit also ignores `archetype`/`interests`/`hotelArea` — changing those will silently return stale intel. Refresh button works around this but users won't know to use it.
 
-If even one field is missing, the user sees "Local language" / "Local time" — which is exactly the placeholder-copy regression flagged. The tab does NOT fall back to the country-specific static block when `aiInsights` is partially populated; it short-circuits at `if (aiInsights)` and uses placeholders for the missing fields.
+4. **Better Alternatives shows empty category labels.** `WhyWeSkippedSection.tsx` looks up `categoryLabels[item.category]` directly. If the AI returns a category outside the 9 known values (`local-favorite`, `better-value`, `hidden-gem`, `insider-pick`, `overpriced`, `overcrowded`, `overhyped`, `tourist-trap`, `better-alternative`), the badge renders empty. The icon path uses `categoryIcons[item.category || 'local-favorite']` which still returns `undefined` for unknown categories.
 
-### Risk 3 — No test coverage
-There is no test for `NeedToKnowSection`, no test for the merge logic, no test for the entry-requirements switch. If a future regen mangles `aiInsights.language.phrases`, the `.map(...)` (line 8242) throws.
+5. **Better Alternatives has no AI payload validation.** `useSkipList` blindly trusts `data.skippedItems` from the edge function. A malformed entry (`{name: 'X'}` without `reason`) renders an empty `<p>` and no value chips. The hook also doesn't filter out entries lacking the required `name` and `reason` fields.
+
+6. **No tests** for any of these four panels' data paths.
+
+### Not bugs (verified)
+
+- Voyance Intelligence is correctly gated: it only renders when `voyanceFinds > 0 || timingOptimizations > 0 || touristTrapsAvoided > 0 || insiderTips > 0`. So zero-state shows nothing rather than placeholder.
+- Trip Completion derivations look right; the `analyzeHealth` and checklist code is straightforward and uses live trip data.
+- Travel Intel uses `error || !intel` to short-circuit; no skeleton placeholder leaks through.
 
 ## Plan
 
-### 1. Refresh stale future-tense copy
+### 1. Voyance Intelligence — replace fabricated savings with real ones
 
-Edit the static fallbacks in `getEntryRequirements()`:
-- Replace `"ETIAS authorization required from 2025 for US citizens"` with `"ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking"`.
-- Replace `"Electronic Travel Authorisation (ETA) required from 2024 for some nationalities"` with `"UK ETA is now required for most non-EU/non-Irish visitors — apply online before travel"`.
-- Drop the `"COVID restrictions may apply - check before travel"` bullet (line 8488). It's a generation-era artifact; if anything, replace with `"Check current health advisories with your country's foreign-travel office"`.
+In `src/utils/intelligenceAnalytics.ts`:
 
-### 2. Make AI/static merge safer
+- Sum **only the verifiable savings** from `skippedItems[].savingsEstimate` (already typed as `{money?: string; time?: string}`). Parse the existing strings (`"$40"`, `"3 hours"`, `"45 min"`) and add them up. If a skipped item has no `savingsEstimate`, contribute zero.
+- Drop the `timing × 25`, `localPicks × $35`, `gems × $18` multipliers entirely.
+- Drop the per-item `savingsTime: '20-30 min'` literal in `timingDetails`. Leave `savingsTime` undefined when we don't know.
+- If the resulting totals are zero, return `estimatedSavings: undefined` so the "X saved vs typical itinerary" pill disappears.
 
-Extract a pure helper:
+Update the rendering in `EditorialItinerary.tsx` (lines 5777–5791) to handle the case where `estimatedSavings.time` is undefined but `money` is set, and vice versa (currently it assumes `time` always present).
 
-```ts
-// src/components/itinerary/needToKnow.ts
-export function mergeNeedToKnowInfo(
-  aiInsights: AiInsights | null,
-  fallback: StaticInfo,           // country-specific block from getDefaultInfo
-): StaticInfo
-```
+### 2. Travel Intelligence — defensive rendering + payload sanity
 
-Rule: for **each field** (`language`, `timezone`, `water`, `voltage`, `emergency`), use the AI value only when it's a non-empty string AND the matching `tips` array has at least one non-empty entry. Otherwise fall back to the country-specific static block — never the bare `'Local language'` / `'Local time'` literal. This kills Risk 2.
+Create `src/components/itinerary/travelIntel.ts` exporting `sanitizeTravelIntel(raw: unknown): TravelIntelData | null`:
 
-Wire `getDefaultInfo()` to call `mergeNeedToKnowInfo(aiInsights, countryFallback)` instead of the current `if (aiInsights) return ai-only` branch.
+- Returns `null` if the payload is missing the four core sections (`gettingAround`, `moneyAndSpending`, `bookNowVsWalkUp`, `weatherAndPacking`).
+- For each section, drop sub-fields that are not non-empty strings; collapse empty arrays.
+- Specifically guards `moneyAndSpending.mealCosts` — if missing or all three sub-keys empty, drop the pills row.
+- Filters `eventsAndHappenings`/`bookNowVsWalkUp.bookNow`/`walkUpFine`/`localCustomsAndEtiquette`/`insiderTips`/`neighborhoodGuide.walkingDistance` to drop entries missing required fields.
 
-### 3. Defensive parsing for AI tips arrays
+Wire `TravelIntelCard` to call `sanitizeTravelIntel(data.data)` before `setIntel(...)`. If the result is `null`, surface the existing `error` state ("Travel intelligence is temporarily unavailable").
 
-`languageTips` builds a string from `aiInsights.language.phrases.map(p => "${p.phrase}" = "${p.translation}" (${p.pronunciation}))`. If `phrases` is `null`, `undefined`, or contains an entry missing one of the three subkeys, the result is either a thrown error or `undefined = undefined (undefined)` rendered to the user.
+Replace direct `{intel.moneyAndSpending.mealCosts.budget}` accesses with conditional rendering of the pills row when `mealCosts` is present.
 
-Harden it: filter out entries lacking `phrase`/`translation`, default `pronunciation` to empty (and drop the parens when missing), and fall through to the static block if zero valid entries remain.
+### 3. Travel Intelligence — cache invalidation on personalization change
 
-### 4. Tests
+Extend the cache key match in `generate-travel-intel/index.ts` to include `archetype`, `interests` (sorted), and `hotelArea`. Compare against the cached `request_params` JSON. Mismatch → re-fetch instead of returning stale.
 
-`src/components/itinerary/__tests__/needToKnow.test.ts`:
-- AI insights null → returns fallback unchanged.
-- AI insights complete → AI fields win.
-- AI insights with empty `language.primary` → falls back to country-specific language (NOT `'Local language'`).
-- AI insights with empty `language.phrases` array → uses fallback `languageTips` instead of `[]`.
-- Malformed phrase entry (`{phrase: 'Hi'}` no translation) → filtered out; if all filtered, fallback wins.
-- AI insights with present `voltage.voltage` but missing `plugType` → renders `"230V"` (no trailing comma+undefined).
+### 4. Better Alternatives — payload validation + safe rendering
 
-### 5. Document in memory
+In `useSkipList.ts`:
 
-Add a small memory entry: *Need to Know merge contract* — partial AI responses must fall back per-field, never substitute generic "Local language"/"Local time" placeholders.
+- Filter `data.skippedItems` to entries with a non-empty `name` AND `reason`. If filtering empties the list, fall back to the hardcoded list rather than caching `[]`.
+- Don't `sessionStorage.setItem` an empty array.
+
+In `WhyWeSkippedSection.tsx`:
+
+- Coerce unknown categories to `'local-favorite'` for both icon and label lookup, so the badge always has text.
+- Guard against entries with missing `category` (already does for icons, fix for labels).
+
+### 5. Tests
+
+Create:
+
+- `src/utils/__tests__/intelligenceAnalytics.test.ts` — verify estimated savings come only from real `skippedItems` data; zero out when no savings; parse `"$40"` / `"3 hours"` / `"45 min"` correctly; aggregate across items.
+- `src/components/itinerary/__tests__/travelIntel.test.ts` — `sanitizeTravelIntel` returns `null` for missing core sections; drops empty `mealCosts`; filters malformed events; preserves valid payloads unchanged.
+- `src/hooks/__tests__/useSkipList.test.ts` — filters out entries missing `name`/`reason`; falls back to hardcoded when AI returns empty/invalid; doesn't cache empty arrays.
+
+### 6. Memory
+
+Add `mem://technical/itinerary/intelligence-panels-integrity`: each panel's data source, the no-fabricated-savings rule (Voyance Intelligence savings come exclusively from `skippedItems`), and the sanitizer requirement for AI payloads (Travel Intel + Better Alternatives must validate before render).
 
 ## Out of scope
 
-- Rewriting the country list / adding new countries.
-- Validating the Perplexity edge function output server-side (could be a future hardening pass).
-- Changing the visual UI of the cards.
+- Redesigning the panels visually.
+- Changing what edge functions return (other than the cache-key fix).
+- Trip Completion logic (it's healthy).
+- Adding new countries to the hardcoded skip list.
 
 ## Files
 
-- `src/components/itinerary/needToKnow.ts` (new)
-- `src/components/itinerary/__tests__/needToKnow.test.ts` (new)
-- `src/components/itinerary/EditorialItinerary.tsx` (use helper, refresh ETIAS/ETA/COVID copy)
-- `mem://technical/itinerary/need-to-know-merge` (new)
+- `src/utils/intelligenceAnalytics.ts` (real savings, no multipliers)
+- `src/components/itinerary/EditorialItinerary.tsx` (handle undefined `time`)
+- `src/components/itinerary/travelIntel.ts` (new — sanitizer)
+- `src/components/itinerary/TravelIntelCard.tsx` (call sanitizer; guard `mealCosts`)
+- `supabase/functions/generate-travel-intel/index.ts` (cache key includes personalization)
+- `src/hooks/useSkipList.ts` (validate + don't cache empty)
+- `src/components/itinerary/WhyWeSkippedSection.tsx` (safe category fallback)
+- `src/utils/__tests__/intelligenceAnalytics.test.ts` (new)
+- `src/components/itinerary/__tests__/travelIntel.test.ts` (new)
+- `src/hooks/__tests__/useSkipList.test.ts` (new)
+- `mem://technical/itinerary/intelligence-panels-integrity` (new)

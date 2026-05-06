@@ -43,13 +43,27 @@ serve(async (req) => {
     if (tripId && !forceRefresh) {
       const { data: cached } = await supabaseAdmin
         .from('travel_intel_cache')
-        .select('intel_data, destination, start_date, end_date')
+        .select('intel_data, destination, start_date, end_date, request_params')
         .eq('trip_id', tripId)
         .single();
 
       if (cached?.intel_data) {
-        // Return cached data if destination and dates match
-        if (cached.destination === destination && cached.start_date === startDate && cached.end_date === endDate) {
+        const cachedParams = (cached.request_params as Record<string, unknown> | null) || {};
+        const sortedInterests = (xs: unknown): string => {
+          if (!Array.isArray(xs)) return '';
+          return [...xs].map(String).sort().join(',');
+        };
+        const personalizationMatches =
+          (cachedParams.archetype ?? null) === (archetype ?? null) &&
+          (cachedParams.hotelArea ?? null) === (hotelArea ?? null) &&
+          sortedInterests(cachedParams.interests) === sortedInterests(interests);
+
+        if (
+          cached.destination === destination &&
+          cached.start_date === startDate &&
+          cached.end_date === endDate &&
+          personalizationMatches
+        ) {
           console.log(`Returning cached travel intel for trip ${tripId}`);
           return new Response(
             JSON.stringify({
