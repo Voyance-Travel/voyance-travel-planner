@@ -867,9 +867,10 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
         pace: blendedTraitScores.pace ?? traitScores.pace,
         budget: blendedTraitScores.budget ?? traitScores.budget,
         adventure: blendedTraitScores.adventure ?? traitScores.adventure ?? 0,
+        authenticity: blendedTraitScores.authenticity ?? traitScores.authenticity ?? 0,
       }
-    : { pace: traitScores.pace, budget: traitScores.budget, adventure: traitScores.adventure ?? 0 };
-  console.log(`[compile-prompt] effective traits: pace=${effectiveTraitScores.pace}, budget=${effectiveTraitScores.budget}, adventure=${effectiveTraitScores.adventure}`);
+    : { pace: traitScores.pace, budget: traitScores.budget, adventure: traitScores.adventure ?? 0, authenticity: traitScores.authenticity ?? 0 };
+  console.log(`[compile-prompt] effective traits: pace=${effectiveTraitScores.pace}, budget=${effectiveTraitScores.budget}, adventure=${effectiveTraitScores.adventure}, authenticity=${effectiveTraitScores.authenticity}`);
 
   // ═══════════════════════════════════════════════════════════════════════
   // BUDGET RESOLUTION
