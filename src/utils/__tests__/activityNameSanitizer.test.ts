@@ -37,3 +37,15 @@ describe('sanitizeActivityText - orphan article repair', () => {
     );
   });
 });
+
+describe('sanitizeActivityName - orphan article repair', () => {
+  it('repairs "the of <Proper>" in titles', () => {
+    expect(sanitizeActivityName('Explore the of Paris Museum')).toBe(
+      'Explore the City of Paris Museum',
+    );
+  });
+
+  it('does not fire when next word is lowercase', () => {
+    expect(sanitizeActivityName('Walk the of dogs')).toBe('Walk the of dogs');
+  });
+});
