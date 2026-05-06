@@ -1046,7 +1046,20 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                       )}
                     </div>
                   )}
-                  {discretionaryRows.map((alloc) => {
+                  {hasNoMeaningfulActivities && !isEmptyItineraryFailure && discretionaryRows.length > 0 && (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm space-y-2">
+                      <p className="font-medium text-foreground">No spending to track yet</p>
+                      <p className="text-muted-foreground text-xs leading-relaxed">
+                        Your itinerary doesn't include any restaurants, activities, or transit yet, so the Food, Activities, and Transit breakdowns can't be calculated. {onRegenerate ? 'Regenerate the itinerary or add activities to populate this section.' : 'Add activities to populate this section.'}
+                      </p>
+                      {onRegenerate && (
+                        <Button size="sm" variant="outline" onClick={onRegenerate} className="mt-1">
+                          Regenerate itinerary
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {!hasNoMeaningfulActivities && discretionaryRows.map((alloc) => {
                     const allocated = alloc.allocatedCents;
                     const used = alloc.usedCents;
                     const percent = allocated > 0 ? Math.min((used / allocated) * 100, 100) : 0;
