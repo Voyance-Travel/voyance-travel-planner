@@ -149,7 +149,7 @@ import { VoyancePickCallout } from './VoyancePickCallout';
 import { GuideBookmarkButton } from '@/components/guides/GuideBookmarkButton';
 import { TransitBadge } from './TransitBadge';
 import { TripDateEditor as TripDateEditorInline } from '@/components/trip/TripDateEditor';
-import { TransitGapIndicator, computeGapMinutes } from './TransitGapIndicator';
+import { TransitGapIndicator, computeGapMinutes, computeDeadGaps, formatDeadGap } from './TransitGapIndicator';
 import { DayRouteMap } from './DayRouteMap';
 import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
@@ -2294,41 +2294,25 @@ export function EditorialItinerary({
     onRefreshResultsChange(counts);
   }, [refreshResults, onRefreshResultsChange]);
 
-  // ── Day 1 auto-buffer ──────────────────────────────────────────────
-  // Arrival day is the worst place to surface a "no travel buffer — Refresh
-  // Day to fix timing" banner. When we detect zero/negative gaps between
-  // non-locked, non-transport, non-same-venue activities on Day 1, silently
-  // cascade a 15-min buffer forward so the banner never appears. Locked
-  // (manual / extracted / pinned) activities anchor the cascade.
-  const day1AutoBufferAppliedRef = useRef<string | null>(null);
+  // ── Auto-buffer cascade (all days) ─────────────────────────────────
+  // The "X activities have no travel buffer — Refresh Day to fix timing"
+  // banner is the worst possible UX: the system already knows the fix
+  // (push the next activity forward by 15 min), so just do it silently
+  // and never surface the banner unless a locked anchor blocks the cascade.
+  // Originally Day-1-only; now runs across the whole trip.
+  const autoBufferAppliedRef = useRef<string | null>(null);
   useEffect(() => {
-    const day = days[0];
-    if (!day || !day.activities || day.activities.length < 2) return;
-    const fp = day.activities.map(a => `${a.id}@${a.startTime || (a as any).time || ''}`).join('|');
-    if (day1AutoBufferAppliedRef.current === fp) return;
+    if (!days || days.length === 0) return;
+    const fp = days.map(d => (d.activities || []).map(a => `${a.id}@${a.startTime || (a as any).time || ''}`).join('|')).join('||');
+    if (autoBufferAppliedRef.current === fp) return;
 
     const REQ_BUFFER = 15;
     const isHHMM = (s?: string) => !!s && /^\d{1,2}:\d{2}$/.test(s);
-    const acts = day.activities;
-    let needsFix = false;
-    for (let i = 0; i < acts.length - 1; i++) {
-      const a = acts[i] as any;
-      const b = acts[i + 1] as any;
-      const catA = (a.category || '').toLowerCase();
-      const catB = (b.category || '').toLowerCase();
-      if (catA === 'transport' || catB === 'transport') continue;
-      if (a.location?.name && b.location?.name && a.location.name === b.location.name) continue;
-      const gap = computeGapMinutes(a.endTime, a.startTime || a.time, a.duration, b.startTime || b.time);
-      if (gap !== null && gap < REQ_BUFFER) { needsFix = true; break; }
-    }
-    if (!needsFix) {
-      day1AutoBufferAppliedRef.current = fp;
-      return;
-    }
 
-    setDays(prev => {
-      if (!prev[0]) return prev;
-      const dayActs = [...prev[0].activities];
+    let anyMutation = false;
+    const nextDays = days.map((day) => {
+      if (!day || !day.activities || day.activities.length < 2) return day;
+      const dayActs = [...day.activities];
       let mutated = false;
       for (let i = 0; i < dayActs.length - 1; i++) {
         const a = dayActs[i] as any;
@@ -2363,13 +2347,16 @@ export function EditorialItinerary({
         };
         mutated = true;
       }
-      if (!mutated) return prev;
-      const next = [...prev];
-      next[0] = { ...prev[0], activities: dayActs };
-      return next;
+      if (!mutated) return day;
+      anyMutation = true;
+      return { ...day, activities: dayActs };
     });
-    day1AutoBufferAppliedRef.current = fp;
-    setHasChanges(true);
+
+    if (anyMutation) {
+      setDays(nextDays);
+      setHasChanges(true);
+    }
+    autoBufferAppliedRef.current = fp;
   }, [days, setDays]);
 
   
@@ -10124,6 +10111,37 @@ function DayCard({
                         {isRefreshingDay ? 'Refreshing…' : 'Refresh Day'}
                       </Button>
                     )}
+                  </div>
+                );
+              })()}
+              {/* Dead-gap nudge — surfaces unplanned 3h+ windows during the active day */}
+              {(() => {
+                if (dayIsPreview || isCleanPreview) return null;
+                if (!isEditable) return null;
+                if (!onAddActivity) return null;
+                const gaps = computeDeadGaps(day.activities || []);
+                if (gaps.length === 0) return null;
+                // Surface only the longest gap to avoid stacking banners
+                const gap = gaps.sort((a, b) => b.minutes - a.minutes)[0];
+                return (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-2 border-b border-border/50 bg-amber-50/60 dark:bg-amber-950/20">
+                    <div className="flex items-start sm:items-center gap-2 min-w-0 flex-1">
+                      <Clock className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" aria-hidden="true" />
+                      <p className="text-xs text-foreground/80">
+                        <span className="font-medium">{formatDeadGap(gap.minutes)} unplanned</span>
+                        <span className="text-muted-foreground"> between {gap.fromTitle || 'previous activity'} ({gap.fromTime}) and {gap.toTitle || 'next activity'} ({gap.toTime}).</span>
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onAddActivity?.(gap.beforeIndex)}
+                      className="h-8 px-3 text-xs shrink-0 self-end sm:self-auto"
+                      aria-label="Fill this gap with an activity"
+                    >
+                      Fill the gap
+                    </Button>
                   </div>
                 );
               })()}
