@@ -17,6 +17,7 @@ export interface AiInsights {
     primary?: string;
     phrases?: AiPhrase[] | null;
     englishFriendly?: string;
+    tips?: string[];
   };
   timezone?: { zone?: string; tips?: string[] };
   water?: { safe?: boolean; description?: string; tips?: string[] };
