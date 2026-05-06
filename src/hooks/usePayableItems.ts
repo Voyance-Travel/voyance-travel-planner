@@ -160,27 +160,36 @@ export function usePayableItems({
 
   // Secondary index used to rescue orphaned activity_costs rows whose
   // activity_id no longer exists in itinerary_data (a late quality pass
-  // swapped the activity and minted a new uuid). We pop a name from the
-  // matching (day, category) queue so the All Costs / Split Bill view
-  // shows the real venue rather than "Meal".
+  // or sync-tables step minted new uuids without updating the cost rows).
+  // Each (day, normalized-category) bucket holds the live JSON activities
+  // in itinerary order. The items pass pops from these queues to repair
+  // the join — preserving the real activity id, name and json cost.
+  type RescueEntry = { id: string; name: string; jsonCost: number; category: string };
+  const DINING_RE = /\b(breakfast|brunch|lunch|dinner|supper|cafe|café|coffee|bakery|tapas|cocktails?|nightcap|aperitif|drinks?)\b/i;
+  const normalizeCat = (rawCat: string, name: string): string => {
+    const c = (rawCat || '').toLowerCase();
+    if (c === 'dining' || c === 'food' || c === 'restaurant' || DINING_RE.test(name)) return 'dining';
+    if (['transport', 'transportation', 'taxi', 'metro', 'transit', 'transfer', 'rideshare'].includes(c)) return 'transport';
+    if (c === 'nightlife') return 'nightlife';
+    if (c === 'shopping') return 'shopping';
+    if (c) return 'activity'; // includes 'cultural', 'activity', 'museum', etc.
+    return '';
+  };
   const orphanRescueByDayCat = useMemo(() => {
-    const DINING_RE = /\b(breakfast|brunch|lunch|dinner|supper|cafe|café|coffee|bakery|tapas|cocktails?|nightcap|aperitif|drinks?)\b/i;
-    const map = new Map<string, string[]>();
+    const map = new Map<string, RescueEntry[]>();
     days.forEach(day => {
       day.activities.forEach(a => {
+        if (!a?.id) return;
         const name = (a?.title || a?.name || '').toString().trim();
         if (!name) return;
-        const rawCat = (a?.category || a?.type || '').toString().toLowerCase();
-        let mapped = '';
-        if (rawCat === 'dining' || rawCat === 'food' || rawCat === 'restaurant' || DINING_RE.test(name)) mapped = 'dining';
-        else if (['transport', 'transportation', 'taxi', 'metro', 'transit', 'transfer'].includes(rawCat)) mapped = 'transport';
-        else if (rawCat === 'nightlife') mapped = 'nightlife';
-        else if (rawCat === 'shopping') mapped = 'shopping';
-        else if (rawCat) mapped = 'activity';
+        const mapped = normalizeCat((a?.category || a?.type || '').toString(), name);
         if (!mapped) return;
         const k = `${day.dayNumber}|${mapped}`;
         const arr = map.get(k) || [];
-        arr.push(name);
+        const explicit = typeof a.cost === 'number' ? a.cost
+          : (a.cost && typeof a.cost === 'object' && typeof (a.cost as any).amount === 'number') ? (a.cost as any).amount
+          : (typeof (a as any).explicitCost === 'number' ? (a as any).explicitCost : 0);
+        arr.push({ id: a.id, name, jsonCost: Number(explicit) || 0, category: (a.category || a.type || '').toLowerCase() });
         map.set(k, arr);
       });
     });
