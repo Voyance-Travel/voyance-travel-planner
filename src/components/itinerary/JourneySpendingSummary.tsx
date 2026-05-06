@@ -58,7 +58,8 @@ export function JourneySpendingSummary({ journeyId, journeyName, currentTripId, 
       const { data: payments } = await supabase
         .from('trip_payments')
         .select('trip_id, amount_cents, status')
-        .in('trip_id', tripIds);
+        .in('trip_id', tripIds)
+        .is('archived_at', null);
 
       const paidMap = new Map<string, number>();
       (payments || []).forEach(p => {

@@ -191,6 +191,7 @@ export async function syncHotelToLedger(
     .eq('trip_id', tripId)
     .eq('item_type', 'hotel')
     .like('item_id', 'manual-%')
+    .is('archived_at', null)
     .limit(1);
   if (manualHotelPayments && manualHotelPayments.length > 0) {
     await removeLogisticsCost(tripId, 'hotel');

@@ -219,6 +219,25 @@ export async function handleGenerateTrip(
     } catch (cleanupErr) {
       console.warn('[generate-trip] Failed to clear normalized tables:', cleanupErr);
     }
+
+    // ── ARCHIVE STALE PAYMENTS ────────────────────────────────────────
+    // Soft-archive trip_payments tied to activities that won't survive the
+    // wipe (everything except flights/hotels). Preserves audit trail.
+    try {
+      const { error: archiveErr, count: archivedCount } = await supabase
+        .from('trip_payments')
+        .update({ archived_at: new Date().toISOString(), archived_reason: 'itinerary_regenerated' }, { count: 'exact' })
+        .eq('trip_id', tripId)
+        .is('archived_at', null)
+        .not('item_type', 'in', '(flight,hotel)');
+      if (archiveErr) {
+        console.warn('[generate-trip] Failed to archive stale trip_payments:', archiveErr);
+      } else if (archivedCount && archivedCount > 0) {
+        console.log(`[generate-trip] 💰 Archived ${archivedCount} stale trip_payments (regenerate)`);
+      }
+    } catch (paymentArchiveErr) {
+      console.warn('[generate-trip] Payment archive step failed (non-blocking):', paymentArchiveErr);
+    }
   }
   
   // =====================================================================
