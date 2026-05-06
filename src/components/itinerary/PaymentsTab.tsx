@@ -1176,7 +1176,7 @@ export function PaymentsTab({
                     className="overflow-hidden"
                   >
                     <CardContent className="pt-0 pb-4">
-                      {essentialItems.map(renderPayableItem)}
+                      {essentialItemsWithReserve.map(renderPayableItem)}
                     </CardContent>
                   </motion.div>
                 )}
