@@ -39,10 +39,10 @@ describe('isClientPlaceholderWellness', () => {
     ).toBe(false);
   });
 
-  it('does NOT flag when a numeric street address is present', () => {
+  it('does NOT flag when title is specific and venue has a numeric address', () => {
     expect(
       isClientPlaceholderWellness({
-        title: 'Personalized Wellness Treatment',
+        title: 'Thermal Circuit at Aire Ancient Baths',
         category: 'wellness',
         location: { name: 'Aire Ancient Baths', address: '1 Saint Thomas St, London SE1 9RY' },
       }),
