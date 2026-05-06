@@ -492,7 +492,7 @@ function ActivityCard({
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-mono">{activity.time}</span>
             <span className="text-xs">•</span>
-            <span className="text-xs">{activity.duration}</span>
+            <span className="text-xs">{coerceDurationString(activity.duration, (activity as any).durationMinutes)}</span>
             {activity.rating && (
               <>
                 <span className="text-xs">•</span>
