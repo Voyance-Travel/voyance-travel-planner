@@ -794,6 +794,19 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 window.dispatchEvent(new CustomEvent('navigate-to-section', { detail: 'hotels' }));
               }
             }}
+            lastRaise={lastRaise}
+            onUndoRaise={lastRaise ? async () => {
+              const prev = lastRaise.fromCents;
+              try {
+                await updateSettings({ budget_total_cents: prev });
+                window.dispatchEvent(new CustomEvent('booking-changed'));
+                toast.success(`Budget reverted to ${formatCurrency(prev)}`);
+              } catch {
+                toast.error('Failed to undo budget raise');
+              } finally {
+                setLastRaise(null);
+              }
+            } : undefined}
           />
         );
       })()}
