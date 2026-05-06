@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolveAnyMealFallback } from '@/lib/fallbackRestaurants';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner';
 
@@ -261,19 +262,41 @@ export function enforceItineraryMealCompliance(
       `detected=[${detected.join(',')}], MISSING=[${missing.join(',')}] — injecting generic`
     );
 
+    const usedNames = new Set<string>(
+      day.activities
+        .map(a => ((a.location as any)?.name || a.title || '').toLowerCase())
+        .filter(Boolean),
+    );
+
     for (const mealType of missing) {
-      const hint = getClientMealHint(dayDestination, mealType);
-      const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
-      day.activities.push(
-        buildFallbackActivity(
+      const real = resolveAnyMealFallback(dayDestination, mealType, usedNames);
+      if (real) {
+        usedNames.add(real.name.toLowerCase());
+        day.activities.push(
+          buildFallbackActivity(
+            mealType,
+            real.name,
+            real.address,
+            real.description,
+            false,
+            real.price,
+          ),
+        );
+      } else {
+        // No coverage at all — emit an explicit unverified slot the UI can
+        // surface as a "Pick a restaurant" CTA, NEVER a "Breakfast at a café" stub.
+        const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+        const stub = buildFallbackActivity(
           mealType,
-          `${label} at a ${hint.venueSuffix}`,
+          `${label} — pick a restaurant`,
           '',
-          hint.description,
+          `We couldn't auto-pick a ${mealType} venue here. Tap to choose one.`,
           true,
           FALLBACK_MEALS[mealType].cost,
-        )
-      );
+        );
+        (stub as any).needsVenuePick = true;
+        day.activities.push(stub);
+      }
     }
 
     day.activities = sortByTime(day.activities);
@@ -323,11 +346,16 @@ export async function enforceItineraryMealComplianceAsync(
 
     // Try to get real venue names from verified_venues
     const realVenues = await fetchRealVenues(supabaseClient, dayDestination, missing);
+    const usedNames = new Set<string>(
+      day.activities
+        .map(a => ((a.location as any)?.name || a.title || '').toLowerCase())
+        .filter(Boolean),
+    );
 
     for (const mealType of missing) {
       const venue = realVenues[mealType];
       if (venue) {
-        // Use real venue name
+        usedNames.add(venue.name.toLowerCase());
         day.activities.push(
           buildFallbackActivity(
             mealType,
@@ -336,23 +364,40 @@ export async function enforceItineraryMealComplianceAsync(
             `${mealType.charAt(0).toUpperCase() + mealType.slice(1)} at ${venue.name}${venue.rating ? ` (★ ${venue.rating})` : ''}`,
             false,
             FALLBACK_MEALS[mealType].cost,
-          )
+          ),
         );
-      } else {
-        // Fall back to generic
-        const hint = getClientMealHint(dayDestination, mealType);
-        const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+        continue;
+      }
+
+      // Reach into the shared real-venue pool BEFORE any generic stub.
+      const real = resolveAnyMealFallback(dayDestination, mealType, usedNames);
+      if (real) {
+        usedNames.add(real.name.toLowerCase());
         day.activities.push(
           buildFallbackActivity(
             mealType,
-            `${label} at a ${hint.venueSuffix}`,
-            '',
-            hint.description,
-            true,
-            FALLBACK_MEALS[mealType].cost,
-          )
+            real.name,
+            real.address,
+            real.description,
+            false,
+            real.price,
+          ),
         );
+        continue;
       }
+
+      // Truly uncovered — emit an explicit unverified slot the UI can flag.
+      const label = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+      const stub = buildFallbackActivity(
+        mealType,
+        `${label} — pick a restaurant`,
+        '',
+        `We couldn't auto-pick a ${mealType} venue here. Tap to choose one.`,
+        true,
+        FALLBACK_MEALS[mealType].cost,
+      );
+      (stub as any).needsVenuePick = true;
+      day.activities.push(stub);
     }
 
     day.activities = sortByTime(day.activities);
