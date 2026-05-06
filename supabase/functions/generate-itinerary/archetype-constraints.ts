@@ -2332,6 +2332,7 @@ Check every activity against:
 9. Are there "luxury/premium/exclusive" words for a non-luxury traveler? → REMOVE them
 10. Adventure trait ≥ +4 — is there at least one KINETIC adventure activity (not park/fountain/market)? → If missing, ADD one.
 11. Authenticity trait ≥ +3 — does this day include a real neighborhood/family-run venue, AND stay under the landmark cap (≤1 marquee landmark/day at +3-5, ≤1 marquee landmark trip-wide at +6+)? → If not, swap a tourist beat for a local one.
+12. Planning trait ≤ -3 — does each day have at least one explicit flex/wander window (90–120m) and ≤3 hard-timed anchors? → If missing, REPLACE one scheduled item with a flex window.
 
 If ANY violation exists, fix it before returning.
 
