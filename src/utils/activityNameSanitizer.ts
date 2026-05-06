@@ -2,6 +2,13 @@
  * Sanitizes activity names by stripping internal system prefixes
  * that should never be shown to users.
  */
+import {
+  isAIStubVenueName,
+  inferMealTypeFromTitle,
+  inferMealTypeFromTime,
+  stubFallbackLabel,
+  type MealType,
+} from './stubVenueDetection';
 
 // Strip AI search qualifiers from names/locations
 // e.g. "(Satellite or High-End alternative in Chiyoda/Minato)"
