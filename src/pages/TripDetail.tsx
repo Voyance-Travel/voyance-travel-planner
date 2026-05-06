@@ -268,13 +268,21 @@ export default function TripDetail() {
 
   useEffect(() => {
     if (generationStalled) {
-      stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 5000);
+      // Hard-failed trips should expose the retry button immediately —
+      // no point in showing a "reconnecting…" spinner for 5s when we
+      // already know the backend bailed.
+      const isHardFailed = trip?.itinerary_status === 'failed';
+      if (isHardFailed) {
+        setShowStalledUI(true);
+      } else {
+        stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 5000);
+      }
     } else {
       setShowStalledUI(false);
       if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current);
     }
     return () => { if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current); };
-  }, [generationStalled]);
+  }, [generationStalled, trip?.itinerary_status]);
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
@@ -403,6 +411,11 @@ export default function TripDetail() {
     // Use canonical date-derived count as source of truth; fall back to metadata only if dates are missing
     const totalDays = canonicalTotalDays > 0 ? canonicalTotalDays : metaTotalDays;
 
+    // If the trip hard-failed with zero saved days, restart from day 1.
+    const wasHardFailedEmpty =
+      currentTrip.itinerary_status === 'failed' && completedDays === 0;
+    const resumeFromDay = wasHardFailedEmpty ? 1 : (completedDays + 1);
+
     try {
       // Reset status to generating with fresh heartbeat + normalize total days
       await supabase.from('trips').update({
@@ -415,6 +428,9 @@ export default function TripDetail() {
           generation_started_at: new Date().toISOString(),
           chain_broken_at_day: null,  // Clear chain failure
           chain_error: null,           // Clear chain error message
+          empty_day_detected: false,
+          generation_failed_on_day: null,
+          failed_day_numbers: wasHardFailedEmpty ? [] : ((meta as any).failed_day_numbers || []),
         },
       }).eq('id', tripId);
 
@@ -422,7 +438,7 @@ export default function TripDetail() {
       const { data: refreshed } = await supabase.from('trips').select('*').eq('id', tripId).single();
       if (refreshed) setTrip(refreshed);
 
-      // Call generate-trip which will resume from completedDays+1
+      // Call generate-trip which will resume from completedDays+1 (or day 1 after a hard fail)
       const { error } = await supabase.functions.invoke('generate-itinerary', {
         body: {
           action: 'generate-trip',
@@ -437,7 +453,7 @@ export default function TripDetail() {
           isMultiCity: !!(currentTrip as any).is_multi_city,
           creditsCharged: 0, // Already charged, no new charge
           requestedDays: totalDays,
-          resumeFromDay: completedDays + 1, // Signal to backend to skip completed days
+          resumeFromDay,
         },
       });
 
@@ -1399,6 +1415,35 @@ export default function TripDetail() {
                   emptyDayHealAttemptedRef.current = false;
                 }
               }, 2000);
+            }
+          }
+        }
+
+        // ── SELF-HEAL: status='failed' with 0 saved days ──
+        // Backend hard-failed (e.g. "Day N generated with 0 activities") and the user
+        // is otherwise stuck on the loading screen forever. Auto-retry once, then
+        // surface the stalled UI so the user can hit "Retry manually".
+        if (tripData.itinerary_status === 'failed') {
+          const itinData = tripData.itinerary_data as { days?: unknown[] } | null;
+          const jsonDayCount = itinData?.days?.length ?? 0;
+          const actualDays = Math.max(jsonDayCount, itineraryDaysDbCount);
+          let expectedTotal = 0;
+          if (tripData.start_date && tripData.end_date) {
+            try {
+              expectedTotal = differenceInDays(
+                parseLocalDate(tripData.end_date),
+                parseLocalDate(tripData.start_date)
+              ) + 1;
+            } catch { expectedTotal = 0; }
+          }
+          if (expectedTotal > 0 && actualDays === 0) {
+            if (!autoResumeAttemptedRef.current) {
+              autoResumeAttemptedRef.current = true;
+              console.warn('[TripDetail] Self-heal: trip failed with 0 days. Auto-resuming once.');
+              setTimeout(() => { handleResumeGeneration(); }, 1500);
+            } else {
+              console.warn('[TripDetail] Self-heal: trip still failed after auto-resume. Showing stalled UI.');
+              setGenerationStalled(true);
             }
           }
         }
