@@ -2605,8 +2605,14 @@ export function EditorialItinerary({
     if (dayNum) {
       setRefreshResults(prev => { const next = { ...prev }; delete next[dayNum]; return next; });
     }
+    // Notify Payments/Budget snapshots so their caches refetch in lockstep with
+    // the upcoming autosave + cost reprojection. Prevents a stale bucket sum
+    // from latching the "Reconciling…" badge on after Fix Timing.
+    try {
+      window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+    } catch {}
     toast.success(`Applied ${changes.length} change${changes.length !== 1 ? 's' : ''} to Day ${dayNum || dayIndex + 1}`);
-  }, [days]);
+  }, [days, tripId]);
   
   // Credit nudge state
   const [creditNudge, setCreditNudge] = useState<{ action: keyof typeof CREDIT_COSTS } | null>(null);
