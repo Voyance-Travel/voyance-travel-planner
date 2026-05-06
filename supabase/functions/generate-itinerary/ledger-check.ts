@@ -14,6 +14,7 @@
  */
 
 import type { DayLedger, LedgerUserIntent } from './day-ledger.ts';
+import { canonicalActivityVenueName, venueNamesMatch } from './generation-utils.ts';
 
 export interface LedgerCheckWarning {
   dayNumber: number;
