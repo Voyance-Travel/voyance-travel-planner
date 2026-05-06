@@ -1348,10 +1348,7 @@ export default function TripDetail() {
                       });
                     } catch (saveErr) {
                       console.error('[TripDetail] Backend save after version restore failed, falling back to direct write:', saveErr);
-                      await supabase.from('trips').update({
-                        itinerary_data: mergedItinerary as any,
-                        updated_at: new Date().toISOString(),
-                      }).eq('id', tripId!);
+                      await safeUpdateItineraryData(tripId!, mergedItinerary);
                     }
                     queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
                     toast.success(`Restored ${restoredCount} day${restoredCount > 1 ? 's' : ''} from history`);
