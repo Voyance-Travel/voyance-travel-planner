@@ -172,6 +172,7 @@ import { ParsedTripNotesSection } from './ParsedTripNotesSection';
 import SortableFlightLegCards from './SortableFlightLegCards';
 import { resolveDropTarget } from './budgetDropResolver';
 import { resolveLiveActivity } from './activityRemoveResolver';
+import { mergeNeedToKnowInfo } from './needToKnow';
 
 // =============================================================================
 // BOARDING PASS VIEW BUTTON (inline helper)
