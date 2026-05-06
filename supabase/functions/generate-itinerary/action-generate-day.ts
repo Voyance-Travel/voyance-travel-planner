@@ -217,6 +217,7 @@ export async function handleGenerateDay(
     metadata, mustDoActivitiesRaw: mustDoActivities,
     preferenceContext, dayConstraints,
     lockedCards,
+    effectiveTraitScores,
   } = prompt;
   flightContext = prompt.flightContext;
 
