@@ -8470,7 +8470,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         ],
         health: 'No required vaccinations',
         healthTips: [
-          'Check current health advisories with your country'\''s foreign-travel office',
+          "Check current health advisories with your country's foreign-travel office",
           'NHS available for emergencies (may incur charges)',
           'European Health Insurance Card (EHIC) no longer valid for UK',
           'Travel insurance strongly recommended'
