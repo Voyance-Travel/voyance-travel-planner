@@ -9546,6 +9546,8 @@ interface DayCardProps {
    onOpenConcierge?: (activity: EditorialActivity, dayIndex: number, activityIndex: number) => void;
    /** Handler to delete an AI saved note */
    onDeleteAINote?: (activityId: string, noteId: string) => void;
+   /** Canonical per-day breakdown from activity_costs (single source of truth) */
+   dayBreakdown?: DayBreakdown;
 }
 
 function DayCard({
