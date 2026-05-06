@@ -76,6 +76,8 @@ export interface SanitizeActivityNameOpts {
   mealType?: import('./stubVenueDetection').MealType | null;
   /** Optional start time (HH:MM) used to infer meal type when not provided */
   startTime?: string | null;
+  /** Optional full activity object — enables wellness placeholder masking */
+  activity?: WellnessActivityShape | null;
 }
 
 export function sanitizeActivityName(
