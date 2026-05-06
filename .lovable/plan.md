@@ -1,72 +1,79 @@
-# Fix: Day 1 hotel check-in scheduled before hotel actually opens
+# Fix: Day title doesn't reflect actual activities
 
-## What's happening
+## Problem
 
-For a 7:30 AM Paris landing, Day 1 schedules "Check-in at Four Seasons Hotel George V" at **9:45 AM**. Four Seasons (and most hotels) doesn't release rooms until 3:00 PM. The morning is built around a check-in that is physically not possible.
+Day titles (the `theme` / `title` field on a generated day) are produced by the model in the same call that generates the activity list. There is no post-generation check that the title's stated theme or neighborhood actually matches what's in `activities[]`. Result: a day titled "Latin Quarter & Left Bank" can ship with a Marais brunch, a Tuileries afternoon, and an 8th-arrondissement dinner — none of which match the title.
 
-Root cause is in `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts`. Lines 47-51 compute the Day 1 sequence as:
+Locations of relevant code:
 
-```ts
-const customsClearance = addMinutesToHHMM(arrival24, 60);
-const transferStart   = addMinutesToHHMM(arrival24, 75);
-const transferEnd     = addMinutesToHHMM(transferStart, 60);
-const hotelCheckIn    = transferEnd;            // = arrival + 135 min
-const settleInEnd     = addMinutesToHHMM(hotelCheckIn, 30);
-```
+- Day title field schema: `generation-core.ts:1259-1260` (`title`, `theme` strings, no constraints)
+- Title cleanup pass (only fixes orphan articles): `action-generate-day.ts:662-668` and `action-generate-trip-day.ts:1498-1505`
+- Day card render: `CustomerDayCard.tsx:375` reads `day.theme`
+- No existing coherence/relabel logic — `rg` for "title.*coherence" finds nothing
 
-The `isMorningArrival` and `isAfternoonArrival` branches (lines 117 and 184) both render this as a real **"Check-in at <hotel>"** activity at `hotelCheckIn`. The hotel's standard check-in time is never consulted, so the prompt instructs the model to put `Check-in` at e.g. 9:45 even though rooms aren't ready until 15:00.
+## Approach
 
-The pattern for handling this is already implemented for the **no-flight + hotel** branch at lines 271-318: it calls the morning hotel stop a **"Luggage Drop"**, adds an explicit later **"Check-in at <hotel>"** activity at `standardCheckInTime` (15:00), and instructs the model to slot real activities between the two. We just need to apply the same pattern to the with-flight branches when `hotelCheckIn < standardCheckIn`.
+Add a deterministic post-generation **title-coherence pass** that runs after the day's activities are finalized (after dedup, repair, and the existing orphan-article cleanup) and either keeps the AI's title or replaces it with a content-derived label. This avoids a second LLM call and keeps cost flat.
 
-## Fix
+### Algorithm
 
-In `pipeline/compile-day-schema.ts`:
+For each generated day with at least 3 activities:
 
-1. After computing `hotelCheckIn` (around line 50), derive a property-aware `standardCheckIn`:
-   ```ts
-   const standardCheckIn = (flightContext as any).hotelCheckInTime || '15:00';
-   const standardCheckInEnd = addMinutesToHHMM(standardCheckIn, 15);
-   const checkInIsTooEarly =
-     hasHotelData &&
-     (parseTimeToMinutes(hotelCheckIn) ?? 0) < (parseTimeToMinutes(standardCheckIn) ?? 900);
-   ```
-   Reuses the existing `flightContext.hotelCheckInTime` field already populated in `prompt-library.ts:33,212` and `compile-day-facts.ts:148/284/309`.
+1. **Extract content signal** from non-logistics activities (skip transport, accommodation, hotel returns, freshen-ups, check-ins, departures):
+   - Collect `neighborhood` values (from `act.neighborhood` and `act.location.neighborhood`).
+   - Collect notable venue names (museums, parks, headline activity).
+   - Detect dominant vibe tags from category mix (food-heavy, museum-heavy, shopping, etc.).
 
-2. In the **morning arrival + hotel** branch (line 117) and the **afternoon arrival + hotel** branch (line 184), branch on `checkInIsTooEarly`:
-   - **If too early** — render the existing 2-step + late-check-in sequence:
-     1. `Arrival at <airport>` (unchanged)
-     2. `Luggage Drop at <hotel>` from `transferEnd` to `transferEnd + 20m`. category `accommodation`. description: "Drop your bags and freshen up. Your room will be ready at `${standardCheckIn}`."
-     3. (Inserted later, around `${standardCheckIn}`): `Check-in at <hotel>` from `${standardCheckIn}` to `${standardCheckInEnd}`. description: "Pick up keys, settle into your room."
-   - **If not too early** (afternoon arrival landing after 14:00ish) — keep current "Check-in at <hotel>" at `hotelCheckIn`.
+2. **Score AI title against content**:
+   - Tokenize title (lowercased, stripped of stopwords like "day", "of", "the", "&").
+   - Coherent if **any** title token matches a neighborhood token, a venue name token, or a category-keyword (e.g., "art" + ≥2 cultural activities, "food" + ≥3 dining, "market" + market activity present, "old town"/"historic" + activities in the historic district).
+   - Also coherent if the title is generic-but-honest ("Arrival in Paris", "Departure Day", "Free Day", "Day 4 in Paris") — match against a small allow-list.
 
-3. Update the `MORNING ARRIVAL GUIDELINES` / `AFTERNOON ARRIVAL GUIDELINES` blocks accordingly. The "earliest sightseeing" timestamp now derives from `transferEnd + 20m` (post-luggage-drop) when the bag-drop branch fires, so morning sightseeing can start sooner instead of waiting on the (impossible) check-in.
+3. **If incoherent, regenerate title locally**:
+   - Pick the dominant neighborhood (most-activity-count among non-logistics).
+   - Pick the headline activity (highest-rank cultural/sightseeing or splurge dinner).
+   - Compose: `"<Neighborhood> & <Headline>"` or, when only one signal is strong, `"<Headline> in <City>"` or `"<Neighborhood> Wander"`.
+   - Fallback to `"Day N in <City>"` if no signal is extractable.
 
-4. Mirror the fix to the `hotelCheckIn`-only paths in the placeholder hotel branch (line 152 — "no specific hotel selected"). Use the same `15:00` default.
+4. **Mirror the new title to both `day.title` and `day.theme`** (UI reads `theme`; we keep both in sync, matching existing `generatedDay.title || generatedDay.theme` patterns).
 
-5. Tag the synthetic activities so existing repair logic recognizes them:
-   - Luggage Drop: `tags: ["bag-drop", "structural"]`, `category: "accommodation"`
-   - Late Check-in: `tags: ["check-in", "structural"]`
+5. **Log every rewrite** with the old title, new title, and signal used (for QA + future tuning).
 
-   Verify (or extend) the **Itinerary Logistics Mandate** memory's bag-drop priority by checking `action-generate-trip-day.ts:1616` (`ACCOM_RE`) already includes `luggage drop` (it does — `luggage\s+drop` matches).
+### Where to wire it
 
-## No-fix areas
+A single new utility, `pipeline/coherence-day-title.ts`, exporting `enforceDayTitleCoherence(day, { city })`. Called from:
 
-- The **all-day event** branch (line 63) intentionally late-checks-in after the event; do not change.
-- The **evening arrival** branch (line 244) already lands after standard check-in; do not change.
-- The **transition-day fallback** in `action-generate-day.ts:949-950` (`checkinStart = arrMins + 45`) is for inter-city same-trip arrival days, not first-day airport arrivals; out of scope (a future ticket can apply the same pattern).
+- `action-generate-day.ts` immediately after the existing orphan-article cleanup at line 668 (single-day generation).
+- `action-generate-trip-day.ts` immediately after the existing cleanup at line 1505 (multi-day batch).
+- `generation-core.ts:1485` (`generatedDay.title = generatedDay.title || ...`) — call right after the fallback assignment so theme/title stay aligned.
+
+### What stays unchanged
+
+- The model still produces day titles on the first pass; this layer only repairs incoherent ones.
+- Day numbering, dates, and activity content are untouched.
+- No prompt changes; we don't need to retrain the model — we sanity-check its output.
 
 ## Tests
 
-Add to `supabase/functions/generate-itinerary/scenario.test.ts` (or a new `compile-day-schema.test.ts` if there isn't one):
+New `pipeline/coherence-day-title.test.ts` covering:
 
-- Morning arrival 07:30 + hotel with no `hotelCheckInTime` → output prompt contains "Luggage Drop" and a separate "Check-in" at `15:00`.
-- Morning arrival 07:30 + hotel with `hotelCheckInTime: '16:00'` → late check-in renders at `16:00`.
-- Afternoon arrival 16:30 + hotel → single "Check-in" entry at `hotelCheckIn` (no luggage-drop split).
-- Morning arrival 07:30 + no hotel → "Check-in at Your Hotel" still emitted at `15:00` after a luggage drop.
+- Title "Latin Quarter & Left Bank" + activities all in 8th arr → relabels to neighborhood-derived title.
+- Title "Marais Stroll" + ≥2 activities in Marais → kept.
+- Title "Day 4" (generic) + 3 museum activities → upgraded to "Museum Day in Paris".
+- Empty/missing title → produces non-empty title from content.
+- Logistics-only fragments (arrival day) → keeps simple "Arrival in Paris".
+
+## Memory
+
+Add a new memory `mem://technical/itinerary/day-title-coherence` and link it from `mem://index.md` so future passes know titles are sanity-checked against content.
 
 ## Files
 
-- `supabase/functions/generate-itinerary/pipeline/compile-day-schema.ts` — main change
-- `supabase/functions/generate-itinerary/scenario.test.ts` (or sibling test) — coverage
+- New: `supabase/functions/generate-itinerary/pipeline/coherence-day-title.ts`
+- New: `supabase/functions/generate-itinerary/pipeline/coherence-day-title.test.ts`
+- Edit: `supabase/functions/generate-itinerary/action-generate-day.ts` (one call site)
+- Edit: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (one call site)
+- Edit: `supabase/functions/generate-itinerary/generation-core.ts` (one call site)
+- New memory file + `mem://index.md` update
 
-No DB migration. No client changes. No memory change required (the **Itinerary Logistics Mandate** memory already covers bag-drop priority).
+No DB migration. No client changes (UI already reads `day.theme`).
