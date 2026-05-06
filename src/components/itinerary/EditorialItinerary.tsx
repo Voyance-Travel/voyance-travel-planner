@@ -3532,6 +3532,10 @@ export function EditorialItinerary({
   // ─── Canonical trip total from useTripFinancialSnapshot (single source of truth) ───
   const financialSnapshot = useTripFinancialSnapshot(tripId);
 
+  // Populate the ledger-override map so getActivityCostInfo can prefer
+  // server-floored prices over stale JSONB on a per-card basis.
+  useLedgerCostOverrideMap(tripId);
+
   // ─── Per-day breakdown from the same activity_costs table — guarantees that
   // the sum of day badges + day-0 logistics + reserve == trip total. ───
   const visibleActivityIdList = useMemo(() => {
