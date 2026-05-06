@@ -1,56 +1,83 @@
-# La Pergola Display vs Ledger Mismatch
+# One Price Per Activity — End the Card vs Budget Divergence
 
-## Root cause
+## Why the previous fix isn't enough
 
-Two distinct bugs are stacked:
+Last turn I added two safety nets:
+1. `preserveLedgerCosts` (server + client) so autosaves can't downgrade JSONB after a repair.
+2. `getLedgerOverride` so the card *displays* the ledger price when JSONB is materially lower.
 
-1. **JSONB writeback is being clobbered post-repair.** `action-repair-costs.ts` correctly raised La Pergola to **$250/pp ($500 total)** in `activity_costs` AND wrote `{cost: {amount: 500}}` back into `trips.itinerary_data` (line 566). But `trips.updated_at` is **30 minutes after** the repair, while every `activity_costs.updated_at` is frozen at the repair time. Something — most likely an autosave path in `EditorialItinerary` / `TripDetail` that rewrites `itinerary_data` from in-memory React state — overwrote `cost.amount` back to the original AI-generated `$30`. The activity card then renders that stale `$30` (which displays as ~€26).
+Both are defensive patches around a structural problem: **`trips.itinerary_data.activities[].cost` and `activity_costs.cost_per_person_usd` are two independent stores of the same fact.** Every code path that writes one without the other is a chance to drift. The user is right — this will keep happening until there is exactly one writer of price.
 
-2. **The display layer trusts JSONB before the ledger.** `getDisplayCost` in `EditorialItinerary.tsx` reads `activity.cost?.amount` first (line 948). It never consults `activity_costs`, even though that table is declared the single source of truth ([Table-Driven Cost Architecture](mem://technical/finance/table-driven-cost-architecture)). So *any* drift in JSONB silently surfaces in the UI even though Budget/Payments are showing the correct $500.
+## The structural fix
 
-The category over-allocation ($860 Food & Dining vs $360 budget) is the *correct* downstream consequence once the ledger has $500 for La Pergola + $240 for Imàgo. That's a separate "Luxury Luminary allocation %" calibration discussion — not a bug.
+Make `activity_costs` the **only** writer, and have the database itself project the value back into JSONB. After this, the card cannot show a different price from the budget — they are reading the same byte path.
 
-## Fix scope
+### 1. Database trigger: `activity_costs` → `trips.itinerary_data` (single source of truth)
 
-Two surgical changes, no business-logic refactors.
+New `AFTER INSERT OR UPDATE OR DELETE` trigger on `public.activity_costs`:
 
-### 1. Stop the JSONB clobber on autosave (root cause)
+- On INSERT/UPDATE: `jsonb_set` the matching activity inside `trips.itinerary_data.days[*].activities[*]` where `id = NEW.activity_id`, writing:
+  ```json
+  "cost": { "amount": <total_cost_usd>, "currency": "USD",
+            "perPerson": <cost_per_person_usd>, "basis": "ledger",
+            "source": <NEW.source>, "synced_at": <now> }
+  ```
+- On DELETE: clear `cost` back to `{ amount: 0, currency: "USD", basis: "ledger" }`.
 
-In every code path that writes `trips.itinerary_data` from in-memory React state, preserve `cost`/`estimatedCost` for activities that have a non-AI repair source recorded. Implementation:
+The trigger function uses a single statement with a `jsonb_path_query` + `jsonb_set` to update the right activity in place. Because the trigger runs in the same transaction as the cost write, **there is no window in which the ledger and JSONB disagree**.
 
-- Stamp each repaired activity in JSONB with `cost.basis = 'repair_floor'` and `cost.source = 'michelin_floor' | 'reference_fallback' | 'auto_corrected'` during writeback in `action-repair-costs.ts`. (Already partially there — extend the patched object.)
-- Add a small helper `preserveLedgerCosts(prevDays, nextDays)` in `src/utils/preserveLedgerCosts.ts`. For every activity in `nextDays`, if `prevDays` has the same id with `cost.basis === 'repair_floor'` (or matching `costSource`), force-keep the previous `cost` and `estimatedCost`.
-- Apply that helper in the three autosave funnels that touch `itinerary_data` outside the repair pipeline:
-  - `src/contexts/TripPlannerContext.tsx` (~line 289)
-  - `src/pages/TripDetail.tsx` (~lines 1227, 1354, 1406, 1763, 1808)
-  - `src/components/itinerary/EditorialItinerary.tsx` save funnels around line 1360 and 1470
-- The helper is a no-op for activities without a ledger-protected basis, so manual/extracted/user-edited rows are untouched.
+This replaces the JSONB-writeback block in `action-repair-costs.ts` (lines 540–581) — it becomes dead code and is removed.
 
-### 2. Defense-in-depth: display reads ledger when JSONB is suspiciously low
+### 2. Make `activity_costs` reject anonymous JSONB-only writes
 
-In `EditorialItinerary.tsx#getDisplayCost`:
+Add a NOT NULL `source` enforcement plus a small allowlist check:
 
-- Accept the existing `activityCostsByActivity` map (already present in the file; consumed for per-day breakdown ~line 9683) and pass it down to the per-card cost resolver.
-- Before returning `costAmount` from JSONB, compare to ledger: if `ledger.cost_per_person_usd > 0` AND `ledger.source` is in `{michelin_floor, ticketed_attraction_floor, auto_corrected, reference_fallback}` AND it is materially higher than JSONB (≥ 2×), prefer the ledger value and log once. This guarantees the card matches Payments/Budget even if a future code path forgets to preserve.
+- Existing sources keep working.
+- A new `'manual_edit'` source is required when a user changes the price from the UI. The client cost-edit handler must call the existing cost-update RPC (or `syncActivitiesToCostTable` with `source: 'manual_edit'`) — never write `trips.itinerary_data.cost` directly.
 
-### 3. Backfill the existing trip
+### 3. Remove all client-side writes to `cost.amount` in `itinerary_data`
 
-Run `repair-trip-costs` once for trip `a5f41a2b-…` so the JSONB writeback re-applies with the new `basis` stamp. (Server-side only; no migration.)
+Audit and delete every place in the UI that mutates `activity.cost` and persists it through `itinerary_data`:
 
-## Out of scope (explicitly)
+- `EditorialItinerary.tsx`: the cost-edit modal, swap handler, transport-mode change, and the `syncBudgetFromDays` JSONB shape pass — all stop writing `cost`. They write to `activity_costs` only.
+- `TripDetail.tsx` autosave funnels: strip `cost` from the activities they round-trip (the trigger will repopulate from ledger after save).
+- `TripPlannerContext.tsx#saveTrip`: same — never persist `cost.amount` from React state.
 
-- The "Luxury Luminary 30% dining allocation feels low" framing. That's an allocation-math conversation, not a bug; flagging via the existing [feasibility-warning-system](mem://features/budget/feasibility-warning-system) would be the right venue if we want to surface it.
-- Any change to `michelin_floor` thresholds or the `KNOWN_FINE_DINING_STARS` map — La Pergola is correctly listed at 3 stars / $250 floor.
+After this, `trips.itinerary_data.cost` is **derived state**, owned by the database. The client treats it as read-only.
 
-## Files touched
+### 4. Card display becomes trivially correct
 
-- `supabase/functions/generate-itinerary/action-repair-costs.ts` (stamp basis/source on JSONB writeback)
-- `src/utils/preserveLedgerCosts.ts` (new)
-- `src/contexts/TripPlannerContext.tsx`
-- `src/pages/TripDetail.tsx`
-- `src/components/itinerary/EditorialItinerary.tsx` (save funnels + getDisplayCost ledger fallback)
-- `src/utils/__tests__/preserveLedgerCosts.test.ts` (new)
+`getActivityCostInfo` keeps reading `activity.cost?.amount`, but the value it sees is now stamped by the DB trigger, so it always matches the budget. The temporary `getLedgerOverride` defense-in-depth from the previous turn is **kept** as a belt-and-braces guard for one release, then removed in a follow-up once we have telemetry showing zero overrides firing.
 
-## Why this keeps happening
+### 5. Backfill
 
-This is the third time we've seen "ledger correct, card wrong" (Paris hotel, Paris dining, Rome La Pergola). The pattern is always the same: a repair writes the truth, then a downstream autosave round-trips React state through `itinerary_data` and silently strips it. Step 1 closes the leak at the source; step 2 makes the UI honest even if a fourth funnel slips through later.
+One-shot migration: for every existing trip, re-run the same `jsonb_set` projection to align JSONB to the current `activity_costs` rows. Logged per-trip count. No data loss — only writing the price the budget already considers truth.
+
+## Out of scope
+
+- Currency display (€ vs $). The trip's `local_currency` already controls the symbol; the underlying amount is what diverged. This plan fixes the amount; the symbol logic is unchanged.
+- The Luxury Luminary 30% dining allocation question — separate calibration discussion.
+- The `'repair_floor'` basis tag added last turn stays, but its purpose is now informational; the trigger guarantees JSONB equality regardless.
+
+## Files
+
+**New**
+- `supabase/migrations/<ts>_sync_activity_costs_to_jsonb.sql` — trigger, function, backfill.
+
+**Modified**
+- `supabase/functions/generate-itinerary/action-repair-costs.ts` — drop the JSONB writeback block (now redundant).
+- `src/components/itinerary/EditorialItinerary.tsx` — strip `cost` from save funnels; cost edits go through the ledger.
+- `src/contexts/TripPlannerContext.tsx` — same.
+- `src/pages/TripDetail.tsx` — same; `safeUpdateItineraryData` no longer needs the preserve helper (kept for one release as a transitional safety).
+- `src/services/activityCostService.ts` — expose `updateActivityCost(tripId, activityId, perPersonUsd, source='manual_edit')` for the cost-edit modal.
+
+## Verification
+
+1. Unit test on the trigger: insert/update/delete on `activity_costs` mutates the matching JSONB activity.
+2. Integration test: run repair on a Rome trip, query `trips.itinerary_data` immediately, assert `cost.amount === total_cost_usd`.
+3. Backfill log: zero residual rows where ledger > 0 and JSONB.cost.amount < ledger × 0.9.
+4. Browser smoke: open the Rome trip, La Pergola card shows $500 with no `[LedgerOverride]` console warning.
+
+## Why this is the last time
+
+After this lands, **the only way for the card and budget to disagree is for a developer to bypass `activity_costs` entirely and stamp `cost` directly into JSONB.** That path is removed from the UI and edge functions; a lint rule (already proposed for Google API centralization — same pattern) can guard against future regressions.
