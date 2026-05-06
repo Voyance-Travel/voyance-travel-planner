@@ -510,6 +510,10 @@ export interface EditorialItineraryProps {
   refreshDayRequest?: { dayNumber: number; nonce: number } | null;
   /** Parent dispatches a deterministic timing-fix request for a day */
   fixTimingRequest?: { dayNumber: number; nonce: number } | null;
+  /** Notify parent when a day re-check starts/finishes */
+  onRefreshingDayChange?: (dayNumber: number | null) => void;
+  /** Notify parent of per-day refresh issue counts */
+  onRefreshResultsChange?: (results: Record<number, { errorCount: number; warningCount: number }>) => void;
 }
 
 // =============================================================================
