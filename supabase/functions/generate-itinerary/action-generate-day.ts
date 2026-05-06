@@ -25,6 +25,7 @@ import {
   getAirportTransferMinutes,
   getAirportTransferFare,
 } from './generation-utils.ts';
+import { matchesAIStubVenue } from './fix-placeholders.ts';
 import {
   sanitizeDateString,
   sanitizeOptionFields,
