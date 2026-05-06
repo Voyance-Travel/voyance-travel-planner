@@ -1985,9 +1985,16 @@ This traveler wants to maximize their trip:
 - 20-30 minute buffers sufficient
 - Pack it in, they want to see everything
 - Efficient routing matters
+
+HARD RULES (Fast-Paced — VIOLATIONS REQUIRE REGENERATION):
+- NO midday "Freshen Up" / hotel-return blocks. The traveler chains activity → activity. A pre-dinner freshen-up is only acceptable if it's ≤30 minutes AND the next activity requires a dress change (e.g. fine-dining reservation, performance).
+- NO unscheduled "free time to explore" blocks. Fast-Paced means scheduled, not loose.
+- Idle gap >60 min between consecutive activities = VIOLATION. Fill it with a real activity, food stop, or shorter buffer.
+- Buffers between consecutive activities should be ≤20 min unless real transit requires more.
+- Every meal slot MUST name a real venue. "Find a local spot" / "Breakfast — find a spot" placeholders = VIOLATION; pick a specific cafe, restaurant, or market.
 `;
   }
-  
+
   return `
 === PACING: MODERATE (pace: ${pace}) ===
 - 4-5 activities per day

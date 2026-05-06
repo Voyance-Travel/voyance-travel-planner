@@ -110,6 +110,9 @@ export interface CompiledPrompt {
 
   // Locked cards from perDayActivities (LOCK phase)
   lockedCards: LockedCard[];
+
+  // Effective trait scores (post-blend) consumed by repair pipeline
+  effectiveTraitScores: { pace: number; budget: number };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1806,5 +1809,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     dayConstraints,
     flightContext,
     lockedCards: lockedCardsForDay,
+    effectiveTraitScores,
   };
 }

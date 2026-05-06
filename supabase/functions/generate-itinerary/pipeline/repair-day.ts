@@ -81,6 +81,11 @@ export interface RepairDayInput {
   // Restaurant pool for meal-swap dedup
   restaurantPool?: Array<{ name: string; address?: string; neighborhood?: string; cuisine?: string; priceRange?: string; mealType: string }>;
   usedRestaurants?: string[];
+
+  // Travel-pace trait score (-10..+10). When >= 4 (Fast-Paced), repair logic
+  // skips midday hotel returns and tightens freshen-up duration caps so the
+  // day stays packed instead of inserting dead time.
+  paceScore?: number;
 }
 
 // =============================================================================
@@ -486,6 +491,8 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     isTransitionDay, isMultiCity, isLastDayInCity,
     resolvedDestination, nextLegTransport, nextLegTransportDetails, hotelOverride,
     isHotelChange, previousHotelName } = input;
+  const paceScore: number = typeof input.paceScore === 'number' ? input.paceScore : 0;
+  const isFastPaced = paceScore >= 4;
 
   // Clone activities array to mutate
   let activities: any[] = [...(input.day.activities || [])];
@@ -2370,23 +2377,25 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // Per Believable Human Day rule, midday hotel "freshen up" rituals should be
   // ~30-90 min. Some AI generations produce 2h+ blocks (e.g. 15:20-18:00),
   // creating obvious dead time. Cap any freshen-up to 90 min by trimming endTime.
+  // Fast-Paced travelers (paceScore >= 4) get a tighter 30-min cap.
+  const freshenCapMin = isFastPaced ? 30 : 90;
   for (const a of activities) {
     const cat = (a.category || '').toLowerCase();
     if (cat !== 'accommodation') continue;
     const t = (a.title || '').toLowerCase();
     if (!t.includes('freshen up') && !t.includes('freshen-up')) continue;
     const dur = Number(a.durationMinutes) || 0;
-    if (dur <= 90) continue;
+    if (dur <= freshenCapMin) continue;
     const start = a.startTime || a.time;
     if (!start || !/^\d{2}:\d{2}$/.test(start)) continue;
     const [sh, sm] = start.split(':').map(Number);
-    const newEndMin = sh * 60 + sm + 90;
+    const newEndMin = sh * 60 + sm + freshenCapMin;
     const eh = Math.floor(newEndMin / 60) % 24;
     const em = newEndMin % 60;
     a.endTime = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
-    a.durationMinutes = 90;
-    repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'capped_freshen_up_to_90min', before: `${dur}min`, after: '90min' });
-    console.log(`[FRESHEN-CAP] Capped "${a.title}" from ${dur}min to 90min (${start}-${a.endTime})`);
+    a.durationMinutes = freshenCapMin;
+    repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: `capped_freshen_up_to_${freshenCapMin}min`, before: `${dur}min`, after: `${freshenCapMin}min` });
+    console.log(`[FRESHEN-CAP] Capped "${a.title}" from ${dur}min to ${freshenCapMin}min (${start}-${a.endTime})${isFastPaced ? ' [fast-paced]' : ''}`);
   }
 
   // --- 9e. ORPHANED ROUND-TRIP TRANSPORT REMOVAL ---
@@ -3441,43 +3450,47 @@ function repairBookends(
 
   // 1. Mid-day hotel transports without accommodation card
   // On hotel-change days, skip freshen-up injection between checkout and check-in (no hotel available)
-  for (let i = 0; i < activities.length - 1; i++) {
-    if (isTransport(activities[i]) && isHotelRelated(activities[i]) && !isAccom(activities[i + 1])) {
-      // Skip if departure day and checkout already exists (traveler has left the hotel)
-      if (isDepartureDay) {
-        const hasCheckout = activities.some((a: any) => (a.title || '').toLowerCase().includes('checkout') || (a.title || '').toLowerCase().includes('check-out'));
-        const checkoutIdx = activities.findIndex((a: any) => (a.title || '').toLowerCase().includes('checkout') || (a.title || '').toLowerCase().includes('check-out'));
-        if (hasCheckout && i >= checkoutIdx) continue;
+  // Fast-Paced (paceScore >= 4) skips this entirely — they chain straight into the next activity.
+  if (!isFastPaced) {
+    for (let i = 0; i < activities.length - 1; i++) {
+      if (isTransport(activities[i]) && isHotelRelated(activities[i]) && !isAccom(activities[i + 1])) {
+        // Skip if departure day and checkout already exists (traveler has left the hotel)
+        if (isDepartureDay) {
+          const hasCheckout = activities.some((a: any) => (a.title || '').toLowerCase().includes('checkout') || (a.title || '').toLowerCase().includes('check-out'));
+          const checkoutIdx = activities.findIndex((a: any) => (a.title || '').toLowerCase().includes('checkout') || (a.title || '').toLowerCase().includes('check-out'));
+          if (hasCheckout && i >= checkoutIdx) continue;
+        }
+        // On hotel-change days, suppress freshen-up between checkout and check-in
+        if (isHotelChange) {
+          const checkoutIdx = activities.findIndex((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            return (t.includes('checkout') || t.includes('check-out') || t.includes('check out'));
+          });
+          const checkInIdx = activities.findIndex((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            return (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+          });
+          if (checkoutIdx >= 0 && checkInIdx > checkoutIdx && i >= checkoutIdx && i < checkInIdx) continue;
+        }
+        // On Day 1, suppress freshen-up injection before check-in
+        if (isFirstDay) {
+          const day1CiIdx = activities.findIndex((a: any) => {
+            const t = (a.title || '').toLowerCase();
+            return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
+          });
+          if (day1CiIdx >= 0 && i < day1CiIdx) continue;
+          if (day1CiIdx < 0) continue; // No check-in found at all on Day 1 — skip all freshen-ups
+        }
+        const card = makeAccomCard('Freshen up at', activities[i].endTime || offset(activities[i].startTime || '14:00', 15), 30);
+        activities.splice(i + 1, 0, card);
+        repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_freshen_up' });
       }
-      // On hotel-change days, suppress freshen-up between checkout and check-in
-      if (isHotelChange) {
-        const checkoutIdx = activities.findIndex((a: any) => {
-          const t = (a.title || '').toLowerCase();
-          return (t.includes('checkout') || t.includes('check-out') || t.includes('check out'));
-        });
-        const checkInIdx = activities.findIndex((a: any) => {
-          const t = (a.title || '').toLowerCase();
-          return (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
-        });
-        if (checkoutIdx >= 0 && checkInIdx > checkoutIdx && i >= checkoutIdx && i < checkInIdx) continue;
-      }
-      // On Day 1, suppress freshen-up injection before check-in
-      if (isFirstDay) {
-        const day1CiIdx = activities.findIndex((a: any) => {
-          const t = (a.title || '').toLowerCase();
-          return isAccom(a) && (t.includes('check-in') || t.includes('check in') || t.includes('checkin'));
-        });
-        if (day1CiIdx >= 0 && i < day1CiIdx) continue;
-        if (day1CiIdx < 0) continue; // No check-in found at all on Day 1 — skip all freshen-ups
-      }
-      const card = makeAccomCard('Freshen up at', activities[i].endTime || offset(activities[i].startTime || '14:00', 15), 30);
-      activities.splice(i + 1, 0, card);
-      repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'injected_hotel_freshen_up' });
     }
   }
 
-  // 1b. Mid-day hotel return guarantee — SKIP on departure days, first day before check-in, AND hotel-change days between checkout/check-in
-  if (!isDepartureDay) {
+  // 1b. Mid-day hotel return guarantee — SKIP on departure days, first day before check-in, AND hotel-change days between checkout/check-in.
+  // Fast-Paced (paceScore >= 4) skips this entirely — no forced hotel detour between lunch and dinner.
+  if (!isDepartureDay && !isFastPaced) {
     // On hotel-change days, find checkout/check-in window to suppress mid-day returns
     let hotelChangeCheckoutMin = -1;
     let hotelChangeCheckInMin = 99999;
