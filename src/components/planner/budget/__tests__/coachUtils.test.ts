@@ -3,6 +3,7 @@ import {
   isSuggestableActivity,
   hasSuggestableContent,
   isGenericCoachTitle,
+  isCoachEligible,
   type CoachActivity,
   type CoachDay,
 } from '../coachUtils';
