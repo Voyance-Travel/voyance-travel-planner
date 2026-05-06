@@ -1091,6 +1091,22 @@ function getActivityPhoto(activity: EditorialActivity): string | null {
   return null;
 }
 
+function getHotelHeroImage(h: any): string | null {
+  if (!h) return null;
+  const fromVal = (v: any): string | null => {
+    if (typeof v === 'string' && v.trim()) return v;
+    if (v && typeof v === 'object' && typeof v.url === 'string' && v.url.trim()) return v.url;
+    return null;
+  };
+  const direct = fromVal(h.imageUrl) || fromVal(h.image_url);
+  if (direct) return direct;
+  const imgs = Array.isArray(h.images) ? h.images : [];
+  for (const v of imgs) { const u = fromVal(v); if (u) return u; }
+  const photos = Array.isArray(h.photos) ? h.photos : [];
+  for (const v of photos) { const u = fromVal(v); if (u) return u; }
+  return null;
+}
+
 function getDayTotalCost(
   activities: EditorialActivity[], 
   travelers: number = 1, 
