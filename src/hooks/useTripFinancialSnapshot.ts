@@ -61,6 +61,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     tripTotalCents: 0,
     paidCents: 0,
     budgetTotalCents: 0,
+    miscReserveCents: 0,
     loading: true,
   });
   const [lastDelta, setLastDelta] = useState<FinancialDelta | null>(null);
