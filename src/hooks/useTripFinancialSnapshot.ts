@@ -108,15 +108,20 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       .select('id, activity_id, cost_per_person_usd, num_travelers, is_paid, paid_amount_usd, category, day_number, source')
       .eq('trip_id', tripId);
 
-    // 2b. Fetch manual payments. They live only in trip_payments — syncHotelToLedger
-    // intentionally clears the canonical day-0 hotel row when a manual hotel
-    // payment exists, to avoid double-billing. If we don't fold the manual amount
-    // in here, BudgetTab silently understates the trip total.
-    const { data: manualPayments } = await supabase
+    // 2b. Fetch ALL trip_payments. trip_payments is the authoritative source
+    // for "paid so far" — every Mark Paid click in PaymentsTab writes here,
+    // and the activity_costs.is_paid mirror is best-effort (silently no-ops
+    // when activity_id doesn't match, e.g. orphaned/regenerated activities).
+    // Without folding paid trip_payments rows in, BudgetTab's "Paid so far"
+    // drifts below PaymentsTab's "Paid so far" (the L'Arpège bug).
+    const { data: allPayments } = await supabase
       .from('trip_payments')
-      .select('item_type, amount_cents, quantity')
-      .eq('trip_id', tripId)
-      .like('item_id', 'manual-%');
+      .select('item_type, item_id, amount_cents, quantity, status')
+      .eq('trip_id', tripId);
+
+    const manualPayments = (allPayments || []).filter(
+      (p) => typeof p.item_id === 'string' && /^manual-/i.test(p.item_id)
+    );
 
     let totalCents = 0;
     let paidTotal = 0;
