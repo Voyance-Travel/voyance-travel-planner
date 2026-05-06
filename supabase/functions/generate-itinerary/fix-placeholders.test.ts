@@ -7,7 +7,7 @@ import {
   PLACEHOLDER_VENUE_PATTERNS,
   isPlaceholderMeal,
   applyFallbackToActivity,
-  GENERIC_VENUE_TEMPLATES,
+  matchesAIStubVenue,
   isPlaceholderWellness,
   getRandomFallbackWellness,
   applyFallbackWellnessToActivity,
@@ -129,14 +129,42 @@ Deno.test("applyFallbackToActivity: clamps price to dining config range", () => 
   assertEquals(activity.cost.amount, 40, "should clamp to lunch upper bound");
 });
 
-// ---------- GENERIC_VENUE_TEMPLATES sanity ----------
+// ---------- AI_STUB_VENUE_PATTERNS / matchesAIStubVenue ----------
 
-Deno.test("GENERIC_VENUE_TEMPLATES: every meal slot has at least 3 options", () => {
-  for (const slot of ["breakfast", "lunch", "dinner"] as const) {
-    const list = GENERIC_VENUE_TEMPLATES[slot];
-    assertEquals(Array.isArray(list), true, `slot ${slot} must be an array`);
-    assertEquals(list.length >= 3, true, `slot ${slot} needs >=3 templates`);
-  }
+Deno.test("AI stub venues: French stubs are flagged", () => {
+  assertEquals(matchesAIStubVenue("Café Matinal"), true);
+  assertEquals(matchesAIStubVenue("Cafe Matinal"), true);
+  assertEquals(matchesAIStubVenue("Table du Quartier"), true);
+  assertEquals(matchesAIStubVenue("Bistrot du Marché"), true);
+  assertEquals(matchesAIStubVenue("Le Comptoir du Midi"), true);
+  assertEquals(matchesAIStubVenue("Brasserie de la Gare"), true);
+  assertEquals(matchesAIStubVenue("Boulangerie du Quartier"), true);
+  assertEquals(matchesAIStubVenue("Le Petit Matin"), true);
+});
+
+Deno.test("AI stub venues: real Paris/EU restaurants are NOT flagged", () => {
+  assertEquals(matchesAIStubVenue("Septime"), false);
+  assertEquals(matchesAIStubVenue("Le Comptoir du Relais"), false);
+  assertEquals(matchesAIStubVenue("Café de Flore"), false);
+  assertEquals(matchesAIStubVenue("Chez L'Ami Jean"), false);
+  assertEquals(matchesAIStubVenue("Le Jules Verne"), false);
+});
+
+Deno.test("isPlaceholderMeal flags AI stub venue names (title and venue)", () => {
+  assertEquals(
+    isPlaceholderMeal(
+      { category: "dining", title: "Breakfast at Café Matinal", location: { name: "Café Matinal" } },
+      "Paris",
+    ),
+    true,
+  );
+  assertEquals(
+    isPlaceholderMeal(
+      { category: "dining", title: "Lunch at Table du Quartier", location: { name: "Table du Quartier" } },
+      "Paris",
+    ),
+    true,
+  );
 });
 
 // ---------- isPlaceholderWellness ----------

@@ -4,7 +4,7 @@
 
 import { isRecurringEvent } from './currency-utils.ts';
 import type { RequiredMeal } from './meal-policy.ts';
-import { getRandomFallbackRestaurant, GENERIC_VENUE_TEMPLATES } from './fix-placeholders.ts';
+import { getRandomFallbackRestaurant } from './fix-placeholders.ts';
 import { extractRestaurantVenueName, venueNamesMatch } from './generation-utils.ts';
 
 // =============================================================================

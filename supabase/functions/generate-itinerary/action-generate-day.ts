@@ -25,6 +25,7 @@ import {
   getAirportTransferMinutes,
   getAirportTransferFare,
 } from './generation-utils.ts';
+import { matchesAIStubVenue } from './fix-placeholders.ts';
 import {
   sanitizeDateString,
   sanitizeOptionFields,
@@ -416,6 +417,11 @@ export async function handleGenerateDay(
             console.log(`[HALLUCINATION FILTER] Removed generic-pattern restaurant: ${name}`);
             return false;
           }
+        }
+        // AI French/Italian stub names ("Café Matinal", "Table du Quartier", …)
+        if (matchesAIStubVenue(name)) {
+          console.log(`[HALLUCINATION FILTER] Removed AI stub-pattern restaurant: ${name}`);
+          return false;
         }
         // Check ALL location-related fields for fake addresses, not just address
         const rawHAddr = act.address || act.location;

@@ -15,6 +15,7 @@ import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validatio
 import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap, enforceVenueTypePriceCap, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
 import { applyAnchorsWin } from './anchor-guard.ts';
+import { matchesAIStubVenue } from './fix-placeholders.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -1012,6 +1013,11 @@ async function _handleGenerateTripDayInner(
           console.log(`[HALLUCINATION FILTER] Removed generic-pattern restaurant: ${name}`);
           return false;
         }
+      }
+      // AI French/Italian stub names ("Café Matinal", "Table du Quartier", …)
+      if (matchesAIStubVenue(name)) {
+        console.log(`[HALLUCINATION FILTER] Removed AI stub-pattern restaurant: ${name}`);
+        return false;
       }
       // Check ALL location-related fields for fake addresses, not just address
       const rawHAddr = act.address || act.location;
