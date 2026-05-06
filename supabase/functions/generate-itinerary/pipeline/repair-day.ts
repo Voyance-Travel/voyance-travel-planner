@@ -32,6 +32,7 @@ import {
 } from '../flight-hotel-context.ts';
 import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
+import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
 
 // =============================================================================
 // INPUT TYPES
@@ -3081,6 +3082,30 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
       }
       return true;
     });
+  }
+
+  // --- 16. FINAL TIMING & TRANSIT-BUFFER PASS (shared with refresh-day) ---------
+  // Catches the conflict classes the section-13 cascade misses:
+  //   - Same-start collisions (currStart === nextStart)
+  //   - Insufficient buffer between two distinct-coordinate cards
+  // Without this, every generated day ships with refresh-day "issues" that the
+  // user has to resolve via Fix Timing — which is what we're trying to avoid.
+  try {
+    const cascade = enforceTimingAndBuffers(activities as any, { lockedIds });
+    activities = cascade.activities as any;
+    for (const r of cascade.repairs) {
+      repairs.push({
+        code: FAILURE_CODES.TIME_OVERLAP,
+        action: `cascade_${r.type}`,
+        before: r.before,
+        after: r.after,
+      });
+    }
+    if (cascade.repairs.length > 0) {
+      console.log(`[repair-day] timing-cascade applied ${cascade.repairs.length} fix(es) on day ${dayNumber}`);
+    }
+  } catch (cascadeErr) {
+    console.warn('[repair-day] timing-cascade failed (non-blocking):', cascadeErr);
   }
 
   return {
