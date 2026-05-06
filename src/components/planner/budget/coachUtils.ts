@@ -13,6 +13,8 @@
  *   supabase/functions/generate-itinerary/day-validation.ts
  */
 
+import { classifyItineraryCompleteness } from '@/utils/itineraryCompleteness';
+
 export interface CoachActivity {
   id?: string;
   title?: string | null;
