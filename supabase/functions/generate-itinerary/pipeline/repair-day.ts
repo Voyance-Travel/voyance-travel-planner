@@ -33,6 +33,7 @@ import {
 import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
 import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
+import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 
 // =============================================================================
 // INPUT TYPES
@@ -3107,6 +3108,12 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   } catch (cascadeErr) {
     console.warn('[repair-day] timing-cascade failed (non-blocking):', cascadeErr);
   }
+
+  // ── Step N+1: NORMALIZE DURATION STRINGS ──
+  // Coerce any "HH:MM:SS"-shaped activity.duration the model may have emitted.
+  try {
+    for (const a of activities) normalizeActivityDuration(a);
+  } catch { /* non-blocking */ }
 
   return {
     day: { ...input.day, activities },

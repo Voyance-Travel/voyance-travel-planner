@@ -712,7 +712,18 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     console.warn('[save-itinerary] timing-cascade pre-save sweep failed (non-blocking):', cascadeErr);
   }
 
-  // ── STEP 3: PERSIST TO trips.itinerary_data ─────────────────────
+  // ── STEP 2.95: NORMALIZE DURATION STRINGS ─────────────────────────
+  // Kill any "45:00:00"-shaped duration the AI / manual edits / pasted
+  // data may have left behind. Without this, raw JSON carries clock-style
+  // duration strings even though the UI hides them via render-time coerce.
+  try {
+    const { normalizeDurationsInDays } = await import('./_shared/duration-format.ts');
+    normalizeDurationsInDays(itineraryDays);
+    (itinerary as any).days = itineraryDays;
+  } catch (durErr) {
+    console.warn('[save-itinerary] duration normalization failed (non-blocking):', durErr);
+  }
+
   const updatePayload: Record<string, any> = {
     itinerary_data: itinerary,
     itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',

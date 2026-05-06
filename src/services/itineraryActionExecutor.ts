@@ -822,6 +822,14 @@ async function updateTripItinerary(tripId: string, updatedDays: ItineraryDay[]):
     console.warn('[ActionExecutor] Pre-save meal sweep failed, skipping:', e);
   }
 
+  // Normalize "HH:MM:SS"-shaped duration strings before persisting.
+  try {
+    const { normalizeDurationsInDays } = await import('@/utils/durationNormalize');
+    normalizeDurationsInDays(updatedDays as any);
+  } catch (e) {
+    console.warn('[ActionExecutor] Duration normalize failed, skipping:', e);
+  }
+
   const sortedDays = sortActivitiesChronologically(updatedDays);
   try {
     // Fetch existing itinerary metadata to preserve it

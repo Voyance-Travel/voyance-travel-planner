@@ -638,6 +638,14 @@ export async function regenerateDay(
     console.warn('[itineraryAPI] Pre-save meal sweep failed, skipping:', e);
   }
 
+  // Normalize "HH:MM:SS"-shaped duration strings before persisting.
+  try {
+    const { normalizeDurationsInDays } = await import('@/utils/durationNormalize');
+    normalizeDurationsInDays(updatedDays as any);
+  } catch (e) {
+    console.warn('[itineraryAPI] Duration normalize failed, skipping:', e);
+  }
+
   const updatedItinerary = { ...existingItinerary, days: updatedDays };
   await supabase
     .from('trips')
