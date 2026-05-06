@@ -10,6 +10,7 @@
  */
 
 import { format, parseISO, addDays } from 'date-fns';
+import { coerceDurationString } from './plannerUtils';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
 const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
