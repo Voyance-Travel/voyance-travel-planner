@@ -279,6 +279,9 @@ function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons
 export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName, isManualMode = false, tripStatus, generationFailureReason, onRegenerate }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [payments, setPayments] = useState<TripPayment[]>([]);
+  // Tracks the user's most recent in-session "Raise budget" so the Coach can
+  // render a celebratory card with Undo instead of silently disappearing.
+  const [lastRaise, setLastRaise] = useState<{ fromCents: number; toCents: number } | null>(null);
   
   const { data: rawTripMembers = [] } = useTripMembers(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
