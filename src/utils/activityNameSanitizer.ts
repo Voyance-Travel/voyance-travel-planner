@@ -168,14 +168,24 @@ export function sanitizeActivityName(
     }
   }
 
-  // Stub-venue mask for dining slots — replaces "Table du Quartier" / "Café Matinal"
+  // Stub-venue mask for meal slots — replaces "Table du Quartier" / "Café Matinal"
   // family of AI inventions with a clear "find a local spot" affordance.
-  if (sanitized && opts?.category) {
-    const cat = opts.category.toLowerCase();
-    const isDining = cat.includes('dining') || cat.includes('restaurant') || cat.includes('food') || cat.includes('meal');
-    if (isDining && isAIStubVenueName(sanitized)) {
-      const meal: MealType | null =
-        opts.mealType ?? inferMealTypeFromTitle(sanitized) ?? inferMealTypeFromTime(opts.startTime ?? null);
+  if (sanitized && isAIStubVenueName(sanitized)) {
+    const cat = (opts?.category || '').toLowerCase();
+    const isDiningCategory =
+      !!cat && /(dining|restaurant|food|meal|breakfast|brunch|lunch|dinner|caf[eé]|coffee|bar|drinks|bakery|boulangerie|bistro|brasserie|patisserie|p[âa]tisserie)/.test(cat);
+    const mealFromCategory: MealType | null =
+      /breakfast/.test(cat) ? 'breakfast' :
+      /brunch/.test(cat) ? 'brunch' :
+      /lunch/.test(cat) ? 'lunch' :
+      /dinner/.test(cat) ? 'dinner' :
+      /drinks|bar/.test(cat) ? 'drinks' : null;
+    const meal: MealType | null =
+      opts?.mealType
+      ?? mealFromCategory
+      ?? inferMealTypeFromTitle(sanitized)
+      ?? inferMealTypeFromTime(opts?.startTime ?? null);
+    if (isDiningCategory || meal) {
       return stubFallbackLabel(meal);
     }
   }

@@ -58,6 +58,23 @@ describe('sanitizeActivityName + stub mask', () => {
       .toBe('Table du Quartier');
   });
 
+  it('masks stub on breakfast/cafe categories', () => {
+    expect(sanitizeActivityName('Café Matinal', { category: 'breakfast' }))
+      .toBe('Breakfast — find a local spot');
+    expect(sanitizeActivityName('Café Matinal', { category: 'cafe', startTime: '08:30' }))
+      .toBe('Breakfast — find a local spot');
+  });
+
+  it('masks stub when category is missing but title implies a meal', () => {
+    expect(sanitizeActivityName('Breakfast at Café Matinal'))
+      .toBe('Breakfast — find a local spot');
+  });
+
+  it('masks stub when only startTime is provided', () => {
+    expect(sanitizeActivityName('Café Matinal', { startTime: '08:30' }))
+      .toBe('Breakfast — find a local spot');
+  });
+
   it('default fallback when no meal info available', () => {
     expect(stubFallbackLabel(null)).toBe('Meal — find a local spot');
   });
