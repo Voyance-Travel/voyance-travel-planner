@@ -1199,6 +1199,7 @@ export async function handleGenerateDay(
           previousHotelName: resolvedPreviousHotelName,
           previousHotelAddress: facts.resolvedPreviousHotelAddress,
           paceScore: effectiveTraitScores?.pace,
+          adventureScore: (effectiveTraitScores as any)?.adventure,
         };
 
         const { day: repairedDay, repairs } = repairDay(repairInput);

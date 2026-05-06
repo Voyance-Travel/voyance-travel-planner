@@ -217,16 +217,24 @@ export function deriveForcedSlots(
     });
   }
   
-  // Adventurous (trait >= 4 means adventurous)
+  // Adventurous (trait >= 4 means adventurous, >= 7 means thrill-seeker)
   if ((traits.adventure ?? 0) >= 4) {
-    // Don't require edge activity every day - alternate
-    if (dayNumber % 2 === 1 || dayNumber === 1) {
+    const adv = traits.adventure || 0;
+    const isThrillSeeker = adv >= 7;
+    // Thrill-Seeker: edge activity EVERY day. Adventurous (4-6): alternating days.
+    const requireEdgeToday = isThrillSeeker || dayNumber % 2 === 1 || dayNumber === 1;
+    if (requireEdgeToday) {
       slots.push({
         type: 'edge_activity',
         traitSource: 'adventure',
-        traitValue: traits.adventure || 0,
-        description: 'One edge activity (bolder experience, not dangerous)',
-        validationTags: ['adventure', 'outdoor', 'active', 'unique', 'off-beaten-path', 'thrill']
+        traitValue: adv,
+        description: isThrillSeeker
+          ? 'One KINETIC / ADRENALINE experience (Vespa or e-bike tour, kayak/SUP, climbing, go-karts, helicopter, paragliding, canyoning, ziplining, motorcycle tour, ghost-tunnel/catacombs night crawl). NOT a park/fountain/scenic walk/market/museum/café.'
+          : 'One edge activity (bolder, kinetic experience: bike tour, kayak, climbing, scooter tour, off-beaten-path adventure). NOT a generic park, fountain, market, or café.',
+        // STRICT validation tags — must be kinetic/adrenaline, not generic "outdoor"
+        validationTags: isThrillSeeker
+          ? ['kinetic', 'adrenaline', 'thrill', 'climbing', 'kayak', 'sup', 'vespa', 'scooter', 'bike-tour', 'ebike', 'helicopter', 'paragliding', 'canyoning', 'zipline', 'motorcycle', 'go-kart', 'speedboat', 'rafting', 'extreme', 'gladiator-school']
+          : ['adventure', 'kinetic', 'thrill', 'bike-tour', 'kayak', 'climbing', 'scooter', 'vespa', 'zipline', 'rafting', 'off-beaten-path']
       });
     }
   }

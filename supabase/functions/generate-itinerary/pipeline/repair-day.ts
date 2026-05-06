@@ -86,6 +86,10 @@ export interface RepairDayInput {
   // skips midday hotel returns and tightens freshen-up duration caps so the
   // day stays packed instead of inserting dead time.
   paceScore?: number;
+
+  // Adventure trait score (-10..+10). Surfaced for downstream logging; the
+  // primary enforcement happens at prompt level via buildAdventureRules.
+  adventureScore?: number;
 }
 
 // =============================================================================

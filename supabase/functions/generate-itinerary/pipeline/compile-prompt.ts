@@ -112,7 +112,7 @@ export interface CompiledPrompt {
   lockedCards: LockedCard[];
 
   // Effective trait scores (post-blend) consumed by repair pipeline
-  effectiveTraitScores: { pace: number; budget: number };
+  effectiveTraitScores: { pace: number; budget: number; adventure: number };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -863,8 +863,13 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
   }
 
   const effectiveTraitScores = blendedTraitScores
-    ? { pace: blendedTraitScores.pace ?? traitScores.pace, budget: blendedTraitScores.budget ?? traitScores.budget }
-    : { pace: traitScores.pace, budget: traitScores.budget };
+    ? {
+        pace: blendedTraitScores.pace ?? traitScores.pace,
+        budget: blendedTraitScores.budget ?? traitScores.budget,
+        adventure: blendedTraitScores.adventure ?? traitScores.adventure ?? 0,
+      }
+    : { pace: traitScores.pace, budget: traitScores.budget, adventure: traitScores.adventure ?? 0 };
+  console.log(`[compile-prompt] effective traits: pace=${effectiveTraitScores.pace}, budget=${effectiveTraitScores.budget}, adventure=${effectiveTraitScores.adventure}`);
 
   // ═══════════════════════════════════════════════════════════════════════
   // BUDGET RESOLUTION
