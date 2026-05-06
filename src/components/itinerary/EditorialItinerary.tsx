@@ -3208,11 +3208,19 @@ export function EditorialItinerary({
 
   // Hero image removed — TripDetail page renders its own hero via DynamicDestinationPhotos
 
-  // Scroll selected day button into view
+  // Scroll selected day button into view — horizontally within the day-picker
+  // container only. Skip first mount so opening the itinerary never yanks
+  // window scroll down to today's pill.
   useEffect(() => {
+    if (!didMountDayPickerRef.current) {
+      didMountDayPickerRef.current = true;
+      return;
+    }
+    const container = dayPickerScrollRef.current;
     const btn = dayButtonRefs.current[selectedDayIndex];
-    if (btn) {
-      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    if (container && btn) {
+      const target = btn.offsetLeft - (container.clientWidth - btn.clientWidth) / 2;
+      container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
     }
   }, [selectedDayIndex]);
 
