@@ -1889,30 +1889,130 @@ async function _handleGenerateTripDayInner(
     }
   }
 
-  // STRUCTURAL VALIDATION: Verify the newly generated day has real activities
+  // STRUCTURAL VALIDATION: Verify the newly generated day has real activities.
+  // Empty days are common transient failures (AI returned 0 activities). Don't kill
+  // the whole trip — record the failure, drop the empty day, and continue chaining.
   const newDayInArray = updatedDays.find((d: any) => d.dayNumber === dayNumber);
   const newDayActivities = Array.isArray(newDayInArray?.activities) ? newDayInArray.activities : [];
   if (newDayActivities.length === 0) {
-    console.error(`[generate-trip-day] ⚠️ EMPTY DAY DETECTED: Day ${dayNumber} has 0 activities after generation. Marking as failed.`);
-    
+    console.error(`[generate-trip-day] ⚠️ EMPTY DAY DETECTED: Day ${dayNumber} has 0 activities. Recording failure & continuing chain.`);
+
     const { data: failTrip } = await supabase.from('trips').select('metadata, unlocked_day_count').eq('id', tripId).single();
     const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
-    
+    const currentUnlocked = (failTrip as any)?.unlocked_day_count ?? 0;
+    const failedDays: number[] = Array.isArray(failMeta.failed_day_numbers) ? [...(failMeta.failed_day_numbers as number[])] : [];
+    if (!failedDays.includes(dayNumber)) failedDays.push(dayNumber);
+
+    // Remove the empty placeholder so it doesn't poison downstream merges/UI
+    const trimmedDays = updatedDays.filter((d: any) => d.dayNumber !== dayNumber);
+    const goodDayCount = trimmedDays.filter((d: any) => Array.isArray(d.activities) && d.activities.length > 0).length;
+    const isLastDay = dayNumber >= totalDays;
+
+    if (!isLastDay) {
+      // Persist failure metadata + heartbeat, then chain to the next day.
+      await supabase.from('trips').update({
+        metadata: {
+          ...failMeta,
+          failed_day_numbers: failedDays,
+          generation_heartbeat: new Date().toISOString(),
+          generation_current_day: dayNumber,
+          last_day_error: `Day ${dayNumber} generated with 0 activities`,
+          empty_day_detected: true,
+        },
+      }).eq('id', tripId);
+
+      const generateUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/generate-itinerary`;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const chainBody = JSON.stringify({
+        action: 'generate-trip-day',
+        tripId, destination, destinationCountry, startDate, endDate, travelers, tripType, budgetTier, userId,
+        isMultiCity, creditsCharged, requestedDays, dayNumber: dayNumber + 1, totalDays, generationRunId,
+        isFirstTrip: isFirstTrip || false,
+      });
+      const maxChainRetries = 3;
+      let chainOk = false;
+      for (let attempt = 1; attempt <= maxChainRetries; attempt++) {
+        try {
+          const r = await fetch(generateUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+            body: chainBody,
+          });
+          if (r.ok) { chainOk = true; break; }
+          const t = await r.text().catch(() => '');
+          console.error(`[generate-trip-day] Empty-day chain attempt ${attempt}/${maxChainRetries} returned ${r.status}: ${t.slice(0, 200)}`);
+          if (r.status >= 400 && r.status < 500) break;
+        } catch (err) {
+          console.error(`[generate-trip-day] Empty-day chain attempt ${attempt}/${maxChainRetries} error:`, err);
+        }
+        if (attempt < maxChainRetries) await new Promise(r => setTimeout(r, 3000 * attempt));
+      }
+      if (!chainOk) {
+        const { data: cm } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+        const cmeta = (cm?.metadata as Record<string, unknown>) || {};
+        await supabase.from('trips').update({
+          metadata: { ...cmeta, chain_broken_at_day: dayNumber, chain_error: `Chain to day ${dayNumber + 1} failed after empty-day retries` },
+        }).eq('id', tripId);
+      }
+      return new Response(
+        JSON.stringify({ status: 'day_failed_continuing', dayNumber, totalDays, nextDay: dayNumber + 1, reason: 'empty_day' }),
+        { headers: jsonHeaders }
+      );
+    }
+
+    // ── LAST DAY EMPTY ─────────────────────────────────────────────────
+    // If at least one earlier day has activities → partial; else hard-fail with full refund.
+    const allEmpty = goodDayCount === 0;
+    const newStatus = allEmpty ? 'failed' : 'partial';
+
     await supabase.from('trips').update({
-      itinerary_status: existingDays.length > 0 ? 'partial' : 'failed',
+      itinerary_status: newStatus,
+      unlocked_day_count: Math.max(currentUnlocked, goodDayCount),
       metadata: {
         ...failMeta,
-        generation_error: `Day ${dayNumber} generated with 0 activities`,
+        failed_day_numbers: failedDays,
+        generation_error: `${failedDays.length} day(s) failed: ${failedDays.join(', ')}`,
         generation_failed_at: new Date().toISOString(),
         generation_failed_on_day: dayNumber,
-        generation_completed_days: existingDays.length,
+        generation_completed_days: goodDayCount,
         generation_total_days: totalDays,
         empty_day_detected: true,
       },
     }).eq('id', tripId);
 
+    // Refund: full when all empty, per-day when partial.
+    const totalCharged = creditsCharged || 0;
+    if (totalCharged > 0) {
+      try {
+        const refundAmount = allEmpty
+          ? totalCharged
+          : (() => {
+              const effectiveTotalDays = requestedDays || totalDays;
+              const creditsPerDay = Math.round(totalCharged / Math.max(1, effectiveTotalDays));
+              return creditsPerDay * failedDays.length;
+            })();
+        if (refundAmount > 0) {
+          await supabase.from('credit_purchases').insert({
+            user_id: userId, credit_type: 'refund', amount: refundAmount, remaining: refundAmount,
+            source: 'system_refund', stripe_session_id: null,
+          });
+          await supabase.from('credit_ledger').insert({
+            user_id: userId, transaction_type: 'refund', credits_delta: refundAmount, is_free_credit: false,
+            action_type: 'refund', trip_id: tripId,
+            notes: allEmpty
+              ? `Server-side refund: all ${totalDays} days empty. +${refundAmount} credits restored.`
+              : `Server-side refund: ${failedDays.length} day(s) empty. +${refundAmount} credits restored.`,
+            metadata: { reason: allEmpty ? 'server_generation_all_empty' : 'server_generation_partial_empty', failed_days: failedDays },
+          });
+          console.log(`[generate-trip-day] Empty-day refund: ${refundAmount} credits (${newStatus})`);
+        }
+      } catch (refundErr) {
+        console.error(`[generate-trip-day] Empty-day refund failed:`, refundErr);
+      }
+    }
+
     return new Response(
-      JSON.stringify({ status: 'failed', dayNumber, error: `Day ${dayNumber} generated with 0 activities` }),
+      JSON.stringify({ status: newStatus, dayNumber, failedDays, error: `Day ${dayNumber} generated with 0 activities` }),
       { headers: jsonHeaders }
     );
   }
