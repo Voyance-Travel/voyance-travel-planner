@@ -2109,18 +2109,74 @@ Don't use "luxury" or "premium" in descriptions.
 // COMBINED CONSTRAINTS BUILDER
 // =============================================================================
 
+export function buildAdventureRules(adventure: number, destination?: string): string {
+  if (!adventure || adventure < 4) return '';
+
+  const isThrillSeeker = adventure >= 7;
+  const dest = (destination || '').toLowerCase();
+
+  // City-aware adrenaline examples
+  const cityExamples: Record<string, string[]> = {
+    rome: ['Vespa or e-scooter tour through the historic center', 'e-bike along the Appian Way', 'Tiber kayak/SUP session', 'Gladiator School training (Gruppo Storico Romano)', 'go-karts at Pista La Pista', 'helicopter sightseeing over the city', 'catacombs after-hours/underground crawl'],
+    paris: ['e-bike or Vespa tour', 'Seine kayak session', 'climbing gym (Arkose / MurMur)', 'go-karts at RKC Roissy', 'helicopter tour over Île-de-France'],
+    barcelona: ['Sailing/SUP off Barceloneta', 'e-bike Montjuïc tour', 'tandem paragliding above the coast', 'Vespa city tour', 'climbing at Sharma Climbing'],
+    london: ['ThamesJet speedboat ride', 'e-bike Hyde Park & Royal Parks loop', 'Vertical Chill ice climbing', 'go-karts at Team Sport', 'helicopter London tour'],
+    tokyo: ['Akihabara go-kart street tour', 'Mt. Takao trail run/hike', 'Tokyo Bay kayak', 'B Pump bouldering gym'],
+    'new york': ['Helicopter Manhattan tour', 'Hudson kayak session', 'The Cliffs climbing gym', 'Citi Bike/electric bike tour through the boroughs'],
+    'cape town': ['Table Mountain hike & abseil', 'Shark cage diving', 'Lion\'s Head sunrise hike', 'Cape Point e-bike or motorcycle tour'],
+  };
+
+  const matchedCity = Object.keys(cityExamples).find(k => dest.includes(k));
+  const examples = matchedCity
+    ? cityExamples[matchedCity]
+    : ['guided bike or e-bike tour', 'kayak/SUP session', 'climbing gym', 'paragliding/ziplining', 'scooter or motorcycle tour', 'helicopter sightseeing', 'underground/ghost tunnel night crawl'];
+
+  return `
+=== 🧗 ADVENTURE / THRILL-SEEKER MODE (adventure trait = +${adventure}) ===
+
+This traveler explicitly slid the Adventure dial to +${adventure}. They want KINETIC, BOLD experiences — not sightseeing dressed up as adventure.
+
+${isThrillSeeker ? 'THRILL-SEEKER (+7 to +10): MINIMUM 2 kinetic/adrenaline experiences across the trip, with at least 1 in the first 3 days.' : 'ADVENTUROUS (+4 to +6): MINIMUM 1 kinetic/edge experience in the trip.'}
+
+✅ THESE COUNT as adventure:
+- Vespa / scooter / e-bike / motorcycle tours
+- Kayak, SUP, sailing, speedboat, jet boat, rafting
+- Climbing gym, bouldering, via ferrata, rappelling
+- Paragliding, ziplining, skydiving, hot-air ballooning
+- Helicopter sightseeing
+- Go-karts, racing experiences
+- Hike-and-scramble routes (e.g. Table Mountain, Pedraforca)
+- Catacombs / underground / ghost-tunnel night tours
+- Combat / movement workshops (gladiator school, MMA, parkour)
+
+❌ THESE DO NOT COUNT — never satisfy the adventure slot with these:
+- Parks, gardens, fountains, scenic walks
+- Markets, shopping, cafés, gelato stops
+- Museums, galleries, churches, archaeological sites (unless paired with a kinetic component like an underground crawl)
+- Standard guided walking tours
+- Spa/wellness/thermal baths
+
+CITY-APPROPRIATE EXAMPLES${matchedCity ? ` for ${matchedCity}` : ''}:
+${examples.map(e => `- ${e}`).join('\n')}
+
+TAGGING REQUIREMENT: Each adventure activity MUST include at least one of these tags in personalization.tags: ['kinetic', 'adrenaline', 'thrill', 'adventure', 'climbing', 'kayak', 'vespa', 'bike-tour', 'helicopter', 'paragliding', 'zipline', 'go-kart', 'speedboat'].
+`;
+}
+
 export function buildAllConstraints(
   archetype: string | undefined,
   budgetTier: string | undefined,
-  traits: { pace: number; budget: number }
+  traits: { pace: number; budget: number; adventure?: number },
+  destination?: string
 ): string {
   const sections: string[] = [];
-  
+
   sections.push(buildArchetypeConstraintsBlock(archetype));
   sections.push(buildTripWideVarietyRules(archetype));
   sections.push(buildUnscheduledTimeRules(archetype, traits.pace));
   sections.push(buildPacingRules(traits.pace));
   sections.push(buildBudgetConstraints(budgetTier, traits.budget));
+  sections.push(buildAdventureRules(traits.adventure ?? 0, destination));
   sections.push(buildNamingRules());
   
   // Add final validation block
@@ -2137,6 +2193,7 @@ Check every activity against:
 7. Is there required unscheduled time? → ADD IT
 8. Is the archetype name in the activity title? → RENAME IT
 9. Are there "luxury/premium/exclusive" words for a non-luxury traveler? → REMOVE them
+10. Adventure trait ≥ +4 — is there at least one KINETIC adventure activity (not park/fountain/market)? → If missing, ADD one.
 
 If ANY violation exists, fix it before returning.
 
