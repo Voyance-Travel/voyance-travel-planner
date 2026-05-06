@@ -430,17 +430,38 @@ export function TripHealthPanel({
                         {item.label}
                       </span>
                     </button>
-                    {!item.done && item.fixLabel && onAction && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-3 text-xs text-primary"
-                        onClick={(e) => { e.stopPropagation(); onAction(item.fixAction!, {}); }}
-                      >
-                        {item.fixLabel}
-                        <ArrowRight className="w-3 h-3 ml-1" />
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!item.done && item.fixLabel && onAction && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-3 text-xs text-primary"
+                          onClick={(e) => { e.stopPropagation(); onAction(item.fixAction!, {}); }}
+                        >
+                          {item.fixLabel}
+                          <ArrowRight className="w-3 h-3 ml-1" />
+                        </Button>
+                      )}
+                      {!item.done && item.markElsewhereField && onAction && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={(e) => { e.stopPropagation(); onAction('mark_booked_elsewhere', { field: item.markElsewhereField }); }}
+                        >
+                          Already booked
+                        </Button>
+                      )}
+                      {item.doneByFlag && item.markElsewhereField && onAction && (
+                        <button
+                          type="button"
+                          className="text-[11px] text-muted-foreground/70 hover:text-foreground italic"
+                          onClick={(e) => { e.stopPropagation(); onAction('unmark_booked_elsewhere', { field: item.markElsewhereField }); }}
+                        >
+                          Booked elsewhere · Undo
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
