@@ -81,7 +81,7 @@ const TripActivityCard: React.FC<TripActivityCardProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h4 className="font-medium text-foreground">{sanitizeActivityName(activity.name, { category: (activity as any).category, startTime: (activity as any).startTime })}</h4>
+              <h4 className="font-medium text-foreground">{sanitizeActivityName(activity.name, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}</h4>
               {(() => { const d = sanitizeActivityText(activity.description); return d ? (
                 <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
                   {d}

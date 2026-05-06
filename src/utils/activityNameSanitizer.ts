@@ -9,6 +9,11 @@ import {
   stubFallbackLabel,
   type MealType,
 } from './stubVenueDetection';
+import {
+  isClientPlaceholderWellness,
+  WELLNESS_PLACEHOLDER_FALLBACK,
+  type WellnessActivityShape,
+} from './wellnessPlaceholderDetection';
 
 // Strip AI search qualifiers from names/locations
 // e.g. "(Satellite or High-End alternative in Chiyoda/Minato)"
@@ -71,6 +76,8 @@ export interface SanitizeActivityNameOpts {
   mealType?: import('./stubVenueDetection').MealType | null;
   /** Optional start time (HH:MM) used to infer meal type when not provided */
   startTime?: string | null;
+  /** Optional full activity object — enables wellness placeholder masking */
+  activity?: WellnessActivityShape | null;
 }
 
 export function sanitizeActivityName(
@@ -187,6 +194,22 @@ export function sanitizeActivityName(
       ?? inferMealTypeFromTime(opts?.startTime ?? null);
     if (isDiningCategory || meal) {
       return stubFallbackLabel(meal);
+    }
+  }
+
+  // Wellness placeholder mask — when the activity is a spa/wellness item without
+  // a verifiable venue (no placeId, no numeric address, generic title), surface a
+  // clear "find a venue" affordance instead of a fake-sounding treatment name.
+  if (sanitized) {
+    const probe: WellnessActivityShape = opts?.activity
+      ? {
+          ...opts.activity,
+          title: sanitized,
+          category: opts.activity.category ?? opts?.category,
+        }
+      : { title: sanitized, category: opts?.category };
+    if (isClientPlaceholderWellness(probe)) {
+      return WELLNESS_PLACEHOLDER_FALLBACK;
     }
   }
 

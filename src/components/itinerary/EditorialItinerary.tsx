@@ -67,6 +67,7 @@ import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import { useActivityImageWriteback } from '@/hooks/useActivityImageWriteback';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
+import { getDisplayDayTitle } from '@/utils/dayTitleCoherence';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
 import { getAppUrl } from '@/utils/getAppUrl';
@@ -2592,7 +2593,7 @@ export function EditorialItinerary({
     if (!day) return;
     setConciergeActivity(activity);
     setConciergeDayDate(day.date || '');
-    setConciergeDayTitle(day.title || day.theme || `Day ${day.dayNumber}`);
+    setConciergeDayTitle(getDisplayDayTitle(day as any, destination) || `Day ${day.dayNumber}`);
     // Find previous/next visible activities
     const actIdx = day.activities.findIndex(a => a.id === activity.id);
     const prev = actIdx > 0 ? day.activities[actIdx - 1] : undefined;
@@ -9855,7 +9856,7 @@ function DayCard({
                 </div>
               )}
               <h3 className="font-serif text-base sm:text-xl font-medium text-foreground mb-0 sm:mb-1 truncate">
-                {day.title || day.theme || `Day ${day.dayNumber}`}
+                {getDisplayDayTitle(day as any, destination) || `Day ${day.dayNumber}`}
               </h3>
               {day.description && (
                 <p className="hidden sm:block text-sm text-muted-foreground italic line-clamp-1 sm:line-clamp-none">{day.description}</p>
@@ -11797,7 +11798,7 @@ function ActivityRow({
                   onClose={() => setShowProposeReplacement(false)}
                   tripId={tripId}
                   activityId={activity.id}
-                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime })}
+                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime, activity: activity as any })}
                   destination={destination}
                   activityForDrawer={{
                     id: activity.id,
@@ -11842,7 +11843,7 @@ function ActivityRow({
                   onClose={() => setShowProposeReplacement(false)}
                   tripId={tripId}
                   activityId={activity.id}
-                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime })}
+                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime, activity: activity as any })}
                   destination={destination}
                   activityForDrawer={{
                     id: activity.id,

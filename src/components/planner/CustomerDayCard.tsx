@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import type { DayItinerary, ItineraryActivity } from '@/types/itinerary';
 import { formatWeatherCondition } from '@/utils/textFormatting';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
+import { getDisplayDayTitle } from '@/utils/dayTitleCoherence';
 import { formatTime12h } from '@/utils/timeFormat';
 import ActivityAlternativesDrawer from './ActivityAlternativesDrawer';
 import { useVersionHistory } from '@/hooks/useVersionHistory';
@@ -141,10 +142,10 @@ export default function CustomerDayCard({
                   )}
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mt-1">
-                  {day.date ? format(new Date(day.date), 'EEEE, MMMM d') : day.theme}
+                  {day.date ? format(new Date(day.date), 'EEEE, MMMM d') : getDisplayDayTitle(day as any, destination)}
                 </h3>
                 {day.theme && day.date && (
-                  <p className="text-sm text-muted-foreground mt-0.5">{day.theme}</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">{getDisplayDayTitle(day as any, destination)}</p>
                 )}
               </div>
               {isExpanded ? (
@@ -244,7 +245,7 @@ export default function CustomerDayCard({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <p className={cn("font-medium", style.text)}>{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime })}</p>
+                                <p className={cn("font-medium", style.text)}>{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}</p>
                                 <p className="text-sm text-muted-foreground mt-0.5">
                                   {sanitizeActivityText(activity.description)}
                                 </p>
@@ -372,7 +373,7 @@ export default function CustomerDayCard({
           onClose={() => setConciergeActivity(null)}
           activity={conciergeActivity}
           dayDate={day.date}
-          dayTitle={day.theme}
+          dayTitle={getDisplayDayTitle(day as any, destination)}
           previousActivity={
             (() => {
               const idx = day.activities.findIndex(a => a.id === conciergeActivity.id);
