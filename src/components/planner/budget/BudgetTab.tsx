@@ -44,7 +44,7 @@ import { JourneyBudgetSummary } from './JourneyBudgetSummary';
 import { BudgetSetupDialog } from './BudgetSetupDialog';
 import { BudgetWarning } from './BudgetWarning';
 import { BudgetCoach, type BudgetSuggestion } from './BudgetCoach';
-import { hasSuggestableContent } from './coachUtils';
+import { hasSuggestableContent, isCoachEligible } from './coachUtils';
 import { classifyItineraryCompleteness } from '@/utils/itineraryCompleteness';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
@@ -782,7 +782,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       })()}
 
 
-      {!isManualMode && !isEmptyItineraryFailure && tripStatus !== 'failed' && hasBudget && itineraryDays && itineraryDays.length > 0 && hasSuggestableContent(itineraryDays as any) && summary && (() => {
+      {!isManualMode && hasBudget && summary && isCoachEligible({ days: itineraryDays as any, tripStatus, generationFailureReason }) && (() => {
         // Compute per-category overruns (planned - allocated, in cents) and
         // translate BudgetCategory → Coach's user-facing labels.
         const CATEGORY_LABEL_MAP: Record<BudgetCategory, string> = {
@@ -849,6 +849,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 setLastRaise(null);
               }
             } : undefined}
+            tripStatus={tripStatus}
+            generationFailureReason={generationFailureReason}
           />
         );
       })()}

@@ -3,6 +3,7 @@ import {
   isSuggestableActivity,
   hasSuggestableContent,
   isGenericCoachTitle,
+  isCoachEligible,
   type CoachActivity,
   type CoachDay,
 } from '../coachUtils';
@@ -108,5 +109,65 @@ describe('hasSuggestableContent', () => {
       },
     ];
     expect(hasSuggestableContent(days)).toBe(false);
+  });
+});
+
+describe('isCoachEligible', () => {
+  const hotel = (id = 'h') =>
+    make({ id, title: 'Four Seasons George V', category: 'hotel', cost: 1200 });
+  const dinner = (id: string, title = 'Dinner at Le Jules Verne') =>
+    make({ id, title, category: 'dining', cost: 250 });
+
+  it('hotel-only multi-day → false', () => {
+    const days: CoachDay[] = [
+      { dayNumber: 1, activities: [hotel()] },
+      { dayNumber: 2, activities: [hotel('h2')] },
+      { dayNumber: 3, activities: [hotel('h3')] },
+    ];
+    expect(isCoachEligible({ days })).toBe(false);
+  });
+
+  it('hotel + single paid dinner across 3 days → false (regression: phantom over-budget suggestions)', () => {
+    const days: CoachDay[] = [
+      { dayNumber: 1, activities: [hotel(), dinner('d1')] },
+      { dayNumber: 2, activities: [hotel('h2')] },
+      { dayNumber: 3, activities: [hotel('h3')] },
+    ];
+    expect(isCoachEligible({ days })).toBe(false);
+  });
+
+  it('hotel + 2 paid activities across 3 days → true', () => {
+    const days: CoachDay[] = [
+      { dayNumber: 1, activities: [hotel(), dinner('d1')] },
+      { dayNumber: 2, activities: [hotel('h2'), dinner('d2', 'Dinner at Septime')] },
+      { dayNumber: 3, activities: [hotel('h3')] },
+    ];
+    expect(isCoachEligible({ days })).toBe(true);
+  });
+
+  it('failed status with incomplete_itinerary → false even when activities exist', () => {
+    const days: CoachDay[] = [
+      { dayNumber: 1, activities: [hotel(), dinner('d1')] },
+      { dayNumber: 2, activities: [hotel('h2'), dinner('d2', 'Dinner at Septime')] },
+    ];
+    expect(
+      isCoachEligible({
+        days,
+        tripStatus: 'failed',
+        generationFailureReason: 'incomplete_itinerary',
+      }),
+    ).toBe(false);
+  });
+
+  it('single-day trip with 1 paid dinner → true (single-day exemption)', () => {
+    const days: CoachDay[] = [
+      { dayNumber: 1, activities: [hotel(), dinner('d1')] },
+    ];
+    expect(isCoachEligible({ days })).toBe(true);
+  });
+
+  it('null / empty days → false', () => {
+    expect(isCoachEligible({ days: null })).toBe(false);
+    expect(isCoachEligible({ days: [] })).toBe(false);
   });
 });

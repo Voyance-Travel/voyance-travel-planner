@@ -33,7 +33,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { hasSuggestableContent as hasSuggestableContentUtil } from './coachUtils';
+import { hasSuggestableContent as hasSuggestableContentUtil, isCoachEligible } from './coachUtils';
 
 // ─── Types ──────────────────────────────────────────────────────
 export interface BudgetSuggestion {
@@ -109,6 +109,10 @@ interface BudgetCoachProps {
   lastRaise?: { fromCents: number; toCents: number } | null;
   /** Revert the last raise. Receives the previous (fromCents) total. */
   onUndoRaise?: () => void;
+  /** Trip lifecycle status — used by isCoachEligible to bail on failed/incomplete generations. */
+  tripStatus?: string | null;
+  /** Generation failure reason — used by isCoachEligible to bail on incomplete itineraries. */
+  generationFailureReason?: string | null;
   className?: string;
 }
 
@@ -187,6 +191,8 @@ export function BudgetCoach({
   onEditAccommodation,
   lastRaise,
   onUndoRaise,
+  tripStatus,
+  generationFailureReason,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
@@ -374,11 +380,18 @@ export function BudgetCoach({
     async (force = false) => {
       if (!isOverBudget) return;
 
-      // ZERO-CANDIDATE GUARD: never call AI when there are no suggestable
-      // activities. This is the root cause of phantom suggestions on bare /
-      // hotel-only itineraries — without this guard, the cache or the AI
-      // fabricates restaurants from a previous generation.
-      if (suggestableCount === 0) {
+      // Belt-and-braces eligibility recheck — the upstream BudgetTab gate
+      // already filters degenerate trips, but any future caller (cache
+      // refresh, force-refetch) must obey the same single rule. This is the
+      // unified replacement for the older `suggestableCount === 0` partial
+      // guard which only covered the over-budget branch.
+      if (
+        !isCoachEligible({
+          days: itineraryDays as any,
+          tripStatus,
+          generationFailureReason,
+        })
+      ) {
         setSuggestions([]);
         setAllProtected(false);
         setError(null);
@@ -480,6 +493,8 @@ export function BudgetCoach({
       gapCents,
       suggestableCount,
       suggestableActivityIds,
+      tripStatus,
+      generationFailureReason,
     ]
   );
 
@@ -609,11 +624,17 @@ export function BudgetCoach({
     persistDismissed([]);
   }, [onProtectedCategoriesChange, persistDismissed]);
 
-  // ─── No suggestable content (hotel-only / broken generation) ──
-  // Render a single compact card instead of the full Coach shell so the
-  // user never sees over-budget messaging, overrun chips, or restructure
-  // panels for an itinerary that doesn't actually exist yet.
-  if (isOverBudget && suggestableCount === 0) {
+  // ─── Single coach-eligibility gate (hotel-only / shell / failed) ──
+  // Mirrors the upstream BudgetTab gate so neither the over-budget suggestion
+  // path nor the under-budget on-target path can leak onto a degenerate
+  // itinerary. Replaces the older `isOverBudget && suggestableCount === 0`
+  // partial guard which only covered the over-budget branch.
+  const coachEligible = isCoachEligible({
+    days: itineraryDays as any,
+    tripStatus,
+    generationFailureReason,
+  });
+  if (!coachEligible) {
     return (
       <Card className={cn('border-border', className)}>
         <CardContent className="py-4">
