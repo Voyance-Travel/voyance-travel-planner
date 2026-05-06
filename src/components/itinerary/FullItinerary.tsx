@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { formatEnumDisplay, formatWeatherCondition } from '@/utils/textFormatting';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
+import { coerceDurationString } from '@/utils/plannerUtils';
 import type { 
   DayItinerary, TripSummary, DestinationInfo, 
   FlightInfo, FlightSegment, HotelInfo, ItineraryActivity, ActivityType, WeatherCondition 
