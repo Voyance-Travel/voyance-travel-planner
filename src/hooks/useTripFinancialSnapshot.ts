@@ -207,12 +207,28 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // Authoritative paid: sum every paid trip_payments row, honoring the
     // hotel/flight inclusion toggles so the figure matches "Trip Total".
     // This makes BudgetTab "Paid so far" identical to PaymentsTab.
+    let paidFromTripPayments = 0;
     for (const p of allPayments || []) {
       if (p.status !== 'paid') continue;
       const cat = (p.item_type || '').toLowerCase();
       if (cat === 'hotel' && !includeHotel) continue;
       if ((cat === 'flight' || cat === 'flights') && !includeFlight) continue;
-      paidTotal += (p.amount_cents || 0) * (p.quantity || 1);
+      paidFromTripPayments += (p.amount_cents || 0) * (p.quantity || 1);
+    }
+    paidTotal += paidFromTripPayments;
+
+    // Reconciliation guard: BudgetTab must never under-report compared to
+    // PaymentsTab. PaymentsTab's "Paid so far" is sum(trip_payments where
+    // status='paid'); if our combined figure (which folds in the
+    // activity_costs.is_paid mirror minus dedupe) somehow comes out lower,
+    // prefer the canonical sum and warn so we can investigate.
+    if (paidFromTripPayments > paidTotal + 1) {
+      console.warn(
+        `[useTripFinancialSnapshot] paid reconciliation: trip_payments sum ` +
+        `($${(paidFromTripPayments / 100).toFixed(2)}) exceeds combined ` +
+        `($${(paidTotal / 100).toFixed(2)}); preferring canonical. tripId=${tripId}`
+      );
+      paidTotal = paidFromTripPayments;
     }
 
     // Misc reserve — the user explicitly set aside cash for tips / SIM /

@@ -1,44 +1,34 @@
-# Fix: Budget Coach disappears after "Raise budget"
+# Fix: BudgetTab "Paid so far" lags PaymentsTab by activity-level payments
 
 ## Problem
 
-When the user clicks **Raise budget to $X**, `applyRaiseBudget` persists the new total and `isOverBudget` flips to false. `BudgetCoach` then early-returns into a tiny green "On target" pill (`BudgetCoach.tsx` lines 655–667), so the swap suggestions, transit warning, gap analysis, and restructure panels all vanish with no acknowledgement that the raise was the cause and no way to undo.
+BudgetTab's "Paid so far" reads `snapshot.paidCents` from `useTripFinancialSnapshot`, which already folds `trip_payments` rows in (lines 207–216) — so the divergence shouldn't exist. In practice the L'Arpège `$500` activity payment is missing from BudgetTab while PaymentsTab shows it.
+
+Two contributors:
+
+1. **Refetch race after Mark Paid.** `PaymentsTab.handleMarkPaid` inserts into `trip_payments` then immediately dispatches `booking-changed`. The snapshot handler runs `fetchData()` once, synchronously. In some sessions the read returns before the new row is visible (the same reason `fetchPayments(delayMs)` exists in PaymentsTab), so the snapshot keeps the pre-payment `paidCents` until the next unrelated refetch.
+2. **No reconciliation guard.** The two surfaces never compare. When they disagree the user has no signal and we have no log.
 
 ## Goal
 
-After a successful raise, render a clear celebratory card that:
-
-1. Confirms the raise (old → new amount).
-2. Shows headroom remaining against the new budget.
-3. Offers an **Undo** button that reverts to the prior budget.
-4. Auto-clears after the next budget edit so it doesn't linger across unrelated changes.
+BudgetTab and PaymentsTab always agree on "Paid so far". When they don't, we self-heal and log instead of silently displaying two numbers.
 
 ## Changes
 
-### 1. `src/components/planner/budget/raiseBudgetApply.ts`
-- Return the `previousBudgetCents` in `RaiseBudgetResult` so the caller can offer undo.
-- No behavior change; pure additive field.
+### 1. `src/hooks/useTripFinancialSnapshot.ts`
+- On `booking-changed`, run `fetchData()` immediately AND schedule a second `fetchData()` after ~600 ms (mirrors PaymentsTab's `fetchPayments(delayMs)` pattern). Cancel any pending second pass on unmount.
+- Accept an optional `optimisticPaidDeltaCents` on the `booking-changed` event detail. When present, apply it immediately to `data.paidCents` so the UI updates in the same frame Mark Paid is clicked, before the DB read returns.
 
-### 2. `src/components/planner/budget/BudgetTab.tsx`
-- Track a local `lastRaise` state: `{ fromCents, toCents, at } | null`.
-- On the **Raise budget** click handler, after `applyRaiseBudget` resolves with `ok: true`, set `lastRaise`.
-- Pass `lastRaise` and an `onUndoRaise` handler down to `<BudgetCoach />` as new props. `onUndoRaise` calls `updateSettings({ budget_total_cents: lastRaise.fromCents })`, dispatches `booking-changed`, clears `lastRaise`, and toasts "Budget reverted to $X".
-- Clear `lastRaise` whenever `settings.budget_total_cents` changes to a value other than `lastRaise.toCents` (any subsequent edit invalidates the undo affordance).
+### 2. `src/components/itinerary/PaymentsTab.tsx`
+- In `handleMarkPaid` (and the bulk-pay path that dispatches `booking-changed`) include the just-paid amount in the event detail:
+  `window.dispatchEvent(new CustomEvent('booking-changed', { detail: { optimisticPaidDeltaCents: amount } }))`.
+- Same for `handleUnmarkPaid` with a negative delta.
 
-### 3. `src/components/planner/budget/BudgetCoach.tsx`
-- Accept new optional props: `lastRaise?: { fromCents: number; toCents: number }` and `onUndoRaise?: () => void`.
-- In the `!isOverBudget` branch (currently lines 626–667), when `lastRaise` is present **and** `budgetTargetCents === lastRaise.toCents`, render a new celebratory card instead of the existing on-target / close-to-budget cards. Card content:
-  - Header: ✅ "Budget raised — you're on target"
-  - Body: "Raised from `formatCurrency(fromCents)` to `formatCurrency(toCents)`. You now have `formatCurrency(remainingCents)` (`headroomPct%`) of headroom."
-  - Buttons: **Undo raise** (calls `onUndoRaise`), **Edit budget…** (existing `onEditBudget`).
-- The existing close-to-budget and plain on-target cards remain the fallback when `lastRaise` is absent.
-- No changes to the over-budget rendering paths.
+### 3. Reconciliation log (defensive)
+- In `useTripFinancialSnapshot.fetchData`, after computing `paidTotal`, compute `paidFromTripPaymentsOnly` (sum of `status='paid'` rows respecting include toggles, excluding the activity_costs.is_paid mirror entirely). If `paidFromTripPaymentsOnly > paidTotal` by more than a cent, prefer the higher value and `console.warn` with `tripId`. This guarantees BudgetTab can never under-report compared to the canonical PaymentsTab source.
 
-### 4. Tests
-- Extend `src/components/planner/budget/__tests__/raiseBudgetApply.test.ts` to assert `previousBudgetCents` is returned on success.
-- Add a small render test (or extend `budgetRaiseCta.integration.test.tsx`) confirming that after a raise the Coach shows the celebratory card with an Undo button, and clicking Undo invokes `updateSettings` with the original cents.
+### 4. Test
+- Extend `src/hooks/__tests__/useTripFinancialSnapshot*.test.ts` (create if absent) with a fixture: 1 paid hotel manual payment + 1 paid activity payment for an activity_id no longer in `itinerary_data.days`. Assert `paidCents` equals the sum of both.
 
 ## Out of scope
-
-- No change to the over-budget Coach UI, swap logic, edge functions, or the empty-itinerary gating from prior fixes.
-- No persistence of `lastRaise` across reloads — it's an intentional in-session affordance.
+- No schema changes; no edits to PaymentsTab's totals logic; no UI changes to the "Paid so far" line itself.
