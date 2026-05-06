@@ -12,6 +12,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { coerceDurationString } from '@/utils/plannerUtils';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
