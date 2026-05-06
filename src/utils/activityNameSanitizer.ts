@@ -2,6 +2,13 @@
  * Sanitizes activity names by stripping internal system prefixes
  * that should never be shown to users.
  */
+import {
+  isAIStubVenueName,
+  inferMealTypeFromTitle,
+  inferMealTypeFromTime,
+  stubFallbackLabel,
+  type MealType,
+} from './stubVenueDetection';
 
 // Strip AI search qualifiers from names/locations
 // e.g. "(Satellite or High-End alternative in Chiyoda/Minato)"
@@ -57,7 +64,19 @@ const SYSTEM_PREFIXES = [
  * @param name - The raw activity name that may contain system prefixes
  * @returns Clean activity name suitable for display
  */
-export function sanitizeActivityName(name: string | undefined | null): string {
+export interface SanitizeActivityNameOpts {
+  /** Activity category — when dining/food/restaurant, AI stub names are masked */
+  category?: string;
+  /** Optional explicit meal type to label the fallback */
+  mealType?: import('./stubVenueDetection').MealType | null;
+  /** Optional start time (HH:MM) used to infer meal type when not provided */
+  startTime?: string | null;
+}
+
+export function sanitizeActivityName(
+  name: string | undefined | null,
+  opts?: SanitizeActivityNameOpts,
+): string {
   if (!name) return 'Activity';
   
   // Strip stray CJK characters injected by AI models (e.g. 旋)
@@ -146,6 +165,18 @@ export function sanitizeActivityName(name: string | undefined | null): string {
     const firstGeoIdx = geoWords.findIndex(w => GEO_SYNONYMS.has(w.toLowerCase()));
     if (firstGeoIdx > 0) {
       sanitized = geoWords.slice(0, firstGeoIdx).join(' ');
+    }
+  }
+
+  // Stub-venue mask for dining slots — replaces "Table du Quartier" / "Café Matinal"
+  // family of AI inventions with a clear "find a local spot" affordance.
+  if (sanitized && opts?.category) {
+    const cat = opts.category.toLowerCase();
+    const isDining = cat.includes('dining') || cat.includes('restaurant') || cat.includes('food') || cat.includes('meal');
+    if (isDining && isAIStubVenueName(sanitized)) {
+      const meal: MealType | null =
+        opts.mealType ?? inferMealTypeFromTitle(sanitized) ?? inferMealTypeFromTime(opts.startTime ?? null);
+      return stubFallbackLabel(meal);
     }
   }
 

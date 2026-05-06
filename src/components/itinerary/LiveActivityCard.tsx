@@ -169,7 +169,7 @@ export function LiveActivityCard({
               'font-semibold text-foreground',
               status === 'skipped' && 'line-through text-muted-foreground'
             )}>
-              {sanitizeActivityName(activity.name)}
+              {sanitizeActivityName(activity.name, { category: (activity as any).category, startTime: (activity as any).startTime })}
             </h4>
             
             {activity.description?.trim() && (

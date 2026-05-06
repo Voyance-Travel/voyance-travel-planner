@@ -10718,7 +10718,10 @@ function ActivityRow({
   const time = activity.startTime || activity.time;
   
   // Normalize title: use title, fallback to name (backend may return either), and strip system prefixes
-  const activityTitle = sanitizeActivityName(activity.title || (activity as { name?: string }).name);
+  const activityTitle = sanitizeActivityName(activity.title || (activity as { name?: string }).name, {
+    category: (activity as { category?: string }).category,
+    startTime: activity.startTime,
+  });
   
   // Use placeholder for thumbnail when no photo exists (skip for downtime/transport)
   const titleLower = (activityTitle || '').toLowerCase();
@@ -11794,7 +11797,7 @@ function ActivityRow({
                   onClose={() => setShowProposeReplacement(false)}
                   tripId={tripId}
                   activityId={activity.id}
-                  activityTitle={sanitizeActivityName(activity.title || '')}
+                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime })}
                   destination={destination}
                   activityForDrawer={{
                     id: activity.id,
@@ -11839,7 +11842,7 @@ function ActivityRow({
                   onClose={() => setShowProposeReplacement(false)}
                   tripId={tripId}
                   activityId={activity.id}
-                  activityTitle={sanitizeActivityName(activity.title || '')}
+                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime })}
                   destination={destination}
                   activityForDrawer={{
                     id: activity.id,

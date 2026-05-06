@@ -37,7 +37,7 @@ export const MyLockedActivities: React.FC<MyLockedActivitiesProps> = ({
             className="flex items-center justify-between p-2.5 bg-muted/50 rounded-md"
           >
             <div>
-              <p className="text-sm font-medium text-foreground">{sanitizeActivityName(activity.name)}</p>
+              <p className="text-sm font-medium text-foreground">{sanitizeActivityName(activity.name, { category: (activity as any).category, startTime: (activity as any).startTime })}</p>
               <p className="text-xs text-muted-foreground">Day {activity.day}</p>
             </div>
             {onUnlock && (

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { fetchTravelerDNA, buildCompactDNASummary, type TravelerDNA } from "../_shared/traveler-dna.ts";
+import { matchesAIStubVenue } from "../generate-itinerary/fix-placeholders.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -340,7 +341,19 @@ Be specific with real place names when possible.`;
   const parsed = JSON.parse(toolCall.function.arguments);
   const activities = parsed.activities || [];
 
-  return activities.map((act: Omit<AlternativeActivity, 'id'>, idx: number) => ({
+  // Filter out AI stub venue names ("Table du Quartier", "Café Matinal", etc.)
+  // — never suggest these to users per the Meal Rules core memory.
+  const filtered = activities.filter((act: Omit<AlternativeActivity, 'id'>) => {
+    const cat = (act.category || '').toLowerCase();
+    if (!(cat.includes('dining') || cat.includes('food') || cat.includes('restaurant'))) return true;
+    if (matchesAIStubVenue(act.name || '') || matchesAIStubVenue(act.location || '')) {
+      console.warn('[alt] dropped AI stub venue suggestion:', act.name);
+      return false;
+    }
+    return true;
+  });
+
+  return filtered.map((act: Omit<AlternativeActivity, 'id'>, idx: number) => ({
     ...act,
     id: `ai-alt-${Date.now()}-${idx}`,
   }));
