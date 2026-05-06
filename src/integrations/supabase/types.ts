@@ -7613,6 +7613,8 @@ export type Database = {
       trip_payments: {
         Row: {
           amount_cents: number
+          archived_at: string | null
+          archived_reason: string | null
           assigned_member_id: string | null
           created_at: string
           currency: string
@@ -7634,6 +7636,8 @@ export type Database = {
         }
         Insert: {
           amount_cents: number
+          archived_at?: string | null
+          archived_reason?: string | null
           assigned_member_id?: string | null
           created_at?: string
           currency?: string
@@ -7655,6 +7659,8 @@ export type Database = {
         }
         Update: {
           amount_cents?: number
+          archived_at?: string | null
+          archived_reason?: string | null
           assigned_member_id?: string | null
           created_at?: string
           currency?: string
@@ -9629,6 +9635,10 @@ export type Database = {
     }
     Functions: {
       accept_trip_invite: { Args: { p_token: string }; Returns: Json }
+      archive_orphan_trip_payments: {
+        Args: { p_trip_id: string }
+        Returns: Json
+      }
       award_founding_member: {
         Args: { p_stripe_session_id?: string; p_user_id: string }
         Returns: Json
