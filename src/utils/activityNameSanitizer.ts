@@ -173,15 +173,10 @@ export function sanitizeActivityName(
   if (sanitized && opts?.category) {
     const cat = opts.category.toLowerCase();
     const isDining = cat.includes('dining') || cat.includes('restaurant') || cat.includes('food') || cat.includes('meal');
-    if (isDining) {
-      // Lazy import to avoid a circular dep at module init time
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { isAIStubVenueName, inferMealTypeFromTitle, inferMealTypeFromTime, stubFallbackLabel } =
-        require('./stubVenueDetection') as typeof import('./stubVenueDetection');
-      if (isAIStubVenueName(sanitized)) {
-        const meal = opts.mealType ?? inferMealTypeFromTitle(sanitized) ?? inferMealTypeFromTime(opts.startTime ?? null);
-        return stubFallbackLabel(meal);
-      }
+    if (isDining && isAIStubVenueName(sanitized)) {
+      const meal: MealType | null =
+        opts.mealType ?? inferMealTypeFromTitle(sanitized) ?? inferMealTypeFromTime(opts.startTime ?? null);
+      return stubFallbackLabel(meal);
     }
   }
 
