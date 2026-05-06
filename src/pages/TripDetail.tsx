@@ -118,6 +118,7 @@ export default function TripDetail() {
   const [showGenerator, setShowGenerator] = useState(false);
   const [navigateToSection, setNavigateToSection] = useState<string | null>(null);
   const [refreshDayRequest, setRefreshDayRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
+  const [fixTimingRequest, setFixTimingRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
   const [autoStartGeneration, setAutoStartGeneration] = useState(false);
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
