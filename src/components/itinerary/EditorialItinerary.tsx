@@ -173,6 +173,7 @@ import SortableFlightLegCards from './SortableFlightLegCards';
 import { resolveDropTarget } from './budgetDropResolver';
 import { resolveLiveActivity } from './activityRemoveResolver';
 import { mergeNeedToKnowInfo } from './needToKnow';
+import { classifyItineraryCompleteness } from '@/utils/itineraryCompleteness';
 
 // =============================================================================
 // BOARDING PASS VIEW BUTTON (inline helper)
@@ -4098,7 +4099,47 @@ export function EditorialItinerary({
       queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
       queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
-      toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
+
+      // ── COMPLETENESS GATE ─────────────────────────────────────────
+      // The day-by-day loop can finish "successfully" yet produce a
+      // hotel-only / shell-day output (e.g. AI rate-limited mid-day).
+      // Mirror the backend gate so the trip is marked failed and the
+      // recovery banner replaces the misleading success toast.
+      const completeness = classifyItineraryCompleteness(generatedDays as any);
+      if (completeness.status !== 'ok') {
+        const failureReason =
+          completeness.status === 'empty' ? 'empty_itinerary' : 'incomplete_itinerary';
+        try {
+          const { data: tripRow } = await supabase
+            .from('trips')
+            .select('metadata')
+            .eq('id', tripId)
+            .single();
+          const existingMeta = (tripRow?.metadata as Record<string, unknown>) || {};
+          await supabase
+            .from('trips')
+            .update({
+              itinerary_status: 'failed',
+              metadata: {
+                ...existingMeta,
+                generation_failure_reason: failureReason,
+                empty_itinerary_detected_at: new Date().toISOString(),
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', tripId);
+        } catch (markErr) {
+          console.warn('[EditorialItinerary] Failed to persist regen failure status:', markErr);
+        }
+        queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+        toast.error(
+          completeness.status === 'empty'
+            ? "Regeneration didn't produce any activities. Tap Regenerate to try again."
+            : 'Regeneration finished without a full plan. Tap Regenerate to try again.',
+        );
+      } else {
+        toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
+      }
 
       // Note: we used to call repairTripCosts here on every regeneration.
       // That silently raised prices (Michelin/ticketed/reference floors) and
@@ -5516,6 +5557,40 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
+             {/* Failed/empty itinerary recovery banner — Itinerary tab is the
+                 primary surface so users immediately see generation failed and
+                 can retry without digging into Budget. */}
+             {!isCleanPreview && itineraryStatus === 'failed' && (
+               generationFailureReason === 'empty_itinerary' ||
+               generationFailureReason === 'incomplete_itinerary'
+             ) && (
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30">
+                <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-destructive" />
+                <div className="flex-1 space-y-2">
+                  <p className="font-semibold text-foreground">
+                    {generationFailureReason === 'incomplete_itinerary'
+                      ? 'Your itinerary is missing activities'
+                      : "Your itinerary didn't generate properly"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {generationFailureReason === 'incomplete_itinerary'
+                      ? 'Generation finished without a full plan of restaurants, activities, and transit. Tap Regenerate to try again — your flights, hotel, and trip settings are preserved.'
+                      : 'Generation finished without any restaurants, activities, or transit. Tap Regenerate to try again — your flights, hotel, and trip settings are preserved.'}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={handleRegenerateItinerary}
+                    disabled={isRegenerating}
+                    className="mt-1 gap-1.5"
+                  >
+                    <RefreshCw className={cn('h-4 w-4', isRegenerating && 'animate-spin')} />
+                    {isRegenerating ? 'Regenerating…' : 'Regenerate itinerary'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
              {/* Smart Finish Banner — DNA gap analysis for manual trips — hidden in clean preview */}
              {!isCleanPreview && isManualMode && !isPastTrip && (
               <SmartFinishBanner
