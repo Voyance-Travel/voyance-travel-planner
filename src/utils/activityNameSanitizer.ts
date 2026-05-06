@@ -74,7 +74,7 @@ export function sanitizeActivityName(name: string | undefined | null): string {
   // Repair orphaned "City" gap in titles (e.g. "Explore the of Paris Museum")
   sanitized = sanitized.replace(/\bthe\s+of\s+(?=[A-Z])/g, 'the City of ');
   sanitized = sanitized.replace(/,\s*the\s+of\b/gi, ', the City of');
-  sanitized = sanitized.replace(/\bthe'\s?s\b/gi, "the city's");
+  sanitized = sanitized.replace(/\bthe['’]\s?s\b/gi, "the city's");
   
   // Strip AI search qualifiers like "(or high-end alternative)"
   sanitized = sanitized.replace(AI_QUALIFIER_RE, '').trim();
