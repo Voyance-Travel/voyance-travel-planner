@@ -330,6 +330,30 @@ export async function updateTripBudgetSettings(
   if (settings.coach_protected_categories !== undefined) updateData.coach_protected_categories = settings.coach_protected_categories;
   if ((settings as any).budget_individual_cents !== undefined) updateData.budget_individual_cents = (settings as any).budget_individual_cents;
 
+  // Seed-on-first-write: if the budget total is being set and the trip has no
+  // recorded "original" baseline yet, capture the value now. We never overwrite
+  // it on later writes — the banner uses this to show the user when their live
+  // budget has drifted from their original intent.
+  if (settings.budget_total_cents !== undefined && settings.budget_total_cents !== null) {
+    const { data: existing } = await supabase
+      .from('trips')
+      .select('budget_allocations')
+      .eq('id', tripId)
+      .single();
+    const existingAlloc = (existing?.budget_allocations as Record<string, unknown> | null) || null;
+    const hasOriginal = existingAlloc && typeof existingAlloc.original_total_cents === 'number';
+    if (!hasOriginal) {
+      // Merge with whatever allocations the caller provided (or existing) so we
+      // don't blow away other percent fields in the same write.
+      const baseAlloc = (settings.budget_allocations as unknown as Record<string, unknown>) || existingAlloc || {};
+      updateData.budget_allocations = {
+        ...baseAlloc,
+        original_total_cents: settings.budget_total_cents,
+        original_set_at: new Date().toISOString(),
+      };
+    }
+  }
+
   const { error } = await supabase
     .from('trips')
     .update(updateData)
