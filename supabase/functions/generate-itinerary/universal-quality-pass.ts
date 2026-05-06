@@ -29,6 +29,7 @@ import {
 } from './sanitization.ts';
 import { normalizeVenueName, venueNamesMatch } from './generation-utils.ts';
 import { getDiningConfig } from './dining-config.ts';
+import { normalizeActivityDuration } from './_shared/duration-format.ts';
 
 // =============================================================================
 // OPTIONS INTERFACE
