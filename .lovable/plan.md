@@ -1,34 +1,32 @@
-# Fix: Category breakdowns show $0 with no warning on empty itinerary
+# Fix: Spending Money reserve inflates trip total on empty itinerary
 
 ## Problem
 
-`BudgetTab`'s "Budget by Category" card is rendered unconditionally. When the itinerary has no meaningful activities (empty or hotel-only), every discretionary row (Food / Activities / Transit) shows `$0 / $allocated` with empty bars — visually indistinguishable from a healthy, untouched budget.
+`useTripFinancialSnapshot` adds the unspent misc-reserve into `tripTotalCents` (lines 234–250) so the headline budget never shows phantom headroom equal to the slider. This is correct on a normal trip, but on an **empty itinerary** (hotel-only, no meaningful activities) the result is a Trip Expenses number that exceeds what the itinerary actually contains:
 
-The existing empty-itinerary banner (lines 567–588) only fires when `tripStatus === 'failed'` AND `generationFailureReason` is `empty_itinerary` / `incomplete_itinerary`. A trip whose status was never marked failed (e.g. saved mid-flow, manual paste with no activities, generator that completed without flagging) falls through and renders the misleading bars.
+- Itinerary: hotel $2,400
+- Misc reserve: $270 (slider %)
+- Snapshot reports: **$2,670** ← off by the reserve, inexplicable to the user
+
+There is no real spending to back the $270 — the reserve is a planning placeholder, and BudgetTab already shows the empty-state breakdown for the same scenario. The total card is the only place still inflating the number.
 
 ## Goal
 
-When the itinerary has no meaningful (non-hotel/non-logistics) activities, the Category Breakdown must say so explicitly instead of rendering deceptive empty progress bars — regardless of `tripStatus`.
+Trip Expenses must equal what's actually in the itinerary (committed/logged costs) when the itinerary has no meaningful activities. The misc reserve only contributes once the trip has real content.
 
 ## Changes
 
-### 1. `src/components/planner/budget/BudgetTab.tsx`
-- Import `classifyItineraryCompleteness` from `@/utils/itineraryCompleteness`.
-- Compute `const completeness = classifyItineraryCompleteness(itineraryDays);` near the existing `isEmptyItineraryFailure` block (~line 553).
-- Define `const hasNoMeaningfulActivities = completeness.status === 'empty' || completeness.status === 'incomplete';` — covers the user's case even when status isn't `'failed'`.
-- In the Category Breakdown `<Card>` (line 977+):
-  - When `hasNoMeaningfulActivities && !isEmptyItineraryFailure` (the failure banner already covers the failed case), **replace the discretionary rows** with an inline empty-state block:
-    > "No spending to track yet — your itinerary doesn't include restaurants, activities, or transit yet. [Regenerate / Add activities] to populate this breakdown."
-  - Keep the **Fixed Costs** rows (hotel/flight) visible since those are real costs even on an empty itinerary.
-  - The empty-state CTA reuses `onRegenerate` if available; otherwise omit the button.
+### `src/hooks/useTripFinancialSnapshot.ts`
+- Reuse the existing `liveActivityIds` walk (lines 96–103). Track `meaningfulActivityCount` while iterating `days[].activities[]`, applying the same exclusions used by `classifyItineraryCompleteness`:
+  - skip categories: `hotel`, `flight`, `accommodation`, `lodging`, `stay`, `check-in`, `check-out`, `bag-drop`, `departure`, `arrival`
+  - skip titles matching `/check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|hotel\s+check(?:in|out)|airport\s+transfer|departure/i`
+- Gate the reserve contribution: only add `reserve.contributionToTotalCents` when `meaningfulActivityCount >= 1`. Otherwise add 0.
+- Comment the gate so future readers understand the rationale (mirrors the BudgetTab empty-state treatment).
 
-### 2. Discretionary-only guard
-- Inside the `discretionaryRows.map(...)` loop, short-circuit it when `hasNoMeaningfulActivities` so we never render `$0 / $X` bars even briefly.
-
-### 3. No backend / data changes
-- We do not change `allocations`, `useTripFinancialSnapshot`, or any cost computation. Just gating the UI to surface reality.
+### Why not import `classifyItineraryCompleteness` directly?
+The snapshot already walks `days[].activities[]` once for `liveActivityIds`. Folding the meaningful-count check into the same loop avoids a second pass and keeps the dependency surface unchanged. We mirror the same exclusion set inline (small and stable).
 
 ## Out of scope
-- Auto-marking trips as `failed` on the backend (separate concern).
-- Changing the empty-state copy in the existing failure banner.
-- Touching the BudgetSummaryPanel header card.
+- No changes to `computeMiscReserve` (its return is still correct; we just don't always add it).
+- No changes to BudgetTab — it already shows the empty-state breakdown.
+- No changes to `paidTotal`, fixed costs, or manual-payment handling.
