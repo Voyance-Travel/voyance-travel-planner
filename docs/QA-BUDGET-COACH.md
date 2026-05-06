@@ -21,3 +21,19 @@ For human verification of the full chain (DB write, Payments tab, header total):
 5. Repeat for a **Drop** suggestion — verify the activity is removed from both Itinerary and Payments, and the over-budget figure improves.
 
 Rollback path: any change can be undone with the trip's regenerate / revert flow; activity_costs cleanup runs during regen.
+
+## Raise budget CTA (BudgetTab inline)
+
+Trigger: open a trip whose `activity_costs` total exceeds `budget_total_cents` so the red over-budget banner renders in the Budget tab.
+
+1. Click **Raise budget to $X** in the banner.
+2. Verify a "Budget raised to $X" success toast appears.
+3. Verify the budget figure in the header / summary updates to $X.
+4. Verify the over-budget banner disappears (or overage shrinks if still under target).
+5. Verify percentages on each allocation row recalculate.
+6. Hard-refresh the page — new budget total persists.
+7. Switch to the Payments tab — totals reflect the raised budget.
+
+Edge cases:
+- Click the CTA when current === suggested: nothing should happen (button is hidden, but the helper guards anyway).
+- Network failure during update: error toast "Failed to raise budget"; budget figure does NOT change.
