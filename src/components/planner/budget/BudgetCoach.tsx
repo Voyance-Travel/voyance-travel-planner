@@ -105,6 +105,10 @@ interface BudgetCoachProps {
   flightCents?: number;
   /** Open the Flight & Hotel editor — surfaced when hotel/flights dominate the overrun. */
   onEditAccommodation?: () => void;
+  /** Most recent in-session "Raise budget" action — when present, the on-target card becomes a celebratory raise card with Undo. */
+  lastRaise?: { fromCents: number; toCents: number } | null;
+  /** Revert the last raise. Receives the previous (fromCents) total. */
+  onUndoRaise?: () => void;
   className?: string;
 }
 
@@ -181,6 +185,8 @@ export function BudgetCoach({
   hotelCents = 0,
   flightCents = 0,
   onEditAccommodation,
+  lastRaise,
+  onUndoRaise,
   className,
 }: BudgetCoachProps) {
   const [suggestions, setSuggestions] = useState<BudgetSuggestion[]>([]);
