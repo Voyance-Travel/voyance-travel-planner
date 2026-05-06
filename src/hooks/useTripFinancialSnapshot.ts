@@ -195,42 +195,36 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       paidActivityIds.add(stripDaySuffix(p.item_id));
     }
 
+    // Canonical resolver: shared with usePayableItems so the row sum and
+    // the header total apply identical orphan-rescue + $0-JSON-rescue rules.
+    const canonical = resolveCanonicalCostRows({
+      costs: (costs || []) as any,
+      liveActivities,
+      includeHotel,
+      includeFlight,
+    });
+    totalCents = canonical.totalCents;
+    committedHotelCents = canonical.hotelCents;
+    committedFlightCents = canonical.flightCents;
+    loggedMiscCents = canonical.loggedMiscCents;
+
+    // Day-0 canonical hotel/flight (used by manual-override delta below)
     for (const row of costs || []) {
-      const isLogisticsRow =
-        row.source === 'logistics-sync' ||
-        row.day_number == null ||
-        row.day_number === 0;
-      if (
-        !isLogisticsRow &&
-        row.activity_id &&
-        !liveActivityIds.has(String(row.activity_id))
-      ) {
-        continue;
-      }
-
-      const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
-      const rowCents = Math.round(rowTotal * 100);
       const cat = (row.category || '').toLowerCase();
-
+      const rowCents = Math.round(((row.cost_per_person_usd || 0) * (row.num_travelers || 1)) * 100);
       if (row.day_number === 0 && cat === 'hotel') canonicalHotelCents += rowCents;
       if (row.day_number === 0 && cat === 'flight') canonicalFlightCents += rowCents;
-      if (cat === 'hotel') committedHotelCents += rowCents;
-      else if (cat === 'flight') committedFlightCents += rowCents;
-      else if (cat === 'misc') loggedMiscCents += rowCents;
+    }
 
+    // is_paid mirror — count rows whose activity is still live and not
+    // already covered by a trip_payments paid row.
+    for (const row of costs || []) {
+      if (!row.is_paid) continue;
       if (!shouldCountRow(row, includeHotel, includeFlight)) continue;
-
-      totalCents += rowCents;
-
-      // Only count is_paid here if no trip_payments paid row covers this
-      // activity — trip_payments is authoritative and counted below.
-      if (
-        row.is_paid &&
-        !(row.activity_id && paidActivityIds.has(stripDaySuffix(String(row.activity_id))))
-      ) {
-        const paidUsd = row.paid_amount_usd != null ? row.paid_amount_usd : rowTotal;
-        paidTotal += Math.round(paidUsd * 100);
-      }
+      if (row.activity_id && paidActivityIds.has(stripDaySuffix(String(row.activity_id)))) continue;
+      const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
+      const paidUsd = row.paid_amount_usd != null ? row.paid_amount_usd : rowTotal;
+      paidTotal += Math.round(paidUsd * 100);
     }
 
     // Manual payment delta — override-aware for hotel/flight, additive for others.
