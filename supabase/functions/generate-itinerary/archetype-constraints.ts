@@ -2286,6 +2286,7 @@ Check every activity against:
 8. Is the archetype name in the activity title? → RENAME IT
 9. Are there "luxury/premium/exclusive" words for a non-luxury traveler? → REMOVE them
 10. Adventure trait ≥ +4 — is there at least one KINETIC adventure activity (not park/fountain/market)? → If missing, ADD one.
+11. Authenticity trait ≥ +3 — does this day include a real neighborhood/family-run venue, AND stay under the landmark cap (≤1 marquee landmark/day at +3-5, ≤1 marquee landmark trip-wide at +6+)? → If not, swap a tourist beat for a local one.
 
 If ANY violation exists, fix it before returning.
 
