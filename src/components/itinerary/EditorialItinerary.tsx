@@ -2425,7 +2425,7 @@ export function EditorialItinerary({
       return;
     }
     setSelectedDayIndex(idx);
-    setActiveTab('details');
+    setActiveTab('itinerary');
     handleRefreshDay(idx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshDayRequest?.nonce]);
@@ -2456,14 +2456,15 @@ export function EditorialItinerary({
       } else if (result.reason === 'day_overflow') {
         toast.warning(`Day ${day.dayNumber} is too packed to auto-space — opening review.`);
         setSelectedDayIndex(idx);
-        setActiveTab('details');
+        setActiveTab('itinerary');
         handleRefreshDay(idx);
       } else if (result.reason === 'no_changes') {
-        toast.info(`Day ${day.dayNumber}: no timing changes needed.`);
+        toast.info(`Day ${day.dayNumber} timing already looks clean — nothing to fix.`);
+        setTimeout(() => { handleRefreshDay(idx); }, 50);
       } else if (result.reason === 'no_timed_activities') {
         toast.info(`Day ${day.dayNumber} has no timed activities to auto-space — opening review.`);
         setSelectedDayIndex(idx);
-        setActiveTab('details');
+        setActiveTab('itinerary');
         handleRefreshDay(idx);
       } else {
         toast.error(`Could not fix Day ${day.dayNumber} timing.`);
