@@ -1505,6 +1505,11 @@ async function _handleGenerateTripDayInner(
       .trim();
   }
 
+  // === TITLE COHERENCE: Ensure title reflects actual activities ===
+  if (dayResult) {
+    enforceDayTitleCoherence(dayResult, { city: destination || '' });
+  }
+
   // === POST-REPAIR: Collapse consecutive transport cards (safety net) ===
   if (dayResult?.activities?.length >= 2) {
     const transportRe = /^travel\s+to\b|^transit\s+to\b|^transfer\s+to\b|^drive\s+to\b|^ride\s+to\b/i;
