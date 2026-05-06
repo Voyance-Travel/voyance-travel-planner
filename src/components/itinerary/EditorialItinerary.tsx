@@ -3670,7 +3670,7 @@ export function EditorialItinerary({
       title: activity.title || 'Activity',
       description: activity.description || '',
       time,
-      duration: activity.duration || '2 hours',
+      duration: coerceDurationString(activity.duration, (activity as any).durationMinutes) || '2 hours',
       type,
       cost,
       location: { name: locName, address: locAddress },
