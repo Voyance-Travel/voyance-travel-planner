@@ -779,8 +779,10 @@ export async function generateSingleDayWithRetry(
         context.budgetTier,
         {
           pace: context.travelerDNA?.traits?.pace || 0,
-          budget: context.travelerDNA?.traits?.budget || 0
-        }
+          budget: context.travelerDNA?.traits?.budget || 0,
+          adventure: context.travelerDNA?.traits?.adventure || 0
+        },
+        context.destination
       );
       
       // Get archetype day structure for activity limits
