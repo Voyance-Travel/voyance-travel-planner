@@ -24,6 +24,7 @@ import { shouldCountRow } from '@/services/tripBudgetService';
 export interface DayBreakdownRow {
   id: string;
   activityId: string | null;
+  dayNumber: number;
   category: string | null;
   costPerPersonUsd: number;
   numTravelers: number;
