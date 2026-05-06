@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Dna, Sparkles, Sliders, RefreshCw, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import useEmblaCarousel from 'embla-carousel-react';
 import MainLayout from '@/components/layout/MainLayout';
@@ -11,6 +11,7 @@ import { ROUTES } from '@/config/routes';
 import { ARCHETYPE_NARRATIVES, CATEGORY_DESCRIPTIONS, type ArchetypeNarrative } from '@/data/archetypeNarratives';
 import { ARCHETYPE_DETAILS, type ArchetypeDetail } from '@/data/archetypeDetailContent';
 import ArchetypeDetailSheet from '@/components/archetypes/ArchetypeDetailSheet';
+import { archetypeIdToSlug, slugToArchetypeId } from '@/utils/archetypeSlug';
 import React from 'react';
 
 /**
@@ -523,7 +524,7 @@ export default function Archetypes() {
       <ArchetypeDetailSheet
         archetype={detailArchetype}
         open={detailOpen}
-        onOpenChange={setDetailOpen}
+        onOpenChange={handleSheetOpenChange}
       />
     </MainLayout>
   );
