@@ -2474,41 +2474,90 @@ export function EditorialItinerary({
       return;
     }
     (async () => {
-      const { fixDayTiming } = await import('@/utils/itinerary/fixDayTiming');
       const day = days[idx];
-      const result = fixDayTiming(day.activities as any[]);
-      if (result.success) {
-        setDays(prev => prev.map((d, i) => i === idx ? { ...d, activities: result.activities as any } : d));
-        setHasChanges(true);
-        setSelectedDayIndex(idx);
-        setActiveTab('itinerary');
-        toast.success(
-          `Day ${day.dayNumber} timing fixed — resolved ${result.resolvedCount} conflict${result.resolvedCount === 1 ? '' : 's'}.`
-        );
-        // Scroll the day into view so the user sees the start/end times shift.
-        requestAnimationFrame(() => {
-          const el = document.getElementById(`day-${day.dayNumber}`);
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setSelectedDayIndex(idx);
+      setActiveTab('itinerary');
+
+      // Use the server validator as the single source of truth — it knows
+      // about transit-aware buffers, operating hours, and sequence rules.
+      // We only auto-apply *time-only* patches so the user sees nothing they
+      // didn't ask for; closed-venue swaps remain visible in the diff panel.
+      setRefreshingDayNumber(day.dayNumber);
+      let firstResult: any = null;
+      try {
+        const activities = day.activities.map((a: any) => {
+          const start = a.startTime || a.time || a.start_time;
+          const dur = a.durationMinutes || a.duration_minutes || a.duration;
+          let end = a.endTime || a.end_time;
+          if (!end && start && typeof dur === 'number' && dur > 0) {
+            const m = /^(\d{1,2}):(\d{2})/.exec(String(start));
+            if (m) {
+              const tot = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + dur;
+              end = `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+            }
+          }
+          return {
+            id: a.id, title: a.title || '', category: a.category,
+            startTime: start, endTime: end, location: a.location,
+            operatingHours: a.operatingHours,
+            durationMinutes: typeof dur === 'number' ? dur : a.durationMinutes,
+            cost: a.cost,
+          };
         });
-        // Re-run refresh validation so the Trip Health panel updates to "no issues"
-        // (otherwise the warning lingers even after a successful fix).
-        setTimeout(() => { handleRefreshDay(idx); }, 50);
-      } else if (result.reason === 'day_overflow') {
-        toast.warning(`Day ${day.dayNumber} is too packed to auto-space — opening review.`);
-        setSelectedDayIndex(idx);
-        setActiveTab('itinerary');
-        handleRefreshDay(idx);
-      } else if (result.reason === 'no_changes') {
-        toast.info(`Day ${day.dayNumber} timing already looks clean — nothing to fix.`);
-        setTimeout(() => { handleRefreshDay(idx); }, 50);
-      } else if (result.reason === 'no_timed_activities') {
-        toast.info(`Day ${day.dayNumber} has no timed activities to auto-space — opening review.`);
-        setSelectedDayIndex(idx);
-        setActiveTab('itinerary');
-        handleRefreshDay(idx);
-      } else {
-        toast.error(`Could not fix Day ${day.dayNumber} timing.`);
+        firstResult = await refreshDay(activities, day.date || '', destination, day.dayNumber);
+      } catch (err: any) {
+        setRefreshingDayNumber(null);
+        toast.error(`Could not fix Day ${day.dayNumber}: ${err?.message || 'unknown error'}`);
+        return;
       }
+      setRefreshingDayNumber(null);
+
+      if (!firstResult) {
+        toast.error(`Could not fix Day ${day.dayNumber} timing.`);
+        return;
+      }
+
+      const timeOnlyChanges = (firstResult.proposedChanges || []).filter(
+        (c: any) => (c.type === 'time_shift' || c.type === 'buffer_added') && c.patch
+      );
+      const nonTimingIssues = (firstResult.issues || []).filter(
+        (i: any) => i.type !== 'timing_overlap' && i.type !== 'insufficient_buffer'
+      );
+
+      if (timeOnlyChanges.length === 0) {
+        setRefreshResults(prev => ({ ...prev, [day.dayNumber]: firstResult }));
+        if ((firstResult.issues || []).length === 0) {
+          toast.info(`Day ${day.dayNumber} timing already looks clean.`);
+        } else {
+          toast(`Day ${day.dayNumber} has no auto-fixable timing issues. Review the suggestions below.`, { icon: 'ℹ️' });
+          requestAnimationFrame(() => {
+            const el = document.getElementById(`refresh-diff-${day.dayNumber}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+        }
+        return;
+      }
+
+      // Apply the time-only patches via the same path the diff panel uses,
+      // so cascading + sorting stays consistent.
+      handleApplyRefreshChanges(idx, timeOnlyChanges as any);
+
+      const remaining = nonTimingIssues.length;
+      if (remaining === 0) {
+        toast.success(
+          `Day ${day.dayNumber} timing fixed — applied ${timeOnlyChanges.length} adjustment${timeOnlyChanges.length === 1 ? '' : 's'}.`
+        );
+      } else {
+        toast(`Timing fixed. Day ${day.dayNumber} still has ${remaining} ${remaining === 1 ? 'issue' : 'issues'} that need review.`, { icon: 'ℹ️' });
+      }
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`day-${day.dayNumber}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
+      // Single follow-up re-check so Trip Health updates to the new state.
+      // Scheduled after React commits so we read the patched activities.
+      setTimeout(() => { handleRefreshDay(idx); }, 100);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixTimingRequest?.nonce]);
