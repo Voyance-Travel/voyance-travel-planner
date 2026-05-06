@@ -3099,7 +3099,7 @@ export function EditorialItinerary({
   }, [collaborators, tripMembers, user]);
 
   // Calculate intelligence value stats for the itinerary
-  const { skippedItems } = useSkipList(destination);
+  const { skippedItems, isLoading: isLoadingSkipList } = useSkipList(destination);
   const valueStats = useMemo(() => calculateItineraryValueStats(days, skippedItems), [days, skippedItems]);
 
   // Dynamic itinerary validation - detect skip list violations and other issues
@@ -5970,6 +5970,7 @@ export function EditorialItinerary({
                  <WhyWeSkippedSection
                    skippedItems={skippedItems}
                    destination={destination}
+                   isLoading={isLoadingSkipList}
                  />
 
                  {/* Accommodation Notes & Practical Tips from parsed trip input */}
