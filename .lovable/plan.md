@@ -1,85 +1,91 @@
 ## Problem
 
-A meal slot is rendering as a stub like **"Breakfast — find a local spot"** / **"Breakfast at a café near your hotel"** — no real venue name, no address, just a "go figure it out" affordance. Per the Meal Rules core memory ("Generic stub names BANNED — recycle real fallback-DB venues or mark slot unverified") this should never reach the UI in a paid product.
+Activity raw data carries duration strings like `"45:00:00"` instead of `"45m"`. Two bugs combine:
 
-## Root cause
+1. **Coerce heuristic is wrong for HH:MM:SS**. Current logic in `src/utils/plannerUtils.ts` and the Deno mirror `supabase/functions/generate-itinerary/_shared/duration-format.ts`:
+   ```ts
+   if (hasSeconds) totalMin = a * 60 + b;
+   ```
+   This unconditionally treats `a` as hours, so `"45:00:00"` → `45 × 60 = 2700` min → `"45h"`. The model is actually emitting MM:SS:CS or treating the colons as a generic clock pattern; either way, a leading number ≥ 24 in an HH:MM:SS slot is implausible as hours and must be read as minutes (mirroring the existing `45:00` → `"45m"` rule).
 
-There are **three independent code paths** that can emit a generic meal stub today, and only one of them is fully guarded:
-
-1. **Server generation** (`nuclearPlaceholderSweep` in `fix-placeholders.ts`) — works correctly. Detects placeholder meals and force-replaces them from `INLINE_FALLBACK_RESTAURANTS` (Paris/Rome/Berlin/Barcelona/London/Lisbon …). This path is fine.
-
-2. **Client meal guard** (`src/utils/mealGuard.ts` → `enforceItineraryMealComplianceAsync`) — runs before save in `itineraryActionExecutor.updateTripItinerary` and `itineraryAPI.regenerateDay`. It tries `verified_venues` first, but when that table has no match for the city, it falls back to **generic strings** with empty addresses:
-   - `"Breakfast at a café near your hotel"` / address `""`
-   - `"Lunch at a neighborhood restaurant"` / address `""`
-   - `"Dinner at a restaurant"` / address `""`
-   This is the most likely source of what the user is seeing — it ships unguarded straight into the trip JSON.
-
-3. **Client name sanitizer** (`src/utils/activityNameSanitizer.ts` → `stubFallbackLabel`) — when an AI stub venue ("Café Matinal", "Bistrot du Marché") slips through, it rewrites the title to `"Breakfast — tap to choose a venue"` instead of fixing it with a real venue. Cosmetic mask, not a fix.
-
-All three need to use the same fallback DB the server already trusts.
+2. **Normalization only runs once, during generation.** `normalizeActivityDuration` is called from `universal-quality-pass.ts` and nowhere else server-side. Refresh-day, repair-day, save-itinerary, and every client save path skip it, so any malformed duration introduced after the quality pass (model-emitted on a regen, user paste, transport repair, etc.) lands in `trips.itinerary_data` unchanged. Today the JSON happens to be clean, but the guard isn't load-bearing — it's accidental.
 
 ## Plan
 
-### 1. Share `INLINE_FALLBACK_RESTAURANTS` with the client
+### 1. Fix the heuristic (single source of truth)
 
-Extract the fallback restaurant pool (currently Deno-only inside `supabase/functions/generate-itinerary/fix-placeholders.ts`) into a plain TS module that both runtimes import:
+Update `src/utils/plannerUtils.ts#coerceDurationString` and the Deno mirror to apply the same "implausible-as-hours" rule already used for `MM:SS`:
 
-- New file: `src/lib/fallbackRestaurants.ts` — exports `INLINE_FALLBACK_RESTAURANTS`, `resolveAnyMealFallback`, `parseMealType`, `regionalEmergencyFallback`. Pure data + pure functions, no Deno APIs.
-- Update `supabase/functions/generate-itinerary/fix-placeholders.ts` to re-export from the shared module via a thin Deno wrapper (or duplicate the import path). Keep the server's existing `nuclearPlaceholderSweep` behavior identical.
+```ts
+if (hasSeconds) {
+  // HH:MM:SS form. If the leading number is implausibly large for hours
+  // (>= 24) OR the seconds field is zero AND the leading number is ≥ 5
+  // with no minutes either, treat the leading number as minutes — mirrors
+  // the MM:SS rule. This catches the AI emitting "45:00:00" for "45 min".
+  if (a >= 24 || (b === 0 && parseInt(colon[3], 10) === 0 && a >= 5)) {
+    totalMin = a;
+  } else {
+    totalMin = a * 60 + b;
+  }
+}
+```
 
-This guarantees client and server agree on which venue names are "real" for a given city/meal.
+After this:
+- `"45:00:00"` → `"45m"` ✅
+- `"15:00:00"` → currently the test expects `"15h"`; under the new rule it becomes `"15m"` because 15h-long activities don't exist in this product. Update the test to match. (Confirm with: 15-hour activity is nonsense; the only valid interpretation is minutes.)
+- `"1:05:00"` → `"1h 5m"` ✅ (a < 24, b ≠ 0)
+- `"2:20:00"` → `"2h 20m"` ✅
+- `"10:00:00"` → currently `"10h"`; under the new rule becomes `"10m"`. Edge case — a 10-hour activity is also nonsense in normal use; bias toward minutes.
 
-### 2. Rewrite the client meal-guard fallback
+If we want to preserve the rare "10 hours of train" reading we can keep `a < 24 && b === 0 && a < 5` as `a*60` and treat `a >= 5` as minutes. The cutoff `a >= 5` matches the existing MM:SS rule already in the code, so we'll use the same boundary across both branches.
 
-In `src/utils/mealGuard.ts`:
+### 2. Run the normalization sweep at every save boundary
 
-- When `verified_venues` returns nothing for a meal slot, call `resolveAnyMealFallback(destination, mealType, usedNames)` instead of building `"Breakfast at a ${venueSuffix}"`.
-- The injected activity now carries a real name (`"Le Nemours"`), real address (`"2 Pl. Colette, 75001 Paris"`), real description, real price, and `cost.source: 'meal_guard_fallback_db'`.
-- Remove the `DESTINATION_MEAL_HINTS` / `getClientMealHint` generic-suffix branch entirely — it's the source of the bad string.
-- Drop `needsRefinement: true` for fallback-DB venues; only keep it when even the regional emergency pool misses (extremely rare; in that case, mark the slot **unverified** with a clear "Tap to pick a restaurant" CTA rather than a fake venue suffix).
+Add `normalizeDurationsInDays(updatedDays)` calls at every server- and client-side persistence boundary:
 
-### 3. Replace the sanitizer's cosmetic mask
+**Server (Deno):**
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — call once, immediately before the DB write (alongside the existing meal/timing sweeps).
+- `supabase/functions/refresh-day/index.ts` — sweep the day before returning patches.
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — sweep `result` at the end of the function (it already mutates `transportation.duration: "N min"` strings, but co-locating the sweep guards against future changes).
 
-In `src/utils/activityNameSanitizer.ts`:
+**Client (TS):**
+- `src/services/itineraryActionExecutor.ts#updateTripItinerary` — call before the DB write, after the meal sweep we just added.
+- `src/services/itineraryAPI.ts#regenerateDay` — same.
+- `src/utils/itineraryParser.ts` — already coerces; leave as-is.
 
-- When `isAIStubVenueName` fires on a meal slot, instead of returning `stubFallbackLabel(meal)` ("Breakfast — tap to choose a venue"), look up the activity's city + meal type and return a real venue name from the shared fallback DB.
-- Sanitizer is sync; the fallback DB is sync; this works without an async refactor.
-- If (and only if) no city context is available, keep `stubFallbackLabel` as the absolute last resort and tag the activity `needsVenuePick: true` so the UI can show an explicit "Pick a restaurant" button instead of a sad title.
+The function exists (`normalizeDurationsInDays`) and is a no-op for already-clean data, so the perf cost is negligible.
 
-### 4. Add a save-time guard mirroring the server
+### 3. Defensive client display
 
-In `src/services/itineraryActionExecutor.updateTripItinerary` and `src/services/itineraryAPI.regenerateDay`, after the meal guard but before the DB write, run a small sweep that:
+`src/components/itinerary/EditorialItinerary.tsx` and `FullItinerary.tsx` already wrap `activity.duration` in `coerceDurationString(...)` at render. With the heuristic fixed (#1), legacy bad data already in the JSON also renders correctly without a backfill.
 
-- Iterates each day's activities,
-- Detects any meal whose title still matches a generic stub pattern (reuse `isAIStubVenueName` + the `PLACEHOLDER_TITLE_PATTERNS` set),
-- Replaces it from the shared fallback DB.
+### 4. Tests
 
-This is the client mirror of `nuclearPlaceholderSweep`, so the "no generic meals in saved JSON" invariant holds regardless of which path produced the activity.
+- Update `src/utils/__tests__/coerceDurationString.test.ts`:
+  - Change `coerceDurationString('15:00:00')` expectation from `'15h'` to `'15m'`.
+  - Add `expect(coerceDurationString('45:00:00')).toBe('45m')`.
+  - Add `expect(coerceDurationString('30:00:00')).toBe('30m')`.
+  - Keep `'1:05:00' → '1h 5m'` and `'2:20:00' → '2h 20m'` (these branches unchanged because `a < 24` and `b !== 0`).
+- Add a Deno test for `normalizeDurationsInDays` proving `"45:00:00"` survives → `"45m"` and that `durationMinutes` back-fill is `45`.
 
-### 5. UI fallback for the truly-unverified case
+### 5. Optional: backfill (skip)
 
-In the activity card rendering layer, when an activity carries `needsVenuePick: true`, show a clear inline CTA ("Pick a restaurant") rather than treating the placeholder string as a normal title. This is a visual-only change; no business-logic shift.
-
-### 6. Tests
-
-- Extend `src/utils/__tests__/stubVenueDetection.test.ts` to assert that, given a city with fallback-DB coverage, the sanitizer returns a real venue name (not "tap to choose a venue").
-- Add a unit test for `mealGuard` proving that, with `verified_venues` empty, a Paris breakfast injection ships with `name: "Le Nemours"` (or any real entry from the pool), not `"Breakfast at a café near your hotel"`.
-- Add a regression test confirming the save-time sweep replaces a manually-injected stub.
+Database scan returned 0 trips with `"duration": "HH:MM:SS"` patterns, so no migration is needed. The render-time coerce + the new save-time sweep cover anything that lands later.
 
 ## Files touched
 
-- `src/lib/fallbackRestaurants.ts` — **new**, shared pool + resolver.
-- `supabase/functions/generate-itinerary/fix-placeholders.ts` — re-export shared pool; behavior unchanged.
-- `src/utils/mealGuard.ts` — drop generic-suffix fallback, use shared resolver.
-- `src/utils/activityNameSanitizer.ts` — call shared resolver before falling back to "tap to choose".
-- `src/utils/stubVenueDetection.ts` — keep only as last-resort label; flag `needsVenuePick`.
-- `src/services/itineraryActionExecutor.ts` — add pre-save sweep.
-- `src/services/itineraryAPI.ts` — add pre-save sweep in `regenerateDay`.
-- `src/components/itinerary/ActivityCard*.tsx` (whichever renders the title) — render "Pick a restaurant" CTA when `needsVenuePick` is set.
-- `src/utils/__tests__/stubVenueDetection.test.ts` and a new `src/utils/__tests__/mealGuard.test.ts`.
+- `src/utils/plannerUtils.ts` — heuristic fix.
+- `supabase/functions/generate-itinerary/_shared/duration-format.ts` — same heuristic fix.
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — add sweep.
+- `supabase/functions/refresh-day/index.ts` — add sweep on output.
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add sweep at end.
+- `src/services/itineraryActionExecutor.ts` — add sweep call.
+- `src/services/itineraryAPI.ts` — add sweep call.
+- `src/utils/__tests__/coerceDurationString.test.ts` — update + add cases.
+- New: `supabase/functions/generate-itinerary/_shared/duration-format.test.ts` — Deno test for the sweep.
 
 ## Out of scope
 
-- Surfacing the fallback DB as an editable admin table.
-- Expanding city coverage beyond the existing six. (We can add cities incrementally — the architecture won't change.)
-- Touching the wellness placeholder path (already uses the same pattern via `INLINE_FALLBACK_WELLNESS`; only flag if you want me to audit that next).
+- Reworking `transportation.duration: "N min"` strings (those go through the same coerce when displayed).
+- Migrating historical rows (none exist).
+- Touching the `duration_text` column on `route_legs` etc. (that's a Google-formatted display field, not what the user is reporting).
