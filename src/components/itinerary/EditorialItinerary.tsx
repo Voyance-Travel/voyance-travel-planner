@@ -8234,26 +8234,10 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
   };
 
   // Static essentials only — currency, tipping, transit live in Travel Intel
+  // NOTE: AI/static merge is delegated to mergeNeedToKnowInfo so partial
+  // Perplexity responses fall back per-field instead of leaking generic
+  // placeholders like "Local language" / "Local time".
   const getDefaultInfo = () => {
-    // If we have AI-generated insights, use those
-    if (aiInsights) {
-      return {
-        language: aiInsights.language?.primary || 'Local language',
-        languageTips: aiInsights.language?.phrases?.map((p: any) => 
-          `"${p.phrase}" = "${p.translation}" (${p.pronunciation})`
-        ) || ['Learn basic greetings'],
-        languageEnglishFriendly: aiInsights.language?.englishFriendly,
-        timezone: aiInsights.timezone?.zone || 'Local time',
-        timezoneTips: aiInsights.timezone?.tips || ['Check local business hours'],
-        water: aiInsights.water?.description || (aiInsights.water?.safe ? 'Tap water is safe' : 'Check local advisories'),
-        waterTips: aiInsights.water?.tips || ['When in doubt, use bottled water'],
-        voltage: `${aiInsights.voltage?.voltage || '230V'}, ${aiInsights.voltage?.plugType || 'Check adapter requirements'}`,
-        voltageTips: aiInsights.voltage?.tips || ['Universal adapters are convenient'],
-        emergency: aiInsights.emergency?.number || 'Contact local authorities',
-        emergencyTips: aiInsights.emergency?.tips || ['Save emergency numbers in your phone'],
-      };
-    }
-
     const country = destinationCountry?.toLowerCase() || '';
     const dest = (destination || '').toLowerCase();
     
