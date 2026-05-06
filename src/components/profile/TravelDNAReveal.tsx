@@ -215,7 +215,8 @@ function ArchetypeHeroCard({
             className="px-0 h-auto py-0 text-xs text-background/30 hover:text-background hover:bg-transparent"
             onClick={async () => {
               const shareText = `I'm a ${narrative.name}! "${narrative.hookLine}" - Discover your Travel DNA on Voyance`;
-              const shareUrl = `${getAppUrl()}/archetypes`;
+              const { archetypeIdToSlug } = await import('@/utils/archetypeSlug');
+              const shareUrl = `${getAppUrl()}/archetypes/${archetypeIdToSlug(narrative.id)}`;
               
               if (navigator.share) {
                 try {

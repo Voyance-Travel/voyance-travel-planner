@@ -190,6 +190,7 @@ function AnimatedRoutes() {
         <Route path="/travel-tips" element={<TravelTips />} />
         <Route path="/about" element={<About />} />
         <Route path="/archetypes" element={<Archetypes />} />
+        <Route path="/archetypes/:slug" element={<Archetypes />} />
         <Route path="/how-it-works" element={<HowItWorks />} />
         <Route path="/careers" element={<Careers />} />
         <Route path="/press" element={<Press />} />

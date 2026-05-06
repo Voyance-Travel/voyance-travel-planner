@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/config/routes';
 import { toast } from 'sonner';
 import { getAppUrl } from '@/utils/getAppUrl';
+import { archetypeIdToSlug } from '@/utils/archetypeSlug';
 
 interface ArchetypeDetailSheetProps {
   archetype: ArchetypeDetail | null;
@@ -28,7 +29,8 @@ export default function ArchetypeDetailSheet({ archetype, open, onOpenChange }: 
 
   const handleShare = async () => {
     const shareText = `I might be a ${archetype.name}! "${archetype.tagline}" - Discover your Travel DNA on Voyance`;
-    const shareUrl = `${getAppUrl()}/archetypes`;
+    const slugSource = (archetype as any).narrativeId || archetype.id;
+    const shareUrl = `${getAppUrl()}/archetypes/${archetypeIdToSlug(slugSource)}`;
 
     if (navigator.share) {
       try {
