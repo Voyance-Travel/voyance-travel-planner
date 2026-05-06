@@ -8,6 +8,7 @@ import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { enforceMealTimeCoherence } from '@/utils/mealTimeCoherence';
+import { safeUpdateItineraryData } from '@/services/safeUpdateItineraryData';
 import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, PenLine, Coins, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import { CREDIT_COSTS } from '@/config/pricing';
 import {
