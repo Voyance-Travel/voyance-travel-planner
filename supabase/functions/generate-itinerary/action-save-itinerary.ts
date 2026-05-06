@@ -685,6 +685,33 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     }
   }
 
+  // ── STEP 2.9: FINAL TIMING-CONFLICT SWEEP ─────────────────────────
+  // Catches same-start collisions and insufficient transit buffers that the
+  // generator's per-day repair didn't handle (and that any non-generator save
+  // path — manual paste, assistant tool edit — wouldn't have run at all).
+  // Without this, refresh-day flags conflicts the user has to fix manually.
+  try {
+    const { enforceTimingAndBuffers } = await import('../_shared/timing-cascade.ts');
+    let totalFixed = 0;
+    for (const day of itineraryDays) {
+      if (!Array.isArray(day?.activities) || day.activities.length < 2) continue;
+      const lockedIds = new Set<string>(
+        (day.activities as any[])
+          .filter((a) => a?.locked === true || a?.lock_state === 'locked')
+          .map((a) => String(a.id))
+      );
+      const cascade = enforceTimingAndBuffers(day.activities as any[], { lockedIds });
+      day.activities = cascade.activities as any[];
+      totalFixed += cascade.repairs.length;
+    }
+    if (totalFixed > 0) {
+      console.log(`[save-itinerary] ⏱️ timing-cascade applied ${totalFixed} pre-save fix(es)`);
+      (itinerary as any).days = itineraryDays;
+    }
+  } catch (cascadeErr) {
+    console.warn('[save-itinerary] timing-cascade pre-save sweep failed (non-blocking):', cascadeErr);
+  }
+
   // ── STEP 3: PERSIST TO trips.itinerary_data ─────────────────────
   const updatePayload: Record<string, any> = {
     itinerary_data: itinerary,
