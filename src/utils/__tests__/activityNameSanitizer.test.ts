@@ -18,4 +18,22 @@ describe('sanitizeActivityText - orphan article repair', () => {
     // Regex requires a capital letter following "of "
     expect(sanitizeActivityText('Walk the of dogs')).toBe('Walk the of dogs');
   });
+
+  it('repairs orphan possessive "the\'s" → "the city\'s"', () => {
+    expect(
+      sanitizeActivityText("A sensory retreat at the's historic mosque"),
+    ).toBe("A sensory retreat at the city's historic mosque");
+  });
+
+  it('repairs orphan possessive with stray space "the\' s"', () => {
+    expect(sanitizeActivityText("Walk the' s old quarter")).toBe(
+      "Walk the city's old quarter",
+    );
+  });
+
+  it('repairs comma-prefixed ", the of <Proper>"', () => {
+    expect(sanitizeActivityText('Settle in, the of Lisbon awaits')).toBe(
+      'Settle in, the City of Lisbon awaits',
+    );
+  });
 });
