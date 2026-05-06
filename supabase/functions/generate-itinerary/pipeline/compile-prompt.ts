@@ -112,7 +112,7 @@ export interface CompiledPrompt {
   lockedCards: LockedCard[];
 
   // Effective trait scores (post-blend) consumed by repair pipeline
-  effectiveTraitScores: { pace: number; budget: number; adventure: number; authenticity: number };
+  effectiveTraitScores: { pace: number; budget: number; adventure: number; authenticity: number; planning: number };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -868,9 +868,10 @@ FAILURE TO INCLUDE INTER-CITY TRAVEL IS UNACCEPTABLE. NO TELEPORTING.`;
         budget: blendedTraitScores.budget ?? traitScores.budget,
         adventure: blendedTraitScores.adventure ?? traitScores.adventure ?? 0,
         authenticity: blendedTraitScores.authenticity ?? traitScores.authenticity ?? 0,
+        planning: blendedTraitScores.planning ?? traitScores.planning ?? 0,
       }
-    : { pace: traitScores.pace, budget: traitScores.budget, adventure: traitScores.adventure ?? 0, authenticity: traitScores.authenticity ?? 0 };
-  console.log(`[compile-prompt] effective traits: pace=${effectiveTraitScores.pace}, budget=${effectiveTraitScores.budget}, adventure=${effectiveTraitScores.adventure}, authenticity=${effectiveTraitScores.authenticity}`);
+    : { pace: traitScores.pace, budget: traitScores.budget, adventure: traitScores.adventure ?? 0, authenticity: traitScores.authenticity ?? 0, planning: traitScores.planning ?? 0 };
+  console.log(`[compile-prompt] effective traits: pace=${effectiveTraitScores.pace}, budget=${effectiveTraitScores.budget}, adventure=${effectiveTraitScores.adventure}, authenticity=${effectiveTraitScores.authenticity}, planning=${effectiveTraitScores.planning}`);
 
   // ═══════════════════════════════════════════════════════════════════════
   // BUDGET RESOLUTION

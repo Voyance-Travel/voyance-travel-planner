@@ -1,63 +1,66 @@
-# Honor Authenticity (+3 Local Explorer) in Itinerary Generation
+# Honor Planning Style -4 (Leaning Spontaneous)
 
 ## The Bug
 
-The Authenticity slider mostly does nothing at +3:
+`planning` is collected on the trait DNA (`-10 spontaneous … +10 planner`) and read into `TraitScores` in `profile-loader.ts`, but downstream the generation pipeline ignores it for negative (spontaneous) values:
 
-- `deriveForcedSlots` only fires the `authentic_encounter` slot when `authenticity >= 4`. A +3 Local Explorer never triggers it.
-- `buildAllConstraints` knows `pace`, `budget`, and (now) `adventure` — but not `authenticity`. There is no "Local Explorer Mode" prompt block.
-- `effectiveTraitScores` in `compile-prompt.ts` doesn't carry `authenticity`, so even if downstream code wanted to use it, it isn't propagated.
-- No blacklist of postcard-tourism venues (Trevi Fountain, Spanish Steps, Colosseum-only photo stops, La Pergola-tier luxury tourist destinations) for high-authenticity travelers — the model defaults to "famous = good".
+- `effectiveTraitScores` in `compile-prompt.ts` only carries `pace`, `budget`, `adventure`, (now) `authenticity` — `planning` is dropped.
+- `buildAllConstraints` has no "Spontaneous Mode" / "Planner Mode" prompt block.
+- `deriveForcedSlots` in `personalization-enforcer.ts` does not relax density or insert flex windows for spontaneous travelers.
+- The Density Protocol ("min 3 paid + 2 free", "no dead gaps >90m") is enforced uniformly — so a spontaneous lean is actively overwritten.
 
-Result: Rome itineraries with Authenticity +3 mix one or two genuine local picks with a wall of standard tourist beats.
+Result: -4 Spontaneous ends up as identical minute-packed itineraries.
 
 ## What to Build
 
-### 1. Lower threshold and tier the forced slot
+### 1. Propagate `planning` through the pipeline
+- Extend `effectiveTraitScores` in `pipeline/compile-prompt.ts` to include `planning` (mirror `authenticity`).
+- Update signatures in `archetype-data.ts` (`getFullArchetypeContext`, `buildFullPromptGuidance(Async)`) and `archetype-constraints.ts` (`buildAllConstraints` traits arg) to accept optional `planning`.
+- In `generation-core.ts`, pass `traits.planning` into `buildAllConstraints`.
+
+### 2. Prompt-level "Planning Style Mode"
+Add `buildPlanningStyleRules(planning)` in `archetype-constraints.ts`, called from `buildAllConstraints`:
+
+- `planning <= -3` (Leaning Spontaneous):
+  - Required: **at least 1 explicit "flex window" per day** of 90–120 minutes labeled with intentionally loose copy: "Wander {neighborhood}", "Free roam — follow your nose", "Open afternoon — café-hop or pivot".
+  - Schedule **fewer hard-timed anchors per day** (cap scheduled paid items at 3, not the usual 4–5). Soft cap leaves room.
+  - Use language like "around 3pm" / "late afternoon" rather than "3:15pm" in `description` text (timestamps still required for the data model).
+  - At least 1 meal per day should be marked as a "neighborhood pick — choose on the day from the suggestions" rather than a hard reservation.
+- `planning <= -6` (Fully Spontaneous):
+  - Bump to **2 flex windows per day**, only 2 hard anchors max, no advance reservations except hotel + flights/trains.
+- `planning >= +4` (Detailed Planner): keep current dense behavior; add explicit "every slot timed and reservation-noted" reminder.
+- `planning between -2 and +3`: balanced (no extra rules).
+
+### 3. Relax density rules for spontaneous travelers
 In `personalization-enforcer.ts > deriveForcedSlots`:
-- Trigger `authentic_encounter` at `authenticity >= 3` (not 4).
-- `>= 3` (Local Explorer): require **1 truly local experience per day** (neighborhood trattoria, local wine bar, non-tourist piazza, family-run venue).
-- `>= 6` (Local-Only): require **2 local experiences per day** AND forbid more than **1 famous landmark per day**.
-- Tighten validationTags: prefer `neighborhood`, `family-run`, `non-touristy`, `enoteca`, `osteria`, `trattoria` — drop generic `local` which the model satisfies trivially.
+- When `planning <= -3`, push a `flex_window` slot per day with description "Open / unplanned wander block (90–120m)" and validation tags `['flex', 'wander', 'free-roam', 'unplanned']`.
+- When `planning <= -6`, push **two** `flex_window` slots per day.
 
-### 2. Propagate `authenticity` through the pipeline
-- Extend `effectiveTraitScores` in `compile-prompt.ts` to include `authenticity` (mirror the recent `adventure` change: read `blendedTraitScores.authenticity ?? traitScores.authenticity ?? 0`).
-- Update signatures: `getFullArchetypeContext`, `buildFullPromptGuidance(Async)`, `buildAllConstraints` to accept optional `authenticity` in their `traits` arg.
-- In `generation-core.ts`, pass `traits.authenticity || 0` into `buildAllConstraints`.
-
-### 3. Prompt-level "Local Explorer Mode"
-Add `buildAuthenticityRules(authenticity, destination)` in `archetype-constraints.ts`, called from `buildAllConstraints` (after adventure rules):
-
-- `>= 3`:
-  - At least 1 venue per day in a residential/non-tourist neighborhood (e.g. Rome: Testaccio, Pigneto, Garbatella, Monti, Quadraro, Trastevere back-streets — NOT around Trevi, Spanish Steps, Piazza Navona).
-  - Meals heavily skew family-run trattorias / osterias / enoteche; ban hotel restaurants, chain Michelin destinations like La Pergola, and "tourist menu" spots near major landmarks.
-  - Allow at most ONE postcard landmark per day; pair it with a deep local follow-up (e.g. Colosseum → lunch in Monti at Mordi e Vai or aperitivo in Rione Monti).
-- `>= 6`:
-  - Hard cap: maximum 1 marquee landmark across the WHOLE TRIP.
-  - Forbidden venues (city-aware): Rome → Trevi Fountain, Spanish Steps, Piazza Navona day visits, La Pergola, Cavalieri/luxury hotel dining, mass-market vans/buses; Paris → Champs-Élysées dining, Eiffel Tower restaurants; Barcelona → La Rambla restaurants; etc.
-- City-specific neighborhood and venue lists for the top destinations (Rome, Paris, Barcelona, London, Tokyo, NYC, Lisbon, Mexico City).
-- Tagging requirement: each "local" activity must include one of `neighborhood`, `family-run`, `osteria`, `trattoria`, `enoteca`, `non-touristy` in `personalization.tags`.
+In the Density Protocol logic (search `Dead gaps >90m` / `Min 3 paid` enforcement — likely in `repair-day.ts` and/or `personalization-enforcer.ts`):
+- Skip the "fill morning gap" / "no dead gap >90m" repairs when `planning <= -3`. Spontaneous travelers EXPECT loose space.
+- Lower the per-day paid-activities floor to 2 (from 3) when `planning <= -3`; to 1 when `planning <= -6`.
 
 ### 4. Validation reminder
-Append rule #11 to the "VALIDATION BEFORE FINALIZING" checklist in `buildAllConstraints`:
-> 11. Authenticity ≥ +3 — does this day include a real neighborhood/family-run venue and stay under the landmark cap? → If not, swap a tourist beat for a local one.
+Append rule #12 to the "VALIDATION BEFORE FINALIZING" checklist in `buildAllConstraints`:
+> 12. Planning trait ≤ -3 — does each day have at least one explicit flex/wander window (90–120m) and no more than 3 hard-timed anchors? → If missing, REPLACE one scheduled item with a flex window.
 
-### 5. (Optional) Soft post-gen warning
-In the existing repair pipeline, surface a non-blocking log when an `authenticity >= 3` trip contains > N landmarks per day or no `neighborhood`-tagged activity. Logging only — repair stays prompt-driven (matches how adventure is handled).
+### 5. UI copy (optional, low risk)
+No UI changes required — the flex windows render as normal activity cards. Their titles ("Wander Trastevere", "Open afternoon") communicate the looseness.
 
 ## Files to Modify
-- `supabase/functions/generate-itinerary/personalization-enforcer.ts`
-- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts`
-- `supabase/functions/generate-itinerary/archetype-constraints.ts` (new `buildAuthenticityRules`, updated `buildAllConstraints`)
-- `supabase/functions/generate-itinerary/archetype-data.ts` (signature update only)
-- `supabase/functions/generate-itinerary/generation-core.ts` (pass `authenticity` into `buildAllConstraints`)
+- `supabase/functions/generate-itinerary/pipeline/compile-prompt.ts` (propagate `planning`)
+- `supabase/functions/generate-itinerary/archetype-data.ts` (signature updates)
+- `supabase/functions/generate-itinerary/archetype-constraints.ts` (new `buildPlanningStyleRules`, wire into `buildAllConstraints`, add validation rule #12)
+- `supabase/functions/generate-itinerary/generation-core.ts` (pass `planning` into `buildAllConstraints`)
+- `supabase/functions/generate-itinerary/personalization-enforcer.ts` (forced flex_window slots; relax density floors)
+- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (skip dead-gap fills when spontaneous)
 
 ## Verification
-- A Rome trip with Authenticity +3 should:
-  - Include ≥1 trattoria/osteria/enoteca per day in Testaccio/Monti/Pigneto/Trastevere-back-streets/Garbatella.
-  - Contain at most 1 postcard landmark per day (no Trevi+Spanish Steps+Pantheon stacked).
-  - Replace La Pergola-style tourist-luxury dining with a local fine-dining alternative (e.g. SantoPalato, Trattoria Pennestri, Armando al Pantheon).
-- Authenticity +6 should produce ≤1 marquee landmark across the whole trip.
-- Other traits (pace, adventure, budget) behavior remains unchanged.
+- A trip with Planning -4 should:
+  - Show ≥1 flex/wander block per day with copy like "Wander Testaccio — pivot as you go".
+  - Have ≤3 hard-scheduled paid anchors per day; no auto-injected fillers in morning/afternoon gaps.
+  - Continue to honor hotel checkout, flights, departures (logistics anchors are unaffected).
+- A trip with Planning +5 behaves as today (or slightly tighter).
+- Other traits (pace, adventure, authenticity, budget) keep working.
 
-The user should tap "Refresh Day" after these changes apply, or regenerate the trip for the cleanest result.
+The user should tap "Refresh Day" or regenerate to see the spontaneous lean applied.

@@ -781,7 +781,8 @@ export async function generateSingleDayWithRetry(
           pace: context.travelerDNA?.traits?.pace || 0,
           budget: context.travelerDNA?.traits?.budget || 0,
           adventure: context.travelerDNA?.traits?.adventure || 0,
-          authenticity: context.travelerDNA?.traits?.authenticity || 0
+          authenticity: context.travelerDNA?.traits?.authenticity || 0,
+          planning: context.travelerDNA?.traits?.planning || 0
         },
         context.destination
       );

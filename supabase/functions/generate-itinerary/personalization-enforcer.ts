@@ -57,6 +57,7 @@ export type ForcedSlotType =
   | 'edge_activity'            // Adventure trait
   | 'wellness_moment'          // Transformation trait
   | 'authentic_encounter'      // Authenticity trait
+  | 'flex_window'              // Planning trait (negative/spontaneous)
   | 'social_experience'        // Social trait (positive)
   | 'solo_retreat'             // Social trait (negative/introvert)
   | 'vip_experience'           // VIP Voyager: high comfort + budget
@@ -265,7 +266,24 @@ export function deriveForcedSlots(
       validationTags: ['neighborhood', 'family-run', 'osteria', 'trattoria', 'enoteca', 'non-touristy', 'hidden-gem']
     });
   }
-  
+
+  // Spontaneous planners — require explicit flex/wander windows
+  const planningScore = traits.planning ?? 0;
+  if (planningScore <= -3) {
+    const isFullySpontaneous = planningScore <= -6;
+    const flexCount = isFullySpontaneous ? 2 : 1;
+    for (let i = 0; i < flexCount; i++) {
+      slots.push({
+        type: 'flex_window',
+        traitSource: 'planning',
+        traitValue: planningScore,
+        description: isFullySpontaneous
+          ? 'Open / unplanned wander block (90–120m). NO fixed venue, NO reservation. Title like "Wander {neighborhood}" or "Free roam — follow your nose".'
+          : 'One open / unplanned wander block (90–120m). NO fixed venue, NO reservation. Title like "Wander {neighborhood}" or "Open afternoon — café-hop or pivot".',
+        validationTags: ['flex', 'wander', 'free-roam', 'unplanned']
+      });
+    }
+  }
   // Social extroverts (positive social score)
   if ((traits.social ?? 0) >= 4) {
     slots.push({
