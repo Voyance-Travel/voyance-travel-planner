@@ -506,6 +506,8 @@ export interface EditorialItineraryProps {
   travelIntelCards?: React.ReactNode;
   /** Trip health/completion panel passed from TripDetail */
   tripHealthPanel?: React.ReactNode;
+  /** Parent dispatches a request (with nonce) to refresh a specific day */
+  refreshDayRequest?: { dayNumber: number; nonce: number } | null;
 }
 
 // =============================================================================
@@ -1238,6 +1240,7 @@ export function EditorialItinerary({
   dateEditorCities,
   travelIntelCards,
   tripHealthPanel,
+  refreshDayRequest,
   viewMode = 'edit',
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
