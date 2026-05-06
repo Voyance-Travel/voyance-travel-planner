@@ -134,10 +134,10 @@ export function getFullArchetypeContext(
   archetype: string,
   destination?: string,
   budgetTier?: string,
-  traitScores?: { pace: number; budget: number; adventure?: number }
+  traitScores?: { pace: number; budget: number; adventure?: number; authenticity?: number }
 ): ArchetypeContext {
   // Default trait scores if not provided
-  const traits = { pace: 0, budget: 0, adventure: 0, ...(traitScores || {}) };
+  const traits = { pace: 0, budget: 0, adventure: 0, authenticity: 0, ...(traitScores || {}) };
   
   // Get all component data
   const definition = getArchetypeDefinition(archetype);
@@ -272,7 +272,7 @@ export function buildFullPromptGuidance(
   archetype: string,
   destination: string,
   budgetTier: string,
-  traitScores: { pace: number; budget: number; adventure?: number }
+  traitScores: { pace: number; budget: number; adventure?: number; authenticity?: number }
 ): string {
   const context = getFullArchetypeContext(archetype, destination, budgetTier, traitScores);
   
@@ -396,7 +396,7 @@ export async function buildFullPromptGuidanceAsync(
   destination: string,
   destinationId: string | null,
   budgetTier: string,
-  traitScores: { pace: number; budget: number; adventure?: number },
+  traitScores: { pace: number; budget: number; adventure?: number; authenticity?: number },
   aiGatewayKey?: string
 ): Promise<string> {
   // Get static guidance first

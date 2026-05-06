@@ -2163,10 +2163,101 @@ TAGGING REQUIREMENT: Each adventure activity MUST include at least one of these 
 `;
 }
 
+export function buildAuthenticityRules(authenticity: number, destination?: string): string {
+  if (!authenticity || authenticity < 3) return '';
+
+  const isLocalOnly = authenticity >= 6;
+  const dest = (destination || '').toLowerCase();
+
+  // City-aware neighborhoods, local venues, and forbidden tourist traps
+  const cityGuide: Record<string, { hoods: string[]; venues: string[]; banned: string[] }> = {
+    rome: {
+      hoods: ['Testaccio', 'Pigneto', 'Garbatella', 'Monti', 'Quadraro', 'San Lorenzo', 'Trastevere back-streets (avoid the main piazza tourist strip)'],
+      venues: ['SantoPalato', 'Trattoria Pennestri', 'Armando al Pantheon', 'Da Felice a Testaccio', 'Mordi e Vai', 'Trapizzino Testaccio', 'Litro (enoteca)', 'Il Goccetto (enoteca)', 'Marigold (Ostiense)', 'Trecca'],
+      banned: ['Trevi Fountain dining/photo-op as a stand-alone slot', 'Spanish Steps shops/restaurants', 'Piazza Navona tourist-menu trattorias', 'La Pergola', 'Cavalieri rooftop dining', 'Hard Rock Cafe', 'restaurants on Via della Conciliazione'],
+    },
+    paris: {
+      hoods: ['Belleville', 'Canal Saint-Martin', 'Batignolles', 'Ménilmontant', '11e back-streets', 'Aligre / 12e'],
+      venues: ['Le Servan', 'Le Baratin', 'Clamato', 'Septime Cave', 'Marché d\'Aligre vendors', 'wine bars in the 11e'],
+      banned: ['Champs-Élysées restaurants', 'Eiffel Tower restaurants (Jules Verne aside, only if luxury archetype)', 'Café de la Paix', 'tourist menus near Notre-Dame'],
+    },
+    barcelona: {
+      hoods: ['Gràcia', 'Poblenou', 'Sant Antoni', 'El Born back-streets', 'Sants'],
+      venues: ['Bar del Pla', 'Quimet & Quimet', 'Cañete', 'Bar Cañete', 'Els Sortidors del Parlament', 'Bodega 1900'],
+      banned: ['restaurants on La Rambla', 'Port Vell tourist chains', 'paella spots in Barceloneta tourist strip'],
+    },
+    london: {
+      hoods: ['Hackney', 'Peckham', 'Brixton', 'Stoke Newington', 'Bermondsey'],
+      venues: ['Brunswick House', 'P. Franco', 'Quality Wines', 'Mangal 2', 'Sweetings', 'Maremma'],
+      banned: ['Leicester Square restaurants', 'M&M\'s World food', 'tourist pubs around Big Ben'],
+    },
+    tokyo: {
+      hoods: ['Shimokitazawa', 'Yanaka', 'Koenji', 'Kiyosumi-Shirakawa', 'Sangenjaya'],
+      venues: ['neighborhood izakaya in Yanaka', 'kissaten cafés in Koenji', 'standing sushi bars off Shibuya'],
+      banned: ['Shibuya Crossing chain restaurants', 'Tokyo Tower observation-deck dining as the meal'],
+    },
+    'new york': {
+      hoods: ['Greenpoint', 'Sunset Park', 'Astoria', 'Crown Heights', 'East Village back-streets'],
+      venues: ['Lucali', 'Win Son', 'Hometown Bar-B-Que', 'Frenchette', 'Cervo\'s', 'Wildair'],
+      banned: ['Times Square restaurants', 'Bubba Gump', 'Olive Garden Times Square', 'tourist diners in Midtown'],
+    },
+    lisbon: {
+      hoods: ['Graça', 'Marvila', 'Campo de Ourique', 'Anjos', 'Alvalade'],
+      venues: ['Taberna Sal Grosso', 'Prado Mercearia', 'A Cevicheria (off-strip)', 'Senhor Uva', 'O Velho Eurico'],
+      banned: ['restaurants on Rua Augusta', 'Time Out Market as the only meal experience', 'fado tourist dinners in Bairro Alto strip'],
+    },
+    'mexico city': {
+      hoods: ['Roma Norte', 'Condesa back-streets', 'Coyoacán', 'San Rafael', 'Juárez'],
+      venues: ['Contramar (off-tourist hours)', 'Expendio de Maíz', 'Lardo', 'Maximo Bistrot', 'Mercado de Medellín taqueros'],
+      banned: ['Zócalo tourist restaurants', 'Sanborns chains', 'mariachi-square tourist dinners'],
+    },
+  };
+
+  const matched = Object.keys(cityGuide).find(k => dest.includes(k));
+  const guide = matched ? cityGuide[matched] : null;
+
+  return `
+=== 🏘️ AUTHENTICITY / LOCAL EXPLORER MODE (authenticity trait = +${authenticity}) ===
+
+This traveler explicitly slid the Authenticity dial to +${authenticity}. They want REAL local life — not curated tourist beats dressed up as "hidden gems".
+
+${isLocalOnly
+  ? `LOCAL-ONLY (+6 to +10): Each day MUST include at least 2 genuinely local experiences. HARD CAP: at most 1 marquee landmark across the WHOLE TRIP.`
+  : `LOCAL EXPLORER (+3 to +5): Each day MUST include at least 1 genuinely local, non-touristy experience. AT MOST 1 famous landmark per day, and it must be paired with a deep local follow-up (e.g. landmark in the morning → meal in a residential neighborhood).`}
+
+✅ THESE COUNT as authentic / local:
+- Family-run trattorias, osterias, enoteche, bistros (not chains, not hotel restaurants)
+- Neighborhood markets where locals shop (not Instagram "food halls")
+- Residential / non-tourist piazzas, parks, and viewpoints
+- Independent wine bars, natural-wine spots, working-class bars
+- Workshops with actual artisans (not "tourist crafts class")
+- Walks through residential districts away from the main attractions
+
+❌ THESE DO NOT COUNT — never satisfy the authenticity slot with these:
+- Famous landmarks visited as photo-ops
+- Hotel restaurants and chain Michelin destinations marketed to tourists
+- Restaurants on the main tourist drags (within 200m of marquee landmarks)
+- Tourist menus, multi-language laminated menus, hawkers
+- Generic "food tours" that hit only the famous beats
+- Luxury rooftops aimed at tourists
+
+${guide ? `NEIGHBORHOOD TARGETS for ${matched}:
+${guide.hoods.map(h => `- ${h}`).join('\n')}
+
+LOCAL VENUE EXAMPLES (use these or similar real, non-touristy spots):
+${guide.venues.map(v => `- ${v}`).join('\n')}
+
+🚫 HARD-BANNED for this traveler:
+${guide.banned.map(b => `- ${b}`).join('\n')}` : `Pick residential neighborhoods away from the main tourist core. Favor family-run venues with local-language menus.`}
+
+TAGGING REQUIREMENT: Each "local" activity MUST include at least one of these tags in personalization.tags: ['neighborhood', 'family-run', 'osteria', 'trattoria', 'enoteca', 'non-touristy', 'hidden-gem', 'local-favorite'].
+`;
+}
+
 export function buildAllConstraints(
   archetype: string | undefined,
   budgetTier: string | undefined,
-  traits: { pace: number; budget: number; adventure?: number },
+  traits: { pace: number; budget: number; adventure?: number; authenticity?: number },
   destination?: string
 ): string {
   const sections: string[] = [];
@@ -2177,6 +2268,7 @@ export function buildAllConstraints(
   sections.push(buildPacingRules(traits.pace));
   sections.push(buildBudgetConstraints(budgetTier, traits.budget));
   sections.push(buildAdventureRules(traits.adventure ?? 0, destination));
+  sections.push(buildAuthenticityRules(traits.authenticity ?? 0, destination));
   sections.push(buildNamingRules());
   
   // Add final validation block
@@ -2194,6 +2286,7 @@ Check every activity against:
 8. Is the archetype name in the activity title? → RENAME IT
 9. Are there "luxury/premium/exclusive" words for a non-luxury traveler? → REMOVE them
 10. Adventure trait ≥ +4 — is there at least one KINETIC adventure activity (not park/fountain/market)? → If missing, ADD one.
+11. Authenticity trait ≥ +3 — does this day include a real neighborhood/family-run venue, AND stay under the landmark cap (≤1 marquee landmark/day at +3-5, ≤1 marquee landmark trip-wide at +6+)? → If not, swap a tourist beat for a local one.
 
 If ANY violation exists, fix it before returning.
 
