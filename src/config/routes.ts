@@ -10,6 +10,7 @@ export const ROUTES = {
   TRAVEL_TIPS: '/travel-tips',
   ABOUT: '/about',
   ARCHETYPES: '/archetypes',
+  ARCHETYPE_DETAIL: '/archetypes/:slug',
   HOW_IT_WORKS: '/how-it-works',
   CAREERS: '/careers',
   PRESS: '/press',
