@@ -2166,6 +2166,8 @@ export function EditorialItinerary({
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
   const venueBank = useTripVenueBank(days);
   const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const dayPickerScrollRef = useRef<HTMLDivElement | null>(null);
+  const didMountDayPickerRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
