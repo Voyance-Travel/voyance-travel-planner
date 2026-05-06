@@ -108,32 +108,43 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       .select('id, activity_id, cost_per_person_usd, num_travelers, is_paid, paid_amount_usd, category, day_number, source')
       .eq('trip_id', tripId);
 
-    // 2b. Fetch manual payments. They live only in trip_payments — syncHotelToLedger
-    // intentionally clears the canonical day-0 hotel row when a manual hotel
-    // payment exists, to avoid double-billing. If we don't fold the manual amount
-    // in here, BudgetTab silently understates the trip total.
-    const { data: manualPayments } = await supabase
+    // 2b. Fetch ALL trip_payments. trip_payments is the authoritative source
+    // for "paid so far" — every Mark Paid click in PaymentsTab writes here,
+    // and the activity_costs.is_paid mirror is best-effort (silently no-ops
+    // when activity_id doesn't match, e.g. orphaned/regenerated activities).
+    // Without folding paid trip_payments rows in, BudgetTab's "Paid so far"
+    // drifts below PaymentsTab's "Paid so far" (the L'Arpège bug).
+    const { data: allPayments } = await supabase
       .from('trip_payments')
-      .select('item_type, amount_cents, quantity')
-      .eq('trip_id', tripId)
-      .like('item_id', 'manual-%');
+      .select('item_type, item_id, amount_cents, quantity, status')
+      .eq('trip_id', tripId);
+
+    const manualPayments = (allPayments || []).filter(
+      (p) => typeof p.item_id === 'string' && /^manual-/i.test(p.item_id)
+    );
 
     let totalCents = 0;
     let paidTotal = 0;
     let canonicalHotelCents = 0;
     let canonicalFlightCents = 0;
-    // Track committed hotel/flight + already-logged misc spend so we can fold
-    // the unspent portion of the misc reserve into the trip total.
     let committedHotelCents = 0;
     let committedFlightCents = 0;
     let loggedMiscCents = 0;
 
+    // Lookup of activity_ids covered by a paid trip_payments row, so we don't
+    // double-count when both the activity_costs.is_paid mirror and the
+    // trip_payments row exist for the same item. Strip the composite `_dN`
+    // suffix that PaymentsTab sometimes appends to item_id.
+    const stripDaySuffix = (id: string): string => id.replace(/_d\d+$/, '');
+    const paidActivityIds = new Set<string>();
+    for (const p of allPayments || []) {
+      if (p.status !== 'paid') continue;
+      if (typeof p.item_id !== 'string') continue;
+      if (/^manual-/i.test(p.item_id)) continue;
+      paidActivityIds.add(stripDaySuffix(p.item_id));
+    }
+
     for (const row of costs || []) {
-      // Orphan filter: drop activity-bound rows whose activity_id no longer
-      // exists in the live itinerary. Logistics rows (day_number=0 or
-      // source=logistics-sync) are exempt — they belong to hotel/flight,
-      // not to itinerary activities. This MUST mirror getBudgetLedger and
-      // usePayableItems exactly so all three views report the same total.
       const isLogisticsRow =
         row.source === 'logistics-sync' ||
         row.day_number == null ||
@@ -150,21 +161,22 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       const rowCents = Math.round(rowTotal * 100);
       const cat = (row.category || '').toLowerCase();
 
-      // Track canonical day-0 logistics rows separately so we can compute the
-      // manual override delta (manual replaces canonical, doesn't add to it).
       if (row.day_number === 0 && cat === 'hotel') canonicalHotelCents += rowCents;
       if (row.day_number === 0 && cat === 'flight') canonicalFlightCents += rowCents;
       if (cat === 'hotel') committedHotelCents += rowCents;
       else if (cat === 'flight') committedFlightCents += rowCents;
       else if (cat === 'misc') loggedMiscCents += rowCents;
 
-      // Use shared inclusion rule — must match getBudgetSummary exactly,
-      // otherwise snapshot total and summary total drift apart.
       if (!shouldCountRow(row, includeHotel, includeFlight)) continue;
 
       totalCents += rowCents;
 
-      if (row.is_paid) {
+      // Only count is_paid here if no trip_payments paid row covers this
+      // activity — trip_payments is authoritative and counted below.
+      if (
+        row.is_paid &&
+        !(row.activity_id && paidActivityIds.has(stripDaySuffix(String(row.activity_id))))
+      ) {
         const paidUsd = row.paid_amount_usd != null ? row.paid_amount_usd : rowTotal;
         paidTotal += Math.round(paidUsd * 100);
       }
@@ -174,13 +186,11 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     let manualHotelCents = 0;
     let manualFlightCents = 0;
     let manualOtherCents = 0;
-    let manualPaidCents = 0;
     for (const p of manualPayments || []) {
       const cents = (p.amount_cents || 0) * (p.quantity || 1);
       if (p.item_type === 'hotel') manualHotelCents += cents;
       else if (p.item_type === 'flight') manualFlightCents += cents;
       else manualOtherCents += cents;
-      manualPaidCents += cents;
     }
     const hotelDelta = canonicalHotelCents > 0
       ? (manualHotelCents - canonicalHotelCents)
@@ -192,7 +202,17 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     if (includeFlight) totalCents += flightDelta;
     totalCents += manualOtherCents;
     totalCents = Math.max(0, totalCents);
-    paidTotal += manualPaidCents;
+
+    // Authoritative paid: sum every paid trip_payments row, honoring the
+    // hotel/flight inclusion toggles so the figure matches "Trip Total".
+    // This makes BudgetTab "Paid so far" identical to PaymentsTab.
+    for (const p of allPayments || []) {
+      if (p.status !== 'paid') continue;
+      const cat = (p.item_type || '').toLowerCase();
+      if (cat === 'hotel' && !includeHotel) continue;
+      if ((cat === 'flight' || cat === 'flights') && !includeFlight) continue;
+      paidTotal += (p.amount_cents || 0) * (p.quantity || 1);
+    }
 
     // Misc reserve — the user explicitly set aside cash for tips / SIM /
     // pharmacy / market finds. The itinerary never auto-fills it, so without
