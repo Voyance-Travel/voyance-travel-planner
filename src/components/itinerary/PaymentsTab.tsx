@@ -570,12 +570,17 @@ export function PaymentsTab({
     setDeleting(true);
     try {
       const ids = item.allPayments.map(p => p.id);
+      const removedPaidCents = item.allPayments
+        .filter(p => p.status === 'paid')
+        .reduce((sum, p) => sum + (p.amount_cents * (p.quantity || 1)), 0);
       const { error } = await supabase.from('trip_payments').delete().in('id', ids);
       if (error) throw error;
       toast.success('Expense deleted');
       setDeleteTarget(null);
       await fetchPayments(150);
-      window.dispatchEvent(new CustomEvent('booking-changed'));
+      window.dispatchEvent(new CustomEvent('booking-changed', {
+        detail: { optimisticPaidDeltaCents: -removedPaidCents }
+      }));
     } catch (err) {
       console.error('Error deleting expense:', err);
       toast.error('Failed to delete expense');
