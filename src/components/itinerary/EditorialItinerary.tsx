@@ -8613,7 +8613,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
 
   const entryInfo = getEntryRequirements();
 
-  const info = getDefaultInfo();
+  const info = mergeNeedToKnowInfo(aiInsights, getDefaultInfo() as any) as any;
 
   const infoCategories = [
     // Entry Requirements - Most important first
