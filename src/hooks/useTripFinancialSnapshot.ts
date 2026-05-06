@@ -245,12 +245,43 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     let paidFromTripPayments = 0;
     for (const p of allPayments || []) {
       if (p.status !== 'paid') continue;
+      // Skip orphan rows whose underlying activity no longer exists in the
+      // itinerary — otherwise a regenerated trip inherits "phantom" payments
+      // from the prior session and triggers a false "Overpaid" warning.
+      if (typeof p.item_id === 'string' && orphanPaymentItemIds.has(p.item_id)) continue;
       const cat = (p.item_type || '').toLowerCase();
       if (cat === 'hotel' && !includeHotel) continue;
       if ((cat === 'flight' || cat === 'flights') && !includeFlight) continue;
       paidFromTripPayments += (p.amount_cents || 0) * (p.quantity || 1);
     }
     paidTotal += paidFromTripPayments;
+
+    // Fire-and-forget archival of orphan rows so PaymentsTab (which reads
+    // its own list) catches up on the next refetch. Guarded by a fingerprint
+    // so we don't hammer the RPC across re-renders.
+    if (orphanPaymentItemIds.size > 0) {
+      const fingerprint = Array.from(orphanPaymentItemIds).sort().join('|');
+      if (fingerprint !== lastArchivedFingerprintRef.current) {
+        lastArchivedFingerprintRef.current = fingerprint;
+        supabase
+          .rpc('archive_orphan_trip_payments', { p_trip_id: tripId })
+          .then(({ data: archResult, error: archErr }) => {
+            if (archErr) {
+              console.warn('[useTripFinancialSnapshot] orphan archive failed', archErr);
+              return;
+            }
+            const count = (archResult as any)?.archived_count ?? 0;
+            if (count > 0) {
+              console.info(
+                `[useTripFinancialSnapshot] auto-archived ${count} orphan payment${count === 1 ? '' : 's'} for trip ${tripId}`
+              );
+              window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+            }
+          });
+      }
+    } else {
+      lastArchivedFingerprintRef.current = null;
+    }
 
     // Reconciliation guard: BudgetTab must never under-report compared to
     // PaymentsTab. PaymentsTab's "Paid so far" is sum(trip_payments where
