@@ -56,6 +56,8 @@ import { rateDisclosure } from '@/lib/currency';
 import { assessBudgetFit, formatMultiplier } from '@/lib/budget-realism';
 import { supabase } from '@/integrations/supabase/client';
 import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
+import { toast } from 'sonner';
+import { applyRaiseBudget } from './raiseBudgetApply';
 
 interface ItineraryActivity {
   id: string;
