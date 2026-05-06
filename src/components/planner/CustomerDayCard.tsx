@@ -244,7 +244,7 @@ export default function CustomerDayCard({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <p className={cn("font-medium", style.text)}>{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime })}</p>
+                                <p className={cn("font-medium", style.text)}>{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}</p>
                                 <p className="text-sm text-muted-foreground mt-0.5">
                                   {sanitizeActivityText(activity.description)}
                                 </p>

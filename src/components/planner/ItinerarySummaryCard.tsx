@@ -206,7 +206,7 @@ export default function ItinerarySummaryCard({
                                 <div className="flex items-start justify-between">
                                   <div>
                                     <h4 className="font-medium text-foreground">
-                                      {sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime })}
+                                      {sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}
                                     </h4>
                                     <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                                       <span className="flex items-center gap-1">

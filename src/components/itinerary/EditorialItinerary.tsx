@@ -11797,7 +11797,7 @@ function ActivityRow({
                   onClose={() => setShowProposeReplacement(false)}
                   tripId={tripId}
                   activityId={activity.id}
-                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime })}
+                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime, activity: activity as any })}
                   destination={destination}
                   activityForDrawer={{
                     id: activity.id,
@@ -11842,7 +11842,7 @@ function ActivityRow({
                   onClose={() => setShowProposeReplacement(false)}
                   tripId={tripId}
                   activityId={activity.id}
-                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime })}
+                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime, activity: activity as any })}
                   destination={destination}
                   activityForDrawer={{
                     id: activity.id,

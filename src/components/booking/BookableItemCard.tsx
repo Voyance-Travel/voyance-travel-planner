@@ -225,7 +225,7 @@ export function BookableItemCard({
           <Badge variant="outline" className={stateColor}>
             {stateLabel}
           </Badge>
-          <span className="font-medium text-sm">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime })}</span>
+          <span className="font-medium text-sm">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}</span>
         </div>
         <div className="flex items-center gap-2">
           <PriceDisplay />
@@ -262,7 +262,7 @@ export function BookableItemCard({
                   </Badge>
                 )}
               </div>
-              <h3 className="font-semibold text-foreground">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime })}</h3>
+              <h3 className="font-semibold text-foreground">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}</h3>
               {activity.description && (
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                   {activity.description}
