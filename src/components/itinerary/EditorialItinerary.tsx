@@ -155,6 +155,7 @@ import { useManualBuilderStore } from '@/stores/manual-builder-store';
 import { useActionCap } from '@/hooks/useActionCap';
 import { useTripVenueBank } from '@/hooks/useTripVenueBank';
 import { AddActivityModal } from './AddActivityModal';
+import { DeadGapBanner } from './DeadGapBanner';
 import { EditActivityModal } from './EditActivityModal';
 import { DiscoverDrawer } from './DiscoverDrawer';
 import { ImportActivitiesModal, type ImportMode } from './ImportActivitiesModal';
