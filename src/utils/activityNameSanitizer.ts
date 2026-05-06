@@ -197,6 +197,22 @@ export function sanitizeActivityName(
     }
   }
 
+  // Wellness placeholder mask — when the activity is a spa/wellness item without
+  // a verifiable venue (no placeId, no numeric address, generic title), surface a
+  // clear "find a venue" affordance instead of a fake-sounding treatment name.
+  if (sanitized) {
+    const probe: WellnessActivityShape = opts?.activity
+      ? {
+          ...opts.activity,
+          title: sanitized,
+          category: opts.activity.category ?? opts?.category,
+        }
+      : { title: sanitized, category: opts?.category };
+    if (isClientPlaceholderWellness(probe)) {
+      return WELLNESS_PLACEHOLDER_FALLBACK;
+    }
+  }
+
   return sanitized || 'Activity';
 }
 
