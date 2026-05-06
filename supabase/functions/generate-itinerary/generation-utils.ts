@@ -396,6 +396,70 @@ export function venueMatchesAny(venue: string, usedSet: Set<string>): boolean {
   return false;
 }
 
+// =============================================================================
+// CROSS-DAY ACTIVITY VENUE CANONICALIZATION
+// =============================================================================
+//
+// Strips activity-style verbs/qualifiers ("Exploration", "Priority Visit",
+// "Skip the Line Tour", "Morning at …", "Visit to …") so that two activities
+// pointing at the same venue collapse to the same canonical key. Used by the
+// cross-day venue dedup filter and by ledger-check to detect "same product on
+// consecutive days" regressions (Louvre case).
+
+const ACTIVITY_QUALIFIER_RE = /\s+(?:exploration|exploring|experience|priority\s+visit|skip[-\s]the[-\s]line|guided\s+tour|guided\s+visit|private\s+tour|tour|visit|stroll|walk|wander|tasting|workshop|class)$/i;
+const ACTIVITY_PREFIX_RE = /^(?:morning|afternoon|evening|final|early|late|leisurely|scenic|guided|private|exclusive)\s+(?:at|in|visit\s+to|stroll\s+(?:at|in|through)|walk\s+(?:at|in|through|around))\s+/i;
+const ACTIVITY_VERB_PREFIX_RE = /^(?:visit(?:\s+to)?|explore|exploring|discover|stroll(?:\s+through)?|walk(?:\s+through)?|wander|tour(?:\s+of)?|enjoy|see)\s+(?:at|in|through|around|along|the)?\s*/i;
+
+/**
+ * Canonicalize an activity title to its underlying venue identity.
+ * "Louvre Museum Exploration" / "Morning at Louvre Museum" / "Skip-the-Line
+ * Louvre Tour" → all collapse to the same normalized form.
+ */
+export function canonicalActivityVenueName(s: string): string {
+  if (!s) return '';
+  let v = String(s).trim()
+    .replace(ACTIVITY_PREFIX_RE, '')
+    .replace(ACTIVITY_VERB_PREFIX_RE, '');
+  let prev = '';
+  while (prev !== v) {
+    prev = v;
+    v = v.replace(ACTIVITY_QUALIFIER_RE, '').trim();
+  }
+  return normalizeVenueName(v);
+}
+
+export interface CrossDayDuplicateResult {
+  isDuplicate: boolean;
+  matchedCandidate?: string;
+  matchedPrev?: string;
+}
+
+/**
+ * Returns whether any of the activity's candidate strings (title, venue_name,
+ * location.name) is a cross-day duplicate of any prior-day venue. Caller is
+ * responsible for excluding categories where recurrence is allowed (dining,
+ * accommodation, transport, hotel anchors).
+ */
+export function crossDayVenueDuplicate(
+  activityCandidates: string[],
+  priorVenues: string[],
+): CrossDayDuplicateResult {
+  const cands = activityCandidates
+    .map(canonicalActivityVenueName)
+    .filter((s) => s && s.length > 3);
+  const prevs = priorVenues
+    .map(canonicalActivityVenueName)
+    .filter((s) => s && s.length > 3 && !/your hotel/i.test(s));
+  for (const cand of cands) {
+    for (const prev of prevs) {
+      if (venueNamesMatch(cand, prev)) {
+        return { isDuplicate: true, matchedCandidate: cand, matchedPrev: prev };
+      }
+    }
+  }
+  return { isDuplicate: false };
+}
+
 export function haversineDistanceKm(
   lat1: number,
   lng1: number,

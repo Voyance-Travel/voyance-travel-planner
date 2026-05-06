@@ -1,93 +1,68 @@
-# Validate the "Raise budget to $X" CTA
+# Lock down cross-day venue dedup against Louvre regression
 
 ## Problem
 
-The inline "Raise budget to $X" button in `BudgetTab.tsx` (line 648) has never been verified end-to-end. Today the click handler is an inline closure:
+In two earlier sessions the Louvre appeared as the same product on consecutive days. Today's protection is the inline `canonVenue` + `venueNamesMatch` filter in `action-generate-trip-day.ts` (lines 1144–1191), which strips activity qualifiers ("Exploration", "Priority Visit", "Tour"…) and fuzzy-matches against `usedVenues`. There are also alias entries in `generation-utils.ts` (`musee du louvre`, `louvre museum`, `the louvre` → `louvre`).
 
-```tsx
-onClick={async () => {
-  await updateSettings({ budget_total_cents: suggested });
-  window.dispatchEvent(new CustomEvent('booking-changed'));
-}}
-```
+The logic looks sound, but:
 
-This calls `useTripBudget.updateSettings` → `updateTripBudgetSettings(tripId, …)` → invalidates `tripBudgetSettings`, `tripBudgetSummary`, `tripBudgetAllocations`, then dispatches `booking-changed`. The path looks correct but is untested, and there is no toast confirming the change (unlike `setBudget`, which does toast).
+- It lives as a closure inside a 2,700-line file — not unit-tested.
+- The exact "Louvre on consecutive days" variants have no regression test, so a future refactor can silently regress.
+- The `ledger-check.ts` "repeat_already_done" pass uses a much weaker `fuzzyMatch` (substring only) and doesn't share the canonicalizer, so if `usedVenues` ever drops out of the pipeline the second line of defense doesn't catch "Louvre Museum Priority Visit" vs "Louvre Museum Exploration" reliably.
 
 ## Plan
 
-Mirror what we did for the Coach "Apply" path: extract the handler into a pure, testable helper, cover it with unit tests, and add a React integration test for the button.
+### 1. Extract canonicalization into `generation-utils.ts`
 
-### 1. Extract pure handler
-
-New file `src/components/planner/budget/raiseBudgetApply.ts`:
+Add `canonicalActivityVenueName(title)` exporting the regex chain currently inlined in `action-generate-trip-day.ts`:
 
 ```ts
-export interface RaiseBudgetDeps {
-  updateSettings: (s: { budget_total_cents: number }) => Promise<void>;
-  dispatchBookingChanged: () => void;
-  toast: { success: (msg: string) => void; error: (msg: string) => void };
-  formatCurrency: (cents: number) => string;
-}
-
-export async function applyRaiseBudget(
-  currentBudgetCents: number,
-  suggestedCents: number,
-  deps: RaiseBudgetDeps,
-): Promise<{ ok: boolean; reason?: string }> {
-  if (!Number.isFinite(suggestedCents) || suggestedCents <= 0)
-    return { ok: false, reason: 'invalid_suggestion' };
-  if (suggestedCents <= currentBudgetCents)
-    return { ok: false, reason: 'not_higher' };
-  try {
-    await deps.updateSettings({ budget_total_cents: suggestedCents });
-    deps.dispatchBookingChanged();
-    deps.toast.success(`Budget raised to ${deps.formatCurrency(suggestedCents)}`);
-    return { ok: true };
-  } catch {
-    deps.toast.error('Failed to raise budget');
-    return { ok: false, reason: 'mutation_failed' };
-  }
+export function canonicalActivityVenueName(s: string): string {
+  if (!s) return '';
+  let v = String(s).trim()
+    .replace(ACTIVITY_PREFIX_RE, '')
+    .replace(ACTIVITY_VERB_PREFIX_RE, '');
+  let prev = '';
+  while (prev !== v) { prev = v; v = v.replace(ACTIVITY_QUALIFIER_RE, '').trim(); }
+  return normalizeVenueName(v);
 }
 ```
 
-### 2. Wire `BudgetTab` to use the helper
+Plus `crossDayVenueDuplicate(activityCandidates: string[], priorVenues: string[]): { isDuplicate: boolean; matchedPrev?: string; matchedCandidate?: string }` that wraps the canonicalize → `venueNamesMatch` loop.
 
-Replace the inline closure (lines 652–655) with `applyRaiseBudget(budgetCents, suggested, { updateSettings, dispatchBookingChanged, toast, formatCurrency })`. This also adds a success toast — currently missing — so users get feedback that the raise persisted.
+### 2. Use it from `action-generate-trip-day.ts`
 
-### 3. Unit tests
+Replace the inline `canonVenue` + nested loops with `crossDayVenueDuplicate(...)`. Behavior unchanged; the log line stays.
 
-`src/components/planner/budget/__tests__/raiseBudgetApply.test.ts` covering:
+### 3. Use the same canonicalizer in `ledger-check.ts`
 
-- happy path: suggested > current → `updateSettings` called with `{ budget_total_cents: suggested }`, dispatcher fired, success toast, returns `{ ok: true }`
-- guard: suggested ≤ current → mutation NOT called, returns `{ ok: false, reason: 'not_higher' }`
-- guard: invalid (0/NaN) suggestion → no-op, `invalid_suggestion`
-- error path: `updateSettings` rejects → error toast, `mutation_failed`
+`ledger-check.ts` step 2 ("Repeat-of-alreadyDone") currently uses substring-only `fuzzyMatch`. Harden it with `canonicalActivityVenueName` before comparing, so even when `usedVenues` is empty (e.g. on a single-day regen) we still catch "Louvre Museum Priority Visit" against an `alreadyDone` of "Louvre Museum Exploration".
 
-### 4. Integration test
+### 4. Regression test suite
 
-`src/components/planner/budget/__tests__/budgetRaiseCta.integration.test.tsx`:
+New `supabase/functions/generate-itinerary/cross-day-dedup.test.ts` covering the Louvre case + neighbors:
 
-- render `BudgetTab` with mocked `useTripBudget` returning a budget that triggers the over-budget banner and a `fit.suggestedBudgetCents` higher than current
-- click "Raise budget to …" button
-- assert `updateSettings` was called with the suggested cents
-- assert `booking-changed` event fired (spy on `window.dispatchEvent`)
-- assert success toast appeared
+- `canonicalActivityVenueName('Louvre Museum Exploration')` → `'louvre museum'` (after strip)
+- `canonicalActivityVenueName('Morning at Louvre Museum')` → matches above
+- `crossDayVenueDuplicate(['Louvre Museum Priority Visit'], ['Louvre Museum Exploration'])` → duplicate
+- `crossDayVenueDuplicate(['Skip-the-Line Louvre Tour'], ['Musée du Louvre'])` → duplicate (alias path)
+- Non-duplicate sanity: `'Musée d'Orsay Visit'` vs `'Louvre Museum Exploration'` → not duplicate
+- Restaurants explicitly skipped (category branch is in caller, but the helper itself should not over-match `'Café Marly'` vs `'Louvre Museum'`)
 
-Mocks follow the existing pattern from `budgetCoachApply.integration.test.tsx`.
+Plus a focused test on the patched `ledger-check.ts`: feed a Day 2 with "Louvre Museum Priority Visit" and an `alreadyDone` of "Louvre Museum Exploration", assert the Day 2 entry is removed with a `repeat_already_done` warning.
 
-### 5. QA checklist
+### 5. Stack-overflow note (database-level dedup)
 
-Append a "Raise budget CTA" section to `docs/QA-BUDGET-COACH.md` (or create `docs/QA-BUDGET.md`): trigger over-budget state → click Raise → verify (a) total updates in header, (b) percentages recalc, (c) banner disappears, (d) refresh persists.
+The lovable-stack-overflow snippet suggests a unique DB index on (`source_id`, `date`, `amount`). That doesn't apply here — itinerary rows aren't identity-keyed by venue, and venues legitimately recur (Eiffel viewing point at sunset vs. tower climb). Sticking with the canonicalizer + alias map is correct.
 
 ## Files
 
-- `src/components/planner/budget/raiseBudgetApply.ts` (new)
-- `src/components/planner/budget/BudgetTab.tsx` (swap inline closure)
-- `src/components/planner/budget/__tests__/raiseBudgetApply.test.ts` (new)
-- `src/components/planner/budget/__tests__/budgetRaiseCta.integration.test.tsx` (new)
-- `docs/QA-BUDGET-COACH.md` (append section)
+- `supabase/functions/generate-itinerary/generation-utils.ts` — add `canonicalActivityVenueName`, `crossDayVenueDuplicate`
+- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — use new helpers
+- `supabase/functions/generate-itinerary/ledger-check.ts` — canonicalize before `fuzzyMatch`
+- `supabase/functions/generate-itinerary/cross-day-dedup.test.ts` — new (Deno)
 
 ## Out of scope
 
-- Changing what `suggestedBudgetCents` resolves to (existing fit logic stays).
-- Touching the Coach's two other "Raise budget to X" buttons in `BudgetCoach.tsx` — they already go through the Coach apply pipeline and have their own coverage. If you want, I can fold them onto the same helper in a follow-up.
+- Restructuring the Day Truth Ledger / `usedVenues` plumbing.
+- Adding a DB unique index — not the right shape for itinerary venue dedup.

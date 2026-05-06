@@ -14,6 +14,7 @@
  */
 
 import type { DayLedger, LedgerUserIntent } from './day-ledger.ts';
+import { canonicalActivityVenueName, venueNamesMatch } from './generation-utils.ts';
 
 export interface LedgerCheckWarning {
   dayNumber: number;
@@ -227,13 +228,25 @@ export async function ledgerCheck(
     //    breakfast, hotel transfers) are SUPPOSED to repeat every day. Without
     //    this exemption every day after day 1 was being stripped of its
     //    Believable-Human structure (see Core memory).
-    const doneSet = ledger.alreadyDone.map((p) => p.title.toLowerCase());
+    const doneLower = ledger.alreadyDone.map((p) => p.title.toLowerCase());
+    const doneCanon = ledger.alreadyDone
+      .map((p) => canonicalActivityVenueName(p.title))
+      .filter((s) => s && s.length > 3);
     day.activities = day.activities.filter((a: any) => {
       if (a.locked || a.isLocked || a.lockedSource) return true;
       if (isDailyAnchor(a)) return true;
       const t = (a.title || a.name || '').toLowerCase().trim();
       if (!t) return true;
-      const repeat = doneSet.some((d) => fuzzyMatch(t, d));
+      // Substring fuzzyMatch against raw titles (legacy behavior).
+      let repeat = doneLower.some((d) => fuzzyMatch(t, d));
+      // Canonical venue match — catches "Louvre Museum Priority Visit" vs
+      // "Louvre Museum Exploration" even when usedVenues plumbing is empty.
+      if (!repeat) {
+        const cand = canonicalActivityVenueName(a.title || a.name || '');
+        if (cand && cand.length > 3) {
+          repeat = doneCanon.some((d) => venueNamesMatch(cand, d));
+        }
+      }
       if (repeat) {
         warnings.push({
           dayNumber: dayNum,

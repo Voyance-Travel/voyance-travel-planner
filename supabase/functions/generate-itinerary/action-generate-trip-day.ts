@@ -1148,21 +1148,7 @@ async function _handleGenerateTripDayInner(
   // like "Exploration", "Priority Visit", "Tour", "Experience") and compare with
   // word-overlap fuzzy matching, not just substring containment.
   if (usedVenues.length > 0 && Array.isArray(dayResult?.activities)) {
-    const { normalizeVenueName, venueNamesMatch } = await import('./generation-utils.ts');
-    const ACTIVITY_QUALIFIER_RE = /\s+(?:exploration|exploring|experience|priority\s+visit|skip[-\s]the[-\s]line|guided\s+tour|guided\s+visit|private\s+tour|tour|visit|stroll|walk|wander|tasting|workshop|class)$/i;
-    const ACTIVITY_PREFIX_RE = /^(?:morning|afternoon|evening|final|early|late|leisurely|scenic|guided|private|exclusive)\s+(?:at|in|visit\s+to|stroll\s+(?:at|in|through)|walk\s+(?:at|in|through|around))\s+/i;
-    const ACTIVITY_VERB_PREFIX_RE = /^(?:visit(?:\s+to)?|explore|exploring|discover|stroll(?:\s+through)?|walk(?:\s+through)?|wander|tour(?:\s+of)?|enjoy|see)\s+(?:at|in|through|around|along|the)?\s*/i;
-    const canonVenue = (s: string): string => {
-      if (!s) return '';
-      let v = String(s).trim();
-      v = v.replace(ACTIVITY_PREFIX_RE, '').replace(ACTIVITY_VERB_PREFIX_RE, '');
-      let prev = '';
-      while (prev !== v) { prev = v; v = v.replace(ACTIVITY_QUALIFIER_RE, '').trim(); }
-      return normalizeVenueName(v);
-    };
-    const prevVenuesCanon = usedVenues
-      .map(canonVenue)
-      .filter(s => s && s.length > 3 && !/your hotel/i.test(s));
+    const { crossDayVenueDuplicate } = await import('./generation-utils.ts');
     const beforeVenueDedup = dayResult.activities.length;
     dayResult.activities = dayResult.activities.filter((act: any) => {
       if (act.locked) return true;
@@ -1174,14 +1160,11 @@ async function _handleGenerateTripDayInner(
         act.venueName || '',
         act.venue_name || '',
         typeof act.location === 'object' ? (act.location?.name || '') : '',
-      ].map(canonVenue).filter(s => s && s.length > 3);
-      for (const cand of candidates) {
-        for (const prev of prevVenuesCanon) {
-          if (venueNamesMatch(cand, prev)) {
-            console.log(`[VENUE DEDUP FILTER] Removed cross-day duplicate: "${act.title}" — canonical "${cand}" matches previous-day "${prev}"`);
-            return false;
-          }
-        }
+      ];
+      const dup = crossDayVenueDuplicate(candidates, usedVenues);
+      if (dup.isDuplicate) {
+        console.log(`[VENUE DEDUP FILTER] Removed cross-day duplicate: "${act.title}" — canonical "${dup.matchedCandidate}" matches previous-day "${dup.matchedPrev}"`);
+        return false;
       }
       return true;
     });
