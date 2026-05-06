@@ -3757,7 +3757,7 @@ export function EditorialItinerary({
             type: newActivity.type,
             time: preservedTime,
             startTime: preservedStartTime,
-            duration: newActivity.duration,
+            duration: coerceDurationString(newActivity.duration, (newActivity as any).durationMinutes),
             cost: { amount: newActivity.cost, currency: tripCurrency },
             location: {
               name: newActivity.location?.name,
