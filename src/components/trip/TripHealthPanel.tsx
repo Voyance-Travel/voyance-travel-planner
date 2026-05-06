@@ -317,7 +317,7 @@ export function TripHealthPanel({
       healthScore: health,
       daysPlanned: planned,
     };
-  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere]);
+  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay]);
 
   const healthColor = healthScore >= 80 ? 'text-green-600' : healthScore >= 50 ? 'text-amber-500' : 'text-destructive';
   const healthBg = healthScore >= 80 ? 'bg-green-600' : healthScore >= 50 ? 'bg-amber-500' : 'bg-destructive';
