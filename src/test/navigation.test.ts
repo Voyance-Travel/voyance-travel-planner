@@ -24,6 +24,7 @@ const ALL_APP_ROUTES = {
     '/travel-tips',
     '/about',
     '/archetypes',
+    '/archetypes/:slug',
     '/how-it-works',
     '/careers',
     '/press',
