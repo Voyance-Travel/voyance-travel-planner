@@ -1,28 +1,36 @@
-# Finding: "Raise budget" persistence is intentional, not a state leak
+## Plan: Make hotel-only regeneration fail visibly and recover safely
 
-## What's happening
-The "Raise budget to $X" CTA in BudgetTab calls `applyRaiseBudget` (`src/components/planner/budget/raiseBudgetApply.ts`), which writes the new value to `trips.budget_total_cents` via `updateSettings` in `tripBudgetService.ts`. That's a database column on the trip row — not session storage, not a cache. So it correctly survives:
+### 1) Stop treating shell itineraries as successful
+- Update `getItinerary` / status handling so a trip with `itinerary_status = 'failed'` or `partial` is not returned to the UI as `ready` just because `itinerary_data.days` exists.
+- Add a shared frontend completeness check that distinguishes:
+  - real itinerary content
+  - hotel/logistics-only days
+  - empty shell days
+- Use that check in `TripDetail.hasItineraryData` and related ready/self-heal paths so hotel-only output does not render as a normal 4-day itinerary.
 
-- page reloads
-- new browser sessions
-- different devices
-- collaborators on the same trip
+### 2) Make regeneration completion use the same backend gate everywhere
+- In `EditorialItinerary.handleRegenerateItinerary`, after day-by-day regeneration finishes, inspect the generated days before showing success.
+- If the generated result is empty/hotel-only/bare:
+  - persist `itinerary_status = 'failed'`
+  - set `metadata.generation_failure_reason = 'empty_itinerary'` or `incomplete_itinerary`
+  - preserve the shell days for diagnostics, but do not call it successful
+  - do not show “Itinerary regenerated!”
+- Align the `partial` status produced by `generate-trip-day` with the existing failure metadata expected by Budget/Coach gating.
 
-The $5,400 you're seeing is the value you committed during the previous test. The original $1,796 was overwritten the moment "Raise budget" was clicked.
+### 3) Add an Itinerary-tab failure banner with retry
+- Add a prominent recovery banner on the Itinerary tab when generation failed or produced hotel-only content.
+- Message: generation finished without restaurants/activities/transit, and the user can retry.
+- Button: `Regenerate itinerary`, wired to the existing regenerate handler.
+- Keep the existing Budget tab warning, but make the Itinerary tab the primary place users see the failure.
 
-## Is this correct?
-**Yes** — same as editing any other trip field (dates, hotel, traveler count). There is no "session" scope for trip settings; a trip is a persistent entity. The button copy ("Raise budget to $X") communicates a permanent action, and the success toast confirms it ("Budget raised to $X").
+### 4) Prevent phantom downstream behavior
+- Ensure Budget Coach remains gated when `itinerary_status` is `failed` or `partial`, and when completeness check says hotel-only.
+- Ensure All Costs can still show legitimate hotel/flight items, but over-budget/Coach warnings should not fire as if an empty itinerary were valid.
 
-## Not a leak because
-- No cross-trip contamination (column is per-trip)
-- No cross-user contamination (RLS on `trips`)
-- No hidden write — the action is explicit, user-initiated, and toasted
-
-## Optional polish (only if you want it)
-If the concern is that the change feels too irreversible, possible non-functional tweaks:
-
-1. **Confirm before raising** — small `AlertDialog`: "Permanently raise this trip's budget from $1,796 to $5,400?" Adds friction to an otherwise one-click destructive-ish action.
-2. **Undo toast** — replace the success toast with one that has an "Undo" action that restores the prior value within ~10s. Same pattern we use elsewhere.
-3. **History entry** — log budget changes to `cost_change_log` (already used for floor adjustments) so the user can audit when/why budget moved.
-
-None of these are required — the current behavior matches the table-driven, persisted-trip model. Let me know if you want any of the three above and I'll scope it.
+### 5) Regression coverage
+- Add/extend tests around the shared completeness check:
+  - 4 shell days, no activities → failed/empty
+  - hotel-only activities → failed/incomplete
+  - hotel + one paid item across multi-day trip → failed/incomplete
+  - normal dining/activity/transit mix → ready
+- Add a targeted test for empty + over-budget not producing Coach suggestions if an existing test harness is available.
