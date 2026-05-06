@@ -154,7 +154,7 @@ export function getFullArchetypeContext(
   // Build pre-compiled prompt blocks
   const identityBlock = buildIdentityBlock(archetype, definition);
   const constraintsBlock = budgetTier 
-    ? buildAllConstraints(archetype, budgetTier, traits)
+    ? buildAllConstraints(archetype, budgetTier, traits, destination)
     : buildArchetypeConstraintsBlock(archetype);
   const affinityBlock = buildExperienceGuidancePrompt(archetype);
   const destinationBlock = destination 
