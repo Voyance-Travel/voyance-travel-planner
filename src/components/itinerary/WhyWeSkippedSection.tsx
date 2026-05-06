@@ -84,8 +84,18 @@ export function WhyWeSkippedSection({
             <h4 className="text-sm font-medium text-foreground">
               Better Alternatives
             </h4>
-            <p className="text-xs text-muted-foreground">
-              {skippedItems.length} local pick{skippedItems.length !== 1 ? 's' : ''} for {destination}
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              {skippedItems.length === 0 && isLoading ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Finding local picks for {destination}…
+                </>
+              ) : (
+                <>
+                  {skippedItems.length} local pick{skippedItems.length !== 1 ? 's' : ''} for {destination}
+                  {isLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                </>
+              )}
             </p>
           </div>
         </div>
