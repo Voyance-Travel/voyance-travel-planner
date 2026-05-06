@@ -1,7 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
 import { fetchTravelerDNA, buildCompactDNASummary, type TravelerDNA } from "../_shared/traveler-dna.ts";
-import { matchesAIStubVenue } from "../generate-itinerary/fix-placeholders.ts";
+// Inlined from generate-itinerary/fix-placeholders.ts (edge functions can't import across sibling function dirs at deploy time)
+const AI_STUB_VENUE_PATTERNS: RegExp[] = [
+  /^(le |la |il |el )?(table|bistrot|brasserie|caf[eé]|comptoir|boulangerie|p[âa]tisserie|trattoria|osteria|taverna|restaurant|maison|petit|grand|bar|cave)\s+(du|de la|des|de|del|della|dei)\s+(quartier|march[ée]|coin|place|soir|midi|matin|gare|arts|jardin|vins|coeur|nord|sud|est|ouest|centre|village|port|pont)\b/i,
+  /^(le |la )?(petit|petite|grand|grande|caf[eé])\s+(matin|matinal|matinale|soir|midi|jardin|comptoir|march[ée]|place|coin)\b/i,
+  /^(caf[eé] matinal|boulangerie du quartier|le petit matin|caf[eé] des arts|p[âa]tisserie du coin|bistrot du march[ée]|le comptoir du midi|brasserie du coin|caf[eé] de la place|table du quartier|restaurant le jardin|la table du soir|le petit comptoir|brasserie de la gare|restaurant du march[ée]|le bar du coin|comptoir des vins|le petit bar|bar de la place|cave [àa] vins)$/i,
+];
+function matchesAIStubVenue(name: string): boolean {
+  return AI_STUB_VENUE_PATTERNS.some((re) => re.test((name || '').trim()));
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
