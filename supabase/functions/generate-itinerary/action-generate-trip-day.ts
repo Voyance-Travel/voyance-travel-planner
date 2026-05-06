@@ -1387,6 +1387,14 @@ async function _handleGenerateTripDayInner(
           if (ts && typeof ts.pace === 'number') return ts.pace;
           return undefined;
         })(),
+        adventureScore: (() => {
+          const gc = (tripMeta?.generation_context as Record<string, unknown> | undefined) || {};
+          const blended = (gc.blendedTraitScores as Record<string, number> | undefined) || undefined;
+          if (blended && typeof blended.adventure === 'number') return blended.adventure;
+          const ts = (tripMeta?.trait_scores as Record<string, number> | undefined) || undefined;
+          if (ts && typeof ts.adventure === 'number') return ts.adventure;
+          return undefined;
+        })(),
       });
 
       if (repairs.length > 0) {
