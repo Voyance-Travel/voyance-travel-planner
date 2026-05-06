@@ -2254,10 +2254,54 @@ TAGGING REQUIREMENT: Each "local" activity MUST include at least one of these ta
 `;
 }
 
+export function buildPlanningStyleRules(planning: number): string {
+  if (!planning) return '';
+
+  if (planning <= -3) {
+    const isFullySpontaneous = planning <= -6;
+    return `
+=== 🌬️ PLANNING STYLE — SPONTANEOUS MODE (planning trait = ${planning}) ===
+
+This traveler explicitly slid the Planning dial to ${planning}. They want INTENTIONAL LOOSENESS — not a minute-by-minute itinerary.
+
+${isFullySpontaneous
+  ? 'FULLY SPONTANEOUS (-6 to -10): MAX 2 hard-timed anchors per day. Insert TWO 90–120 min flex/wander windows per day. NO advance reservations except hotel/flights/trains.'
+  : 'LEANING SPONTANEOUS (-3 to -5): MAX 3 hard-timed anchors per day. Insert at least ONE 90–120 min flex/wander window per day.'}
+
+✅ Required FLEX WINDOW format:
+- Title: "Wander {neighborhood}", "Free roam — follow your nose", "Open afternoon — café-hop or pivot", or similar.
+- Duration: 90–120 minutes.
+- Description: 2–3 sentence suggestion of what to look for (cafés, viewpoints, side-streets) — but NO fixed venue or reservation.
+- personalization.tags MUST include one of: ['flex', 'wander', 'free-roam', 'unplanned'].
+
+✅ Soften scheduling language in descriptions:
+- Use "around 3pm", "late afternoon", "after lunch" rather than "3:15pm sharp" (timestamps still required in data, but copy stays loose).
+- At least 1 meal per day should be framed as a "neighborhood pick — choose on the day from these suggestions" with 2–3 options instead of one hard reservation.
+
+❌ DO NOT:
+- Pack the day with back-to-back booked activities.
+- Auto-fill every gap with a paid attraction.
+- Schedule reservations for every meal.
+
+The Density Protocol's "fill every morning gap" rule is RELAXED for this traveler. Empty space is the feature, not a bug.
+`;
+  }
+
+  if (planning >= 4) {
+    return `
+=== 📋 PLANNING STYLE — DETAILED PLANNER MODE (planning trait = +${planning}) ===
+
+This traveler wants every slot timed, mapped, and reservation-noted. Pack the day with explicit times, named venues, and confirmed-booking notes where relevant. Avoid vague language like "around" or "later".
+`;
+  }
+
+  return '';
+}
+
 export function buildAllConstraints(
   archetype: string | undefined,
   budgetTier: string | undefined,
-  traits: { pace: number; budget: number; adventure?: number; authenticity?: number },
+  traits: { pace: number; budget: number; adventure?: number; authenticity?: number; planning?: number },
   destination?: string
 ): string {
   const sections: string[] = [];
@@ -2269,6 +2313,7 @@ export function buildAllConstraints(
   sections.push(buildBudgetConstraints(budgetTier, traits.budget));
   sections.push(buildAdventureRules(traits.adventure ?? 0, destination));
   sections.push(buildAuthenticityRules(traits.authenticity ?? 0, destination));
+  sections.push(buildPlanningStyleRules(traits.planning ?? 0));
   sections.push(buildNamingRules());
   
   // Add final validation block
