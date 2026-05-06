@@ -630,6 +630,14 @@ export async function regenerateDay(
     console.warn('[itineraryAPI] Meal guard failed, skipping:', e);
   }
 
+  // Final stub sweep — replace any leftover generic meal stubs before persisting.
+  try {
+    const { preSaveMealStubSweep } = await import('@/utils/preSaveMealSweep');
+    preSaveMealStubSweep(updatedDays as any, trip.destination);
+  } catch (e) {
+    console.warn('[itineraryAPI] Pre-save meal sweep failed, skipping:', e);
+  }
+
   const updatedItinerary = { ...existingItinerary, days: updatedDays };
   await supabase
     .from('trips')
