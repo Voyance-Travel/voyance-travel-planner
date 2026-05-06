@@ -15,7 +15,7 @@ describe('applyRaiseBudget', () => {
   it('persists, dispatches, and toasts on happy path', async () => {
     const deps = makeDeps();
     const res = await applyRaiseBudget(100_000, 150_000, deps);
-    expect(res).toEqual({ ok: true });
+    expect(res).toEqual({ ok: true, previousBudgetCents: 100_000 });
     expect(deps.updateSettings).toHaveBeenCalledWith({ budget_total_cents: 150_000 });
     expect(deps.dispatchBookingChanged).toHaveBeenCalledOnce();
     expect(deps.toast.success).toHaveBeenCalledWith('Budget raised to $1500');
