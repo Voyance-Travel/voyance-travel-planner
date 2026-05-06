@@ -2374,6 +2374,35 @@ export function EditorialItinerary({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshDayRequest?.nonce]);
 
+  // External fix-timing requests — deterministic auto-spacing of overlapping
+  // activities. No AI call. Falls back to Refresh Day on day_overflow.
+  useEffect(() => {
+    if (!fixTimingRequest?.dayNumber) return;
+    const idx = days.findIndex((d: any) => d.dayNumber === fixTimingRequest.dayNumber);
+    if (idx < 0) return;
+    (async () => {
+      const { fixDayTiming } = await import('@/utils/itinerary/fixDayTiming');
+      const day = days[idx];
+      const result = fixDayTiming(day.activities as any[]);
+      if (result.success) {
+        setDays(prev => prev.map((d, i) => i === idx ? { ...d, activities: result.activities as any } : d));
+        toast.success(
+          `Resolved ${result.resolvedCount} timing conflict${result.resolvedCount === 1 ? '' : 's'} on Day ${day.dayNumber}`
+        );
+      } else if (result.reason === 'day_overflow') {
+        toast.warning(`Day ${day.dayNumber} is too packed to auto-space — opening review.`);
+        setSelectedDayIndex(idx);
+        setActiveTab('details');
+        handleRefreshDay(idx);
+      } else if (result.reason === 'no_changes') {
+        toast.info(`Day ${day.dayNumber}: no timing changes needed.`);
+      } else {
+        toast.info(`Day ${day.dayNumber}: nothing to auto-fix.`);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixTimingRequest?.nonce]);
+
   // Apply accepted refresh changes — patches activity startTime/endTime by ID
   const handleApplyRefreshChanges = useCallback((dayIndex: number, changes: ProposedChange[]) => {
     setDays(prev => prev.map((day, dIdx) => {
