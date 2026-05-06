@@ -21,6 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { sanitizeTravelIntel } from './travelIntel';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -245,9 +246,13 @@ export default function TravelIntelCard({
       if (fnError) throw fnError;
 
       if (data?.success && data?.data) {
-        setIntel(data.data);
-        
-        fetchedRef.current = true;
+        const cleaned = sanitizeTravelIntel(data.data);
+        if (cleaned) {
+          setIntel(cleaned);
+          fetchedRef.current = true;
+        } else {
+          setError('Travel intelligence is temporarily unavailable.');
+        }
       } else {
         setError(data?.error || 'Failed to load intel');
       }
