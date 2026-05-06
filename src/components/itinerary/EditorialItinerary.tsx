@@ -2593,7 +2593,7 @@ export function EditorialItinerary({
     if (!day) return;
     setConciergeActivity(activity);
     setConciergeDayDate(day.date || '');
-    setConciergeDayTitle(day.title || day.theme || `Day ${day.dayNumber}`);
+    setConciergeDayTitle(getDisplayDayTitle(day as any, destination) || `Day ${day.dayNumber}`);
     // Find previous/next visible activities
     const actIdx = day.activities.findIndex(a => a.id === activity.id);
     const prev = actIdx > 0 ? day.activities[actIdx - 1] : undefined;
