@@ -667,6 +667,12 @@ export async function handleGenerateDay(
         .trim();
     }
 
+    // === TITLE COHERENCE: Ensure title reflects actual activities ===
+    if (generatedDay) {
+      const { enforceDayTitleCoherence } = await import('./pipeline/coherence-day-title.ts');
+      enforceDayTitleCoherence(generatedDay, { city: resolvedDestination || destination || '' });
+    }
+
     // === DUPLICATE HOTEL RETURN REMOVAL ===
     if (normalizedActivities.length >= 2) {
       for (let i = normalizedActivities.length - 2; i >= 0; i--) {
