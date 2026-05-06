@@ -119,6 +119,8 @@ export default function TripDetail() {
   const [navigateToSection, setNavigateToSection] = useState<string | null>(null);
   const [refreshDayRequest, setRefreshDayRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
   const [fixTimingRequest, setFixTimingRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
+  const [refreshingDayNumber, setRefreshingDayNumber] = useState<number | null>(null);
+  const [refreshResultsByDay, setRefreshResultsByDay] = useState<Record<number, { errorCount: number; warningCount: number }>>({});
   const [autoStartGeneration, setAutoStartGeneration] = useState(false);
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
