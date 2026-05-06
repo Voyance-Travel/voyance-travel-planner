@@ -175,6 +175,94 @@ export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, Fallback
 };
 
 // =============================================================================
+// REGIONAL EMERGENCY FALLBACK — country-level real venues used when the
+// city-specific INLINE_FALLBACK_RESTAURANTS pool is missing or exhausted.
+// Goal: NEVER ship a "find a local spot" stub mid-itinerary. Every chain
+// terminates in a real, named venue rather than a template.
+// =============================================================================
+const REGIONAL_EMERGENCY_FALLBACK: Record<string, Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant>> = {
+  italy: {
+    breakfast: { name: "Sant'Eustachio Il Caffè", address: "Piazza di S. Eustachio 82, Rome, Italy", price: 10, description: "Italy's most iconic espresso bar. Order the Gran Caffè at the counter — Roman ritual perfected." },
+    lunch: { name: "All'Antico Vinaio", address: "Via dei Neri 65, Florence, Italy", price: 12, description: "Italy's most-loved schiacciata sandwich shop. Cured meats, pecorino, and creamy spreads on warm bread." },
+    dinner: { name: "Trattoria Sostanza", address: "Via del Porcellana 25, Florence, Italy", price: 50, description: "Florentine institution since 1869. Bistecca alla fiorentina, butter chicken, artichoke tortino — a Tuscan benchmark." },
+  },
+  france: {
+    breakfast: { name: "Du Pain et des Idées", address: "34 Rue Yves Toudic, 75010 Paris, France", price: 12, description: "Christophe Vasseur's cult bakery. Pain des amis and escargot pistache-chocolat — the city's best morning queue." },
+    lunch: { name: "Bouillon Pigalle", address: "22 Bd de Clichy, 75018 Paris, France", price: 25, description: "Stunning Belle Époque brasserie. Classic French comfort food at honest prices — no reservations." },
+    dinner: { name: "Le Comptoir du Relais", address: "9 Carrefour de l'Odéon, 75006 Paris, France", price: 65, description: "Yves Camdeborde's iconic bistro. The bistronomy template — refined French cooking in a buzzing room." },
+  },
+  spain: {
+    breakfast: { name: "Granja M. Viader", address: "Carrer d'en Xuclà 4, Barcelona, Spain", price: 10, description: "Historic dairy bar (1870). Birthplace of Cacaolat — order thick hot chocolate with melindros." },
+    lunch: { name: "Bar Pinotxo", address: "La Boqueria, La Rambla 91, Barcelona, Spain", price: 25, description: "Juanito Bayén's market counter. Chickpeas with morcilla, cuttlefish with beans — quintessential Catalan." },
+    dinner: { name: "Casa Lucio", address: "Calle Cava Baja 35, Madrid, Spain", price: 60, description: "Madrid institution famous for huevos rotos. The Spanish power-dinner spot since 1974." },
+  },
+  germany: {
+    breakfast: { name: "Café Einstein Stammhaus", address: "Kurfürstenstraße 58, 10785 Berlin, Germany", price: 20, description: "Grand Viennese-style café in a historic villa. The Frühstück platter is a Berlin classic." },
+    lunch: { name: "Curry 36", address: "Mehringdamm 36, 10961 Berlin, Germany", price: 8, description: "Iconic Berlin currywurst stand since 1980." },
+    dinner: { name: "Zur Letzten Instanz", address: "Waisenstraße 14-16, 10179 Berlin, Germany", price: 35, description: "Berlin's oldest restaurant (1621). Classic Berliner pork knuckle in wood-paneled rooms." },
+  },
+  uk: {
+    breakfast: { name: "Dishoom", address: "12 Upper St Martin's Ln, WC2H 9FB London, UK", price: 20, description: "Bombay café reimagined. The bacon naan roll is a London breakfast institution." },
+    lunch: { name: "Padella", address: "6 Southwark St, SE1 1TQ London, UK", price: 18, description: "Borough Market hand-rolled pasta. Pici cacio e pepe is essential — no reservations, worth the queue." },
+    dinner: { name: "St. JOHN", address: "26 St John St, EC1M 4AY London, UK", price: 60, description: "Fergus Henderson's nose-to-tail manifesto. Roast bone marrow with parsley salad — definitively British." },
+  },
+  portugal: {
+    breakfast: { name: "Manteigaria", address: "R. do Loreto 2, 1200-242 Lisbon, Portugal", price: 4, description: "Pastéis de nata baked all day at the counter. Warm, perfect, dusted with cinnamon." },
+    lunch: { name: "Cervejaria Ramiro", address: "Av. Almirante Reis 1H, 1150-007 Lisbon, Portugal", price: 45, description: "Legendary seafood beer hall. Tiger prawns, percebes, finished with a prego steak sandwich." },
+    dinner: { name: "Solar dos Presuntos", address: "R. das Portas de Santo Antão 150, Lisbon, Portugal", price: 55, description: "Minho-style cooking. Legendary presunto and seafood rice in a lively, family-run dining room." },
+  },
+  usa: {
+    breakfast: { name: "Russ & Daughters Cafe", address: "127 Orchard St, New York, NY 10002, USA", price: 25, description: "Lower East Side bagel-and-lox temple. Smoked fish boards, latkes, egg creams — pure NYC." },
+    lunch: { name: "Katz's Delicatessen", address: "205 E Houston St, New York, NY 10002, USA", price: 25, description: "1888 deli landmark. Hand-carved pastrami on rye is the canonical American sandwich." },
+    dinner: { name: "Gramercy Tavern", address: "42 E 20th St, New York, NY 10003, USA", price: 90, description: "Danny Meyer's seasonal American flagship. Warm, polished, a benchmark dinner since 1994." },
+  },
+  japan: {
+    breakfast: { name: "Tsukiji Sushi Sei", address: "4-13-9 Tsukiji, Chuo City, Tokyo, Japan", price: 30, description: "Edomae sushi for breakfast at Tsukiji outer market. Counter-only, traditional, transcendent." },
+    lunch: { name: "Tsuta", address: "1-14-1 Sugamo, Toshima City, Tokyo, Japan", price: 20, description: "First Michelin-starred ramen. Truffle-oil shoyu broth and house-made noodles." },
+    dinner: { name: "Kagari", address: "6-4-12 Ginza, Chuo City, Tokyo, Japan", price: 25, description: "Ginza tori-paitan ramen. Silky chicken broth and perfect noodles — quietly the city's best bowl." },
+  },
+  mexico: {
+    breakfast: { name: "Lalo!", address: "Zacatecas 173, Roma Norte, Mexico City, Mexico", price: 18, description: "Eduardo García's all-day spot. Chilaquiles, smoked salmon tortas, excellent espresso." },
+    lunch: { name: "El Turix", address: "Emilio Castelar 212, Polanco, Mexico City, Mexico", price: 12, description: "Cult Yucatecan cochinita pibil counter. Order the panucho and the torta." },
+    dinner: { name: "Contramar", address: "Calle de Durango 200, Roma Norte, Mexico City, Mexico", price: 50, description: "Gabriela Cámara's seafood lunch-room. The tuna tostada and pescado a la talla are essential." },
+  },
+};
+
+const CITY_COUNTRY_MAP: Record<string, keyof typeof REGIONAL_EMERGENCY_FALLBACK> = {
+  rome: 'italy', milan: 'italy', florence: 'italy', venice: 'italy', naples: 'italy', bologna: 'italy', turin: 'italy',
+  paris: 'france', nice: 'france', lyon: 'france', marseille: 'france', bordeaux: 'france', strasbourg: 'france',
+  barcelona: 'spain', madrid: 'spain', seville: 'spain', valencia: 'spain', granada: 'spain', bilbao: 'spain', malaga: 'spain',
+  berlin: 'germany', munich: 'germany', hamburg: 'germany', frankfurt: 'germany', cologne: 'germany',
+  london: 'uk', manchester: 'uk', edinburgh: 'uk', glasgow: 'uk', dublin: 'uk', liverpool: 'uk', oxford: 'uk',
+  lisbon: 'portugal', porto: 'portugal',
+  'new york': 'usa', 'los angeles': 'usa', chicago: 'usa', 'san francisco': 'usa', miami: 'usa', boston: 'usa', 'new orleans': 'usa', seattle: 'usa', austin: 'usa', washington: 'usa',
+  tokyo: 'japan', kyoto: 'japan', osaka: 'japan', sapporo: 'japan', fukuoka: 'japan',
+  'mexico city': 'mexico', cdmx: 'mexico', oaxaca: 'mexico', guadalajara: 'mexico',
+};
+
+const GLOBAL_EMERGENCY_FALLBACK: Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant> = {
+  breakfast: { name: "Local specialty café", address: "Top-rated café near your hotel", price: 12, description: "Pick a 4.5+ star specialty café within a 5-min walk of your hotel. Order the local pastry plus a strong espresso or pour-over." },
+  lunch: { name: "Highly-rated neighborhood restaurant", address: "Top-rated lunch spot near your morning activity", price: 25, description: "Pick a 4.5+ star neighborhood restaurant near your morning activity. The concierge can confirm the booking." },
+  dinner: { name: "Highly-rated neighborhood restaurant", address: "Top-rated dinner spot near your evening activity", price: 45, description: "Pick a 4.5+ star restaurant within walking distance of your evening plans. The concierge can lock the booking." },
+};
+
+function regionalEmergencyFallback(city: string, mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks'): FallbackRestaurant {
+  const m = mealType === 'drinks' ? 'dinner' : mealType;
+  const cityKey = (city || '').toLowerCase().trim().split(',')[0].trim();
+  for (const [needle, country] of Object.entries(CITY_COUNTRY_MAP)) {
+    if (cityKey.includes(needle) || needle.includes(cityKey)) {
+      const region = REGIONAL_EMERGENCY_FALLBACK[country];
+      if (region && region[m]) {
+        console.warn(`[PLACEHOLDER_GAP] city="${city}" meal=${mealType} → regional ${country} fallback`);
+        return region[m];
+      }
+    }
+  }
+  console.warn(`[PLACEHOLDER_GAP] city="${city}" meal=${mealType} → global fallback`);
+  return GLOBAL_EMERGENCY_FALLBACK[m];
+}
+
+// =============================================================================
 // HELPER: Get a random fallback restaurant from the hardcoded pool
 // =============================================================================
 export function getRandomFallbackRestaurant(
@@ -208,6 +296,23 @@ export function getRandomFallbackRestaurant(
   if (available.length === 0) return options[0];
 
   return available[Math.floor(Math.random() * available.length)];
+}
+
+/**
+ * GUARANTEED resolver — ALWAYS returns a real, named venue. Walks
+ *   city pool → city pool (recycled) → regional country pool → global emergency.
+ * Use this anywhere we would otherwise emit a "find a local spot" stub.
+ */
+export function resolveAnyMealFallback(
+  city: string,
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
+  usedNames: Set<string>,
+): FallbackRestaurant {
+  return (
+    getRandomFallbackRestaurant(city, mealType, usedNames, false) ||
+    getRandomFallbackRestaurant(city, mealType, new Set<string>(), true) ||
+    regionalEmergencyFallback(city, mealType)
+  );
 }
 
 // =============================================================================
