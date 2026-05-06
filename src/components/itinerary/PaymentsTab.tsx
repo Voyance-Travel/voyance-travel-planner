@@ -1032,7 +1032,7 @@ export function PaymentsTab({
           {isOverpaid ? (
             <div
               className="flex items-center gap-2"
-              title="Some payments may not be linked to current itinerary items. Review Recent Payments to reconcile."
+              title="Some payments may not be linked to current itinerary items. Reconcile to archive stale payments from a previous itinerary."
             >
               <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -1041,11 +1041,31 @@ export function PaymentsTab({
                 <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
                   Overpaid by {formatCurrency(overpaidAmount)}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Recorded payments exceed itinerary total
-                </p>
+                <button
+                  type="button"
+                  className="text-xs text-amber-700 dark:text-amber-400 underline underline-offset-2 hover:no-underline"
+                  onClick={async () => {
+                    try {
+                      const { data, error } = await supabase.rpc('archive_orphan_trip_payments', { p_trip_id: tripId });
+                      if (error) throw error;
+                      const count = (data as any)?.archived_count ?? 0;
+                      toast.success(count > 0 ? `Archived ${count} stale payment${count === 1 ? '' : 's'}` : 'Nothing to archive');
+                      const result = await getTripPayments(tripId);
+                      if (result.success) {
+                        setPayments(result.payments || []);
+                        setTotals(result.totals || { paid: 0, pending: 0, total: 0 });
+                      }
+                    } catch (err) {
+                      console.error('[PaymentsTab] reconcile failed', err);
+                      toast.error('Could not archive stale payments');
+                    }
+                  }}
+                >
+                  Reconcile previous payments
+                </button>
               </div>
             </div>
+
           ) : (
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
