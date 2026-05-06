@@ -136,7 +136,7 @@ function isCoherent(title: string, day: Day): boolean {
   if (titleTokens.size === 0) return false;
 
   const acts = (day.activities || []).filter((a) => !isLogistics(a));
-  if (acts.length === 0) return true; // logistics-only — don't second-guess
+  if (acts.length === 0) return ALLOW_GENERIC_RE.test(trimmed); // logistics-only: only generic titles pass
 
   const signalTokens = new Set<string>();
   for (const a of acts) {
