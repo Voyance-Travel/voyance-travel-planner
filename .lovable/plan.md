@@ -1,91 +1,72 @@
-## Problem
+## Root cause
 
-Activity raw data carries duration strings like `"45:00:00"` instead of `"45m"`. Two bugs combine:
+Real double-entry, not a render glitch. Day 2 of trip `a5f41a2b…` has **two** `activity_costs` rows tagged `dining` × $15:
 
-1. **Coerce heuristic is wrong for HH:MM:SS**. Current logic in `src/utils/plannerUtils.ts` and the Deno mirror `supabase/functions/generate-itinerary/_shared/duration-format.ts`:
-   ```ts
-   if (hasSeconds) totalMin = a * 60 + b;
-   ```
-   This unconditionally treats `a` as hours, so `"45:00:00"` → `45 × 60 = 2700` min → `"45h"`. The model is actually emitting MM:SS:CS or treating the colons as a generic clock pattern; either way, a leading number ≥ 24 in an HH:MM:SS slot is implausible as hours and must be read as minutes (mirroring the existing `45:00` → `"45m"` rule).
+| activity_id | in itinerary JSON? |
+|---|---|
+| `7834bb8d…` | ✅ live "Lunch at Mordi e Vai" |
+| `44c1ae94…` | ❌ orphan — no matching activity in `itinerary_data` |
 
-2. **Normalization only runs once, during generation.** `normalizeActivityDuration` is called from `universal-quality-pass.ts` and nowhere else server-side. Refresh-day, repair-day, save-itinerary, and every client save path skip it, so any malformed duration introduced after the quality pass (model-emitted on a regen, user paste, transport repair, etc.) lands in `trips.itinerary_data` unchanged. Today the JSON happens to be clean, but the guard isn't load-bearing — it's accidental.
+`usePayableItems` (`src/hooks/usePayableItems.ts:358-449`) iterates `activityCosts` in DB order. The two rows happen to be processed like this:
+
+1. Row `44c1ae94` (orphan) → no direct id match → falls into orphan-rescue → pops the next unconsumed `(day=2, dining)` JSON activity, which is **"Lunch at Mordi e Vai"** (`7834bb8d`). It pushes a row using the live name + $15.
+2. Row `7834bb8d` (legit) → direct id match in `activityNameById` → pushes a *second* row using the live name + $15.
+
+Result: two identical "Lunch at Mordi e Vai @ $30" rows in All Costs and Payments, inflating the total by $30. (Compose IDs differ — `44c1ae94_d2` vs `7834bb8d_d2` — so the existing `presentItemIds` dedupe at the bottom doesn't catch them.)
+
+The orphan-rescue's `rescueConsumed` set only blocks the *same JSON id* from being rescued twice; it doesn't block the *direct lookup path* from later claiming a JSON id that orphan-rescue already consumed.
+
+There's a secondary, lower-urgency question of *why* an orphan `activity_costs` row even exists when generation does `DELETE+INSERT` per pass — likely a refresh-day / repair path that mints a new activity uuid without rewriting its cost row. Worth tracing but not required to stop the duplicate.
 
 ## Plan
 
-### 1. Fix the heuristic (single source of truth)
+### 1. Hook fix — make direct matches win, orphan-rescue fill in only
 
-Update `src/utils/plannerUtils.ts#coerceDurationString` and the Deno mirror to apply the same "implausible-as-hours" rule already used for `MM:SS`:
+Refactor the loop in `src/hooks/usePayableItems.ts` (lines ~336-449) into two passes over `activityCosts`:
+
+**Pass 1 — direct matches.** For every row whose `row.activity_id` is in `activityNameById`, push the payable item and add the JSON id to a new `claimedJsonIds: Set<string>`.
+
+**Pass 2 — orphan-rescue.** For every row that did NOT direct-match in pass 1, attempt `popRescue`, but skip any candidate already in `claimedJsonIds`. Update `popRescue` to take `claimedJsonIds` as a guard (or filter the queue at pop time):
 
 ```ts
-if (hasSeconds) {
-  // HH:MM:SS form. If the leading number is implausibly large for hours
-  // (>= 24) OR the seconds field is zero AND the leading number is ≥ 5
-  // with no minutes either, treat the leading number as minutes — mirrors
-  // the MM:SS rule. This catches the AI emitting "45:00:00" for "45 min".
-  if (a >= 24 || (b === 0 && parseInt(colon[3], 10) === 0 && a >= 5)) {
-    totalMin = a;
-  } else {
-    totalMin = a * 60 + b;
+const popRescue = (dayNum: number, mappedCat: string): RescueEntry | null => {
+  const queue = orphanRescueByDayCat.get(`${dayNum}|${mappedCat}`);
+  if (!queue) return null;
+  let cursor = rescueCursors.get(k) ?? 0;
+  while (cursor < queue.length) {
+    const entry = queue[cursor++];
+    if (!rescueConsumed.has(entry.id) && !claimedJsonIds.has(entry.id)) {
+      rescueCursors.set(k, cursor);
+      return entry;
+    }
   }
-}
+  return null;
+};
 ```
 
-After this:
-- `"45:00:00"` → `"45m"` ✅
-- `"15:00:00"` → currently the test expects `"15h"`; under the new rule it becomes `"15m"` because 15h-long activities don't exist in this product. Update the test to match. (Confirm with: 15-hour activity is nonsense; the only valid interpretation is minutes.)
-- `"1:05:00"` → `"1h 5m"` ✅ (a < 24, b ≠ 0)
-- `"2:20:00"` → `"2h 20m"` ✅
-- `"10:00:00"` → currently `"10h"`; under the new rule becomes `"10m"`. Edge case — a 10-hour activity is also nonsense in normal use; bias toward minutes.
+Transit grouping (`transitByDay`) stays as-is; the same two-pass split applies because direct matches still beat rescue.
 
-If we want to preserve the rare "10 hours of train" reading we can keep `a < 24 && b === 0 && a < 5` as `a*60` and treat `a >= 5` as minutes. The cutoff `a >= 5` matches the existing MM:SS rule already in the code, so we'll use the same boundary across both branches.
+This fully resolves the user-visible duplicate without any DB changes — even if the orphan row keeps existing, it'll be silently dropped (no live JSON slot to rescue into).
 
-### 2. Run the normalization sweep at every save boundary
+### 2. Tests
 
-Add `normalizeDurationsInDays(updatedDays)` calls at every server- and client-side persistence boundary:
+Add a test in `src/hooks/__tests__/usePayableItems.test.ts`:
 
-**Server (Deno):**
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — call once, immediately before the DB write (alongside the existing meal/timing sweeps).
-- `supabase/functions/refresh-day/index.ts` — sweep the day before returning patches.
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — sweep `result` at the end of the function (it already mutates `transportation.duration: "N min"` strings, but co-locating the sweep guards against future changes).
+- One day with one live dining activity (id `B`).
+- Two `activity_costs` rows: one stale (id `A`, no JSON match), one live (id `B`).
+- Assert `items.filter(i => i.name === 'Lunch at Mordi e Vai').length === 1`.
+- Assert `totalCents === 1 × $30`.
 
-**Client (TS):**
-- `src/services/itineraryActionExecutor.ts#updateTripItinerary` — call before the DB write, after the meal sweep we just added.
-- `src/services/itineraryAPI.ts#regenerateDay` — same.
-- `src/utils/itineraryParser.ts` — already coerces; leave as-is.
+### 3. Backstop — prune orphan rows on next sync (deferred / out of scope)
 
-The function exists (`normalizeDurationsInDays`) and is a no-op for already-clean data, so the perf cost is negligible.
-
-### 3. Defensive client display
-
-`src/components/itinerary/EditorialItinerary.tsx` and `FullItinerary.tsx` already wrap `activity.duration` in `coerceDurationString(...)` at render. With the heuristic fixed (#1), legacy bad data already in the JSON also renders correctly without a backfill.
-
-### 4. Tests
-
-- Update `src/utils/__tests__/coerceDurationString.test.ts`:
-  - Change `coerceDurationString('15:00:00')` expectation from `'15h'` to `'15m'`.
-  - Add `expect(coerceDurationString('45:00:00')).toBe('45m')`.
-  - Add `expect(coerceDurationString('30:00:00')).toBe('30m')`.
-  - Keep `'1:05:00' → '1h 5m'` and `'2:20:00' → '2h 20m'` (these branches unchanged because `a < 24` and `b !== 0`).
-- Add a Deno test for `normalizeDurationsInDays` proving `"45:00:00"` survives → `"45m"` and that `durationMinutes` back-fill is `45`.
-
-### 5. Optional: backfill (skip)
-
-Database scan returned 0 trips with `"duration": "HH:MM:SS"` patterns, so no migration is needed. The render-time coerce + the new save-time sweep cover anything that lands later.
+The right long-term fix for the orphan is in the writer. Stage 6 generation already does `DELETE + INSERT`, so the orphan was written by another path. Candidates: `syncBudgetFromDays` (`EditorialItinerary`) and `budgetLedgerSync`. If we want to guarantee a clean ledger, add a "trim" step that deletes any `activity_costs` row for `trip_id` whose `activity_id` is not in the current `itinerary_data` after every save. **Skipping in this plan** — call it out so the user can decide whether to schedule it next.
 
 ## Files touched
 
-- `src/utils/plannerUtils.ts` — heuristic fix.
-- `supabase/functions/generate-itinerary/_shared/duration-format.ts` — same heuristic fix.
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — add sweep.
-- `supabase/functions/refresh-day/index.ts` — add sweep on output.
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — add sweep at end.
-- `src/services/itineraryActionExecutor.ts` — add sweep call.
-- `src/services/itineraryAPI.ts` — add sweep call.
-- `src/utils/__tests__/coerceDurationString.test.ts` — update + add cases.
-- New: `supabase/functions/generate-itinerary/_shared/duration-format.test.ts` — Deno test for the sweep.
+- `src/hooks/usePayableItems.ts` — two-pass refactor + `claimedJsonIds` guard.
+- `src/hooks/__tests__/usePayableItems.test.ts` — new test for stale-row dedupe.
 
 ## Out of scope
 
-- Reworking `transportation.duration: "N min"` strings (those go through the same coerce when displayed).
-- Migrating historical rows (none exist).
-- Touching the `duration_text` column on `route_legs` etc. (that's a Google-formatted display field, not what the user is reporting).
+- Deleting / migrating the existing orphan row in this trip (they'll silently drop with the hook fix; user can also wait for the next save sweep if we add #3 later).
+- DB-level unique constraints — the existing `(trip_id, activity_id)` index is correct; the duplicate isn't a unique-constraint violation, it's two *different* activity_ids resolving to the same JSON activity.
