@@ -7254,20 +7254,24 @@ export function EditorialItinerary({
                       }
                     }}
                   >
-                    {hotelSelection?.imageUrl ? (
-                      <img
-                        src={hotelSelection.imageUrl}
-                        alt={hotelSelection.name || 'Hotel'}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        onError={(e) => { 
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-secondary/50">
-                        <Hotel className="h-12 w-12 text-muted-foreground/30" />
-                      </div>
-                    )}
+                    {(() => {
+                      const heroSrc = getHotelHeroImage(hotelSelection);
+                      return (
+                        <>
+                          <div className="absolute inset-0 flex items-center justify-center bg-secondary/50">
+                            <Hotel className="h-12 w-12 text-muted-foreground/30" />
+                          </div>
+                          {heroSrc && (
+                            <img
+                              src={heroSrc}
+                              alt={hotelSelection.name || 'Hotel'}
+                              className="relative w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
                     
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                     
