@@ -53,7 +53,7 @@ Deno.test('crossDayVenueDuplicate does NOT flag a restaurant near a duplicated l
   assertEquals(r.isDuplicate, false);
 });
 
-Deno.test('ledger-check repeat_already_done catches Louvre qualifier variant via canonicalizer', () => {
+Deno.test('ledger-check repeat_already_done catches Louvre qualifier variant via canonicalizer', async () => {
   const ledger: DayLedger = {
     dayNumber: 2,
     date: '2025-06-02',
