@@ -196,14 +196,29 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - category: "transport"
    - description: "Clear customs and collect luggage"
 
-2. "Check-in at Your Hotel"
+${checkInIsTooEarly ? `2. "Luggage Drop at Your Hotel"
+   - startTime: "${transferEnd}", endTime: "${bagDropEnd}"
+   - category: "accommodation"
+   - description: "Drop your bags and freshen up briefly. Your room will be ready at ${standardCheckIn}."
+   - location: { name: "Your Hotel" }
+   - tags: ["bag-drop", "structural"]
+
+3. (Schedule between ${bagDropEnd} and ${standardCheckIn}) — light morning/afternoon activities near the hotel.
+
+4. "Check-in at Your Hotel"
+   - startTime: "${standardCheckIn}", endTime: "${standardCheckInEnd}"
+   - category: "accommodation"
+   - description: "Pick up keys and settle into your room."
+   - location: { name: "Your Hotel" }
+   - tags: ["check-in", "structural"]
+   - ⚠️ Do NOT schedule a real "Check-in" before ${standardCheckIn}. Rooms are not released earlier.` : `2. "Check-in at Your Hotel"
    - startTime: "${addMinutesToHHMM(arrival24, 90)}", endTime: "${addMinutesToHHMM(arrival24, 120)}"
    - category: "accommodation"
    - description: "Check in and freshen up"
-   - location: { name: "Your Hotel" }
+   - location: { name: "Your Hotel" }`}
 
 MORNING ARRIVAL GUIDELINES:
-- After check-in, the traveler may want a light breakfast or brunch near the hotel
+- ${checkInIsTooEarly ? `After dropping bags (${bagDropEnd}), the traveler can begin light activities — the room itself is not ready until ${standardCheckIn}` : `After check-in, the traveler may want a light breakfast or brunch near the hotel`}
 - Start with LOW-ENERGY activities: a café, a leisurely neighborhood walk, or a nearby park
 - Build energy throughout the day - save more intensive sightseeing for afternoon
 - Earliest sightseeing/exploration: ${earliestSightseeing}
