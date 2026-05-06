@@ -2374,20 +2374,36 @@ export function EditorialItinerary({
   
   const handleRefreshDay = useCallback(async (dayIndex: number) => {
     const day = days[dayIndex];
-    if (!day) return;
+    if (!day) {
+      toast.error('Could not find that day to refresh.');
+      return;
+    }
     setRefreshingDayNumber(day.dayNumber);
     try {
-      const activities = day.activities.map(a => ({
-        id: a.id,
-        title: a.title || '',
-        category: a.category,
-        startTime: a.startTime || (a as any).time,
-        endTime: a.endTime,
-        location: a.location,
-        operatingHours: (a as any).operatingHours,
-        durationMinutes: a.durationMinutes,
-        cost: a.cost,
-      }));
+      const activities = day.activities.map(a => {
+        const start = a.startTime || (a as any).time || (a as any).start_time;
+        const dur = a.durationMinutes || (a as any).duration_minutes || (a as any).duration;
+        let end = a.endTime || (a as any).end_time;
+        // Derive endTime from start + duration when missing
+        if (!end && start && typeof dur === 'number' && dur > 0) {
+          const m = /^(\d{1,2}):(\d{2})/.exec(String(start));
+          if (m) {
+            const tot = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + dur;
+            end = `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+          }
+        }
+        return {
+          id: a.id,
+          title: a.title || '',
+          category: a.category,
+          startTime: start,
+          endTime: end,
+          location: a.location,
+          operatingHours: (a as any).operatingHours,
+          durationMinutes: typeof dur === 'number' ? dur : a.durationMinutes,
+          cost: a.cost,
+        };
+      });
       const result = await refreshDay(activities, day.date || '', destination, day.dayNumber);
       if (result) {
         setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
@@ -2414,7 +2430,11 @@ export function EditorialItinerary({
   useEffect(() => {
     if (!refreshDayRequest?.dayNumber) return;
     const idx = days.findIndex((d: any) => d.dayNumber === refreshDayRequest.dayNumber);
-    if (idx < 0) return;
+    if (idx < 0) {
+      console.warn('[refresh_day] day not found in editor', { dayNumber: refreshDayRequest.dayNumber, available: days.map((d: any) => d.dayNumber) });
+      toast.error(`Day ${refreshDayRequest.dayNumber} is not loaded — try reopening the trip.`);
+      return;
+    }
     setSelectedDayIndex(idx);
     setActiveTab('details');
     handleRefreshDay(idx);
@@ -2426,7 +2446,11 @@ export function EditorialItinerary({
   useEffect(() => {
     if (!fixTimingRequest?.dayNumber) return;
     const idx = days.findIndex((d: any) => d.dayNumber === fixTimingRequest.dayNumber);
-    if (idx < 0) return;
+    if (idx < 0) {
+      console.warn('[fix_timing] day not found in editor', { dayNumber: fixTimingRequest.dayNumber, available: days.map((d: any) => d.dayNumber) });
+      toast.error(`Day ${fixTimingRequest.dayNumber} is not loaded — try reopening the trip.`);
+      return;
+    }
     (async () => {
       const { fixDayTiming } = await import('@/utils/itinerary/fixDayTiming');
       const day = days[idx];
@@ -2443,8 +2467,13 @@ export function EditorialItinerary({
         handleRefreshDay(idx);
       } else if (result.reason === 'no_changes') {
         toast.info(`Day ${day.dayNumber}: no timing changes needed.`);
+      } else if (result.reason === 'no_timed_activities') {
+        toast.info(`Day ${day.dayNumber} has no timed activities to auto-space — opening review.`);
+        setSelectedDayIndex(idx);
+        setActiveTab('details');
+        handleRefreshDay(idx);
       } else {
-        toast.info(`Day ${day.dayNumber}: nothing to auto-fix.`);
+        toast.error(`Could not fix Day ${day.dayNumber} timing.`);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
