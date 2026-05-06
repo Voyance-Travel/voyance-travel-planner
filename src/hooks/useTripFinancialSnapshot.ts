@@ -72,6 +72,9 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   // user-driven changes happen well after this window.
   const mountedAtRef = useRef<number>(Date.now());
   const STABILIZATION_MS = 4_000;
+  // Tracks the last orphan-payment fingerprint we asked the DB to archive,
+  // so we don't re-fire the archival RPC on every refetch when nothing changed.
+  const lastArchivedFingerprintRef = useRef<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
