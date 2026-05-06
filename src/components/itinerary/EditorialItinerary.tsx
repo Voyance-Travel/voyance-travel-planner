@@ -9820,12 +9820,16 @@ function DayCard({
   const effectiveExpanded = isCleanPreview ? true : isExpanded;
 
   return (
-    <div className={cn(
-      "overflow-hidden rounded-xl transition-shadow",
-      isCleanPreview
-        ? "border-0 shadow-none bg-transparent"
-        : "border border-border bg-card shadow-none sm:shadow-sm sm:hover:shadow-md"
-    )} data-tour="day-header">
+    <div
+      id={`day-${day.dayNumber}`}
+      className={cn(
+        "overflow-hidden rounded-xl transition-shadow scroll-mt-24",
+        isCleanPreview
+          ? "border-0 shadow-none bg-transparent"
+          : "border border-border bg-card shadow-none sm:shadow-sm sm:hover:shadow-md"
+      )}
+      data-tour="day-header"
+    >
       {/* Day Header - Editorial Style with Color Accent */}
       <div className={cn(
         "relative p-4 sm:p-6 transition-colors duration-500",
