@@ -49,7 +49,21 @@ export function compileDaySchema(input: DaySchemaInput): CompiledSchema {
       const transferEnd = addMinutesToHHMM(transferStart, 60);
       const hotelCheckIn = transferEnd;
       const settleInEnd = addMinutesToHHMM(hotelCheckIn, 30);
-      const earliestSightseeing = addMinutesToHHMM(settleInEnd, 30);
+
+      // Hotel rooms are typically not ready until ~15:00. If our computed
+      // arrival-driven check-in falls before the property's standard check-in,
+      // reframe the morning hotel stop as a luggage drop and add a real
+      // check-in step at standardCheckIn (see no-flight branch below).
+      const standardCheckIn = (flightContext as { hotelCheckInTime?: string }).hotelCheckInTime || '15:00';
+      const standardCheckInEnd = addMinutesToHHMM(standardCheckIn, 15);
+      const checkInMins = parseTimeToMinutes(hotelCheckIn) ?? 0;
+      const standardMins = parseTimeToMinutes(standardCheckIn) ?? (15 * 60);
+      const checkInIsTooEarly = checkInMins < standardMins;
+      const bagDropEnd = addMinutesToHHMM(transferEnd, 20);
+
+      const earliestSightseeing = checkInIsTooEarly
+        ? addMinutesToHHMM(bagDropEnd, 15)
+        : addMinutesToHHMM(settleInEnd, 30);
 
       const hotelNameDisplay = flightContext.hotelName || 'Your Hotel';
       const hotelAddressDisplay = flightContext.hotelAddress || '';
