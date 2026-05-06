@@ -418,6 +418,11 @@ export async function handleGenerateDay(
             return false;
           }
         }
+        // AI French/Italian stub names ("Café Matinal", "Table du Quartier", …)
+        if (matchesAIStubVenue(name)) {
+          console.log(`[HALLUCINATION FILTER] Removed AI stub-pattern restaurant: ${name}`);
+          return false;
+        }
         // Check ALL location-related fields for fake addresses, not just address
         const rawHAddr = act.address || act.location;
         const addressFromRaw = (typeof rawHAddr === 'string' ? rawHAddr : (rawHAddr && typeof rawHAddr === 'object' ? (String(rawHAddr.address || rawHAddr.name || '')) : '')).trim();
