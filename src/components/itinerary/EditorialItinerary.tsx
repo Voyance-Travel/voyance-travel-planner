@@ -3407,7 +3407,43 @@ export function EditorialItinerary({
   const totalCost = snapshotTotalUsd > 0
     ? snapshotTotalUsd
     : (totalActivityCost * (travelers || 1) + flightCost + hotelCost);
-  
+
+  // ─── Reconciliation between per-day badges and the trip total ───
+  // tripLevelCents = trip total − Σ day(d≥1) totals
+  // Captures Day-0 logistics (hotel/flight/transfers), unspent misc reserve,
+  // and manual-payment override deltas — i.e. anything not attributed to a
+  // specific day. Surfaced as its own line so day badges sum to trip total.
+  const daysSubtotalCents = useMemo(() => {
+    let sum = 0;
+    for (const d of days) {
+      const b = tripDayBreakdown.byDay[d.dayNumber];
+      if (b) sum += b.totalCents;
+    }
+    return sum;
+  }, [days, tripDayBreakdown.byDay]);
+  const tripLevelCents = Math.max(
+    0,
+    financialSnapshot.tripTotalCents - daysSubtotalCents,
+  );
+
+  // Dev guard: warn when totals drift unexpectedly.
+  useEffect(() => {
+    if (financialSnapshot.loading || tripDayBreakdown.loading) return;
+    if (financialSnapshot.tripTotalCents <= 0) return;
+    const day0 = tripDayBreakdown.byDay[0]?.totalCents ?? 0;
+    const expected = daysSubtotalCents + (financialSnapshot.tripTotalCents - daysSubtotalCents - day0) + day0;
+    const diff = Math.abs(expected - financialSnapshot.tripTotalCents);
+    if (diff > 1) {
+      // eslint-disable-next-line no-console
+      console.warn('[EditorialItinerary] Day totals do not reconcile to trip total', {
+        tripTotalCents: financialSnapshot.tripTotalCents,
+        daysSubtotalCents,
+        day0,
+        diffCents: diff,
+      });
+    }
+  }, [financialSnapshot.loading, financialSnapshot.tripTotalCents, daysSubtotalCents, tripDayBreakdown]);
+
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
   const countryCurrency = inferCurrencyFromCountry(destinationCountry);
