@@ -5970,6 +5970,7 @@ export function EditorialItinerary({
                  <WhyWeSkippedSection
                    skippedItems={skippedItems}
                    destination={destination}
+                   isLoading={isLoadingSkipList}
                  />
 
                  {/* Accommodation Notes & Practical Tips from parsed trip input */}
