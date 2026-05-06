@@ -33,6 +33,7 @@ import {
 import { extractRestaurantVenueName, haversineDistanceKm } from '../generation-utils.ts';
 import { getRandomFallbackWellness, applyFallbackWellnessToActivity } from '../fix-placeholders.ts';
 import { enforceTimingAndBuffers } from '../../_shared/timing-cascade.ts';
+import { normalizeActivityDuration } from '../_shared/duration-format.ts';
 
 // =============================================================================
 // INPUT TYPES
@@ -3111,7 +3112,6 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // ── Step N+1: NORMALIZE DURATION STRINGS ──
   // Coerce any "HH:MM:SS"-shaped activity.duration the model may have emitted.
   try {
-    const { normalizeActivityDuration } = await import('../_shared/duration-format.ts');
     for (const a of activities) normalizeActivityDuration(a);
   } catch { /* non-blocking */ }
 
