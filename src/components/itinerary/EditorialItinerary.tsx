@@ -965,6 +965,30 @@ function getActivityCostInfo(
     return { amount: 0, isEstimated: false, confidence: 'high' as const, basis: 'flat' as CostBasis };
   }
   
+  // Defense-in-depth: if the activity_costs ledger has a server-floored
+  // price (Michelin/ticketed/auto-corrected/reference) that is materially
+  // higher than the JSONB cost, prefer the ledger value. This guarantees
+  // the card matches Budget/Payments even if a save funnel slipped past
+  // preserveLedgerCosts and downgraded the JSONB.
+  const ledgerOverride = getLedgerOverride((activity as any).id);
+  if (ledgerOverride) {
+    const jsonbAmt = costAmount ?? 0;
+    if (ledgerOverride.perPersonUsd >= jsonbAmt * 2 || jsonbAmt === 0) {
+      warnOnceLedgerOverride(String((activity as any).id), {
+        jsonbAmount: jsonbAmt,
+        ledgerAmount: ledgerOverride.perPersonUsd,
+        source: ledgerOverride.source,
+        title,
+      });
+      return {
+        amount: ledgerOverride.perPersonUsd,
+        isEstimated: false,
+        confidence: 'high' as const,
+        basis,
+      };
+    }
+  }
+
   // Check cost.amount first - this is explicit pricing from venue data
   // BUT if it's 0 and the category should never be free, fall through to estimation
   if (costAmount !== undefined && costAmount > 0) {
