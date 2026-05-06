@@ -283,14 +283,29 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - category: "transport"
    - description: "Clear customs and collect luggage"
 
-2. "Check-in at Your Hotel"
+${checkInIsTooEarly ? `2. "Luggage Drop at Your Hotel"
+   - startTime: "${transferEnd}", endTime: "${bagDropEnd}"
+   - category: "accommodation"
+   - description: "Drop your bags briefly. Your room will be ready at ${standardCheckIn}."
+   - location: { name: "Your Hotel" }
+   - tags: ["bag-drop", "structural"]
+
+3. (Schedule between ${bagDropEnd} and ${standardCheckIn}) — light activity near the hotel.
+
+4. "Check-in at Your Hotel"
+   - startTime: "${standardCheckIn}", endTime: "${standardCheckInEnd}"
+   - category: "accommodation"
+   - description: "Pick up keys and settle into your room."
+   - location: { name: "Your Hotel" }
+   - tags: ["check-in", "structural"]
+   - ⚠️ Do NOT schedule a real "Check-in" before ${standardCheckIn}. Rooms are not released earlier.` : `2. "Check-in at Your Hotel"
    - startTime: "${addMinutesToHHMM(arrival24, 60)}", endTime: "${addMinutesToHHMM(arrival24, 90)}"
    - category: "accommodation"
    - description: "Check in and freshen up"
-   - location: { name: "Your Hotel" }
+   - location: { name: "Your Hotel" }`}
 
 AFTERNOON ARRIVAL GUIDELINES:
-- After check-in, plan 1-2 light activities
+- ${checkInIsTooEarly ? `After dropping bags (${bagDropEnd}), plan 1-2 light activities until check-in at ${standardCheckIn}` : `After check-in, plan 1-2 light activities`}
 - Focus on the hotel neighborhood - nearby exploration, a café, or a walk
 - End the day with a nice dinner near the hotel
 - Earliest exploration: ${earliestSightseeing}
