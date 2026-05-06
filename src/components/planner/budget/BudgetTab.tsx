@@ -370,6 +370,17 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     return () => window.removeEventListener('booking-changed', handler);
   }, [fetchPaymentsForBudget]);
 
+  // Clear the in-session lastRaise marker once the budget moves to anything
+  // other than the raised value (manual edit, undo, etc.) so the celebratory
+  // card doesn't linger across unrelated budget changes.
+  useEffect(() => {
+    if (!lastRaise) return;
+    const current = settings?.budget_total_cents;
+    if (typeof current === 'number' && current !== lastRaise.toCents) {
+      setLastRaise(null);
+    }
+  }, [settings?.budget_total_cents, lastRaise]);
+
   // ─── Canonical financial snapshot from DB ledger (single source of truth) ───
   const snapshot = useTripFinancialSnapshot(tripId);
 
