@@ -1224,10 +1224,7 @@ export default function TripDetail() {
                   };
 
                   console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount})`);
-                  await supabase.from('trips').update({
-                    itinerary_data: healedItinerary as any,
-                    updated_at: new Date().toISOString(),
-                  }).eq('id', tripId);
+                  await safeUpdateItineraryData(tripId, healedItinerary);
 
                   const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
                   setTrip(healedTripData);
