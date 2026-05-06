@@ -72,6 +72,9 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
   // user-driven changes happen well after this window.
   const mountedAtRef = useRef<number>(Date.now());
   const STABILIZATION_MS = 4_000;
+  // Tracks the last orphan-payment fingerprint we asked the DB to archive,
+  // so we don't re-fire the archival RPC on every refetch when nothing changed.
+  const lastArchivedFingerprintRef = useRef<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!tripId) return;
@@ -151,11 +154,29 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // trip_payments row exist for the same item. Strip the composite `_dN`
     // suffix that PaymentsTab sometimes appends to item_id.
     const stripDaySuffix = (id: string): string => id.replace(/_d\d+$/, '');
+
+    // Orphan detection: trip_payments rows pointing at activities that no
+    // longer exist in the live itinerary (e.g. survived a regeneration).
+    // Excludes hotel/flight (governed by include toggles, not the activity
+    // list) and manual-* rows (free-form, not tied to an activity_id).
+    const orphanPaymentItemIds = new Set<string>();
+    for (const p of allPayments || []) {
+      if (typeof p.item_id !== 'string') continue;
+      if (/^manual-/i.test(p.item_id)) continue;
+      const cat = (p.item_type || '').toLowerCase();
+      if (cat === 'hotel' || cat === 'flight' || cat === 'flights') continue;
+      const stripped = stripDaySuffix(p.item_id);
+      if (!liveActivityIds.has(stripped)) {
+        orphanPaymentItemIds.add(p.item_id);
+      }
+    }
+
     const paidActivityIds = new Set<string>();
     for (const p of allPayments || []) {
       if (p.status !== 'paid') continue;
       if (typeof p.item_id !== 'string') continue;
       if (/^manual-/i.test(p.item_id)) continue;
+      if (orphanPaymentItemIds.has(p.item_id)) continue;
       paidActivityIds.add(stripDaySuffix(p.item_id));
     }
 
@@ -224,12 +245,43 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     let paidFromTripPayments = 0;
     for (const p of allPayments || []) {
       if (p.status !== 'paid') continue;
+      // Skip orphan rows whose underlying activity no longer exists in the
+      // itinerary — otherwise a regenerated trip inherits "phantom" payments
+      // from the prior session and triggers a false "Overpaid" warning.
+      if (typeof p.item_id === 'string' && orphanPaymentItemIds.has(p.item_id)) continue;
       const cat = (p.item_type || '').toLowerCase();
       if (cat === 'hotel' && !includeHotel) continue;
       if ((cat === 'flight' || cat === 'flights') && !includeFlight) continue;
       paidFromTripPayments += (p.amount_cents || 0) * (p.quantity || 1);
     }
     paidTotal += paidFromTripPayments;
+
+    // Fire-and-forget archival of orphan rows so PaymentsTab (which reads
+    // its own list) catches up on the next refetch. Guarded by a fingerprint
+    // so we don't hammer the RPC across re-renders.
+    if (orphanPaymentItemIds.size > 0) {
+      const fingerprint = Array.from(orphanPaymentItemIds).sort().join('|');
+      if (fingerprint !== lastArchivedFingerprintRef.current) {
+        lastArchivedFingerprintRef.current = fingerprint;
+        supabase
+          .rpc('archive_orphan_trip_payments', { p_trip_id: tripId })
+          .then(({ data: archResult, error: archErr }) => {
+            if (archErr) {
+              console.warn('[useTripFinancialSnapshot] orphan archive failed', archErr);
+              return;
+            }
+            const count = (archResult as any)?.archived_count ?? 0;
+            if (count > 0) {
+              console.info(
+                `[useTripFinancialSnapshot] auto-archived ${count} orphan payment${count === 1 ? '' : 's'} for trip ${tripId}`
+              );
+              window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+            }
+          });
+      }
+    } else {
+      lastArchivedFingerprintRef.current = null;
+    }
 
     // Reconciliation guard: BudgetTab must never under-report compared to
     // PaymentsTab. PaymentsTab's "Paid so far" is sum(trip_payments where
