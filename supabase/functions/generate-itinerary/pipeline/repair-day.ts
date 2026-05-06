@@ -81,6 +81,11 @@ export interface RepairDayInput {
   // Restaurant pool for meal-swap dedup
   restaurantPool?: Array<{ name: string; address?: string; neighborhood?: string; cuisine?: string; priceRange?: string; mealType: string }>;
   usedRestaurants?: string[];
+
+  // Travel-pace trait score (-10..+10). When >= 4 (Fast-Paced), repair logic
+  // skips midday hotel returns and tightens freshen-up duration caps so the
+  // day stays packed instead of inserting dead time.
+  paceScore?: number;
 }
 
 // =============================================================================
