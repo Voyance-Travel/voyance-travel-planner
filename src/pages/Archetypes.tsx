@@ -196,6 +196,8 @@ function CategorySection({ category, archetypeIds, categoryIndex, onSelectArchet
 }
 
 export default function Archetypes() {
+  const { slug } = useParams<{ slug?: string }>();
+  const navigate = useNavigate();
   const allArchetypes = ALL_ARCHETYPE_IDS
     .map(id => ARCHETYPE_NARRATIVES[id])
     .filter(Boolean);
@@ -208,18 +210,42 @@ export default function Archetypes() {
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [detailArchetype, setDetailArchetype] = useState<(ArchetypeDetail & { displayName?: string }) | null>(null);
+  const [detailArchetype, setDetailArchetype] = useState<(ArchetypeDetail & { displayName?: string; narrativeId?: string }) | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
   const handleSelectArchetype = useCallback((narrativeId: string) => {
     const detailId = NARRATIVE_TO_DETAIL[narrativeId];
     const narrative = ARCHETYPE_NARRATIVES[narrativeId];
     if (detailId && ARCHETYPE_DETAILS[detailId]) {
-      // Override the detail name with the narrative name so users see consistent naming
-      setDetailArchetype({ ...ARCHETYPE_DETAILS[detailId], name: narrative?.name || ARCHETYPE_DETAILS[detailId].name });
+      setDetailArchetype({
+        ...ARCHETYPE_DETAILS[detailId],
+        name: narrative?.name || ARCHETYPE_DETAILS[detailId].name,
+        narrativeId,
+      });
       setDetailOpen(true);
+      const targetSlug = archetypeIdToSlug(narrativeId);
+      if (slug !== targetSlug) {
+        navigate(`/archetypes/${targetSlug}`, { replace: true });
+      }
     }
-  }, []);
+  }, [navigate, slug]);
+
+  const handleSheetOpenChange = useCallback((open: boolean) => {
+    setDetailOpen(open);
+    if (!open && slug) {
+      navigate('/archetypes', { replace: true });
+    }
+  }, [navigate, slug]);
+
+  // Auto-open the sheet when arriving via /archetypes/:slug
+  useEffect(() => {
+    const narrativeId = slugToArchetypeId(slug);
+    if (!narrativeId) return;
+    handleSelectArchetype(narrativeId);
+    const idx = ALL_ARCHETYPE_IDS.indexOf(narrativeId);
+    if (idx >= 0 && emblaApi) emblaApi.scrollTo(idx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, emblaApi]);
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
@@ -236,13 +262,31 @@ export default function Archetypes() {
     return () => { emblaApi.off('select', onSelect); emblaApi.off('reInit', onSelect); };
   }, [emblaApi, onSelect]);
 
+  const headMeta = useMemo(() => {
+    const narrativeId = slugToArchetypeId(slug);
+    const narrative = narrativeId ? ARCHETYPE_NARRATIVES[narrativeId] : null;
+    if (narrative) {
+      return {
+        title: `${narrative.name} — Travel DNA | Voyance`,
+        description: narrative.hookLine || `Discover the ${narrative.name} traveler type on Voyance.`,
+        canonical: `https://travelwithvoyance.com/archetypes/${archetypeIdToSlug(narrativeId!)}`,
+      };
+    }
+    return {
+      title: 'Travel Types | Voyance - Discover Your Travel DNA',
+      description: 'Explore 29 unique traveler types and discover which one matches your travel style. From Cultural Anthropologists to Adrenaline Architects, find your travel DNA.',
+      canonical: 'https://travelwithvoyance.com/archetypes',
+    };
+  }, [slug]);
+
   return (
     <MainLayout>
       <Head
-        title="Travel Types | Voyance - Discover Your Travel DNA"
-        description="Explore 29 unique traveler types and discover which one matches your travel style. From Cultural Anthropologists to Adrenaline Architects, find your travel DNA."
-        canonical="https://travelwithvoyance.com/archetypes"
+        title={headMeta.title}
+        description={headMeta.description}
+        canonical={headMeta.canonical}
       />
+
       {/* Hero with spotlight cards */}
       <section className="pt-24 pb-16 md:pt-32 md:pb-20 relative overflow-hidden">
         {/* Warm gradient background */}
