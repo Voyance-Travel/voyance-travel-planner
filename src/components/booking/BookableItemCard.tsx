@@ -262,7 +262,7 @@ export function BookableItemCard({
                   </Badge>
                 )}
               </div>
-              <h3 className="font-semibold text-foreground">{sanitizeActivityName(activity.title)}</h3>
+              <h3 className="font-semibold text-foreground">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime })}</h3>
               {activity.description && (
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                   {activity.description}
