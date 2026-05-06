@@ -2352,31 +2352,38 @@ export function EditorialItinerary({
     const day = days[dayIndex];
     if (!day) return;
     setRefreshingDayNumber(day.dayNumber);
-    const activities = day.activities.map(a => ({
-      id: a.id,
-      title: a.title || '',
-      category: a.category,
-      startTime: a.startTime || (a as any).time,
-      endTime: a.endTime,
-      location: a.location,
-      operatingHours: (a as any).operatingHours,
-      durationMinutes: a.durationMinutes,
-      cost: a.cost,
-    }));
-    const result = await refreshDay(activities, day.date || '', destination, day.dayNumber);
-    if (result) {
-      setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
-      const errorCount = result.issues.filter(i => i.severity === 'error').length;
-      const warnCount = result.issues.filter(i => i.severity === 'warning').length;
-      if (result.issues.length === 0) {
-        toast.success(`Day ${day.dayNumber} validated, no issues found!`);
+    try {
+      const activities = day.activities.map(a => ({
+        id: a.id,
+        title: a.title || '',
+        category: a.category,
+        startTime: a.startTime || (a as any).time,
+        endTime: a.endTime,
+        location: a.location,
+        operatingHours: (a as any).operatingHours,
+        durationMinutes: a.durationMinutes,
+        cost: a.cost,
+      }));
+      const result = await refreshDay(activities, day.date || '', destination, day.dayNumber);
+      if (result) {
+        setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
+        const errorCount = result.issues.filter(i => i.severity === 'error').length;
+        const warnCount = result.issues.filter(i => i.severity === 'warning').length;
+        if (result.issues.length === 0) {
+          toast.success(`Day ${day.dayNumber} validated, no issues found!`);
+        } else {
+          toast(`Day ${day.dayNumber}: ${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warnCount} warning${warnCount !== 1 ? 's' : ''}`, {
+            icon: '⚠️',
+          });
+        }
       } else {
-        toast(`Day ${day.dayNumber}: ${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warnCount} warning${warnCount !== 1 ? 's' : ''}`, {
-          icon: '⚠️',
-        });
+        toast.error(`Could not re-check Day ${day.dayNumber} — please try again.`);
       }
+    } catch (err: any) {
+      toast.error(`Could not re-check Day ${day.dayNumber}: ${err?.message || 'unknown error'}`);
+    } finally {
+      setRefreshingDayNumber(null);
     }
-    setRefreshingDayNumber(null);
   }, [days, destination, refreshDay]);
 
   // External refresh-day requests (e.g. from TripHealthPanel quick-fix button)
