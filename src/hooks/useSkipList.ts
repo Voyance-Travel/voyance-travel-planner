@@ -40,9 +40,18 @@ export function useSkipList(destination: string) {
           body: { destination },
         });
 
-        if (!error && data?.skippedItems?.length > 0) {
-          setSkippedItems(data.skippedItems);
-          sessionStorage.setItem(cacheKey, JSON.stringify(data.skippedItems));
+        if (!error && Array.isArray(data?.skippedItems)) {
+          // Drop entries missing required fields so the UI never renders blank rows
+          const cleaned: SkippedItem[] = data.skippedItems.filter((it: any) =>
+            it && typeof it.name === 'string' && it.name.trim().length > 0 &&
+            typeof it.reason === 'string' && it.reason.trim().length > 0
+          );
+          if (cleaned.length > 0) {
+            setSkippedItems(cleaned);
+            sessionStorage.setItem(cacheKey, JSON.stringify(cleaned));
+          }
+          // If cleaned is empty, keep hardcoded fallback already in state and
+          // do NOT cache an empty array — let a future fetch try again.
         }
       } catch (err) {
         console.warn('[useSkipList] Failed to fetch, using fallback:', err);
