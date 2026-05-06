@@ -238,16 +238,31 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - description: "Clear customs and collect luggage"
    - ⚠️ This MUST be its own activity block — do NOT merge with check-in
 
-2. "Check-in at ${hotelNameDisplay}"
+${checkInIsTooEarly ? `2. "Luggage Drop at ${hotelNameDisplay}"
+   - startTime: "${transferEnd}", endTime: "${bagDropEnd}"
+   - category: "accommodation"
+   - description: "Drop your bags briefly. Your room will be ready at ${standardCheckIn}."
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+   - tags: ["bag-drop", "structural"]
+
+3. (Schedule between ${bagDropEnd} and ${standardCheckIn}) — light activity near the hotel.
+
+4. "Check-in at ${hotelNameDisplay}"
+   - startTime: "${standardCheckIn}", endTime: "${standardCheckInEnd}"
+   - category: "accommodation"
+   - description: "Pick up keys and settle into your room."
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+   - tags: ["check-in", "structural"]
+   - ⚠️ Do NOT schedule a real "Check-in" before ${standardCheckIn}. Rooms are not released earlier.` : `2. "Check-in at ${hotelNameDisplay}"
    - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
    - description: "Check in and freshen up"
-   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }`}
 
 Do NOT generate an "Airport Transfer to Hotel" activity — the transfer is handled by a separate UI widget.
 
 AFTERNOON ARRIVAL GUIDELINES:
-- After check-in (${settleInEnd}), plan 1-2 light activities
+- ${checkInIsTooEarly ? `After dropping bags (${bagDropEnd}), plan 1-2 light activities until check-in at ${standardCheckIn}` : `After check-in (${settleInEnd}), plan 1-2 light activities`}
 - Focus on the hotel neighborhood - nearby exploration, a café, or a walk
 - End the day with a nice dinner near the hotel
 - Earliest exploration: ${earliestSightseeing}
