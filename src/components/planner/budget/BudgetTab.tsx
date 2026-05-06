@@ -59,6 +59,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
 import { toast } from 'sonner';
 import { applyRaiseBudget } from './raiseBudgetApply';
+import { BudgetRaisedBanner } from './BudgetRaisedBanner';
 
 interface ItineraryActivity {
   id: string;
