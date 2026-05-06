@@ -146,16 +146,31 @@ REQUIRED ACTIVITY SEQUENCE (in exact order — each MUST be a SEPARATE activity 
    - description: "Clear customs and collect luggage"
    - ⚠️ This MUST be its own activity block — do NOT merge with check-in
 
-2. "Check-in at ${hotelNameDisplay}"
+${checkInIsTooEarly ? `2. "Luggage Drop at ${hotelNameDisplay}"
+   - startTime: "${transferEnd}", endTime: "${bagDropEnd}"
+   - category: "accommodation"
+   - description: "Drop your bags and freshen up briefly. Your room will be ready at ${standardCheckIn}."
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+   - tags: ["bag-drop", "structural"]
+
+3. (Schedule between ${bagDropEnd} and ${standardCheckIn}) — light morning/afternoon activities near the hotel.
+
+4. "Check-in at ${hotelNameDisplay}"
+   - startTime: "${standardCheckIn}", endTime: "${standardCheckInEnd}"
+   - category: "accommodation"
+   - description: "Pick up keys and settle into your room."
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+   - tags: ["check-in", "structural"]
+   - ⚠️ Do NOT schedule a real "Check-in" before ${standardCheckIn}. Rooms are not released earlier.` : `2. "Check-in at ${hotelNameDisplay}"
    - startTime: "${hotelCheckIn}", endTime: "${settleInEnd}"
    - category: "accommodation"
    - description: "Check in, freshen up, and get oriented to the area"
-   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }
+   - location: { name: "${hotelNameDisplay}", address: "${hotelAddressDisplay}" }`}
 
 Do NOT generate an "Airport Transfer to Hotel" activity — the transfer is handled by a separate UI widget.
 
 MORNING ARRIVAL GUIDELINES:
-- After checking in (${settleInEnd}), the traveler may want a light breakfast or brunch near the hotel
+- ${checkInIsTooEarly ? `After dropping bags (${bagDropEnd}), the traveler can begin light activities — the room itself is not ready until ${standardCheckIn}` : `After checking in (${settleInEnd}), the traveler may want a light breakfast or brunch near the hotel`}
 - Consider their Travel DNA for pace preference - some may want to rest first, others to explore
 - Start with LOW-ENERGY activities: a café, a leisurely neighborhood walk, or a nearby park
 - Build energy throughout the day - save more intensive sightseeing for afternoon
