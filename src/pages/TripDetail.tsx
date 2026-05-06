@@ -2820,8 +2820,12 @@ export default function TripDetail() {
                               } else if (action === 'add_intercity') {
                                 setNavigateToSection('hotels');
                                 setTimeout(() => setNavigateToSection(null), 500);
-                              } else if (action === 'generate_day' || action === 'refresh_day') {
-                                toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
+                               } else if (action === 'refresh_day') {
+                                 if (ctx?.dayNumber) {
+                                   setRefreshDayRequest({ dayNumber: ctx.dayNumber as number, nonce: Date.now() });
+                                 }
+                               } else if (action === 'generate_day') {
+                                 toast.info(`Use the day toolbar to generate Day ${ctx?.dayNumber || ''}`);
                               } else if (action === 'generate_missing_days' || action === 'generate_all') {
                                 setShowGenerator(true);
                               }
@@ -3062,8 +3066,12 @@ export default function TripDetail() {
                         } else if (action === 'add_intercity') {
                           setNavigateToSection('hotels');
                           setTimeout(() => setNavigateToSection(null), 500);
-                        } else if (action === 'generate_day' || action === 'refresh_day') {
-                          toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
+                        } else if (action === 'refresh_day') {
+                          if (ctx?.dayNumber) {
+                            setRefreshDayRequest({ dayNumber: ctx.dayNumber as number, nonce: Date.now() });
+                          }
+                        } else if (action === 'generate_day') {
+                          toast.info(`Use the day toolbar to generate Day ${ctx?.dayNumber || ''}`);
                         } else if (action === 'generate_missing_days' || action === 'generate_all') {
                           setShowGenerator(true);
                         }
