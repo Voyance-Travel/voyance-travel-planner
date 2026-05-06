@@ -396,7 +396,7 @@ export async function buildFullPromptGuidanceAsync(
   destination: string,
   destinationId: string | null,
   budgetTier: string,
-  traitScores: { pace: number; budget: number; adventure?: number },
+  traitScores: { pace: number; budget: number; adventure?: number; authenticity?: number },
   aiGatewayKey?: string
 ): Promise<string> {
   // Get static guidance first
