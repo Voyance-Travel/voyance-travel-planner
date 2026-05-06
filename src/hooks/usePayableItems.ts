@@ -334,25 +334,69 @@ export function usePayableItems({
     addManualGroups('other');
 
     // ─── DB-driven activity rows: ONE per non-transit row, grouped per day for transit ───
+    // Track ids consumed via orphan-rescue so the JSON-walk fallback below
+    // doesn't double-surface them.
+    const rescueConsumed = new Set<string>();
+    // Per-(day, mapped-cat) cursor into orphanRescueByDayCat.
+    const rescueCursors = new Map<string, number>();
+    const popRescue = (dayNum: number, mappedCat: string): RescueEntry | null => {
+      const k = `${dayNum}|${mappedCat}`;
+      const queue = orphanRescueByDayCat.get(k);
+      if (!queue || !queue.length) return null;
+      const cursor = rescueCursors.get(k) ?? 0;
+      // Skip already-matched ids (defensive — non-orphans go through activityNameById path)
+      for (let i = cursor; i < queue.length; i++) {
+        const entry = queue[i];
+        if (rescueConsumed.has(entry.id) || activityNameById.has(entry.id) === false) {
+          // Found an unconsumed candidate. (We deliberately allow rescue regardless
+          // of whether it's also in activityNameById — the cost row was clearly
+          // meant for *some* activity in this day+cat slot, and order-based pop
+          // is the most faithful reconstruction we have.)
+          if (!rescueConsumed.has(entry.id)) {
+            rescueCursors.set(k, i + 1);
+            return entry;
+          }
+        }
+      }
+      return null;
+    };
+
     if (activityCosts?.length) {
       const transitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
 
       for (const row of activityCosts) {
         if (row.day_number === 0) continue; // hotel/flight handled above
-        // Orphan guard: any row whose activity_id no longer exists in the
-        // itinerary JSON is leftover from a prior swap. Surfacing it would
-        // produce duplicate-looking line items (same venue, two prices)
-        // because the orphan-rescue logic below assigns the live activity's
-        // name. Drop it. Logistics rows (day_number=0) handled above.
-        if (row.activity_id && !activityNameById.has(row.activity_id)) continue;
         const cat = (row.category || '').toLowerCase();
+
+        // Resolve to a live JSON activity. Prefer direct id match; otherwise
+        // attempt orphan-rescue by (day, normalized-category). Only drop the
+        // row when neither path yields a live activity — those are true
+        // leftovers from a prior itinerary version.
+        let lookup = activityNameById.get(row.activity_id);
+        let effectiveActivityId = row.activity_id;
+        if (!lookup) {
+          const mappedCat = normalizeCat(cat, '');
+          const rescued = mappedCat ? popRescue(row.day_number, mappedCat) : null;
+          if (rescued) {
+            rescueConsumed.add(rescued.id);
+            effectiveActivityId = rescued.id;
+            lookup = { name: rescued.name, dayNumber: row.day_number, jsonCost: rescued.jsonCost, category: rescued.category };
+            if (typeof console !== 'undefined') {
+              // One-line diagnostic to catch future regressions in the field
+              // without spamming users with toasts.
+              console.warn('[usePayableItems] orphan-rescue', { dayNumber: row.day_number, category: cat, rescuedName: rescued.name });
+            }
+          } else {
+            continue; // no live activity for this slot — drop
+          }
+        }
+
         let cents = rowTotalCents(row);
 
         // Rescue: if the DB row is $0 but the itinerary JSON has an explicit
         // positive cost, trust the JSON. This catches restaurants that the
         // cost-repair pipeline misclassified as "Free venue - Tier 1".
         if (cents <= 0) {
-          const lookup = activityNameById.get(row.activity_id);
           const PAID_CATS = new Set(['dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'bar', 'nightlife', 'spa', 'wellness']);
           const isPaidCat = PAID_CATS.has(cat) || (lookup && PAID_CATS.has(lookup.category));
           if (isPaidCat && lookup && lookup.jsonCost > 0) {
@@ -363,7 +407,6 @@ export function usePayableItems({
 
         // Group transit rows
         if (TRANSIT_CATEGORIES.has(cat)) {
-          const lookup = activityNameById.get(row.activity_id);
           // Skip placeholder departure transfers — no mode chosen, no committed price.
           if (lookup && isPlaceholderDepartureTransferTitle(lookup.name)) {
             continue;
@@ -375,7 +418,7 @@ export function usePayableItems({
           const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
           const subName = lookup?.name || 'Local transit';
           bucket.subItems.push({
-            id: row.activity_id,
+            id: effectiveActivityId,
             name: subName,
             amountCents: cents,
           });
@@ -385,20 +428,11 @@ export function usePayableItems({
         }
 
         // Non-transit: one payable item per row, name from JSON itinerary
-        const lookup = activityNameById.get(row.activity_id);
-        const compositeId = `${row.activity_id}_d${row.day_number}`;
+        const compositeId = `${effectiveActivityId}_d${row.day_number}`;
         const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === compositeId);
         const assignedIds = activityPayments
           .map(p => (p as any)?.assigned_member_id)
           .filter(Boolean) as string[];
-
-        // Orphan-rescue name reassignment removed. The orphan guard above
-        // already skips any row whose activity_id is not in the live
-        // itinerary, so by this point we either have a real lookup or this
-        // is a row legitimately missing JSON metadata. Re-using a live
-        // activity's name for an unrelated row was the root cause of the
-        // duplicate "Lunch at Le Comptoir du Relais" symptom.
-        const rescuedName = '';
 
         // If we don't have a JSON name, fall back to a category-derived label.
         // This avoids leaking an opaque UUID into the UI.
@@ -410,7 +444,7 @@ export function usePayableItems({
         result.push({
           id: compositeId,
           type: 'activity',
-          name: lookup?.name || rescuedName || fallbackLabel,
+          name: lookup?.name || fallbackLabel,
           amountCents: cents,
           dayNumber: row.day_number,
           payment: activityPayments[0],
