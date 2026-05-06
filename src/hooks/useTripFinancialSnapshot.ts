@@ -40,6 +40,8 @@ export interface FinancialSnapshot {
   budgetRemainingCents: number;
   plannedUnpaidCents: number;
   paidPercent: number;
+  /** Unspent portion of the misc / spending-money reserve folded into the total. */
+  miscReserveCents: number;
   loading: boolean;
   lastDelta: FinancialDelta | null;
   refetch: () => void;
@@ -50,6 +52,7 @@ interface SnapshotData {
   tripTotalCents: number;
   paidCents: number;
   budgetTotalCents: number;
+  miscReserveCents: number;
   loading: boolean;
 }
 
