@@ -493,6 +493,8 @@ export function BudgetCoach({
       gapCents,
       suggestableCount,
       suggestableActivityIds,
+      tripStatus,
+      generationFailureReason,
     ]
   );
 
