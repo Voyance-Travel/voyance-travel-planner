@@ -24,6 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { shouldCountRow } from '@/services/tripBudgetService';
 import { computeMiscReserve } from '@/services/budgetReserve';
+import { resolveCanonicalCostRows, type CanonicalLiveActivity } from '@/services/canonicalCostRows';
 
 export interface FinancialDelta {
   previousTotalCents: number;
