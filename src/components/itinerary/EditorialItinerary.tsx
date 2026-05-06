@@ -2360,6 +2360,17 @@ export function EditorialItinerary({
     setRefreshingDayNumber(null);
   }, [days, destination, refreshDay]);
 
+  // External refresh-day requests (e.g. from TripHealthPanel quick-fix button)
+  useEffect(() => {
+    if (!refreshDayRequest?.dayNumber) return;
+    const idx = days.findIndex((d: any) => d.dayNumber === refreshDayRequest.dayNumber);
+    if (idx < 0) return;
+    setSelectedDayIndex(idx);
+    setActiveTab('details');
+    handleRefreshDay(idx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshDayRequest?.nonce]);
+
   // Apply accepted refresh changes — patches activity startTime/endTime by ID
   const handleApplyRefreshChanges = useCallback((dayIndex: number, changes: ProposedChange[]) => {
     setDays(prev => prev.map((day, dIdx) => {
