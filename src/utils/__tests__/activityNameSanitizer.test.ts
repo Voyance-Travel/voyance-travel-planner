@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeActivityText } from '../activityNameSanitizer';
+import { sanitizeActivityText, sanitizeActivityName } from '../activityNameSanitizer';
 
 describe('sanitizeActivityText - orphan article repair', () => {
   it('repairs "the of <Proper>" by inserting "City"', () => {
@@ -35,5 +35,17 @@ describe('sanitizeActivityText - orphan article repair', () => {
     expect(sanitizeActivityText('Settle in, the of Lisbon awaits')).toBe(
       'Settle in, the City of Lisbon awaits',
     );
+  });
+});
+
+describe('sanitizeActivityName - orphan article repair', () => {
+  it('repairs "the of <Proper>" in titles', () => {
+    expect(sanitizeActivityName('Explore the of Paris Museum')).toBe(
+      'Explore the City of Paris Museum',
+    );
+  });
+
+  it('does not fire when next word is lowercase', () => {
+    expect(sanitizeActivityName('Walk the of dogs')).toBe('Walk the of dogs');
   });
 });
