@@ -72,11 +72,25 @@ export function fixDayTiming<T extends TimedActivity>(input: T[]): FixDayTimingR
 
   // Index timed activities + remember original index
   const items = input.map((a, idx) => {
-    const start = parseHHMM(a.startTime);
-    const end = parseHHMM(a.endTime);
-    const duration =
-      typeof a.durationMinutes === 'number' && a.durationMinutes > 0
+    const startRaw = a.startTime ?? (a as any).time ?? (a as any).start_time;
+    const endRaw = a.endTime ?? (a as any).end_time;
+    const start = parseHHMM(startRaw);
+    let end = parseHHMM(endRaw);
+    const durRaw =
+      typeof a.durationMinutes === 'number'
         ? a.durationMinutes
+        : typeof (a as any).duration_minutes === 'number'
+        ? (a as any).duration_minutes
+        : typeof (a as any).duration === 'number'
+        ? (a as any).duration
+        : null;
+    // Derive end from start + duration if missing
+    if (end == null && start != null && typeof durRaw === 'number' && durRaw > 0) {
+      end = start + durRaw;
+    }
+    const duration =
+      typeof durRaw === 'number' && durRaw > 0
+        ? durRaw
         : start != null && end != null && end > start
         ? end - start
         : null;
