@@ -5557,6 +5557,40 @@ export function EditorialItinerary({
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
+             {/* Failed/empty itinerary recovery banner — Itinerary tab is the
+                 primary surface so users immediately see generation failed and
+                 can retry without digging into Budget. */}
+             {!isCleanPreview && itineraryStatus === 'failed' && (
+               generationFailureReason === 'empty_itinerary' ||
+               generationFailureReason === 'incomplete_itinerary'
+             ) && (
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30">
+                <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-destructive" />
+                <div className="flex-1 space-y-2">
+                  <p className="font-semibold text-foreground">
+                    {generationFailureReason === 'incomplete_itinerary'
+                      ? 'Your itinerary is missing activities'
+                      : "Your itinerary didn't generate properly"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {generationFailureReason === 'incomplete_itinerary'
+                      ? 'Generation finished without a full plan of restaurants, activities, and transit. Tap Regenerate to try again — your flights, hotel, and trip settings are preserved.'
+                      : 'Generation finished without any restaurants, activities, or transit. Tap Regenerate to try again — your flights, hotel, and trip settings are preserved.'}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={handleRegenerateItinerary}
+                    disabled={isRegenerating}
+                    className="mt-1 gap-1.5"
+                  >
+                    <RefreshCw className={cn('h-4 w-4', isRegenerating && 'animate-spin')} />
+                    {isRegenerating ? 'Regenerating…' : 'Regenerate itinerary'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
              {/* Smart Finish Banner — DNA gap analysis for manual trips — hidden in clean preview */}
              {!isCleanPreview && isManualMode && !isPastTrip && (
               <SmartFinishBanner
