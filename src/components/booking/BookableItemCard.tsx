@@ -225,7 +225,7 @@ export function BookableItemCard({
           <Badge variant="outline" className={stateColor}>
             {stateLabel}
           </Badge>
-          <span className="font-medium text-sm">{sanitizeActivityName(activity.title)}</span>
+          <span className="font-medium text-sm">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime })}</span>
         </div>
         <div className="flex items-center gap-2">
           <PriceDisplay />
