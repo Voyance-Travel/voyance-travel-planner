@@ -45,8 +45,16 @@ export const coerceDurationString = (
     const hasSeconds = colon[3] !== undefined;
     let totalMin: number;
     if (hasSeconds) {
-      // True HH:MM:SS clock duration
-      totalMin = a * 60 + b;
+      // HH:MM:SS form. The AI sometimes emits "45:00:00" meaning "45 minutes",
+      // not 45 hours. Apply the same implausibility heuristic as MM:SS:
+      // if the leading number is implausible as hours (>= 24, or >= 5 with
+      // both following fields zero), treat it as minutes.
+      const c = parseInt(colon[3], 10);
+      if (a >= 24 || (a >= 5 && b === 0 && c === 0)) {
+        totalMin = a;
+      } else {
+        totalMin = a * 60 + b;
+      }
     } else if (a >= 24 || (a >= 5 && b === 0)) {
       // "45:00" or "90:00" -> minutes:seconds, treat first as minutes
       totalMin = a;

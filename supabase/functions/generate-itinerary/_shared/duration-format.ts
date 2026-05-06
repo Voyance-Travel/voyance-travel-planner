@@ -31,7 +31,13 @@ export function coerceDurationString(
     const b = parseInt(colon[2], 10);
     const hasSeconds = colon[3] !== undefined;
     let totalMin: number;
-    if (hasSeconds) totalMin = a * 60 + b;
+    if (hasSeconds) {
+      // HH:MM:SS form. Treat implausible-as-hours leading numbers as minutes
+      // (the AI sometimes emits "45:00:00" for "45 minutes").
+      const c = parseInt(colon[3]!, 10);
+      if (a >= 24 || (a >= 5 && b === 0 && c === 0)) totalMin = a;
+      else totalMin = a * 60 + b;
+    }
     else if (a >= 24 || (a >= 5 && b === 0)) totalMin = a;
     else totalMin = a * 60 + b;
     if (totalMin > 0) return formatMinutes(totalMin);
