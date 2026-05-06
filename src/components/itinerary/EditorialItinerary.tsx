@@ -2405,6 +2405,11 @@ export function EditorialItinerary({
             icon: '⚠️',
           });
         }
+        // Scroll the diff view into focus so the user can actually see the result.
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`refresh-diff-${day.dayNumber}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
       } else {
         toast.error(`Could not re-check Day ${day.dayNumber} — please try again.`);
       }
