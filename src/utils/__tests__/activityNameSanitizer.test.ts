@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeActivityText } from '../activityNameSanitizer';
+import { sanitizeActivityText, sanitizeActivityName } from '../activityNameSanitizer';
 
 describe('sanitizeActivityText - orphan article repair', () => {
   it('repairs "the of <Proper>" by inserting "City"', () => {
