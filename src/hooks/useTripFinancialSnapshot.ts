@@ -465,6 +465,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       budgetRemainingCents: budgetRemaining,
       plannedUnpaidCents: toBePaid,
       paidPercent: Math.min(paidPct, 100),
+      miscReserveCents: data.miscReserveCents,
       loading: data.loading,
       lastDelta,
       refetch,
