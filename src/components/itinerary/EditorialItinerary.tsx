@@ -5725,7 +5725,7 @@ export function EditorialItinerary({
                       <span className="text-xs font-semibold text-primary uppercase tracking-wider">Voyance Intelligence</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {!showTripOverview && valueStats.estimatedSavings && (
+                      {!showTripOverview && valueStats.estimatedSavings?.time && (
                         <span className="text-[11px] text-muted-foreground">{valueStats.estimatedSavings.time} saved</span>
                       )}
                       <ChevronDown className={cn("h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200", showTripOverview && "rotate-180")} />
