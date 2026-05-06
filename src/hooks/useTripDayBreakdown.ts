@@ -90,6 +90,7 @@ export function useTripDayBreakdown(
       return {
         id: r.id,
         activityId: r.activity_id || null,
+        dayNumber: r.day_number == null ? 0 : Number(r.day_number),
         category: r.category || null,
         costPerPersonUsd: perPerson,
         numTravelers: trav,
@@ -97,10 +98,7 @@ export function useTripDayBreakdown(
         notes: r.notes || null,
         source: r.source || null,
         isPaid: r.is_paid === true,
-        // day_number stays accessible via the row index below
-        // we attach it dynamically since it's not in the typed shape
-        ...(r.day_number != null ? { dayNumber: r.day_number } : {}),
-      } as DayBreakdownRow & { dayNumber?: number };
+      };
     });
 
     setRows(mapped);
