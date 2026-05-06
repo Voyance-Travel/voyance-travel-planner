@@ -5774,18 +5774,20 @@ export function EditorialItinerary({
                           </div>
                         )}
                       </div>
-                      {valueStats.estimatedSavings && (
+                      {valueStats.estimatedSavings && (valueStats.estimatedSavings.time || valueStats.estimatedSavings.money) && (
                         <div className="p-3 bg-primary/5 border-t border-border/50">
-                          <div className="flex items-center justify-center gap-2 text-sm">
+                          <div className="flex items-center justify-center gap-2 text-sm flex-wrap">
                             <TrendingUp className="h-4 w-4 text-primary" />
-                            <span className="font-medium text-foreground">{valueStats.estimatedSavings.time} saved</span>
-                            {valueStats.estimatedSavings.money && (
-                              <>
-                                <span className="text-muted-foreground">+</span>
-                                <span className="font-medium text-foreground">{valueStats.estimatedSavings.money}</span>
-                              </>
+                            {valueStats.estimatedSavings.time && (
+                              <span className="font-medium text-foreground">{valueStats.estimatedSavings.time} saved</span>
                             )}
-                            <span className="text-muted-foreground">vs. typical itinerary</span>
+                            {valueStats.estimatedSavings.time && valueStats.estimatedSavings.money && (
+                              <span className="text-muted-foreground">+</span>
+                            )}
+                            {valueStats.estimatedSavings.money && (
+                              <span className="font-medium text-foreground">{valueStats.estimatedSavings.money}</span>
+                            )}
+                            <span className="text-muted-foreground">from local picks</span>
                           </div>
                         </div>
                       )}
