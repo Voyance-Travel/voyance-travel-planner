@@ -1243,6 +1243,7 @@ export function EditorialItinerary({
   travelIntelCards,
   tripHealthPanel,
   refreshDayRequest,
+  fixTimingRequest,
   viewMode = 'edit',
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
