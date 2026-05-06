@@ -202,7 +202,23 @@ export async function syncHotelToLedger(
   const hotelAny = hotel as any;
   const checkInDate = hotel.checkIn || hotelAny.checkInDate || null;
   const checkOutDate = hotel.checkOut || hotelAny.checkOutDate || null;
+  const explicitNights = getHotelNights(hotel);
+  // Use the legacy single-selection path so `hotel.nights` is honored when
+  // present, with checkIn/checkOut as the secondary fallback via daysCount.
+  const hotelForCompute = {
+    totalPrice: hotel.totalPrice,
+    pricePerNight: hotel.pricePerNight,
+    nights: explicitNights || undefined,
+  };
+  // daysCount is only used to derive (days-1) nights, so when we have explicit
+  // dates compute nights here and pass through nights to keep the result stable.
   const totalUsd = computeHotelCostUsd(
+    null,
+    hotelForCompute,
+    // If `nights` is set on hotelForCompute the daysCount is ignored.
+    // Otherwise rely on dates by treating them as a 1-hotel multi-city array.
+    1,
+  ) || computeHotelCostUsd(
     [{ hotel: hotel as any, checkInDate, checkOutDate }],
     null,
     0,
