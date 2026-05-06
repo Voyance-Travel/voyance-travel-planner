@@ -400,7 +400,7 @@ export function TripHealthPanel({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 px-2 text-[11px] text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-6 px-2 text-[11px] text-primary"
                         onClick={(e) => { e.stopPropagation(); onAction(item.fixAction!, {}); }}
                       >
                         {item.fixLabel}
@@ -438,7 +438,7 @@ export function TripHealthPanel({
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-6 px-2 text-[10px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-6 px-2 text-[10px] shrink-0 text-primary border-primary/30 hover:bg-primary/10"
                             onClick={(e) => {
                               e.stopPropagation();
                               onAction(issue.fixAction!, { dayNumber: issue.dayNumber });

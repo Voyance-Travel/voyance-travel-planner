@@ -117,6 +117,7 @@ export default function TripDetail() {
   const [error, setError] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
   const [navigateToSection, setNavigateToSection] = useState<string | null>(null);
+  const [refreshDayRequest, setRefreshDayRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
   const [autoStartGeneration, setAutoStartGeneration] = useState(false);
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
@@ -2819,8 +2820,12 @@ export default function TripDetail() {
                               } else if (action === 'add_intercity') {
                                 setNavigateToSection('hotels');
                                 setTimeout(() => setNavigateToSection(null), 500);
-                              } else if (action === 'generate_day' || action === 'refresh_day') {
-                                toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
+                               } else if (action === 'refresh_day') {
+                                 if (ctx?.dayNumber) {
+                                   setRefreshDayRequest({ dayNumber: ctx.dayNumber as number, nonce: Date.now() });
+                                 }
+                               } else if (action === 'generate_day') {
+                                 toast.info(`Use the day toolbar to generate Day ${ctx?.dayNumber || ''}`);
                               } else if (action === 'generate_missing_days' || action === 'generate_all') {
                                 setShowGenerator(true);
                               }
@@ -2959,6 +2964,7 @@ export default function TripDetail() {
                   }
                   initialItineraryData={(trip.itinerary_data as Record<string, unknown>) || null}
                   navigateToSection={navigateToSection}
+                  refreshDayRequest={refreshDayRequest}
                   parsedMetadata={(() => {
                     const meta = (trip.itinerary_data as any)?.metadata;
                     if (meta?.source === 'manual_paste') return meta;
@@ -3060,8 +3066,12 @@ export default function TripDetail() {
                         } else if (action === 'add_intercity') {
                           setNavigateToSection('hotels');
                           setTimeout(() => setNavigateToSection(null), 500);
-                        } else if (action === 'generate_day' || action === 'refresh_day') {
-                          toast.info(`Use the day toolbar to ${action === 'generate_day' ? 'generate' : 'refresh'} Day ${ctx?.dayNumber || ''}`);
+                        } else if (action === 'refresh_day') {
+                          if (ctx?.dayNumber) {
+                            setRefreshDayRequest({ dayNumber: ctx.dayNumber as number, nonce: Date.now() });
+                          }
+                        } else if (action === 'generate_day') {
+                          toast.info(`Use the day toolbar to generate Day ${ctx?.dayNumber || ''}`);
                         } else if (action === 'generate_missing_days' || action === 'generate_all') {
                           setShowGenerator(true);
                         }
