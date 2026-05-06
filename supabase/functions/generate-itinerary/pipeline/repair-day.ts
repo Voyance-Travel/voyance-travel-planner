@@ -2377,23 +2377,25 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
   // Per Believable Human Day rule, midday hotel "freshen up" rituals should be
   // ~30-90 min. Some AI generations produce 2h+ blocks (e.g. 15:20-18:00),
   // creating obvious dead time. Cap any freshen-up to 90 min by trimming endTime.
+  // Fast-Paced travelers (paceScore >= 4) get a tighter 30-min cap.
+  const freshenCapMin = isFastPaced ? 30 : 90;
   for (const a of activities) {
     const cat = (a.category || '').toLowerCase();
     if (cat !== 'accommodation') continue;
     const t = (a.title || '').toLowerCase();
     if (!t.includes('freshen up') && !t.includes('freshen-up')) continue;
     const dur = Number(a.durationMinutes) || 0;
-    if (dur <= 90) continue;
+    if (dur <= freshenCapMin) continue;
     const start = a.startTime || a.time;
     if (!start || !/^\d{2}:\d{2}$/.test(start)) continue;
     const [sh, sm] = start.split(':').map(Number);
-    const newEndMin = sh * 60 + sm + 90;
+    const newEndMin = sh * 60 + sm + freshenCapMin;
     const eh = Math.floor(newEndMin / 60) % 24;
     const em = newEndMin % 60;
     a.endTime = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
-    a.durationMinutes = 90;
-    repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'capped_freshen_up_to_90min', before: `${dur}min`, after: '90min' });
-    console.log(`[FRESHEN-CAP] Capped "${a.title}" from ${dur}min to 90min (${start}-${a.endTime})`);
+    a.durationMinutes = freshenCapMin;
+    repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: `capped_freshen_up_to_${freshenCapMin}min`, before: `${dur}min`, after: `${freshenCapMin}min` });
+    console.log(`[FRESHEN-CAP] Capped "${a.title}" from ${dur}min to ${freshenCapMin}min (${start}-${a.endTime})${isFastPaced ? ' [fast-paced]' : ''}`);
   }
 
   // --- 9e. ORPHANED ROUND-TRIP TRANSPORT REMOVAL ---
