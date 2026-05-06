@@ -1137,7 +1137,7 @@ export function PaymentsTab({
 
         <TabsContent value="expenses" className="mt-4 space-y-4">
           {/* Essentials Category */}
-          {essentialItems.length > 0 && (
+          {essentialItemsWithReserve.length > 0 && (
             <Card className="overflow-hidden">
               <button
                 onClick={() => setExpandedCategory(expandedCategory === 'essentials' ? null : 'essentials')}
