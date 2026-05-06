@@ -119,6 +119,8 @@ export default function TripDetail() {
   const [navigateToSection, setNavigateToSection] = useState<string | null>(null);
   const [refreshDayRequest, setRefreshDayRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
   const [fixTimingRequest, setFixTimingRequest] = useState<{ dayNumber: number; nonce: number } | null>(null);
+  const [refreshingDayNumber, setRefreshingDayNumber] = useState<number | null>(null);
+  const [refreshResultsByDay, setRefreshResultsByDay] = useState<Record<number, { errorCount: number; warningCount: number }>>({});
   const [autoStartGeneration, setAutoStartGeneration] = useState(false);
   const [isSyncingTrip, setIsSyncingTrip] = useState(false);
   const [paymentsRefreshKey, setPaymentsRefreshKey] = useState(0);
@@ -2840,6 +2842,8 @@ export default function TripDetail() {
                             hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
                             flightsBookedElsewhere={!!(trip?.metadata as any)?.flightsBookedElsewhere}
                             hotelBookedElsewhere={!!(trip?.metadata as any)?.hotelBookedElsewhere}
+                            refreshingDayNumber={refreshingDayNumber}
+                            refreshResultsByDay={refreshResultsByDay}
                             className=""
                             onAction={(action, ctx) => {
                               if (action === 'add_flights') {
@@ -3003,6 +3007,8 @@ export default function TripDetail() {
                   navigateToSection={navigateToSection}
                   refreshDayRequest={refreshDayRequest}
                   fixTimingRequest={fixTimingRequest}
+                  onRefreshingDayChange={setRefreshingDayNumber}
+                  onRefreshResultsChange={setRefreshResultsByDay}
                   parsedMetadata={(() => {
                     const meta = (trip.itinerary_data as any)?.metadata;
                     if (meta?.source === 'manual_paste') return meta;
@@ -3095,6 +3101,8 @@ export default function TripDetail() {
                       hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
                       flightsBookedElsewhere={!!(trip?.metadata as any)?.flightsBookedElsewhere}
                       hotelBookedElsewhere={!!(trip?.metadata as any)?.hotelBookedElsewhere}
+                      refreshingDayNumber={refreshingDayNumber}
+                      refreshResultsByDay={refreshResultsByDay}
                       className=""
                       onAction={(action, ctx) => {
                         if (action === 'add_flights') {

@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2, Circle, ChevronDown, AlertTriangle,
   Plane, Hotel, CalendarDays, Bus, Clock,
-  Sparkles, ArrowRight, Shield, Zap,
+  Sparkles, ArrowRight, Shield, Zap, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +52,8 @@ export interface TripHealthPanelProps {
   isMultiCity?: boolean;
   flightsBookedElsewhere?: boolean;
   hotelBookedElsewhere?: boolean;
+  refreshingDayNumber?: number | null;
+  refreshResultsByDay?: Record<number, { errorCount: number; warningCount: number }>;
   className?: string;
   onAction?: (action: string, context?: { dayNumber?: number; field?: 'flights' | 'hotel' }) => void;
 }
@@ -193,6 +195,8 @@ export function TripHealthPanel({
   isMultiCity = false,
   flightsBookedElsewhere = false,
   hotelBookedElsewhere = false,
+  refreshingDayNumber = null,
+  refreshResultsByDay,
   className,
   onAction,
 }: TripHealthPanelProps) {
@@ -479,7 +483,11 @@ export function TripHealthPanel({
                   </div>
 
                   <div className="space-y-1.5 pl-6">
-                    {healthIssues.map((issue) => (
+                    {healthIssues.map((issue) => {
+                      const isReChecking = !!issue.dayNumber && refreshingDayNumber === issue.dayNumber;
+                      const recheck = issue.dayNumber ? refreshResultsByDay?.[issue.dayNumber] : undefined;
+                      const recheckTotal = recheck ? recheck.errorCount + recheck.warningCount : null;
+                      return (
                       <div key={issue.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="flex items-start gap-2 min-w-0">
                           {issue.severity === 'error' ? (
@@ -487,7 +495,21 @@ export function TripHealthPanel({
                           ) : (
                             <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" aria-hidden="true" />
                           )}
-                          <span className="text-xs text-muted-foreground leading-relaxed">{issue.message}</span>
+                          <span className="text-xs text-muted-foreground leading-relaxed">
+                            {issue.message}
+                            {recheckTotal !== null && (
+                              <span
+                                className={cn(
+                                  'ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium',
+                                  recheckTotal === 0
+                                    ? 'bg-green-500/10 text-green-700 dark:text-green-400'
+                                    : 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+                                )}
+                              >
+                                Re-checked · {recheckTotal === 0 ? 'no issues' : `${recheckTotal} issue${recheckTotal === 1 ? '' : 's'}`}
+                              </span>
+                            )}
+                          </span>
                         </div>
                         {issue.fixLabel && onAction && (
                           <div className="flex items-center gap-1 shrink-0 self-end sm:self-auto">
@@ -508,20 +530,30 @@ export function TripHealthPanel({
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                disabled={isReChecking}
                                 className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                                aria-label={`Review day ${issue.dayNumber} in detail`}
+                                aria-label={`Re-check day ${issue.dayNumber}. Re-runs analysis only — use Fix timing to apply fixes.`}
+                                title="Re-runs analysis only. Use Fix timing to apply fixes."
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onAction('refresh_day', { dayNumber: issue.dayNumber });
                                 }}
                               >
-                                Review
+                                {isReChecking ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                    Re-checking…
+                                  </>
+                                ) : (
+                                  'Re-check'
+                                )}
                               </Button>
                             )}
                           </div>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

@@ -510,6 +510,10 @@ export interface EditorialItineraryProps {
   refreshDayRequest?: { dayNumber: number; nonce: number } | null;
   /** Parent dispatches a deterministic timing-fix request for a day */
   fixTimingRequest?: { dayNumber: number; nonce: number } | null;
+  /** Notify parent when a day re-check starts/finishes */
+  onRefreshingDayChange?: (dayNumber: number | null) => void;
+  /** Notify parent of per-day refresh issue counts */
+  onRefreshResultsChange?: (results: Record<number, { errorCount: number; warningCount: number }>) => void;
 }
 
 // =============================================================================
@@ -1260,6 +1264,8 @@ export function EditorialItinerary({
   tripHealthPanel,
   refreshDayRequest,
   fixTimingRequest,
+  onRefreshingDayChange,
+  onRefreshResultsChange,
   viewMode = 'edit',
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
@@ -2269,6 +2275,23 @@ export function EditorialItinerary({
   const { isRefreshing: isRefreshingDay, refreshDay } = useRefreshDay();
   const [refreshingDayNumber, setRefreshingDayNumber] = useState<number | null>(null);
 
+  // Notify parent of refresh state changes
+  useEffect(() => {
+    onRefreshingDayChange?.(refreshingDayNumber);
+  }, [refreshingDayNumber, onRefreshingDayChange]);
+
+  useEffect(() => {
+    if (!onRefreshResultsChange) return;
+    const counts: Record<number, { errorCount: number; warningCount: number }> = {};
+    Object.entries(refreshResults).forEach(([dayNum, r]: [string, any]) => {
+      counts[Number(dayNum)] = {
+        errorCount: r.issues.filter((i: any) => i.severity === 'error').length,
+        warningCount: r.issues.filter((i: any) => i.severity === 'warning').length,
+      };
+    });
+    onRefreshResultsChange(counts);
+  }, [refreshResults, onRefreshResultsChange]);
+
   // ── Day 1 auto-buffer ──────────────────────────────────────────────
   // Arrival day is the worst place to surface a "no travel buffer — Refresh
   // Day to fix timing" banner. When we detect zero/negative gaps between
@@ -2352,31 +2375,38 @@ export function EditorialItinerary({
     const day = days[dayIndex];
     if (!day) return;
     setRefreshingDayNumber(day.dayNumber);
-    const activities = day.activities.map(a => ({
-      id: a.id,
-      title: a.title || '',
-      category: a.category,
-      startTime: a.startTime || (a as any).time,
-      endTime: a.endTime,
-      location: a.location,
-      operatingHours: (a as any).operatingHours,
-      durationMinutes: a.durationMinutes,
-      cost: a.cost,
-    }));
-    const result = await refreshDay(activities, day.date || '', destination, day.dayNumber);
-    if (result) {
-      setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
-      const errorCount = result.issues.filter(i => i.severity === 'error').length;
-      const warnCount = result.issues.filter(i => i.severity === 'warning').length;
-      if (result.issues.length === 0) {
-        toast.success(`Day ${day.dayNumber} validated, no issues found!`);
+    try {
+      const activities = day.activities.map(a => ({
+        id: a.id,
+        title: a.title || '',
+        category: a.category,
+        startTime: a.startTime || (a as any).time,
+        endTime: a.endTime,
+        location: a.location,
+        operatingHours: (a as any).operatingHours,
+        durationMinutes: a.durationMinutes,
+        cost: a.cost,
+      }));
+      const result = await refreshDay(activities, day.date || '', destination, day.dayNumber);
+      if (result) {
+        setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
+        const errorCount = result.issues.filter(i => i.severity === 'error').length;
+        const warnCount = result.issues.filter(i => i.severity === 'warning').length;
+        if (result.issues.length === 0) {
+          toast.success(`Day ${day.dayNumber} validated, no issues found!`);
+        } else {
+          toast(`Day ${day.dayNumber}: ${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warnCount} warning${warnCount !== 1 ? 's' : ''}`, {
+            icon: '⚠️',
+          });
+        }
       } else {
-        toast(`Day ${day.dayNumber}: ${errorCount} error${errorCount !== 1 ? 's' : ''}, ${warnCount} warning${warnCount !== 1 ? 's' : ''}`, {
-          icon: '⚠️',
-        });
+        toast.error(`Could not re-check Day ${day.dayNumber} — please try again.`);
       }
+    } catch (err: any) {
+      toast.error(`Could not re-check Day ${day.dayNumber}: ${err?.message || 'unknown error'}`);
+    } finally {
+      setRefreshingDayNumber(null);
     }
-    setRefreshingDayNumber(null);
   }, [days, destination, refreshDay]);
 
   // External refresh-day requests (e.g. from TripHealthPanel quick-fix button)
