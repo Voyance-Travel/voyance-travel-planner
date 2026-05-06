@@ -29,6 +29,8 @@ interface ChecklistItem {
   icon: React.ElementType;
   fixLabel?: string;
   fixAction?: string; // action key for parent to handle
+  doneByFlag?: boolean; // marked done via "booked elsewhere" flag
+  markElsewhereField?: 'flights' | 'hotel'; // enables "Already booked" button when not done
 }
 
 interface HealthIssue {
@@ -48,8 +50,10 @@ export interface TripHealthPanelProps {
   hasAirportTransfer?: boolean;
   hasInterCityTransport?: boolean;
   isMultiCity?: boolean;
+  flightsBookedElsewhere?: boolean;
+  hotelBookedElsewhere?: boolean;
   className?: string;
-  onAction?: (action: string, context?: { dayNumber?: number }) => void;
+  onAction?: (action: string, context?: { dayNumber?: number; field?: 'flights' | 'hotel' }) => void;
 }
 
 // ─── Health Analysis ────────────────────────────────────────────────────────
