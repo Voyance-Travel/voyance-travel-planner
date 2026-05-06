@@ -10545,6 +10545,18 @@ function DayCard({
                               <span className="font-semibold">Day total{travelers > 1 ? ' /pp' : ''}</span>
                               <span className="font-semibold tabular-nums">{formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}</span>
                             </div>
+                            {travelers > 1 && (
+                              <>
+                                <div className="flex justify-between gap-3">
+                                  <span className="text-muted-foreground">× {travelers} travelers</span>
+                                  <span className="font-medium tabular-nums">{formatCurrency(Math.floor(displayCost(totalCost * travelers)), tripCurrency)}</span>
+                                </div>
+                                <div className="flex justify-between gap-3 pt-0.5 mt-0.5 border-t border-border">
+                                  <span className="font-semibold">Day total (group)</span>
+                                  <span className="font-semibold tabular-nums">{formatCurrency(Math.floor(displayCost(totalCost * travelers)), tripCurrency)}</span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </TooltipContent>
                       </Tooltip>
