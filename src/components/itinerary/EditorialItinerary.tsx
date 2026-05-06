@@ -6602,6 +6602,7 @@ export function EditorialItinerary({
                           isManualMode={isManualMode}
                           onOpenConcierge={handleOpenConcierge}
                           onDeleteAINote={handleDeleteAINote}
+                          dayBreakdown={tripDayBreakdown.byDay[selectedDay.dayNumber]}
                         />
                       )}
                     </>
