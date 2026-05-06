@@ -191,10 +191,15 @@ export function TripHealthPanel({
   hasAirportTransfer = false,
   hasInterCityTransport = false,
   isMultiCity = false,
+  flightsBookedElsewhere = false,
+  hotelBookedElsewhere = false,
   className,
   onAction,
 }: TripHealthPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const flightsDone = hasFlights || flightsBookedElsewhere;
+  const hotelDone = hasHotel || hotelBookedElsewhere;
 
   const { checklist, healthIssues, completionPct, healthScore, daysPlanned } = useMemo(() => {
     // Count days with real activities
@@ -208,8 +213,26 @@ export function TripHealthPanel({
 
     // Build checklist
     const items: ChecklistItem[] = [
-      { id: 'flights', label: 'Flights booked', done: hasFlights, icon: Plane, fixLabel: 'Add flights', fixAction: 'add_flights' },
-      { id: 'hotel', label: 'Hotels confirmed', done: hasHotel, icon: Hotel, fixLabel: 'Add hotel', fixAction: 'add_hotel' },
+      {
+        id: 'flights',
+        label: 'Flights booked',
+        done: flightsDone,
+        icon: Plane,
+        fixLabel: flightsDone ? undefined : 'Add flights',
+        fixAction: flightsDone ? undefined : 'add_flights',
+        doneByFlag: !hasFlights && flightsBookedElsewhere,
+        markElsewhereField: 'flights',
+      },
+      {
+        id: 'hotel',
+        label: 'Hotels confirmed',
+        done: hotelDone,
+        icon: Hotel,
+        fixLabel: hotelDone ? undefined : 'Add hotel',
+        fixAction: hotelDone ? undefined : 'add_hotel',
+        doneByFlag: !hasHotel && hotelBookedElsewhere,
+        markElsewhereField: 'hotel',
+      },
     ];
 
     // Days checklist entries
@@ -255,8 +278,8 @@ export function TripHealthPanel({
     // Compute completion %
     const completionFactors = [
       planned / Math.max(totalDaysExpected, 1),
-      hasFlights ? 1 : 0,
-      hasHotel ? 1 : 0,
+      flightsDone ? 1 : 0,
+      hotelDone ? 1 : 0,
     ];
     if (isMultiCity) completionFactors.push(hasInterCityTransport ? 1 : 0);
     const completion = Math.round(
@@ -281,7 +304,7 @@ export function TripHealthPanel({
       healthScore: health,
       daysPlanned: planned,
     };
-  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity]);
+  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere]);
 
   const healthColor = healthScore >= 80 ? 'text-green-600' : healthScore >= 50 ? 'text-amber-500' : 'text-destructive';
   const healthBg = healthScore >= 80 ? 'bg-green-600' : healthScore >= 50 ? 'bg-amber-500' : 'bg-destructive';
