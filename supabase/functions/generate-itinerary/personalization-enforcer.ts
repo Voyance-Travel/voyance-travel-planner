@@ -57,6 +57,7 @@ export type ForcedSlotType =
   | 'edge_activity'            // Adventure trait
   | 'wellness_moment'          // Transformation trait
   | 'authentic_encounter'      // Authenticity trait
+  | 'flex_window'              // Planning trait (negative/spontaneous)
   | 'social_experience'        // Social trait (positive)
   | 'solo_retreat'             // Social trait (negative/introvert)
   | 'vip_experience'           // VIP Voyager: high comfort + budget
