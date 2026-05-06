@@ -262,13 +262,16 @@ function checkGenericVenues(activities: StrictActivityMinimal[], results: Valida
       isCityNameOnly || hasPlaceholderDescription ||
       /^(a |the )?(local |nearby )?(spot|place|restaurant|caf[eé]|cafe|eatery|bistro|establishment)/i.test(locationName);
 
-    if (GENERIC_VENUE_PATTERNS.some(re => re.test(title.trim()))) {
+    const isAIStub = matchesAIStubVenue(title) || matchesAIStubVenue(locationName);
+
+    if (GENERIC_VENUE_PATTERNS.some(re => re.test(title.trim())) || isAIStub) {
       // Escalate ALL dining generic venues to error (they should trigger repair)
-      const shouldEscalate = isDining || /^(breakfast|brunch|lunch|dinner|supper)\s+(in|at)\s+/i.test(title.trim());
+      const shouldEscalate = isDining || isAIStub || /^(breakfast|brunch|lunch|dinner|supper)\s+(in|at)\s+/i.test(title.trim());
+      const stubLabel = isAIStub ? ' — AI-generated stub name (e.g. "Café Matinal", "Table du Quartier")' : '';
       results.push({
         code: FAILURE_CODES.GENERIC_VENUE,
         severity: shouldEscalate ? 'error' : 'warning',
-        message: `"${title}" is a generic placeholder venue name${shouldEscalate ? ' — meal cards must use real restaurant names' : ''}`,
+        message: `"${title}" is a generic placeholder venue name${shouldEscalate ? ' — meal cards must use real restaurant names' : ''}${stubLabel}`,
         activityIndex: i,
         field: 'title',
         autoRepairable: true,
