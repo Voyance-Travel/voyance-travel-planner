@@ -1066,7 +1066,7 @@ export function sanitizeAITextField(text: string | undefined | null, destination
 
   // Always fix orphaned possessive "the's" / "the' s" → "the city's" (reads
   // natural regardless of destination, avoids ugly forms like "Paris's").
-  result = result.replace(/\bthe'\s?s\b/gi, "the city's");
+  result = result.replace(/\bthe['’]\s?s\b/gi, "the city's");
 
   // Destination-agnostic orphan-article repairs — must always run, even if no
   // destination is supplied to this sanitize call. Repairs AI dropouts where
