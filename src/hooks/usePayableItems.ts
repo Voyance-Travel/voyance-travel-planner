@@ -334,10 +334,15 @@ export function usePayableItems({
     addManualGroups('other');
 
     // ─── DB-driven activity rows: ONE per non-transit row, grouped per day for transit ───
-    // Track ids consumed via orphan-rescue so the JSON-walk fallback below
-    // doesn't double-surface them.
+    // Two-pass resolution:
+    //   Pass 1 — direct id matches (live JSON activity for this exact row).
+    //            These claim their JSON id so orphan-rescue can't reuse it.
+    //   Pass 2 — orphan rows (no direct match) try to rescue an unclaimed JSON
+    //            activity in the same (day, normalized-category) bucket.
+    // This prevents stale activity_costs rows from duplicating a live activity
+    // already surfaced by its legitimate row (e.g. two "Lunch at Mordi e Vai").
+    const claimedJsonIds = new Set<string>();
     const rescueConsumed = new Set<string>();
-    // Per-(day, mapped-cat) cursor into orphanRescueByDayCat.
     const rescueCursors = new Map<string, number>();
     const popRescue = (dayNum: number, mappedCat: string): RescueEntry | null => {
       const k = `${dayNum}|${mappedCat}`;
@@ -346,7 +351,7 @@ export function usePayableItems({
       let cursor = rescueCursors.get(k) ?? 0;
       while (cursor < queue.length) {
         const entry = queue[cursor++];
-        if (!rescueConsumed.has(entry.id)) {
+        if (!rescueConsumed.has(entry.id) && !claimedJsonIds.has(entry.id)) {
           rescueCursors.set(k, cursor);
           return entry;
         }
@@ -358,14 +363,24 @@ export function usePayableItems({
     if (activityCosts?.length) {
       const transitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
 
+      // Partition rows: direct matches first, orphans second.
+      const directRows: typeof activityCosts = [];
+      const orphanRows: typeof activityCosts = [];
       for (const row of activityCosts) {
         if (row.day_number === 0) continue; // hotel/flight handled above
+        if (activityNameById.has(row.activity_id)) {
+          directRows.push(row);
+          claimedJsonIds.add(row.activity_id);
+        } else {
+          orphanRows.push(row);
+        }
+      }
+
+      const orderedRows = [...directRows, ...orphanRows];
+
+      for (const row of orderedRows) {
         const cat = (row.category || '').toLowerCase();
 
-        // Resolve to a live JSON activity. Prefer direct id match; otherwise
-        // attempt orphan-rescue by (day, normalized-category). Only drop the
-        // row when neither path yields a live activity — those are true
-        // leftovers from a prior itinerary version.
         let lookup = activityNameById.get(row.activity_id);
         let effectiveActivityId = row.activity_id;
         if (!lookup) {
@@ -376,12 +391,10 @@ export function usePayableItems({
             effectiveActivityId = rescued.id;
             lookup = { name: rescued.name, dayNumber: row.day_number, jsonCost: rescued.jsonCost, category: rescued.category };
             if (typeof console !== 'undefined') {
-              // One-line diagnostic to catch future regressions in the field
-              // without spamming users with toasts.
               console.warn('[usePayableItems] orphan-rescue', { dayNumber: row.day_number, category: cat, rescuedName: rescued.name });
             }
           } else {
-            continue; // no live activity for this slot — drop
+            continue; // no live activity for this slot — drop the orphan row
           }
         }
 
