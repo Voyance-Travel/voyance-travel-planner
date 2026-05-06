@@ -651,10 +651,15 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                     size="sm"
                     variant="outline"
                     className="h-8 text-xs"
-                    onClick={async () => {
-                      await updateSettings({ budget_total_cents: suggested });
-                      window.dispatchEvent(new CustomEvent('booking-changed'));
-                    }}
+                    onClick={() =>
+                      applyRaiseBudget(budgetCents, suggested, {
+                        updateSettings: (s) => updateSettings(s),
+                        dispatchBookingChanged: () =>
+                          window.dispatchEvent(new CustomEvent('booking-changed')),
+                        toast,
+                        formatCurrency,
+                      })
+                    }
                   >
                     Raise budget to {formatCurrency(suggested)}
                   </Button>
