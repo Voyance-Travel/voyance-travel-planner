@@ -174,8 +174,17 @@ export function sanitizeActivityName(
     const cat = (opts?.category || '').toLowerCase();
     const isDiningCategory =
       !!cat && /(dining|restaurant|food|meal|breakfast|brunch|lunch|dinner|caf[eé]|coffee|bar|drinks|bakery|boulangerie|bistro|brasserie|patisserie|p[âa]tisserie)/.test(cat);
+    const mealFromCategory: MealType | null =
+      /breakfast/.test(cat) ? 'breakfast' :
+      /brunch/.test(cat) ? 'brunch' :
+      /lunch/.test(cat) ? 'lunch' :
+      /dinner/.test(cat) ? 'dinner' :
+      /drinks|bar/.test(cat) ? 'drinks' : null;
     const meal: MealType | null =
-      opts?.mealType ?? inferMealTypeFromTitle(sanitized) ?? inferMealTypeFromTime(opts?.startTime ?? null);
+      opts?.mealType
+      ?? mealFromCategory
+      ?? inferMealTypeFromTitle(sanitized)
+      ?? inferMealTypeFromTime(opts?.startTime ?? null);
     if (isDiningCategory || meal) {
       return stubFallbackLabel(meal);
     }
