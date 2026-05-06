@@ -8459,7 +8459,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
           'No visa required for tourism (US/EU citizens)',
           'Must show proof of return/onward travel',
           'May need to show proof of accommodation',
-          'Electronic Travel Authorisation (ETA) required from 2024 for some nationalities'
+          'UK ETA is now required for most non-EU/non-Irish visitors — apply online before travel'
         ],
         passport: 'Valid passport required',
         passportTips: [
@@ -8470,7 +8470,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         ],
         health: 'No required vaccinations',
         healthTips: [
-          'COVID restrictions may apply - check before travel',
+          'Check current health advisories with your country'\''s foreign-travel office',
           'NHS available for emergencies (may incur charges)',
           'European Health Insurance Card (EHIC) no longer valid for UK',
           'Travel insurance strongly recommended'
@@ -8484,7 +8484,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS authorization required from 2025 for US citizens',
+          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Count all Schengen countries toward 90-day limit'
         ],
@@ -8511,7 +8511,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS authorization required from 2025 for US citizens',
+          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Register at local police station if staying 8+ days (handled by hotels)'
         ],
@@ -8538,7 +8538,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS authorization required from 2025 for US citizens',
+          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Count all Schengen countries toward 90-day limit'
         ],
@@ -8565,7 +8565,7 @@ function NeedToKnowSection({ destination, destinationCountry, destinationInfo }:
         visa: 'US citizens: Visa-free for up to 90 days (Schengen)',
         visaTips: [
           'Part of Schengen Area - 90 days in any 180-day period',
-          'ETIAS authorization required from 2025 for US citizens',
+          'ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking',
           'No visa required for tourism (US/EU citizens)',
           'Count all Schengen countries toward 90-day limit'
         ],
