@@ -439,18 +439,33 @@ export function TripHealthPanel({
                           <span className="text-xs text-muted-foreground leading-relaxed">{issue.message}</span>
                         </div>
                         {issue.fixLabel && onAction && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-6 px-2 text-[10px] shrink-0 text-primary border-primary/30 hover:bg-primary/10"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onAction(issue.fixAction!, { dayNumber: issue.dayNumber });
-                            }}
-                          >
-                            <Zap className="w-3 h-3 mr-1" />
-                            {issue.fixLabel}
-                          </Button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] text-primary border-primary/30 hover:bg-primary/10"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onAction(issue.fixAction!, { dayNumber: issue.dayNumber });
+                              }}
+                            >
+                              <Zap className="w-3 h-3 mr-1" />
+                              {issue.fixLabel}
+                            </Button>
+                            {issue.fixAction === 'fix_timing' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onAction('refresh_day', { dayNumber: issue.dayNumber });
+                                }}
+                              >
+                                Review
+                              </Button>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))}
