@@ -2452,9 +2452,16 @@ export function EditorialItinerary({
       if (result.success) {
         setDays(prev => prev.map((d, i) => i === idx ? { ...d, activities: result.activities as any } : d));
         setHasChanges(true);
+        setSelectedDayIndex(idx);
+        setActiveTab('itinerary');
         toast.success(
-          `Resolved ${result.resolvedCount} timing conflict${result.resolvedCount === 1 ? '' : 's'} on Day ${day.dayNumber}`
+          `Day ${day.dayNumber} timing fixed — resolved ${result.resolvedCount} conflict${result.resolvedCount === 1 ? '' : 's'}.`
         );
+        // Scroll the day into view so the user sees the start/end times shift.
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`day-${day.dayNumber}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
         // Re-run refresh validation so the Trip Health panel updates to "no issues"
         // (otherwise the warning lingers even after a successful fix).
         setTimeout(() => { handleRefreshDay(idx); }, 50);
