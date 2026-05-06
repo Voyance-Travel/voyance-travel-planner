@@ -1,84 +1,88 @@
-# Lock down Flights & Hotels tab vs Payments consistency
+# Need to Know tab — audit and lock down
 
-## Problem
+## What I found
 
-The Flights & Hotels tab (the `details` tab in `EditorialItinerary.tsx` at line 6801, label `"Flights & Hotels"`) renders three things that have to stay in sync with the Payments tab:
+`NeedToKnowSection` (lines 8182–8810 of `EditorialItinerary.tsx`) hydrates from two sources:
 
-1. **Flight legs total** — `flightCost` in `EditorialItinerary` (sums `leg.price`) vs the `Round-trip Flight` row that `usePayableItems` builds from `flightSelection`.
-2. **Single-hotel total** — `hotelCost` (lines 3381–3400) using `totalPrice ?? pricePerNight × nights` vs the `hotel-selection` row in `usePayableItems` (lines 254–271).
-3. **Multi-city hotels** — `allHotels.reduce(...)` in EditorialItinerary vs `syncMultiCityHotelsToLedger` (writes one `activity_costs` hotel row aggregated across cities).
+1. **`lookup-destination-insights` edge function** (Perplexity `sonar`) — fills language, timezone, water, voltage, emergency.
+2. **Hardcoded static fallbacks** in `getDefaultInfo()` and `getEntryRequirements()` for UK / France / Italy / Spain / Germany, with a generic default.
 
-Two real failure modes have already happened (and have inline-comment guards but no test):
+Three concrete risks the user is right to worry about:
 
-- "Hotel Accommodation $2,850" auto-estimate appearing alongside a manual "Four Seasons $2,400" — guard added in `syncHotelToLedger` (lines 187–197): if any `manual-` hotel payment exists, remove the canonical row instead of upserting. **No regression test.**
-- A selected hotel without an explicit price triggering a reference-table estimate that surprised users and double-billed — guard added (lines 207–214). **No regression test.**
+### Risk 1 — Outdated future-tense copy
+The fallback text is now stale in 2026:
+- `"ETIAS authorization required from 2025 for US citizens"` (lines 8502, 8529, 8556, 8583)
+- `"Electronic Travel Authorisation (ETA) required from 2024 for some nationalities"` (line 8477)
+- `"COVID restrictions may apply - check before travel"` (line 8488) — generation-era artifact
 
-If either guard regresses, the Flights & Hotels tab will silently disagree with the Payments tab again.
+These render verbatim in the tab. ETIAS hasn't actually launched (it's been pushed to late 2026 / 2027); ETA is now live for most. Either way, "from 2025" reads as a bug.
+
+### Risk 2 — Placeholder leak from partial AI responses
+When `aiInsights` loads but the model returns an incomplete object, the merge in `getDefaultInfo()` (lines 8239–8255) silently substitutes generic placeholders that look like UI bugs:
+- `aiInsights.language?.primary || 'Local language'`
+- `aiInsights.timezone?.zone || 'Local time'`
+- `aiInsights.emergency?.number || 'Contact local authorities'`
+- `aiInsights.water?.description || 'Check local advisories'`
+
+If even one field is missing, the user sees "Local language" / "Local time" — which is exactly the placeholder-copy regression flagged. The tab does NOT fall back to the country-specific static block when `aiInsights` is partially populated; it short-circuits at `if (aiInsights)` and uses placeholders for the missing fields.
+
+### Risk 3 — No test coverage
+There is no test for `NeedToKnowSection`, no test for the merge logic, no test for the entry-requirements switch. If a future regen mangles `aiInsights.language.phrases`, the `.map(...)` (line 8242) throws.
 
 ## Plan
 
-### 1. Extract `computeHotelCost(allHotels, hotelSelection, daysCount)` into a small utility
+### 1. Refresh stale future-tense copy
 
-Today the hotel-cost math in `EditorialItinerary.tsx` (lines 3381–3400) is duplicated in three places: that file, `usePayableItems` (line 258), and `syncHotelToLedger` (lines 199–214). Extract a single pure function:
+Edit the static fallbacks in `getEntryRequirements()`:
+- Replace `"ETIAS authorization required from 2025 for US citizens"` with `"ETIAS pre-travel authorisation will be required once it launches — check the official EU travel site before booking"`.
+- Replace `"Electronic Travel Authorisation (ETA) required from 2024 for some nationalities"` with `"UK ETA is now required for most non-EU/non-Irish visitors — apply online before travel"`.
+- Drop the `"COVID restrictions may apply - check before travel"` bullet (line 8488). It's a generation-era artifact; if anything, replace with `"Check current health advisories with your country's foreign-travel office"`.
+
+### 2. Make AI/static merge safer
+
+Extract a pure helper:
 
 ```ts
-// src/lib/hotel-cost.ts
-export function computeHotelCostUsd(
-  allHotels: Array<{ hotel?: { totalPrice?: number; pricePerNight?: number }; checkInDate?: string; checkOutDate?: string }> | null | undefined,
-  hotelSelection: { totalPrice?: number; pricePerNight?: number; nights?: number } | null | undefined,
-  daysCount: number,
-): number;
+// src/components/itinerary/needToKnow.ts
+export function mergeNeedToKnowInfo(
+  aiInsights: AiInsights | null,
+  fallback: StaticInfo,           // country-specific block from getDefaultInfo
+): StaticInfo
 ```
 
-Wire all three callers to use it. No behavior change.
+Rule: for **each field** (`language`, `timezone`, `water`, `voltage`, `emergency`), use the AI value only when it's a non-empty string AND the matching `tips` array has at least one non-empty entry. Otherwise fall back to the country-specific static block — never the bare `'Local language'` / `'Local time'` literal. This kills Risk 2.
 
-### 2. Unit tests for `computeHotelCostUsd`
+Wire `getDefaultInfo()` to call `mergeNeedToKnowInfo(aiInsights, countryFallback)` instead of the current `if (aiInsights) return ai-only` branch.
 
-`src/lib/__tests__/hotel-cost.test.ts`:
+### 3. Defensive parsing for AI tips arrays
 
-- multi-city: sum of `totalPrice` per hotel
-- multi-city: `pricePerNight × nights` when `totalPrice` missing, with the existing 1-night floor
-- single hotel `totalPrice` wins over `pricePerNight × nights`
-- single hotel falls back to `pricePerNight × (nights ?? days-1)`
-- empty/null returns `0`
+`languageTips` builds a string from `aiInsights.language.phrases.map(p => "${p.phrase}" = "${p.translation}" (${p.pronunciation}))`. If `phrases` is `null`, `undefined`, or contains an entry missing one of the three subkeys, the result is either a thrown error or `undefined = undefined (undefined)` rendered to the user.
 
-### 3. Regression tests for the manual-override guard
+Harden it: filter out entries lacking `phrase`/`translation`, default `pronunciation` to empty (and drop the parens when missing), and fall through to the static block if zero valid entries remain.
 
-The double-billing fix (lines 187–197 of `syncHotelToLedger`) is the highest-leverage thing to lock down. Pure-function test isn't possible because it queries supabase, so:
+### 4. Tests
 
-`src/services/__tests__/budgetLedgerSync.test.ts`:
+`src/components/itinerary/__tests__/needToKnow.test.ts`:
+- AI insights null → returns fallback unchanged.
+- AI insights complete → AI fields win.
+- AI insights with empty `language.primary` → falls back to country-specific language (NOT `'Local language'`).
+- AI insights with empty `language.phrases` array → uses fallback `languageTips` instead of `[]`.
+- Malformed phrase entry (`{phrase: 'Hi'}` no translation) → filtered out; if all filtered, fallback wins.
+- AI insights with present `voltage.voltage` but missing `plugType` → renders `"230V"` (no trailing comma+undefined).
 
-- mock `supabase.from('trip_payments')` to return one `manual-` hotel row → assert `removeLogisticsCost` is called and `upsertLogisticsCost` is **not** called, even when `hotel.totalPrice = 2850`
-- mock no manual rows + `hotel.totalPrice = 2400` → assert `upsertLogisticsCost(tripId, 'hotel', 2400, ...)`
-- mock no manual rows + only `pricePerNight = 600` and 4 nights via checkIn/checkOut → asserts $2,400 via the nights × rate path
-- mock no manual rows + no price at all → asserts `removeLogisticsCost` (the "no auto-estimate" guard)
+### 5. Document in memory
 
-### 4. `usePayableItems` hotel/flight reconciliation tests
-
-`src/hooks/__tests__/usePayableItems.test.ts` — render the hook via `renderHook` with three scenarios:
-
-- **Selection-only**: `hotelSelection.totalPrice = 2400`, no payments → emits one `hotel-selection` row at 240000 cents.
-- **Manual override**: one `payments` row with `item_type='hotel'`, `item_id='manual-...'` → canonical `hotel-selection` row is suppressed (the `hasManualHotel` branch). This is the "phantom $2,850" prevention case.
-- **Inclusion toggles**: `includeHotel = false` → hotel row dropped from the result; `includeFlight = false` (default) keeps flights surfaced because the flight branch isn't gated by `includeFlight` in the hook (verify or fix; today the `activityCosts` filter respects both flags but the selection branch only honors `hasManualFlight`).
-
-Same for flight: the third test acts as a real audit — if `includeFlight=false` should hide the canonical flight row but doesn't, we surface it as a finding rather than fix in this loop.
-
-### 5. Document the agreement
-
-Add a short comment block at the top of `EditorialItinerary.tsx`'s `details` tab section ("Flights & Hotels tab — invariants") listing the three sources of truth that must agree (selection-derived UI, `activity_costs` ledger, `usePayableItems`). Cheaper than another doc; lives where the code does.
+Add a small memory entry: *Need to Know merge contract* — partial AI responses must fall back per-field, never substitute generic "Local language"/"Local time" placeholders.
 
 ## Out of scope
 
-- Changing the actual UI of the tab. We're locking down data agreement, not redesigning.
-- Reworking `useTripFinancialSnapshot` — already canonical.
-- Adding e2e tests; vitest unit/hook tests cover the regression risk surfaced by the user.
+- Rewriting the country list / adding new countries.
+- Validating the Perplexity edge function output server-side (could be a future hardening pass).
+- Changing the visual UI of the cards.
 
 ## Files
 
-- `src/lib/hotel-cost.ts` (new)
-- `src/lib/__tests__/hotel-cost.test.ts` (new)
-- `src/services/__tests__/budgetLedgerSync.test.ts` (new)
-- `src/hooks/__tests__/usePayableItems.test.ts` (new)
-- `src/components/itinerary/EditorialItinerary.tsx` (use `computeHotelCostUsd`, add invariants comment)
-- `src/hooks/usePayableItems.ts` (use `computeHotelCostUsd` for the selection branch)
-- `src/services/budgetLedgerSync.ts` (use `computeHotelCostUsd` after the manual guard)
+- `src/components/itinerary/needToKnow.ts` (new)
+- `src/components/itinerary/__tests__/needToKnow.test.ts` (new)
+- `src/components/itinerary/EditorialItinerary.tsx` (use helper, refresh ETIAS/ETA/COVID copy)
+- `mem://technical/itinerary/need-to-know-merge` (new)
