@@ -107,3 +107,53 @@ describe('usePayableItems — Flights & Hotels reconciliation', () => {
     expect(result.current.items.find(i => i.id === 'flight-selection')).toBeUndefined();
   });
 });
+
+describe('usePayableItems — orphan-rescue dedupe', () => {
+  it('does not double-surface a live activity when a stale activity_costs row exists for the same (day, category)', () => {
+    // One live dining activity in JSON.
+    const liveId = '7834bb8d-0448-495d-b8f7-dc675f02abb2';
+    const staleId = '44c1ae94-5dd1-40aa-8401-60b029b63165';
+    const days = [
+      { dayNumber: 1, activities: [] },
+      {
+        dayNumber: 2,
+        activities: [
+          {
+            id: liveId,
+            title: 'Lunch at Mordi e Vai',
+            category: 'dining',
+            cost: { amount: 15, currency: 'USD' },
+          },
+        ],
+      },
+    ];
+
+    // Two activity_costs rows: one stale (no live JSON match), one legit.
+    const activityCosts = [
+      { activity_id: staleId, day_number: 2, category: 'dining', cost_per_person_usd: 15, num_travelers: 2 },
+      { activity_id: liveId, day_number: 2, category: 'dining', cost_per_person_usd: 15, num_travelers: 2 },
+    ];
+
+    const { result } = renderHook(() =>
+      usePayableItems({
+        days: days as any,
+        flightSelection: null,
+        hotelSelection: null,
+        travelers: 2,
+        payments: [],
+        activityCosts: activityCosts as any,
+        paymentsLoaded: true,
+      }),
+    );
+
+    const lunchRows = result.current.items.filter(i => i.name === 'Lunch at Mordi e Vai');
+    expect(lunchRows).toHaveLength(1);
+    expect(lunchRows[0].amountCents).toBe(3000); // $15 × 2 travelers, once
+
+    // Total dining cost from this day must be exactly $30, not $60.
+    const diningTotal = result.current.items
+      .filter(i => i.type === 'activity' && i.dayNumber === 2)
+      .reduce((s, i) => s + i.amountCents, 0);
+    expect(diningTotal).toBe(3000);
+  });
+});
