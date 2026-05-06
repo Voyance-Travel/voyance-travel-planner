@@ -1,55 +1,47 @@
 ## Problem
 
-The user's trip `b552bb7c…` is `itinerary_status='failed'` with **0 days saved** and `metadata.generation_error = "Day 2 generated with 0 activities"`. The UI sits on the generation/loading screen forever ("stuck on the final day") because:
+When opening an itinerary, the page sometimes lands scrolled near the bottom instead of at the top. `ScrollToTop` is already wired into the router, so the cause isn't a missing route reset — it's an effect inside `EditorialItinerary` that fires on mount and pulls the page down.
 
-1. **Backend bails the whole chain on a single empty day.**
-   `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (lines 1892–1918) detects `newDayActivities.length === 0` and immediately writes `itinerary_status='failed'` and `return`s — *without* retrying the day and *without* continuing to subsequent days. That's inconsistent with the HTTP-error path (lines 673–744), which retries up to `MAX_RETRIES` and then keeps chaining when not on the last day.
+## Root cause
 
-2. **Client auto-resume only triggers on partial data.**
-   `src/pages/TripDetail.tsx` self-heal (lines 1224–1235) only fires when `0 < actualDays < expectedTotal`. With 0 saved days + status `failed`, neither resume nor a clear retry CTA renders, so the user keeps staring at `GenerationPhases` / the stalled spinner.
+`src/components/itinerary/EditorialItinerary.tsx` (~line 3209) runs this effect on every change of `selectedDayIndex`, including the initial mount:
 
-3. **No user-facing recovery for "empty failure".** The "Retry manually" button only shows in the `showStalledUI` branch, which requires the poller to be active. After a hard-fail it isn't.
+```ts
+useEffect(() => {
+  const btn = dayButtonRefs.current[selectedDayIndex];
+  if (btn) {
+    btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
+}, [selectedDayIndex]);
+```
+
+`Element.scrollIntoView` walks up every scrollable ancestor — including the `window` — to bring the target into view. When the trip is active, `selectedDayIndex` is initialized to "today" (often day 3+), so the picker's selected pill sits offscreen on first render and the browser scrolls the whole page down to it. The `PostGenerationCTA` "Explore your itinerary" button uses `scrollIntoView` too, but only on click, so it's not the culprit.
 
 ## Fix
 
-### 1. Backend – don't kill the trip on one empty day
-File: `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
+Constrain the day-picker auto-scroll to its own horizontal scroller and skip the first render:
 
-Replace the empty-day short-circuit with the same recovery shape used for HTTP failures:
+1. In `EditorialItinerary.tsx`, add a ref for the horizontal day-picker container (the element that already wraps `dayButtonRefs.current[*]`).
+2. Replace the effect with one that:
+   - Skips the very first run (using a `didMountRef`), so the initial "today" selection never yanks the page.
+   - On subsequent changes, scrolls horizontally inside the container only, e.g.
 
-- Push `dayNumber` into `metadata.failed_day_numbers`.
-- If this is *not* the last day, write a heartbeat and **continue the chain** (recurse / chain to `dayNumber + 1`) rather than returning a terminal `failed` response.
-- If it *is* the last day:
-  - If at least one earlier day has activities → mark `itinerary_status='partial'` and refund per-day credits for failed days (mirror the existing partial-refund block at lines 745–790).
-  - Only when *all* days are empty → keep the current `failed` + full-refund behavior.
-- Before bailing on a single empty day, do **one in-place retry** of `generate-day` for that day (mini-loop, max 2 attempts) so transient AI returns don't poison the chain.
+     ```ts
+     const container = dayPickerScrollRef.current;
+     const btn = dayButtonRefs.current[selectedDayIndex];
+     if (container && btn) {
+       const target = btn.offsetLeft - (container.clientWidth - btn.clientWidth) / 2;
+       container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+     }
+     ```
 
-### 2. Client – surface an explicit retry when generation hard-failed with no data
-File: `src/pages/TripDetail.tsx`
+   This keeps the "centered selected day" UX without ever moving `window.scrollY`.
+3. Verify the existing `ScrollToTop` in `App.tsx` still puts new route loads at the top (no change needed there).
 
-- Extend the existing self-heal block (around lines 1224–1235) so that when `itinerary_status === 'failed'` and `actualDays === 0` and `expectedTotal > 0`, we:
-  - Call `handleResumeGeneration()` once automatically (guarded by `autoResumeAttemptedRef`).
-  - If the auto-attempt has already been used, set `setGenerationStalled(true)` so the existing "Retry manually" UI renders instead of the perpetual loader.
-- In `handleResumeGeneration` (lines 383–454), when the trip is recovering from `failed`/empty state, set `resumeFromDay: 1` (not `completedDays + 1 = 1` by accident — make it explicit) and clear `metadata.empty_day_detected`, `generation_failed_on_day`, `failed_day_numbers` before re-invoking.
+## Files to change
 
-### 3. Client – widen the stalled gate
-File: `src/pages/TripDetail.tsx` (around line 2371)
-
-`isServerGenerating || generationStalled` already shows the retry UI, but the "Retry manually" button is nested inside `showStalledUI`. Ensure `showStalledUI` becomes true whenever `trip.itinerary_status === 'failed'` and there are 0 saved days, so the user always has a visible "Retry" instead of just the spinner.
+- `src/components/itinerary/EditorialItinerary.tsx` — add `dayPickerScrollRef` to the existing day-picker scroller and rewrite the `selectedDayIndex` scroll effect as described.
 
 ## Out of scope
 
-- The `<circle> attribute r: undefined` warning is a separate Recharts/Sparkline issue surfaced by missing trip stats; not addressed here.
-- The `lookup-restaurant-url` 4xx and the message-channel browser-extension noise are unrelated.
-
-## Technical notes
-
-- Empty-day retry should reuse the same `generateUrl` POST already used at line 587, with the same body. Cap retries at 2 to avoid blowing the 180s window.
-- When marking `partial`, snapshot `unlocked_day_count` to `existingDays.length` so the user can open what *did* generate.
-- Keep refund accounting consistent with the existing `creditsPerDay = round(totalCharged / effectiveTotalDays)` math at lines 763–765.
-- After backend changes, verify with: `psql -c "select itinerary_status, jsonb_array_length(itinerary_data->'days'), metadata->'failed_day_numbers' from trips where id='b552bb7c-7475-4d5a-a4bf-2ccecfe7cfe3'"` post-resume.
-
-## Files touched
-
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts`
-- `src/pages/TripDetail.tsx`
+- Other `scrollIntoView` calls (refresh-day diff, fix-timing, onboarding tour, PostGenerationCTA hint button) — they only fire on explicit user actions and are working as intended.
