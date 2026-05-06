@@ -2166,6 +2166,8 @@ export function EditorialItinerary({
   const { claimBonus, hasClaimedBonus } = useBonusCredits();
   const venueBank = useTripVenueBank(days);
   const dayButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const dayPickerScrollRef = useRef<HTMLDivElement | null>(null);
+  const didMountDayPickerRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -3206,11 +3208,19 @@ export function EditorialItinerary({
 
   // Hero image removed — TripDetail page renders its own hero via DynamicDestinationPhotos
 
-  // Scroll selected day button into view
+  // Scroll selected day button into view — horizontally within the day-picker
+  // container only. Skip first mount so opening the itinerary never yanks
+  // window scroll down to today's pill.
   useEffect(() => {
+    if (!didMountDayPickerRef.current) {
+      didMountDayPickerRef.current = true;
+      return;
+    }
+    const container = dayPickerScrollRef.current;
     const btn = dayButtonRefs.current[selectedDayIndex];
-    if (btn) {
-      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    if (container && btn) {
+      const target = btn.offsetLeft - (container.clientWidth - btn.clientWidth) / 2;
+      container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
     }
   }, [selectedDayIndex]);
 
@@ -6257,7 +6267,7 @@ export function EditorialItinerary({
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
 
-                <div className="flex-1 overflow-x-auto scrollbar-hide">
+                <div ref={dayPickerScrollRef} className="flex-1 overflow-x-auto scrollbar-hide">
                   <div className="flex gap-1.5" data-tour="day-picker">
                     {days.map((day, index) => {
                       // Check if day has real (non-structural) activities
