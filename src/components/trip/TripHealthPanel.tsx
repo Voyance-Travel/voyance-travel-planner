@@ -86,16 +86,19 @@ function analyzeHealth(days: any[]): HealthIssue[] {
         name: a.name || a.title,
         start: parseTime(a.startTime),
         end: parseTime(a.endTime),
+        startStr: String(a.startTime),
+        endStr: String(a.endTime),
       }))
       .filter((a: { start: number; end: number }) => a.start > 0 || a.end > 0)
       .sort((a: { start: number }, b: { start: number }) => a.start - b.start);
 
     for (let i = 0; i < timed.length - 1; i++) {
       if (timed[i].end > timed[i + 1].start) {
+        const overlap = timed[i].end - timed[i + 1].start;
         issues.push({
           id: `conflict-day-${dayNum}-${i}`,
           severity: 'error',
-          message: `Day ${dayNum}: "${timed[i].name}" overlaps with "${timed[i + 1].name}"`,
+          message: `Day ${dayNum}: "${timed[i].name}" (${timed[i].startStr}–${timed[i].endStr}) overlaps with "${timed[i + 1].name}" (${timed[i + 1].startStr}–${timed[i + 1].endStr}) — ${overlap} min conflict`,
           fixLabel: 'Fix timing',
           fixAction: 'fix_timing',
           dayNumber: dayNum,
