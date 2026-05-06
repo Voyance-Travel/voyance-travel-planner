@@ -7,7 +7,7 @@
 
 import { FAILURE_CODES, type ValidationResult, type FailureCode } from './types.ts';
 import { extractRestaurantVenueName } from '../generation-utils.ts';
-import { isPlaceholderWellness } from '../fix-placeholders.ts';
+import { isPlaceholderWellness, matchesAIStubVenue } from '../fix-placeholders.ts';
 import {
   CHAIN_RESTAURANT_BLOCKLIST,
   isChainRestaurant,
