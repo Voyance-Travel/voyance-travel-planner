@@ -1377,6 +1377,16 @@ async function _handleGenerateTripDayInner(
         // Pass dedup context so DUPLICATE_CONCEPT / MEAL_DUPLICATE can swap from the pool
         restaurantPool: restaurantPool && restaurantPool.length > 0 ? restaurantPool : undefined,
         usedRestaurants: usedRestaurants.length > 0 ? usedRestaurants : undefined,
+        // Plumb travel-pace trait so repair pipeline honors Fast-Paced (skip
+        // midday hotel returns, tighten freshen-up cap to 30 min).
+        paceScore: (() => {
+          const gc = (tripMeta?.generation_context as Record<string, unknown> | undefined) || {};
+          const blended = (gc.blendedTraitScores as Record<string, number> | undefined) || undefined;
+          if (blended && typeof blended.pace === 'number') return blended.pace;
+          const ts = (tripMeta?.trait_scores as Record<string, number> | undefined) || undefined;
+          if (ts && typeof ts.pace === 'number') return ts.pace;
+          return undefined;
+        })(),
       });
 
       if (repairs.length > 0) {
