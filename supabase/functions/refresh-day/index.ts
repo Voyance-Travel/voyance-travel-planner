@@ -211,18 +211,31 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { activities, date, destination, dayNumber } = await req.json() as {
+    const body = await req.json() as {
+      mode?: string;
       activities: Activity[];
       date: string;
       destination: string;
       dayNumber: number;
+      gap?: { startTime?: string; endTime?: string; beforeId?: string; afterId?: string };
+      avoidIds?: string[];
+      archetype?: string;
+      dietaryRestrictions?: string[];
+      budgetTier?: string;
+      tripCurrency?: string;
     };
+    const { activities, date, destination, dayNumber } = body;
 
     if (!activities || !Array.isArray(activities)) {
       return new Response(JSON.stringify({ error: 'activities array required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ─── fill_dead_gap mode — auto-suggest a single activity for an unplanned window ───
+    if (body.mode === 'fill_dead_gap') {
+      return await handleFillDeadGap(body);
     }
 
     const issues: ValidationIssue[] = [];
