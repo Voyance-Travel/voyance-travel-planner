@@ -1264,6 +1264,8 @@ export function EditorialItinerary({
   tripHealthPanel,
   refreshDayRequest,
   fixTimingRequest,
+  onRefreshingDayChange,
+  onRefreshResultsChange,
   viewMode = 'edit',
 }: EditorialItineraryProps) {
   const queryClient = useQueryClient();
