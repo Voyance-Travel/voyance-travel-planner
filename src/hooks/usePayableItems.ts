@@ -343,21 +343,15 @@ export function usePayableItems({
       const k = `${dayNum}|${mappedCat}`;
       const queue = orphanRescueByDayCat.get(k);
       if (!queue || !queue.length) return null;
-      const cursor = rescueCursors.get(k) ?? 0;
-      // Skip already-matched ids (defensive — non-orphans go through activityNameById path)
-      for (let i = cursor; i < queue.length; i++) {
-        const entry = queue[i];
-        if (rescueConsumed.has(entry.id) || activityNameById.has(entry.id) === false) {
-          // Found an unconsumed candidate. (We deliberately allow rescue regardless
-          // of whether it's also in activityNameById — the cost row was clearly
-          // meant for *some* activity in this day+cat slot, and order-based pop
-          // is the most faithful reconstruction we have.)
-          if (!rescueConsumed.has(entry.id)) {
-            rescueCursors.set(k, i + 1);
-            return entry;
-          }
+      let cursor = rescueCursors.get(k) ?? 0;
+      while (cursor < queue.length) {
+        const entry = queue[cursor++];
+        if (!rescueConsumed.has(entry.id)) {
+          rescueCursors.set(k, cursor);
+          return entry;
         }
       }
+      rescueCursors.set(k, cursor);
       return null;
     };
 
