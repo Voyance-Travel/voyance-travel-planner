@@ -7154,18 +7154,21 @@ export function EditorialItinerary({
                               <div className="flex items-start gap-3">
                                 {/* Hotel image thumbnail */}
                                 <div className="h-16 w-16 rounded-lg bg-muted/30 overflow-hidden shrink-0">
-                                  {cityHotel.hotel.imageUrl ? (
-                                    <img
-                                      src={cityHotel.hotel.imageUrl}
-                                      alt={cityHotel.hotel.name}
-                                      className="w-full h-full object-cover"
-                                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                      <Hotel className="h-6 w-6 text-muted-foreground/30" />
-                                    </div>
-                                  )}
+                                  {(() => {
+                                    const thumbSrc = getHotelHeroImage(cityHotel.hotel);
+                                    return thumbSrc ? (
+                                      <img
+                                        src={thumbSrc}
+                                        alt={cityHotel.hotel.name}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <Hotel className="h-6 w-6 text-muted-foreground/30" />
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <h4 className="font-medium text-foreground truncate">{cityHotel.hotel.name}</h4>
