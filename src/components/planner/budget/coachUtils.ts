@@ -96,3 +96,32 @@ export function hasSuggestableContent(days: CoachDay[] | null | undefined): bool
   }
   return false;
 }
+
+/**
+ * Single source of truth for "should the Budget Coach surface ANY card?".
+ * Both the over-budget and under-budget paths must bail on the same rule —
+ * historically `hasSuggestableContent` allowed a 2+ day trip with one paid
+ * dinner through the gate, even though `classifyItineraryCompleteness`
+ * marked the same trip as 'incomplete'. That mismatch is the source of
+ * over-budget phantom suggestions on shell-day itineraries.
+ */
+export interface CoachEligibilityInput {
+  days: CoachDay[] | null | undefined;
+  tripStatus?: string | null;
+  generationFailureReason?: string | null;
+}
+
+export function isCoachEligible(input: CoachEligibilityInput): boolean {
+  const { days, tripStatus, generationFailureReason } = input;
+  if (
+    tripStatus === 'failed' &&
+    (generationFailureReason === 'empty_itinerary' ||
+      generationFailureReason === 'incomplete_itinerary')
+  ) {
+    return false;
+  }
+  const completeness = classifyItineraryCompleteness(days as any);
+  if (completeness.status !== 'ok') return false;
+  return hasSuggestableContent(days);
+}
+
