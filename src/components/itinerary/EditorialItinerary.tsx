@@ -10114,6 +10114,37 @@ function DayCard({
                   </div>
                 );
               })()}
+              {/* Dead-gap nudge — surfaces unplanned 3h+ windows during the active day */}
+              {(() => {
+                if (dayIsPreview || isCleanPreview) return null;
+                if (!isEditable) return null;
+                if (!onAddActivity) return null;
+                const gaps = computeDeadGaps(day.activities || []);
+                if (gaps.length === 0) return null;
+                // Surface only the longest gap to avoid stacking banners
+                const gap = gaps.sort((a, b) => b.minutes - a.minutes)[0];
+                return (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-2 border-b border-border/50 bg-amber-50/60 dark:bg-amber-950/20">
+                    <div className="flex items-start sm:items-center gap-2 min-w-0 flex-1">
+                      <Clock className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" aria-hidden="true" />
+                      <p className="text-xs text-foreground/80">
+                        <span className="font-medium">{formatDeadGap(gap.minutes)} unplanned</span>
+                        <span className="text-muted-foreground"> between {gap.fromTitle || 'previous activity'} ({gap.fromTime}) and {gap.toTitle || 'next activity'} ({gap.toTime}).</span>
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onAddActivity?.(gap.beforeIndex)}
+                      className="h-8 px-3 text-xs shrink-0 self-end sm:self-auto"
+                      aria-label="Fill this gap with an activity"
+                    >
+                      Fill the gap
+                    </Button>
+                  </div>
+                );
+              })()}
               <DraggableActivityList
                 items={day.activities}
                 onReorder={(reordered) => onActivityReorder?.(reordered)}
