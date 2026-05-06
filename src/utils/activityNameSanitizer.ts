@@ -187,7 +187,7 @@ export function sanitizeActivityText(text: string | undefined | null): string {
     .replace(/\bthe\s+of\s+(?=[A-Z])/g, 'the City of ')
     // Repair orphan possessive "the's" / "the' s" → "the city's"
     // (e.g. "A sensory retreat at the's historic mosque")
-    .replace(/\bthe'\s?s\b/gi, "the city's")
+    .replace(/\bthe['’]\s?s\b/gi, "the city's")
     // Repair ", the of <Proper>" → ", the City of <Proper>"
     .replace(/,\s*the\s+of\b/gi, ', the City of')
     .replace(SYSTEM_LABEL_RE, '')
