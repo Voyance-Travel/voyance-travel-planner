@@ -13,6 +13,8 @@ export type RaiseBudgetReason =
 export interface RaiseBudgetResult {
   ok: boolean;
   reason?: RaiseBudgetReason;
+  /** Previous budget (cents) before the raise — provided on success so callers can offer Undo. */
+  previousBudgetCents?: number;
 }
 
 /**
@@ -37,7 +39,7 @@ export async function applyRaiseBudget(
     await deps.updateSettings({ budget_total_cents: suggestedCents });
     deps.dispatchBookingChanged();
     deps.toast.success(`Budget raised to ${deps.formatCurrency(suggestedCents)}`);
-    return { ok: true };
+    return { ok: true, previousBudgetCents: currentBudgetCents };
   } catch {
     deps.toast.error('Failed to raise budget');
     return { ok: false, reason: 'mutation_failed' };

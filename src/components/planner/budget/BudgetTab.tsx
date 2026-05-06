@@ -279,6 +279,9 @@ function PayableCostsList({ items, formatCurrency, categoryColors, categoryIcons
 export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActivityRemove, onApplyBudgetSwap, hasHotel, hasFlight, destination, destinationCountry, budgetTier, flightSelection, hotelSelection, journeyId, journeyName, isManualMode = false, tripStatus, generationFailureReason, onRegenerate }: BudgetTabProps) {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [payments, setPayments] = useState<TripPayment[]>([]);
+  // Tracks the user's most recent in-session "Raise budget" so the Coach can
+  // render a celebratory card with Undo instead of silently disappearing.
+  const [lastRaise, setLastRaise] = useState<{ fromCents: number; toCents: number } | null>(null);
   
   const { data: rawTripMembers = [] } = useTripMembers(tripId);
   const { data: collaborators = [] } = useTripCollaborators(tripId);
@@ -366,6 +369,17 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     window.addEventListener('booking-changed', handler);
     return () => window.removeEventListener('booking-changed', handler);
   }, [fetchPaymentsForBudget]);
+
+  // Clear the in-session lastRaise marker once the budget moves to anything
+  // other than the raised value (manual edit, undo, etc.) so the celebratory
+  // card doesn't linger across unrelated budget changes.
+  useEffect(() => {
+    if (!lastRaise) return;
+    const current = settings?.budget_total_cents;
+    if (typeof current === 'number' && current !== lastRaise.toCents) {
+      setLastRaise(null);
+    }
+  }, [settings?.budget_total_cents, lastRaise]);
 
   // ─── Canonical financial snapshot from DB ledger (single source of truth) ───
   const snapshot = useTripFinancialSnapshot(tripId);
@@ -651,15 +665,18 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                     size="sm"
                     variant="outline"
                     className="h-8 text-xs"
-                    onClick={() =>
-                      applyRaiseBudget(budgetCents, suggested, {
+                    onClick={async () => {
+                      const res = await applyRaiseBudget(budgetCents, suggested, {
                         updateSettings: (s) => updateSettings(s),
                         dispatchBookingChanged: () =>
                           window.dispatchEvent(new CustomEvent('booking-changed')),
                         toast,
                         formatCurrency,
-                      })
-                    }
+                      });
+                      if (res.ok && typeof res.previousBudgetCents === 'number') {
+                        setLastRaise({ fromCents: res.previousBudgetCents, toCents: suggested });
+                      }
+                    }}
                   >
                     Raise budget to {formatCurrency(suggested)}
                   </Button>
@@ -777,6 +794,19 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 window.dispatchEvent(new CustomEvent('navigate-to-section', { detail: 'hotels' }));
               }
             }}
+            lastRaise={lastRaise}
+            onUndoRaise={lastRaise ? async () => {
+              const prev = lastRaise.fromCents;
+              try {
+                await updateSettings({ budget_total_cents: prev });
+                window.dispatchEvent(new CustomEvent('booking-changed'));
+                toast.success(`Budget reverted to ${formatCurrency(prev)}`);
+              } catch {
+                toast.error('Failed to undo budget raise');
+              } finally {
+                setLastRaise(null);
+              }
+            } : undefined}
           />
         );
       })()}

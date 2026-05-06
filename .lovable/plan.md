@@ -1,70 +1,44 @@
+# Fix: Budget Coach disappears after "Raise budget"
+
 ## Problem
 
-The Trip Completion panel (`TripHealthPanel`) detects timing overlaps and renders two per-issue actions: a primary "Fix timing" button and a secondary "Re-check" (Refresh Day) button. Clicking either produces no visible effect — no spinner, no toast, no itinerary mutation.
+When the user clicks **Raise budget to $X**, `applyRaiseBudget` persists the new total and `isOverBudget` flips to false. `BudgetCoach` then early-returns into a tiny green "On target" pill (`BudgetCoach.tsx` lines 655–667), so the swap suggestions, transit warning, gap analysis, and restructure panels all vanish with no acknowledgement that the raise was the cause and no way to undo.
 
-## Root cause analysis
+## Goal
 
-The wiring chain is:
+After a successful raise, render a clear celebratory card that:
 
-```text
-TripHealthPanel → onAction('fix_timing'|'refresh_day', { dayNumber })
-  → TripDetail sets fixTimingRequest / refreshDayRequest { nonce }
-    → EditorialItinerary useEffect on nonce → handleRefreshDay / fixDayTiming
-```
+1. Confirms the raise (old → new amount).
+2. Shows headroom remaining against the new budget.
+3. Offers an **Undo** button that reverts to the prior budget.
+4. Auto-clears after the next budget edit so it doesn't linger across unrelated changes.
 
-There are two `TripHealthPanel` render sites in `TripDetail.tsx` (lines ~2848 and ~3107). Only the second one passes the result down through `EditorialItinerary` props (`refreshDayRequest`, `fixTimingRequest`, `onRefreshingDayChange`, `onRefreshResultsChange`). The first render path sets the same state, but if its panel is the one actually visible in the user's layout, the consumer (`EditorialItinerary`) is mounted in a different branch and the `nonce`-driven effect either never sees a new value (state is owned by the wrong subtree) or fires against `days` that don't include the requested `dayNumber` (mismatch between editor days and the panel's day numbering — e.g. preview/past-trip view).
+## Changes
 
-Additional failure modes confirmed by reading the code:
+### 1. `src/components/planner/budget/raiseBudgetApply.ts`
+- Return the `previousBudgetCents` in `RaiseBudgetResult` so the caller can offer undo.
+- No behavior change; pure additive field.
 
-1. `handleRefreshDay` in `EditorialItinerary` (line 2375) finds the day by index but the trigger effect (line 2415) finds it by `dayNumber`. If the panel emits a `dayNumber` that isn't in `editorDays` (multi-city / arrival-day / hidden days), `idx < 0` and the effect silently returns — **no toast, no error**.
-2. `fix_timing` runs `fixDayTiming` which can return `{ success: false, reason: 'no_timed_activities' }` when activities lack `startTime/endTime` — currently shows `toast.info('nothing to auto-fix')` only when reason is `null`; the `no_timed_activities` branch falls through with no toast.
-3. The `refresh-day` edge function call may resolve with `{ issues: [] }` (validator can't reproduce overlap because activities use `time` instead of `startTime`). The toast says "validated, no issues found" — which is exactly what the user perceives as "nothing happened".
-4. There is no fallback when the panel's `editorDays` is empty (preview mode) — the buttons still render but `days.findIndex` always returns `-1`.
+### 2. `src/components/planner/budget/BudgetTab.tsx`
+- Track a local `lastRaise` state: `{ fromCents, toCents, at } | null`.
+- On the **Raise budget** click handler, after `applyRaiseBudget` resolves with `ok: true`, set `lastRaise`.
+- Pass `lastRaise` and an `onUndoRaise` handler down to `<BudgetCoach />` as new props. `onUndoRaise` calls `updateSettings({ budget_total_cents: lastRaise.fromCents })`, dispatches `booking-changed`, clears `lastRaise`, and toasts "Budget reverted to $X".
+- Clear `lastRaise` whenever `settings.budget_total_cents` changes to a value other than `lastRaise.toCents` (any subsequent edit invalidates the undo affordance).
 
-## Fix plan
+### 3. `src/components/planner/budget/BudgetCoach.tsx`
+- Accept new optional props: `lastRaise?: { fromCents: number; toCents: number }` and `onUndoRaise?: () => void`.
+- In the `!isOverBudget` branch (currently lines 626–667), when `lastRaise` is present **and** `budgetTargetCents === lastRaise.toCents`, render a new celebratory card instead of the existing on-target / close-to-budget cards. Card content:
+  - Header: ✅ "Budget raised — you're on target"
+  - Body: "Raised from `formatCurrency(fromCents)` to `formatCurrency(toCents)`. You now have `formatCurrency(remainingCents)` (`headroomPct%`) of headroom."
+  - Buttons: **Undo raise** (calls `onUndoRaise`), **Edit budget…** (existing `onEditBudget`).
+- The existing close-to-budget and plain on-target cards remain the fallback when `lastRaise` is absent.
+- No changes to the over-budget rendering paths.
 
-### 1. Single source of truth for the request bus
+### 4. Tests
+- Extend `src/components/planner/budget/__tests__/raiseBudgetApply.test.ts` to assert `previousBudgetCents` is returned on success.
+- Add a small render test (or extend `budgetRaiseCta.integration.test.tsx`) confirming that after a raise the Coach shows the celebratory card with an Undo button, and clicking Undo invokes `updateSettings` with the original cents.
 
-Hoist `refreshDayRequest` / `fixTimingRequest` into a context (or pass them through both `TripHealthPanel` render sites' parents) so the request is always observed by the live `EditorialItinerary`. Remove the duplicate state setter in the unused branch.
+## Out of scope
 
-### 2. Diagnostic guardrails in `EditorialItinerary` effects
-
-In both nonce effects (`refreshDayRequest`, `fixTimingRequest`):
-
-- If `idx < 0`, emit `toast.error('Day N not found in editor')` and `console.warn` instead of silently returning.
-- Log entry/exit so the action is traceable in the console.
-
-### 3. Normalize activity time fields before validation
-
-In `handleRefreshDay`, map both `startTime`/`endTime` and the legacy `time`/`duration` shape into the `ActivityInput` payload. The validator currently misses overlaps when only `time` is set, producing the misleading "no issues" toast.
-
-### 4. Complete `fixDayTiming` user feedback
-
-In the `fix_timing` effect (line 2426), handle every `result.reason`:
-
-- `no_timed_activities` → `toast.info('Day N has no timed activities to space')`.
-- `day_overflow` → already handled (falls back to Refresh Day).
-- `no_changes` → already handled.
-- Unknown failure → `toast.error('Could not fix Day N timing')`.
-
-### 5. Always show progress
-
-Wrap the Re-check / Fix timing buttons with the existing `isReChecking` spinner state so the user gets immediate visual feedback even when the network call is fast or returns empty.
-
-### 6. Verify the edge function is reachable
-
-Run `supabase--edge_function_logs` for `refresh-day` after a click to confirm the invocation actually arrives. If it doesn't (CORS, auth), surface the error in the toast.
-
-## Files to change
-
-- `src/pages/TripDetail.tsx` — consolidate the two `TripHealthPanel` render branches' `onAction` handlers; ensure `refreshDayRequest` / `fixTimingRequest` are passed wherever `EditorialItinerary` is mounted.
-- `src/components/itinerary/EditorialItinerary.tsx` — `handleRefreshDay` payload normalization, error toasts when day not found, complete `fix_timing` reason handling.
-- `src/utils/itinerary/fixDayTiming.ts` — accept legacy `time` field as a `startTime` fallback so it can act on activities that have only `time` + `durationMinutes`.
-- `src/components/trip/TripHealthPanel.tsx` — keep the existing buttons visible (no change to hover behaviour beyond confirming they are not actually hidden — the user's "hover-only" report likely refers to a layout where the row collapses on small widths; verify with the real DOM).
-
-## Validation
-
-1. With a trip that has a known overlap, click "Fix timing" → expect a toast like "Resolved 1 timing conflict on Day 1" and the activity card times to shift.
-2. Click "Re-check" → expect spinner, then "Re-checked · no issues" pill (or warning count).
-3. Trigger from a day not in the current editor view → expect explicit error toast instead of silence.
-4. Inspect `refresh-day` edge function logs to confirm invocations.
+- No change to the over-budget Coach UI, swap logic, edge functions, or the empty-itinerary gating from prior fixes.
+- No persistence of `lastRaise` across reloads — it's an intentional in-session affordance.
