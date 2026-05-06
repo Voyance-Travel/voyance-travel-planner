@@ -403,6 +403,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       tripTotalCents: totalCents,
       paidCents: paidTotal,
       budgetTotalCents: tripData?.budget_total_cents || 0,
+      miscReserveCents: miscReserveContributionCents,
       loading: false,
     });
   }, [tripId]);
