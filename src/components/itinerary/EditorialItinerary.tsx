@@ -9856,7 +9856,7 @@ function DayCard({
                 </div>
               )}
               <h3 className="font-serif text-base sm:text-xl font-medium text-foreground mb-0 sm:mb-1 truncate">
-                {day.title || day.theme || `Day ${day.dayNumber}`}
+                {getDisplayDayTitle(day as any, destination) || `Day ${day.dayNumber}`}
               </h3>
               {day.description && (
                 <p className="hidden sm:block text-sm text-muted-foreground italic line-clamp-1 sm:line-clamp-none">{day.description}</p>
