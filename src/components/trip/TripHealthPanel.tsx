@@ -404,7 +404,7 @@ export function TripHealthPanel({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 px-2 text-[11px] text-primary"
+                        className="h-8 px-3 text-xs text-primary"
                         onClick={(e) => { e.stopPropagation(); onAction(item.fixAction!, {}); }}
                       >
                         {item.fixLabel}
