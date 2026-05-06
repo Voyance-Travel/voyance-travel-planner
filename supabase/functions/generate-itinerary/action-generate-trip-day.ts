@@ -15,6 +15,7 @@ import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validatio
 import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap, enforceVenueTypePriceCap, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
 import { applyAnchorsWin } from './anchor-guard.ts';
+import { matchesAIStubVenue } from './fix-placeholders.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
