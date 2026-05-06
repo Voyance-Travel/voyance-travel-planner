@@ -1411,6 +1411,35 @@ export default function TripDetail() {
           }
         }
 
+        // ── SELF-HEAL: status='failed' with 0 saved days ──
+        // Backend hard-failed (e.g. "Day N generated with 0 activities") and the user
+        // is otherwise stuck on the loading screen forever. Auto-retry once, then
+        // surface the stalled UI so the user can hit "Retry manually".
+        if (tripData.itinerary_status === 'failed') {
+          const itinData = tripData.itinerary_data as { days?: unknown[] } | null;
+          const jsonDayCount = itinData?.days?.length ?? 0;
+          const actualDays = Math.max(jsonDayCount, itineraryDaysDbCount);
+          let expectedTotal = 0;
+          if (tripData.start_date && tripData.end_date) {
+            try {
+              expectedTotal = differenceInDays(
+                parseLocalDate(tripData.end_date),
+                parseLocalDate(tripData.start_date)
+              ) + 1;
+            } catch { expectedTotal = 0; }
+          }
+          if (expectedTotal > 0 && actualDays === 0) {
+            if (!autoResumeAttemptedRef.current) {
+              autoResumeAttemptedRef.current = true;
+              console.warn('[TripDetail] Self-heal: trip failed with 0 days. Auto-resuming once.');
+              setTimeout(() => { handleResumeGeneration(); }, 1500);
+            } else {
+              console.warn('[TripDetail] Self-heal: trip still failed after auto-resume. Showing stalled UI.');
+              setGenerationStalled(true);
+            }
+          }
+        }
+
         // Seed optimistic locking version cache
         if (tripData?.id) {
           setCachedVersion(tripData.id, (tripData as any).itinerary_version ?? 1);
