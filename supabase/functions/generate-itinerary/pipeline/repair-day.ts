@@ -3488,8 +3488,9 @@ function repairBookends(
     }
   }
 
-  // 1b. Mid-day hotel return guarantee — SKIP on departure days, first day before check-in, AND hotel-change days between checkout/check-in
-  if (!isDepartureDay) {
+  // 1b. Mid-day hotel return guarantee — SKIP on departure days, first day before check-in, AND hotel-change days between checkout/check-in.
+  // Fast-Paced (paceScore >= 4) skips this entirely — no forced hotel detour between lunch and dinner.
+  if (!isDepartureDay && !isFastPaced) {
     // On hotel-change days, find checkout/check-in window to suppress mid-day returns
     let hotelChangeCheckoutMin = -1;
     let hotelChangeCheckInMin = 99999;
