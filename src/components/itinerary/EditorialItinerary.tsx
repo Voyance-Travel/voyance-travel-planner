@@ -2430,7 +2430,11 @@ export function EditorialItinerary({
   useEffect(() => {
     if (!refreshDayRequest?.dayNumber) return;
     const idx = days.findIndex((d: any) => d.dayNumber === refreshDayRequest.dayNumber);
-    if (idx < 0) return;
+    if (idx < 0) {
+      console.warn('[refresh_day] day not found in editor', { dayNumber: refreshDayRequest.dayNumber, available: days.map((d: any) => d.dayNumber) });
+      toast.error(`Day ${refreshDayRequest.dayNumber} is not loaded — try reopening the trip.`);
+      return;
+    }
     setSelectedDayIndex(idx);
     setActiveTab('details');
     handleRefreshDay(idx);
@@ -2442,7 +2446,11 @@ export function EditorialItinerary({
   useEffect(() => {
     if (!fixTimingRequest?.dayNumber) return;
     const idx = days.findIndex((d: any) => d.dayNumber === fixTimingRequest.dayNumber);
-    if (idx < 0) return;
+    if (idx < 0) {
+      console.warn('[fix_timing] day not found in editor', { dayNumber: fixTimingRequest.dayNumber, available: days.map((d: any) => d.dayNumber) });
+      toast.error(`Day ${fixTimingRequest.dayNumber} is not loaded — try reopening the trip.`);
+      return;
+    }
     (async () => {
       const { fixDayTiming } = await import('@/utils/itinerary/fixDayTiming');
       const day = days[idx];
@@ -2459,8 +2467,13 @@ export function EditorialItinerary({
         handleRefreshDay(idx);
       } else if (result.reason === 'no_changes') {
         toast.info(`Day ${day.dayNumber}: no timing changes needed.`);
+      } else if (result.reason === 'no_timed_activities') {
+        toast.info(`Day ${day.dayNumber} has no timed activities to auto-space — opening review.`);
+        setSelectedDayIndex(idx);
+        setActiveTab('details');
+        handleRefreshDay(idx);
       } else {
-        toast.info(`Day ${day.dayNumber}: nothing to auto-fix.`);
+        toast.error(`Could not fix Day ${day.dayNumber} timing.`);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
