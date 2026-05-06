@@ -7,7 +7,8 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Compass, Star, DollarSign, Clock, Gem } from 'lucide-react';
+import { ChevronDown, Compass, Star, DollarSign, Clock, Gem, Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 

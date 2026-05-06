@@ -1,39 +1,37 @@
 ## Root cause
 
-Tab content in `src/components/itinerary/EditorialItinerary.tsx` is wrapped in a single `<AnimatePresence mode="wait">` (L5464) that gates ~6 sibling `motion.div` blocks on `activeTab === '...'`.
+`WhyWeSkippedSection` (the "Better Alternatives" card) renders only its `skippedItems` array — there is no awareness of the loading state from `useSkipList`. `useSkipList` already exposes `isLoading`, but it isn't passed in.
 
-`mode="wait"` defers mounting the **next** child until the **previous** child's `exit` animation has fully resolved. The exit animations use only `exit={{ opacity: 0 }}` with no explicit transition. Combined with:
+For destinations with no hardcoded fallback in `getDestinationSkippedItems`, the initial array is `[]`, so:
+1. The panel returns `null` (L39 `if (skippedItems.length === 0) return null`) — but if a hardcoded fallback exists it shows immediately, then re-populates after the AI fetch (~4 s) with no indication anything is happening.
+2. When a user opens the section while a refresh is in-flight, the body shows nothing for the duration of the request.
 
-- React 18 concurrent rendering batching the state update,
-- `NeedToKnowSection` being a heavy subtree (data fetches, multiple cards) whose unmount is not synchronous,
-- and the shared `layoutId="editorialItineraryTab"` underline animating on its own track,
-
-the underline updates immediately (not gated by AnimatePresence), but the new tab body waits for the exit to complete. In practice the exit promise can hang until the next interaction kicks the reconciler, so the user sees a "ghost" state requiring a second click.
-
-This is a known `mode="wait"` pitfall when the leaving subtree is expensive.
+The user's report ("blank card, then 5 alternatives load after 4 s") matches the case where the AI call replaces an initially-rendering set, OR the card mounts in a state where `skippedItems` are loading but already counted in the header subtitle from a stale render.
 
 ## Fix
 
-Switch tab content to `mode="popLayout"` (or remove `mode="wait"` entirely). This mounts the incoming tab immediately so content swaps on the first click, while still allowing the outgoing tab to fade out underneath. The underline animation already uses `layoutId` and works independently.
+Wire `isLoading` from `useSkipList` into `WhyWeSkippedSection` and render a clear loading affordance.
 
-### Change
+### Changes
 
-In `src/components/itinerary/EditorialItinerary.tsx` (L5464):
-- `<AnimatePresence mode="wait">` → `<AnimatePresence mode="popLayout" initial={false}>`
-  - `initial={false}` suppresses the entrance animation on first render so the initial tab doesn't fade in awkwardly.
-  - `popLayout` keeps the exiting child in flow visually while the new child mounts immediately, eliminating the double-click.
+**1. `src/components/itinerary/WhyWeSkippedSection.tsx`**
+- Add `isLoading?: boolean` to `WhyWeSkippedSectionProps`.
+- Adjust the early-return: render the panel when `skippedItems.length > 0` **or** `isLoading`. (Hide entirely only when both empty and not loading.)
+- Header subtitle while loading + empty: show `"Finding local picks for {destination}…"` and a small `Loader2` spinner next to the count instead of "X local picks".
+- Expanded body while `isLoading` and items length is 0: render 3 skeleton rows (rounded-lg shimmer using existing `Skeleton` from `@/components/ui/skeleton`) so the card is visibly working.
+- If items already exist and `isLoading` is true (background refresh), keep showing items, but place a tiny inline `Loader2` + "Refreshing…" hint at the bottom of the list.
 
-If `popLayout` causes a brief overlap visual glitch, fallback alternative: drop AnimatePresence entirely for tab content and keep only the underline `layoutId` animation on the trigger row.
+**2. `src/components/itinerary/EditorialItinerary.tsx`**
+- Destructure `isLoading` from `useSkipList` (L3102) — `const { skippedItems, isLoading: isLoadingSkipList } = useSkipList(destination);`
+- Pass `isLoading={isLoadingSkipList}` to `<WhyWeSkippedSection>` at L5970.
 
 ## Out of scope
 
-- Refactoring NeedToKnowSection performance.
-- Tab persistence / URL sync.
-- The mobile overflow dropdown (already works via direct state set).
+- Changes to the `useSkipList` fetching logic, edge function, or caching policy.
+- Other intelligence panels.
 
 ## Verification
 
-1. Navigate to a trip → Need to Know tab → click Budget. Content must swap on the first click.
-2. Repeat in the other direction (Budget → Need to Know, Itinerary → Need to Know → Budget).
-3. Confirm the underline still slides smoothly between tabs.
-4. Confirm no console warnings from framer-motion about layout/keys.
+1. Open a trip whose destination has no hardcoded skip list. Confirm the Better Alternatives card mounts immediately with a spinner + "Finding local picks…" subtitle, expanded shows skeleton rows, then real items replace them.
+2. Open a trip with a hardcoded fallback. Confirm items show instantly; if a background refresh runs, a small "Refreshing…" hint appears momentarily.
+3. After load completes with zero results and zero fallback, the card disappears (no blank shell).
