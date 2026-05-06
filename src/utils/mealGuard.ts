@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolveAnyMealFallback } from '@/lib/fallbackRestaurants';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner';
 
