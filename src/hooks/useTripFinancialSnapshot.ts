@@ -102,6 +102,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // so we can suppress the misc-reserve contribution on empty itineraries —
     // otherwise Trip Expenses inflates beyond what the itinerary contains.
     const liveActivityIds = new Set<string>();
+    const liveActivities: CanonicalLiveActivity[] = [];
     let meaningfulActivityCount = 0;
     const NON_MEANINGFUL_CATEGORIES = new Set([
       'hotel', 'flight', 'accommodation', 'lodging', 'stay',
@@ -110,8 +111,21 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     const NON_MEANINGFUL_TITLE_RE = /check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|hotel\s+check(?:in|out)|airport\s+transfer|departure/i;
     const days = ((tripData as any)?.itinerary_data?.days) || [];
     for (const day of days) {
+      const dayNum = Number(day?.dayNumber) || 0;
       for (const a of (day?.activities || [])) {
-        if (a?.id) liveActivityIds.add(String(a.id));
+        if (a?.id) {
+          liveActivityIds.add(String(a.id));
+          const explicit = typeof a.cost === 'number' ? a.cost
+            : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
+            : (typeof a.explicitCost === 'number' ? a.explicitCost : 0);
+          liveActivities.push({
+            id: String(a.id),
+            dayNumber: dayNum,
+            name: String(a.title || a.name || ''),
+            category: String(a.category || a.type || '').toLowerCase(),
+            jsonCost: Number(explicit) || 0,
+          });
+        }
         const cat = String(a?.category || '').toLowerCase().trim();
         const title = String(a?.title || a?.name || '');
         if (NON_MEANINGFUL_CATEGORIES.has(cat)) continue;
