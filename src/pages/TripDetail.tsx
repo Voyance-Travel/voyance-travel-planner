@@ -268,13 +268,21 @@ export default function TripDetail() {
 
   useEffect(() => {
     if (generationStalled) {
-      stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 5000);
+      // Hard-failed trips should expose the retry button immediately —
+      // no point in showing a "reconnecting…" spinner for 5s when we
+      // already know the backend bailed.
+      const isHardFailed = trip?.itinerary_status === 'failed';
+      if (isHardFailed) {
+        setShowStalledUI(true);
+      } else {
+        stalledTimerRef.current = setTimeout(() => setShowStalledUI(true), 5000);
+      }
     } else {
       setShowStalledUI(false);
       if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current);
     }
     return () => { if (stalledTimerRef.current) clearTimeout(stalledTimerRef.current); };
-  }, [generationStalled]);
+  }, [generationStalled, trip?.itinerary_status]);
 
   const generationPoller = useGenerationPoller({
     tripId: tripId || null,
