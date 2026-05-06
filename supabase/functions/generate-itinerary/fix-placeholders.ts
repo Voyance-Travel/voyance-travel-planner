@@ -522,6 +522,21 @@ export function nuclearPlaceholderSweep(
       activity.description = `We couldn't verify a ${mealType} venue here. Tap the assistant to suggest one.`;
       (activity as any).__needs_meal_swap = true;
       (activity as any).needsRefinement = true;
+      // Trim duration to 30 min so this unverified slot stops eating a 60-90 min
+      // block in the timeline (especially painful on Fast-Paced days).
+      const startStr: string = activity.startTime || activity.start_time || '';
+      const sm = startStr.match(/^(\d{1,2}):(\d{2})$/);
+      if (sm) {
+        const startMin = parseInt(sm[1], 10) * 60 + parseInt(sm[2], 10);
+        const endMin = startMin + 30;
+        const eh = Math.floor(endMin / 60) % 24;
+        const em = endMin % 60;
+        const endStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+        activity.endTime = endStr;
+        if (activity.end_time !== undefined) activity.end_time = endStr;
+        activity.durationMinutes = 30;
+        if (activity.duration !== undefined) activity.duration = '30 min';
+      }
       console.error(`[NUCLEAR] No fallback DB for "${city}" — marked ${mealType} slot as unverified instead of using template stub`);
     }
 
