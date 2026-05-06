@@ -4099,7 +4099,47 @@ export function EditorialItinerary({
       queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
       queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
       queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
-      toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
+
+      // ── COMPLETENESS GATE ─────────────────────────────────────────
+      // The day-by-day loop can finish "successfully" yet produce a
+      // hotel-only / shell-day output (e.g. AI rate-limited mid-day).
+      // Mirror the backend gate so the trip is marked failed and the
+      // recovery banner replaces the misleading success toast.
+      const completeness = classifyItineraryCompleteness(generatedDays as any);
+      if (completeness.status !== 'ok') {
+        const failureReason =
+          completeness.status === 'empty' ? 'empty_itinerary' : 'incomplete_itinerary';
+        try {
+          const { data: tripRow } = await supabase
+            .from('trips')
+            .select('metadata')
+            .eq('id', tripId)
+            .single();
+          const existingMeta = (tripRow?.metadata as Record<string, unknown>) || {};
+          await supabase
+            .from('trips')
+            .update({
+              itinerary_status: 'failed',
+              metadata: {
+                ...existingMeta,
+                generation_failure_reason: failureReason,
+                empty_itinerary_detected_at: new Date().toISOString(),
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', tripId);
+        } catch (markErr) {
+          console.warn('[EditorialItinerary] Failed to persist regen failure status:', markErr);
+        }
+        queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
+        toast.error(
+          completeness.status === 'empty'
+            ? "Regeneration didn't produce any activities. Tap Regenerate to try again."
+            : 'Regeneration finished without a full plan. Tap Regenerate to try again.',
+        );
+      } else {
+        toast.success('Itinerary regenerated! Flights, hotels, and trip settings preserved.');
+      }
 
       // Note: we used to call repairTripCosts here on every regeneration.
       // That silently raised prices (Michelin/ticketed/reference floors) and
