@@ -558,6 +558,14 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   const isIncompleteItineraryFailure =
     tripStatus === 'failed' && generationFailureReason === 'incomplete_itinerary';
 
+  // Status-independent emptiness check — covers trips that were never marked
+  // 'failed' but still have no meaningful content (manual paste, mid-flow
+  // saves, generators that finished without flagging). Without this, the
+  // Category Breakdown renders deceptive $0 / $allocated bars.
+  const completeness = classifyItineraryCompleteness(itineraryDays as any);
+  const hasNoMeaningfulActivities =
+    completeness.status === 'empty' || completeness.status === 'incomplete';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
