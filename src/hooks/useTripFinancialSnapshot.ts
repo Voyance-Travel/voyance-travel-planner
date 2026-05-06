@@ -250,7 +250,11 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // folding the unspent portion into the total the headline budget reads
     // as having phantom headroom equal to the slider value.
     const budgetTotalForReserve = tripData?.budget_total_cents || 0;
-    if (budgetTotalForReserve > 0 && miscPercent > 0) {
+    // Gate: on empty itineraries (hotel-only / logistics-only) the reserve is
+    // a planning placeholder with no real spend behind it. Adding it inflates
+    // Trip Expenses beyond what the itinerary actually contains, which the
+    // Budget tab already flags via its empty-state breakdown.
+    if (budgetTotalForReserve > 0 && miscPercent > 0 && meaningfulActivityCount >= 1) {
       const reserve = computeMiscReserve({
         budgetTotalCents: budgetTotalForReserve,
         miscPercent,
