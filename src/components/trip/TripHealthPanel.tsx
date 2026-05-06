@@ -259,7 +259,11 @@ export function TripHealthPanel({
     // Health score: start at 100, deduct for issues
     let health = 100;
     issues.forEach(issue => {
-      health -= issue.severity === 'error' ? 15 : 5;
+      // Timing issues are one-click fixable; weight them lighter so the score
+      // doesn't look alarming for a problem the user can resolve instantly.
+      const isTiming = issue.fixAction === 'fix_timing';
+      if (issue.severity === 'error') health -= isTiming ? 8 : 15;
+      else health -= isTiming ? 3 : 5;
     });
     health = Math.max(0, Math.min(100, health));
 
