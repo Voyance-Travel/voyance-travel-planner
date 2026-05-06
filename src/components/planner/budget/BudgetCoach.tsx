@@ -109,6 +109,10 @@ interface BudgetCoachProps {
   lastRaise?: { fromCents: number; toCents: number } | null;
   /** Revert the last raise. Receives the previous (fromCents) total. */
   onUndoRaise?: () => void;
+  /** Trip lifecycle status — used by isCoachEligible to bail on failed/incomplete generations. */
+  tripStatus?: string | null;
+  /** Generation failure reason — used by isCoachEligible to bail on incomplete itineraries. */
+  generationFailureReason?: string | null;
   className?: string;
 }
 
