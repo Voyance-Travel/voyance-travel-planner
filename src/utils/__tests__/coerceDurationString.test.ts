@@ -7,11 +7,16 @@ describe('coerceDurationString', () => {
     expect(coerceDurationString('garbage', 90)).toBe('1h 30m');
   });
 
-  it('parses HH:MM:SS as hours:minutes', () => {
-    expect(coerceDurationString('15:00:00')).toBe('15h');
+  it('parses HH:MM:SS — implausible-as-hours leading numbers become minutes', () => {
+    // AI emits "45:00:00" meaning "45 min" — must NOT become 45h.
+    expect(coerceDurationString('45:00:00')).toBe('45m');
+    expect(coerceDurationString('30:00:00')).toBe('30m');
+    expect(coerceDurationString('15:00:00')).toBe('15m');
+    expect(coerceDurationString('10:00:00')).toBe('10m');
+    // Realistic clock-style durations stay intact.
     expect(coerceDurationString('1:05:00')).toBe('1h 5m');
     expect(coerceDurationString('2:20:00')).toBe('2h 20m');
-    expect(coerceDurationString('10:00:00')).toBe('10h');
+    expect(coerceDurationString('3:00:00')).toBe('3h');
   });
 
   it('parses MM:SS heuristically (>=24 first part = minutes)', () => {
