@@ -26,6 +26,14 @@ export interface BudgetAllocations {
   transit_percent: number;
   misc_percent: number;
   buffer_percent: number;
+  /**
+   * The first budget the user ever set, in cents. Captured on the first
+   * write and never overwritten. Powers the "raised from $X" banner so users
+   * notice when the live budget has drifted from their original intent.
+   */
+  original_total_cents?: number;
+  /** ISO timestamp the original was first captured. */
+  original_set_at?: string;
 }
 
 export interface TripBudgetSettings {
