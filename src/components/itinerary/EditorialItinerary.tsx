@@ -9620,7 +9620,18 @@ function DayCard({
   // Premium content visibility: use entitlement prop, fallback to !dayIsPreview for backward compat
   const canViewPremium = canViewPremiumProp !== undefined ? canViewPremiumProp : !dayIsPreview;
   const allLocked = day.activities.every(a => a.isLocked);
-  const totalCost = dayIsPreview ? 0 : getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode);
+  // Day badge cost: prefer the canonical activity_costs breakdown (group cost,
+  // matches trip-total source). Falls back to the JS estimator while the
+  // breakdown is loading or unavailable. We render per-person to match the
+  // existing /pp UI when travelers > 1.
+  const breakdownGroupUsd = dayBreakdown ? dayBreakdown.totalCents / 100 : null;
+  const breakdownPerPersonUsd = breakdownGroupUsd != null
+    ? breakdownGroupUsd / Math.max(1, travelers || 1)
+    : null;
+  const fallbackPerPersonUsd = getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode);
+  const totalCost = dayIsPreview
+    ? 0
+    : (breakdownPerPersonUsd != null ? breakdownPerPersonUsd : fallbackPerPersonUsd);
 
   // Transit subtotal — sum costs of transport/transit activities so the day
   // badge can break down "visible activities + transit = day total". Without
