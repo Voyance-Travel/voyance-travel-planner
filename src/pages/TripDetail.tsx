@@ -3101,6 +3101,8 @@ export default function TripDetail() {
                       hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
                       flightsBookedElsewhere={!!(trip?.metadata as any)?.flightsBookedElsewhere}
                       hotelBookedElsewhere={!!(trip?.metadata as any)?.hotelBookedElsewhere}
+                      refreshingDayNumber={refreshingDayNumber}
+                      refreshResultsByDay={refreshResultsByDay}
                       className=""
                       onAction={(action, ctx) => {
                         if (action === 'add_flights') {
