@@ -1794,15 +1794,11 @@ export default function TripDetail() {
           ? Math.max(existingUnlocked, computedUnlocked) 
           : undefined;
         
-        const { error } = await supabase
-          .from('trips')
-          .update({
-            itinerary_data: JSON.parse(JSON.stringify(itineraryPayload)) as any,
-            itinerary_status: 'ready',
-            updated_at: new Date().toISOString(),
-            ...(safeUnlocked !== undefined ? { unlocked_day_count: safeUnlocked } : {}),
-          })
-          .eq('id', tripId);
+        const result = await safeUpdateItineraryData(tripId, JSON.parse(JSON.stringify(itineraryPayload)), {
+          itinerary_status: 'ready',
+          ...(safeUnlocked !== undefined ? { unlocked_day_count: safeUnlocked } : {}),
+        });
+        const error = result?.error;
         
         if (error) {
           console.error('[TripDetail] Failed to force-save itinerary:', error);
