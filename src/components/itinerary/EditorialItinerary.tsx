@@ -80,6 +80,7 @@ import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternative
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
 import { preloadCostIndex, estimateCostSync, isLikelyFreePublicVenue } from '@/lib/cost-estimation';
+import { computeHotelCostUsd } from '@/lib/hotel-cost';
 import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { PaymentsTab } from './PaymentsTab';
