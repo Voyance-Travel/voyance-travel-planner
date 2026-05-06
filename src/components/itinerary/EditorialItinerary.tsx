@@ -2275,6 +2275,23 @@ export function EditorialItinerary({
   const { isRefreshing: isRefreshingDay, refreshDay } = useRefreshDay();
   const [refreshingDayNumber, setRefreshingDayNumber] = useState<number | null>(null);
 
+  // Notify parent of refresh state changes
+  useEffect(() => {
+    onRefreshingDayChange?.(refreshingDayNumber);
+  }, [refreshingDayNumber, onRefreshingDayChange]);
+
+  useEffect(() => {
+    if (!onRefreshResultsChange) return;
+    const counts: Record<number, { errorCount: number; warningCount: number }> = {};
+    Object.entries(refreshResults).forEach(([dayNum, r]: [string, any]) => {
+      counts[Number(dayNum)] = {
+        errorCount: r.issues.filter((i: any) => i.severity === 'error').length,
+        warningCount: r.issues.filter((i: any) => i.severity === 'warning').length,
+      };
+    });
+    onRefreshResultsChange(counts);
+  }, [refreshResults, onRefreshResultsChange]);
+
   // ── Day 1 auto-buffer ──────────────────────────────────────────────
   // Arrival day is the worst place to surface a "no travel buffer — Refresh
   // Day to fix timing" banner. When we detect zero/negative gaps between
