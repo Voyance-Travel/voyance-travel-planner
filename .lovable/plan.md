@@ -1,68 +1,92 @@
-# Fix Duration HH:MM:SS Bug at the Data Layer
+# Reconcile Payments buckets to the Trip Total ($987 vs $1,035 bug)
 
-## Symptom
-Day 2 raw text shows duration values like `15:00:00`, `45:00:00`, `1:05:00`, `2:20:00`, `10:00:00`. These are minute integers being formatted as `HH:MM:SS` clock strings somewhere in the pipeline. Even when the UI hides them, they leak into screen-reader text, AI prompts, exports, and the activity JSON.
+## Why this keeps happening
 
-## What I confirmed during exploration
-- The healthy path uses two duration shapes:
-  - **`durationMinutes`** — integer (e.g. `45`)
-  - **`duration`** — human string built by `formatDuration()` in `src/utils/plannerUtils.ts` → `"45m"` / `"1h 5m"`
-- DB schemas use `duration_minutes integer` everywhere (no `interval`/`time` columns for durations). So the bad string is being **constructed in code**, not coming from Postgres.
-- Dozens of places build `"${minutes} min"` or `"${h}h ${m}m"`. None of the obvious formatters emit `HH:MM:SS`. The `15:00:00`-style values are very likely **AI-emitted strings** that the model wrote as `"duration": "15:00"` or `"15:00:00"` (interpreting "15 minutes" as a clock duration), and we are passing them through unchanged into `activity.duration`.
-- Evidence supporting this:
-  - Multiple ingest paths (`itineraryParser.ts:414`, `EditorialItinerary.tsx:3672/3759/4031`, `previewConverter.ts:92`) take `activity.duration` straight from upstream JSON.
-  - Nothing currently sanitizes `duration` to ensure it matches `Nh Nm` / `N min` shape.
-  - `1:05:00` and `2:20:00` are exactly what the model produces when it thinks "duration → time-of-day clock".
+Two hooks compute totals from the **same** ledger but apply **different** rules:
+
+| Rule | `useTripFinancialSnapshot` (header $987) | `usePayableItems` (rows $1,035) |
+|---|---|---|
+| Toggles (hotel/flight) | ✅ | ✅ |
+| Drops rows whose `activity_id` is gone from `itinerary_data` | ✅ drops them | ❌ orphan-**rescues** by reassigning to a live activity, then counts |
+| `$0` DB row + positive JSON `cost` (paid category) | uses DB `$0` | rewrites cents to **JSON cost × travelers** |
+| Adds **Misc / Spending Money reserve** | ✅ adds to total | ❌ never appears as a row |
+| Manual `activity` payments | ✅ via `manualOtherCents` | ✅ via `addManualGroups('activity')` |
+
+Net effect on this trip: the JSON-cost rescue and/or orphan-rescue inflate the activity bucket above what the snapshot counts, while the misc reserve quietly inflates the snapshot above the visible row sum. Either direction can win — yesterday it was Paris (rows < total), today it's $1,035 > $987.
+
+This is the same shape of "AI/extraction inconsistency" pattern: two consumers of the same data apply slightly different cleanup heuristics and end up with two answers.
 
 ## Fix Plan
 
-### 1. New shared sanitizer: `coerceDurationString(raw, durationMinutes?)`
-Add to `src/utils/plannerUtils.ts` (and a Deno-safe twin in `supabase/functions/generate-itinerary/_shared/duration-format.ts`).
+Make the two hooks **share a single canonical pricing function** so a bucket sum is mathematically forced to equal the headline.
 
-Rules:
-- If `durationMinutes` is a positive integer, ALWAYS return `formatDuration(durationMinutes)`. Trust the int over the string.
-- Else if `raw` matches `^\d{1,2}:\d{2}(:\d{2})?$` → parse as `HH:MM[:SS]`, convert to total minutes, return `formatDuration(total)`. (`"15:00:00"` → `15h`, `"1:05:00"` → `1h 5m`, `"45:00"` → `45m` only when leading number > 23 or trailing `:00`.)
-  - Heuristic: if HH ≥ 24 OR (HH ≥ 5 AND MM=00 AND no `:SS`), treat HH as **minutes**, not hours. This recovers `"45:00"` → `45m` instead of `45h`.
-- Else if `raw` matches `^\d+\s*(min|m|mins|minutes)$` → pass through normalized.
-- Else if `raw` matches `^\d+\s*(h|hr|hour|hours)(\s*\d+\s*(m|min)?)?$` → pass through normalized.
-- Else if `raw` is a bare integer string → treat as minutes.
-- Else → drop it. Return `formatDuration(durationMinutes ?? 60)` or empty string if no fallback.
+### 1. Extract `resolveCanonicalCostRows(args)`
+New file: `src/services/canonicalCostRows.ts`. Pure function. Inputs: `activityCosts`, `liveActivityIds`, `liveActivityById` (for JSON-cost rescue), `includeHotel`, `includeFlight`, `manualPayments`, `miscReserveCents`. Output:
 
-Add a unit test file covering each branch with the values from the bug report.
+```ts
+{
+  rows: Array<{
+    kind: 'activity-cost' | 'manual' | 'reserve',
+    sourceRowId: string,
+    effectiveActivityId?: string,        // post-rescue
+    dayNumber: number,
+    category: string,
+    cents: number,
+    rescueTag?: 'orphan-id' | 'json-zero-rescue',
+  }>,
+  totalCents: number,
+  hotelCents: number,
+  flightCents: number,
+  reserveCents: number,
+}
+```
 
-### 2. Apply at the three ingest seams
-- **`src/utils/itineraryParser.ts:414`** — wrap the `duration` extraction with `coerceDurationString`.
-- **`src/utils/previewConverter.ts:92`** — same.
-- **`src/components/itinerary/EditorialItinerary.tsx`** — at every place an activity is constructed/normalized (`3672`, `3759`, `4031`, `4958`, the `recalcDuration` helper near `5291`), pipe `duration` through the sanitizer. The `recalcDuration` already uses good logic; the issue is upstream payloads that bypass it.
+The function applies in this exact order: toggle filter → orphan-id rescue or drop (one shared decision) → `$0` JSON rescue (one shared decision) → reserve injection.
 
-### 3. Backend post-generation pass
-In `supabase/functions/generate-itinerary/universal-quality-pass.ts` (or a small new helper imported from there + `repair-day.ts`), after activities are built, walk every activity and:
-1. If `duration_minutes` is a number, regenerate `duration` from it ("Nh Nm" / "N min").
-2. Else if `duration` is `HH:MM[:SS]`-shaped, parse → set both `duration_minutes` and a clean `duration` string.
+### 2. Rewire both hooks to consume it
+- `useTripFinancialSnapshot` replaces its inline `for (const row of costs)` block with `const canonical = resolveCanonicalCostRows(...)` and uses `canonical.totalCents` directly.
+- `usePayableItems` builds its `result` array from `canonical.rows` instead of re-walking `activityCosts`. Transit grouping, naming, and orphan-payment recovery layer on top of the same rows.
 
-This guarantees that whatever shape the model emits, what we ship to the client and to `activity_costs.notes`/snapshots is always normalized.
+### 3. Surface the Misc Reserve as a real line item
+In `usePayableItems`, when `canonical.reserveCents > 0`, push a synthetic `essentialItems` row:
 
-### 4. Defense-in-depth render guard
-In the components that render `activity.duration` directly (grep: `FullItinerary.tsx:494`, `TripActivityCard.tsx:136`, transit badges, etc.), call the same `coerceDurationString` at render time. This means any **legacy stored data** in existing trips also displays correctly without a backfill.
+```
+{ id: 'misc-reserve', type: 'other', name: 'Spending money & tips reserve', amountCents: reserveCents }
+```
 
-### 5. (Optional) DB backfill
-A short Node script (`scripts/backfill-duration-strings.ts`) that walks `itinerary_activities` rows where `duration ~ '^\d{1,2}:\d{2}'` and rewrites the string from `duration_minutes`. Only worth doing if production trips already have many polluted rows; otherwise the render guard in step 4 covers it.
+Now the buckets visibly add up to the header — no invisible delta. (The reserve already counts toward the budget; this just stops it from hiding.)
+
+### 4. Add a runtime invariant
+In `PaymentsTab.tsx`, after computing `estimatedTotal` and the bucket sum, assert:
+
+```ts
+const bucketSum = essentialItems.reduce(...) + activityItems.reduce(...);
+if (Math.abs(bucketSum - estimatedTotal) > 100) {  // > $1
+  console.warn('[PaymentsTab] reconciliation drift', { bucketSum, estimatedTotal, diff });
+  // existing "Reconciling…" badge already triggers off this discrepancy;
+  // strengthen its tooltip with the actual delta and direction.
+}
+```
+
+This is the safety net: any future regression that re-introduces a divergent rule fires immediately in console + tooltip instead of silently skewing the breakdown.
+
+### 5. Make the header label honest
+The "Matches itinerary" badge under "Trip Total" currently fires whenever `tripTotalCents > 0`. Change it to fire only when the invariant in step 4 passes (`|bucketSum − estimatedTotal| ≤ $1`). Otherwise show "Reconciling…" with the delta tooltip we already built.
 
 ## Files to change
-- `src/utils/plannerUtils.ts` — add `coerceDurationString` + tests
-- `src/utils/itineraryParser.ts`
-- `src/utils/previewConverter.ts`
-- `src/components/itinerary/EditorialItinerary.tsx` — sanitize at activity build sites
-- `src/components/itinerary/FullItinerary.tsx`, `planner/TripActivityCard.tsx` — render-time guard
-- `supabase/functions/generate-itinerary/_shared/duration-format.ts` — new shared util
-- `supabase/functions/generate-itinerary/universal-quality-pass.ts` — call the post-gen normalizer
-- `supabase/functions/generate-itinerary/pipeline/repair-day.ts` — same call
+- `src/services/canonicalCostRows.ts` *(new)* — single source of truth
+- `src/hooks/useTripFinancialSnapshot.ts` — delegate the activity-cost loop to canonical
+- `src/hooks/usePayableItems.ts` — build rows from canonical instead of re-walking
+- `src/components/itinerary/PaymentsTab.tsx` — runtime invariant, honest "Matches itinerary" badge
+- `src/hooks/__tests__/canonicalCostRows.test.ts` *(new)* — covers: orphan-rescue parity, JSON-zero rescue parity, misc reserve appears as a row, sum-of-rows = totalCents.
 
 ## Verification
-- New unit tests assert: `"15:00:00"` → `"15h"`, `"45:00:00"` → `"45m"` (when `durationMinutes=45`), `"1:05:00"` → `"1h 5m"`, `"2:20:00"` → `"2h 20m"`, `"10:00:00"` → `"10h"`.
-- Generate a fresh Rome trip; inspect the activity JSON: every `duration` matches `^(\d+h(\s\d+m)?|\d+m|\d+ min)$`. No colons.
-- Open an existing trip with the bad strings stored: render guard converts them on display.
+- Open the Rome trip showing $987/$1,035: header and "Activities & Experiences" + "Spending money reserve" rows must add to the same dollar.
+- Toggle Include Hotel / Include Flight: header and bucket sum stay in lockstep on every toggle.
+- Add a manual activity expense: it appears as a row AND moves the header by exactly its amount.
+- Force an orphan row in the DB: the row is either dropped from both views or rescued in both views — never one-sided.
+- Unit test `bucketSum === totalCents` across 6 fixture trips (clean, with-orphans, with-zero-cost-dining, with-misc-reserve, hotel-toggled-off, flight-toggled-on).
 
 ## Out of scope
-- Touching transport `duration` strings produced by Google Routes (`route-details/index.ts`, `optimize-itinerary/index.ts`) — those are already minute-formatted and unrelated.
-- DNA / personalization changes.
+- Migration / backfill of orphaned `activity_costs` rows. The shared resolver makes them harmless either way; cleanup can be a separate maintenance task.
+- Changing how the AI itself prices activities (this is a **reconciliation** fix, not an estimation fix).

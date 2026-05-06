@@ -329,6 +329,39 @@ export function PaymentsTab({
   const isOverpaid = overpaidAmount > 0 && estimatedTotal > 0;
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
+  // Surface the misc / spending-money reserve as a real essential row so the
+  // bucket sums add up to the headline Trip Total instead of silently lagging it.
+  const reserveCents = financialSnapshot.miscReserveCents || 0;
+  const essentialItemsWithReserve = useMemo(() => {
+    if (reserveCents <= 0) return essentialItems;
+    return [
+      ...essentialItems,
+      {
+        id: 'misc-reserve',
+        type: 'other' as const,
+        name: 'Spending money & tips reserve',
+        amountCents: reserveCents,
+        allPayments: [],
+        assignedMemberIds: [],
+      },
+    ];
+  }, [essentialItems, reserveCents]);
+
+  // Invariant: bucket sum must match the headline within $1.
+  const bucketSumCents =
+    essentialItemsWithReserve.reduce((s, i) => s + i.amountCents, 0) +
+    activityItems.reduce((s, i) => s + i.amountCents, 0);
+  const reconciliationDriftCents = bucketSumCents - estimatedTotal;
+  const reconciles = Math.abs(reconciliationDriftCents) <= 100;
+  if (!reconciles && !financialSnapshot.loading && estimatedTotal > 0) {
+    // Single warn per render burst (browser dedupes by line)
+    console.warn('[PaymentsTab] reconciliation drift', {
+      bucketSumCents,
+      estimatedTotalCents: estimatedTotal,
+      driftCents: reconciliationDriftCents,
+    });
+  }
+
   /**
    * Map a real trip_members UUID back to the synthetic member.id used in the UI.
    * This is needed so pre-population of the assign modal and breakdown work correctly.
@@ -993,10 +1026,19 @@ export function PaymentsTab({
             <p className="text-2xl font-semibold text-primary">{formatCurrency(estimatedTotal)}</p>
             <p className="text-xs text-muted-foreground">Trip Total</p>
             {!financialSnapshot.loading && financialSnapshot.tripTotalCents > 0 && (
-              <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
-                <CheckCircle2 className="h-3 w-3 text-green-600" />
-                Matches itinerary
-              </p>
+              reconciles ? (
+                <p className="text-[10px] text-muted-foreground/80 mt-0.5 flex items-center gap-1 justify-end">
+                  <CheckCircle2 className="h-3 w-3 text-green-600" />
+                  Matches itinerary
+                </p>
+              ) : (
+                <p
+                  className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1 justify-end"
+                  title={`Bucket sum ${formatCurrency(bucketSumCents)} differs from total by ${formatCurrency(Math.abs(reconciliationDriftCents))}`}
+                >
+                  Reconciling…
+                </p>
+              )
             )}
           </div>
         </div>
@@ -1104,7 +1146,7 @@ export function PaymentsTab({
 
         <TabsContent value="expenses" className="mt-4 space-y-4">
           {/* Essentials Category */}
-          {essentialItems.length > 0 && (
+          {essentialItemsWithReserve.length > 0 && (
             <Card className="overflow-hidden">
               <button
                 onClick={() => setExpandedCategory(expandedCategory === 'essentials' ? null : 'essentials')}
@@ -1122,10 +1164,10 @@ export function PaymentsTab({
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <p className="font-medium">
-                      {formatCurrency(essentialItems.reduce((sum, i) => sum + i.amountCents, 0))}
+                      {formatCurrency(essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0))}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {essentialItems.filter(i => i.payment?.status === 'paid').length}/{essentialItems.length} paid
+                      {essentialItemsWithReserve.filter(i => i.payment?.status === 'paid').length}/{essentialItemsWithReserve.length} paid
                     </p>
                   </div>
                   <ChevronDown className={cn(
@@ -1143,7 +1185,7 @@ export function PaymentsTab({
                     className="overflow-hidden"
                   >
                     <CardContent className="pt-0 pb-4">
-                      {essentialItems.map(renderPayableItem)}
+                      {essentialItemsWithReserve.map(renderPayableItem)}
                     </CardContent>
                   </motion.div>
                 )}

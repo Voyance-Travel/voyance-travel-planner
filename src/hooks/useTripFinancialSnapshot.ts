@@ -24,6 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { shouldCountRow } from '@/services/tripBudgetService';
 import { computeMiscReserve } from '@/services/budgetReserve';
+import { resolveCanonicalCostRows, type CanonicalLiveActivity } from '@/services/canonicalCostRows';
 
 export interface FinancialDelta {
   previousTotalCents: number;
@@ -39,6 +40,8 @@ export interface FinancialSnapshot {
   budgetRemainingCents: number;
   plannedUnpaidCents: number;
   paidPercent: number;
+  /** Unspent portion of the misc / spending-money reserve folded into the total. */
+  miscReserveCents: number;
   loading: boolean;
   lastDelta: FinancialDelta | null;
   refetch: () => void;
@@ -49,6 +52,7 @@ interface SnapshotData {
   tripTotalCents: number;
   paidCents: number;
   budgetTotalCents: number;
+  miscReserveCents: number;
   loading: boolean;
 }
 
@@ -57,6 +61,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     tripTotalCents: 0,
     paidCents: 0,
     budgetTotalCents: 0,
+    miscReserveCents: 0,
     loading: true,
   });
   const [lastDelta, setLastDelta] = useState<FinancialDelta | null>(null);
@@ -101,6 +106,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // so we can suppress the misc-reserve contribution on empty itineraries —
     // otherwise Trip Expenses inflates beyond what the itinerary contains.
     const liveActivityIds = new Set<string>();
+    const liveActivities: CanonicalLiveActivity[] = [];
     let meaningfulActivityCount = 0;
     const NON_MEANINGFUL_CATEGORIES = new Set([
       'hotel', 'flight', 'accommodation', 'lodging', 'stay',
@@ -109,8 +115,21 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     const NON_MEANINGFUL_TITLE_RE = /check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|hotel\s+check(?:in|out)|airport\s+transfer|departure/i;
     const days = ((tripData as any)?.itinerary_data?.days) || [];
     for (const day of days) {
+      const dayNum = Number(day?.dayNumber) || 0;
       for (const a of (day?.activities || [])) {
-        if (a?.id) liveActivityIds.add(String(a.id));
+        if (a?.id) {
+          liveActivityIds.add(String(a.id));
+          const explicit = typeof a.cost === 'number' ? a.cost
+            : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
+            : (typeof a.explicitCost === 'number' ? a.explicitCost : 0);
+          liveActivities.push({
+            id: String(a.id),
+            dayNumber: dayNum,
+            name: String(a.title || a.name || ''),
+            category: String(a.category || a.type || '').toLowerCase(),
+            jsonCost: Number(explicit) || 0,
+          });
+        }
         const cat = String(a?.category || '').toLowerCase().trim();
         const title = String(a?.title || a?.name || '');
         if (NON_MEANINGFUL_CATEGORIES.has(cat)) continue;
@@ -180,42 +199,36 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       paidActivityIds.add(stripDaySuffix(p.item_id));
     }
 
+    // Canonical resolver: shared with usePayableItems so the row sum and
+    // the header total apply identical orphan-rescue + $0-JSON-rescue rules.
+    const canonical = resolveCanonicalCostRows({
+      costs: (costs || []) as any,
+      liveActivities,
+      includeHotel,
+      includeFlight,
+    });
+    totalCents = canonical.totalCents;
+    committedHotelCents = canonical.hotelCents;
+    committedFlightCents = canonical.flightCents;
+    loggedMiscCents = canonical.loggedMiscCents;
+
+    // Day-0 canonical hotel/flight (used by manual-override delta below)
     for (const row of costs || []) {
-      const isLogisticsRow =
-        row.source === 'logistics-sync' ||
-        row.day_number == null ||
-        row.day_number === 0;
-      if (
-        !isLogisticsRow &&
-        row.activity_id &&
-        !liveActivityIds.has(String(row.activity_id))
-      ) {
-        continue;
-      }
-
-      const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
-      const rowCents = Math.round(rowTotal * 100);
       const cat = (row.category || '').toLowerCase();
-
+      const rowCents = Math.round(((row.cost_per_person_usd || 0) * (row.num_travelers || 1)) * 100);
       if (row.day_number === 0 && cat === 'hotel') canonicalHotelCents += rowCents;
       if (row.day_number === 0 && cat === 'flight') canonicalFlightCents += rowCents;
-      if (cat === 'hotel') committedHotelCents += rowCents;
-      else if (cat === 'flight') committedFlightCents += rowCents;
-      else if (cat === 'misc') loggedMiscCents += rowCents;
+    }
 
+    // is_paid mirror — count rows whose activity is still live and not
+    // already covered by a trip_payments paid row.
+    for (const row of costs || []) {
+      if (!row.is_paid) continue;
       if (!shouldCountRow(row, includeHotel, includeFlight)) continue;
-
-      totalCents += rowCents;
-
-      // Only count is_paid here if no trip_payments paid row covers this
-      // activity — trip_payments is authoritative and counted below.
-      if (
-        row.is_paid &&
-        !(row.activity_id && paidActivityIds.has(stripDaySuffix(String(row.activity_id))))
-      ) {
-        const paidUsd = row.paid_amount_usd != null ? row.paid_amount_usd : rowTotal;
-        paidTotal += Math.round(paidUsd * 100);
-      }
+      if (row.activity_id && paidActivityIds.has(stripDaySuffix(String(row.activity_id)))) continue;
+      const rowTotal = (row.cost_per_person_usd || 0) * (row.num_travelers || 1);
+      const paidUsd = row.paid_amount_usd != null ? row.paid_amount_usd : rowTotal;
+      paidTotal += Math.round(paidUsd * 100);
     }
 
     // Manual payment delta — override-aware for hotel/flight, additive for others.
@@ -306,6 +319,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // a planning placeholder with no real spend behind it. Adding it inflates
     // Trip Expenses beyond what the itinerary actually contains, which the
     // Budget tab already flags via its empty-state breakdown.
+    let miscReserveContributionCents = 0;
     if (budgetTotalForReserve > 0 && miscPercent > 0 && meaningfulActivityCount >= 1) {
       const reserve = computeMiscReserve({
         budgetTotalCents: budgetTotalForReserve,
@@ -316,7 +330,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
         includeFlight,
         loggedMiscCents,
       });
-      totalCents += reserve.contributionToTotalCents;
+      miscReserveContributionCents = reserve.contributionToTotalCents;
+      totalCents += miscReserveContributionCents;
     }
 
     // Compute delta against the previous fetch (skip on initial load and
@@ -388,6 +403,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       tripTotalCents: totalCents,
       paidCents: paidTotal,
       budgetTotalCents: tripData?.budget_total_cents || 0,
+      miscReserveCents: miscReserveContributionCents,
       loading: false,
     });
   }, [tripId]);
@@ -449,6 +465,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
       budgetRemainingCents: budgetRemaining,
       plannedUnpaidCents: toBePaid,
       paidPercent: Math.min(paidPct, 100),
+      miscReserveCents: data.miscReserveCents,
       loading: data.loading,
       lastDelta,
       refetch,
