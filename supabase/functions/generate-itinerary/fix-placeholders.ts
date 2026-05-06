@@ -670,41 +670,11 @@ export function nuclearPlaceholderSweep(
     const startTimeStr = activity.startTime || activity.start_time || '12:00';
     const mealType = parseMealType(startTimeStr);
 
-    // Try hardcoded fallback first (ignore used filter as last resort)
-    const fallback = getRandomFallbackRestaurant(city, mealType, usedNames, true);
-
-    if (fallback) {
-      applyFallbackToActivity(activity, fallback, mealType, usedNames, diningConfig);
-    } else {
-      // No fallback DB for this city — refuse to ship a generic stub like "Café Matinal".
-      // Mark slot as unverified so the UI can surface a swap CTA instead of a fake venue.
-      const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : mealType === 'drinks' ? 'Drinks' : 'Dinner';
-      activity.title = `${mealLabel} — find a local spot`;
-      activity.name = activity.title;
-      activity.venue_name = '';
-      if (activity.location) {
-        activity.location.name = '';
-      }
-      activity.description = `We couldn't verify a ${mealType} venue here. Tap the assistant to suggest one.`;
-      (activity as any).__needs_meal_swap = true;
-      (activity as any).needsRefinement = true;
-      // Trim duration to 30 min so this unverified slot stops eating a 60-90 min
-      // block in the timeline (especially painful on Fast-Paced days).
-      const startStr: string = activity.startTime || activity.start_time || '';
-      const sm = startStr.match(/^(\d{1,2}):(\d{2})$/);
-      if (sm) {
-        const startMin = parseInt(sm[1], 10) * 60 + parseInt(sm[2], 10);
-        const endMin = startMin + 30;
-        const eh = Math.floor(endMin / 60) % 24;
-        const em = endMin % 60;
-        const endStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
-        activity.endTime = endStr;
-        if (activity.end_time !== undefined) activity.end_time = endStr;
-        activity.durationMinutes = 30;
-        if (activity.duration !== undefined) activity.duration = '30 min';
-      }
-      console.error(`[NUCLEAR] No fallback DB for "${city}" — marked ${mealType} slot as unverified instead of using template stub`);
-    }
+    // GUARANTEED resolver: city pool → recycled → regional → global. Never null.
+    const fallback = resolveAnyMealFallback(city, mealType, usedNames);
+    applyFallbackToActivity(activity, fallback, mealType, usedNames, diningConfig);
+    // Force category=DINING so downstream pricing/UI handle it correctly.
+    activity.category = 'dining';
 
     activity._placeholder_replaced = true;
     replaced++;
