@@ -3076,6 +3076,10 @@ export default function TripDetail() {
                           if (ctx?.dayNumber) {
                             setRefreshDayRequest({ dayNumber: ctx.dayNumber as number, nonce: Date.now() });
                           }
+                        } else if (action === 'fix_timing') {
+                          if (ctx?.dayNumber) {
+                            setFixTimingRequest({ dayNumber: ctx.dayNumber as number, nonce: Date.now() });
+                          }
                         } else if (action === 'generate_day') {
                           toast.info(`Use the day toolbar to generate Day ${ctx?.dayNumber || ''}`);
                         } else if (action === 'generate_missing_days' || action === 'generate_all') {
