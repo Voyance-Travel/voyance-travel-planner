@@ -555,7 +555,9 @@ export function PaymentsTab({
 
       toast.success('Payment unmarked');
       await fetchPayments(150);
-      window.dispatchEvent(new CustomEvent('booking-changed'));
+      window.dispatchEvent(new CustomEvent('booking-changed', {
+        detail: { optimisticPaidDeltaCents: -removedPaidCents }
+      }));
       
     } catch (err) {
       console.error('Error unmarking payment:', err);
