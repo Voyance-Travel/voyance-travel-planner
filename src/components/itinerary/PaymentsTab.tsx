@@ -329,6 +329,39 @@ export function PaymentsTab({
   const isOverpaid = overpaidAmount > 0 && estimatedTotal > 0;
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
+  // Surface the misc / spending-money reserve as a real essential row so the
+  // bucket sums add up to the headline Trip Total instead of silently lagging it.
+  const reserveCents = financialSnapshot.miscReserveCents || 0;
+  const essentialItemsWithReserve = useMemo(() => {
+    if (reserveCents <= 0) return essentialItems;
+    return [
+      ...essentialItems,
+      {
+        id: 'misc-reserve',
+        type: 'other' as const,
+        name: 'Spending money & tips reserve',
+        amountCents: reserveCents,
+        allPayments: [],
+        assignedMemberIds: [],
+      },
+    ];
+  }, [essentialItems, reserveCents]);
+
+  // Invariant: bucket sum must match the headline within $1.
+  const bucketSumCents =
+    essentialItemsWithReserve.reduce((s, i) => s + i.amountCents, 0) +
+    activityItems.reduce((s, i) => s + i.amountCents, 0);
+  const reconciliationDriftCents = bucketSumCents - estimatedTotal;
+  const reconciles = Math.abs(reconciliationDriftCents) <= 100;
+  if (!reconciles && !financialSnapshot.loading && estimatedTotal > 0) {
+    // Single warn per render burst (browser dedupes by line)
+    console.warn('[PaymentsTab] reconciliation drift', {
+      bucketSumCents,
+      estimatedTotalCents: estimatedTotal,
+      driftCents: reconciliationDriftCents,
+    });
+  }
+
   /**
    * Map a real trip_members UUID back to the synthetic member.id used in the UI.
    * This is needed so pre-population of the assign modal and breakdown work correctly.
