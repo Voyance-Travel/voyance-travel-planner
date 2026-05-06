@@ -96,8 +96,8 @@ function analyzeHealth(days: any[]): HealthIssue[] {
           id: `conflict-day-${dayNum}-${i}`,
           severity: 'error',
           message: `Day ${dayNum}: "${timed[i].name}" overlaps with "${timed[i + 1].name}"`,
-          fixLabel: 'Refresh Day',
-          fixAction: 'refresh_day',
+          fixLabel: 'Fix timing',
+          fixAction: 'fix_timing',
           dayNumber: dayNum,
         });
         break; // Only report first conflict per day
@@ -117,8 +117,8 @@ function analyzeHealth(days: any[]): HealthIssue[] {
             id: `buffer-day-${dayNum}-${i}`,
             severity: 'warning',
             message: `Day ${dayNum}: Only ${gap}min between "${timed[i].name}" and "${timed[i + 1].name}"`,
-            fixLabel: 'Refresh Day',
-            fixAction: 'refresh_day',
+            fixLabel: 'Fix timing',
+            fixAction: 'fix_timing',
             dayNumber: dayNum,
           });
           break;
