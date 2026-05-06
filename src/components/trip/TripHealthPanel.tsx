@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2, Circle, ChevronDown, AlertTriangle,
   Plane, Hotel, CalendarDays, Bus, Clock,
-  Sparkles, ArrowRight, Shield, Zap,
+  Sparkles, ArrowRight, Shield, Zap, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
