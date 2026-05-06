@@ -29,6 +29,8 @@ interface ChecklistItem {
   icon: React.ElementType;
   fixLabel?: string;
   fixAction?: string; // action key for parent to handle
+  doneByFlag?: boolean; // marked done via "booked elsewhere" flag
+  markElsewhereField?: 'flights' | 'hotel'; // enables "Already booked" button when not done
 }
 
 interface HealthIssue {
@@ -48,8 +50,10 @@ export interface TripHealthPanelProps {
   hasAirportTransfer?: boolean;
   hasInterCityTransport?: boolean;
   isMultiCity?: boolean;
+  flightsBookedElsewhere?: boolean;
+  hotelBookedElsewhere?: boolean;
   className?: string;
-  onAction?: (action: string, context?: { dayNumber?: number }) => void;
+  onAction?: (action: string, context?: { dayNumber?: number; field?: 'flights' | 'hotel' }) => void;
 }
 
 // ─── Health Analysis ────────────────────────────────────────────────────────
@@ -187,10 +191,15 @@ export function TripHealthPanel({
   hasAirportTransfer = false,
   hasInterCityTransport = false,
   isMultiCity = false,
+  flightsBookedElsewhere = false,
+  hotelBookedElsewhere = false,
   className,
   onAction,
 }: TripHealthPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const flightsDone = hasFlights || flightsBookedElsewhere;
+  const hotelDone = hasHotel || hotelBookedElsewhere;
 
   const { checklist, healthIssues, completionPct, healthScore, daysPlanned } = useMemo(() => {
     // Count days with real activities
@@ -204,8 +213,26 @@ export function TripHealthPanel({
 
     // Build checklist
     const items: ChecklistItem[] = [
-      { id: 'flights', label: 'Flights booked', done: hasFlights, icon: Plane, fixLabel: 'Add flights', fixAction: 'add_flights' },
-      { id: 'hotel', label: 'Hotels confirmed', done: hasHotel, icon: Hotel, fixLabel: 'Add hotel', fixAction: 'add_hotel' },
+      {
+        id: 'flights',
+        label: 'Flights booked',
+        done: flightsDone,
+        icon: Plane,
+        fixLabel: flightsDone ? undefined : 'Add flights',
+        fixAction: flightsDone ? undefined : 'add_flights',
+        doneByFlag: !hasFlights && flightsBookedElsewhere,
+        markElsewhereField: 'flights',
+      },
+      {
+        id: 'hotel',
+        label: 'Hotels confirmed',
+        done: hotelDone,
+        icon: Hotel,
+        fixLabel: hotelDone ? undefined : 'Add hotel',
+        fixAction: hotelDone ? undefined : 'add_hotel',
+        doneByFlag: !hasHotel && hotelBookedElsewhere,
+        markElsewhereField: 'hotel',
+      },
     ];
 
     // Days checklist entries
@@ -251,8 +278,8 @@ export function TripHealthPanel({
     // Compute completion %
     const completionFactors = [
       planned / Math.max(totalDaysExpected, 1),
-      hasFlights ? 1 : 0,
-      hasHotel ? 1 : 0,
+      flightsDone ? 1 : 0,
+      hotelDone ? 1 : 0,
     ];
     if (isMultiCity) completionFactors.push(hasInterCityTransport ? 1 : 0);
     const completion = Math.round(
@@ -277,7 +304,7 @@ export function TripHealthPanel({
       healthScore: health,
       daysPlanned: planned,
     };
-  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity]);
+  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere]);
 
   const healthColor = healthScore >= 80 ? 'text-green-600' : healthScore >= 50 ? 'text-amber-500' : 'text-destructive';
   const healthBg = healthScore >= 80 ? 'bg-green-600' : healthScore >= 50 ? 'bg-amber-500' : 'bg-destructive';
@@ -403,17 +430,38 @@ export function TripHealthPanel({
                         {item.label}
                       </span>
                     </button>
-                    {!item.done && item.fixLabel && onAction && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-3 text-xs text-primary"
-                        onClick={(e) => { e.stopPropagation(); onAction(item.fixAction!, {}); }}
-                      >
-                        {item.fixLabel}
-                        <ArrowRight className="w-3 h-3 ml-1" />
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!item.done && item.fixLabel && onAction && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-3 text-xs text-primary"
+                          onClick={(e) => { e.stopPropagation(); onAction(item.fixAction!, {}); }}
+                        >
+                          {item.fixLabel}
+                          <ArrowRight className="w-3 h-3 ml-1" />
+                        </Button>
+                      )}
+                      {!item.done && item.markElsewhereField && onAction && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={(e) => { e.stopPropagation(); onAction('mark_booked_elsewhere', { field: item.markElsewhereField }); }}
+                        >
+                          Already booked
+                        </Button>
+                      )}
+                      {item.doneByFlag && item.markElsewhereField && onAction && (
+                        <button
+                          type="button"
+                          className="text-[11px] text-muted-foreground/70 hover:text-foreground italic"
+                          onClick={(e) => { e.stopPropagation(); onAction('unmark_booked_elsewhere', { field: item.markElsewhereField }); }}
+                        >
+                          Booked elsewhere · Undo
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

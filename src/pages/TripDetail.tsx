@@ -152,6 +152,34 @@ export default function TripDetail() {
     tripRef.current = trip;
   }, [trip]);
 
+  // Mark/unmark flights or hotel as "booked elsewhere" — persists to trip.metadata
+  const handleMarkBookedElsewhere = async (
+    field: 'flights' | 'hotel' | undefined,
+    mark: boolean,
+  ) => {
+    if (!field || !tripId) return;
+    const key = field === 'flights' ? 'flightsBookedElsewhere' : 'hotelBookedElsewhere';
+    const prevMeta = (trip?.metadata as Record<string, unknown>) || {};
+    const nextMeta = { ...prevMeta, [key]: mark };
+    // Optimistic update
+    setTrip(prev => (prev ? { ...prev, metadata: nextMeta as any } : prev));
+    try {
+      const { error } = await supabase
+        .from('trips')
+        .update({ metadata: nextMeta as any })
+        .eq('id', tripId);
+      if (error) throw error;
+      toast.success(
+        mark
+          ? `Marked ${field === 'flights' ? 'flights' : 'hotel'} as booked elsewhere`
+          : `${field === 'flights' ? 'Flights' : 'Hotel'} no longer marked as booked elsewhere`,
+      );
+    } catch (e: any) {
+      setTrip(prev => (prev ? { ...prev, metadata: prevMeta as any } : prev));
+      toast.error(`Could not save: ${e?.message || 'unknown error'}`);
+    }
+  };
+
   // Entitlements — gate premium features like chat assistant
   const { data: entitlements, refresh: refreshEntitlements } = useEntitlements(tripId);
   // Premium access = paid purchase, smart finish, OR this trip has unlocked days
@@ -2810,6 +2838,8 @@ export default function TripDetail() {
                             }
                             isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
                             hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
+                            flightsBookedElsewhere={!!(trip?.metadata as any)?.flightsBookedElsewhere}
+                            hotelBookedElsewhere={!!(trip?.metadata as any)?.hotelBookedElsewhere}
                             className=""
                             onAction={(action, ctx) => {
                               if (action === 'add_flights') {
@@ -2833,6 +2863,8 @@ export default function TripDetail() {
                                   toast.info(`Use the day toolbar to generate Day ${ctx?.dayNumber || ''}`);
                               } else if (action === 'generate_missing_days' || action === 'generate_all') {
                                 setShowGenerator(true);
+                              } else if (action === 'mark_booked_elsewhere' || action === 'unmark_booked_elsewhere') {
+                                handleMarkBookedElsewhere(ctx?.field, action === 'mark_booked_elsewhere');
                               }
                             }}
                           />
@@ -3061,6 +3093,8 @@ export default function TripDetail() {
                       }
                       isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
                       hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
+                      flightsBookedElsewhere={!!(trip?.metadata as any)?.flightsBookedElsewhere}
+                      hotelBookedElsewhere={!!(trip?.metadata as any)?.hotelBookedElsewhere}
                       className=""
                       onAction={(action, ctx) => {
                         if (action === 'add_flights') {
@@ -3084,6 +3118,8 @@ export default function TripDetail() {
                           toast.info(`Use the day toolbar to generate Day ${ctx?.dayNumber || ''}`);
                         } else if (action === 'generate_missing_days' || action === 'generate_all') {
                           setShowGenerator(true);
+                        } else if (action === 'mark_booked_elsewhere' || action === 'unmark_booked_elsewhere') {
+                          handleMarkBookedElsewhere(ctx?.field, action === 'mark_booked_elsewhere');
                         }
                       }}
                     />
