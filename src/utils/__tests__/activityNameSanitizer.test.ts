@@ -49,3 +49,17 @@ describe('sanitizeActivityName - orphan article repair', () => {
     expect(sanitizeActivityName('Walk the of dogs')).toBe('Walk the of dogs');
   });
 });
+
+describe('sanitizeActivityText - curly apostrophe repair', () => {
+  it('repairs curly "the’s" → "the city\'s"', () => {
+    expect(
+      sanitizeActivityText('A sensory retreat at the\u2019s historic mosque'),
+    ).toBe("A sensory retreat at the city's historic mosque");
+  });
+
+  it('repairs curly "the’ s" with space', () => {
+    expect(sanitizeActivityText('Walk the\u2019 s old quarter')).toBe(
+      "Walk the city's old quarter",
+    );
+  });
+});

@@ -1,41 +1,45 @@
 ## Problem
 
-The Petit Palais activity is being rendered with a broken title: **"Explore the of Paris Museum"**. The AI dropped the word "City" between "the" and "of".
+User sees: **"A sensory retreat at the's historic mosque"** in the Grande Mosquée de Paris hammam description. The AI dropped a noun between `the` and `'s`, producing an orphan possessive.
 
 ## Root cause
 
-We already have a repair for this pattern (`\bthe\s+of\s+(?=[A-Z])` → `the City of `) in two places:
+We already repair this exact pattern in two places:
 
-- `supabase/functions/generate-itinerary/sanitization.ts` (server-side, line 1075)
-- `src/utils/activityNameSanitizer.ts` → `sanitizeActivityText()` (description sanitizer, line 182)
+- `supabase/functions/generate-itinerary/sanitization.ts` (line ~1069)
+- `src/utils/activityNameSanitizer.ts` → `sanitizeActivityText()` (line ~190)
 
-But it is **missing from `sanitizeActivityName()`** in the same file — the function used to render activity *titles* throughout the itinerary (`EditorialItinerary`, `LiveActivityCard`, `BookableItemCard`, `MyLockedActivities`, `ItinerarySummaryCard`, etc.).
+Both use the regex `/\bthe'\s?s\b/gi`. Verified with a quick test:
 
-So when the server-side repair fails to fire (legacy data, alternative-fetch, refresh-day, or any path that bypasses the main sanitization), the title leaks straight to the UI even though the description would have been repaired.
+| Input | Repaired? |
+|---|---|
+| `the's` (ASCII `'`) | yes |
+| `the' s` | yes |
+| `the’s` (curly U+2019) | **NO** |
+| `the’ s` | **NO** |
+
+So whenever the model emits a curly/typographic apostrophe (very common with Gemini/GPT on French content like "Mosquée"), the repair is bypassed and the broken phrase reaches the UI.
 
 ## Fix
 
-Add the same orphan-article repair (and the `the's` → `the city's` repair) to `sanitizeActivityName()` so titles get the same protection as descriptions and server output.
+Broaden the apostrophe character class to match both ASCII and curly apostrophes in both sanitizers, plus the orphan-name title sanitizer added in the previous fix.
 
-### Code change (single file)
+### Code changes
 
-`src/utils/activityNameSanitizer.ts` — inside `sanitizeActivityName()`, before the duplicate-word logic, add:
+1. **`src/utils/activityNameSanitizer.ts`** — replace the two existing `the's` regexes (in `sanitizeActivityName` and `sanitizeActivityText`) with:
+   ```ts
+   /\bthe['’]\s?s\b/gi
+   ```
 
-```ts
-// Repair orphaned "City" gap in titles (e.g. "Explore the of Paris Museum")
-sanitized = sanitized.replace(/\bthe\s+of\s+(?=[A-Z])/g, 'the City of ');
-sanitized = sanitized.replace(/,\s*the\s+of\b/gi, ', the City of');
-sanitized = sanitized.replace(/\bthe'\s?s\b/gi, "the city's");
-```
+2. **`supabase/functions/generate-itinerary/sanitization.ts`** — same change at line ~1069 so future generations are repaired server-side too.
 
 ### Tests
 
-Extend `src/utils/__tests__/activityNameSanitizer.test.ts` with a `sanitizeActivityName` case asserting:
+Extend `src/utils/__tests__/activityNameSanitizer.test.ts` with cases covering both apostrophe variants:
 
-- `"Explore the of Paris Museum"` → `"Explore the City of Paris Museum"`
-- `"Walk the of dogs"` (lowercase next word) → unchanged
+- `"A sensory retreat at the’s historic mosque"` → `"A sensory retreat at the city's historic mosque"`
+- `"Walk the’ s old quarter"` → `"Walk the city's old quarter"`
 
 ## Out of scope
 
-- No backend / generation pipeline changes — server already repairs this on new generations. This is a defense-in-depth client patch covering legacy rows and any path that skips server sanitization.
-- No DB migration to rewrite existing stored titles (the renderer fix covers all surfaces).
+- No DB rewrite of legacy stored descriptions — the renderer-side repair (`sanitizeActivityText`) covers all surfaces that already use it (EditorialItinerary, FullItinerary, planner cards). A handful of secondary surfaces (LiveActivityCard, ActivityModal, BookableItemCard, CommunityGuideActivityCard) still print `activity.description` raw; that's a broader hygiene cleanup, not part of this targeted bug fix.
