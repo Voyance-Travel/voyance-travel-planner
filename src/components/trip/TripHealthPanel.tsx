@@ -404,7 +404,7 @@ export function TripHealthPanel({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 px-2 text-[11px] text-primary"
+                        className="h-8 px-3 text-xs text-primary"
                         onClick={(e) => { e.stopPropagation(); onAction(item.fixAction!, {}); }}
                       >
                         {item.fixLabel}
@@ -429,34 +429,36 @@ export function TripHealthPanel({
 
                   <div className="space-y-1.5 pl-6">
                     {healthIssues.map((issue) => (
-                      <div key={issue.id} className="flex items-start justify-between gap-2 group">
+                      <div key={issue.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="flex items-start gap-2 min-w-0">
                           {issue.severity === 'error' ? (
-                            <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+                            <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" aria-hidden="true" />
                           ) : (
-                            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" aria-hidden="true" />
                           )}
                           <span className="text-xs text-muted-foreground leading-relaxed">{issue.message}</span>
                         </div>
                         {issue.fixLabel && onAction && (
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-1 shrink-0 self-end sm:self-auto">
                             <Button
-                              variant="outline"
+                              variant={issue.severity === 'error' ? 'default' : 'outline'}
                               size="sm"
-                              className="h-6 px-2 text-[10px] text-primary border-primary/30 hover:bg-primary/10"
+                              className="h-8 px-3 text-xs"
+                              aria-label={`${issue.fixLabel}${issue.dayNumber ? ` on day ${issue.dayNumber}` : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onAction(issue.fixAction!, { dayNumber: issue.dayNumber });
                               }}
                             >
-                              <Zap className="w-3 h-3 mr-1" />
+                              <Zap className="w-3 h-3 mr-1" aria-hidden="true" />
                               {issue.fixLabel}
                             </Button>
                             {issue.fixAction === 'fix_timing' && (
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                                aria-label={`Review day ${issue.dayNumber} in detail`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onAction('refresh_day', { dayNumber: issue.dayNumber });

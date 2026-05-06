@@ -9949,24 +9949,27 @@ function DayCard({
                 (day as any).__zeroGapCount = zeroGapCount;
                 if (zeroGapCount < 1) return null;
                 return (
-                  <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/30">
-                    <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-medium">{zeroGapCount} {zeroGapCount === 1 ? 'activity' : 'activities'}</span> {zeroGapCount === 1 ? 'has' : 'have'} no travel buffer.{' '}
-                      {onRefreshDay ? (
-                        <button
-                          type="button"
-                          onClick={onRefreshDay}
-                          disabled={isRefreshingDay}
-                          className="font-medium text-primary hover:underline cursor-pointer disabled:opacity-50 bg-transparent border-none p-0 inline"
-                        >
-                          Refresh Day
-                        </button>
-                      ) : (
-                        <span className="font-medium text-primary">Refresh Day</span>
-                      )}
-                      {' '}to fix timing.
-                    </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-2 border-b border-border/50 bg-muted/30">
+                    <div className="flex items-start sm:items-center gap-2 min-w-0 flex-1">
+                      <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5 sm:mt-0" aria-hidden="true" />
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">{zeroGapCount} {zeroGapCount === 1 ? 'activity' : 'activities'}</span> {zeroGapCount === 1 ? 'has' : 'have'} no travel buffer.
+                      </p>
+                    </div>
+                    {onRefreshDay && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onRefreshDay}
+                        disabled={isRefreshingDay}
+                        className="h-8 px-3 text-xs shrink-0 self-end sm:self-auto"
+                        aria-label="Refresh day to fix timing"
+                      >
+                        <RefreshCw className={cn("h-3 w-3 mr-1", isRefreshingDay && "animate-spin")} aria-hidden="true" />
+                        {isRefreshingDay ? 'Refreshing…' : 'Refresh Day'}
+                      </Button>
+                    )}
                   </div>
                 );
               })()}
