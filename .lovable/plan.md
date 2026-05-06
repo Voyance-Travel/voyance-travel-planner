@@ -1,79 +1,97 @@
-# Reconcile Day Totals → Trip Total
+# Verify Budget Coach Apply End-to-End
 
-## Problem
+## Findings
 
-The €2,035 gap comes from three independent sources of truth that report different things:
-
-| Surface | Source | Includes |
-|---|---|---|
-| **Trip total badge** (header) | `useTripFinancialSnapshot` → `activity_costs` table | Activity rows + day-0 hotel/flight + misc reserve + manual-payment overrides + orphan filter |
-| **Per-day badge** (Day card) | `getDayTotalCost` → `itinerary_data.days[].activities` JSON, per-person | Confirmed-cost activities only; **excludes** estimates, hotel, flight, misc reserve, transit micro-rows that aren't on cards, day-0 logistics |
-| **Budget tab** | `useTripDayBreakdown` → `activity_costs` table | Everything in snapshot, grouped by `day_number` |
-
-So summing the visible day badges and comparing to the trip total is guaranteed to drift by:
-
-1. **Hotel + flight + misc reserve** — booked at `day_number = 0`, attributed to no day card.
-2. **Estimated-cost activities** — excluded from day badge, included in trip total whenever `activity_costs` has a row.
-3. **Per-person vs group cost** — day badge renders the per-person figure (`/pp` suffix), trip total is group cost.
-4. **Orphan filter mismatch** — snapshot drops `activity_costs` rows whose `activity_id` is missing from live JSON; day badge sums whatever is in JSON, including activities that may not have a cost row yet.
-5. **Manual payment override delta** — applied only in snapshot, never visible per-day.
-
-Users see "the math doesn't add up" because nothing in the UI exposes items 1, 4, or 5.
-
-## Fix — single canonical day source + a visible "Trip-level" line
-
-Make day badges read from the same table the trip total reads from, then surface the unallocated bucket as its own line so the arithmetic always closes.
-
-### 1. Day card badge: switch to `useTripDayBreakdown`
-
-In `src/components/itinerary/EditorialItinerary.tsx`:
-
-- Lift one `useTripDayBreakdown(tripId, visibleActivityIds)` call into `EditorialItinerary` (alongside the existing `useTripFinancialSnapshot`) and pass `byDay[dayNumber]` into each `DayCard` via props.
-- Inside `DayCard`, when `byDay[day.dayNumber]` is present, prefer `breakdown.totalCents / 100` over `getDayTotalCost(...)` for the badge. Fall back to the JS calc only while the hook is loading or for clean previews.
-- Group cost is already in `totalUsdCents` — drop the misleading `/pp` suffix when we use the snapshot value (or divide by `travelers` when `travelers > 1` if we want to keep the per-person UI; either way the sum-of-days will match the snapshot).
-- Replace the existing tooltip rows (Activities / Airport / Local transit) with `breakdown.visibleCents` + `breakdown.otherCents`, where `otherCents` is rendered as "Transit & fees" with the existing `breakdown.otherRows` available for an optional expansion.
-
-### 2. New "Trip-level costs" row in the trip total breakdown
-
-In the same file, build a `tripLevelCents` value from the snapshot:
+The Apply path is wired but never asserted by a test. The chain is:
 
 ```text
-tripLevelCents = tripTotalCents − Σ byDay[d].totalCents     (for d ≥ 1)
+BudgetCoach.handleApply(s)
+  → onApplySuggestion(s)                     [BudgetTab prop]
+  → onApplyBudgetSwap(s)                     [EditorialItinerary inline handler, lines 6741-6861]
+      ├ swap path:  setDays(...)             — replaces title / cost (strict-lower guard)
+      └ drop path:  resolveDropTarget + setDays(...)  — removes activity
+  → syncBudgetFromDays(updated)              [lines 1301-1422]
+      ├ syncActivitiesToCostTable            — UPSERTs activity_costs rows
+      ├ cleanupRemovedActivityCosts          — deletes orphan rows for dropped activities
+      └ dispatchEvent('booking-changed')     — refetch trigger
+  → queryClient.invalidateQueries(...)       — Budget allocations / summary / ledger
+
+Listeners:
+  • useTripFinancialSnapshot   → refetches trip total, paid, budget remaining
+  • useTripDayBreakdown        → refetches per-day totals (header + day badges)
+  • BudgetTab                  → fetchPaymentsForBudget()
+  • PaymentsTab                → mounted with same activity_costs source
 ```
 
-This bucket is exactly Day-0 logistics (hotel, flight, transfers tagged `day_number = 0`), the unspent misc reserve, and the manual-payment override delta. Render it as a single line below the day list inside `TripTotalDeltaIndicator` / wherever the header total is expanded:
+Logic is correct, but **not a single automated test exercises it**. The risk is real: the handler is a 120-line closure inside an 11k-line file and depends on `setDays`, `resolveDropTarget`, `enforceMealTimeCoherence`, and the canonical pricing engine inside `syncBudgetFromDays`.
 
-```text
-Day 1   $410
-Day 2   $295
-…
-Day 7   $380
-─────────────
-Days subtotal   $2,140
-Hotel, flight & reserve   $2,035
-─────────────
-Trip total   $4,175   ✓
+## Plan
+
+### 1. Extract pure swap logic to a testable module
+
+Create `src/components/itinerary/budgetSwapApply.ts` exporting a single pure function:
+
+```ts
+applyBudgetSuggestion(
+  days: EditorialDay[],
+  suggestion: BudgetSuggestion,
+): { ok: boolean; updatedDays: EditorialDay[]; reason?: 'not-found' | 'cost-not-lower' | 'stale' }
 ```
 
-If the toggles `budget_include_hotel` / `budget_include_flight` are off, the row label collapses to "Reserve & adjustments".
+It contains the swap branch from lines 6785–6845 and the drop branch from lines 6747–6781 (minus the `setDays` / toast / queryClient calls). The caller in `EditorialItinerary.tsx` becomes:
 
-### 3. Reconciliation guard (dev assertion)
+```ts
+const { ok, updatedDays, reason } = applyBudgetSuggestion(days, suggestion);
+if (!ok) { /* existing toasts based on reason */ return false; }
+setDays(updatedDays);
+syncBudgetFromDays(updatedDays);
+queryClient.invalidateQueries(...);
+return true;
+```
 
-Add a `useEffect` in `EditorialItinerary` that compares
-`Σ byDay[d].totalCents (d ≥ 1) + day0Cents` against `tripTotalCents`.
-If they disagree by more than 1 cent, `console.warn` with both totals and the per-day vector. This catches future regressions silently introduced by the snapshot or repair pipeline.
+No behavior change — just lifts the deterministic part out so it is unit-testable and the inline handler stays thin.
 
-### 4. No backend changes
+### 2. Unit tests for the pure logic
 
-`activity_costs` already carries `day_number`, the snapshot already tracks `canonicalHotelCents` / `canonicalFlightCents` / misc reserve. The fix is entirely in the React layer plus passing one prop into `DayCard`. No migration, no edge function changes.
+`src/components/itinerary/__tests__/budgetSwapApply.test.ts` covers:
+
+- **Swap success** — current cost > new cost: title, name, description replaced; cost.amount lowered; `cost.basis` preserved; bookingUrl/viatorProductCode/vendorPrice cleared.
+- **Swap blocked** — new ≥ current returns `{ ok: false, reason: 'cost-not-lower' }` and leaves days untouched.
+- **Drop success** — activity removed from the matching day; other days untouched.
+- **Drop with cross-day stale `day_number`** — suggestion's `day_number` is wrong; `resolveDropTarget` still finds the activity on another day and removes it.
+- **Drop not found** — returns `{ ok: false, reason: 'not-found' }`.
+- **Meal-time coherence** — verifies `enforceMealTimeCoherence` is applied to swapped title for evening slots.
+
+### 3. Integration test for the apply → sync → refetch chain
+
+`src/components/planner/budget/__tests__/budgetCoachApply.integration.test.tsx` mounts `<BudgetCoach />` with:
+
+- A handcrafted `suggestions` array seeded into the in-memory `suggestionsCache` so we bypass the edge-function fetch.
+- A spy `onApplySuggestion` that resolves `true` after a 1-tick delay.
+
+It then:
+
+1. Asserts an Apply button is rendered for the seeded suggestion.
+2. Fires `userEvent.click(applyButton)`.
+3. Asserts `onApplySuggestion` was called with the seeded suggestion exactly once.
+4. Asserts the suggestion is removed from the visible list (covers the post-apply prune at line 759).
+5. Asserts a success toast is fired and the suggestion does not reappear after a re-render (cache-prune coverage).
+
+A second case calls the spy with `Promise.resolve(false)` and asserts the suggestion **stays** in the list and an error toast is fired (covers the failure branch at line 744).
+
+### 4. Manual reproducibility note
+
+Add a paragraph to `docs/QA-BUDGET-COACH.md` (new file) listing the manual smoke steps for QA: open a trip with `currentTotalCents > budgetTargetCents`, scroll Coach, click Apply on a swap, watch trip-total badge drop, switch to Payments tab and confirm the row reflects the new title + cost. This documents the human path that the automated tests now cover deterministically.
 
 ## Files
 
-- `src/components/itinerary/EditorialItinerary.tsx` — lift `useTripDayBreakdown`, replace `getDayTotalCost` consumer in `DayCard`, add the trip-level row + reconciliation guard.
-- `src/hooks/useTripDayBreakdown.ts` — expose `dayNumber` on `DayBreakdownRow` (currently attached as `any`); minor typing tidy.
-- (Optional) `src/components/itinerary/TripTotalDeltaIndicator.tsx` — render the "Hotel, flight & reserve" line if it's the right host; otherwise inline near the existing total badge.
+- `src/components/itinerary/budgetSwapApply.ts` (new) — pure logic extracted from `EditorialItinerary.tsx`.
+- `src/components/itinerary/EditorialItinerary.tsx` — replace inline body of `onApplyBudgetSwap` with a call to `applyBudgetSuggestion`. Keeps existing toasts and `syncBudgetFromDays` call.
+- `src/components/itinerary/__tests__/budgetSwapApply.test.ts` (new) — unit tests.
+- `src/components/planner/budget/__tests__/budgetCoachApply.integration.test.tsx` (new) — UI integration test through `BudgetCoach`.
+- `docs/QA-BUDGET-COACH.md` (new) — manual repro checklist.
 
 ## Out of scope
 
-- Reworking `getDayTotalCost` callers outside of `DayCard` (e.g. exports, share view) — they continue using the JSON-derived calc until a follow-up unifies them.
-- Changing how hotel/flight rows are persisted (still `day_number = 0`).
+- Edge function (`budget-coach-suggestions`) test coverage — separate concern.
+- Mocking the entire `syncBudgetFromDays` Supabase write path; the integration test asserts the Coach side only and the parent wiring is asserted by the unit test on the extracted function.
