@@ -508,6 +508,8 @@ export interface EditorialItineraryProps {
   tripHealthPanel?: React.ReactNode;
   /** Parent dispatches a request (with nonce) to refresh a specific day */
   refreshDayRequest?: { dayNumber: number; nonce: number } | null;
+  /** Parent dispatches a deterministic timing-fix request for a day */
+  fixTimingRequest?: { dayNumber: number; nonce: number } | null;
 }
 
 // =============================================================================
