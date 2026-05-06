@@ -1,79 +1,79 @@
-# Fix: Day title doesn't reflect actual activities
+# Reconcile Day Totals → Trip Total
 
 ## Problem
 
-Day titles (the `theme` / `title` field on a generated day) are produced by the model in the same call that generates the activity list. There is no post-generation check that the title's stated theme or neighborhood actually matches what's in `activities[]`. Result: a day titled "Latin Quarter & Left Bank" can ship with a Marais brunch, a Tuileries afternoon, and an 8th-arrondissement dinner — none of which match the title.
+The €2,035 gap comes from three independent sources of truth that report different things:
 
-Locations of relevant code:
+| Surface | Source | Includes |
+|---|---|---|
+| **Trip total badge** (header) | `useTripFinancialSnapshot` → `activity_costs` table | Activity rows + day-0 hotel/flight + misc reserve + manual-payment overrides + orphan filter |
+| **Per-day badge** (Day card) | `getDayTotalCost` → `itinerary_data.days[].activities` JSON, per-person | Confirmed-cost activities only; **excludes** estimates, hotel, flight, misc reserve, transit micro-rows that aren't on cards, day-0 logistics |
+| **Budget tab** | `useTripDayBreakdown` → `activity_costs` table | Everything in snapshot, grouped by `day_number` |
 
-- Day title field schema: `generation-core.ts:1259-1260` (`title`, `theme` strings, no constraints)
-- Title cleanup pass (only fixes orphan articles): `action-generate-day.ts:662-668` and `action-generate-trip-day.ts:1498-1505`
-- Day card render: `CustomerDayCard.tsx:375` reads `day.theme`
-- No existing coherence/relabel logic — `rg` for "title.*coherence" finds nothing
+So summing the visible day badges and comparing to the trip total is guaranteed to drift by:
 
-## Approach
+1. **Hotel + flight + misc reserve** — booked at `day_number = 0`, attributed to no day card.
+2. **Estimated-cost activities** — excluded from day badge, included in trip total whenever `activity_costs` has a row.
+3. **Per-person vs group cost** — day badge renders the per-person figure (`/pp` suffix), trip total is group cost.
+4. **Orphan filter mismatch** — snapshot drops `activity_costs` rows whose `activity_id` is missing from live JSON; day badge sums whatever is in JSON, including activities that may not have a cost row yet.
+5. **Manual payment override delta** — applied only in snapshot, never visible per-day.
 
-Add a deterministic post-generation **title-coherence pass** that runs after the day's activities are finalized (after dedup, repair, and the existing orphan-article cleanup) and either keeps the AI's title or replaces it with a content-derived label. This avoids a second LLM call and keeps cost flat.
+Users see "the math doesn't add up" because nothing in the UI exposes items 1, 4, or 5.
 
-### Algorithm
+## Fix — single canonical day source + a visible "Trip-level" line
 
-For each generated day with at least 3 activities:
+Make day badges read from the same table the trip total reads from, then surface the unallocated bucket as its own line so the arithmetic always closes.
 
-1. **Extract content signal** from non-logistics activities (skip transport, accommodation, hotel returns, freshen-ups, check-ins, departures):
-   - Collect `neighborhood` values (from `act.neighborhood` and `act.location.neighborhood`).
-   - Collect notable venue names (museums, parks, headline activity).
-   - Detect dominant vibe tags from category mix (food-heavy, museum-heavy, shopping, etc.).
+### 1. Day card badge: switch to `useTripDayBreakdown`
 
-2. **Score AI title against content**:
-   - Tokenize title (lowercased, stripped of stopwords like "day", "of", "the", "&").
-   - Coherent if **any** title token matches a neighborhood token, a venue name token, or a category-keyword (e.g., "art" + ≥2 cultural activities, "food" + ≥3 dining, "market" + market activity present, "old town"/"historic" + activities in the historic district).
-   - Also coherent if the title is generic-but-honest ("Arrival in Paris", "Departure Day", "Free Day", "Day 4 in Paris") — match against a small allow-list.
+In `src/components/itinerary/EditorialItinerary.tsx`:
 
-3. **If incoherent, regenerate title locally**:
-   - Pick the dominant neighborhood (most-activity-count among non-logistics).
-   - Pick the headline activity (highest-rank cultural/sightseeing or splurge dinner).
-   - Compose: `"<Neighborhood> & <Headline>"` or, when only one signal is strong, `"<Headline> in <City>"` or `"<Neighborhood> Wander"`.
-   - Fallback to `"Day N in <City>"` if no signal is extractable.
+- Lift one `useTripDayBreakdown(tripId, visibleActivityIds)` call into `EditorialItinerary` (alongside the existing `useTripFinancialSnapshot`) and pass `byDay[dayNumber]` into each `DayCard` via props.
+- Inside `DayCard`, when `byDay[day.dayNumber]` is present, prefer `breakdown.totalCents / 100` over `getDayTotalCost(...)` for the badge. Fall back to the JS calc only while the hook is loading or for clean previews.
+- Group cost is already in `totalUsdCents` — drop the misleading `/pp` suffix when we use the snapshot value (or divide by `travelers` when `travelers > 1` if we want to keep the per-person UI; either way the sum-of-days will match the snapshot).
+- Replace the existing tooltip rows (Activities / Airport / Local transit) with `breakdown.visibleCents` + `breakdown.otherCents`, where `otherCents` is rendered as "Transit & fees" with the existing `breakdown.otherRows` available for an optional expansion.
 
-4. **Mirror the new title to both `day.title` and `day.theme`** (UI reads `theme`; we keep both in sync, matching existing `generatedDay.title || generatedDay.theme` patterns).
+### 2. New "Trip-level costs" row in the trip total breakdown
 
-5. **Log every rewrite** with the old title, new title, and signal used (for QA + future tuning).
+In the same file, build a `tripLevelCents` value from the snapshot:
 
-### Where to wire it
+```text
+tripLevelCents = tripTotalCents − Σ byDay[d].totalCents     (for d ≥ 1)
+```
 
-A single new utility, `pipeline/coherence-day-title.ts`, exporting `enforceDayTitleCoherence(day, { city })`. Called from:
+This bucket is exactly Day-0 logistics (hotel, flight, transfers tagged `day_number = 0`), the unspent misc reserve, and the manual-payment override delta. Render it as a single line below the day list inside `TripTotalDeltaIndicator` / wherever the header total is expanded:
 
-- `action-generate-day.ts` immediately after the existing orphan-article cleanup at line 668 (single-day generation).
-- `action-generate-trip-day.ts` immediately after the existing cleanup at line 1505 (multi-day batch).
-- `generation-core.ts:1485` (`generatedDay.title = generatedDay.title || ...`) — call right after the fallback assignment so theme/title stay aligned.
+```text
+Day 1   $410
+Day 2   $295
+…
+Day 7   $380
+─────────────
+Days subtotal   $2,140
+Hotel, flight & reserve   $2,035
+─────────────
+Trip total   $4,175   ✓
+```
 
-### What stays unchanged
+If the toggles `budget_include_hotel` / `budget_include_flight` are off, the row label collapses to "Reserve & adjustments".
 
-- The model still produces day titles on the first pass; this layer only repairs incoherent ones.
-- Day numbering, dates, and activity content are untouched.
-- No prompt changes; we don't need to retrain the model — we sanity-check its output.
+### 3. Reconciliation guard (dev assertion)
 
-## Tests
+Add a `useEffect` in `EditorialItinerary` that compares
+`Σ byDay[d].totalCents (d ≥ 1) + day0Cents` against `tripTotalCents`.
+If they disagree by more than 1 cent, `console.warn` with both totals and the per-day vector. This catches future regressions silently introduced by the snapshot or repair pipeline.
 
-New `pipeline/coherence-day-title.test.ts` covering:
+### 4. No backend changes
 
-- Title "Latin Quarter & Left Bank" + activities all in 8th arr → relabels to neighborhood-derived title.
-- Title "Marais Stroll" + ≥2 activities in Marais → kept.
-- Title "Day 4" (generic) + 3 museum activities → upgraded to "Museum Day in Paris".
-- Empty/missing title → produces non-empty title from content.
-- Logistics-only fragments (arrival day) → keeps simple "Arrival in Paris".
-
-## Memory
-
-Add a new memory `mem://technical/itinerary/day-title-coherence` and link it from `mem://index.md` so future passes know titles are sanity-checked against content.
+`activity_costs` already carries `day_number`, the snapshot already tracks `canonicalHotelCents` / `canonicalFlightCents` / misc reserve. The fix is entirely in the React layer plus passing one prop into `DayCard`. No migration, no edge function changes.
 
 ## Files
 
-- New: `supabase/functions/generate-itinerary/pipeline/coherence-day-title.ts`
-- New: `supabase/functions/generate-itinerary/pipeline/coherence-day-title.test.ts`
-- Edit: `supabase/functions/generate-itinerary/action-generate-day.ts` (one call site)
-- Edit: `supabase/functions/generate-itinerary/action-generate-trip-day.ts` (one call site)
-- Edit: `supabase/functions/generate-itinerary/generation-core.ts` (one call site)
-- New memory file + `mem://index.md` update
+- `src/components/itinerary/EditorialItinerary.tsx` — lift `useTripDayBreakdown`, replace `getDayTotalCost` consumer in `DayCard`, add the trip-level row + reconciliation guard.
+- `src/hooks/useTripDayBreakdown.ts` — expose `dayNumber` on `DayBreakdownRow` (currently attached as `any`); minor typing tidy.
+- (Optional) `src/components/itinerary/TripTotalDeltaIndicator.tsx` — render the "Hotel, flight & reserve" line if it's the right host; otherwise inline near the existing total badge.
 
-No DB migration. No client changes (UI already reads `day.theme`).
+## Out of scope
+
+- Reworking `getDayTotalCost` callers outside of `DayCard` (e.g. exports, share view) — they continue using the JSON-derived calc until a follow-up unifies them.
+- Changing how hotel/flight rows are persisted (still `day_number = 0`).
