@@ -1809,5 +1809,6 @@ IMPORTANT: Pick DIFFERENT restaurants/activities than listed above. Do not repea
     dayConstraints,
     flightContext,
     lockedCards: lockedCardsForDay,
+    effectiveTraitScores,
   };
 }
