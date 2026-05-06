@@ -57,7 +57,19 @@ const SYSTEM_PREFIXES = [
  * @param name - The raw activity name that may contain system prefixes
  * @returns Clean activity name suitable for display
  */
-export function sanitizeActivityName(name: string | undefined | null): string {
+export interface SanitizeActivityNameOpts {
+  /** Activity category — when dining/food/restaurant, AI stub names are masked */
+  category?: string;
+  /** Optional explicit meal type to label the fallback */
+  mealType?: import('./stubVenueDetection').MealType | null;
+  /** Optional start time (HH:MM) used to infer meal type when not provided */
+  startTime?: string | null;
+}
+
+export function sanitizeActivityName(
+  name: string | undefined | null,
+  opts?: SanitizeActivityNameOpts,
+): string {
   if (!name) return 'Activity';
   
   // Strip stray CJK characters injected by AI models (e.g. 旋)
