@@ -654,15 +654,18 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                     size="sm"
                     variant="outline"
                     className="h-8 text-xs"
-                    onClick={() =>
-                      applyRaiseBudget(budgetCents, suggested, {
+                    onClick={async () => {
+                      const res = await applyRaiseBudget(budgetCents, suggested, {
                         updateSettings: (s) => updateSettings(s),
                         dispatchBookingChanged: () =>
                           window.dispatchEvent(new CustomEvent('booking-changed')),
                         toast,
                         formatCurrency,
-                      })
-                    }
+                      });
+                      if (res.ok && typeof res.previousBudgetCents === 'number') {
+                        setLastRaise({ fromCents: res.previousBudgetCents, toCents: suggested });
+                      }
+                    }}
                   >
                     Raise budget to {formatCurrency(suggested)}
                   </Button>
