@@ -94,11 +94,25 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     ) || 0;
 
     // Build the live activity ID set from the rendered itinerary JSON.
+    // Also count "meaningful" activities (excluding hotel/logistics rituals)
+    // so we can suppress the misc-reserve contribution on empty itineraries —
+    // otherwise Trip Expenses inflates beyond what the itinerary contains.
     const liveActivityIds = new Set<string>();
+    let meaningfulActivityCount = 0;
+    const NON_MEANINGFUL_CATEGORIES = new Set([
+      'hotel', 'flight', 'accommodation', 'lodging', 'stay',
+      'check-in', 'check-out', 'bag-drop', 'departure', 'arrival',
+    ]);
+    const NON_MEANINGFUL_TITLE_RE = /check\s*-?\s*in|check\s*-?\s*out|bag\s*-?\s*drop|return\s+to\s+(?:your\s+)?hotel|hotel\s+check(?:in|out)|airport\s+transfer|departure/i;
     const days = ((tripData as any)?.itinerary_data?.days) || [];
     for (const day of days) {
       for (const a of (day?.activities || [])) {
         if (a?.id) liveActivityIds.add(String(a.id));
+        const cat = String(a?.category || '').toLowerCase().trim();
+        const title = String(a?.title || a?.name || '');
+        if (NON_MEANINGFUL_CATEGORIES.has(cat)) continue;
+        if (NON_MEANINGFUL_TITLE_RE.test(title)) continue;
+        meaningfulActivityCount++;
       }
     }
 
