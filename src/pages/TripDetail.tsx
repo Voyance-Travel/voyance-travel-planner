@@ -1397,10 +1397,7 @@ export default function TripDetail() {
                       });
                     } catch (saveErr) {
                       console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
-                      await supabase.from('trips').update({
-                        itinerary_data: mergedFresh as any,
-                        updated_at: new Date().toISOString(),
-                      }).eq('id', tripId!);
+                      await safeUpdateItineraryData(tripId!, mergedFresh);
                     }
                     queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
                     setIncompleteDays(unresolvedDays);
