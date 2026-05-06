@@ -576,7 +576,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       {/* Original-vs-current budget banner — surfaces budget raises so they
           don't silently persist across regenerations. */}
       {(() => {
-        const alloc = settings?.budget_allocations as Record<string, unknown> | undefined;
+        const alloc = settings?.budget_allocations as unknown as Record<string, unknown> | undefined;
         const originalCents = typeof alloc?.original_total_cents === 'number'
           ? (alloc.original_total_cents as number)
           : null;
