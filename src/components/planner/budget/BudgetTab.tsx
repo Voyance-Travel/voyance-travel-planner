@@ -56,6 +56,8 @@ import { rateDisclosure } from '@/lib/currency';
 import { assessBudgetFit, formatMultiplier } from '@/lib/budget-realism';
 import { supabase } from '@/integrations/supabase/client';
 import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
+import { toast } from 'sonner';
+import { applyRaiseBudget } from './raiseBudgetApply';
 
 interface ItineraryActivity {
   id: string;
@@ -649,10 +651,15 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                     size="sm"
                     variant="outline"
                     className="h-8 text-xs"
-                    onClick={async () => {
-                      await updateSettings({ budget_total_cents: suggested });
-                      window.dispatchEvent(new CustomEvent('booking-changed'));
-                    }}
+                    onClick={() =>
+                      applyRaiseBudget(budgetCents, suggested, {
+                        updateSettings: (s) => updateSettings(s),
+                        dispatchBookingChanged: () =>
+                          window.dispatchEvent(new CustomEvent('booking-changed')),
+                        toast,
+                        formatCurrency,
+                      })
+                    }
                   >
                     Raise budget to {formatCurrency(suggested)}
                   </Button>

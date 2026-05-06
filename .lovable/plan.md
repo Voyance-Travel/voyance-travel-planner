@@ -1,97 +1,93 @@
-# Verify Budget Coach Apply End-to-End
+# Validate the "Raise budget to $X" CTA
 
-## Findings
+## Problem
 
-The Apply path is wired but never asserted by a test. The chain is:
+The inline "Raise budget to $X" button in `BudgetTab.tsx` (line 648) has never been verified end-to-end. Today the click handler is an inline closure:
 
-```text
-BudgetCoach.handleApply(s)
-  → onApplySuggestion(s)                     [BudgetTab prop]
-  → onApplyBudgetSwap(s)                     [EditorialItinerary inline handler, lines 6741-6861]
-      ├ swap path:  setDays(...)             — replaces title / cost (strict-lower guard)
-      └ drop path:  resolveDropTarget + setDays(...)  — removes activity
-  → syncBudgetFromDays(updated)              [lines 1301-1422]
-      ├ syncActivitiesToCostTable            — UPSERTs activity_costs rows
-      ├ cleanupRemovedActivityCosts          — deletes orphan rows for dropped activities
-      └ dispatchEvent('booking-changed')     — refetch trigger
-  → queryClient.invalidateQueries(...)       — Budget allocations / summary / ledger
-
-Listeners:
-  • useTripFinancialSnapshot   → refetches trip total, paid, budget remaining
-  • useTripDayBreakdown        → refetches per-day totals (header + day badges)
-  • BudgetTab                  → fetchPaymentsForBudget()
-  • PaymentsTab                → mounted with same activity_costs source
+```tsx
+onClick={async () => {
+  await updateSettings({ budget_total_cents: suggested });
+  window.dispatchEvent(new CustomEvent('booking-changed'));
+}}
 ```
 
-Logic is correct, but **not a single automated test exercises it**. The risk is real: the handler is a 120-line closure inside an 11k-line file and depends on `setDays`, `resolveDropTarget`, `enforceMealTimeCoherence`, and the canonical pricing engine inside `syncBudgetFromDays`.
+This calls `useTripBudget.updateSettings` → `updateTripBudgetSettings(tripId, …)` → invalidates `tripBudgetSettings`, `tripBudgetSummary`, `tripBudgetAllocations`, then dispatches `booking-changed`. The path looks correct but is untested, and there is no toast confirming the change (unlike `setBudget`, which does toast).
 
 ## Plan
 
-### 1. Extract pure swap logic to a testable module
+Mirror what we did for the Coach "Apply" path: extract the handler into a pure, testable helper, cover it with unit tests, and add a React integration test for the button.
 
-Create `src/components/itinerary/budgetSwapApply.ts` exporting a single pure function:
+### 1. Extract pure handler
 
-```ts
-applyBudgetSuggestion(
-  days: EditorialDay[],
-  suggestion: BudgetSuggestion,
-): { ok: boolean; updatedDays: EditorialDay[]; reason?: 'not-found' | 'cost-not-lower' | 'stale' }
-```
-
-It contains the swap branch from lines 6785–6845 and the drop branch from lines 6747–6781 (minus the `setDays` / toast / queryClient calls). The caller in `EditorialItinerary.tsx` becomes:
+New file `src/components/planner/budget/raiseBudgetApply.ts`:
 
 ```ts
-const { ok, updatedDays, reason } = applyBudgetSuggestion(days, suggestion);
-if (!ok) { /* existing toasts based on reason */ return false; }
-setDays(updatedDays);
-syncBudgetFromDays(updatedDays);
-queryClient.invalidateQueries(...);
-return true;
+export interface RaiseBudgetDeps {
+  updateSettings: (s: { budget_total_cents: number }) => Promise<void>;
+  dispatchBookingChanged: () => void;
+  toast: { success: (msg: string) => void; error: (msg: string) => void };
+  formatCurrency: (cents: number) => string;
+}
+
+export async function applyRaiseBudget(
+  currentBudgetCents: number,
+  suggestedCents: number,
+  deps: RaiseBudgetDeps,
+): Promise<{ ok: boolean; reason?: string }> {
+  if (!Number.isFinite(suggestedCents) || suggestedCents <= 0)
+    return { ok: false, reason: 'invalid_suggestion' };
+  if (suggestedCents <= currentBudgetCents)
+    return { ok: false, reason: 'not_higher' };
+  try {
+    await deps.updateSettings({ budget_total_cents: suggestedCents });
+    deps.dispatchBookingChanged();
+    deps.toast.success(`Budget raised to ${deps.formatCurrency(suggestedCents)}`);
+    return { ok: true };
+  } catch {
+    deps.toast.error('Failed to raise budget');
+    return { ok: false, reason: 'mutation_failed' };
+  }
+}
 ```
 
-No behavior change — just lifts the deterministic part out so it is unit-testable and the inline handler stays thin.
+### 2. Wire `BudgetTab` to use the helper
 
-### 2. Unit tests for the pure logic
+Replace the inline closure (lines 652–655) with `applyRaiseBudget(budgetCents, suggested, { updateSettings, dispatchBookingChanged, toast, formatCurrency })`. This also adds a success toast — currently missing — so users get feedback that the raise persisted.
 
-`src/components/itinerary/__tests__/budgetSwapApply.test.ts` covers:
+### 3. Unit tests
 
-- **Swap success** — current cost > new cost: title, name, description replaced; cost.amount lowered; `cost.basis` preserved; bookingUrl/viatorProductCode/vendorPrice cleared.
-- **Swap blocked** — new ≥ current returns `{ ok: false, reason: 'cost-not-lower' }` and leaves days untouched.
-- **Drop success** — activity removed from the matching day; other days untouched.
-- **Drop with cross-day stale `day_number`** — suggestion's `day_number` is wrong; `resolveDropTarget` still finds the activity on another day and removes it.
-- **Drop not found** — returns `{ ok: false, reason: 'not-found' }`.
-- **Meal-time coherence** — verifies `enforceMealTimeCoherence` is applied to swapped title for evening slots.
+`src/components/planner/budget/__tests__/raiseBudgetApply.test.ts` covering:
 
-### 3. Integration test for the apply → sync → refetch chain
+- happy path: suggested > current → `updateSettings` called with `{ budget_total_cents: suggested }`, dispatcher fired, success toast, returns `{ ok: true }`
+- guard: suggested ≤ current → mutation NOT called, returns `{ ok: false, reason: 'not_higher' }`
+- guard: invalid (0/NaN) suggestion → no-op, `invalid_suggestion`
+- error path: `updateSettings` rejects → error toast, `mutation_failed`
 
-`src/components/planner/budget/__tests__/budgetCoachApply.integration.test.tsx` mounts `<BudgetCoach />` with:
+### 4. Integration test
 
-- A handcrafted `suggestions` array seeded into the in-memory `suggestionsCache` so we bypass the edge-function fetch.
-- A spy `onApplySuggestion` that resolves `true` after a 1-tick delay.
+`src/components/planner/budget/__tests__/budgetRaiseCta.integration.test.tsx`:
 
-It then:
+- render `BudgetTab` with mocked `useTripBudget` returning a budget that triggers the over-budget banner and a `fit.suggestedBudgetCents` higher than current
+- click "Raise budget to …" button
+- assert `updateSettings` was called with the suggested cents
+- assert `booking-changed` event fired (spy on `window.dispatchEvent`)
+- assert success toast appeared
 
-1. Asserts an Apply button is rendered for the seeded suggestion.
-2. Fires `userEvent.click(applyButton)`.
-3. Asserts `onApplySuggestion` was called with the seeded suggestion exactly once.
-4. Asserts the suggestion is removed from the visible list (covers the post-apply prune at line 759).
-5. Asserts a success toast is fired and the suggestion does not reappear after a re-render (cache-prune coverage).
+Mocks follow the existing pattern from `budgetCoachApply.integration.test.tsx`.
 
-A second case calls the spy with `Promise.resolve(false)` and asserts the suggestion **stays** in the list and an error toast is fired (covers the failure branch at line 744).
+### 5. QA checklist
 
-### 4. Manual reproducibility note
-
-Add a paragraph to `docs/QA-BUDGET-COACH.md` (new file) listing the manual smoke steps for QA: open a trip with `currentTotalCents > budgetTargetCents`, scroll Coach, click Apply on a swap, watch trip-total badge drop, switch to Payments tab and confirm the row reflects the new title + cost. This documents the human path that the automated tests now cover deterministically.
+Append a "Raise budget CTA" section to `docs/QA-BUDGET-COACH.md` (or create `docs/QA-BUDGET.md`): trigger over-budget state → click Raise → verify (a) total updates in header, (b) percentages recalc, (c) banner disappears, (d) refresh persists.
 
 ## Files
 
-- `src/components/itinerary/budgetSwapApply.ts` (new) — pure logic extracted from `EditorialItinerary.tsx`.
-- `src/components/itinerary/EditorialItinerary.tsx` — replace inline body of `onApplyBudgetSwap` with a call to `applyBudgetSuggestion`. Keeps existing toasts and `syncBudgetFromDays` call.
-- `src/components/itinerary/__tests__/budgetSwapApply.test.ts` (new) — unit tests.
-- `src/components/planner/budget/__tests__/budgetCoachApply.integration.test.tsx` (new) — UI integration test through `BudgetCoach`.
-- `docs/QA-BUDGET-COACH.md` (new) — manual repro checklist.
+- `src/components/planner/budget/raiseBudgetApply.ts` (new)
+- `src/components/planner/budget/BudgetTab.tsx` (swap inline closure)
+- `src/components/planner/budget/__tests__/raiseBudgetApply.test.ts` (new)
+- `src/components/planner/budget/__tests__/budgetRaiseCta.integration.test.tsx` (new)
+- `docs/QA-BUDGET-COACH.md` (append section)
 
 ## Out of scope
 
-- Edge function (`budget-coach-suggestions`) test coverage — separate concern.
-- Mocking the entire `syncBudgetFromDays` Supabase write path; the integration test asserts the Coach side only and the parent wiring is asserted by the unit test on the extracted function.
+- Changing what `suggestedBudgetCents` resolves to (existing fit logic stays).
+- Touching the Coach's two other "Raise budget to X" buttons in `BudgetCoach.tsx` — they already go through the Coach apply pipeline and have their own coverage. If you want, I can fold them onto the same helper in a follow-up.
