@@ -2457,9 +2457,13 @@ export function EditorialItinerary({
       const result = fixDayTiming(day.activities as any[]);
       if (result.success) {
         setDays(prev => prev.map((d, i) => i === idx ? { ...d, activities: result.activities as any } : d));
+        setHasChanges(true);
         toast.success(
           `Resolved ${result.resolvedCount} timing conflict${result.resolvedCount === 1 ? '' : 's'} on Day ${day.dayNumber}`
         );
+        // Re-run refresh validation so the Trip Health panel updates to "no issues"
+        // (otherwise the warning lingers even after a successful fix).
+        setTimeout(() => { handleRefreshDay(idx); }, 50);
       } else if (result.reason === 'day_overflow') {
         toast.warning(`Day ${day.dayNumber} is too packed to auto-space — opening review.`);
         setSelectedDayIndex(idx);

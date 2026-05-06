@@ -3888,32 +3888,41 @@ function repairBookends(
 
     // === FINAL SEQUENTIAL ENFORCEMENT ===
     // Safety net: catch any overlaps introduced by bookend repairs, transit injection, etc.
+    // Also enforce a 5-min buffer between non-transit, distinct-venue activities so the
+    // UI's Trip Health checker (which warns on <5min gaps) doesn't immediately re-flag
+    // freshly generated days.
+    const TRANSIT_CATS_FE = new Set(['transit', 'transport', 'transportation', 'transfer', 'walking', 'taxi', 'rideshare', 'metro']);
+    const isTransitFE = (a: any) => TRANSIT_CATS_FE.has(String(a?.category || a?.type || '').toLowerCase());
     for (let i = 1; i < deduped.length; i++) {
       const prev = deduped[i - 1];
       const curr = deduped[i];
       const prevEndMin = parseTimeToMinutes(prev.endTime);
       const currStartMin = parseTimeToMinutes(curr.startTime);
-      if (prevEndMin != null && currStartMin != null && currStartMin < prevEndMin) {
-        const overlap = prevEndMin - currStartMin;
-        // Push current (and all subsequent) forward by the overlap
-        for (let j = i; j < deduped.length; j++) {
-          const a = deduped[j];
-          const sMin = parseTimeToMinutes(a.startTime);
-          const eMin = parseTimeToMinutes(a.endTime);
-          if (sMin != null) {
-            const dur = (eMin != null) ? eMin - sMin : 0;
-            a.startTime = minutesToHHMM(sMin + overlap);
-            if (eMin != null) a.endTime = minutesToHHMM(sMin + overlap + dur);
-          }
+      if (prevEndMin == null || currStartMin == null) continue;
+
+      const needsBuffer = !isTransitFE(prev) && !isTransitFE(curr);
+      const minGap = needsBuffer ? 5 : 0;
+      const gap = currStartMin - prevEndMin;
+      if (gap >= minGap) continue;
+
+      const shift = minGap - gap; // amount to push current (and subsequent) forward
+      for (let j = i; j < deduped.length; j++) {
+        const a = deduped[j];
+        const sMin = parseTimeToMinutes(a.startTime);
+        const eMin = parseTimeToMinutes(a.endTime);
+        if (sMin != null) {
+          const dur = (eMin != null) ? eMin - sMin : 0;
+          a.startTime = minutesToHHMM(sMin + shift);
+          if (eMin != null) a.endTime = minutesToHHMM(sMin + shift + dur);
         }
-        console.log(`[TIME-FIX] Pushed "${curr.title}" forward ${overlap}min (was overlapping with "${prev.title}")`);
-        repairs.push({
-          code: FAILURE_CODES.TIME_OVERLAP,
-          action: 'sequential_enforcement_push',
-          before: `${curr.title} started at ${minutesToHHMM(currStartMin)}`,
-          after: `pushed to ${curr.startTime}`,
-        });
       }
+      console.log(`[TIME-FIX] Pushed "${curr.title}" forward ${shift}min (gap was ${gap}, need ${minGap})`);
+      repairs.push({
+        code: FAILURE_CODES.TIME_OVERLAP,
+        action: 'sequential_enforcement_push',
+        before: `${curr.title} started at ${minutesToHHMM(currStartMin)}`,
+        after: `pushed to ${curr.startTime}`,
+      });
     }
 
     return { activities: deduped, repairs };
