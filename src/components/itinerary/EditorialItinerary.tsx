@@ -6267,7 +6267,7 @@ export function EditorialItinerary({
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
 
-                <div className="flex-1 overflow-x-auto scrollbar-hide">
+                <div ref={dayPickerScrollRef} className="flex-1 overflow-x-auto scrollbar-hide">
                   <div className="flex gap-1.5" data-tour="day-picker">
                     {days.map((day, index) => {
                       // Check if day has real (non-structural) activities
