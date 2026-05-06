@@ -5461,7 +5461,7 @@ export function EditorialItinerary({
        </div>}
 
        {/* In clean preview, force itinerary tab and skip AnimatePresence wrapper */}
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="popLayout" initial={false}>
         {activeTab === 'itinerary' && (
           <motion.div
             key="itinerary"

@@ -1,52 +1,39 @@
-## Goal
+## Root cause
 
-Make the action buttons on Trip Health critical-issue rows ("Fix timing" + "Review") permanently visible, properly sized for touch, and accessible — no hover-dependence on any device.
+Tab content in `src/components/itinerary/EditorialItinerary.tsx` is wrapped in a single `<AnimatePresence mode="wait">` (L5464) that gates ~6 sibling `motion.div` blocks on `activeTab === '...'`.
 
-## Audit findings
+`mode="wait"` defers mounting the **next** child until the **previous** child's `exit` animation has fully resolved. The exit animations use only `exit={{ opacity: 0 }}` with no explicit transition. Combined with:
 
-In `src/components/trip/TripHealthPanel.tsx` (issue rows, ~L431–470):
-- Each issue row is wrapped in `group`, and buttons render unconditionally — but they sit at `h-6 px-2 text-[10px]` (24px tall, ~10px font). On mobile this is below the 44px tap target and the styling reads as "hover affordance only."
-- Button labels collapse against long messages because the row uses `flex items-start justify-between` without min-width protection.
-- No `aria-label` distinguishing per-day actions ("Fix timing on Day 2").
+- React 18 concurrent rendering batching the state update,
+- `NeedToKnowSection` being a heavy subtree (data fetches, multiple cards) whose unmount is not synchronous,
+- and the shared `layoutId="editorialItineraryTab"` underline animating on its own track,
 
-In `src/components/itinerary/EditorialItinerary.tsx` (no-travel-buffer banner, ~L9952–9970):
-- "Refresh Day" is rendered as an inline text-link inside a sentence — no button affordance, no minimum tap area.
+the underline updates immediately (not gated by AnimatePresence), but the new tab body waits for the exit to complete. In practice the exit promise can hang until the next interaction kicks the reconciler, so the user sees a "ghost" state requiring a second click.
 
-In `src/components/itinerary/DraggableActivityList.tsx` (L83):
-- Drag handle uses `sm:opacity-0 sm:group-hover:opacity-100`. Already mobile-safe (visible <sm), no change needed but worth noting.
+This is a known `mode="wait"` pitfall when the leaving subtree is expensive.
 
-## Changes
+## Fix
 
-### 1. `src/components/trip/TripHealthPanel.tsx`
+Switch tab content to `mode="popLayout"` (or remove `mode="wait"` entirely). This mounts the incoming tab immediately so content swaps on the first click, while still allowing the outgoing tab to fade out underneath. The underline animation already uses `layoutId` and works independently.
 
-- For issue rows (L431–470):
-  - Replace `h-6 px-2 text-[10px]` with `h-8 px-3 text-xs` on both the primary "Fix timing" button and the secondary "Review" button so they meet a comfortable tap size.
-  - Remove the `group` wrapper from the row (no longer needed — buttons are always visible).
-  - Switch row layout from `items-start` to a two-line stack on narrow widths: keep message + button on the same row at `sm:` and above; on mobile, wrap the buttons under the message (`flex-col sm:flex-row sm:items-center`).
-  - Add `aria-label={`${issue.fixLabel} on day ${issue.dayNumber}`}` to both buttons.
-  - Give the primary button a stronger affordance: switch from `variant="outline"` to `variant="default"` with `size="sm"` so the action is unmistakable on a critical (destructive-icon) row.
-  - Keep "Review" as `variant="ghost"` but add `underline-offset-2` and a visible focus ring via existing button defaults.
+### Change
 
-- For checklist rows (L378–415):
-  - Bump `h-6 px-2 text-[11px]` to `h-8 px-3 text-xs` on the inline fix button for consistency and touch.
+In `src/components/itinerary/EditorialItinerary.tsx` (L5464):
+- `<AnimatePresence mode="wait">` → `<AnimatePresence mode="popLayout" initial={false}>`
+  - `initial={false}` suppresses the entrance animation on first render so the initial tab doesn't fade in awkwardly.
+  - `popLayout` keeps the exiting child in flow visually while the new child mounts immediately, eliminating the double-click.
 
-### 2. `src/components/itinerary/EditorialItinerary.tsx` (no-travel-buffer banner ~L9952)
-
-- Replace the inline `<button class="…hover:underline…">Refresh Day</button>` with a real `<Button size="sm" variant="outline">` placed at the right of the row (or wrapped under the message on mobile). Keep the descriptive sentence but drop the inline-link pattern.
-
-### 3. Accessibility polish
-
-- Ensure both fix buttons are reachable via keyboard (they already are via `<Button>`); just confirm no `tabIndex={-1}` is added.
-- Confirm icons (`Zap`, `RefreshCw`) carry `aria-hidden` (lucide defaults are fine; verify after edit).
+If `popLayout` causes a brief overlap visual glitch, fallback alternative: drop AnimatePresence entirely for tab content and keep only the underline `layoutId` animation on the trigger row.
 
 ## Out of scope
 
-- Logic of `fix_timing` / `refresh_day` actions (already handled in prior work).
-- Health score weighting.
-- BudgetCoach styling.
+- Refactoring NeedToKnowSection performance.
+- Tab persistence / URL sync.
+- The mobile overflow dropdown (already works via direct state set).
 
 ## Verification
 
-- Visual check at mobile (375px) and desktop (1280px) widths: buttons visible without hover, tap targets ≥ 32px tall, message doesn't overlap buttons.
-- Keyboard tab through Trip Health → both buttons receive focus rings.
-- Click "Fix timing" still triggers `onAction('fix_timing', { dayNumber })`; "Review" still triggers `refresh_day`.
+1. Navigate to a trip → Need to Know tab → click Budget. Content must swap on the first click.
+2. Repeat in the other direction (Budget → Need to Know, Itinerary → Need to Know → Budget).
+3. Confirm the underline still slides smoothly between tabs.
+4. Confirm no console warnings from framer-motion about layout/keys.
