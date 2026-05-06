@@ -10608,24 +10608,26 @@ function DayCard({
 
               {/* Refresh Day Diff View */}
               {refreshResult && refreshResult.dayNumber === day.dayNumber && (
-                <RefreshDayDiffView
-                  dayNumber={day.dayNumber}
-                  proposedChanges={refreshResult.proposedChanges || []}
-                  issues={refreshResult.issues}
-                  transitEstimates={refreshResult.transitEstimates}
-                  buffers={refreshResult.buffers || []}
-                  onAcceptAll={(changes) => onApplyRefreshChanges?.(changes)}
-                  onAcceptSelected={(changes) => onApplyRefreshChanges?.(changes)}
-                  onDismiss={() => onDismissRefresh?.()}
-                  onFindAlternative={(activityId, _activityTitle) => {
-                    if (!onActivitySwap) return;
-                    const matchedActivity = day.activities.find(a => a.id === activityId);
-                    if (matchedActivity) {
-                      onActivitySwap(dayIndex, matchedActivity);
-                    }
-                  }}
-                  className="mt-3"
-                />
+                <div id={`refresh-diff-${day.dayNumber}`}>
+                  <RefreshDayDiffView
+                    dayNumber={day.dayNumber}
+                    proposedChanges={refreshResult.proposedChanges || []}
+                    issues={refreshResult.issues}
+                    transitEstimates={refreshResult.transitEstimates}
+                    buffers={refreshResult.buffers || []}
+                    onAcceptAll={(changes) => onApplyRefreshChanges?.(changes)}
+                    onAcceptSelected={(changes) => onApplyRefreshChanges?.(changes)}
+                    onDismiss={() => onDismissRefresh?.()}
+                    onFindAlternative={(activityId, _activityTitle) => {
+                      if (!onActivitySwap) return;
+                      const matchedActivity = day.activities.find(a => a.id === activityId);
+                      if (matchedActivity) {
+                        onActivitySwap(dayIndex, matchedActivity);
+                      }
+                    }}
+                    className="mt-3"
+                  />
+                </div>
               )}
             </div>
             )}
