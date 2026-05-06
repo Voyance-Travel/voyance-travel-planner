@@ -90,6 +90,7 @@ import { useTripBudget } from '@/hooks/useTripBudget';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 
 import { useTripFinancialSnapshot } from '@/hooks/useTripFinancialSnapshot';
+import { useTripDayBreakdown, type DayBreakdown } from '@/hooks/useTripDayBreakdown';
 import { resolveCountry } from '@/utils/cityCountryMap';
 import { useEntitlements, canViewPremiumContentForDay } from '@/hooks/useEntitlements';
 import { LockedPhotoPlaceholder } from './LockedPhotoPlaceholder';
