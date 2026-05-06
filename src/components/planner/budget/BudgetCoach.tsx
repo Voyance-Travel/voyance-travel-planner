@@ -622,8 +622,36 @@ export function BudgetCoach({
     );
   }
 
-  // ─── On-target state ──────────────────────────────────────────
+  // ─── On-target / close-to-budget states ───────────────────────
   if (!isOverBudget) {
+    const remainingCents = Math.max(0, budgetTargetCents - currentTotalCents);
+    const headroomPct = budgetTargetCents > 0 ? (remainingCents / budgetTargetCents) * 100 : 100;
+    const isCloseToBudget = headroomPct < 15;
+
+    if (isCloseToBudget) {
+      return (
+        <Card className={cn('border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20', className)}>
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="flex-1 space-y-1">
+                <p className="font-medium text-amber-900 dark:text-amber-100">You're close to your budget</p>
+                <p className="text-sm text-amber-800/90 dark:text-amber-200/90">
+                  Only {formatCurrency(remainingCents)} ({Math.round(headroomPct)}%) of your {formatCurrency(budgetTargetCents)} budget is left.
+                  Nice work staying on plan — keep an eye out for new bookings.
+                </p>
+                {onEditBudget && (
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-amber-900 dark:text-amber-100 hover:bg-amber-100/60 dark:hover:bg-amber-900/40 -ml-2 mt-1" onClick={onEditBudget}>
+                    Edit budget…
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
       <Card className={cn('border-emerald-200 dark:border-emerald-800', className)}>
         <CardContent className="py-4">
