@@ -380,11 +380,18 @@ export function BudgetCoach({
     async (force = false) => {
       if (!isOverBudget) return;
 
-      // ZERO-CANDIDATE GUARD: never call AI when there are no suggestable
-      // activities. This is the root cause of phantom suggestions on bare /
-      // hotel-only itineraries — without this guard, the cache or the AI
-      // fabricates restaurants from a previous generation.
-      if (suggestableCount === 0) {
+      // Belt-and-braces eligibility recheck — the upstream BudgetTab gate
+      // already filters degenerate trips, but any future caller (cache
+      // refresh, force-refetch) must obey the same single rule. This is the
+      // unified replacement for the older `suggestableCount === 0` partial
+      // guard which only covered the over-budget branch.
+      if (
+        !isCoachEligible({
+          days: itineraryDays as any,
+          tripStatus,
+          generationFailureReason,
+        })
+      ) {
         setSuggestions([]);
         setAllProtected(false);
         setError(null);
