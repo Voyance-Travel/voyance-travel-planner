@@ -3542,7 +3542,7 @@ export function EditorialItinerary({
     if (financialSnapshot.tripTotalCents <= 0) return;
     if (daysSubtotalCents > financialSnapshot.tripTotalCents + 1) {
       // eslint-disable-next-line no-console
-      console.warn('[EditorialItinerary] Day totals exceed trip total', {
+      console.warn('[Itinerary reconcile] Day totals exceed trip total', {
         tripTotalCents: financialSnapshot.tripTotalCents,
         daysSubtotalCents,
         diffCents: daysSubtotalCents - financialSnapshot.tripTotalCents,
@@ -5692,52 +5692,43 @@ export function EditorialItinerary({
                     </span>
                   )}
                 </div>
-                {(hotelCost > 0 || flightCost > 0) && (() => {
-                  const daysSubtotal = totalActivityCost * (travelers || 1);
-                  const nightsCount = (allHotels && allHotels.length > 0)
-                    ? allHotels.reduce((sum, h) => {
-                        if (h.checkInDate && h.checkOutDate) {
-                          return sum + Math.max(1, Math.ceil(
-                            (parseLocalDate(h.checkOutDate).getTime() - parseLocalDate(h.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
-                          ));
-                        }
-                        return sum;
-                      }, 0)
-                    : (hotelSelection?.nights ?? Math.max(1, days.length - 1));
-                  return (
-                    <div className="flex items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground flex-wrap justify-center">
-                      <span><span className="text-muted-foreground/70">Days</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(daysSubtotal), tripCurrency)}</span></span>
-                      {hotelCost > 0 && (
-                        <>
-                          <span className="text-muted-foreground/40">·</span>
-                          <span><span className="text-muted-foreground/70">Hotel</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(hotelCost), tripCurrency)}</span> <span className="text-muted-foreground/70">({nightsCount} {nightsCount === 1 ? 'night' : 'nights'})</span></span>
-                        </>
-                      )}
-                      {flightCost > 0 && (
-                        <>
-                          <span className="text-muted-foreground/40">·</span>
-                          <span><span className="text-muted-foreground/70">Flights</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(flightCost), tripCurrency)}</span></span>
-                        </>
-                      )}
-                    </div>
-                  );
-                })()}
-                {/* Reconciliation strip — exposes the unallocated bucket
-                    (Day-0 logistics + reserve + manual override delta) so the
-                    sum of day-card badges plus this line equals Trip Total. */}
-                {tripLevelCents > 0 && daysSubtotalCents > 0 && (() => {
-                  const daysSubUsd = daysSubtotalCents / 100;
+                {/* Unified reconciliation strip — itemised equation so the
+                    sum of day-card badges (group cost) plus hotel/flights/reserve
+                    visibly equals Trip Total. Renders whenever there's a trip
+                    total OR a multi-traveler /pp ↔ group bridge to explain. */}
+                {financialSnapshot.tripTotalCents > 0 && (tripLevelCents > 0 || daysSubtotalCents > 0) && (() => {
+                  const daysGroupUsd = daysSubtotalCents / 100;
                   const tripLevelUsd = tripLevelCents / 100;
-                  const includeHotel = (financialSnapshot as any).budget_include_hotel; // not exposed, fallback by toggles below
-                  const label = (hotelCost > 0 || flightCost > 0)
-                    ? 'Hotel, flight & reserve'
-                    : 'Reserve & adjustments';
+                  const reserveUsd = Math.max(0, tripLevelUsd - hotelCost - flightCost);
+                  const tripTotalUsd = financialSnapshot.tripTotalCents / 100;
+                  const Sep = ({ char }: { char: string }) => (
+                    <span className="text-muted-foreground/40">{char}</span>
+                  );
+                  const Chip = ({ label, value }: { label: string; value: number }) => (
+                    <span>
+                      <span className="text-muted-foreground/70">{label}</span>{' '}
+                      <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(value), tripCurrency)}</span>
+                    </span>
+                  );
                   return (
-                    <div className="flex items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground flex-wrap justify-center">
-                      <span><span className="text-muted-foreground/70">Days subtotal</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(daysSubUsd), tripCurrency)}</span></span>
-                      <span className="text-muted-foreground/40">+</span>
-                      <span><span className="text-muted-foreground/70">{label}</span> <span className="font-medium text-foreground tabular-nums">{formatCurrency(displayCost(tripLevelUsd), tripCurrency)}</span></span>
-                    </div>
+                    <>
+                      <div className="flex items-center gap-x-2 gap-y-1 mt-1.5 text-xs text-muted-foreground flex-wrap justify-center">
+                        <Chip label="Days (group)" value={daysGroupUsd} />
+                        {hotelCost > 0 && (<><Sep char="+" /><Chip label="Hotel" value={hotelCost} /></>)}
+                        {flightCost > 0 && (<><Sep char="+" /><Chip label="Flights" value={flightCost} /></>)}
+                        {reserveUsd > 0 && (<><Sep char="+" /><Chip label="Reserve & adjustments" value={reserveUsd} /></>)}
+                        <Sep char="=" />
+                        <span>
+                          <span className="text-muted-foreground/70">Trip Total</span>{' '}
+                          <span className="font-semibold text-foreground tabular-nums">{formatCurrency(displayCost(tripTotalUsd), tripCurrency)}</span>
+                        </span>
+                      </div>
+                      {travelers > 1 && (
+                        <div className="text-[11px] text-muted-foreground/70 text-center mt-1">
+                          Day badges show /pp · multiply by {travelers} for group cost
+                        </div>
+                      )}
+                    </>
                   );
                 })()}
               </div>
@@ -10545,6 +10536,18 @@ function DayCard({
                               <span className="font-semibold">Day total{travelers > 1 ? ' /pp' : ''}</span>
                               <span className="font-semibold tabular-nums">{formatCurrency(Math.floor(displayCost(totalCost)), tripCurrency)}</span>
                             </div>
+                            {travelers > 1 && (
+                              <>
+                                <div className="flex justify-between gap-3">
+                                  <span className="text-muted-foreground">× {travelers} travelers</span>
+                                  <span className="font-medium tabular-nums">{formatCurrency(Math.floor(displayCost(totalCost * travelers)), tripCurrency)}</span>
+                                </div>
+                                <div className="flex justify-between gap-3 pt-0.5 mt-0.5 border-t border-border">
+                                  <span className="font-semibold">Day total (group)</span>
+                                  <span className="font-semibold tabular-nums">{formatCurrency(Math.floor(displayCost(totalCost * travelers)), tripCurrency)}</span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </TooltipContent>
                       </Tooltip>

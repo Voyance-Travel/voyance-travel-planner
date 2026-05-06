@@ -1,74 +1,68 @@
-# Fix: Budget changes persist silently across regenerations
-
 ## Problem
 
-`budget_total_cents` is the only budget field on `trips`. Every write — initial setup, the inline "Raise budget" CTA, BudgetSetupDialog edits — overwrites it in place. There is no record of what the user originally chose, no awareness in the UI that the current value differs from the original, and regeneration paths (`generate-itinerary`, day-regen, smart-finish, unlock) never touch the budget. So a $1,796 → $5,400 raise carries forward into every future itinerary with no signal to the user.
+In the Itinerary tab the per-day "Day Total" badges do not visibly add up to the headline **Trip Total**. Two structural reasons:
 
-User decision: keep the current budget as-is on regeneration, but surface a clear, dismissible banner that tells the user the budget has been raised from the original and offers a one-click reset.
+1. **Per-person vs group mismatch.** Each day badge renders `breakdownPerPersonUsd` and appends `/pp` when `travelers > 1`. The Trip Total above is the **group** total. A 2-traveler trip therefore appears to be "missing" roughly half the activities cost when a user sums day badges by eye.
+2. **Day-0 + reserve bucket is hidden until non-zero in the right way.** `tripLevelCents = tripTotal − Σ day(d≥1) group totals` already captures hotel, flights, transfers and the misc reserve, and we render a "Days subtotal + Hotel, flight & reserve" strip — but it only appears when `tripLevelCents > 0 AND daysSubtotalCents > 0`, uses **group** numbers while the badges users see are **/pp**, and is visually a faint muted strip easy to miss. It also lumps reserve into the same line as hotel/flight, so users can't tell where the gap is.
+
+Net effect: the user sees `Σ /pp day badges ≠ group trip total` and the reconciliation strip neither matches the badge numbers nor itemises the gap.
 
 ## Goal
 
-1. Capture the original budget once, when it's first set, and never overwrite it on subsequent edits.
-2. Whenever the live budget differs from the original, show a banner in the Budget tab: "Your budget is $5,400 — raised from $1,796 on May 4. Reset to original."
-3. One-click "Reset to original" reverts `budget_total_cents` and emits `booking-changed` so all summaries refresh. The original record itself never changes; the banner simply disappears once values match again.
-4. Optional dismiss persists per-trip in `sessionStorage` so the banner doesn't nag mid-session, but reappears in a fresh session as long as the values still differ.
+Make the math obvious: a user reading the itinerary tab can trace every dollar from the day badges up to the Trip Total without opening the Budget tab.
 
-## Storage
+## Changes (UI only — no business logic)
 
-No schema change. Reuse the existing `budget_allocations jsonb` column on `trips`, adding two optional fields:
+All edits in `src/components/itinerary/EditorialItinerary.tsx`.
 
-```jsonc
-{
-  // existing fields …
-  "original_total_cents": 179600,
-  "original_set_at": "2026-05-04T12:30:00Z"
-}
+### 1. Day badge tooltip — add the per-person → group bridge
+
+In the existing day-total tooltip (around lines 10526–10549), when `travelers > 1`, append two rows after "Day total /pp":
+
+```
+× N travelers      $X
+Day total (group)  $Y
 ```
 
-Why `budget_allocations` and not a new column:
-- Already loaded everywhere budget settings are read.
-- Avoids a migration for a small piece of metadata.
-- `BudgetAllocations` type already passes through unknown keys via `Partial<>` merges — additions don't break consumers.
+This uses values already in scope (`totalCost`, `travelers`, `dayBreakdown.totalCents`). No new data fetching.
 
-## Changes
+### 2. Always show the reconciliation strip when there is *any* gap
 
-### 1. `src/services/tripBudgetService.ts`
-- Extend `BudgetAllocations` (or sibling type) to include optional `original_total_cents?: number` and `original_set_at?: string`.
-- In `getTripBudgetSettings`, surface these fields on the returned settings object so UI can read them without a second query.
-- In `updateTripBudgetSettings`, when the caller provides `budget_total_cents` AND the trip currently has no `original_total_cents` recorded, atomically seed `budget_allocations.original_total_cents` with the **incoming** value and `original_set_at = now()`. This handles brand-new trips correctly (first-set value is the original) and also backfills legacy trips on their next budget mutation (current value becomes the original baseline).
-- For all subsequent budget writes, never overwrite `original_*` fields.
+Replace the current gating `tripLevelCents > 0 && daysSubtotalCents > 0` (line 5728) with: render whenever `financialSnapshot.tripTotalCents > 0` AND (`tripLevelCents > 0` OR `travelers > 1`).
 
-### 2. `src/components/planner/budget/BudgetSetupDialog.tsx`
-- No logic change needed beyond going through the updated service. First-time setup persists original automatically via the seed-on-first-write rule.
+### 3. Itemise the strip so day badges literally sum to Trip Total
 
-### 3. `src/components/planner/budget/raiseBudgetApply.ts`
-- No change. It calls `updateSettings({ budget_total_cents })` which now preserves `original_*` automatically.
+Render the strip as a single horizontal equation, group-cost throughout, with line items conditional on non-zero:
 
-### 4. New component: `src/components/planner/budget/BudgetRaisedBanner.tsx`
-- Props: `currentCents`, `originalCents`, `originalSetAt?`, `tripId`, `onReset()`.
-- Renders only when `currentCents !== originalCents` and the user hasn't dismissed it for this trip in `sessionStorage` (`budget-raised-banner-dismissed:${tripId}`).
-- Layout (semantic tokens only):
-  - Icon (`Info` or `TrendingUp`) + headline: "Your budget is **{currentCents}**" (or "Your budget is currently **{currentCents}**, lowered from {originalCents}" if lowered).
-  - Sub-line: "Raised from **{originalCents}** on {date}. This persists across regenerations."
-  - Actions (right side): `Reset to original` (primary, ghost) and `Dismiss` (icon button).
-- Reset confirms inline: replace banner copy with "Reset budget to {originalCents}?" + Confirm / Cancel for two seconds, then commit. Avoids accidental clicks on a destructive financial change.
+```
+Days (group)  $A   +   Hotel  $H   +   Flights  $F   +   Reserve & adjustments  $R   =   Trip Total  $T
+```
 
-### 5. `src/components/planner/budget/BudgetTab.tsx`
-- Read `original_total_cents` and `original_set_at` from `settings`.
-- Render `<BudgetRaisedBanner>` near the top of the tab, just above the existing Trip Total / Paid summary block.
-- `onReset` calls `updateSettings({ budget_total_cents: originalCents })`, dispatches `booking-changed`, toasts "Budget reset to {originalCents}". This piggybacks on the existing raise/undo plumbing.
+Rules:
+- `Days (group) = daysSubtotalCents/100` (already computed).
+- `Hotel`, `Flights` come from `hotelCost` / `flightCost` already in scope; only render the chip when > 0.
+- `Reserve & adjustments = tripLevelCents/100 − hotelCost − flightCost`, clamped at 0; only render when > 0.
+- Right-most chip is the Trip Total so the equation visibly closes.
+- When `travelers > 1`, prepend a small helper line under the strip:
+  `Day badges show /pp · multiply by ${travelers} for group cost`.
+
+### 4. Remove the now-redundant "Days / Hotel / Flights" strip at lines 5707–5723
+
+That strip currently uses `totalActivityCost * travelers` (a different code path than `daysSubtotalCents`) and can drift from the reconciliation strip. Collapse to the single itemised equation from step 3 so there is exactly **one** breakdown view and it is by construction self-consistent.
+
+### 5. Keep, but rename, the dev-warning at lines 3540–3551
+
+No behaviour change; rename the log tag to `[Itinerary reconcile]` for grepability.
 
 ## Out of scope
-- No changes to regeneration code (`generate-itinerary` and friends). The budget intentionally persists; the banner is the surface that informs the user.
-- No new DB column or migration.
-- No backfill script — legacy trips backfill their original value the next time their budget is touched.
-- No analytics; banner dismiss is local-only.
 
-## Verification
+- No changes to `useTripFinancialSnapshot`, `tripDayBreakdown`, `activity_costs`, or any cost computation.
+- No changes to Budget tab, payments, or PDF export.
+- No currency-conversion changes; the new strip uses `displayCost` + `tripCurrency` exactly like the existing one.
 
-1. New trip → set budget $1,796 → DB has `budget_allocations.original_total_cents = 179600`. No banner shown.
-2. Click inline "Raise budget to $5,400" → DB updates `budget_total_cents` only; `original_total_cents` unchanged. Banner appears with "Raised from $1,796 on …".
-3. Click "Reset to original" → confirm → `budget_total_cents` returns to $1,796; banner disappears; `booking-changed` event refreshes Trip Total and Coach.
-4. Regenerate itinerary → banner still visible, current budget unchanged.
-5. Dismiss → banner hidden for the rest of the session; reappears on next page load while values still differ.
-6. Legacy trip with budget but no original → on first edit through BudgetSetupDialog, original is seeded with the **new** value entered (first deliberate user choice in this flow); subsequent raises trigger the banner as expected.
+## Acceptance
+
+- On a 2+ traveler trip, the day-badge tooltip shows the `/pp → × travelers → group` bridge.
+- The header strip always renders an equation whose left-hand items sum to the right-hand Trip Total (within $1 rounding).
+- Hotel-only / empty-itinerary trips still render sensibly (Days $0 + Hotel + Flights = Trip Total).
+- No console warning from the dev guard on a normal trip.
