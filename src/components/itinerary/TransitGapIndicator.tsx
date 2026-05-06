@@ -135,6 +135,86 @@ export function computeGapMinutes(
   return nextStart - prevEnd;
 }
 
+/**
+ * Detect "dead gaps" — long unplanned windows during the active day (09:00–18:00)
+ * between two non-transport, non-logistics activities. Per the Density Protocol
+ * (Core memory), gaps over 90 minutes are warnings; we surface a UI nudge at
+ * ≥180 minutes (3 hours) where the user clearly has time to slot something in.
+ */
+export interface DeadGap {
+  /** Index of the activity BEFORE the gap (in the activities array passed in) */
+  beforeIndex: number;
+  /** Gap length in minutes */
+  minutes: number;
+  /** End time of the previous activity (HH:MM) */
+  fromTime: string;
+  /** Start time of the next activity (HH:MM) */
+  toTime: string;
+  /** Title of activity before */
+  fromTitle: string;
+  /** Title of activity after */
+  toTitle: string;
+}
+
+const LOGISTICS_KEYWORDS = ['check-in', 'check in', 'checkin', 'check-out', 'check out', 'checkout', 'arrival', 'departure', 'flight', 'airport', 'transfer to', 'transfer from'];
+
+function isLogisticsActivity(a: any): boolean {
+  const cat = (a?.category || '').toLowerCase();
+  if (cat === 'accommodation' || cat === 'hotel' || cat === 'lodging') return true;
+  if (cat === 'logistics' || cat === 'flight') return true;
+  const title = (a?.title || '').toLowerCase();
+  return LOGISTICS_KEYWORDS.some(k => title.includes(k));
+}
+
+export function computeDeadGaps(
+  activities: Array<any>,
+  options: { minMinutes?: number; dayWindowStartMin?: number; dayWindowEndMin?: number } = {},
+): DeadGap[] {
+  const minMinutes = options.minMinutes ?? 180;
+  const winStart = options.dayWindowStartMin ?? 9 * 60;   // 09:00
+  const winEnd = options.dayWindowEndMin ?? 18 * 60;      // 18:00
+  if (!activities || activities.length < 2) return [];
+
+  const out: DeadGap[] = [];
+  for (let i = 0; i < activities.length - 1; i++) {
+    const a = activities[i];
+    const b = activities[i + 1];
+    if (isTransitCategory(a?.category) || isTransitCategory(b?.category)) continue;
+    if (isLogisticsActivity(a) || isLogisticsActivity(b)) continue;
+
+    const aEnd = parseTimeToMinutes(a?.endTime);
+    const bStart = parseTimeToMinutes(b?.startTime || a?.time);
+    if (aEnd === null || bStart === null) continue;
+    const gap = bStart - aEnd;
+    if (gap < minMinutes) continue;
+
+    // Window overlap: gap must overlap the active 09:00–18:00 window
+    const overlapStart = Math.max(aEnd, winStart);
+    const overlapEnd = Math.min(bStart, winEnd);
+    if (overlapEnd - overlapStart < 60) continue; // need ≥60 min of usable window
+
+    out.push({
+      beforeIndex: i,
+      minutes: gap,
+      fromTime: a.endTime,
+      toTime: b.startTime || b.time,
+      fromTitle: a.title || '',
+      toTitle: b.title || '',
+    });
+  }
+  return out;
+}
+
+function formatGap(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+export { formatGap as formatDeadGap };
+
 function getModeIcon(mode: string) {
   const m = (mode || '').toLowerCase();
   if (m.includes('taxi') || m.includes('rideshare') || m.includes('car') || m.includes('uber'))
