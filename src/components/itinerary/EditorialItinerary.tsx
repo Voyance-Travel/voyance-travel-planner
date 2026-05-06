@@ -1091,6 +1091,22 @@ function getActivityPhoto(activity: EditorialActivity): string | null {
   return null;
 }
 
+function getHotelHeroImage(h: any): string | null {
+  if (!h) return null;
+  const fromVal = (v: any): string | null => {
+    if (typeof v === 'string' && v.trim()) return v;
+    if (v && typeof v === 'object' && typeof v.url === 'string' && v.url.trim()) return v.url;
+    return null;
+  };
+  const direct = fromVal(h.imageUrl) || fromVal(h.image_url);
+  if (direct) return direct;
+  const imgs = Array.isArray(h.images) ? h.images : [];
+  for (const v of imgs) { const u = fromVal(v); if (u) return u; }
+  const photos = Array.isArray(h.photos) ? h.photos : [];
+  for (const v of photos) { const u = fromVal(v); if (u) return u; }
+  return null;
+}
+
 function getDayTotalCost(
   activities: EditorialActivity[], 
   travelers: number = 1, 
@@ -7138,18 +7154,21 @@ export function EditorialItinerary({
                               <div className="flex items-start gap-3">
                                 {/* Hotel image thumbnail */}
                                 <div className="h-16 w-16 rounded-lg bg-muted/30 overflow-hidden shrink-0">
-                                  {cityHotel.hotel.imageUrl ? (
-                                    <img
-                                      src={cityHotel.hotel.imageUrl}
-                                      alt={cityHotel.hotel.name}
-                                      className="w-full h-full object-cover"
-                                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                      <Hotel className="h-6 w-6 text-muted-foreground/30" />
-                                    </div>
-                                  )}
+                                  {(() => {
+                                    const thumbSrc = getHotelHeroImage(cityHotel.hotel);
+                                    return thumbSrc ? (
+                                      <img
+                                        src={thumbSrc}
+                                        alt={cityHotel.hotel.name}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <Hotel className="h-6 w-6 text-muted-foreground/30" />
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <h4 className="font-medium text-foreground truncate">{cityHotel.hotel.name}</h4>
@@ -7238,20 +7257,24 @@ export function EditorialItinerary({
                       }
                     }}
                   >
-                    {hotelSelection?.imageUrl ? (
-                      <img
-                        src={hotelSelection.imageUrl}
-                        alt={hotelSelection.name || 'Hotel'}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        onError={(e) => { 
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-secondary/50">
-                        <Hotel className="h-12 w-12 text-muted-foreground/30" />
-                      </div>
-                    )}
+                    {(() => {
+                      const heroSrc = getHotelHeroImage(hotelSelection);
+                      return (
+                        <>
+                          <div className="absolute inset-0 flex items-center justify-center bg-secondary/50">
+                            <Hotel className="h-12 w-12 text-muted-foreground/30" />
+                          </div>
+                          {heroSrc && (
+                            <img
+                              src={heroSrc}
+                              alt={hotelSelection.name || 'Hotel'}
+                              className="relative w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
                     
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                     
