@@ -3,7 +3,7 @@ import {
   canonicalActivityVenueName,
   crossDayVenueDuplicate,
 } from './generation-utils.ts';
-import { ledgerCheckDays } from './ledger-check.ts';
+import { ledgerCheck } from './ledger-check.ts';
 import type { DayLedger } from './day-ledger.ts';
 
 Deno.test('canonicalActivityVenueName collapses Louvre activity variants', () => {
