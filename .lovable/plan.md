@@ -1,66 +1,73 @@
 ## Problem
 
-Budget tab "Paid so far" ($2,400) is $500 short of Payments tab "Paid so far" ($2,900). The missing $500 is a Lunch at L'Arpège that was marked paid in the Payments tab.
+Trip Health surfaces 3 timing overlaps (Days 1–3) but the only quick-fix offered is **Refresh Day**, which routes through `handleRefreshDay` → the AI validation/diff engine. That engine is designed for venue-closure / quality issues, not for adjusting clock times, so even when it runs the user typically sees "no proposed changes" and the overlap persists. From the user's perspective there is no way to resolve the conflicts. Health score sits at 55/100 with no actionable path forward.
 
-### Root cause
+## Goal
 
-The two tabs derive "paid so far" from different sources:
+Give the user a **one-click deterministic fix** for timing overlaps that doesn't rely on the AI engine, plus contextual fallbacks if a manual review is preferred. The Refresh Day path stays for closure / quality issues.
 
-- **Payments tab** (`PaymentsTab.tsx` → `getTripPayments` in `src/services/tripPaymentsAPI.ts:104-139`)
-  Sums `trip_payments` rows where `status = 'paid'`. Authoritative — every "Mark paid" click writes a row here.
+## Plan
 
-- **Budget tab** (`BudgetTab.tsx:904` → `snapshot.paidCents` from `useTripFinancialSnapshot.ts`)
-  Sums:
-  1. `activity_costs.paid_amount_usd` where `is_paid = true` (lines 167-170), plus
-  2. `trip_payments` rows whose `item_id` matches `manual-%` only (lines 115-119, 178-184).
+### 1. Add deterministic "Auto-fix timing" action
 
-When the user marks "Lunch at L'Arpège" paid in the Payments tab, the handler:
-1. Always inserts a `trip_payments` row with `status = 'paid'` ✅
-2. Calls `markActivityPaid(tripId, activityId, amountUsd)` to mirror it onto `activity_costs.is_paid` (`PaymentsTab.tsx:419-422` → `activityCostService.ts:267-287`).
+Create `src/utils/itinerary/fixDayTiming.ts`:
 
-Step 2 silently no-ops whenever the L'Arpège payment row in `activity_costs` is missing or its `activity_id` doesn't match the itinerary id passed in (orphaned row, regenerated activity, composite `_dN` mismatch, manual entry, etc.). Result: Payments tab counts the $500 (from `trip_payments`); Budget tab doesn't (no `is_paid=true` row, and item_id isn't `manual-%`).
+- Input: a day's activities (with `id`, `startTime`, `endTime`, `durationMinutes`, `category`).
+- Sort by `startTime`. Walk the list; whenever `activities[i].endTime > activities[i+1].startTime`, push activity `i+1` forward so it starts at `activities[i].endTime + 5 min` buffer (or `+0` if either side is transit/transfer/walking).
+- Preserve each activity's original `durationMinutes` (recompute `endTime = newStart + duration`). If `durationMinutes` is missing, derive it from the original `endTime - startTime`.
+- Cap the day at 23:30 — if pushing forward would exceed it, stop and return `{ success: false, reason: 'day_overflow', resolvedCount }` so the UI can fall back to Refresh Day.
+- Skip locked / pinned activities (the universal-locking memory). Treat them as immovable anchors and shift only the movable conflicting neighbour.
+- Pure function + unit tests covering: simple two-activity overlap, three-activity cascade, transit pair (no buffer), locked anchor, day overflow.
 
-This is the same drift class as the recent "Reconciling…" bug; the snapshot must accept `trip_payments` as the authoritative source for "paid", just like Payments tab does, instead of trusting that the mirror succeeded.
+### 2. Wire the action through TripHealthPanel
 
-## Fix
+In `src/components/trip/TripHealthPanel.tsx`:
 
-### 1. Make `useTripFinancialSnapshot` paid total match Payments tab
+- For `severity: 'error'` overlap issues, change `fixLabel: 'Refresh Day'` → `fixLabel: 'Fix timing'`, `fixAction: 'fix_timing'`. Keep a secondary "Review day" button (ghost-style) that fires the existing `refresh_day` action so users can still open the AI panel.
+- For the `< 5 min buffer` warning, keep `fix_timing` as primary too (it injects the 5-min buffer).
+- Add a brief inline hint when `healthScore < 70`: "Tap Fix timing to auto-space overlapping activities."
 
-In `src/hooks/useTripFinancialSnapshot.ts`:
+### 3. Implement the action handler
 
-- Fetch **all** `trip_payments` rows for the trip (not just `like 'manual-%'`). Keep the manual filter for the existing manual-spend `totalCents` math, but use the full list for `paidTotal`.
-- Compute `paidTotal` as:
-  ```
-  paidTotal = sum(trip_payments where status='paid')
-            + sum(activity_costs.paid_amount_usd where is_paid AND no matching trip_payments row)
-  ```
-  Match key: `trip_payments.item_id` ↔ `activity_costs.activity_id` (with the `_d{N}` suffix stripped, mirroring `PaymentsTab.tsx:421`). The "no match" branch preserves any legacy/manual `is_paid` flips that were never written through the Payments tab.
-- Apply the same hotel/flight inclusion gate (`includeHotel` / `includeFlight`) to `trip_payments` so toggling those off doesn't double-shrink or inflate the paid figure (mirror the row-level rule already in `shouldCountRow`).
+In both `onAction` switches in `src/pages/TripDetail.tsx` (lines 2813 and 3059):
 
-This keeps the snapshot's `tripTotalCents` math untouched (only `paidCents` changes), and makes BudgetTab's "Paid so far" identical to PaymentsTab's `totals.paid`.
+```ts
+} else if (action === 'fix_timing') {
+  if (ctx?.dayNumber) {
+    setFixTimingRequest({ dayNumber: ctx.dayNumber, nonce: Date.now() });
+  }
+}
+```
 
-### 2. Backfill mirror best-effort but don't depend on it
+Add a `fixTimingRequest` state (mirroring `refreshDayRequest`). Pass it as a new prop to `EditorialItinerary`.
 
-In `src/components/itinerary/PaymentsTab.tsx` (handlers `handleMarkAsPaid` and `handleUnmarkPaid`), keep the `markActivityPaid` / `update is_paid=false` calls but treat them as a non-blocking mirror. Log (don't toast) when the mirror updates 0 rows so future regressions are visible in console without user-visible noise. Snapshot is now correct either way.
+In `src/components/itinerary/EditorialItinerary.tsx`:
 
-### 3. Tests
+- New `useEffect` keyed on `fixTimingRequest?.nonce` that:
+  1. Locates the day.
+  2. Calls `fixDayTiming(day.activities)`.
+  3. On success, calls the existing `setDays` + persistence path used by manual edits (the same one already used by drag-reorder so the day-truth ledger / activity-cost snapshot stays coherent).
+  4. Shows `toast.success('Resolved N timing conflict(s) on Day X')`.
+  5. On `day_overflow`, falls back to opening the Refresh Day panel and toasting "Day is too packed to auto-space — review proposed changes."
 
-Add `src/hooks/__tests__/useTripFinancialSnapshot.test.ts` cases (or extend an existing test):
-- Paid `trip_payment` exists with no matching `activity_costs.is_paid` → counted once.
-- Both `trip_payment` paid AND `activity_costs.is_paid` for same item → counted once (no double count).
-- Legacy `activity_costs.is_paid=true` with no `trip_payment` row → still counted.
-- `manual-%` payment + canonical hotel row → existing override math unchanged.
+### 4. Health-score messaging
 
-### 4. QA
-1. Mark L'Arpège paid from Payments tab → both tabs show $2,900 immediately.
-2. Unmark → both tabs drop to $2,400.
-3. Hotel toggle off in Budget settings → both tabs hide the $2,400 hotel row from "Paid so far" consistently.
-4. Add a "Manual" expense from PaymentsTab → still folded in (manual-% path unchanged).
-5. Existing optimistic UI in PaymentsTab still updates instantly; BudgetTab refreshes via the existing `'booking-changed'` event already dispatched after mark/unmark.
+In `TripHealthPanel.tsx` reduce the per-error penalty for **timing** issues from −15 → −8 (they're trivially fixable), and add a one-line tooltip on the health pill: "Score reflects current conflicts — most can be fixed in one click." This stops the panel from looking alarmingly red while a single click can drop the score back to 95+.
+
+## QA
+
+1. Trip with three days each containing one overlap → click "Fix timing" on each → activities re-space, toast confirms, conflicts list empties, health score climbs.
+2. Day with a locked activity in the middle → only the movable neighbour shifts; locked anchor untouched.
+3. Day overflowing past 23:30 → toast routes to Refresh Day panel.
+4. Refresh Day still available via secondary button for venue closures.
+5. Unit tests pass for `fixDayTiming`.
 
 ## Files touched
-- `src/hooks/useTripFinancialSnapshot.ts` — broaden `trip_payments` fetch + new `paidTotal` reconciliation.
-- `src/components/itinerary/PaymentsTab.tsx` — log silent mirror failures (small).
-- `src/hooks/__tests__/useTripFinancialSnapshot.test.ts` — new tests.
 
-No DB migrations, no edge functions, no schema changes.
+- `src/utils/itinerary/fixDayTiming.ts` (new)
+- `src/utils/itinerary/__tests__/fixDayTiming.test.ts` (new)
+- `src/components/trip/TripHealthPanel.tsx` (label + action wiring + score weight)
+- `src/components/itinerary/EditorialItinerary.tsx` (new prop + effect + persist)
+- `src/pages/TripDetail.tsx` (state + onAction branches in both panels)
+
+No DB migrations, no edge functions, no AI calls.

@@ -96,8 +96,8 @@ function analyzeHealth(days: any[]): HealthIssue[] {
           id: `conflict-day-${dayNum}-${i}`,
           severity: 'error',
           message: `Day ${dayNum}: "${timed[i].name}" overlaps with "${timed[i + 1].name}"`,
-          fixLabel: 'Refresh Day',
-          fixAction: 'refresh_day',
+          fixLabel: 'Fix timing',
+          fixAction: 'fix_timing',
           dayNumber: dayNum,
         });
         break; // Only report first conflict per day
@@ -117,8 +117,8 @@ function analyzeHealth(days: any[]): HealthIssue[] {
             id: `buffer-day-${dayNum}-${i}`,
             severity: 'warning',
             message: `Day ${dayNum}: Only ${gap}min between "${timed[i].name}" and "${timed[i + 1].name}"`,
-            fixLabel: 'Refresh Day',
-            fixAction: 'refresh_day',
+            fixLabel: 'Fix timing',
+            fixAction: 'fix_timing',
             dayNumber: dayNum,
           });
           break;
@@ -259,7 +259,11 @@ export function TripHealthPanel({
     // Health score: start at 100, deduct for issues
     let health = 100;
     issues.forEach(issue => {
-      health -= issue.severity === 'error' ? 15 : 5;
+      // Timing issues are one-click fixable; weight them lighter so the score
+      // doesn't look alarming for a problem the user can resolve instantly.
+      const isTiming = issue.fixAction === 'fix_timing';
+      if (issue.severity === 'error') health -= isTiming ? 8 : 15;
+      else health -= isTiming ? 3 : 5;
     });
     health = Math.max(0, Math.min(100, health));
 
@@ -435,18 +439,33 @@ export function TripHealthPanel({
                           <span className="text-xs text-muted-foreground leading-relaxed">{issue.message}</span>
                         </div>
                         {issue.fixLabel && onAction && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-6 px-2 text-[10px] shrink-0 text-primary border-primary/30 hover:bg-primary/10"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onAction(issue.fixAction!, { dayNumber: issue.dayNumber });
-                            }}
-                          >
-                            <Zap className="w-3 h-3 mr-1" />
-                            {issue.fixLabel}
-                          </Button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] text-primary border-primary/30 hover:bg-primary/10"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onAction(issue.fixAction!, { dayNumber: issue.dayNumber });
+                              }}
+                            >
+                              <Zap className="w-3 h-3 mr-1" />
+                              {issue.fixLabel}
+                            </Button>
+                            {issue.fixAction === 'fix_timing' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onAction('refresh_day', { dayNumber: issue.dayNumber });
+                                }}
+                              >
+                                Review
+                              </Button>
+                            )}
+                          </div>
                         )}
                       </div>
                     ))}
