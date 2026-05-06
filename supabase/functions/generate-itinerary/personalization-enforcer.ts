@@ -251,14 +251,18 @@ export function deriveForcedSlots(
     });
   }
   
-  // High authenticity seekers
-  if ((traits.authenticity ?? 0) >= 4) {
+  // Authenticity / Local Explorer
+  const authScore = traits.authenticity ?? 0;
+  if (authScore >= 3) {
+    const isLocalOnly = authScore >= 6;
     slots.push({
       type: 'authentic_encounter',
       traitSource: 'authenticity',
-      traitValue: traits.authenticity || 0,
-      description: 'One truly local, non-touristy experience',
-      validationTags: ['local', 'authentic', 'hidden-gem', 'neighborhood', 'traditional', 'off-beaten-path']
+      traitValue: authScore,
+      description: isLocalOnly
+        ? 'TWO genuinely local experiences (residential neighborhood, family-run trattoria/osteria/enoteca, non-tourist piazza). At MOST 1 marquee landmark across the WHOLE TRIP.'
+        : 'One genuinely local experience in a residential/non-tourist neighborhood (family-run trattoria, osteria, enoteca, neighborhood piazza). NOT a famous landmark or tourist-luxury venue.',
+      validationTags: ['neighborhood', 'family-run', 'osteria', 'trattoria', 'enoteca', 'non-touristy', 'hidden-gem']
     });
   }
   
