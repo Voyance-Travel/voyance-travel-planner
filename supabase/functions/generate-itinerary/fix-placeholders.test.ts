@@ -7,7 +7,7 @@ import {
   PLACEHOLDER_VENUE_PATTERNS,
   isPlaceholderMeal,
   applyFallbackToActivity,
-  GENERIC_VENUE_TEMPLATES,
+  matchesAIStubVenue,
   isPlaceholderWellness,
   getRandomFallbackWellness,
   applyFallbackWellnessToActivity,
