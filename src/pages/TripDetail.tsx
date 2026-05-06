@@ -3005,6 +3005,8 @@ export default function TripDetail() {
                   navigateToSection={navigateToSection}
                   refreshDayRequest={refreshDayRequest}
                   fixTimingRequest={fixTimingRequest}
+                  onRefreshingDayChange={setRefreshingDayNumber}
+                  onRefreshResultsChange={setRefreshResultsByDay}
                   parsedMetadata={(() => {
                     const meta = (trip.itinerary_data as any)?.metadata;
                     if (meta?.source === 'manual_paste') return meta;
