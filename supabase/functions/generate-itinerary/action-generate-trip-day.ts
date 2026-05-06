@@ -14,6 +14,7 @@ import { deriveMealPolicy, type RequiredMeal } from './meal-policy.ts';
 import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validation.ts';
 import { sanitizeGeneratedDay, stripPhantomHotelActivities, sanitizeAITextField, enforceMichelinPriceFloor, enforceTicketedAttractionPricing, enforceBarNightcapPriceCap, enforceCasualVenuePriceCap, enforceVenueTypePriceCap, KNOWN_FINE_DINING_STARS, FINE_DINING_MIN_PRICE_BY_STARS } from './sanitization.ts';
 import { StageLogger } from './pipeline/stage-logger.ts';
+import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { applyAnchorsWin } from './anchor-guard.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
 
@@ -1502,6 +1503,11 @@ async function _handleGenerateTripDayInner(
       .replace(/\bThe\s+of\s+/g, 'The City of ')
       .replace(/\bA\s+of\s+/g, 'A Day of ')
       .trim();
+  }
+
+  // === TITLE COHERENCE: Ensure title reflects actual activities ===
+  if (dayResult) {
+    enforceDayTitleCoherence(dayResult, { city: destination || '' });
   }
 
   // === POST-REPAIR: Collapse consecutive transport cards (safety net) ===

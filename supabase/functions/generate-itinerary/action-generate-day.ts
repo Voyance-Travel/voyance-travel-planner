@@ -74,6 +74,7 @@ import type { LockedActivity } from './pipeline/types.ts';
 import { validateDay, type ValidateDayInput } from './pipeline/validate-day.ts';
 import { repairDay, type RepairDayInput } from './pipeline/repair-day.ts';
 import { compilePrompt, type LockedCard } from './pipeline/compile-prompt.ts';
+import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { persistDay } from './pipeline/persist-day.ts';
 import { callAI, AICallError } from './pipeline/ai-call.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
@@ -665,6 +666,11 @@ export async function handleGenerateDay(
         .replace(/\bThe\s+of\s+/g, 'The City of ')
         .replace(/\bA\s+of\s+/g, 'A Day of ')
         .trim();
+    }
+
+    // === TITLE COHERENCE: Ensure title reflects actual activities ===
+    if (generatedDay) {
+      enforceDayTitleCoherence(generatedDay, { city: resolvedDestination || destination || '' });
     }
 
     // === DUPLICATE HOTEL RETURN REMOVAL ===

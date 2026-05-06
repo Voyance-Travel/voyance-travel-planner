@@ -230,6 +230,7 @@ import {
 } from './must-do-priorities.ts';
 
 import type { PreBookedCommitment } from './pre-booked-commitments.ts';
+import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 
 
 export async function prepareContext(supabase: any, tripId: string, userId?: string, directTripData?: DirectTripData, requestSmartFinishMode?: boolean): Promise<GenerationContext | null> {
@@ -2324,6 +2325,7 @@ Generate activities for this day following ALL constraints above.`;
           }
         }
         console.log(`[Stage 2] Day ${dayNumber} generated successfully (${generatedDay.activities.length} activities${dayCity ? `, city: ${dayCity.cityName}` : ''})`);
+        enforceDayTitleCoherence(generatedDay, { city: (dayCity?.cityName as string) || context.destination || '' });
         return generatedDay;
       }
 
