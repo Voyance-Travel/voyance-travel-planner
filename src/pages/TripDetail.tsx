@@ -2810,6 +2810,8 @@ export default function TripDetail() {
                             }
                             isMultiCity={!!(trip as any).is_multi_city || tripCities.length > 1}
                             hasInterCityTransport={editorDays.some((d: any) => d.isTransitionDay)}
+                            flightsBookedElsewhere={!!(trip?.metadata as any)?.flightsBookedElsewhere}
+                            hotelBookedElsewhere={!!(trip?.metadata as any)?.hotelBookedElsewhere}
                             className=""
                             onAction={(action, ctx) => {
                               if (action === 'add_flights') {
@@ -2833,6 +2835,8 @@ export default function TripDetail() {
                                   toast.info(`Use the day toolbar to generate Day ${ctx?.dayNumber || ''}`);
                               } else if (action === 'generate_missing_days' || action === 'generate_all') {
                                 setShowGenerator(true);
+                              } else if (action === 'mark_booked_elsewhere' || action === 'unmark_booked_elsewhere') {
+                                handleMarkBookedElsewhere(ctx?.field, action === 'mark_booked_elsewhere');
                               }
                             }}
                           />
