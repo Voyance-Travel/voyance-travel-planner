@@ -52,6 +52,8 @@ export interface TripHealthPanelProps {
   isMultiCity?: boolean;
   flightsBookedElsewhere?: boolean;
   hotelBookedElsewhere?: boolean;
+  refreshingDayNumber?: number | null;
+  refreshResultsByDay?: Record<number, { errorCount: number; warningCount: number }>;
   className?: string;
   onAction?: (action: string, context?: { dayNumber?: number; field?: 'flights' | 'hotel' }) => void;
 }
