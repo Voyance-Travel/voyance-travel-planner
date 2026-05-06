@@ -276,42 +276,8 @@ function aggregateSkippedSavings(
   };
 }
 
-/**
- * Estimate time and money savings — only from verified intelligence items
- */
-function calculateEstimatedSavings(
-  timingOptimizations: number,
-  localPicks: number,
-  hiddenGems: number,
-): { time: string; money?: string } | undefined {
-  const timingMinutes = timingOptimizations * 25;
-  const localPickMoney = localPicks * 35;
-  const hiddenGemMoney = hiddenGems * 18;
-  
-  const totalMinutes = timingMinutes;
-  const totalMoney = localPickMoney + hiddenGemMoney;
-  
-  if (totalMinutes === 0 && totalMoney === 0) return undefined;
-  
-  let timeStr: string | undefined;
-  if (totalMinutes > 0) {
-    const hours = Math.floor(totalMinutes / 60);
-    if (hours >= 2) {
-      timeStr = `${hours}+ hours`;
-    } else if (hours === 1) {
-      timeStr = `${hours}+ hour`;
-    } else {
-      timeStr = `${Math.round(totalMinutes / 5) * 5}+ min`;
-    }
-  }
-  
-  if (!timeStr && totalMoney === 0) return undefined;
-
-  return {
-    time: timeStr || 'Smart routing',
-    money: totalMoney > 0 ? `~$${totalMoney}` : undefined,
-  };
-}
+// (calculateEstimatedSavings removed: savings now come exclusively from
+//  real skippedItems[].savingsEstimate via aggregateSkippedSavings.)
 
 /**
  * Get default local alternatives for a destination
