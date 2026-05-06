@@ -142,10 +142,10 @@ export default function CustomerDayCard({
                   )}
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mt-1">
-                  {day.date ? format(new Date(day.date), 'EEEE, MMMM d') : day.theme}
+                  {day.date ? format(new Date(day.date), 'EEEE, MMMM d') : getDisplayDayTitle(day as any, destination)}
                 </h3>
                 {day.theme && day.date && (
-                  <p className="text-sm text-muted-foreground mt-0.5">{day.theme}</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">{getDisplayDayTitle(day as any, destination)}</p>
                 )}
               </div>
               {isExpanded ? (
