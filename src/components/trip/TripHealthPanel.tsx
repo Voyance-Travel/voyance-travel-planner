@@ -277,7 +277,16 @@ export function TripHealthPanel({
     }
 
     // Health analysis
-    const issues = analyzeHealth(days);
+    const rawIssues = analyzeHealth(days);
+    // Suppress local timing/buffer issues for any day where the latest server
+    // re-check returned zero issues — otherwise the panel says "no issues" in
+    // the badge while still showing the stale red line.
+    const issues = rawIssues.filter((issue) => {
+      if (issue.fixAction !== 'fix_timing' || !issue.dayNumber) return true;
+      const recheck = refreshResultsByDay?.[issue.dayNumber];
+      if (!recheck) return true;
+      return (recheck.errorCount + recheck.warningCount) > 0;
+    });
 
     // Compute completion %
     const completionFactors = [
@@ -308,7 +317,7 @@ export function TripHealthPanel({
       healthScore: health,
       daysPlanned: planned,
     };
-  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere]);
+  }, [days, totalDaysExpected, hasFlights, hasHotel, hasAirportTransfer, hasInterCityTransport, isMultiCity, flightsDone, hotelDone, flightsBookedElsewhere, hotelBookedElsewhere, refreshResultsByDay]);
 
   const healthColor = healthScore >= 80 ? 'text-green-600' : healthScore >= 50 ? 'text-amber-500' : 'text-destructive';
   const healthBg = healthScore >= 80 ? 'bg-green-600' : healthScore >= 50 ? 'bg-amber-500' : 'bg-destructive';

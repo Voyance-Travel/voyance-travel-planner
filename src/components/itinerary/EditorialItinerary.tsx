@@ -2405,6 +2405,11 @@ export function EditorialItinerary({
             icon: '⚠️',
           });
         }
+        // Scroll the diff view into focus so the user can actually see the result.
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`refresh-diff-${day.dayNumber}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
       } else {
         toast.error(`Could not re-check Day ${day.dayNumber} — please try again.`);
       }
@@ -2447,9 +2452,16 @@ export function EditorialItinerary({
       if (result.success) {
         setDays(prev => prev.map((d, i) => i === idx ? { ...d, activities: result.activities as any } : d));
         setHasChanges(true);
+        setSelectedDayIndex(idx);
+        setActiveTab('itinerary');
         toast.success(
-          `Resolved ${result.resolvedCount} timing conflict${result.resolvedCount === 1 ? '' : 's'} on Day ${day.dayNumber}`
+          `Day ${day.dayNumber} timing fixed — resolved ${result.resolvedCount} conflict${result.resolvedCount === 1 ? '' : 's'}.`
         );
+        // Scroll the day into view so the user sees the start/end times shift.
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`day-${day.dayNumber}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
         // Re-run refresh validation so the Trip Health panel updates to "no issues"
         // (otherwise the warning lingers even after a successful fix).
         setTimeout(() => { handleRefreshDay(idx); }, 50);
@@ -9808,12 +9820,16 @@ function DayCard({
   const effectiveExpanded = isCleanPreview ? true : isExpanded;
 
   return (
-    <div className={cn(
-      "overflow-hidden rounded-xl transition-shadow",
-      isCleanPreview
-        ? "border-0 shadow-none bg-transparent"
-        : "border border-border bg-card shadow-none sm:shadow-sm sm:hover:shadow-md"
-    )} data-tour="day-header">
+    <div
+      id={`day-${day.dayNumber}`}
+      className={cn(
+        "overflow-hidden rounded-xl transition-shadow scroll-mt-24",
+        isCleanPreview
+          ? "border-0 shadow-none bg-transparent"
+          : "border border-border bg-card shadow-none sm:shadow-sm sm:hover:shadow-md"
+      )}
+      data-tour="day-header"
+    >
       {/* Day Header - Editorial Style with Color Accent */}
       <div className={cn(
         "relative p-4 sm:p-6 transition-colors duration-500",
@@ -10608,24 +10624,26 @@ function DayCard({
 
               {/* Refresh Day Diff View */}
               {refreshResult && refreshResult.dayNumber === day.dayNumber && (
-                <RefreshDayDiffView
-                  dayNumber={day.dayNumber}
-                  proposedChanges={refreshResult.proposedChanges || []}
-                  issues={refreshResult.issues}
-                  transitEstimates={refreshResult.transitEstimates}
-                  buffers={refreshResult.buffers || []}
-                  onAcceptAll={(changes) => onApplyRefreshChanges?.(changes)}
-                  onAcceptSelected={(changes) => onApplyRefreshChanges?.(changes)}
-                  onDismiss={() => onDismissRefresh?.()}
-                  onFindAlternative={(activityId, _activityTitle) => {
-                    if (!onActivitySwap) return;
-                    const matchedActivity = day.activities.find(a => a.id === activityId);
-                    if (matchedActivity) {
-                      onActivitySwap(dayIndex, matchedActivity);
-                    }
-                  }}
-                  className="mt-3"
-                />
+                <div id={`refresh-diff-${day.dayNumber}`}>
+                  <RefreshDayDiffView
+                    dayNumber={day.dayNumber}
+                    proposedChanges={refreshResult.proposedChanges || []}
+                    issues={refreshResult.issues}
+                    transitEstimates={refreshResult.transitEstimates}
+                    buffers={refreshResult.buffers || []}
+                    onAcceptAll={(changes) => onApplyRefreshChanges?.(changes)}
+                    onAcceptSelected={(changes) => onApplyRefreshChanges?.(changes)}
+                    onDismiss={() => onDismissRefresh?.()}
+                    onFindAlternative={(activityId, _activityTitle) => {
+                      if (!onActivitySwap) return;
+                      const matchedActivity = day.activities.find(a => a.id === activityId);
+                      if (matchedActivity) {
+                        onActivitySwap(dayIndex, matchedActivity);
+                      }
+                    }}
+                    className="mt-3"
+                  />
+                </div>
               )}
             </div>
             )}
