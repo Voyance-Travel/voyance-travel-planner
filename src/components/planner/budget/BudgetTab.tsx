@@ -849,6 +849,8 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                 setLastRaise(null);
               }
             } : undefined}
+            tripStatus={tripStatus}
+            generationFailureReason={generationFailureReason}
           />
         );
       })()}
