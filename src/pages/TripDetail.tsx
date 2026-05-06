@@ -166,7 +166,7 @@ export default function TripDetail() {
     try {
       const { error } = await supabase
         .from('trips')
-        .update({ metadata: nextMeta })
+        .update({ metadata: nextMeta as any })
         .eq('id', tripId);
       if (error) throw error;
       toast.success(
