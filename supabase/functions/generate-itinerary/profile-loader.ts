@@ -291,6 +291,50 @@ export async function loadTravelerProfile(
   if (Object.values(traitScores).some(v => v !== 0)) {
     dataCompleteness += 20;
   }
+
+  // =========================================================================
+  // STEP 5b: Apply Fine-Tune trait overrides from profiles.travel_dna_overrides
+  // The slider UI persists -10..+10 values per trait key. Merge them on top of
+  // the base trait scores so the prompt actually reflects user adjustments.
+  // =========================================================================
+  if (userId) {
+    try {
+      const { data: overrideRow } = await supabase
+        .from('profiles')
+        .select('travel_dna_overrides')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const overrides = overrideRow?.travel_dna_overrides;
+      if (overrides && typeof overrides === 'object') {
+        const appliedKeys: string[] = [];
+        const before: Record<string, number> = {};
+        for (const key of Object.keys(traitScores) as Array<keyof TraitScores>) {
+          const raw = (overrides as Record<string, unknown>)[key as string];
+          const num = typeof raw === 'number' ? raw : Number(raw);
+          if (Number.isFinite(num)) {
+            const clamped = Math.max(-10, Math.min(10, num));
+            if (clamped !== traitScores[key]) {
+              before[key as string] = traitScores[key];
+              traitScores[key] = clamped;
+              appliedKeys.push(key as string);
+            }
+          }
+        }
+        if (appliedKeys.length > 0) {
+          dataCompleteness += 5;
+          warnings.push(`Trait overrides applied: ${appliedKeys.join(', ')}`);
+          console.log(
+            `[profile-loader] Trait overrides applied for ${userId}: ${appliedKeys
+              .map(k => `${k} ${before[k]}→${traitScores[k as keyof TraitScores]}`)
+              .join(', ')}`
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('[profile-loader] Failed to load trait overrides:', (e as Error).message);
+    }
+  }
   
   // =========================================================================
   // STEP 6: Extract Preferences

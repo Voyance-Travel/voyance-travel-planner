@@ -1,57 +1,61 @@
 ## Bug
 
-Two-part gap, same root cause:
+The Fine-Tune trait sliders (Adventure, Planning/Spontaneity, Authenticity, etc. in `TraitOverrideSliders.tsx`) write to `profiles.travel_dna_overrides`, but the itinerary generator never reads that column. The prompt is built from `travel_dna_profiles.trait_scores` (with a fallback to the legacy `profiles.travel_dna` blob) — overrides are silently ignored.
 
-1. **`/archetypes/:slug` returns 404.** No route is registered. `App.tsx` only mounts `/archetypes` → `<Archetypes>`; the per-type detail lives inside `ArchetypeDetailSheet` (modal-only).
-2. **The "Share this archetype" button shares the index page, not the type.** `ArchetypeDetailSheet.tsx:31` and `TravelDNAReveal.tsx:218` both hard-code `${getAppUrl()}/archetypes` regardless of which archetype is open. Anyone clicking that link lands on the carousel and has to find the type themselves.
+Evidence:
+- `supabase/functions/generate-itinerary/preference-context.ts:178` defines `getTraitOverrides()` reading `profiles.travel_dna_overrides`.
+- A repo-wide grep (`rg "getTraitOverrides|trait_overrides|traitOverrides" supabase/`) shows that function has **zero call sites**.
+- `profile-loader.ts:266` resolves `traitScores` only from the DNA profile / blob, then `prompt-library.ts:1744` walks those scores to render the trait narrative — overrides never enter the pipeline.
+
+So a user who pushes Adventure to +9 still gets the prompt their base quiz produced.
 
 ## Fix
 
-### 1. New permalink route `/archetypes/:slug`
+Single change: merge `profiles.travel_dna_overrides` into `traitScores` inside the profile loader, then verify it lands in the prompt. No UI changes (the slider already persists correctly).
 
-- Add `ARCHETYPE_DETAIL: '/archetypes/:slug'` to `src/config/routes.ts`.
-- Register `<Route path="/archetypes/:slug" element={<Archetypes />} />` in `App.tsx` (reuse the same page — no new page component).
-- In `Archetypes.tsx`:
-  - Read `useParams<{ slug?: string }>()`.
-  - Build a `narrativeIdFromSlug(slug)` helper. Slug = kebab-case of `narrativeId` (e.g. `luxury-luminary` → `luxury_luminary`).
-  - On mount / slug change, if a valid slug is present, call the existing `handleSelectArchetype(narrativeId)` so the sheet opens against the matching archetype and the carousel scrolls to its index (`emblaApi.scrollTo(index)`).
-  - When the sheet closes, `navigate('/archetypes', { replace: true })` so the URL doesn't keep a stale slug.
-  - Bad/unknown slug → silently fall back to the index (no detail open). Avoids the "Wrong turn" page.
+### 1. Wire overrides into the profile loader
 
-### 2. SEO + share metadata per slug
+In `supabase/functions/generate-itinerary/profile-loader.ts`, after STEP 5 (trait-score resolution, around line 289):
 
-- Replace the static `<Head>` block in `Archetypes.tsx` with a slug-aware variant:
-  - **No slug:** existing copy.
-  - **Valid slug:** `title = "${archetype.name} — Travel DNA | Voyance"`, `description = archetype.tagline`, `canonical = https://travelwithvoyance.com/archetypes/${slug}`, plus `og:title` / `og:description` / `og:image` (use `archetype.icon` only if no real image — leave OG image empty otherwise to avoid broken previews).
+- Fetch overrides via the existing `getTraitOverrides(supabase, userId)` (move/import it, or inline the same `select('travel_dna_overrides')` query).
+- For each numeric value present in overrides, replace the corresponding `traitScores[key]`.
+  - The slider stores values on the `-10..+10` scale (same as `TraitScores`); guard with `Number.isFinite` and clamp to `[-10, 10]`.
+- Append to `warnings` an info line `Trait overrides applied: <keys>` and `console.log` the before/after diff for traceability.
+- Increment `dataCompleteness` by 5 when at least one override is applied (overrides are an explicit signal of intent).
 
-### 3. Share buttons emit the permalink
+### 2. Make the override visible to the prompt
 
-- `src/components/archetypes/ArchetypeDetailSheet.tsx` line 31 → `${getAppUrl()}/archetypes/${slug(archetype.id || narrativeId)}`. Pass the originating `narrativeId` into the sheet (currently only the merged `ArchetypeDetail` is passed) so we share the user-facing slug, not the internal detail-id.
-- `src/components/profile/TravelDNAReveal.tsx` line 218 → same change, using the user's resolved primary archetype's slug.
-- Web Share API payload: keep title/text the same; only swap `url`.
+`compile-prompt.ts` and `prompt-library.ts:1744` already read `profile.traitScores`, so once the loader merges overrides, the trait-narrative block, archetype-tone hints, and adventure/authenticity copy automatically reflect the slider. No prompt edits needed — verify by logging the merged `traitScores` once at the top of `compile-prompt.ts` (gated behind the existing debug flag).
 
-### 4. Slug helper + fixture
+### 3. Source-of-truth tag in the ledger / metadata
 
-- New `src/utils/archetypeSlug.ts` exporting `archetypeIdToSlug(id)` and `slugToArchetypeId(slug)`. Pure underscore↔hyphen conversion plus a lookup against `Object.keys(ARCHETYPE_NARRATIVES)` so unknown slugs return `null` (not an injected lookup).
-- Test fixture: every key in `ARCHETYPE_NARRATIVES` round-trips through `archetypeIdToSlug` → `slugToArchetypeId` and matches.
+Add `traitOverridesApplied: string[]` to the existing trip metadata snapshot written in `action-save-itinerary.ts` (whichever object already records `archetypeSource`). This lets us tell post-hoc whether a degenerate output came from a user who *did* tune the sliders.
 
-### 5. Regression tests
+### 4. Regression test
 
-- `src/utils/__tests__/archetypeSlug.test.ts` — round-trip for all 29 narrative ids; unknown slugs return `null`; case-insensitive match (`Luxury-Luminary` resolves).
-- `src/test/navigation.test.ts` — extend the public route list with one valid `/archetypes/luxury-luminary` and one invalid `/archetypes/not-a-thing`; both must render without 404. (The page itself renders even for invalid slugs.)
+New `supabase/functions/generate-itinerary/profile-loader.test.ts` (or extend an existing test if present):
+
+- Mock `travel_dna_profiles` returning `{ trait_scores: { adventure: 0, authenticity: 0, planning: 5 } }`.
+- Mock `profiles` returning `{ travel_dna_overrides: { adventure: 9, planning: -7 } }`.
+- Assert the returned `traitScores.adventure === 9`, `planning === -7`, `authenticity === 0`.
+- Assert warnings include the override-applied note.
+
+### 5. Memory note
+
+Add a short memory entry: *"Fine-Tune trait sliders (`profiles.travel_dna_overrides`) are merged on top of `travel_dna_profiles.trait_scores` inside `profile-loader`. Don't reintroduce a path that reads trait_scores without the override merge."*
 
 ## Files
 
 **Edited**
-- `src/config/routes.ts` — add `ARCHETYPE_DETAIL`
-- `src/App.tsx` — register `/archetypes/:slug`
-- `src/pages/Archetypes.tsx` — read slug, auto-open sheet, scroll carousel, slug-aware `<Head>`, sync URL on sheet close
-- `src/components/archetypes/ArchetypeDetailSheet.tsx` — share permalink + accept narrative id
-- `src/components/profile/TravelDNAReveal.tsx` — share permalink for the user's resolved type
-- `src/test/navigation.test.ts` — coverage for permalink + invalid slug
+- `supabase/functions/generate-itinerary/profile-loader.ts` — merge overrides into `traitScores`
+- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — record `traitOverridesApplied` in trip metadata
+- `mem://index.md` + new `mem://features/itinerary/trait-overrides-merge`
 
 **Created**
-- `src/utils/archetypeSlug.ts`
-- `src/utils/__tests__/archetypeSlug.test.ts`
+- `supabase/functions/generate-itinerary/profile-loader.test.ts` (or new test in the existing file)
 
-No backend changes. Pure frontend / routing fix.
+**Untouched**
+- `TraitOverrideSliders.tsx` — already persists correctly
+- `prompt-library.ts` / `compile-prompt.ts` — already consume `profile.traitScores`; merge happens upstream
+
+No schema changes. Pure server-side wiring + test.
