@@ -117,7 +117,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     const { data: allPayments } = await supabase
       .from('trip_payments')
       .select('item_type, item_id, amount_cents, quantity, status')
-      .eq('trip_id', tripId);
+      .eq('trip_id', tripId)
+      .is('archived_at', null);
 
     const manualPayments = (allPayments || []).filter(
       (p) => typeof p.item_id === 'string' && /^manual-/i.test(p.item_id)
