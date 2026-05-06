@@ -1,68 +1,84 @@
-# Lock down cross-day venue dedup against Louvre regression
+# Lock down Flights & Hotels tab vs Payments consistency
 
 ## Problem
 
-In two earlier sessions the Louvre appeared as the same product on consecutive days. Today's protection is the inline `canonVenue` + `venueNamesMatch` filter in `action-generate-trip-day.ts` (lines 1144–1191), which strips activity qualifiers ("Exploration", "Priority Visit", "Tour"…) and fuzzy-matches against `usedVenues`. There are also alias entries in `generation-utils.ts` (`musee du louvre`, `louvre museum`, `the louvre` → `louvre`).
+The Flights & Hotels tab (the `details` tab in `EditorialItinerary.tsx` at line 6801, label `"Flights & Hotels"`) renders three things that have to stay in sync with the Payments tab:
 
-The logic looks sound, but:
+1. **Flight legs total** — `flightCost` in `EditorialItinerary` (sums `leg.price`) vs the `Round-trip Flight` row that `usePayableItems` builds from `flightSelection`.
+2. **Single-hotel total** — `hotelCost` (lines 3381–3400) using `totalPrice ?? pricePerNight × nights` vs the `hotel-selection` row in `usePayableItems` (lines 254–271).
+3. **Multi-city hotels** — `allHotels.reduce(...)` in EditorialItinerary vs `syncMultiCityHotelsToLedger` (writes one `activity_costs` hotel row aggregated across cities).
 
-- It lives as a closure inside a 2,700-line file — not unit-tested.
-- The exact "Louvre on consecutive days" variants have no regression test, so a future refactor can silently regress.
-- The `ledger-check.ts` "repeat_already_done" pass uses a much weaker `fuzzyMatch` (substring only) and doesn't share the canonicalizer, so if `usedVenues` ever drops out of the pipeline the second line of defense doesn't catch "Louvre Museum Priority Visit" vs "Louvre Museum Exploration" reliably.
+Two real failure modes have already happened (and have inline-comment guards but no test):
+
+- "Hotel Accommodation $2,850" auto-estimate appearing alongside a manual "Four Seasons $2,400" — guard added in `syncHotelToLedger` (lines 187–197): if any `manual-` hotel payment exists, remove the canonical row instead of upserting. **No regression test.**
+- A selected hotel without an explicit price triggering a reference-table estimate that surprised users and double-billed — guard added (lines 207–214). **No regression test.**
+
+If either guard regresses, the Flights & Hotels tab will silently disagree with the Payments tab again.
 
 ## Plan
 
-### 1. Extract canonicalization into `generation-utils.ts`
+### 1. Extract `computeHotelCost(allHotels, hotelSelection, daysCount)` into a small utility
 
-Add `canonicalActivityVenueName(title)` exporting the regex chain currently inlined in `action-generate-trip-day.ts`:
+Today the hotel-cost math in `EditorialItinerary.tsx` (lines 3381–3400) is duplicated in three places: that file, `usePayableItems` (line 258), and `syncHotelToLedger` (lines 199–214). Extract a single pure function:
 
 ```ts
-export function canonicalActivityVenueName(s: string): string {
-  if (!s) return '';
-  let v = String(s).trim()
-    .replace(ACTIVITY_PREFIX_RE, '')
-    .replace(ACTIVITY_VERB_PREFIX_RE, '');
-  let prev = '';
-  while (prev !== v) { prev = v; v = v.replace(ACTIVITY_QUALIFIER_RE, '').trim(); }
-  return normalizeVenueName(v);
-}
+// src/lib/hotel-cost.ts
+export function computeHotelCostUsd(
+  allHotels: Array<{ hotel?: { totalPrice?: number; pricePerNight?: number }; checkInDate?: string; checkOutDate?: string }> | null | undefined,
+  hotelSelection: { totalPrice?: number; pricePerNight?: number; nights?: number } | null | undefined,
+  daysCount: number,
+): number;
 ```
 
-Plus `crossDayVenueDuplicate(activityCandidates: string[], priorVenues: string[]): { isDuplicate: boolean; matchedPrev?: string; matchedCandidate?: string }` that wraps the canonicalize → `venueNamesMatch` loop.
+Wire all three callers to use it. No behavior change.
 
-### 2. Use it from `action-generate-trip-day.ts`
+### 2. Unit tests for `computeHotelCostUsd`
 
-Replace the inline `canonVenue` + nested loops with `crossDayVenueDuplicate(...)`. Behavior unchanged; the log line stays.
+`src/lib/__tests__/hotel-cost.test.ts`:
 
-### 3. Use the same canonicalizer in `ledger-check.ts`
+- multi-city: sum of `totalPrice` per hotel
+- multi-city: `pricePerNight × nights` when `totalPrice` missing, with the existing 1-night floor
+- single hotel `totalPrice` wins over `pricePerNight × nights`
+- single hotel falls back to `pricePerNight × (nights ?? days-1)`
+- empty/null returns `0`
 
-`ledger-check.ts` step 2 ("Repeat-of-alreadyDone") currently uses substring-only `fuzzyMatch`. Harden it with `canonicalActivityVenueName` before comparing, so even when `usedVenues` is empty (e.g. on a single-day regen) we still catch "Louvre Museum Priority Visit" against an `alreadyDone` of "Louvre Museum Exploration".
+### 3. Regression tests for the manual-override guard
 
-### 4. Regression test suite
+The double-billing fix (lines 187–197 of `syncHotelToLedger`) is the highest-leverage thing to lock down. Pure-function test isn't possible because it queries supabase, so:
 
-New `supabase/functions/generate-itinerary/cross-day-dedup.test.ts` covering the Louvre case + neighbors:
+`src/services/__tests__/budgetLedgerSync.test.ts`:
 
-- `canonicalActivityVenueName('Louvre Museum Exploration')` → `'louvre museum'` (after strip)
-- `canonicalActivityVenueName('Morning at Louvre Museum')` → matches above
-- `crossDayVenueDuplicate(['Louvre Museum Priority Visit'], ['Louvre Museum Exploration'])` → duplicate
-- `crossDayVenueDuplicate(['Skip-the-Line Louvre Tour'], ['Musée du Louvre'])` → duplicate (alias path)
-- Non-duplicate sanity: `'Musée d'Orsay Visit'` vs `'Louvre Museum Exploration'` → not duplicate
-- Restaurants explicitly skipped (category branch is in caller, but the helper itself should not over-match `'Café Marly'` vs `'Louvre Museum'`)
+- mock `supabase.from('trip_payments')` to return one `manual-` hotel row → assert `removeLogisticsCost` is called and `upsertLogisticsCost` is **not** called, even when `hotel.totalPrice = 2850`
+- mock no manual rows + `hotel.totalPrice = 2400` → assert `upsertLogisticsCost(tripId, 'hotel', 2400, ...)`
+- mock no manual rows + only `pricePerNight = 600` and 4 nights via checkIn/checkOut → asserts $2,400 via the nights × rate path
+- mock no manual rows + no price at all → asserts `removeLogisticsCost` (the "no auto-estimate" guard)
 
-Plus a focused test on the patched `ledger-check.ts`: feed a Day 2 with "Louvre Museum Priority Visit" and an `alreadyDone` of "Louvre Museum Exploration", assert the Day 2 entry is removed with a `repeat_already_done` warning.
+### 4. `usePayableItems` hotel/flight reconciliation tests
 
-### 5. Stack-overflow note (database-level dedup)
+`src/hooks/__tests__/usePayableItems.test.ts` — render the hook via `renderHook` with three scenarios:
 
-The lovable-stack-overflow snippet suggests a unique DB index on (`source_id`, `date`, `amount`). That doesn't apply here — itinerary rows aren't identity-keyed by venue, and venues legitimately recur (Eiffel viewing point at sunset vs. tower climb). Sticking with the canonicalizer + alias map is correct.
+- **Selection-only**: `hotelSelection.totalPrice = 2400`, no payments → emits one `hotel-selection` row at 240000 cents.
+- **Manual override**: one `payments` row with `item_type='hotel'`, `item_id='manual-...'` → canonical `hotel-selection` row is suppressed (the `hasManualHotel` branch). This is the "phantom $2,850" prevention case.
+- **Inclusion toggles**: `includeHotel = false` → hotel row dropped from the result; `includeFlight = false` (default) keeps flights surfaced because the flight branch isn't gated by `includeFlight` in the hook (verify or fix; today the `activityCosts` filter respects both flags but the selection branch only honors `hasManualFlight`).
 
-## Files
+Same for flight: the third test acts as a real audit — if `includeFlight=false` should hide the canonical flight row but doesn't, we surface it as a finding rather than fix in this loop.
 
-- `supabase/functions/generate-itinerary/generation-utils.ts` — add `canonicalActivityVenueName`, `crossDayVenueDuplicate`
-- `supabase/functions/generate-itinerary/action-generate-trip-day.ts` — use new helpers
-- `supabase/functions/generate-itinerary/ledger-check.ts` — canonicalize before `fuzzyMatch`
-- `supabase/functions/generate-itinerary/cross-day-dedup.test.ts` — new (Deno)
+### 5. Document the agreement
+
+Add a short comment block at the top of `EditorialItinerary.tsx`'s `details` tab section ("Flights & Hotels tab — invariants") listing the three sources of truth that must agree (selection-derived UI, `activity_costs` ledger, `usePayableItems`). Cheaper than another doc; lives where the code does.
 
 ## Out of scope
 
-- Restructuring the Day Truth Ledger / `usedVenues` plumbing.
-- Adding a DB unique index — not the right shape for itinerary venue dedup.
+- Changing the actual UI of the tab. We're locking down data agreement, not redesigning.
+- Reworking `useTripFinancialSnapshot` — already canonical.
+- Adding e2e tests; vitest unit/hook tests cover the regression risk surfaced by the user.
+
+## Files
+
+- `src/lib/hotel-cost.ts` (new)
+- `src/lib/__tests__/hotel-cost.test.ts` (new)
+- `src/services/__tests__/budgetLedgerSync.test.ts` (new)
+- `src/hooks/__tests__/usePayableItems.test.ts` (new)
+- `src/components/itinerary/EditorialItinerary.tsx` (use `computeHotelCostUsd`, add invariants comment)
+- `src/hooks/usePayableItems.ts` (use `computeHotelCostUsd` for the selection branch)
+- `src/services/budgetLedgerSync.ts` (use `computeHotelCostUsd` after the manual guard)

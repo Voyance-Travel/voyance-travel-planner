@@ -8,6 +8,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { FlightSelection, HotelSelection } from '@/types/trip';
+import { computeHotelCostUsd } from '@/lib/hotel-cost';
 
 // activity_id is now TEXT — no UUID validation needed
 
@@ -196,13 +197,32 @@ export async function syncHotelToLedger(
     return;
   }
 
-  let totalUsd = hotel.totalPrice || 0;
-
-  // First fallback: pricePerNight × nights (still a real user-entered rate)
-  if (!totalUsd && hotel.pricePerNight) {
-    const nights = getHotelNights(hotel);
-    if (nights > 0) totalUsd = hotel.pricePerNight * nights;
-  }
+  // Single source of truth for hotel total math, shared with the Flights &
+  // Hotels tab and Payments tab so the three views never disagree.
+  const hotelAny = hotel as any;
+  const checkInDate = hotel.checkIn || hotelAny.checkInDate || null;
+  const checkOutDate = hotel.checkOut || hotelAny.checkOutDate || null;
+  const explicitNights = getHotelNights(hotel);
+  // Use the legacy single-selection path so `hotel.nights` is honored when
+  // present, with checkIn/checkOut as the secondary fallback via daysCount.
+  const hotelForCompute = {
+    totalPrice: hotel.totalPrice,
+    pricePerNight: hotel.pricePerNight,
+    nights: explicitNights || undefined,
+  };
+  // daysCount is only used to derive (days-1) nights, so when we have explicit
+  // dates compute nights here and pass through nights to keep the result stable.
+  const totalUsd = computeHotelCostUsd(
+    null,
+    hotelForCompute,
+    // If `nights` is set on hotelForCompute the daysCount is ignored.
+    // Otherwise rely on dates by treating them as a 1-hotel multi-city array.
+    1,
+  ) || computeHotelCostUsd(
+    [{ hotel: hotel as any, checkInDate, checkOutDate }],
+    null,
+    0,
+  );
 
   // NO reference-table estimate. A selected hotel without an explicit price
   // must NOT auto-bill the trip — a $2,850 estimated stay surprised users

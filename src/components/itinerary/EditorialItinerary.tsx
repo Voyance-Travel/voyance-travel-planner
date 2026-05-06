@@ -80,6 +80,7 @@ import ActivityAlternativesDrawer from '@/components/planner/ActivityAlternative
 import { RegenerateGuidedAssistDialog } from './RegenerateGuidedAssistDialog';
 import { WeatherForecast } from './WeatherForecast';
 import { preloadCostIndex, estimateCostSync, isLikelyFreePublicVenue } from '@/lib/cost-estimation';
+import { computeHotelCostUsd } from '@/lib/hotel-cost';
 import { VendorBookingLink } from '@/components/booking/VendorBookingLink';
 import { InlineBookingActions } from '@/components/booking/InlineBookingActions';
 import { PaymentsTab } from './PaymentsTab';
@@ -3378,26 +3379,11 @@ export function EditorialItinerary({
   // Calculate totals with smart estimation using destination-aware pricing
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode), 0);
   const flightCost = allFlightLegs.reduce((sum, leg) => sum + (leg.price || 0), 0);
-  const hotelCost = (() => {
-    // Multi-hotel: sum totalPrice (or pricePerNight * nights) across all hotels
-    if (allHotels && allHotels.length > 0) {
-      return allHotels.reduce((sum, h) => {
-        const hotel = h.hotel;
-        if (!hotel) return sum;
-        if (hotel.totalPrice) return sum + hotel.totalPrice;
-        if (hotel.pricePerNight && h.checkInDate && h.checkOutDate) {
-          const nights = Math.max(1, Math.ceil(
-            (parseLocalDate(h.checkOutDate).getTime() - parseLocalDate(h.checkInDate).getTime()) / (1000 * 60 * 60 * 24)
-          ));
-          return sum + hotel.pricePerNight * nights;
-        }
-        return sum;
-      }, 0);
-    }
-    // Legacy single hotel
-    if (hotelSelection?.totalPrice) return hotelSelection.totalPrice;
-    return (hotelSelection?.pricePerNight || 0) * (hotelSelection?.nights || Math.max(1, days.length - 1));
-  })();
+  // Flights & Hotels tab — invariants: this number, the canonical hotel row in
+  // `usePayableItems`, and the `activity_costs` row written by
+  // `syncHotelToLedger` MUST agree. All three call `computeHotelCostUsd` so a
+  // change to the math propagates everywhere at once.
+  const hotelCost = computeHotelCostUsd(allHotels as any, hotelSelection as any, days.length);
   
   // Use financial snapshot as the SOLE source of truth for trip total
   // This eliminates divergence between Trip Summary, Budget tab, and Payments tab

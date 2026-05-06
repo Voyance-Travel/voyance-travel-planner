@@ -13,6 +13,7 @@
 import { useMemo } from 'react';
 import type { TripPayment } from '@/services/tripPaymentsAPI';
 import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle, isUnconfirmedIntraCityTaxi } from '@/lib/cost-estimation';
+import { computeHotelCostUsd } from '@/lib/hotel-cost';
 
 export interface PayableSubItem {
   id: string;
@@ -254,8 +255,7 @@ export function usePayableItems({
     if (paymentsLoaded && !hasManualHotel && (hotelSelection?.totalPrice || hotelSelection?.pricePerNight)) {
       const hotelId = 'hotel-selection';
       const hotelPayments = payments.filter(p => p.item_type === 'hotel' && p.item_id === hotelId);
-      const nights = Math.max(1, days.length - 1);
-      const hotelPrice = hotelSelection.totalPrice || (hotelSelection.pricePerNight || 0) * nights;
+      const hotelPrice = computeHotelCostUsd(null, hotelSelection as any, days.length);
       const assignedIds = hotelPayments
         .map(p => (p as any)?.assigned_member_id)
         .filter(Boolean) as string[];
