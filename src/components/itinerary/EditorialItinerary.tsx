@@ -3426,23 +3426,20 @@ export function EditorialItinerary({
     financialSnapshot.tripTotalCents - daysSubtotalCents,
   );
 
-  // Dev guard: warn when totals drift unexpectedly.
+  // Dev guard: warn when day totals exceed trip total (indicates the snapshot
+  // dropped rows the day breakdown still counts — e.g. orphan filter mismatch).
   useEffect(() => {
     if (financialSnapshot.loading || tripDayBreakdown.loading) return;
     if (financialSnapshot.tripTotalCents <= 0) return;
-    const day0 = tripDayBreakdown.byDay[0]?.totalCents ?? 0;
-    const expected = daysSubtotalCents + (financialSnapshot.tripTotalCents - daysSubtotalCents - day0) + day0;
-    const diff = Math.abs(expected - financialSnapshot.tripTotalCents);
-    if (diff > 1) {
+    if (daysSubtotalCents > financialSnapshot.tripTotalCents + 1) {
       // eslint-disable-next-line no-console
-      console.warn('[EditorialItinerary] Day totals do not reconcile to trip total', {
+      console.warn('[EditorialItinerary] Day totals exceed trip total', {
         tripTotalCents: financialSnapshot.tripTotalCents,
         daysSubtotalCents,
-        day0,
-        diffCents: diff,
+        diffCents: daysSubtotalCents - financialSnapshot.tripTotalCents,
       });
     }
-  }, [financialSnapshot.loading, financialSnapshot.tripTotalCents, daysSubtotalCents, tripDayBreakdown]);
+  }, [financialSnapshot.loading, financialSnapshot.tripTotalCents, daysSubtotalCents, tripDayBreakdown.loading]);
 
   // Derive local currency robustly (destinationInfo is often undefined on TripDetail)
   // IMPORTANT: If the trip is in the Eurozone, prefer EUR even if some upstream metadata is wrong.
