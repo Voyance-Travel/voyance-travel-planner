@@ -3365,7 +3365,16 @@ export function EditorialItinerary({
 
   // ─── Canonical trip total from useTripFinancialSnapshot (single source of truth) ───
   const financialSnapshot = useTripFinancialSnapshot(tripId);
-  
+
+  // ─── Per-day breakdown from the same activity_costs table — guarantees that
+  // the sum of day badges + day-0 logistics + reserve == trip total. ───
+  const visibleActivityIdList = useMemo(() => {
+    const ids: string[] = [];
+    for (const d of days) for (const a of d.activities || []) if (a?.id) ids.push(String(a.id));
+    return ids;
+  }, [days]);
+  const tripDayBreakdown = useTripDayBreakdown(tripId, visibleActivityIdList);
+
   // Calculate totals with smart estimation using destination-aware pricing
   const totalActivityCost = days.reduce((sum, day) => sum + getDayTotalCost(day.activities, travelers, budgetTier, destination, destinationCountry, isManualMode), 0);
   const flightCost = allFlightLegs.reduce((sum, leg) => sum + (leg.price || 0), 0);
