@@ -2325,7 +2325,7 @@ Generate activities for this day following ALL constraints above.`;
           }
         }
         console.log(`[Stage 2] Day ${dayNumber} generated successfully (${generatedDay.activities.length} activities${dayCity ? `, city: ${dayCity.cityName}` : ''})`);
-        enforceDayTitleCoherence(generatedDay, { city: (dayCity?.cityName as string) || destination || '' });
+        enforceDayTitleCoherence(generatedDay, { city: (dayCity?.cityName as string) || context.destination || '' });
         return generatedDay;
       }
 
