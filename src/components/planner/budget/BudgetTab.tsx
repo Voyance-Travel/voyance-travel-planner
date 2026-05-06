@@ -59,6 +59,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePayableItems, type PayableItem } from '@/hooks/usePayableItems';
 import { toast } from 'sonner';
 import { applyRaiseBudget } from './raiseBudgetApply';
+import { BudgetRaisedBanner } from './BudgetRaisedBanner';
 
 interface ItineraryActivity {
   id: string;
@@ -572,6 +573,38 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6 py-6"
     >
+      {/* Original-vs-current budget banner — surfaces budget raises so they
+          don't silently persist across regenerations. */}
+      {(() => {
+        const alloc = settings?.budget_allocations as unknown as Record<string, unknown> | undefined;
+        const originalCents = typeof alloc?.original_total_cents === 'number'
+          ? (alloc.original_total_cents as number)
+          : null;
+        const originalSetAt = typeof alloc?.original_set_at === 'string'
+          ? (alloc.original_set_at as string)
+          : undefined;
+        const currentCents = settings?.budget_total_cents ?? 0;
+        if (!originalCents || originalCents === currentCents) return null;
+        return (
+          <BudgetRaisedBanner
+            tripId={tripId}
+            currentCents={currentCents}
+            originalCents={originalCents}
+            originalSetAt={originalSetAt}
+            formatCurrency={formatCurrency}
+            onReset={async () => {
+              try {
+                await updateSettings({ budget_total_cents: originalCents });
+                window.dispatchEvent(new CustomEvent('booking-changed', { detail: { tripId } }));
+                toast.success(`Budget reset to ${formatCurrency(originalCents)}`);
+              } catch {
+                toast.error('Could not reset budget');
+              }
+            }}
+          />
+        );
+      })()}
+
       {/* Failed/empty itinerary banner — replaces over-budget messaging */}
       {isEmptyItineraryFailure && (
         <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/30">
