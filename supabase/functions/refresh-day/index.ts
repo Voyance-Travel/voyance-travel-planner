@@ -203,6 +203,184 @@ function estimateTransit(a: Activity, b: Activity): TransitEstimate | null {
   };
 }
 
+// ─── fill_dead_gap helper ──────────────────────────────────────────────────────
+
+interface FillDeadGapBody {
+  mode?: string;
+  activities: Activity[];
+  date: string;
+  destination: string;
+  dayNumber: number;
+  gap?: { startTime?: string; endTime?: string; beforeId?: string; afterId?: string };
+  avoidIds?: string[];
+  archetype?: string;
+  dietaryRestrictions?: string[];
+  budgetTier?: string;
+  tripCurrency?: string;
+}
+
+async function handleFillDeadGap(body: FillDeadGapBody): Promise<Response> {
+  const { activities, destination, gap, avoidIds = [], archetype, dietaryRestrictions = [], budgetTier = 'standard', tripCurrency = 'USD' } = body;
+
+  if (!gap?.startTime || !gap?.endTime) {
+    return new Response(JSON.stringify({ error: 'gap.startTime and gap.endTime are required' }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    return new Response(JSON.stringify({ error: 'AI service not configured' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Window: leave 15-min buffer at each end
+  const startMin = (parseTime(gap.startTime) ?? 0) + 15;
+  const endMin = (parseTime(gap.endTime) ?? 0) - 15;
+  if (endMin - startMin < 45) {
+    return new Response(JSON.stringify({ error: 'gap too small after buffer' }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const beforeAct = activities.find(a => a.id === gap.beforeId);
+  const afterAct = activities.find(a => a.id === gap.afterId);
+
+  const existingTitles = activities.map(a => a.title).filter(Boolean);
+  const avoidList = [...existingTitles, ...avoidIds].join(', ');
+  const dietary = dietaryRestrictions.length ? dietaryRestrictions.join(', ') : 'none';
+
+  const systemPrompt = `You are a local concierge in ${destination} suggesting ONE real activity to fill an unplanned window in a traveler's day.
+
+WINDOW: ${minutesToTime(startMin)}–${minutesToTime(endMin)} (${endMin - startMin} minutes available, including 15-min buffers).
+NEIGHBORHOOD CONTEXT: previous activity = ${beforeAct?.title || 'none'} (ends ${gap.startTime}), next activity = ${afterAct?.title || 'none'} (starts ${gap.endTime}).
+TRAVELER STYLE: ${archetype || 'flexible_wanderer'}.
+BUDGET TIER: ${budgetTier}.
+DIETARY RESTRICTIONS: ${dietary}.
+
+HARD RULES:
+- Use a REAL named venue/landmark in ${destination} (no generic stubs like "Local Café").
+- Activity must fit fully inside ${minutesToTime(startMin)}–${minutesToTime(endMin)} with at least 45 minutes duration.
+- Do NOT duplicate any of these: ${avoidList || '(none)'}.
+- Be geographically sensible — close to the previous activity if possible.
+- If you cannot find a real venue, return { "fallback": true } and nothing else.
+
+OUTPUT (JSON only, no markdown):
+{
+  "title": "Real venue name",
+  "description": "1-2 sentence pitch (max 160 chars).",
+  "category": "activity|dining|explore|wellness|culture|shopping",
+  "startTime": "HH:MM",
+  "endTime": "HH:MM",
+  "venueName": "Real venue name",
+  "address": "Street address or neighborhood",
+  "rationale": "One short sentence (max 100 chars)."
+}`;
+
+  let aiResponse: Response;
+  try {
+    aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Suggest one activity for the unplanned window.' },
+        ],
+        temperature: 0.85,
+        max_tokens: 400,
+      }),
+    });
+  } catch (e) {
+    console.error('[fill_dead_gap] AI gateway fetch failed:', e);
+    return new Response(JSON.stringify({ fallback: true, reason: 'ai_unavailable' }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (!aiResponse.ok) {
+    const txt = await aiResponse.text().catch(() => '');
+    console.warn('[fill_dead_gap] AI gateway non-OK:', aiResponse.status, txt.slice(0, 200));
+    if (aiResponse.status === 429) {
+      return new Response(JSON.stringify({ error: 'rate_limited' }), {
+        status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ fallback: true, reason: 'ai_error' }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const aiData = await aiResponse.json();
+  const content: string = aiData?.choices?.[0]?.message?.content || '';
+  let parsed: any = null;
+  try {
+    const m = content.match(/\{[\s\S]*\}/);
+    if (m) parsed = JSON.parse(m[0]);
+  } catch (e) {
+    console.warn('[fill_dead_gap] parse failed:', e);
+  }
+
+  if (!parsed || parsed.fallback) {
+    return new Response(JSON.stringify({ fallback: true, reason: 'no_suggestion' }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Validate window — snap if AI returned out-of-window times
+  const sMin = parseTime(parsed.startTime);
+  const eMin = parseTime(parsed.endTime);
+  if (sMin === null || eMin === null || sMin < startMin || eMin > endMin || eMin - sMin < 45) {
+    const dur = Math.min(Math.max(60, (sMin !== null && eMin !== null) ? eMin - sMin : 90), endMin - startMin);
+    parsed.startTime = minutesToTime(startMin);
+    parsed.endTime = minutesToTime(startMin + dur);
+  }
+
+  // Generic-name guard
+  const genericRe = /^(local|café|cafe|bistro|restaurant|bar|spa|museum|gallery|park)( |$)/i;
+  if (!parsed.title || genericRe.test(String(parsed.title).trim())) {
+    return new Response(JSON.stringify({ fallback: true, reason: 'generic_name' }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Dedup against existing + avoid list
+  const titleLower = String(parsed.title).toLowerCase();
+  const dup = [...existingTitles, ...avoidIds].some(t => {
+    const tl = String(t).toLowerCase();
+    return tl === titleLower || (tl.length > 4 && titleLower.includes(tl)) || (titleLower.length > 4 && tl.includes(titleLower));
+  });
+  if (dup) {
+    return new Response(JSON.stringify({ fallback: true, reason: 'duplicate' }), {
+      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const proposedActivity = {
+    id: `gap-suggest-${Date.now()}`,
+    title: parsed.title,
+    description: parsed.description || '',
+    category: parsed.category || 'activity',
+    startTime: parsed.startTime,
+    endTime: parsed.endTime,
+    location: { name: parsed.venueName || parsed.title, address: parsed.address || '' },
+    cost: { amount: 0, currency: tripCurrency },
+    rationale: parsed.rationale || '',
+    isLocked: false,
+    source: 'fill_dead_gap',
+  };
+
+  return new Response(JSON.stringify({
+    proposedChange: {
+      type: 'insert_activity',
+      insertAfterId: gap.beforeId,
+      activity: proposedActivity,
+    },
+  }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
 // ─── Main Handler ──────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -211,18 +389,31 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { activities, date, destination, dayNumber } = await req.json() as {
+    const body = await req.json() as {
+      mode?: string;
       activities: Activity[];
       date: string;
       destination: string;
       dayNumber: number;
+      gap?: { startTime?: string; endTime?: string; beforeId?: string; afterId?: string };
+      avoidIds?: string[];
+      archetype?: string;
+      dietaryRestrictions?: string[];
+      budgetTier?: string;
+      tripCurrency?: string;
     };
+    const { activities, date, destination, dayNumber } = body;
 
     if (!activities || !Array.isArray(activities)) {
       return new Response(JSON.stringify({ error: 'activities array required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ─── fill_dead_gap mode — auto-suggest a single activity for an unplanned window ───
+    if (body.mode === 'fill_dead_gap') {
+      return await handleFillDeadGap(body);
     }
 
     const issues: ValidationIssue[] = [];

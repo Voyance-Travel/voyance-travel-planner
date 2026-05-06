@@ -1,61 +1,75 @@
-## Bug
+# Fill the Gap — backend auto-suggestion
 
-The Fine-Tune trait sliders (Adventure, Planning/Spontaneity, Authenticity, etc. in `TraitOverrideSliders.tsx`) write to `profiles.travel_dna_overrides`, but the itinerary generator never reads that column. The prompt is built from `travel_dna_profiles.trait_scores` (with a fallback to the legacy `profiles.travel_dna` blob) — overrides are silently ignored.
+## Goal
 
-Evidence:
-- `supabase/functions/generate-itinerary/preference-context.ts:178` defines `getTraitOverrides()` reading `profiles.travel_dna_overrides`.
-- A repo-wide grep (`rg "getTraitOverrides|trait_overrides|traitOverrides" supabase/`) shows that function has **zero call sites**.
-- `profile-loader.ts:266` resolves `traitScores` only from the DNA profile / blob, then `prompt-library.ts:1744` walks those scores to render the trait narrative — overrides never enter the pipeline.
+Today the amber "Fill the gap" banner just opens `AddActivityModal` with a blank form. Make it actually *suggest* an activity for the gap (DNA-aware, dietary-aware, budget-aware) and offer one-tap accept, while keeping manual entry as a fallback.
 
-So a user who pushes Adventure to +9 still gets the prompt their base quiz produced.
+## UX
 
-## Fix
+1. User sees amber banner: "2h 30m unplanned between A (14:00) and B (16:30)."
+2. CTA changes from **"Fill the gap"** → **"Suggest something"** (primary) with a secondary **"Add manually"** link.
+3. Tapping "Suggest something":
+   - Spinner inline on the banner (~2-4s).
+   - Returns a single proposed activity card (title, ~time window, cost, short rationale, category icon).
+   - Two actions: **Add to day** (commits) and **Try another** (re-rolls, max 3 times before falling back to manual).
+4. If suggestion engine fails or returns nothing usable → banner falls back to the existing "Add manually" CTA so user is never blocked.
 
-Single change: merge `profiles.travel_dna_overrides` into `traitScores` inside the profile loader, then verify it lands in the prompt. No UI changes (the slider already persists correctly).
+## Backend
 
-### 1. Wire overrides into the profile loader
+Add a new request shape to `supabase/functions/refresh-day/index.ts`:
 
-In `supabase/functions/generate-itinerary/profile-loader.ts`, after STEP 5 (trait-score resolution, around line 289):
+```text
+POST { mode: "fill_dead_gap",
+       trip_id, day_number, date, destination,
+       gap: { start_time, end_time, before_id, after_id },
+       activities: [...current day],
+       avoid_ids?: string[]   // for "Try another"
+     }
+→ { proposed_change: { type: "insert_activity",
+                       afterIndex, activity: { ... } } }
+```
 
-- Fetch overrides via the existing `getTraitOverrides(supabase, userId)` (move/import it, or inline the same `select('travel_dna_overrides')` query).
-- For each numeric value present in overrides, replace the corresponding `traitScores[key]`.
-  - The slider stores values on the `-10..+10` scale (same as `TraitScores`); guard with `Number.isFinite` and clamp to `[-10, 10]`.
-- Append to `warnings` an info line `Trait overrides applied: <keys>` and `console.log` the before/after diff for traceability.
-- Increment `dataCompleteness` by 5 when at least one override is applied (overrides are an explicit signal of intent).
+Implementation notes:
+- Branch at the top of the handler on `body.mode === 'fill_dead_gap'`; existing validation flow stays untouched.
+- Pull profile + trait scores via the same loader `generate-itinerary` uses (`profile-loader.ts` already merges Fine-Tune overrides).
+- Reuse the day-fill helper that `action-generate-day.ts` calls (one-activity prompt to Lovable AI Gateway, `google/gemini-2.5-flash`).
+- Constrain the AI to:
+  - Fit inside the gap window (leave a 15-min buffer either side).
+  - Honor dietary + budget tier (pass through from trip).
+  - Avoid duplicating any existing activity title/venue on the trip (use `cross-day-dedup` canonicalizer).
+  - Respect Wellness Venue Integrity (real venue or downgrade to free).
+  - Use `cost_reference` for cost (no AI estimation).
+- Return $0/null cost when no real venue found rather than fabricating.
 
-### 2. Make the override visible to the prompt
+## Frontend
 
-`compile-prompt.ts` and `prompt-library.ts:1744` already read `profile.traitScores`, so once the loader merges overrides, the trait-narrative block, archetype-tone hints, and adventure/authenticity copy automatically reflect the slider. No prompt edits needed — verify by logging the merged `traitScores` once at the top of `compile-prompt.ts` (gated behind the existing debug flag).
+`src/components/itinerary/EditorialItinerary.tsx` (lines ~10117-10147):
+- Replace inline "Fill the gap" button with a small `<DeadGapBanner>` component (new file `src/components/itinerary/DeadGapBanner.tsx`) that owns local state: idle → loading → suggested → applying → error.
+- New hook `src/hooks/useFillDeadGap.ts` wrapping `supabase.functions.invoke('refresh-day', { body: { mode:'fill_dead_gap', ... } })`. Tracks `avoidIds` across retries.
+- On accept, call existing `onAddActivity`-style commit path (build the activity object, splice at `afterIndex`, persist via existing save flow).
+- Keep `onAddActivity?.(gap.beforeIndex)` as the manual fallback link.
 
-### 3. Source-of-truth tag in the ledger / metadata
+## Tests
 
-Add `traitOverridesApplied: string[]` to the existing trip metadata snapshot written in `action-save-itinerary.ts` (whichever object already records `archetypeSource`). This lets us tell post-hoc whether a degenerate output came from a user who *did* tune the sliders.
-
-### 4. Regression test
-
-New `supabase/functions/generate-itinerary/profile-loader.test.ts` (or extend an existing test if present):
-
-- Mock `travel_dna_profiles` returning `{ trait_scores: { adventure: 0, authenticity: 0, planning: 5 } }`.
-- Mock `profiles` returning `{ travel_dna_overrides: { adventure: 9, planning: -7 } }`.
-- Assert the returned `traitScores.adventure === 9`, `planning === -7`, `authenticity === 0`.
-- Assert warnings include the override-applied note.
-
-### 5. Memory note
-
-Add a short memory entry: *"Fine-Tune trait sliders (`profiles.travel_dna_overrides`) are merged on top of `travel_dna_profiles.trait_scores` inside `profile-loader`. Don't reintroduce a path that reads trait_scores without the override merge."*
+- `supabase/functions/refresh-day/fill_dead_gap.test.ts` — 3 cases: valid gap returns insert_activity within window; dietary restriction excluded; avoid_ids honored on retry.
+- `src/components/itinerary/__tests__/DeadGapBanner.test.tsx` — loading state, accept → calls commit, "Try another" appends to avoidIds, max-retry falls back to manual CTA.
 
 ## Files
 
-**Edited**
-- `supabase/functions/generate-itinerary/profile-loader.ts` — merge overrides into `traitScores`
-- `supabase/functions/generate-itinerary/action-save-itinerary.ts` — record `traitOverridesApplied` in trip metadata
-- `mem://index.md` + new `mem://features/itinerary/trait-overrides-merge`
+Created
+- `src/components/itinerary/DeadGapBanner.tsx`
+- `src/hooks/useFillDeadGap.ts`
+- `supabase/functions/refresh-day/fill_dead_gap.test.ts`
+- `src/components/itinerary/__tests__/DeadGapBanner.test.tsx`
 
-**Created**
-- `supabase/functions/generate-itinerary/profile-loader.test.ts` (or new test in the existing file)
+Edited
+- `supabase/functions/refresh-day/index.ts` — `mode: 'fill_dead_gap'` branch + reuse profile-loader + day-fill helper
+- `src/components/itinerary/EditorialItinerary.tsx` — swap inline banner for `<DeadGapBanner>`
 
-**Untouched**
-- `TraitOverrideSliders.tsx` — already persists correctly
-- `prompt-library.ts` / `compile-prompt.ts` — already consume `profile.traitScores`; merge happens upstream
+No DB migrations. No new secrets. Uses the existing Lovable AI Gateway call already wired in `action-generate-day.ts`.
 
-No schema changes. Pure server-side wiring + test.
+## Out of scope
+
+- Multi-suggestion picker UI (just one at a time + re-roll).
+- Late-arrival window tuning (still 09:00–18:00 — separate gap).
+- Budget Coach integration (banner is independent of coach swaps).
