@@ -319,6 +319,7 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // a planning placeholder with no real spend behind it. Adding it inflates
     // Trip Expenses beyond what the itinerary actually contains, which the
     // Budget tab already flags via its empty-state breakdown.
+    let miscReserveContributionCents = 0;
     if (budgetTotalForReserve > 0 && miscPercent > 0 && meaningfulActivityCount >= 1) {
       const reserve = computeMiscReserve({
         budgetTotalCents: budgetTotalForReserve,
@@ -329,7 +330,8 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
         includeFlight,
         loggedMiscCents,
       });
-      totalCents += reserve.contributionToTotalCents;
+      miscReserveContributionCents = reserve.contributionToTotalCents;
+      totalCents += miscReserveContributionCents;
     }
 
     // Compute delta against the previous fetch (skip on initial load and
