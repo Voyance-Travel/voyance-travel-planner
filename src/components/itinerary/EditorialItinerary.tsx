@@ -6739,125 +6739,41 @@ export function EditorialItinerary({
               toast.success(`Removed "${title}" from itinerary`);
             }}
             onApplyBudgetSwap={async (suggestion) => {
-              // ─── DROP path ──────────────────────────────────────────
-              // Match by activity_id ACROSS ALL DAYS (not just
-              // suggestion.day_number, which can be stale) and verify
-              // the live title still loosely matches current_item so a
-              // recycled UUID can never wipe an unrelated activity.
-              if (suggestion.swap_type === 'drop') {
-                const resolved = resolveDropTarget(days as any, suggestion as any);
-                if (resolved.ok === false) {
-                  if (resolved.error === 'not-found') {
+              // Pure logic lives in budgetSwapApply.ts so it can be unit-tested.
+              const { applyBudgetSuggestion } = await import('./budgetSwapApply');
+              // Capture the title BEFORE the drop so the toast can name it.
+              const droppedTitle = suggestion.swap_type === 'drop'
+                ? (days.flatMap((d) => d.activities).find((a) => a.id === suggestion.activity_id)?.title || 'activity')
+                : null;
+
+              const result = applyBudgetSuggestion(days as any, suggestion as any);
+              if (!result.ok) {
+                if (suggestion.swap_type === 'drop') {
+                  if (result.reason === 'not-found') {
                     toast.error("Couldn't drop — item is no longer in your itinerary.");
                   } else {
                     toast.error("Couldn't drop — that suggestion no longer matches your itinerary. Refresh suggestions.");
                   }
-                  return false;
                 }
-
-                const { dayIdx, activity: foundActivity } = resolved;
-                const targetId = suggestion.activity_id;
-                let updatedDays: typeof days = [];
-                setDays((prev) => {
-                  const updated = prev.map((day, idx) => {
-                    if (idx !== dayIdx) return day;
-                    return { ...day, activities: day.activities.filter((a) => a.id !== targetId) };
-                  });
-                  updatedDays = updated;
-                  return updated;
-                });
-                if (updatedDays.length > 0) {
-                  syncBudgetFromDays(updatedDays);
-                  setHasChanges(true);
-                  queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
-                  queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
-                  queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
-                  const savedAmount = (suggestion.savings || 0) * (travelers || 1);
-                  toast.success(
-                    `Dropped "${foundActivity.title || 'activity'}" — saved ${formatCurrency(savedAmount)}`
-                  );
-                  return true;
+                if (result.reason === 'cost-not-lower') {
+                  console.warn('Budget swap blocked: new cost not lower than current');
                 }
                 return false;
               }
 
+              const updatedDays = result.updatedDays as typeof days;
+              setDays(updatedDays);
+              syncBudgetFromDays(updatedDays);
+              setHasChanges(true);
+              queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
+              queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
+              queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
 
-              // ─── SWAP path (default) ───────────────────────────────
-              // suggestion.new_cost is in CENTS from the edge function.
-              // Activity costs are stored in WHOLE currency units.
-              const newCostWhole = Math.round(suggestion.new_cost / 100);
-
-              let applied = false;
-              let updatedDays: typeof days = [];
-              setDays(prev => {
-                const updated = prev.map(day => {
-                  if (day.dayNumber !== suggestion.day_number) return day;
-                  return {
-                    ...day,
-                    activities: day.activities.map(act => {
-                      if (act.id !== suggestion.activity_id) return act;
-
-                      const currentCostWhole =
-                        typeof act.cost === 'object' && act.cost !== null
-                          ? Number((act.cost as any).amount ?? 0)
-                          : Number(act.cost ?? 0);
-
-                      // STRICT GUARD: only apply if new cost is strictly lower
-                      if (currentCostWhole > 0 && newCostWhole >= currentCostWhole) {
-                        console.warn(`Budget swap blocked: new ${newCostWhole} >= current ${currentCostWhole}`);
-                        return act;
-                      }
-
-                      applied = true;
-                      // Preserve original cost basis so syncBudgetFromDays writes correct per-person value
-                      const originalBasis = typeof act.cost === 'object' && act.cost !== null
-                        ? (act.cost as any).basis
-                        : undefined;
-                      const coherentTitle = enforceMealTimeCoherence(suggestion.suggested_swap, act.startTime || act.time);
-                      return {
-                        ...act,
-                        title: coherentTitle,
-                        name: coherentTitle,
-                        description: suggestion.suggested_description || coherentTitle,
-                        cost: typeof act.cost === 'object' && act.cost !== null
-                          ? { ...(act.cost as any), amount: newCostWhole, basis: originalBasis }
-                          : newCostWhole,
-                        location: {
-                          ...(act.location || {}),
-                          name: coherentTitle,
-                        },
-                        // Clear booking metadata — replacement is a different activity
-                        bookingUrl: undefined,
-                        viatorProductCode: undefined,
-                        website: undefined,
-                        externalBookingUrl: undefined,
-                        vendorPrice: undefined,
-                        tips: undefined,
-                        voyanceInsight: undefined,
-                        isVoyancePick: false,
-                      };
-                    }),
-                  };
-                });
-
-                updatedDays = updated;
-                return updated;
-              });
-
-              // Let syncBudgetFromDays handle ALL writes to activity_costs.
-              if (updatedDays.length > 0) {
-                syncBudgetFromDays(updatedDays);
+              if (suggestion.swap_type === 'drop' && droppedTitle) {
+                const savedAmount = (suggestion.savings || 0) * (travelers || 1);
+                toast.success(`Dropped "${droppedTitle}" — saved ${formatCurrency(savedAmount)}`);
               }
-
-              if (applied) {
-                setHasChanges(true);
-                queryClient.invalidateQueries({ queryKey: ['tripBudgetSummary', tripId] });
-                queryClient.invalidateQueries({ queryKey: ['tripBudgetLedger', tripId] });
-                queryClient.invalidateQueries({ queryKey: ['tripBudgetAllocations', tripId] });
-                return true; // Signal success to BudgetCoach
-              } else {
-                return false; // Signal failure — swap was blocked
-              }
+              return true;
             }}
           />
           </ErrorBoundary>
