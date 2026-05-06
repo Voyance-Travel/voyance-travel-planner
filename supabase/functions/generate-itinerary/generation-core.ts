@@ -230,6 +230,7 @@ import {
 } from './must-do-priorities.ts';
 
 import type { PreBookedCommitment } from './pre-booked-commitments.ts';
+import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 
 
 export async function prepareContext(supabase: any, tripId: string, userId?: string, directTripData?: DirectTripData, requestSmartFinishMode?: boolean): Promise<GenerationContext | null> {
