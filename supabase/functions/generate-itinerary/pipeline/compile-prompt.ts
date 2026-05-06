@@ -112,7 +112,7 @@ export interface CompiledPrompt {
   lockedCards: LockedCard[];
 
   // Effective trait scores (post-blend) consumed by repair pipeline
-  effectiveTraitScores: { pace: number; budget: number; adventure: number };
+  effectiveTraitScores: { pace: number; budget: number; adventure: number; authenticity: number };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
