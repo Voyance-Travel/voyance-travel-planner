@@ -411,7 +411,10 @@ function parseSingleActivity(
     startTime: extractString(activityData, ['startTime', 'start_time', 'time']),
     endTime: extractString(activityData, ['endTime', 'end_time']),
     time: extractString(activityData, ['time', 'startTime', 'start_time']),
-    duration: extractString(activityData, ['duration']),
+    duration: coerceDurationString(
+      extractString(activityData, ['duration']),
+      extractNumber(activityData, ['durationMinutes', 'duration_minutes'])
+    ),
     durationMinutes: extractNumber(activityData, ['durationMinutes', 'duration_minutes']),
     location: parseLocation(activityData.location),
     imageUrl: extractString(activityData, ['imageUrl', 'image_url', 'image'])
