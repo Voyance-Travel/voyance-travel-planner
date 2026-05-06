@@ -180,6 +180,11 @@ export function sanitizeActivityText(text: string | undefined | null): string {
   return text
     // Repair orphaned "City" gap (e.g. "Explore the of Paris Museum…")
     .replace(/\bthe\s+of\s+(?=[A-Z])/g, 'the City of ')
+    // Repair orphan possessive "the's" / "the' s" → "the city's"
+    // (e.g. "A sensory retreat at the's historic mosque")
+    .replace(/\bthe'\s?s\b/gi, "the city's")
+    // Repair ", the of <Proper>" → ", the City of <Proper>"
+    .replace(/,\s*the\s+of\b/gi, ', the City of')
     .replace(SYSTEM_LABEL_RE, '')
     .replace(VOYANCE_PICK_RE, '')
     // Strip any Voyance branding text that leaks into descriptions
