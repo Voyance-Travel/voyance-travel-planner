@@ -2374,20 +2374,36 @@ export function EditorialItinerary({
   
   const handleRefreshDay = useCallback(async (dayIndex: number) => {
     const day = days[dayIndex];
-    if (!day) return;
+    if (!day) {
+      toast.error('Could not find that day to refresh.');
+      return;
+    }
     setRefreshingDayNumber(day.dayNumber);
     try {
-      const activities = day.activities.map(a => ({
-        id: a.id,
-        title: a.title || '',
-        category: a.category,
-        startTime: a.startTime || (a as any).time,
-        endTime: a.endTime,
-        location: a.location,
-        operatingHours: (a as any).operatingHours,
-        durationMinutes: a.durationMinutes,
-        cost: a.cost,
-      }));
+      const activities = day.activities.map(a => {
+        const start = a.startTime || (a as any).time || (a as any).start_time;
+        const dur = a.durationMinutes || (a as any).duration_minutes || (a as any).duration;
+        let end = a.endTime || (a as any).end_time;
+        // Derive endTime from start + duration when missing
+        if (!end && start && typeof dur === 'number' && dur > 0) {
+          const m = /^(\d{1,2}):(\d{2})/.exec(String(start));
+          if (m) {
+            const tot = parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + dur;
+            end = `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+          }
+        }
+        return {
+          id: a.id,
+          title: a.title || '',
+          category: a.category,
+          startTime: start,
+          endTime: end,
+          location: a.location,
+          operatingHours: (a as any).operatingHours,
+          durationMinutes: typeof dur === 'number' ? dur : a.durationMinutes,
+          cost: a.cost,
+        };
+      });
       const result = await refreshDay(activities, day.date || '', destination, day.dayNumber);
       if (result) {
         setRefreshResults(prev => ({ ...prev, [day.dayNumber]: result }));
