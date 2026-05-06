@@ -617,23 +617,34 @@ export function matchesAIStubVenue(name: string): boolean {
  */
 export function isPlaceholderMeal(activity: any, cityName: string): boolean {
   const category = (activity.category || '').toUpperCase();
-  if (category !== 'DINING' && category !== 'RESTAURANT') return false;
-
   const title = (activity.title || '').trim();
   const venue = (activity.location?.name || activity.venue_name || '').trim();
   const description = (activity.description || '').trim();
+
+  // Title-shape detection FIRST — many meal-shaped placeholders ship with a
+  // non-DINING category (e.g. "experience", "food", or empty). We treat any
+  // meal-labeled activity as a candidate, then defer category gating.
+  const looksLikeMeal =
+    category === 'DINING' ||
+    category === 'RESTAURANT' ||
+    /^(breakfast|brunch|lunch|dinner|supper|drinks|meal)\b/i.test(title);
+  if (!looksLikeMeal) return false;
 
   if (PLACEHOLDER_TITLE_PATTERNS.some(p => p.test(title))) return true;
   if (cityName.length > 2 && venue.toLowerCase() === cityName.toLowerCase()) return true;
   if (PLACEHOLDER_VENUE_PATTERNS.some(p => p.test(venue))) return true;
   if (/get a restaurant recommendation/i.test(description)) return true;
   if (/get a restaurant recommendation/i.test(venue)) return true;
+  // Legacy "find a local spot" stubs from prior generations
+  if (/find a local spot/i.test(title)) return true;
+  if (/find a local spot/i.test(venue)) return true;
   // Venue name equals title (e.g. both are "Lunch at a bistro")
   if (venue && title && venue.toLowerCase() === title.toLowerCase()) return true;
-  // AI-generated French/Italian stub names ("Café Matinal", "Table du Quartier", …)
+  // Empty venue on a meal-labeled activity = placeholder
+  if (looksLikeMeal && !venue) return true;
+  // AI-generated French/Italian stub names
   if (matchesAIStubVenue(title)) return true;
   if (matchesAIStubVenue(venue)) return true;
-  // Strip leading meal label ("Lunch at <stub>") and re-test
   const titleNoLabel = title.replace(/^(breakfast|brunch|lunch|dinner|supper|drinks|meal)\s*[:\-—–]?\s*(at\s+)?/i, '').trim();
   if (titleNoLabel && titleNoLabel !== title && matchesAIStubVenue(titleNoLabel)) return true;
 
