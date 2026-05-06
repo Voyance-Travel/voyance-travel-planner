@@ -2425,7 +2425,7 @@ export function EditorialItinerary({
       return;
     }
     setSelectedDayIndex(idx);
-    setActiveTab('details');
+    setActiveTab('itinerary');
     handleRefreshDay(idx);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshDayRequest?.nonce]);
