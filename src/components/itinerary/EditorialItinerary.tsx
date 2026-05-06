@@ -5144,6 +5144,20 @@ export function EditorialItinerary({
     toast.success('Activity added!');
   }, [tripCurrency, spendCredits, tripId, days, syncBudgetFromDays]);
 
+  // Listen for accepted dead-gap suggestions and commit them via handleAddActivity
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { activity: Partial<EditorialActivity> } | undefined;
+      if (!detail?.activity) return;
+      // Close the modal that onAddActivity opened, then commit the suggestion
+      setAddActivityModal(null);
+      const dayIndex = selectedDayIndex >= 0 ? selectedDayIndex : 0;
+      handleAddActivity(dayIndex, detail.activity);
+    };
+    window.addEventListener('lovable:fill-dead-gap-accept', handler as EventListener);
+    return () => window.removeEventListener('lovable:fill-dead-gap-accept', handler as EventListener);
+  }, [handleAddActivity, selectedDayIndex]);
+
   const handleImportActivities = useCallback(async (imports: Array<{ dayIndex: number; activities: Array<Partial<EditorialActivity>>; mode: ImportMode }>) => {
     // Save version snapshots for all affected days before modifying
     const affectedDayIndices = [...new Set(imports.map(i => i.dayIndex))];
