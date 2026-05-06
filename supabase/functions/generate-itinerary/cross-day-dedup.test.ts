@@ -75,7 +75,7 @@ Deno.test('ledger-check repeat_already_done catches Louvre qualifier variant via
       ],
     },
   ];
-  const result = ledgerCheckDays(days, [ledger]);
+  const result = await ledgerCheck(days, [ledger]);
   assertEquals(result.removed, 1);
   const warning = result.warnings.find((w) => w.kind === 'repeat_already_done');
   assert(warning, 'expected repeat_already_done warning');
