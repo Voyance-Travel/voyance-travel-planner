@@ -1,83 +1,66 @@
-# One Price Per Activity — End the Card vs Budget Divergence
+## Problem
 
-## Why the previous fix isn't enough
+Clicking **Fix Timing** in the Trip Health panel runs `fixDayTiming` (a local 5-minute-buffer auto-spacer), then immediately calls `handleRefreshDay` against the server `refresh-day` function. The server uses **transit-aware** buffers (walking/transit minutes + category minimums) and also reports **operating-hours** issues that `fixDayTiming` never touches. Result:
 
-Last turn I added two safety nets:
-1. `preserveLedgerCosts` (server + client) so autosaves can't downgrade JSONB after a repair.
-2. `getLedgerOverride` so the card *displays* the ledger price when JSONB is materially lower.
+1. Local fix declares "resolved 2 conflicts" and shows success.
+2. Server re-check immediately reports 7 new errors + 2 warnings (transit gaps, closed venues).
+3. Health score doesn't update because the panel still sees the original `analyzeHealth(days)` issues alongside `refreshResultsByDay` (two parallel sources of truth, only the local one feeds health math).
+4. `setHasChanges(true)` triggers downstream activity-cost sync + `booking-changed` dispatch, kicking the financial snapshot into a refetch loop where `bucketSum !== estimatedTotal` for several hundred ms each cycle, so Payments shows a permanent "Reconciling…" badge.
 
-Both are defensive patches around a structural problem: **`trips.itinerary_data.activities[].cost` and `activity_costs.cost_per_person_usd` are two independent stores of the same fact.** Every code path that writes one without the other is a chance to drift. The user is right — this will keep happening until there is exactly one writer of price.
+The mechanical fix works; the user-visible outcome is worse than not clicking.
 
-## The structural fix
+## Goal
 
-Make `activity_costs` the **only** writer, and have the database itself project the value back into JSONB. After this, the card cannot show a different price from the budget — they are reading the same byte path.
+A single click on **Fix Timing** should:
+- Use the same logic the server validator uses (so it can actually clear what it claims to fix).
+- Update the health score the moment the day is clean.
+- Not destabilize the Payments tab.
 
-### 1. Database trigger: `activity_costs` → `trips.itinerary_data` (single source of truth)
+## Plan
 
-New `AFTER INSERT OR UPDATE OR DELETE` trigger on `public.activity_costs`:
+### 1. Make Fix Timing call the authoritative validator
 
-- On INSERT/UPDATE: `jsonb_set` the matching activity inside `trips.itinerary_data.days[*].activities[*]` where `id = NEW.activity_id`, writing:
-  ```json
-  "cost": { "amount": <total_cost_usd>, "currency": "USD",
-            "perPerson": <cost_per_person_usd>, "basis": "ledger",
-            "source": <NEW.source>, "synced_at": <now> }
-  ```
-- On DELETE: clear `cost` back to `{ amount: 0, currency: "USD", basis: "ledger" }`.
+Replace the dual-engine flow in `EditorialItinerary.tsx` (`fixTimingRequest` effect, lines ~2466-2514).
 
-The trigger function uses a single statement with a `jsonb_path_query` + `jsonb_set` to update the right activity in place. Because the trigger runs in the same transaction as the cost write, **there is no window in which the ledger and JSONB disagree**.
+New flow:
+- Call `refreshDay()` for the selected day.
+- Filter `proposedChanges` to **time-only** patches (`time_shift`, `buffer_added`) — skip `replacement` (operating-hours / closed-venue swaps) and `reorder` so we never silently move an activity the user didn't ask to move.
+- Apply those patches via the existing `handleApplyRefreshChanges()` path so cascading is consistent.
+- Re-run `refreshDay()` once after apply to refresh `refreshResultsByDay` (single round-trip, no recursion).
+- Toast outcomes:
+  - All time issues resolved → "Day N timing fixed."
+  - Some non-timing issues remain (closed venues, sequence) → "Timing fixed. Day N still has N venues that need attention." with a **Review** button that opens the existing refresh diff panel.
+  - Nothing to fix → "Day N timing already clean."
+- Drop the local `fixDayTiming` import from this path. (Keep the file/tests for now — referenced elsewhere; mark for follow-up removal.)
 
-This replaces the JSONB-writeback block in `action-repair-costs.ts` (lines 540–581) — it becomes dead code and is removed.
+### 2. Make health score reflect the latest re-check
 
-### 2. Make `activity_costs` reject anonymous JSONB-only writes
+In `TripHealthPanel.tsx` (`analyzeHealth` and the score calculation, lines 63-310):
+- Already filters `fix_timing` issues away when a day's recheck returns 0 issues. Extend this so the **score** uses the same filtered list (it does — but verify the dependency on `refreshResultsByDay` is in the `useMemo` deps so the score recomputes when re-check results change).
+- Add `refreshResultsByDay` to the `useMemo` dep array so the panel re-renders the score immediately after a fix.
 
-Add a NOT NULL `source` enforcement plus a small allowlist check:
+### 3. Stop the Payments "Reconciling…" loop
 
-- Existing sources keep working.
-- A new `'manual_edit'` source is required when a user changes the price from the UI. The client cost-edit handler must call the existing cost-update RPC (or `syncActivitiesToCostTable` with `source: 'manual_edit'`) — never write `trips.itinerary_data.cost` directly.
+The "Fix Timing" effect calls `setHasChanges(true)`, which (via the autosave + cost-sync chain in `EditorialItinerary.tsx` ~1450-1480) dispatches `booking-changed`. The financial snapshot refetches; for ~300-800 ms the new `tripTotalCents` arrives before the bucket items finish recomputing, so `bucketSumCents !== estimatedTotal` flips the badge.
 
-### 3. Remove all client-side writes to `cost.amount` in `itinerary_data`
+Two changes in `PaymentsTab.tsx` (~lines 350-1042):
+- Treat the badge as **debounced**: only show "Reconciling…" if the drift has persisted for ≥1.5 s. Use a small `useEffect` with a timer that sets a `showDriftBadge` state. Clear it on every snapshot/bucket change. This eliminates the transient flicker without hiding genuine, persistent drift.
+- Also suppress the badge while `financialSnapshot.loading || isAnyRefetchInFlight`.
 
-Audit and delete every place in the UI that mutates `activity.cost` and persists it through `itinerary_data`:
+A timing-only fix never changes any cost row, so steady-state drift after Fix Timing must be 0. The debounce removes the false positive without weakening the real-drift signal.
 
-- `EditorialItinerary.tsx`: the cost-edit modal, swap handler, transport-mode change, and the `syncBudgetFromDays` JSONB shape pass — all stop writing `cost`. They write to `activity_costs` only.
-- `TripDetail.tsx` autosave funnels: strip `cost` from the activities they round-trip (the trigger will repopulate from ledger after save).
-- `TripPlannerContext.tsx#saveTrip`: same — never persist `cost.amount` from React state.
+### Out of scope
+- The local `fixDayTiming` utility and its tests (kept; can be retired in a separate cleanup once nothing imports it).
+- Operating-hours auto-replacement (still surfaced via the Refresh Day diff, not auto-applied).
 
-After this, `trips.itinerary_data.cost` is **derived state**, owned by the database. The client treats it as read-only.
+## Files to edit
 
-### 4. Card display becomes trivially correct
-
-`getActivityCostInfo` keeps reading `activity.cost?.amount`, but the value it sees is now stamped by the DB trigger, so it always matches the budget. The temporary `getLedgerOverride` defense-in-depth from the previous turn is **kept** as a belt-and-braces guard for one release, then removed in a follow-up once we have telemetry showing zero overrides firing.
-
-### 5. Backfill
-
-One-shot migration: for every existing trip, re-run the same `jsonb_set` projection to align JSONB to the current `activity_costs` rows. Logged per-trip count. No data loss — only writing the price the budget already considers truth.
-
-## Out of scope
-
-- Currency display (€ vs $). The trip's `local_currency` already controls the symbol; the underlying amount is what diverged. This plan fixes the amount; the symbol logic is unchanged.
-- The Luxury Luminary 30% dining allocation question — separate calibration discussion.
-- The `'repair_floor'` basis tag added last turn stays, but its purpose is now informational; the trigger guarantees JSONB equality regardless.
-
-## Files
-
-**New**
-- `supabase/migrations/<ts>_sync_activity_costs_to_jsonb.sql` — trigger, function, backfill.
-
-**Modified**
-- `supabase/functions/generate-itinerary/action-repair-costs.ts` — drop the JSONB writeback block (now redundant).
-- `src/components/itinerary/EditorialItinerary.tsx` — strip `cost` from save funnels; cost edits go through the ledger.
-- `src/contexts/TripPlannerContext.tsx` — same.
-- `src/pages/TripDetail.tsx` — same; `safeUpdateItineraryData` no longer needs the preserve helper (kept for one release as a transitional safety).
-- `src/services/activityCostService.ts` — expose `updateActivityCost(tripId, activityId, perPersonUsd, source='manual_edit')` for the cost-edit modal.
+- `src/components/itinerary/EditorialItinerary.tsx` — rewrite the `fixTimingRequest` effect to delegate to `refreshDay` + `handleApplyRefreshChanges`.
+- `src/components/trip/TripHealthPanel.tsx` — add `refreshResultsByDay` to the score `useMemo` deps; confirm filtered-issue list drives the score.
+- `src/components/itinerary/PaymentsTab.tsx` — debounce the "Reconciling…" badge and hide it while snapshot is loading.
 
 ## Verification
 
-1. Unit test on the trigger: insert/update/delete on `activity_costs` mutates the matching JSONB activity.
-2. Integration test: run repair on a Rome trip, query `trips.itinerary_data` immediately, assert `cost.amount === total_cost_usd`.
-3. Backfill log: zero residual rows where ledger > 0 and JSONB.cost.amount < ledger × 0.9.
-4. Browser smoke: open the Rome trip, La Pergola card shows $500 with no `[LedgerOverride]` console warning.
-
-## Why this is the last time
-
-After this lands, **the only way for the card and budget to disagree is for a developer to bypass `activity_costs` entirely and stamp `cost` directly into JSONB.** That path is removed from the UI and edge functions; a lint rule (already proposed for Google API centralization — same pattern) can guard against future regressions.
+- Click Fix Timing on a day with overlap: toast shows resolved count; refresh diff updates; health score moves up; no "Reconciling…" badge appears on Payments.
+- Click Fix Timing on a day with overlap **and** a closed-venue issue: timing clears, badge counter drops to remaining non-timing count, "Review" button opens the diff panel for the swap.
+- Click Fix Timing on a clean day: "already clean" info toast, no state change.
