@@ -1,34 +1,34 @@
-# Fix: BudgetTab "Paid so far" lags PaymentsTab by activity-level payments
+# Fix: Category breakdowns show $0 with no warning on empty itinerary
 
 ## Problem
 
-BudgetTab's "Paid so far" reads `snapshot.paidCents` from `useTripFinancialSnapshot`, which already folds `trip_payments` rows in (lines 207–216) — so the divergence shouldn't exist. In practice the L'Arpège `$500` activity payment is missing from BudgetTab while PaymentsTab shows it.
+`BudgetTab`'s "Budget by Category" card is rendered unconditionally. When the itinerary has no meaningful activities (empty or hotel-only), every discretionary row (Food / Activities / Transit) shows `$0 / $allocated` with empty bars — visually indistinguishable from a healthy, untouched budget.
 
-Two contributors:
-
-1. **Refetch race after Mark Paid.** `PaymentsTab.handleMarkPaid` inserts into `trip_payments` then immediately dispatches `booking-changed`. The snapshot handler runs `fetchData()` once, synchronously. In some sessions the read returns before the new row is visible (the same reason `fetchPayments(delayMs)` exists in PaymentsTab), so the snapshot keeps the pre-payment `paidCents` until the next unrelated refetch.
-2. **No reconciliation guard.** The two surfaces never compare. When they disagree the user has no signal and we have no log.
+The existing empty-itinerary banner (lines 567–588) only fires when `tripStatus === 'failed'` AND `generationFailureReason` is `empty_itinerary` / `incomplete_itinerary`. A trip whose status was never marked failed (e.g. saved mid-flow, manual paste with no activities, generator that completed without flagging) falls through and renders the misleading bars.
 
 ## Goal
 
-BudgetTab and PaymentsTab always agree on "Paid so far". When they don't, we self-heal and log instead of silently displaying two numbers.
+When the itinerary has no meaningful (non-hotel/non-logistics) activities, the Category Breakdown must say so explicitly instead of rendering deceptive empty progress bars — regardless of `tripStatus`.
 
 ## Changes
 
-### 1. `src/hooks/useTripFinancialSnapshot.ts`
-- On `booking-changed`, run `fetchData()` immediately AND schedule a second `fetchData()` after ~600 ms (mirrors PaymentsTab's `fetchPayments(delayMs)` pattern). Cancel any pending second pass on unmount.
-- Accept an optional `optimisticPaidDeltaCents` on the `booking-changed` event detail. When present, apply it immediately to `data.paidCents` so the UI updates in the same frame Mark Paid is clicked, before the DB read returns.
+### 1. `src/components/planner/budget/BudgetTab.tsx`
+- Import `classifyItineraryCompleteness` from `@/utils/itineraryCompleteness`.
+- Compute `const completeness = classifyItineraryCompleteness(itineraryDays);` near the existing `isEmptyItineraryFailure` block (~line 553).
+- Define `const hasNoMeaningfulActivities = completeness.status === 'empty' || completeness.status === 'incomplete';` — covers the user's case even when status isn't `'failed'`.
+- In the Category Breakdown `<Card>` (line 977+):
+  - When `hasNoMeaningfulActivities && !isEmptyItineraryFailure` (the failure banner already covers the failed case), **replace the discretionary rows** with an inline empty-state block:
+    > "No spending to track yet — your itinerary doesn't include restaurants, activities, or transit yet. [Regenerate / Add activities] to populate this breakdown."
+  - Keep the **Fixed Costs** rows (hotel/flight) visible since those are real costs even on an empty itinerary.
+  - The empty-state CTA reuses `onRegenerate` if available; otherwise omit the button.
 
-### 2. `src/components/itinerary/PaymentsTab.tsx`
-- In `handleMarkPaid` (and the bulk-pay path that dispatches `booking-changed`) include the just-paid amount in the event detail:
-  `window.dispatchEvent(new CustomEvent('booking-changed', { detail: { optimisticPaidDeltaCents: amount } }))`.
-- Same for `handleUnmarkPaid` with a negative delta.
+### 2. Discretionary-only guard
+- Inside the `discretionaryRows.map(...)` loop, short-circuit it when `hasNoMeaningfulActivities` so we never render `$0 / $X` bars even briefly.
 
-### 3. Reconciliation log (defensive)
-- In `useTripFinancialSnapshot.fetchData`, after computing `paidTotal`, compute `paidFromTripPaymentsOnly` (sum of `status='paid'` rows respecting include toggles, excluding the activity_costs.is_paid mirror entirely). If `paidFromTripPaymentsOnly > paidTotal` by more than a cent, prefer the higher value and `console.warn` with `tripId`. This guarantees BudgetTab can never under-report compared to the canonical PaymentsTab source.
-
-### 4. Test
-- Extend `src/hooks/__tests__/useTripFinancialSnapshot*.test.ts` (create if absent) with a fixture: 1 paid hotel manual payment + 1 paid activity payment for an activity_id no longer in `itinerary_data.days`. Assert `paidCents` equals the sum of both.
+### 3. No backend / data changes
+- We do not change `allocations`, `useTripFinancialSnapshot`, or any cost computation. Just gating the UI to surface reality.
 
 ## Out of scope
-- No schema changes; no edits to PaymentsTab's totals logic; no UI changes to the "Paid so far" line itself.
+- Auto-marking trips as `failed` on the backend (separate concern).
+- Changing the empty-state copy in the existing failure banner.
+- Touching the BudgetSummaryPanel header card.

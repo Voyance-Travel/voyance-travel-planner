@@ -45,6 +45,7 @@ import { BudgetSetupDialog } from './BudgetSetupDialog';
 import { BudgetWarning } from './BudgetWarning';
 import { BudgetCoach, type BudgetSuggestion } from './BudgetCoach';
 import { hasSuggestableContent } from './coachUtils';
+import { classifyItineraryCompleteness } from '@/utils/itineraryCompleteness';
 import { useTripMembers } from '@/services/tripBudgetAPI';
 import { useTripCollaborators } from '@/services/tripCollaboratorsAPI';
 import type { BudgetCategory } from '@/services/tripBudgetService';
@@ -557,6 +558,14 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
   const isIncompleteItineraryFailure =
     tripStatus === 'failed' && generationFailureReason === 'incomplete_itinerary';
 
+  // Status-independent emptiness check — covers trips that were never marked
+  // 'failed' but still have no meaningful content (manual paste, mid-flow
+  // saves, generators that finished without flagging). Without this, the
+  // Category Breakdown renders deceptive $0 / $allocated bars.
+  const completeness = classifyItineraryCompleteness(itineraryDays as any);
+  const hasNoMeaningfulActivities =
+    completeness.status === 'empty' || completeness.status === 'incomplete';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1037,7 +1046,20 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
                       )}
                     </div>
                   )}
-                  {discretionaryRows.map((alloc) => {
+                  {hasNoMeaningfulActivities && !isEmptyItineraryFailure && discretionaryRows.length > 0 && (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm space-y-2">
+                      <p className="font-medium text-foreground">No spending to track yet</p>
+                      <p className="text-muted-foreground text-xs leading-relaxed">
+                        Your itinerary doesn't include any restaurants, activities, or transit yet, so the Food, Activities, and Transit breakdowns can't be calculated. {onRegenerate ? 'Regenerate the itinerary or add activities to populate this section.' : 'Add activities to populate this section.'}
+                      </p>
+                      {onRegenerate && (
+                        <Button size="sm" variant="outline" onClick={onRegenerate} className="mt-1">
+                          Regenerate itinerary
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {!hasNoMeaningfulActivities && discretionaryRows.map((alloc) => {
                     const allocated = alloc.allocatedCents;
                     const used = alloc.usedCents;
                     const percent = allocated > 0 ? Math.min((used / allocated) * 100, 100) : 0;
