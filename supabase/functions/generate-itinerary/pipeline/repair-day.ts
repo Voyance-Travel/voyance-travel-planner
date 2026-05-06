@@ -3108,6 +3108,13 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
     console.warn('[repair-day] timing-cascade failed (non-blocking):', cascadeErr);
   }
 
+  // ── Step N+1: NORMALIZE DURATION STRINGS ──
+  // Coerce any "HH:MM:SS"-shaped activity.duration the model may have emitted.
+  try {
+    const { normalizeActivityDuration } = await import('../_shared/duration-format.ts');
+    for (const a of activities) normalizeActivityDuration(a);
+  } catch { /* non-blocking */ }
+
   return {
     day: { ...input.day, activities },
     repairs,
