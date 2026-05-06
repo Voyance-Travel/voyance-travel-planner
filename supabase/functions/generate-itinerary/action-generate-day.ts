@@ -670,7 +670,6 @@ export async function handleGenerateDay(
 
     // === TITLE COHERENCE: Ensure title reflects actual activities ===
     if (generatedDay) {
-      const { enforceDayTitleCoherence } = await import('./pipeline/coherence-day-title.ts');
       enforceDayTitleCoherence(generatedDay, { city: resolvedDestination || destination || '' });
     }
 
