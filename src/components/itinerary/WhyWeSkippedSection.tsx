@@ -28,16 +28,19 @@ interface WhyWeSkippedSectionProps {
   skippedItems: SkippedItem[];
   destination: string;
   className?: string;
+  isLoading?: boolean;
 }
 
 export function WhyWeSkippedSection({
   skippedItems,
   destination,
   className,
+  isLoading = false,
 }: WhyWeSkippedSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  if (skippedItems.length === 0) return null;
+  // Hide entirely only if there's nothing to show AND nothing being loaded
+  if (skippedItems.length === 0 && !isLoading) return null;
 
   const categoryIcons: Record<string, React.ReactNode> = {
     'local-favorite': <Star className="h-3.5 w-3.5" />,
