@@ -3,10 +3,10 @@
  * cost materially lower than what the activity_costs ledger says, when the
  * ledger value comes from a server-side floor (Michelin / ticketed / etc.).
  *
- * This is a process-global map keyed by `${tripId}:${activityId}`. It is
- * populated by useLedgerCostOverrideMap (mounted high in EditorialItinerary)
- * and read by getActivityCostInfo where prop-threading would otherwise be
- * invasive.
+ * Keyed by activity_id (uuids are globally unique). Populated by
+ * useLedgerCostOverrideMap (mounted in EditorialItinerary) and consulted by
+ * getActivityCostInfo so prop-threading the ledger map down the render tree
+ * isn't required.
  */
 
 import { useEffect } from 'react';
@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface LedgerOverride {
   perPersonUsd: number;
   source: string;
+  tripId: string;
 }
 
 const PROTECTED_FLOOR_SOURCES = new Set([
@@ -25,12 +26,21 @@ const PROTECTED_FLOOR_SOURCES = new Set([
 ]);
 
 const overrides = new Map<string, LedgerOverride>();
+const warnedFor = new Set<string>();
 
-const key = (tripId: string, activityId: string) => `${tripId}:${activityId}`;
+export function getLedgerOverride(activityId: string | undefined): LedgerOverride | undefined {
+  if (!activityId) return undefined;
+  return overrides.get(String(activityId));
+}
 
-export function getLedgerOverride(tripId: string | undefined, activityId: string | undefined): LedgerOverride | undefined {
-  if (!tripId || !activityId) return undefined;
-  return overrides.get(key(tripId, activityId));
+export function warnOnceLedgerOverride(activityId: string, ctx: { jsonbAmount: number; ledgerAmount: number; source: string; title?: string }) {
+  if (warnedFor.has(activityId)) return;
+  warnedFor.add(activityId);
+  console.warn(
+    `[LedgerOverride] Activity "${ctx.title || activityId}" JSONB cost $${ctx.jsonbAmount} ` +
+    `is materially below ledger floor $${ctx.ledgerAmount} (${ctx.source}). ` +
+    `Card will display ledger value to match Budget/Payments.`
+  );
 }
 
 export function useLedgerCostOverrideMap(tripId: string | undefined): void {
@@ -44,21 +54,20 @@ export function useLedgerCostOverrideMap(tripId: string | undefined): void {
         .select('activity_id, cost_per_person_usd, source')
         .eq('trip_id', tripId);
       if (cancelled || error || !data) return;
-      // Clear any stale entries for this trip first
-      for (const k of Array.from(overrides.keys())) {
-        if (k.startsWith(`${tripId}:`)) overrides.delete(k);
+      // Clear stale entries for this trip first
+      for (const [k, v] of Array.from(overrides.entries())) {
+        if (v.tripId === tripId) overrides.delete(k);
       }
       for (const row of data as any[]) {
         const src = String(row.source || '');
         if (!PROTECTED_FLOOR_SOURCES.has(src)) continue;
         const perPerson = Number(row.cost_per_person_usd) || 0;
-        if (perPerson <= 0) continue;
-        if (row.activity_id) {
-          overrides.set(key(tripId, String(row.activity_id)), {
-            perPersonUsd: perPerson,
-            source: src,
-          });
-        }
+        if (perPerson <= 0 || !row.activity_id) continue;
+        overrides.set(String(row.activity_id), {
+          perPersonUsd: perPerson,
+          source: src,
+          tripId,
+        });
       }
     };
 
