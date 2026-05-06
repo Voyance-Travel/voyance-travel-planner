@@ -11797,7 +11797,7 @@ function ActivityRow({
                   onClose={() => setShowProposeReplacement(false)}
                   tripId={tripId}
                   activityId={activity.id}
-                  activityTitle={sanitizeActivityName(activity.title || '')}
+                  activityTitle={sanitizeActivityName(activity.title || '', { category: (activity as any).category, startTime: activity.startTime })}
                   destination={destination}
                   activityForDrawer={{
                     id: activity.id,
