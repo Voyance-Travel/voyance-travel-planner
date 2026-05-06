@@ -11,6 +11,76 @@ export const formatDuration = (minutes: number): string => {
 };
 
 /**
+ * Coerce a possibly-malformed duration string (e.g. "15:00:00", "1:05:00", "45 min")
+ * into a clean human-readable duration. If `durationMinutes` is provided and valid,
+ * it is preferred as the source of truth.
+ *
+ * Examples:
+ *   coerceDurationString("15:00:00")        -> "15h"
+ *   coerceDurationString("1:05:00")         -> "1h 5m"
+ *   coerceDurationString("45:00")           -> "45m"   (heuristic: >23 = minutes)
+ *   coerceDurationString("2:20:00")         -> "2h 20m"
+ *   coerceDurationString("90 min")          -> "1h 30m"
+ *   coerceDurationString("foo", 60)         -> "1h"
+ */
+export const coerceDurationString = (
+  raw: unknown,
+  durationMinutes?: number | null
+): string => {
+  if (typeof durationMinutes === 'number' && Number.isFinite(durationMinutes) && durationMinutes > 0) {
+    return formatDuration(Math.round(durationMinutes));
+  }
+  if (raw == null) return '';
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+    return formatDuration(Math.round(raw));
+  }
+  const s = String(raw).trim();
+  if (!s) return '';
+
+  // HH:MM:SS or HH:MM
+  const colon = s.match(/^(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (colon) {
+    const a = parseInt(colon[1], 10);
+    const b = parseInt(colon[2], 10);
+    const hasSeconds = colon[3] !== undefined;
+    let totalMin: number;
+    if (hasSeconds) {
+      // True HH:MM:SS clock duration
+      totalMin = a * 60 + b;
+    } else if (a >= 24 || (a >= 5 && b === 0)) {
+      // "45:00" or "90:00" -> minutes:seconds, treat first as minutes
+      totalMin = a;
+    } else {
+      // "1:30" -> 1h 30m
+      totalMin = a * 60 + b;
+    }
+    if (totalMin > 0) return formatDuration(totalMin);
+  }
+
+  // "Nh Mm" / "N min" / bare integer
+  const hm = s.match(/^(\d+)\s*h(?:ours?|rs?)?(?:\s*(\d+)\s*m(?:in(?:ute)?s?)?)?$/i);
+  if (hm) {
+    const total = parseInt(hm[1], 10) * 60 + (hm[2] ? parseInt(hm[2], 10) : 0);
+    if (total > 0) return formatDuration(total);
+  }
+  const minOnly = s.match(/^(\d+)\s*(?:m|min|mins|minute|minutes)$/i);
+  if (minOnly) {
+    const total = parseInt(minOnly[1], 10);
+    if (total > 0) return formatDuration(total);
+  }
+  const bare = s.match(/^(\d+)$/);
+  if (bare) {
+    const total = parseInt(bare[1], 10);
+    if (total > 0) return formatDuration(total);
+  }
+
+  // Range like "2-3 hours" or "30-45 min" — keep as-is (descriptive)
+  if (/^\d+\s*[-–]\s*\d+\s*(h|hr|hour|min|m)/i.test(s)) return s;
+
+  return '';
+};
+
+/**
  * Parse duration string to minutes
  */
 export const parseDuration = (duration: string): number => {
