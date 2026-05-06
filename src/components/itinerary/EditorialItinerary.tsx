@@ -67,6 +67,7 @@ import { convertFrontendDayToBackend, convertFrontendActivityToBackend } from '@
 import { useActivityImage, getActivityPlaceholder } from '@/hooks/useActivityImage';
 import { useActivityImageWriteback } from '@/hooks/useActivityImageWriteback';
 import { sanitizeActivityName, sanitizeActivityText } from '@/utils/activityNameSanitizer';
+import { getDisplayDayTitle } from '@/utils/dayTitleCoherence';
 import { getActivityFallbackImage } from '@/utils/activityFallbackImages';
 import { parseEditorialDays } from '@/utils/itineraryParser';
 import { getAppUrl } from '@/utils/getAppUrl';
