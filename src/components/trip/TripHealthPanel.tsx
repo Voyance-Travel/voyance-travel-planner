@@ -195,6 +195,8 @@ export function TripHealthPanel({
   isMultiCity = false,
   flightsBookedElsewhere = false,
   hotelBookedElsewhere = false,
+  refreshingDayNumber = null,
+  refreshResultsByDay,
   className,
   onAction,
 }: TripHealthPanelProps) {
