@@ -1155,10 +1155,10 @@ export function PaymentsTab({
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <p className="font-medium">
-                      {formatCurrency(essentialItems.reduce((sum, i) => sum + i.amountCents, 0))}
+                      {formatCurrency(essentialItemsWithReserve.reduce((sum, i) => sum + i.amountCents, 0))}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {essentialItems.filter(i => i.payment?.status === 'paid').length}/{essentialItems.length} paid
+                      {essentialItemsWithReserve.filter(i => i.payment?.status === 'paid').length}/{essentialItemsWithReserve.length} paid
                     </p>
                   </div>
                   <ChevronDown className={cn(
