@@ -272,7 +272,7 @@ export function buildFullPromptGuidance(
   archetype: string,
   destination: string,
   budgetTier: string,
-  traitScores: { pace: number; budget: number; adventure?: number }
+  traitScores: { pace: number; budget: number; adventure?: number; authenticity?: number }
 ): string {
   const context = getFullArchetypeContext(archetype, destination, budgetTier, traitScores);
   
