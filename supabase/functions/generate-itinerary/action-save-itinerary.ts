@@ -9,6 +9,7 @@ import { enforceRequiredMealsFinalGuard, detectMealSlots } from './day-validatio
 import { applyAnchorsWin as sharedApplyAnchorsWin } from './anchor-guard.ts';
 import { buildDayLedger, type DayLedger } from './day-ledger.ts';
 import { ledgerCheck } from './ledger-check.ts';
+import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -205,6 +206,13 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   let itineraryDays: any[] = Array.isArray((itinerary as any)?.days) ? (itinerary as any).days : [];
   if (itineraryDays.length > 0) {
     itineraryDays = normalizeDays(itineraryDays, tripStartDate);
+    // Preserve server-repaired Michelin/ticketed/reference floors that the
+    // client copy may have re-serialized from a stale render snapshot.
+    const { days: preservedDays, preserved } = preserveLedgerCosts(existingJsonDays as any[], itineraryDays);
+    if (preserved > 0) {
+      console.log(`[save-itinerary] 🔒 Preserved ${preserved} ledger-floored cost(s) from clobber by autosave`);
+    }
+    itineraryDays = preservedDays;
     (itinerary as any).days = itineraryDays;
   }
 

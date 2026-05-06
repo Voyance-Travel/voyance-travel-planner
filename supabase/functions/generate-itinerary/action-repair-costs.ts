@@ -563,8 +563,10 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
         jsonbPatched++;
         return {
           ...a,
-          cost: { amount: fix.totalUsd, currency: 'USD' },
-          estimatedCost: { amount: fix.totalUsd, currency: 'USD' },
+          cost: { amount: fix.totalUsd, currency: 'USD', basis: 'repair_floor', source: fix.reason },
+          estimatedCost: { amount: fix.totalUsd, currency: 'USD', basis: 'repair_floor', source: fix.reason },
+          costBasis: 'repair_floor',
+          costSource: fix.reason,
         };
       }),
     }));

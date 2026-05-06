@@ -8,6 +8,7 @@ import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-
 import { format, isAfter, isBefore, differenceInDays, addDays } from 'date-fns';
 import { parseLocalDate } from '@/utils/dateUtils';
 import { enforceMealTimeCoherence } from '@/utils/mealTimeCoherence';
+import { safeUpdateItineraryData } from '@/services/safeUpdateItineraryData';
 import { Loader2, MapPin, ArrowLeft, Sparkles, CheckCircle, PenLine, Coins, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import { CREDIT_COSTS } from '@/config/pricing';
 import {
@@ -1223,10 +1224,7 @@ export default function TripDetail() {
                   };
 
                   console.log(`[TripDetail] Self-heal: persisting rebuilt itinerary_data with ${rebuiltDays.length} days (was ${jsonDayCount})`);
-                  await supabase.from('trips').update({
-                    itinerary_data: healedItinerary as any,
-                    updated_at: new Date().toISOString(),
-                  }).eq('id', tripId);
+                  await safeUpdateItineraryData(tripId, healedItinerary);
 
                   const healedTripData = { ...tripData, itinerary_data: healedItinerary as any };
                   setTrip(healedTripData);
@@ -1350,10 +1348,7 @@ export default function TripDetail() {
                       });
                     } catch (saveErr) {
                       console.error('[TripDetail] Backend save after version restore failed, falling back to direct write:', saveErr);
-                      await supabase.from('trips').update({
-                        itinerary_data: mergedItinerary as any,
-                        updated_at: new Date().toISOString(),
-                      }).eq('id', tripId!);
+                      await safeUpdateItineraryData(tripId!, mergedItinerary);
                     }
                     queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
                     toast.success(`Restored ${restoredCount} day${restoredCount > 1 ? 's' : ''} from history`);
@@ -1402,10 +1397,7 @@ export default function TripDetail() {
                       });
                     } catch (saveErr) {
                       console.error('[TripDetail] Backend save after placeholder materialization failed:', saveErr);
-                      await supabase.from('trips').update({
-                        itinerary_data: mergedFresh as any,
-                        updated_at: new Date().toISOString(),
-                      }).eq('id', tripId!);
+                      await safeUpdateItineraryData(tripId!, mergedFresh);
                     }
                     queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
                     setIncompleteDays(unresolvedDays);
@@ -1802,15 +1794,11 @@ export default function TripDetail() {
           ? Math.max(existingUnlocked, computedUnlocked) 
           : undefined;
         
-        const { error } = await supabase
-          .from('trips')
-          .update({
-            itinerary_data: JSON.parse(JSON.stringify(itineraryPayload)) as any,
-            itinerary_status: 'ready',
-            updated_at: new Date().toISOString(),
-            ...(safeUnlocked !== undefined ? { unlocked_day_count: safeUnlocked } : {}),
-          })
-          .eq('id', tripId);
+        const result = await safeUpdateItineraryData(tripId, JSON.parse(JSON.stringify(itineraryPayload)), {
+          itinerary_status: 'ready',
+          ...(safeUnlocked !== undefined ? { unlocked_day_count: safeUnlocked } : {}),
+        });
+        const error = result?.error;
         
         if (error) {
           console.error('[TripDetail] Failed to force-save itinerary:', error);

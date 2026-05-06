@@ -13,6 +13,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { coerceDurationString } from '@/utils/plannerUtils';
+import { useLedgerCostOverrideMap, getLedgerOverride, warnOnceLedgerOverride } from '@/utils/ledgerCostOverride';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -964,6 +965,30 @@ function getActivityCostInfo(
     return { amount: 0, isEstimated: false, confidence: 'high' as const, basis: 'flat' as CostBasis };
   }
   
+  // Defense-in-depth: if the activity_costs ledger has a server-floored
+  // price (Michelin/ticketed/auto-corrected/reference) that is materially
+  // higher than the JSONB cost, prefer the ledger value. This guarantees
+  // the card matches Budget/Payments even if a save funnel slipped past
+  // preserveLedgerCosts and downgraded the JSONB.
+  const ledgerOverride = getLedgerOverride((activity as any).id);
+  if (ledgerOverride) {
+    const jsonbAmt = costAmount ?? 0;
+    if (ledgerOverride.perPersonUsd >= jsonbAmt * 2 || jsonbAmt === 0) {
+      warnOnceLedgerOverride(String((activity as any).id), {
+        jsonbAmount: jsonbAmt,
+        ledgerAmount: ledgerOverride.perPersonUsd,
+        source: ledgerOverride.source,
+        title,
+      });
+      return {
+        amount: ledgerOverride.perPersonUsd,
+        isEstimated: false,
+        confidence: 'high' as const,
+        basis,
+      };
+    }
+  }
+
   // Check cost.amount first - this is explicit pricing from venue data
   // BUT if it's 0 and the category should never be free, fall through to estimation
   if (costAmount !== undefined && costAmount > 0) {
@@ -3506,6 +3531,10 @@ export function EditorialItinerary({
 
   // ─── Canonical trip total from useTripFinancialSnapshot (single source of truth) ───
   const financialSnapshot = useTripFinancialSnapshot(tripId);
+
+  // Populate the ledger-override map so getActivityCostInfo can prefer
+  // server-floored prices over stale JSONB on a per-card basis.
+  useLedgerCostOverrideMap(tripId);
 
   // ─── Per-day breakdown from the same activity_costs table — guarantees that
   // the sum of day badges + day-0 logistics + reserve == trip total. ───
