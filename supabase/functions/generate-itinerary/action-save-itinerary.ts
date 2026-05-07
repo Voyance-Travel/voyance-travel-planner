@@ -182,7 +182,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
 
   const { data: currentTrip } = await supabase
     .from('trips')
-    .select('itinerary_data')
+    .select('itinerary_data, destination')
     .eq('id', tripId)
     .single();
   const existingJsonDays: unknown[] = Array.isArray((currentTrip?.itinerary_data as any)?.days)
