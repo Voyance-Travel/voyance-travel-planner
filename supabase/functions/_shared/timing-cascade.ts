@@ -230,7 +230,15 @@ export function enforceTimingAndBuffers<T extends CascadeActivity>(
 
     // 2. Overlap
     if (currEnd !== null && currEnd > nextStart && !isStructural(next, lockedIds)) {
-      const target = currEnd + overlapBuffer;
+      // Transit cards may butt up against neighbors with a 0-min buffer, but they
+      // must never start before the previous activity's endTime.
+      const currCatLower = (curr.category || '').toLowerCase();
+      const nextCatLower = (next.category || '').toLowerCase();
+      const eitherTransit =
+        TRANSIT_CATS.some(t => currCatLower.includes(t)) ||
+        TRANSIT_CATS.some(t => nextCatLower.includes(t));
+      const buffer = eitherTransit ? 0 : overlapBuffer;
+      const target = currEnd + buffer;
       const delta = target - nextStart;
       if (delta > 0) {
         const before = `${next.title} @ ${next.startTime}`;
