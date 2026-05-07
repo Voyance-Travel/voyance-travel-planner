@@ -524,12 +524,15 @@ export function isPlaceholderWellness(activity: any, cityName: string, hotelName
 
   // Hotel logistics & transport short-circuit — never wellness, even if the
   // hotel name contains "Spa" (e.g. "JW Marriott Venice Resort & Spa").
+  const HOTEL_VENUE_RE = /\b(hotel|resort|inn|lodge|guesthouse|hostel|palazzo|palace|hyatt|marriott|hilton|ritz|sheraton|westin|four\s+seasons|aman|six\s+senses|st\.?\s+regis|park\s+hyatt|grand\s+hyatt|jw\s+marriott)\b/i;
   if (
     category === 'accommodation' ||
+    category === 'stay' ||
     category === 'transport' ||
     category === 'transportation' ||
     category === 'transit' ||
-    HOTEL_LOGISTICS_TITLE_RE.test(title)
+    HOTEL_LOGISTICS_TITLE_RE.test(title) ||
+    HOTEL_VENUE_RE.test(venue)
   ) {
     return false;
   }
