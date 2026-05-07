@@ -98,16 +98,43 @@ async function enrichActivities(
     console.log(`[enrich-day] Enrichment partial: ${enrichedActivities.filter((a: any) => a.rating).length} enriched, rest returned as-is`);
   }
 
+  // Cross-city hallucination filter — drop activities whose Google Places match
+  // resolved to a different city than the destination (real venue, wrong city).
+  const { isCrossCityAddress } = await import('../cross-city-filter.ts');
+  let crossCityRemovedFromEnrichment = 0;
+  let crossCityRemovedFromAddress = 0;
+  const enrichedKept = enrichedActivities.filter((a: any) => {
+    if (a?.locked || a?.isLocked) return true;
+    if (a?.removed && a?.crossCityHallucination) {
+      console.warn(`[enrich-day] 🗑 [CROSS-CITY HALLUCINATION] Removed "${a.title}" — ${a.removalReason || 'wrong city'}`);
+      crossCityRemovedFromEnrichment++;
+      return false;
+    }
+    const cat = String(a?.category || '').toLowerCase();
+    const checkCats = ['dining', 'restaurant', 'food', 'sightseeing', 'attraction', 'museum', 'culture', 'shopping'];
+    if (!checkCats.includes(cat)) return true;
+    const wrongCity = isCrossCityAddress(a, destination);
+    if (wrongCity) {
+      console.warn(`[enrich-day] 🗑 [CROSS-CITY ADDRESS] Removed "${a.title}" — address mentions ${wrongCity}, destination is ${destination}`);
+      crossCityRemovedFromAddress++;
+      return false;
+    }
+    return true;
+  });
+
   // Merge enriched activities back with locked ones and sort by time
-  const merged = [...enrichedActivities, ...alreadyEnriched];
+  const merged = [...enrichedKept, ...alreadyEnriched];
   merged.sort((a: any, b: any) => {
     const aTime = parseTimeToMinutes(a.startTime || '00:00') ?? 0;
     const bTime = parseTimeToMinutes(b.startTime || '00:00') ?? 0;
     return aTime - bTime;
   });
 
-  const enrichedWithRatings = enrichedActivities.filter((a: any) => a.rating).length;
+  const enrichedWithRatings = enrichedKept.filter((a: any) => a.rating).length;
   console.log(`[enrich-day] Enrichment complete: ${enrichedWithRatings}/${activitiesToEnrich.length} activities got ratings`);
+  if (crossCityRemovedFromEnrichment + crossCityRemovedFromAddress > 0) {
+    console.warn(`[enrich-day] Cross-city hallucinations removed: ${crossCityRemovedFromEnrichment} via Google distance guard, ${crossCityRemovedFromAddress} via address scan`);
+  }
 
   return merged;
 }
