@@ -326,6 +326,7 @@ export function usePayableItems({
           allPayments: group,
           assignedMemberId: assignedIds[0],
           assignedMemberIds: [...new Set(assignedIds)],
+          budgetCategory: toBudgetCategory(itemType),
         });
       });
     };
