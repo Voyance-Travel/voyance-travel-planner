@@ -129,6 +129,16 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
       const tb = parseTimeToMinutes(b.startTime || b.start_time || b.time);
       return ta - tb;
     });
+    // Final belt-and-braces: drop any pre-dawn hotel-return entries that the
+    // sort just hoisted to the top of the day. These are spillover/wraparound
+    // bugs, not real plans.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { stripPreDawnHotelReturns } = require('../_shared/predawn-hotel-strip.ts');
+      stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
+    } catch {
+      // dynamic import fallback (deno)
+    }
     return { ...day, dayNumber, date, activities };
   });
 }
