@@ -1,37 +1,60 @@
-## Bug
-Day-2 cards render leaked AI scaffolding:
-- `This satisfies your 'Deep Context' requirement`
-- `(AESTHETIC slot)`
-- `(slot)`
+## Problem
 
-Reported as new-this-run. The earlier fix added strippers in `supabase/functions/generate-itinerary/sanitization.ts` (write-time) and `src/utils/textSanitizer.ts` (call sites in chat / manual paste). But the **itinerary card render path doesn't go through `sanitizeText`** — it goes through `sanitizeDisplayString` in `src/utils/itineraryParser.ts`, which only strips non-Latin scripts and JSON-schema leaks. So saved trips with the artifacts still display them.
+Day-2 cards still show AI prompt scaffolding because the existing regexes only catch a narrow set of phrasings. Live DB samples include forms the current sanitizers miss:
+
+- `Essential Roman landmark providing the 'Deep Context' required for this traveler profile.`
+- `Specifically satisfies the Interest for wellness in a high-end Roman setting.`
+- `Fulfills the 'Authentic Encounter' wellness interest with a high-end relaxation experience.`
+- `As a 'Transformer' arche, this deep-driven history aligns with your desire for meaningful travel encounters.`
+- `Provides the deep historical context you value while maintaining a high-quality, aesthetically pleasing environment.`
+- `Deep context stop` (whole title)
+- `Deep context at the Estrela Basilica rooftop` (whole title)
+- `This is ; the illuminated monuments provide the perfect aesthetic backdrop...` (orphan from earlier sanitizer pass)
+
+The current rules require a sentence to start with `This <verb> the/your/their …`. Variants beginning with `Essential`, `Provides`, `Specifically`, `As a 'X' arche`, or starting with `Fulfills`/with no leading `This` slip through. The orphan `This is ;` artifact is a side-effect of an earlier replacement leaving fragments behind.
 
 ## Plan
 
-### 1. Extend `sanitizeDisplayString` in `src/utils/itineraryParser.ts`
-Add the same three artifact regexes to the `.replace()` chain (lines 24–31):
+Strengthen sanitization in **two places** (mirror frontend + server) without touching business logic:
 
-```ts
-// Strip leaked AI prompt scaffolding ("This satisfies your 'Deep Context' requirement",
-// "(AESTHETIC slot)", "(slot)") that escaped the server-side sanitizer.
-.replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+['"\u2018\u2019\u201C\u201D][^'"\u2018\u2019\u201C\u201D]{2,40}['"\u2018\u2019\u201C\u201D]\s+(?:interest|preference|request|need|requirement|slot|moment|stop|block)\b[^.]*\.?\s*/gi, '')
-.replace(/\s*\(\s*(?:[A-Z][A-Z\s/&-]{1,30}\s+)?slot\s*\)\s*/gi, ' ')
-.replace(/\s*\(\s*(?:AESTHETIC|NARRATIVE|MOOD|TONE|VIBE|THEME|ARCHETYPE|PERSONA|CONTEXT|FULFILLS?|SLOT)(?:\s+[A-Z][A-Z\s/&-]{0,30})?\s*\)\s*/g, ' ')
-```
+### 1. `src/utils/itineraryParser.ts` — extend `sanitizeDisplayString`
 
-Because `sanitizeDisplayString` runs through `sanitizeUnknownStrings` against the entire activity payload (titles, descriptions, tags, narrative, highlights), this single change scrubs every visible field for both new and previously-saved trips on first render.
+Add these replacements (in order) after the existing slot/AESTHETIC rules:
 
-### 2. Add a regression test
-`src/utils/__tests__/itineraryParser.artifacts.test.ts`:
-- description with `"This satisfies your 'Deep Context' requirement."` → stripped
-- title `"Doge's Palace (AESTHETIC slot)"` → `"Doge's Palace"`
-- description ending in `"(slot)"` → stripped
-- legitimate "time slot" prose preserved
+- **Quoted-archetype clauses anywhere** — match `'<Label>' <noun>` clauses regardless of leading verb:
+  `(?:providing|satisfying|fulfilling|matching|delivering|offering|reflecting|catering to|aligning with|aligns with|tailored to|in line with)\s+(?:the\s+)?['"\u2018\u201C][^'"\u2019\u201D]{2,40}['"\u2019\u201D]\s+(?:interest|preference|requirement|slot|need|moment|context|arche\w*|profile|trait|fit)[^.]*\.?`
+- **Bare `Fulfills/Satisfies/Addresses ... requirement|interest|slot|block|moment` sentences** (no leading `This`):
+  `(?:^|[.!?]\s+)(?:Fulfills?|Satisfies|Addresses|Specifically\s+(?:fulfills?|satisfies|addresses))\b[^.]*\b(?:requirement|interest|slot|block|moment|need|preference|profile|arche\w*)\b[^.]*\.?`
+- **`As a '<Label>' arche…` framing**:
+  `\bAs\s+a\s+['"\u2018\u201C][^'"\u2019\u201D]{2,40}['"\u2019\u201D]\s+arche\w*[^.]*\.?`
+- **`Deep [historical] context` / `traveler profile` filler phrases** stripped from any sentence:
+  `\b(?:provid(?:es|ing)|offer(?:s|ing)|deliver(?:s|ing))\s+(?:the\s+)?(?:deep|rich|essential)\s+(?:historical\s+)?context[^.]*\.?`
+  `\bfor\s+this\s+traveler\s+profile\b\.?`
+- **Standalone titles equal to** `Deep context`, `Deep context stop`, or starting with `Deep context ` (case-insensitive) — drop the `Deep context ` prefix; if nothing remains, return `undefined` so caller falls back to a default name.
+- **Orphan fragment cleanup** — collapse `This is\s*[;,.]` and `\bis\s*;\s*` left over from prior replacements; collapse repeated punctuation `[.,;:]{2,}` → single, then re-trim.
 
-### Files touched
-- `src/utils/itineraryParser.ts` — three regex lines added inside `sanitizeDisplayString`.
-- `src/utils/__tests__/itineraryParser.artifacts.test.ts` — new test file.
+### 2. `supabase/functions/generate-itinerary/sanitization.ts`
 
-### Out of scope
-- Server prompt rewrites (already-saved itineraries need a render-time defense).
-- Any cost/booking changes.
+Mirror the same six rules in the server-side `sanitizeText` (around lines 1025–1037) so newly generated trips never persist these strings.
+
+### 3. Tests
+
+Extend `src/utils/__tests__/itineraryParser.artifacts.test.ts` with one assertion per new variant above, plus a "preserve legitimate prose" guard:
+- `"Reserve a time slot for the tour."` stays intact
+- `"Essential historical context for the city's founding."` stays intact (only the *traveler-profile* / *deep context* + verb variants are stripped; bare "historical context" is kept)
+
+### 4. One-time DB cleanup (optional, ask before running)
+
+After the regex is verified, offer to run a backfill that re-sanitizes `itinerary_data` for the 4 affected trip IDs so existing users see clean copy without regenerating. Not part of this plan unless approved.
+
+## Out of scope
+
+- Fixing the upstream prompt that produces these phrases.
+- Cost, booking, scheduling, or layout changes.
+- Regenerating itineraries.
+
+## Files to edit
+
+- `src/utils/itineraryParser.ts`
+- `supabase/functions/generate-itinerary/sanitization.ts`
+- `src/utils/__tests__/itineraryParser.artifacts.test.ts`
