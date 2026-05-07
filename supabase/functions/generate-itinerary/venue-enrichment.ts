@@ -691,7 +691,7 @@ export async function enrichActivity(
     if (venueData?.crossCityHallucination) {
       const cat = (activity.category || '').toLowerCase();
       // Only auto-remove for venue-style categories where wrong-city is a hard fail.
-      const removableCats = ['dining', 'restaurant', 'food', 'sightseeing', 'attraction', 'museum', 'culture', 'shopping'];
+      const removableCats = ['dining', 'restaurant', 'food', 'sightseeing', 'attraction', 'museum', 'culture', 'shopping', 'wellness', 'spa', 'activity', 'entertainment', 'relaxation'];
       if (!(activity as any).locked && removableCats.includes(cat)) {
         (enriched as any).crossCityHallucination = true;
         (enriched as any).removed = true;
