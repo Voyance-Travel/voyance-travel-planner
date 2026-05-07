@@ -15,6 +15,7 @@ import type { TripPayment } from '@/services/tripPaymentsAPI';
 import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle, isUnconfirmedIntraCityTaxi, isWalkingLeg } from '@/lib/cost-estimation';
 import { computeHotelCostUsd } from '@/lib/hotel-cost';
 import { toBudgetCategory, type BudgetCategoryKey } from '@/services/budgetCategoryMap';
+import { resolveCanonicalCostRows, type CanonicalLiveActivity } from '@/services/canonicalCostRows';
 
 export interface PayableSubItem {
   id: string;
