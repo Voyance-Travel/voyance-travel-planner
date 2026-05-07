@@ -1081,6 +1081,14 @@ export function sanitizeAITextField(text: string | undefined | null, destination
   // natural regardless of destination, avoids ugly forms like "Paris's").
   result = result.replace(/\bthe['’]\s?s\b/gi, "the city's");
 
+  // Repair "see/in/of the from the <noun>" gaps left by legacy aggressive
+  // schema-leak stripping that previously deleted the bare word "city" from
+  // sentences like "see the city from the water".
+  result = result
+    .replace(/\b(see|view|explore|experience|enjoy|admire|photograph|take in|tour) the from the\b/gi, '$1 the city from the')
+    .replace(/\b(in|of|across|over|through|around|from) the from the\b/gi, '$1 the city from the')
+    .replace(/\bthe from the (water|street|streets|river|canal|canals|sea|sky|air|ground|inside|outside|rooftop|rooftops|hilltop|hilltops|harbor|harbour|lagoon|coast)\b/gi, 'the city from the $1');
+
   // Destination-agnostic orphan-article repairs — must always run, even if no
   // destination is supplied to this sanitize call. Repairs AI dropouts where
   // "City" is missing between "the" and "of" in titles like
