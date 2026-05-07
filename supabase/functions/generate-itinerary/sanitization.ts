@@ -1011,12 +1011,12 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/^(?:Short\s+Trip|City\s+Trip|Long\s+Trip|Weekend\s+Trip|Extended\s+Trip)\s+\w+(?:\s+\w+)*\s+Day\s+\d+\s*[:–—-]\s*/i, '')
     // Strip bare "Day N:" prefix
     .replace(/^Day\s+\d+\s*[:–—-]\s*/i, '')
-    .replace(/\b(?:BOOK|RESERVE|SECURE)\s+\d[\d-]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|BEFORE|OUT|EARLY)?(?:\s+(?:for|at|in|before|after|around|during|by|until|on|with|to)\b[^.]*?)?\.?\s*/gi, '')
+    .replace(/\b(?:BOOK|RESERVE|SECURE)\s+\d[\d-]*\s*(?:WEEKS?|MONTHS?|DAYS?)\s*(?:AHEAD|IN ADVANCE|BEFORE|OUT|EARLY)?(?:\s+(?:for|at|in|before|after|around|during|by|until|on|with|to)\b[^.]*\.)?\s*/gi, '')
     .replace(/[🔴🟡🟢🔵]\s*(?:Book|Reserve|BOOK|RESERVE)[^.]*\.?\s*/g, '')
     .replace(/\b(?:book_now|book_soon|book_early|reserve_early|reserve_now)\b/gi, '')
     .replace(/(?:^|\.\s*)\s*(?:Reservation\s*)?[Uu]rgency[:\s]+\w+\.?\s*/gi, '')
-    .replace(/\b(?:BOOK|RESERVE|SECURE)\s+(?:ASAP|IMMEDIATELY|NOW|IN ADVANCE|WELL AHEAD|EARLY)(?:\s+(?:for|at|in|before|after|around|during|by|until|on|with|to)\b[^.]*?)?\.?\s*/gi, '')
-    .replace(/\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)(?:\s+(?:for|at|in|before|after|around|during|by|until|on|with|to)\b[^.]*?)?\.?\s*/gi, '')
+    .replace(/\b(?:BOOK|RESERVE|SECURE)\s+(?:ASAP|IMMEDIATELY|NOW|IN ADVANCE|WELL AHEAD|EARLY)(?:\s+(?:for|at|in|before|after|around|during|by|until|on|with|to)\b[^.]*\.)?\s*/gi, '')
+    .replace(/\b(?:Advance|advance)\s+(?:booking|reservation)\s+(?:required|recommended|essential|necessary)(?:\s+(?:for|at|in|before|after|around|during|by|until|on|with|to)\b[^.]*\.)?\s*/gi, '')
     // AI self-referential commentary
     .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+\w+\s+(?:interest|preference|request|need|requirement)\b[^.]*\.?/gi, '')
     // "Since the traveler/user/guest loves/prefers..." reasoning sentences
