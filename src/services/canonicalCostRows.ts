@@ -191,6 +191,11 @@ export function resolveCanonicalCostRows({
       cents,
       rescueTag,
       isLogisticsRow,
+      name: lookup?.name ?? null,
+      numTravelers: row.num_travelers || 1,
+      isPaid: row.is_paid === true,
+      paidAmountUsd: row.paid_amount_usd ?? null,
+      source: row.source ?? null,
     });
   }
 
