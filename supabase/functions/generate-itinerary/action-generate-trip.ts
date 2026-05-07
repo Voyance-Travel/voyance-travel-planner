@@ -737,7 +737,6 @@ Return ONLY valid JSON array, no markdown:
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${serviceKey}`,
-          'apikey': Deno.env.get("SUPABASE_ANON_KEY") || '',
         },
         body: initialChainBody,
       });
