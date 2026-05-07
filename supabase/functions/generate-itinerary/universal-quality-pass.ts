@@ -270,10 +270,13 @@ export async function universalQualityPass(
         const h = parseInt(m[1], 10);
         if (h >= 5 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
       }
+      // Use the resolved hotel name when available so the card never resolves
+      // to an unrelated venue (e.g. "Your Hotel" → wrong Google Places match).
+      const resolvedHotel = (hotelName && hotelName.trim()) || '';
       result.push({
-        title: 'Return to Your Hotel',
-        venue_name: 'Your Hotel',
-        category: 'STAY',
+        title: resolvedHotel ? `Return to ${resolvedHotel}` : 'Return to Your Hotel',
+        venue_name: resolvedHotel || 'Your Hotel',
+        category: 'accommodation',
         start_time: startTime24,
         startTime: startTime24,
         cost_per_person: 0,
@@ -281,6 +284,9 @@ export async function universalQualityPass(
         description: 'Return to your hotel for a restful night.',
         is_free: true,
         price_per_person: 0,
+        // Mark so enrichment skips Google Places lookup (would otherwise
+        // pick the first matching "hotel" in the city — bug source).
+        skipEnrichment: true,
       });
       console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
     }
