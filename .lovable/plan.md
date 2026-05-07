@@ -1,59 +1,27 @@
-## Problem
+## Plan: end permanently stuck payment reconciliation
 
-"Walk to Lunch in San Polo" appears as a $20 line in the Budget tab's **All Costs** view, even though:
-- The activity's stored cost is `{amount: 0, currency: USD}`.
-- It's correctly absent from the `activity_costs` ledger table.
-- The shared `isWalkingLeg` guard already exists and skips it everywhere else (Payments, canonical resolver, generation pipeline, repair-costs).
+### 1. Make checkout writes fail-safe
+- Update the activity checkout function so once a `trip_payments` row is created, any later checkout or gateway failure immediately marks that row `failed` instead of leaving it `pending`/`processing`.
+- Keep the payment record creation before the gateway call where possible, with `provider_data`/metadata storing the failure reason for debugging.
+- If the local payment write fails after a Stripe session is created, cancel/expire the session or return a hard error instead of giving the user a checkout URL that cannot reconcile.
 
-The value is being synthesized client-side by a Budget-only ledger builder that estimates a price for `category: transport` without consulting `isWalkingLeg`.
+### 2. Repair full-trip booking checkout
+- Fix `create-booking-checkout`’s broken checkout setup: it references `customerId` and `origin` without defining them.
+- Add the same fail-safe status handling for flight/hotel/activity payment rows created for a booking checkout.
+- Ensure failures after rows are inserted mark all session-linked rows as `failed`.
 
-## Root cause
+### 3. Harden verification and webhook reconciliation
+- Update `verify-payment` and `verify-booking-payment` so non-paid terminal Stripe statuses (`unpaid`, `expired`, `canceled`, failed payment intent) update matching `trip_payments` rows to `failed`/`cancelled` instead of returning a status that leaves the UI waiting.
+- Update the Stripe webhook handler to also finalize session-linked rows on completed/expired/failed events and log when no row is matched.
 
-In `src/components/planner/budget/BudgetTab.tsx`, the `ledger` array (used for the All Costs list and for the "hidden free count" badge — line 454) is constructed independently from `usePayableItems`. That builder runs `estimateCostSync` on every itinerary activity and bypasses the `isWalkingLeg` predicate that the unified `usePayableItems` path uses (line 505 in `src/hooks/usePayableItems.ts`).
+### 4. Add stale-pending cleanup
+- Add a small backend reconciliation function or database RPC that marks old `pending`/`processing` `trip_payments` rows as `failed` after a safe TTL when they have a Stripe checkout session but were never completed.
+- Call it from the Payments tab fetch path before rendering totals so old orphaned rows stop causing sticky reconciliation states.
 
-Because the activity's category is `transport`, the estimator returns a default taxi/transit price (~$20) and that line ships into the All Costs view.
+### 5. Clean current orphaned data
+- Apply a one-time data cleanup for existing stale `pending`/`processing` trip payment rows that are old enough to be impossible in-flight.
+- Preserve genuinely paid/refunded/cancelled rows.
 
-## Plan
-
-### 1. Fix the leak
-
-In `BudgetTab.tsx`, locate the `ledger` builder (the loop that consumes `itineraryDays`/`days` and pushes per-activity rows). Add the same guards already used in `usePayableItems`:
-
-```ts
-import { isWalkingLeg, isPlaceholderDepartureTransfer, isUnconfirmedIntraCityTaxi, isLikelyFreePublicVenue } from '@/lib/cost-estimation';
-…
-if (isWalkingLeg({
-  title: a.title || a.name,
-  description: a.description,
-  bookingRequired: a.bookingRequired,
-})) continue;
-```
-
-Place the check before any call to `estimateCostSync` so walking legs never receive a synthesized cost.
-
-### 2. Centralize so this can't regress
-
-The repeated guard sequence (`isLikelyFreePublicVenue` → `isPlaceholderDepartureTransfer` → `isUnconfirmedIntraCityTaxi` → `isWalkingLeg`) now appears in at least three places: `usePayableItems`, `EditorialItinerary.syncBudgetFromDays`, and (after the fix) the BudgetTab ledger builder.
-
-Extract a single helper `shouldSnapshotZeroCost(activity)` in `src/lib/cost-estimation.ts` that returns `true` when any of those rules fire. Refactor the three call sites to use it. This collapses the surface area so a future "all costs" view can't reintroduce the walking-cost bug.
-
-### 3. Regression test
-
-Add a unit test for `usePayableItems` (or a new `BudgetTab.ledger.test.ts`) that feeds an activity matching `{title: "Walk to Lunch in San Polo", category: "transport", cost: {amount: 0}}` and asserts the resulting list contains zero rows for that id.
-
-### 4. Memory
-
-The Core memory rule **Walking Is Free** already covers this. Update its "Enforced via" footer to mention the new shared `shouldSnapshotZeroCost` helper and the BudgetTab ledger path so future work treats it as a closed surface.
-
-## Files
-
-- edit: `src/components/planner/budget/BudgetTab.tsx` — add guard inside the ledger builder
-- edit: `src/lib/cost-estimation.ts` — add `shouldSnapshotZeroCost`
-- edit: `src/hooks/usePayableItems.ts` — replace inline guard chain with helper
-- edit: `src/components/itinerary/EditorialItinerary.tsx` — replace inline guard chain in `syncBudgetFromDays`
-- new test covering the walk-leg case
-- update mem://index.md Core "Walking Is Free" line
-
-## Out of scope
-
-No backend or migration changes — `activity_costs` is already clean for this trip; the row is not in the DB. Pure client-side fix.
+### 6. Validate the fix
+- Add targeted regression coverage for stale pending rows and checkout failure handling.
+- Test the affected backend functions and verify the current stale pending row no longer appears as an active pending payment.
