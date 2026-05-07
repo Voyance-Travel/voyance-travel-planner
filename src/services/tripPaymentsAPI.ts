@@ -174,7 +174,7 @@ export function formatCurrency(amountCents: number, currency: string = 'USD'): s
 /**
  * Get payment status for a specific item
  */
-export async function getItemPaymentStatus(tripId: string, itemType: 'flight' | 'hotel' | 'activity', itemId: string): Promise<TripPayment | null> {
+export async function getItemPaymentStatus(tripId: string, itemType: TripPaymentItemType, itemId: string): Promise<TripPayment | null> {
   const result = await getTripPayments(tripId);
   if (!result.success || !result.payments) return null;
   
