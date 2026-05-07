@@ -9923,19 +9923,25 @@ function DayCard({
     const info = getActivityCostInfo(act, travelers, budgetTier, destination, destinationCountry, isManualMode);
     return sum + (isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount));
   }, 0);
-  // Airport-transfer subtotal — broken out of transit so users see why Day 1
-  // transit looks high. Detected by "airport" in title/name/description on a
-  // transit-category row.
+  // Airport-transfer subtotal — only labels a row as "airport taxi" when it's
+  // a real paid transfer (vehicle keyword in TITLE alongside "airport"), not
+  // when the title/description merely mentions the airport in passing. Walking
+  // legs and zero-cost rows never count. This prevents Day 1 from showing
+  // "(incl. €130 airport taxi)" for a trip whose paid transfer is on Day 3.
+  const AIRPORT_TAXI_TITLE_RE = /(airport).{0,40}(taxi|transfer|shuttle|car service|private car|water taxi|alilaguna|limo|sedan|minivan|ride)|(taxi|transfer|shuttle|car service|private car|water taxi|alilaguna|limo|sedan|minivan|ride).{0,40}(airport)/i;
   const airportTransferSubtotal = dayIsPreview ? 0 : day.activities.reduce((sum, act) => {
     const cat = (act.category || '').toLowerCase();
     const typ = ((act as any).type || '').toLowerCase();
     const isTransit = cat === 'transportation' || cat === 'transport' || cat === 'transit'
       || typ === 'transportation' || typ === 'transport' || typ === 'transit';
     if (!isTransit) return sum;
-    const haystack = `${act.title || ''} ${(act as any).name || ''} ${act.description || ''}`.toLowerCase();
-    if (!/\bairport\b/.test(haystack)) return sum;
+    if (isWalkingLeg({ title: act.title, description: act.description })) return sum;
+    const title = `${act.title || ''} ${(act as any).name || ''}`;
+    if (!AIRPORT_TAXI_TITLE_RE.test(title)) return sum;
     const info = getActivityCostInfo(act, travelers, budgetTier, destination, destinationCountry, isManualMode);
-    return sum + (isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount));
+    const amt = isManualMode ? info.amount : (info.isEstimated ? 0 : info.amount);
+    if (amt <= 0) return sum;
+    return sum + amt;
   }, 0);
   const otherTransitSubtotal = Math.max(0, transitSubtotal - airportTransferSubtotal);
   const visibleActivitiesSubtotal = Math.max(0, totalCost - transitSubtotal);
