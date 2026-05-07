@@ -88,6 +88,13 @@ export async function persistDay(input: PersistDayInput): Promise<PersistDayResu
   } = input;
   let normalizedActivities = [...input.normalizedActivities];
 
+  // Final pre-dawn hotel-return strip before persistence — last gate.
+  const { stripPreDawnHotelReturns } = await import('../../_shared/predawn-hotel-strip.ts');
+  stripPreDawnHotelReturns(normalizedActivities, { dayNumber, label: 'PERSIST' });
+  if (Array.isArray(generatedDay?.activities)) {
+    stripPreDawnHotelReturns(generatedDay.activities, { dayNumber, label: 'PERSIST_DAY' });
+  }
+
   // ── 1. Upsert day row ──
   const { data: dayRow, error: dayError } = await supabase
     .from('itinerary_days')
