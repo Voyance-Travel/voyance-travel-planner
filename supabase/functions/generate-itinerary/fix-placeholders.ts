@@ -900,6 +900,8 @@ export function nuclearCrossCitySweep(activities: any[], destination: string): n
   }
   return mutated;
 }
+
+interface PlaceholderSlot {
   activityRef: any;
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks';
 }
