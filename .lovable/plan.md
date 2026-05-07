@@ -1,72 +1,68 @@
-## Root cause
+## What's happening
 
-Real double-entry, not a render glitch. Day 2 of trip `a5f41a2b…` has **two** `activity_costs` rows tagged `dining` × $15:
+Trip Health surfaces three real overlaps:
 
-| activity_id | in itinerary JSON? |
-|---|---|
-| `7834bb8d…` | ✅ live "Lunch at Mordi e Vai" |
-| `44c1ae94…` | ❌ orphan — no matching activity in `itinerary_data` |
+- Day 1: Breakfast 08:30–09:15 vs **Transfer to Marriott** 09:00–09:45
+- Day 2: Vatican 09:30–12:30 vs **Walk to Lunch via Ponte Sant'Angelo** 12:20–12:40
+- Day 3: Villa Medici 10:05–10:55 vs **Walk to Hotel Flora** 10:45–11:00
 
-`usePayableItems` (`src/hooks/usePayableItems.ts:358-449`) iterates `activityCosts` in DB order. The two rows happen to be processed like this:
+In every case the **transit card starts before the previous activity ends**. We already have a deterministic fixer (`enforceTimingAndBuffers` in `supabase/functions/_shared/timing-cascade.ts`) that handles exactly this, and it runs in:
 
-1. Row `44c1ae94` (orphan) → no direct id match → falls into orphan-rescue → pops the next unconsumed `(day=2, dining)` JSON activity, which is **"Lunch at Mordi e Vai"** (`7834bb8d`). It pushes a row using the live name + $15.
-2. Row `7834bb8d` (legit) → direct id match in `activityNameById` → pushes a *second* row using the live name + $15.
+- `action-save-itinerary.ts` STEP 2.9
+- `pipeline/repair-day.ts` final pass
 
-Result: two identical "Lunch at Mordi e Vai @ $30" rows in All Costs and Payments, inflating the total by $30. (Compose IDs differ — `44c1ae94_d2` vs `7834bb8d_d2` — so the existing `presentItemIds` dedupe at the bottom doesn't catch them.)
+But it only runs at *write* time. Two paths bypass it:
 
-The orphan-rescue's `rescueConsumed` set only blocks the *same JSON id* from being rescued twice; it doesn't block the *direct lookup path* from later claiming a JSON id that orphan-rescue already consumed.
+1. **Legacy data** — itineraries saved before the cascade was wired (and any saves done by older write paths) still carry the original overlaps. They never get re-cleaned because nothing re-runs the cascade unless the user edits.
+2. **Render-time synthetic cards** — `EditorialItinerary.tsx` injects "Transfer to Marriott" / hotel arrival cards client-side after load (lines ~1623–1730 and ~1853–2010). Those cards' times are fixed from flight/hotel metadata and never reconciled against neighboring AI activities, which is exactly the Day 1 case.
 
-There's a secondary, lower-urgency question of *why* an orphan `activity_costs` row even exists when generation does `DELETE+INSERT` per pass — likely a refresh-day / repair path that mints a new activity uuid without rewriting its cost row. Worth tracing but not required to stop the duplicate.
+The Health panel correctly flags all three, and the existing "Fix timing" button works — but that requires the user to click it on every day, on every trip. For a $20 paid product the user is right: the itinerary should arrive clean.
 
 ## Plan
 
-### 1. Hook fix — make direct matches win, orphan-rescue fill in only
+Make the timing cascade run automatically without the user clicking anything, in two places, and tighten one rule that was letting transit cards slip through.
 
-Refactor the loop in `src/hooks/usePayableItems.ts` (lines ~336-449) into two passes over `activityCosts`:
+### 1. Auto-repair on itinerary load (one shot per trip, persisted)
 
-**Pass 1 — direct matches.** For every row whose `row.activity_id` is in `activityNameById`, push the payable item and add the JSON id to a new `claimedJsonIds: Set<string>`.
+Add a load-time pass in `EditorialItinerary.tsx` that:
 
-**Pass 2 — orphan-rescue.** For every row that did NOT direct-match in pass 1, attempt `popRescue`, but skip any candidate already in `claimedJsonIds`. Update `popRescue` to take `claimedJsonIds` as a guard (or filter the queue at pop time):
+- Runs **after** all synthetic injection (transit, hotel, departure cards) is finished — i.e. on the same `displayDays` derived value that Health analyzes.
+- For each day, calls a tiny client mirror of `enforceTimingAndBuffers` (new file `src/utils/itinerary/timingCascade.ts`, ported from the Deno shared module — pure TS, no Deno imports).
+- If any repairs are produced for any day, applies them to the in-memory `days` and triggers exactly one save through the existing `itineraryAPI` save path (which already runs the server cascade as a belt-and-suspenders).
+- Idempotent: once a day round-trips clean, the next load produces zero repairs and skips the save. Guarded by a `useRef` so it can't re-fire in the same session.
 
-```ts
-const popRescue = (dayNum: number, mappedCat: string): RescueEntry | null => {
-  const queue = orphanRescueByDayCat.get(`${dayNum}|${mappedCat}`);
-  if (!queue) return null;
-  let cursor = rescueCursors.get(k) ?? 0;
-  while (cursor < queue.length) {
-    const entry = queue[cursor++];
-    if (!rescueConsumed.has(entry.id) && !claimedJsonIds.has(entry.id)) {
-      rescueCursors.set(k, cursor);
-      return entry;
-    }
-  }
-  return null;
-};
-```
+Net effect: legacy trips silently heal on first open; new trips are unaffected because they're already clean.
 
-Transit grouping (`transitByDay`) stays as-is; the same two-pass split applies because direct matches still beat rescue.
+### 2. Cover the synthetic-card path explicitly
 
-This fully resolves the user-visible duplicate without any DB changes — even if the orphan row keeps existing, it'll be silently dropped (no live JSON slot to rescue into).
+Inside the `displayDays` builder in `EditorialItinerary.tsx`, after the transition / departure / arrival-transfer injection blocks finish for a day, run the same cascade on that day's activities **before** returning. This catches the "Transfer to Marriott @ 09:00 collides with Breakfast ending 09:15" class of conflict at the source instead of waiting for the load-time pass to notice.
 
-### 2. Tests
+We already use `cascadeFixOverlaps` from `injectHotelActivities.ts` in some sibling paths, but it only resolves overlaps by pushing forward — it doesn't enforce the buffer / same-start rules `enforceTimingAndBuffers` does. Replace those call sites with the new shared client cascade so all injection paths converge on one rulebook.
 
-Add a test in `src/hooks/__tests__/usePayableItems.test.ts`:
+### 3. Tighten the cascade for transit cards
 
-- One day with one live dining activity (id `B`).
-- Two `activity_costs` rows: one stale (id `A`, no JSON match), one live (id `B`).
-- Assert `items.filter(i => i.name === 'Lunch at Mordi e Vai').length === 1`.
-- Assert `totalCents === 1 × $30`.
+In `supabase/functions/_shared/timing-cascade.ts` the `isStructural` guard exempts hotel/departure cards from being moved, which is correct. But transit cards (`category: 'transit' | 'transport' | 'transfer'`) currently get a buffer of **0** between themselves and their neighbours (`getMinBufferMinutes` returns 0 when either side is transit). That's why "Walk to Lunch 12:20–12:40" is allowed to start before Vatican's 12:30 end — the cascade only acts on a true overlap, and once we resolve it, a 0-min buffer is acceptable.
 
-### 3. Backstop — prune orphan rows on next sync (deferred / out of scope)
+Change: when *one side is a transit card and the other is not*, still allow a 0-min buffer between them, but require that the transit card's `startTime >= previous activity's endTime`. This is already what the overlap branch does, so the real fix is to ensure the transit card itself is repositioned (not just its successor) when it starts mid-previous-activity.
 
-The right long-term fix for the orphan is in the writer. Stage 6 generation already does `DELETE + INSERT`, so the orphan was written by another path. Candidates: `syncBudgetFromDays` (`EditorialItinerary`) and `budgetLedgerSync`. If we want to guarantee a clean ledger, add a "trim" step that deletes any `activity_costs` row for `trip_id` whose `activity_id` is not in the current `itinerary_data` after every save. **Skipping in this plan** — call it out so the user can decide whether to schedule it next.
+Mirror the same change in `src/utils/itinerary/timingCascade.ts` so client and server agree.
+
+### 4. Tests
+
+- Extend `supabase/functions/_shared/timing-cascade.test.ts` with the three exact scenarios above (Marriott transfer, Walk-to-Lunch, Walk-to-Hotel) — assert each transit card's start is pushed to ≥ previous end.
+- Add a vitest for the new `src/utils/itinerary/timingCascade.ts` covering the same three cases.
+- Add a render test (or unit test of the `displayDays` builder helper if extractable) confirming that injecting "Transfer to Marriott @ 09:00" against a Breakfast ending 09:15 results in a transfer at 09:15+.
 
 ## Files touched
 
-- `src/hooks/usePayableItems.ts` — two-pass refactor + `claimedJsonIds` guard.
-- `src/hooks/__tests__/usePayableItems.test.ts` — new test for stale-row dedupe.
+- `src/utils/itinerary/timingCascade.ts` *(new — port of the Deno shared module)*
+- `src/utils/itinerary/__tests__/timingCascade.test.ts` *(new)*
+- `src/components/itinerary/EditorialItinerary.tsx` — load-time auto-repair effect + post-injection cascade in `displayDays`
+- `src/utils/injectHotelActivities.ts` — route through the new shared cascade
+- `supabase/functions/_shared/timing-cascade.ts` — transit-card start-time rule
+- `supabase/functions/_shared/timing-cascade.test.ts` — new scenarios
 
 ## Out of scope
 
-- Deleting / migrating the existing orphan row in this trip (they'll silently drop with the hook fix; user can also wait for the next save sweep if we add #3 later).
-- DB-level unique constraints — the existing `(trip_id, activity_id)` index is correct; the duplicate isn't a unique-constraint violation, it's two *different* activity_ids resolving to the same JSON activity.
+- Backfilling the entire DB. The on-load auto-repair handles trips as they're opened, which is enough for paid-user perception. A scheduled batch job is a separate ask.
+- Changing how synthetic cards pick their initial time (e.g., teaching "Transfer to Marriott" to read the previous activity's end). The cascade handles it after the fact; rewriting the picker is a bigger refactor.
