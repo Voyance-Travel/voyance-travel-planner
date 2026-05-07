@@ -13,6 +13,7 @@
  */
 
 import { shouldCountRow } from './tripBudgetService';
+import { isWalkingLeg } from '@/lib/cost-estimation';
 
 export interface CanonicalCostInputRow {
   cost_per_person_usd: number | null;
