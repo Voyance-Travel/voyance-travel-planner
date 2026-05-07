@@ -111,7 +111,7 @@ async function enrichActivities(
       return false;
     }
     const cat = String(a?.category || '').toLowerCase();
-    const checkCats = ['dining', 'restaurant', 'food', 'sightseeing', 'attraction', 'museum', 'culture', 'shopping'];
+    const checkCats = ['dining', 'restaurant', 'food', 'sightseeing', 'attraction', 'museum', 'culture', 'shopping', 'wellness', 'spa', 'activity', 'entertainment', 'relaxation'];
     if (!checkCats.includes(cat)) return true;
     const wrongCity = isCrossCityAddress(a, destination);
     if (wrongCity) {

@@ -503,7 +503,7 @@ function ActivityCard({
               </>
             )}
           </div>
-          <h4 className="font-medium text-sm">{sanitizeActivityName(activity.title)}</h4>
+          <h4 className="font-medium text-sm">{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime || (activity as any).time, activity: activity as any })}</h4>
           {(activity as any).closedRisk && (
             <div className="flex items-center gap-1.5 mt-1 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md">
               <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400 flex-shrink-0" />

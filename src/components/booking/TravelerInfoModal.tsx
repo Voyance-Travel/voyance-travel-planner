@@ -149,7 +149,7 @@ export function TravelerInfoModal({
         <DialogHeader>
           <DialogTitle>Traveler Information</DialogTitle>
           <DialogDescription>
-            Enter details for all travelers booking "{sanitizeActivityName(activity.title)}".
+            Enter details for all travelers booking "{sanitizeActivityName(activity.title, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}".
             Names must match travel documents.
           </DialogDescription>
         </DialogHeader>

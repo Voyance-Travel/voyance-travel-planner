@@ -148,4 +148,29 @@ describe('sanitizeActivityName + wellness mask', () => {
       }),
     ).toBe('Spa Time — find a venue');
   });
+
+  it('strips leaked "— find a venue" from a Return-to-Hotel logistics row', () => {
+    expect(
+      sanitizeActivityName('Spa Time — find a venue', {
+        category: 'accommodation',
+        activity: {
+          title: 'Return to JW Marriott Venice Resort & Spa',
+          category: 'accommodation',
+          location: { name: 'JW Marriott Venice Resort & Spa', address: 'Isola delle Rose, Venice' },
+        },
+      }),
+    ).not.toMatch(/find a venue/i);
+  });
+
+  it('does not show "Spa Time — find a venue" on a hotel/accommodation card', () => {
+    const out = sanitizeActivityName('Spa Time — find a venue', {
+      category: 'stay',
+      activity: {
+        title: 'Hotel Stay',
+        category: 'stay',
+        location: { name: 'Gritti Palace', address: 'Campo Santa Maria del Giglio, Venice' },
+      },
+    });
+    expect(out).not.toMatch(/find a venue/i);
+  });
 });
