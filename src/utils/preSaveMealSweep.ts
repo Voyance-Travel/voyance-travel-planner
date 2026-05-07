@@ -86,7 +86,7 @@ function isStubMeal(act: ActivityShape, city: string): boolean {
 
 function applyRealVenue(
   act: ActivityShape,
-  fallback: { name: string; address: string; price: number; description: string },
+  fallback: { name: string; address: string; price: number; description: string; needsVenuePick?: boolean },
   meal: MealSlot,
 ): void {
   const label =
@@ -94,20 +94,30 @@ function applyRealVenue(
     : meal === 'lunch' ? 'Lunch'
     : meal === 'drinks' ? 'Drinks'
     : 'Dinner';
-  act.title = `${label} at ${fallback.name}`;
+  const isUnverified = fallback.needsVenuePick === true;
+
+  // Unverified sentinel: keep the "find a local spot" copy as the title and
+  // force $0 — never present a foreign venue or a paid stub.
+  act.title = isUnverified ? fallback.name : `${label} at ${fallback.name}`;
   act.name = act.title;
-  act.location = { ...(act.location || {}), name: fallback.name, address: fallback.address };
-  act.venue_name = fallback.name;
+  act.location = { ...(act.location || {}), name: isUnverified ? '' : fallback.name, address: isUnverified ? '' : fallback.address };
+  act.venue_name = isUnverified ? '' : fallback.name;
   if (fallback.description) act.description = fallback.description;
+
+  const price = isUnverified ? 0 : fallback.price;
   if (act.cost) {
-    act.cost.amount = fallback.price;
-    act.cost.source = 'meal_guard_fallback_db';
+    act.cost.amount = price;
+    act.cost.source = isUnverified ? 'meal_guard_unverified' : 'meal_guard_fallback_db';
   } else {
-    act.cost = { amount: fallback.price, currency: 'USD', source: 'meal_guard_fallback_db' };
+    act.cost = { amount: price, currency: 'USD', source: isUnverified ? 'meal_guard_unverified' : 'meal_guard_fallback_db' };
   }
-  act.cost_per_person = fallback.price;
+  act.cost_per_person = price;
   act.category = act.category || 'dining';
-  delete act.needsVenuePick;
+  if (isUnverified) {
+    act.needsVenuePick = true;
+  } else {
+    delete act.needsVenuePick;
+  }
 }
 
 /**
@@ -131,13 +141,10 @@ export function preSaveMealStubSweep(days: DayShape[], destination?: string): nu
       if (!isStubMeal(act, city)) continue;
       const meal = inferMealSlot(act);
       const fallback = resolveAnyMealFallback(city, meal, usedNames);
-      if (!fallback) {
-        // Mark for UI CTA — better than leaving the stub title untouched.
-        act.needsVenuePick = true;
-        continue;
-      }
       applyRealVenue(act, fallback, meal);
-      usedNames.add(fallback.name.toLowerCase());
+      if (!fallback.needsVenuePick) {
+        usedNames.add(fallback.name.toLowerCase());
+      }
       replaced++;
     }
   }

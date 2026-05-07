@@ -5,6 +5,7 @@
 import { isRecurringEvent } from './currency-utils.ts';
 import type { RequiredMeal } from './meal-policy.ts';
 import { getRandomFallbackRestaurant, resolveAnyMealFallback } from './fix-placeholders.ts';
+import { detectCrossCityMention } from './cross-city-filter.ts';
 import { extractRestaurantVenueName, venueNamesMatch } from './generation-utils.ts';
 
 // =============================================================================
@@ -851,12 +852,25 @@ export function enforceRequiredMealsFinalGuard(
     return false;
   };
 
-  // Pre-filter: remove any chain restaurants AND blocked restaurants from fallbackVenues
-  const cleanFallbackVenues = fallbackVenues.filter(
-    (v) => !isChainRestaurant(v.name) && !isBlocked(v.name),
-  );
+  // Pre-filter: remove chain restaurants, blocked restaurants, AND wrong-city
+  // venues from fallbackVenues. Cross-city filter prevents Tartine (SF) /
+  // All'Antico Vinaio (Florence) / Le Comptoir (Paris) from being injected
+  // into a Venice itinerary via verified_venues prefetch.
+  const cleanFallbackVenues = fallbackVenues.filter((v) => {
+    if (isChainRestaurant(v.name)) return false;
+    if (isBlocked(v.name)) return false;
+    if (detectCrossCityMention(v.address || '', destination)) {
+      console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: cross-city venue blocked from fallback pool: "${v.name}" (${v.address})`);
+      return false;
+    }
+    if (detectCrossCityMention(v.name || '', destination)) {
+      console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: cross-city venue (name) blocked: "${v.name}"`);
+      return false;
+    }
+    return true;
+  });
   if (cleanFallbackVenues.length < fallbackVenues.length) {
-    console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Stripped ${fallbackVenues.length - cleanFallbackVenues.length} chain/blocked-duplicate venue(s) from fallback pool`);
+    console.warn(`[MEAL FINAL GUARD] Day ${dayNumber}: Stripped ${fallbackVenues.length - cleanFallbackVenues.length} chain/blocked/cross-city venue(s) from fallback pool`);
   }
   fallbackVenues = cleanFallbackVenues;
 
