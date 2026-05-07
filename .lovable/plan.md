@@ -1,37 +1,53 @@
 ## Bug
-Day 1 badge shows `(incl. €130 airport taxi)` for a trip whose departure flight is Day 3. The arrival-day breakdown is rolling a cost into the "airport taxi" slot that shouldn't be there.
+User-facing card descriptions show internal AI prompt scaffolding:
+- `This satisfies your 'Deep Context' requirement`
+- `(AESTHETIC slot)`
+- `(slot)`
 
-## Root Cause Hypothesis
-In `src/components/itinerary/EditorialItinerary.tsx` (lines ~9929-9939), `airportTransferSubtotal` sums every transit-category activity on the day whose title/name/description merely **mentions** "airport". This catches:
+These should never appear in saved or rendered itinerary copy.
 
-1. Arrival-day "Land at VCE / water taxi from airport" rows (legit, but on Day 1 the user expects only the explicit Day-3 departure transfer to be priced).
-2. Generic transit rows whose description mentions the airport in passing ("walk from hotel — 20 min from airport district") — false positives priced via fallback.
-3. Transit legs whose `cost` came from the cost engine's airport-transfer fallback even though the leg isn't actually a paid taxi (e.g., a public-transport leg).
+## Why current sanitizer misses them
+`supabase/functions/generate-itinerary/sanitization.ts`:
+- Line 1025 catches `satisfies your X interest|requirement` but its `\w+` group is **a single word**, so `'Deep Context'` (quoted, two words) slips through.
+- Line 1031 catches parentheticals containing `archetype|slot\s+logic|...`, but **bare `(slot)` and `(AESTHETIC slot)`** (slot as a standalone word, no "logic" suffix) are not in the alternation.
+- No rule strips ALL-CAPS slot tags like `(AESTHETIC slot)`, `(NARRATIVE slot)`, `(MOOD slot)`, etc.
 
-So two separate fixes are needed: a **labeling fix** (don't claim "airport taxi" for arrival walks/public transit) and a **diagnostic** confirming whether the €130 row is a real paid taxi or a stub.
+`src/utils/textSanitizer.ts` has no equivalent guard, so previously-saved trips keep showing the artifacts.
 
 ## Plan
 
-### 1. Tighten the "airport taxi" detection (UI only)
-In `EditorialItinerary.tsx` around lines 9929-9940, replace the loose `/\bairport\b/` test with a stricter predicate that requires **all three**:
-- Transit category (already checked).
-- Title (not description) matches `/airport.*(taxi|transfer|shuttle|car|ride|water taxi|alilaguna|private)|(taxi|transfer|shuttle|car|water taxi).*airport/i`.
-- A positive non-walking, non-zero `cost` that came from a paid source (skip rows whose `cost.basis` is `'estimated'` with no booking, and skip rows matching `isWalkingLeg`).
+### 1. Server-side: tighten `sanitization.ts` (defense at write time)
+Add three new replacements to the `removeBrackets`/text-clean pipeline (around lines 1025–1031):
 
-Activities that just *mention* the airport (sightseeing, walks, generic transit without a vehicle keyword) fall through to "Local transit" or are excluded entirely.
+```ts
+// "This satisfies/fulfills/addresses your 'Archetype Name' requirement|slot|moment"
+// — quoted (single OR double) multi-word archetype labels.
+.replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+['"][^'"]{2,40}['"]\s+(?:interest|preference|request|need|requirement|slot|moment|stop|block)\b[^.]*\.?\s*/gi, '')
 
-### 2. Diagnostic note in the dev-only sanity check
-Extend the existing `process.env.NODE_ENV !== 'production'` block (~line 9944) to log, for each day, the activities counted under `airportTransferSubtotal` (id, title, dayNumber, cost, source). This makes future regressions of "wrong-day airport cost" visible in the console without needing user reports.
+// Bare "(slot)" or "(<LABEL> slot)" / "(<LABEL> SLOT)"
+.replace(/\s*\(\s*(?:[A-Z][A-Z\s/&-]{1,30}\s+)?slot\s*\)\s*/gi, '')
 
-### 3. Verify on the reported trip
-After deploying, the user re-runs the Venice itinerary. Expected outcome:
-- Day 1 badge no longer shows `(incl. €130 airport taxi)` unless Day 1 actually contains a paid airport-taxi/water-taxi/transfer activity.
-- Day 3 badge correctly shows the departure transfer subtotal.
+// "(AESTHETIC|NARRATIVE|MOOD|TONE|... <noun>)" — single ALL-CAPS label tag
+.replace(/\s*\(\s*(?:AESTHETIC|NARRATIVE|MOOD|TONE|VIBE|THEME|ARCHETYPE|PERSONA|CONTEXT|FULFILLS?|SLOT)(?:\s+[A-Z][A-Z\s/&-]{0,30})?\s*\)\s*/g, '')
+```
+
+These run inside the existing master cleaner so every save path (generate, repair, refresh-day, save-itinerary) inherits the fix.
+
+### 2. Frontend: extend `sanitizeText` in `src/utils/textSanitizer.ts` (defense at render time)
+For already-saved trips that bypassed the server fix, add the same three replacements to `sanitizeText` so card descriptions, modal copy, and shared views are clean immediately on next render — no regen required.
+
+### 3. Tests
+Extend `src/test/noEmDashes.test.ts` (or add a sibling `src/utils/__tests__/textSanitizer.artifacts.test.ts`) with cases:
+- `"This satisfies your 'Deep Context' requirement."` → empty/clean
+- `"Visit the Doge's Palace (AESTHETIC slot)"` → `"Visit the Doge's Palace"`
+- `"Cicchetti tour (slot)"` → `"Cicchetti tour"`
+- Sentences that legitimately contain the word "slot" outside parentheses (e.g. "time slot") are preserved.
 
 ### Files touched
-- `src/components/itinerary/EditorialItinerary.tsx` — only the two `reduce` blocks at lines 9917-9940 and the dev sanity-check block.
+- `supabase/functions/generate-itinerary/sanitization.ts` — three added regex lines.
+- `src/utils/textSanitizer.ts` — same three regexes mirrored into `sanitizeText`.
+- `src/utils/__tests__/textSanitizer.artifacts.test.ts` — new test file.
 
 ### Out of scope
-- Backend cost-engine logic (airport transfers are correctly costed there).
-- Cross-day reassignment of airport-transfer activities (that's a generation-pipeline concern, not a label bug).
-- Changes to the day-total math itself — only the inline "incl. X" annotation is affected.
+- AI prompt rewrites — root cause is the model leaking scaffolding; sanitizer is the durable defense.
+- Cost/booking pipeline.
