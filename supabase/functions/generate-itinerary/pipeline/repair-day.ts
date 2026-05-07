@@ -687,23 +687,26 @@ export function repairDay(input: RepairDayInput): RepairDayResult {
           });
           console.log(`[Repair] WELLNESS_PLACEHOLDER: kept AI venue "${existingVenue}" — "${before}" → "${act.title}" ($0, unverified)`);
         } else {
-          // No fallback DB, no hotel, no real venue — strip cost, mark for refinement
-          act.cost_per_person = 0;
-          if (act.cost) act.cost.amount = 0;
-          act.title = 'Spa Time — find a venue';
-          act.name = act.title;
-          act.description = "We couldn't verify a spa venue here. Tap the assistant to suggest one.";
-          (act as any).needsRefinement = true;
-          act.source = 'wellness-placeholder-stripped';
+          // No fallback DB, no hotel, no real venue — REMOVE the activity
+          // entirely. Persisting "Spa Time — find a venue" creates a ghost
+          // entry the user never asked for; the dead-gap nudge can fill the
+          // slot instead.
+          (act as any).__remove_unverifiable_wellness = true;
           repairs.push({
             code: FAILURE_CODES.GENERIC_VENUE,
             activityIndex: vr.activityIndex,
-            action: 'stripped_wellness_placeholder',
+            action: 'removed_unverifiable_wellness',
             before,
-            after: act.title,
+            after: '(removed)',
           });
-          console.warn(`[Repair] WELLNESS_PLACEHOLDER: No fallback or hotel — stripped "${before}"`);
+          console.warn(`[Repair] WELLNESS_PLACEHOLDER: No fallback or hotel — removed "${before}"`);
         }
+      }
+    }
+    // Sweep activities flagged for removal (wellness with no resolvable venue).
+    for (let i = activities.length - 1; i >= 0; i--) {
+      if ((activities[i] as any)?.__remove_unverifiable_wellness) {
+        activities.splice(i, 1);
       }
     }
 

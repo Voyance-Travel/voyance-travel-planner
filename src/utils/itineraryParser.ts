@@ -11,6 +11,7 @@
 
 import { format, parseISO, addDays } from 'date-fns';
 import { coerceDurationString } from './plannerUtils';
+import { isGhostActivity } from '@/lib/itinerary/hideGhostActivities';
 
 // Strip non-Latin scripts from AI text artifacts before rendering
 const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\u0600-\u06FF\u0400-\u04FF\u0E00-\u0E7F]+/g;
@@ -604,12 +605,24 @@ export function parseItineraryDays(
     console.warn(`[itineraryParser] Deduplicated ${parsedDays.length - deduped.length} duplicate day(s)`);
   }
   
-  // Step 4: Re-assign sequential dayNumbers and authoritative dates
-  const result = deduped.map((day, idx) => ({
-    ...day,
-    dayNumber: idx + 1,
-    date: calculateDayDate(tripStartDate, idx) || day.date,
-  }));
+  // Step 4: Re-assign sequential dayNumbers and authoritative dates,
+  //          and strip "ghost" activities (legacy pre-dawn hotel returns and
+  //          "Spa Time — find a venue" wellness placeholders) from display.
+  const result = deduped.map((day, idx) => {
+    const filteredActivities = (day.activities || []).filter((a) => {
+      const ghost = isGhostActivity(a);
+      if (ghost) {
+        console.warn(`[itineraryParser] Hiding ghost activity "${(a as any)?.title || (a as any)?.name}" on day ${idx + 1} (start=${(a as any)?.startTime || (a as any)?.start_time || (a as any)?.time})`);
+      }
+      return !ghost;
+    });
+    return {
+      ...day,
+      dayNumber: idx + 1,
+      date: calculateDayDate(tripStartDate, idx) || day.date,
+      activities: filteredActivities,
+    };
+  });
 
   // Step 5: Day-count mismatch detection (diagnostic only, skip for partial/in-progress data)
   if (tripStartDate && tripEndDate && !options?.partial) {
