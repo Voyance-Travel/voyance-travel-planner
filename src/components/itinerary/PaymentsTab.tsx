@@ -1238,39 +1238,43 @@ export function PaymentsTab({
             </Card>
           )}
 
-          {/* Activities Category */}
-          {activityItems.length > 0 && (
-            <Card className="overflow-hidden">
+          {/* Category cards — mirror Budget by Category buckets so totals agree */}
+          {([
+            { key: 'food', items: foodItems, label: 'Food & Dining', icon: <Utensils className="h-5 w-5 text-accent" /> },
+            { key: 'activities', items: activitiesOnlyItems, label: 'Activities & Experiences', icon: <Camera className="h-5 w-5 text-accent" /> },
+            { key: 'transit', items: transitItems, label: 'Local Transit', icon: <Car className="h-5 w-5 text-accent" /> },
+          ] as const).map(({ key, items, label, icon }) => items.length > 0 && (
+            <Card key={key} className="overflow-hidden">
               <button
-                onClick={() => setExpandedCategory(expandedCategory === 'activities' ? null : 'activities')}
+                onClick={() => setExpandedCategory(expandedCategory === key ? null : key)}
                 className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
-                    <Camera className="h-5 w-5 text-accent" />
+                    {icon}
                   </div>
                   <div className="text-left">
-                    <h4 className="font-medium">Activities & Experiences</h4>
-                    <p className="text-xs text-muted-foreground">{activityItems.length} bookable items</p>
+                    <h4 className="font-medium">{label}</h4>
+                    <p className="text-xs text-muted-foreground">{items.length} bookable item{items.length === 1 ? '' : 's'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <p className="font-medium">
-                      {formatCurrency(activityItems.reduce((sum, i) => sum + i.amountCents, 0))}
+                      {formatCurrency(items.reduce((sum, i) => sum + i.amountCents, 0))}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {activityItems.filter(i => i.payment?.status === 'paid').length}/{activityItems.length} paid
+                      {items.filter(i => i.payment?.status === 'paid').length}/{items.length} paid
                     </p>
                   </div>
                   <ChevronDown className={cn(
                     "h-5 w-5 text-muted-foreground transition-transform",
-                    expandedCategory === 'activities' && "rotate-180"
+                    expandedCategory === key && "rotate-180"
                   )} />
                 </div>
               </button>
               <AnimatePresence>
-                {expandedCategory === 'activities' && (
+                {expandedCategory === key && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
@@ -1278,13 +1282,13 @@ export function PaymentsTab({
                     className="overflow-hidden"
                   >
                     <CardContent className="pt-0 pb-4">
-                      {activityItems.map(renderPayableItem)}
+                      {items.map(renderPayableItem)}
                     </CardContent>
                   </motion.div>
                 )}
               </AnimatePresence>
             </Card>
-          )}
+          ))}
 
           {/* Add Expense Button */}
           <Button
