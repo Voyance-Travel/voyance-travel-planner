@@ -1158,10 +1158,12 @@ async function getDestinationPOI(supabase: any, destinationName: string): Promis
 
     const pois = data?.points_of_interest;
     if (Array.isArray(pois) && pois.length > 0) {
-      // Pick a random POI from the list
-      const randomIndex = Math.floor(Math.random() * pois.length);
-      console.log(`[Images] Found ${pois.length} POIs for ${destinationName}, using: ${pois[randomIndex]}`);
-      return pois[randomIndex];
+      // Deterministic: always pick the first POI so every regeneration of the
+      // same destination resolves to the same hero cache key (huge cost saver).
+      const sorted = [...pois].sort((a: any, b: any) => String(a).localeCompare(String(b)));
+      const chosen = sorted[0];
+      console.log(`[Images] Found ${pois.length} POIs for ${destinationName}, using canonical: ${chosen}`);
+      return chosen;
     }
     return null;
   } catch (e) {
