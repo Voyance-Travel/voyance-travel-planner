@@ -1,68 +1,63 @@
 ## What's happening
 
-Trip Health surfaces three real overlaps:
+The card shows venue **AcquaMadre Hammam** with a proper street address ("Via di S. Ambrogio 17, 00186 Rome") — that data is correct and matches the curated `INLINE_FALLBACK_WELLNESS.rome` entry. But the **title** renders as `Spa Time — find a venue`.
 
-- Day 1: Breakfast 08:30–09:15 vs **Transfer to Marriott** 09:00–09:45
-- Day 2: Vatican 09:30–12:30 vs **Walk to Lunch via Ponte Sant'Angelo** 12:20–12:40
-- Day 3: Villa Medici 10:05–10:55 vs **Walk to Hotel Flora** 10:45–11:00
+Trace:
 
-In every case the **transit card starts before the previous activity ends**. We already have a deterministic fixer (`enforceTimingAndBuffers` in `supabase/functions/_shared/timing-cascade.ts`) that handles exactly this, and it runs in:
+1. The server stored a generic title (e.g. `"Spa Time"` or `"Wellness Session"`) — likely from an older repair pass that downgraded the title without replacing the venue, or from a path that set the venue from `INLINE_FALLBACK_WELLNESS` but never re-applied the matching `Spa Session at {venue}` title via `applyFallbackWellnessToActivity`.
+2. At render time, `sanitizeActivityName` (`src/utils/activityNameSanitizer.ts:200-214`) calls `isClientPlaceholderWellness`. That function (`src/utils/wellnessPlaceholderDetection.ts:65-105`) returns `true` **as soon as the title matches a generic pattern** (line 84) — *before* it checks whether the venue/address are real. So a real venue + generic title gets masked to the `WELLNESS_PLACEHOLDER_FALLBACK` string `"Spa Time — find a venue"`.
 
-- `action-save-itinerary.ts` STEP 2.9
-- `pipeline/repair-day.ts` final pass
-
-But it only runs at *write* time. Two paths bypass it:
-
-1. **Legacy data** — itineraries saved before the cascade was wired (and any saves done by older write paths) still carry the original overlaps. They never get re-cleaned because nothing re-runs the cascade unless the user edits.
-2. **Render-time synthetic cards** — `EditorialItinerary.tsx` injects "Transfer to Marriott" / hotel arrival cards client-side after load (lines ~1623–1730 and ~1853–2010). Those cards' times are fixed from flight/hotel metadata and never reconciled against neighboring AI activities, which is exactly the Day 1 case.
-
-The Health panel correctly flags all three, and the existing "Fix timing" button works — but that requires the user to click it on every day, on every trip. For a $20 paid product the user is right: the itinerary should arrive clean.
+That's a label-bleed: the placeholder string is meant for items with no venue at all, but the gate fires on title-only and ignores the verified venue sitting right next to it.
 
 ## Plan
 
-Make the timing cascade run automatically without the user clicking anything, in two places, and tighten one rule that was letting transit cards slip through.
+Two small, surgical changes — purely client-side, no DB write, no AI call.
 
-### 1. Auto-repair on itinerary load (one shot per trip, persisted)
+### 1. Stop masking when the venue is real
 
-Add a load-time pass in `EditorialItinerary.tsx` that:
+In `src/utils/wellnessPlaceholderDetection.ts`, reorder `isClientPlaceholderWellness` so the "real venue" exit comes **before** the generic-title check:
 
-- Runs **after** all synthetic injection (transit, hotel, departure cards) is finished — i.e. on the same `displayDays` derived value that Health analyzes.
-- For each day, calls a tiny client mirror of `enforceTimingAndBuffers` (new file `src/utils/itinerary/timingCascade.ts`, ported from the Deno shared module — pure TS, no Deno imports).
-- If any repairs are produced for any day, applies them to the in-memory `days` and triggers exactly one save through the existing `itineraryAPI` save path (which already runs the server cascade as a belt-and-suspenders).
-- Idempotent: once a day round-trips clean, the next load produces zero repairs and skips the save. Guarded by a `useRef` so it can't re-fire in the same session.
+- A venue is "real" if any of:
+  - has a `placeId` (already handled, line 77-81),
+  - venue name matches one in `INLINE_FALLBACK_WELLNESS` (new — export the flat name set from the server module's mirror, or hard-code a small client-side allowlist; we already mirror the patterns),
+  - venue name length ≥ 4, not in `GENERIC_WELLNESS_VENUE_PATTERNS`, **and** address is numeric (≥ 8 chars + a digit).
 
-Net effect: legacy trips silently heal on first open; new trips are unaffected because they're already clean.
+When real, return `false`. Don't mask anything.
 
-### 2. Cover the synthetic-card path explicitly
+### 2. Auto-correct the title at render time
 
-Inside the `displayDays` builder in `EditorialItinerary.tsx`, after the transition / departure / arrival-transfer injection blocks finish for a day, run the same cascade on that day's activities **before** returning. This catches the "Transfer to Marriott @ 09:00 collides with Breakfast ending 09:15" class of conflict at the source instead of waiting for the load-time pass to notice.
+When the venue is real but the stored title is generic, `sanitizeActivityName` should return `"Spa Session at {venue.name}"` instead of the placeholder string. This matches what `applyFallbackWellnessToActivity` writes for fresh trips, so old and new look identical.
 
-We already use `cascadeFixOverlaps` from `injectHotelActivities.ts` in some sibling paths, but it only resolves overlaps by pushing forward — it doesn't enforce the buffer / same-start rules `enforceTimingAndBuffers` does. Replace those call sites with the new shared client cascade so all injection paths converge on one rulebook.
+Implementation: in `src/utils/activityNameSanitizer.ts` (around line 211), change the wellness branch:
 
-### 3. Tighten the cascade for transit cards
+```ts
+if (isClientPlaceholderWellness(probe)) {
+  return WELLNESS_PLACEHOLDER_FALLBACK;
+}
+// New: real-venue + generic-title path — rewrite, don't mask
+if (hasGenericWellnessTitle(sanitized)) {
+  const venue = (probe.location?.name || probe.venue_name || '').trim();
+  if (venue) return `Spa Session at ${venue}`;
+}
+```
 
-In `supabase/functions/_shared/timing-cascade.ts` the `isStructural` guard exempts hotel/departure cards from being moved, which is correct. But transit cards (`category: 'transit' | 'transport' | 'transfer'`) currently get a buffer of **0** between themselves and their neighbours (`getMinBufferMinutes` returns 0 when either side is transit). That's why "Walk to Lunch 12:20–12:40" is allowed to start before Vatican's 12:30 end — the cascade only acts on a true overlap, and once we resolve it, a 0-min buffer is acceptable.
+(`hasGenericWellnessTitle` is already exported from `wellnessPlaceholderDetection.ts`.)
 
-Change: when *one side is a transit card and the other is not*, still allow a 0-min buffer between them, but require that the transit card's `startTime >= previous activity's endTime`. This is already what the overlap branch does, so the real fix is to ensure the transit card itself is repositioned (not just its successor) when it starts mid-previous-activity.
+### 3. Tests
 
-Mirror the same change in `src/utils/itinerary/timingCascade.ts` so client and server agree.
+Extend `src/utils/__tests__/wellnessPlaceholderDetection.test.ts`:
 
-### 4. Tests
-
-- Extend `supabase/functions/_shared/timing-cascade.test.ts` with the three exact scenarios above (Marriott transfer, Walk-to-Lunch, Walk-to-Hotel) — assert each transit card's start is pushed to ≥ previous end.
-- Add a vitest for the new `src/utils/itinerary/timingCascade.ts` covering the same three cases.
-- Add a render test (or unit test of the `displayDays` builder helper if extractable) confirming that injecting "Transfer to Marriott @ 09:00" against a Breakfast ending 09:15 results in a transfer at 09:15+.
-
-## Files touched
-
-- `src/utils/itinerary/timingCascade.ts` *(new — port of the Deno shared module)*
-- `src/utils/itinerary/__tests__/timingCascade.test.ts` *(new)*
-- `src/components/itinerary/EditorialItinerary.tsx` — load-time auto-repair effect + post-injection cascade in `displayDays`
-- `src/utils/injectHotelActivities.ts` — route through the new shared cascade
-- `supabase/functions/_shared/timing-cascade.ts` — transit-card start-time rule
-- `supabase/functions/_shared/timing-cascade.test.ts` — new scenarios
+- Generic title `"Spa Time"` + venue `"AcquaMadre Hammam"` + numeric address → `isClientPlaceholderWellness` returns `false`.
+- Same input through `sanitizeActivityName` → `"Spa Session at AcquaMadre Hammam"`.
+- Empty venue + generic title → still returns the `WELLNESS_PLACEHOLDER_FALLBACK` (regression guard).
 
 ## Out of scope
 
-- Backfilling the entire DB. The on-load auto-repair handles trips as they're opened, which is enough for paid-user perception. A scheduled batch job is a separate ask.
-- Changing how synthetic cards pick their initial time (e.g., teaching "Transfer to Marriott" to read the previous activity's end). The cascade handles it after the fact; rewriting the picker is a bigger refactor.
+- Backfilling stored titles. The render-time rewrite is enough; on the next save (any edit, refresh, or auto-cascade) the corrected title will be persisted.
+- Touching the server. The server already writes the correct `Spa Session at …` shape via `applyFallbackWellnessToActivity`; this is purely about cleaning up legacy data and any case where another pass overwrote just the title.
+
+## Files touched
+
+- `src/utils/wellnessPlaceholderDetection.ts` — reorder the real-venue exit
+- `src/utils/activityNameSanitizer.ts` — rewrite generic title when venue is real
+- `src/utils/__tests__/wellnessPlaceholderDetection.test.ts` — new cases

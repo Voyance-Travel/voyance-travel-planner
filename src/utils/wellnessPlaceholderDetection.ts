@@ -80,10 +80,10 @@ export function isClientPlaceholderWellness(activity: WellnessActivityShape | nu
     !!activity?.verified?.placeId;
   if (hasPlaceId) return false;
 
-  // Title is generic placeholder
-  if (hasGenericWellnessTitle(title)) return true;
-
-  // Venue is empty / generic
+  // Real venue exit (runs BEFORE generic-title check):
+  // a non-generic named venue with a plausible numeric address (or known
+  // curated allowlist hit) means the activity is real even if the title
+  // is still generic — we'll rewrite the title elsewhere, not mask it.
   const venueLower = venue.toLowerCase();
   const isGenericVenue =
     venue.length < 4 ||
@@ -91,6 +91,15 @@ export function isClientPlaceholderWellness(activity: WellnessActivityShape | nu
     venueLower === 'the destination' ||
     venueLower === 'the city' ||
     GENERIC_WELLNESS_VENUE_PATTERNS.some((re) => re.test(venue));
+  const hasNumericAddress = address.length >= 8 && /\d/.test(address);
+  const inAllowlist = WELLNESS_VENUE_ALLOWLIST.has(venueLower);
+  const explicitlyVerified = activity?.metadata?.unverified_venue === false;
+  if (!isGenericVenue && (hasNumericAddress || inAllowlist || explicitlyVerified)) {
+    return false;
+  }
+
+  // Title is generic placeholder (and venue isn't proven real above)
+  if (hasGenericWellnessTitle(title)) return true;
 
   if (isGenericVenue) {
     const hasNamedVenue = / at [A-Z][\w'’-]+(?:\s+[A-Z&][\w'’-]+){0,5}/.test(title);
@@ -98,11 +107,30 @@ export function isClientPlaceholderWellness(activity: WellnessActivityShape | nu
   }
 
   // Otherwise require a real numeric address or explicit verification
-  const hasNumericAddress = address.length >= 8 && /\d/.test(address);
-  const explicitlyVerified = activity?.metadata?.unverified_venue === false;
   if (!hasNumericAddress && !explicitlyVerified) return true;
 
   return false;
 }
+
+/**
+ * Curated allowlist mirroring the server's INLINE_FALLBACK_WELLNESS so a
+ * known-real venue is treated as verified even without a numeric address.
+ */
+export const WELLNESS_VENUE_ALLOWLIST: Set<string> = new Set([
+  'spa valmont at le meurice',
+  'spa my blend by clarins',
+  'hammam pacha',
+  'cristallo spa at palazzo manfredi',
+  'acquamadre hammam',
+  'vabali spa berlin',
+  'liquidrom',
+  'aire ancient baths',
+  'spa mayan secret at hotel claris',
+  'espa life at corinthia',
+  'akasha holistic wellbeing at hotel café royal',
+  'aire ancient baths london',
+  'six senses spa at tivoli avenida liberdade',
+  'spa at bairro alto hotel',
+]);
 
 export const WELLNESS_PLACEHOLDER_FALLBACK = 'Spa Time — find a venue';

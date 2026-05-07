@@ -11,6 +11,7 @@ import {
 } from './stubVenueDetection';
 import {
   isClientPlaceholderWellness,
+  hasGenericWellnessTitle,
   WELLNESS_PLACEHOLDER_FALLBACK,
   type WellnessActivityShape,
 } from './wellnessPlaceholderDetection';
@@ -210,6 +211,15 @@ export function sanitizeActivityName(
       : { title: sanitized, category: opts?.category };
     if (isClientPlaceholderWellness(probe)) {
       return WELLNESS_PLACEHOLDER_FALLBACK;
+    }
+    // Real-venue + generic-title path: the placeholder check returned false
+    // because the venue is verified (placeId, allowlist, or numeric address),
+    // but the stored title is still a generic stub like "Spa Time". Rewrite
+    // it to match the server's "Spa Session at {venue}" shape so users never
+    // see "find a venue" next to a real, addressed spa.
+    if (hasGenericWellnessTitle(sanitized)) {
+      const venue = (probe.location?.name || probe.venue_name || '').trim();
+      if (venue && venue.length >= 4) return `Spa Session at ${venue}`;
     }
   }
 

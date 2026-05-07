@@ -58,6 +58,16 @@ describe('isClientPlaceholderWellness', () => {
       }),
     ).toBe(false);
   });
+
+  it('does NOT flag generic title when venue is real with numeric address (AcquaMadre)', () => {
+    expect(
+      isClientPlaceholderWellness({
+        title: 'Spa Time',
+        category: 'wellness',
+        location: { name: 'AcquaMadre Hammam', address: 'Via di S. Ambrogio 17, 00186 Rome' },
+      }),
+    ).toBe(false);
+  });
 });
 
 describe('sanitizeActivityName + wellness mask', () => {
@@ -85,5 +95,31 @@ describe('sanitizeActivityName + wellness mask', () => {
         },
       }),
     ).toBe('Spa Valmont at Le Meurice');
+  });
+
+  it('rewrites generic title to "Spa Session at {venue}" when venue is real', () => {
+    expect(
+      sanitizeActivityName('Spa Time', {
+        category: 'wellness',
+        activity: {
+          title: 'Spa Time',
+          category: 'wellness',
+          location: { name: 'AcquaMadre Hammam', address: 'Via di S. Ambrogio 17, 00186 Rome' },
+        },
+      }),
+    ).toBe('Spa Session at AcquaMadre Hammam');
+  });
+
+  it('still masks when generic title has no venue', () => {
+    expect(
+      sanitizeActivityName('Spa Time', {
+        category: 'wellness',
+        activity: {
+          title: 'Spa Time',
+          category: 'wellness',
+          location: { name: '', address: '' },
+        },
+      }),
+    ).toBe('Spa Time — find a venue');
   });
 });
