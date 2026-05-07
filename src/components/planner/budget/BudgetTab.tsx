@@ -409,7 +409,7 @@ export function BudgetTab({ tripId, travelers, totalDays, itineraryDays, onActiv
     queryFn: async () => {
       const { data } = await supabase
         .from('activity_costs')
-        .select('cost_per_person_usd, num_travelers, category, day_number, activity_id')
+        .select('id, cost_per_person_usd, num_travelers, category, day_number, activity_id, source, is_paid, paid_amount_usd')
         .eq('trip_id', tripId);
       return data || [];
     },
