@@ -210,7 +210,19 @@ export function sanitizeActivityName(
         }
       : { title: sanitized, category: opts?.category };
     if (isClientPlaceholderWellness(probe)) {
+      // If the venue is real but the stored title is generic, rewrite to
+      // "Spa Session at {venue}" instead of masking with the placeholder.
+      if (hasGenericWellnessTitle(sanitized)) {
+        const venue = (probe.location?.name || probe.venue_name || '').trim();
+        if (venue && venue.length >= 4) return `Spa Session at ${venue}`;
+      }
       return WELLNESS_PLACEHOLDER_FALLBACK;
+    }
+    // Real-venue + generic-title path (placeholder check returned false because
+    // venue is verified): rewrite the title to match server-side fallback shape.
+    if (hasGenericWellnessTitle(sanitized)) {
+      const venue = (probe.location?.name || probe.venue_name || '').trim();
+      if (venue && venue.length >= 4) return `Spa Session at ${venue}`;
     }
   }
 
