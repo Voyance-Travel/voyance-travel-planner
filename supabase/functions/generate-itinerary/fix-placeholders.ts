@@ -1068,7 +1068,7 @@ export async function fillPlaceholderSlot(
       diningConfig,
     );
     if (aiRestaurant) {
-      applyFallbackToActivity(activity, aiRestaurant, mealType, usedVenueNames, diningConfig);
+      applyFallbackToActivity(activity, aiRestaurant, mealType, usedVenueNames, diningConfig, city);
       return true;
     }
   } catch (err) {
