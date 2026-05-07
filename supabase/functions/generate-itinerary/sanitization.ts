@@ -1069,7 +1069,7 @@ export function sanitizeAITextField(text: string | undefined | null, destination
   // Conservative: requires a leading lowercase preposition, ≤80 chars, and a
   // sentence-ending period — so capitalized real openings are never eaten.
   result = result.replace(
-    /^\s*(?:for|at|in|before|after|around|during|by|until|on|with|to|from)\b[^.]{0,80}\.\s*/i,
+    /^\s*(?:for|at|in|before|after|around|during|by|until|on|with|to|from)\b[^.]{0,80}\.\s*/,
     '',
   );
 
