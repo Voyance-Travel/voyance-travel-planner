@@ -47,6 +47,8 @@ function sanitizeDisplayString(value: string | undefined | null): string | undef
     .replace(/\s{2,}/g, ' ')
     .replace(/^[,;|:\s-]+|[,;|:\s-]+$/g, '')
     .trim();
+  // Standalone "Deep context" / "Deep context stop" placeholder titles → drop entirely
+  if (/^deep\s+context(?:\s+stop)?$/i.test(cleaned)) return undefined;
   return cleaned || undefined;
 }
 
