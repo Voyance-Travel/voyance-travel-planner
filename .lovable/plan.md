@@ -1,97 +1,104 @@
 ## Problem
 
-Two distinct ghost entries are still slipping into the persisted itinerary and rendering at the **top of Days 1 and 2** at pre-dawn / midnight times:
+Day 2 of the active Venice luxury trip renders without an evening meal even though the meal guard fired. DB inspection of trip `38f81fab…` Day 2:
 
-1. **`Spa Time — find a venue`** — the placeholder string the generator writes when no curated wellness DB venue and no hotel name are available (`pipeline/repair-day.ts` §wellness, line 693). It is never meant to be saved/displayed; it's a "needs refinement" stub. Only the *generator* repair pass produces it; nothing scrubs it on the read side.
-2. **`Return to Your Hotel`** at `00:00`–`04:59` with the **previous-night's** or **wrong** hotel address. The shared `stripPreDawnHotelReturns` helper (`supabase/functions/_shared/predawn-hotel-strip.ts`) is wired into every *write* path (universal-quality-pass, sync-tables, save-itinerary, persist-day, action-generate-trip-day) but:
-   - Is **not** run on read in the frontend — every legacy/migrated trip already has these rows persisted (DB confirms 30+ trips with `Return to Your Hotel` at `00:05`, `01:30`, `00:16`, etc.).
-   - Inserts the entry **at the END of the array** with `start_time = end of previous activity`. When that previous activity ended `23:35`, the new entry inherits a 1-hour duration into post-midnight (`00:35`), and a later sort places it **first** the next render.
+```
+19:55 dining   Dinner at Dinner — pick a restaurant
+```
 
-## Root cause (per surface)
+This is the `GLOBAL_EMERGENCY_FALLBACK.dinner` sentinel from `supabase/functions/generate-itinerary/fix-placeholders.ts` (line 247) — a `needsVenuePick: true` stub that:
 
-| Surface | Why ghosts survive |
-| --- | --- |
-| `repair-day.ts` line 690-705 | Writes `Spa Time — find a venue` as a "transient" title but persists it; no terminal pass strips wellness placeholders before save. |
-| `universal-quality-pass.ts` Step 8 (line 254-292) | Computes `startTime24` from `lastActivity.endTime`. If the LLM emitted `endTime: "23:50"` and the helper rounds via `+30m` elsewhere, it can wrap to `00:20` and not be caught (HOTEL_TITLE_RE matches but the *new* row is appended before the strip pass on the *next* tick on the *previous* day's array). |
-| Frontend (`EditorialItinerary.tsx` / `CustomerDayCard.tsx`) | Renders raw `day.activities` in array order. A row that ended up at index 0 with a `00:xx` time is shown verbatim. No display-time filter for pre-dawn hotel returns or `find a venue` titles. |
-| Address attribution | `Return to Your Hotel` rows persist a stale `location.address` from the LLM. When the user later changes their accommodation, the address is never refreshed (the hotel-context propagator only re-stamps activities matched by venue name or `skipEnrichment`, but the legacy row was saved without `skipEnrichment: true`). |
+- Is masked by frontend sanitizers (`src/utils/activityNameSanitizer.ts`, `preSaveMealSweep.ts`) so it renders as "no venue" / hidden in some surfaces.
+- Has `cost.amount = 0`, address `""`, no venue, no booking — so it visually disappears in dense day cards and budget rows.
+
+To the user, Day 2 is "missing dinner entirely". Same root cause is hitting Day 2 breakfast (`Breakfast at Breakfast — pick a café`) and Day 3 lunch in this trip, and is broadly responsible for many "missing meal" complaints across cities not in `INLINE_FALLBACK_RESTAURANTS`.
+
+## Root cause
+
+`enforceRequiredMealsFinalGuard` (day-validation.ts §TRY 1-4) cascades:
+
+1. `verified_venues` table → `INLINE_FALLBACK_RESTAURANTS` city pool → `INLINE_FALLBACK_RESTAURANTS` recycled pool → `regionalEmergencyFallback(city)` → `GLOBAL_EMERGENCY_FALLBACK`.
+2. `regionalEmergencyFallback` accepts a city string and resolves the country via `CITY_COUNTRY_MAP`. Venice → italy → "Trattoria Sostanza" should be emitted.
+
+The cascade is failing for two reasons:
+
+### A. Destination string is lost before the guard runs
+
+`action-save-itinerary.ts` line 303:
+```ts
+const destination = day.city || day.destination || 'the destination';
+```
+`day.city` and `day.destination` are not populated in the per-day shape that the save pipeline sees (trip-level `trips.destination` is). When `destination === 'the destination'`:
+
+- `verified_venues` query is skipped (line 311 guard).
+- `getRandomFallbackRestaurant('the destination', …)` returns `null` (no key match).
+- `regionalEmergencyFallback('the destination', …)` falls through every entry in `CITY_COUNTRY_MAP` → returns `GLOBAL_EMERGENCY_FALLBACK` → emits the "Dinner — pick a restaurant" sentinel that looks like nothing to the user.
+
+`action-generate-day.ts` and `action-generate-trip-day.ts` have similar pathways but get `destination` from a richer context, so this primarily affects the **save-side guard** (where the bug for the Venice trip surfaced).
+
+### B. Venice (and many secondary cities) has no city-level fallback pool
+
+`INLINE_FALLBACK_RESTAURANTS` only holds Paris, Rome, Berlin, Barcelona, London, Lisbon. Venice, Marrakech, Chengdu, Scottsdale, Palm Beach etc. all skip directly to `regionalEmergencyFallback`. When (A) is fixed, Venice → italy → Trattoria Sostanza will at least be a real venue — but it's a Florence dinner spot served as Venice's emergency. Acceptable as a *true* last resort, but not great for a luxury trip.
+
+### C. The "Dinner at Dinner — pick a restaurant" double-label
+
+`day-validation.ts` line 1094:
+```ts
+title: venueName!.startsWith(label) ? venueName! : `${label}: ${venueName}`,
+```
+When the GLOBAL sentinel `"Dinner — pick a restaurant"` is wrapped at line 1056 as `"Dinner at Dinner — pick a restaurant"` (resolveAnyMealFallback path emits the bare name; TRY 1/3/4 prepend `${label} at`), the duplicated "Dinner" leaks through visibly.
 
 ## Fix
 
-### 1. Generator: stop emitting the `find a venue` placeholder (server)
+### 1. Always pass a real destination into the meal guard
 
-In `supabase/functions/generate-itinerary/pipeline/repair-day.ts` (≈ line 690 — the `else` branch when there's no fallback DB, no hotel, no real venue):
-
-- **Remove the activity entirely** instead of renaming it to `Spa Time — find a venue`.
-- Push a `repairs` entry with `action: 'removed_unverifiable_wellness'` so the dead-gap nudge can fire.
-- Update `wellnessPlaceholderDetection.test.ts` to reflect: when no venue is resolvable, the slot is dropped, not masked.
-
-### 2. Generator: harden pre-dawn return injection
-
-In `universal-quality-pass.ts` Step 8 (line 254-292):
-
-- After computing `startTime24`, validate `parseInt(startTime24.slice(0,2)) >= 17` (a hotel return before 5pm is nonsense). If not, skip injection — the day truly has no late activity to return from.
-- Always set `endTime` to `min(startTime24 + 30m, "23:59")` and never let it wrap.
-- After Step 8, run `stripPreDawnHotelReturns(result, …)` (already imported at line 33) in addition to the existing call at line 296 — this catches the row we just inserted if its time still landed pre-dawn for any reason.
-
-### 3. Frontend: display-time scrubber for legacy trips
-
-The DB already contains thousands of legacy ghost rows; we can't migrate every one (some users have edited around them). Add a render-time filter so the user **never sees** the bad rows, while leaving the row in the DB until the next save naturally rewrites it.
-
-Create `src/lib/itinerary/hideGhostActivities.ts`:
+In `action-save-itinerary.ts` (and audit `action-generate-day.ts`, `action-generate-trip-day.ts`) — when computing `destination` for the guard, prefer the trip-level destination already loaded above the day loop:
 
 ```ts
-const HOTEL_RETURN_RE = /return\s+to\s+(your\s+)?[^,]*hotel|back\s+to\s+(the\s+)?hotel/i;
-const WELLNESS_PLACEHOLDER_RE = /find a venue\s*$/i;
-const PRE_DAWN_MAX = 5 * 60; // 05:00
-
-export function isGhostActivity(a: any): boolean {
-  // A: wellness placeholder string
-  if (WELLNESS_PLACEHOLDER_RE.test(a?.title || '')) return true;
-  // B: pre-dawn hotel return
-  const t = a?.startTime || a?.start_time || a?.time;
-  if (typeof t === 'string' && HOTEL_RETURN_RE.test(a?.title || '')) {
-    const m = t.match(/(\d{1,2}):(\d{2})/);
-    if (m) {
-      const mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-      if (mins < PRE_DAWN_MAX) return true;
-    }
-  }
-  return false;
-}
+const destination =
+  day.city ||
+  day.destination ||
+  trip?.destination ||           // fall back to trip-level
+  'the destination';
 ```
 
-Apply in:
-- `EditorialItinerary.tsx` — wherever `day.activities` is mapped for rendering, filter through `!isGhostActivity`.
-- `CustomerDayCard.tsx` — same.
-- `PaymentsTab.tsx` / `usePayableItems.ts` — already filter $0 walks; add the same ghost guard so the bad rows don't appear in payable lists or the budget snapshot.
+Add an assertion log when we still hit `'the destination'` so we catch any remaining gap in CI.
 
-### 4. One-time DB scrub for in-memory hot trips
+### 2. Add a regional pool for "luxury / Italy / Venice-tier" cities
 
-Run a migration that clears confirmed-junk rows from `itinerary_data`:
+Extend `REGIONAL_EMERGENCY_FALLBACK.italy` so its `dinner` entry is upgraded for Venice-context (or add a new top-level Venice pool with 4-6 vetted dinners — Osteria alle Testiere, Trattoria Da Romano, Antiche Carampane, Al Covo, Vini da Gigio, Venissa). Even one real Venice dinner in the city pool means the sentinel never fires for this destination again.
 
-```sql
--- Strip activities matching ghost criteria from itinerary_data.days[].activities[]
--- using a jsonb walker (mirroring sync_activity_cost_to_itinerary_jsonb pattern).
+This is content-only and unblocks the active reproduction.
+
+### 3. Eliminate the "Dinner at Dinner — pick a restaurant" double-label
+
+In `day-validation.ts` line 1094, dedupe consecutive label words:
+
+```ts
+const rawTitle = venueName!.startsWith(label) ? venueName! : `${label}: ${venueName}`;
+const title = rawTitle.replace(new RegExp(`^${label}\\s+at\\s+${label}\\b`, 'i'), `${label} —`);
 ```
 
-Two predicates only — both already validated above:
-- `title ~* 'find a venue\s*$'`
-- `(title ~* 'return.*hotel') AND startTime/start_time hour ∈ [0..4]`
+So even if a `needsVenuePick` sentinel does survive, it reads `"Dinner — pick a restaurant"` without the doubled token.
 
-Skip rows where `is_locked = true` or `source IN ('user', 'manual')` — those are user-edited and we never touch them.
+### 4. Guarantee a visible dinner card
 
-### 5. Address refresh on hotel-context change (defensive)
+Two cheap defensive measures so a "needsVenuePick" placeholder never disappears silently in the UI:
 
-When a user updates accommodation (`unified-accommodation-selector` flow), the existing context propagator should re-stamp `location.address` on every activity whose `title` matches `HOTEL_RETURN_RE` (not just exact venue-name matches). Add that one regex branch to the propagator so future address-mismatch ghosts can't accumulate.
+- **Frontend (`src/utils/activityNameSanitizer.ts` + `preSaveMealSweep.ts`)**: when a meal slot has `needsVenuePick === true`, render a *visible* "Dinner — tap to pick a spot" pill with an explicit CTA to open the assistant. Today the sanitizer masks it down to nothing in dense day cards — that's why the user perceives "no dinner".
+- **Editorial day card**: render a single-line amber placeholder card for `needsVenuePick` meals (mirroring the existing dead-gap nudge). Always visible. Counts as a "dinner exists" structurally, but visually flags itself as needing input.
+
+### 5. Sweep existing trips that already have the sentinel
+
+Run a one-time SQL update mirroring the prior ghost-activity scrub: for any persisted `*  — pick a restaurant` / `* — pick a café` activity, re-run `resolveAnyMealFallback` (or, in pure SQL, swap the title for the country-level emergency entry from a small mapping table). Skips locked / user-edited rows. Verify with the same query used in this investigation.
 
 ## Verification
 
-- After deploy: run the same `find a venue` / pre-dawn query — count should drop monotonically as users open their trips and the next save scrubs each one.
-- Add a Deno test in `_shared/predawn-hotel-strip.test.ts` covering the wraparound case (last activity ends `23:50` → injected return must NOT land pre-dawn).
-- Unit test `isGhostActivity` for: `Return to Your Hotel @ 00:05` → true; `Return to JW Marriott @ 22:30` → false; `Spa Time — find a venue` → true; `Spa Session at JW Venice Spa` → false.
+- After edits: re-open the Venice trip, confirm Day 2 dinner renders with a real restaurant card (not the sentinel) and that breakfast and Day 3 lunch are real venues too.
+- DB query: `select count(*) from trips, jsonb_array_elements(...) where title ilike '%pick a restaurant%' or title ilike '%pick a café%'` → should be 0 after scrub.
+- Existing tests: `meal-policy.test.ts` and `fix-placeholders.test.ts` still pass; add a new test asserting that for Venice + dinner, `resolveAnyMealFallback` never returns `needsVenuePick: true`.
 
 ## Out of scope
 
-- The address-mismatch root cause for *legitimate* hotel returns (correct time but stale address after hotel swap) is partly addressed by Step 5 but a full audit of the accommodation-change propagator is a separate ticket.
-- Wellness fallback DB expansion (so fewer cities fall through to the now-removed placeholder) is a content task.
+- Wider expansion of `INLINE_FALLBACK_RESTAURANTS` to more cities (separate content task).
+- Tying meal-guard output to live Google Places lookups for unverified destinations (architecture change).
