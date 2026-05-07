@@ -2815,19 +2815,23 @@ async function _handleGenerateTripDayInner(
     console.log('=== SENDING TO NEXT DAY ===');
     console.log(`Sending usedRestaurants (${newUsedRestaurants.length}):`, JSON.stringify(newUsedRestaurants));
 
-    await supabase.from('trips').update({
-      itinerary_data: partialItinerary,
-      unlocked_day_count: newUnlocked,
-      metadata: {
-        ...meta,
-        generation_completed_days: dayNumber,
-        generation_heartbeat: new Date().toISOString(),
-        generation_total_days: totalDays,
-        generation_current_city: nextCityName,
-        used_restaurants: newUsedRestaurants,
-        generation_timeout_sentinel: null, // Clear sentinel on success
+    const { persistTripItinerary: __persistInter } = await import('../_shared/persist-itinerary.ts');
+    await __persistInter(supabase, tripId, partialItinerary, {
+      destination: destination ?? null,
+      label: 'generate-trip-day:intermediate',
+      extraUpdate: {
+        unlocked_day_count: newUnlocked,
+        metadata: {
+          ...meta,
+          generation_completed_days: dayNumber,
+          generation_heartbeat: new Date().toISOString(),
+          generation_total_days: totalDays,
+          generation_current_city: nextCityName,
+          used_restaurants: newUsedRestaurants,
+          generation_timeout_sentinel: null, // Clear sentinel on success
+        },
       },
-    }).eq('id', tripId);
+    });
 
     // Record day timing with category breakdown
     const dayGenTotal = Date.now() - dayGenStart;
