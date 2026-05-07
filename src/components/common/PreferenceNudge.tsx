@@ -78,23 +78,27 @@ const LEVEL_CONFIG = {
 };
 
 function ConfidenceRing({ confidence, size = 64 }: { confidence: number; size?: number }) {
-  const radius = (size - 8) / 2;
+  const safeSize = Number.isFinite(size) && size > 8 ? size : 64;
+  const safeConfidence = Number.isFinite(confidence)
+    ? Math.max(0, Math.min(100, confidence))
+    : 0;
+  const radius = (safeSize - 8) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress = (confidence / 100) * circumference;
-  
+  const progress = (safeConfidence / 100) * circumference;
+
   const getColor = () => {
-    if (confidence >= 70) return 'text-emerald-500';
-    if (confidence >= 50) return 'text-blue-500';
-    if (confidence >= 30) return 'text-amber-500';
+    if (safeConfidence >= 70) return 'text-emerald-500';
+    if (safeConfidence >= 50) return 'text-blue-500';
+    if (safeConfidence >= 30) return 'text-amber-500';
     return 'text-red-500';
   };
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg className="transform -rotate-90" width={size} height={size}>
+    <div className="relative" style={{ width: safeSize, height: safeSize }}>
+      <svg className="transform -rotate-90" width={safeSize} height={safeSize}>
         <circle
-          cx={size / 2}
-          cy={size / 2}
+          cx={safeSize / 2}
+          cy={safeSize / 2}
           r={radius}
           fill="none"
           stroke="currentColor"
@@ -102,8 +106,8 @@ function ConfidenceRing({ confidence, size = 64 }: { confidence: number; size?: 
           className="text-muted/20"
         />
         <circle
-          cx={size / 2}
-          cy={size / 2}
+          cx={safeSize / 2}
+          cy={safeSize / 2}
           r={radius}
           fill="none"
           stroke="currentColor"
@@ -116,7 +120,7 @@ function ConfidenceRing({ confidence, size = 64 }: { confidence: number; size?: 
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
         <span className={cn('text-sm font-semibold', getColor())}>
-          {confidence}%
+          {safeConfidence}%
         </span>
       </div>
     </div>
