@@ -133,20 +133,62 @@ export function enforcePersistDayContract<T = any>(
  * in-place. Logs a single summary line if anything was dropped so we can
  * track which generator paths still leak.
  */
-export function enforceContractOnDays(days: any[]): { totalDrops: number; byReason: Record<ContractViolation, number> } {
-  const byReason: Record<ContractViolation, number> = {
+export async function enforceContractOnDays(
+  days: any[],
+  ctx: { destination?: string | null } = {},
+): Promise<{ totalDrops: number; byReason: Record<string, number> }> {
+  const byReason: Record<string, number> = {
     'ghost-row': 0,
     'placeholder-name': 0,
     'prompt-artifact': 0,
+    'cross-city': 0,
   };
   let totalDrops = 0;
+
+  // Lazy-load the cross-city detector so non-Deno callers (tests) don't fail.
+  let detectCrossCityMention: ((text: string, destination: string) => string | null) | null = null;
+  if (ctx.destination) {
+    try {
+      const mod = await import('../generate-itinerary/cross-city-filter.ts');
+      detectCrossCityMention = mod.detectCrossCityMention;
+    } catch {
+      detectCrossCityMention = null;
+    }
+  }
+
   for (const day of days || []) {
     if (!day || !Array.isArray(day.activities)) continue;
     const { activities, drops } = enforcePersistDayContract(day.activities, {
       dayNumber: day.dayNumber,
     });
+    let cleaned = activities;
+
+    // Cross-city sweep on what survives placeholder/ghost contract.
+    if (detectCrossCityMention && ctx.destination) {
+      const dest = ctx.destination;
+      cleaned = cleaned.filter((a: any) => {
+        if (isLockedRow(a)) return true;
+        const cat = String(a?.category || a?.type || '').toLowerCase();
+        // Apply only to venue-bearing categories
+        if (!/dining|food|restaurant|cafe|bar|nightlife|sightseeing|museum|culture|shopping|wellness|spa|activity|entertainment|relaxation/i.test(cat)) {
+          return true;
+        }
+        const blob = [
+          a?.title, a?.name,
+          a?.location?.name, a?.location?.address, a?.location?.city,
+          a?.address, a?.venue?.name, a?.venue?.address,
+        ].filter(Boolean).join(' | ');
+        const hit = detectCrossCityMention!(blob, dest);
+        if (hit) {
+          drops.push({ dayNumber: day.dayNumber, title: String(a?.title || a?.name || ''), reason: 'cross-city' as any });
+          return false;
+        }
+        return true;
+      });
+    }
+
     if (drops.length > 0) {
-      day.activities = activities;
+      day.activities = cleaned;
       totalDrops += drops.length;
       for (const d of drops) {
         byReason[d.reason] = (byReason[d.reason] || 0) + 1;
