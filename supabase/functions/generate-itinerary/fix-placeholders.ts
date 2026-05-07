@@ -242,9 +242,9 @@ const CITY_COUNTRY_MAP: Record<string, keyof typeof REGIONAL_EMERGENCY_FALLBACK>
 };
 
 const GLOBAL_EMERGENCY_FALLBACK: Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant> = {
-  breakfast: { name: "Local specialty café", address: "Top-rated café near your hotel", price: 12, description: "Pick a 4.5+ star specialty café within a 5-min walk of your hotel. Order the local pastry plus a strong espresso or pour-over." },
-  lunch: { name: "Highly-rated neighborhood restaurant", address: "Top-rated lunch spot near your morning activity", price: 25, description: "Pick a 4.5+ star neighborhood restaurant near your morning activity. The concierge can confirm the booking." },
-  dinner: { name: "Highly-rated neighborhood restaurant", address: "Top-rated dinner spot near your evening activity", price: 45, description: "Pick a 4.5+ star restaurant within walking distance of your evening plans. The concierge can lock the booking." },
+  breakfast: { name: "Breakfast — pick a café", address: "", price: 0, description: "We don't have a vetted café on file for this destination yet. Tap to choose one or ask the concierge.", needsVenuePick: true },
+  lunch: { name: "Lunch — pick a restaurant", address: "", price: 0, description: "We don't have a vetted lunch spot on file for this destination yet. Tap to choose one or ask the concierge.", needsVenuePick: true },
+  dinner: { name: "Dinner — pick a restaurant", address: "", price: 0, description: "We don't have a vetted dinner spot on file for this destination yet. Tap to choose one or ask the concierge.", needsVenuePick: true },
 };
 
 function regionalEmergencyFallback(city: string, mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks'): FallbackRestaurant {
