@@ -2668,30 +2668,32 @@ async function _handleGenerateTripDayInner(
       .filter((d: any) => !Array.isArray(d.activities) || d.activities.length === 0)
       .map((d: any) => d.dayNumber);
 
-    await supabase.from('trips').update({
-      itinerary_data: partialItinerary,
-      itinerary_status: finalStatus,
-      unlocked_day_count: newUnlocked,
-      itinerary_status: finalStatus,
-      unlocked_day_count: newUnlocked,
-      metadata: {
-        ...meta,
-        generation_completed_days: isComplete ? totalDays : updatedDays.filter((d: any) => Array.isArray(d.activities) && d.activities.length > 0).length,
-        generation_completed_at: new Date().toISOString(),
-        generation_heartbeat: new Date().toISOString(),
-        generation_total_days: totalDays,
-        generation_current_city: null,
-        chain_broken_at_day: isComplete ? null : emptyDaysList[0],
-        chain_error: isComplete ? null : (
-          !hasEnoughMeaningful
-            ? `Bare itinerary: only ${meaningfulActivityCount} real activities for ${totalDays} days`
-            : `Shell days detected: ${emptyDaysList.join(', ')} have 0 activities`
-        ),
-        empty_days_at_completion: emptyDaysList.length > 0 ? emptyDaysList : null,
-        bare_itinerary_detected: !hasEnoughMeaningful || null,
-        meaningful_activity_count: meaningfulActivityCount,
+    const { persistTripItinerary: __persistFinal } = await import('../_shared/persist-itinerary.ts');
+    await __persistFinal(supabase, tripId, partialItinerary, {
+      destination: destination ?? null,
+      label: 'generate-trip-day:final',
+      extraUpdate: {
+        itinerary_status: finalStatus,
+        unlocked_day_count: newUnlocked,
+        metadata: {
+          ...meta,
+          generation_completed_days: isComplete ? totalDays : updatedDays.filter((d: any) => Array.isArray(d.activities) && d.activities.length > 0).length,
+          generation_completed_at: new Date().toISOString(),
+          generation_heartbeat: new Date().toISOString(),
+          generation_total_days: totalDays,
+          generation_current_city: null,
+          chain_broken_at_day: isComplete ? null : emptyDaysList[0],
+          chain_error: isComplete ? null : (
+            !hasEnoughMeaningful
+              ? `Bare itinerary: only ${meaningfulActivityCount} real activities for ${totalDays} days`
+              : `Shell days detected: ${emptyDaysList.join(', ')} have 0 activities`
+          ),
+          empty_days_at_completion: emptyDaysList.length > 0 ? emptyDaysList : null,
+          bare_itinerary_detected: !hasEnoughMeaningful || null,
+          meaningful_activity_count: meaningfulActivityCount,
+        },
       },
-    }).eq('id', tripId);
+    });
 
     // Record final day timing with category breakdown and finalize performance log
     const dayGenTotal = Date.now() - dayGenStart;
