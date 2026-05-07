@@ -70,4 +70,21 @@ describe('resolveCanonicalCostRows', () => {
     expect(on.totalCents).toBe(40000);
     expect(off.totalCents).toBe(0);
   });
+
+  it('day-level transport row tagged logistics-sync still renders as a payable (non-logistics) row', () => {
+    // Regression: previously any source==='logistics-sync' row was treated as
+    // a logistics row and dropped from per-row Payments rendering, while still
+    // counted in the headline. That mismatch produced the persistent
+    // "Totals differ by $X" drift on transit-heavy itineraries.
+    const live = [
+      { id: 'leg-1', dayNumber: 2, name: 'Vaporetto to San Marco', category: 'transport', jsonCost: 0 },
+    ];
+    const costs = [
+      { activity_id: 'leg-1', day_number: 2, category: 'transport', cost_per_person_usd: 9.5, num_travelers: 2, source: 'logistics-sync' },
+    ];
+    const r = resolveCanonicalCostRows({ costs: costs as any, liveActivities: live, includeHotel: true, includeFlight: false });
+    expect(r.totalCents).toBe(1900);
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0].isLogisticsRow).toBe(false);
+  });
 });
