@@ -721,7 +721,24 @@ serve(async (req) => {
       }
 
       // ========================================
-      // Charge Refunded
+      // Checkout Session Expired / Async Payment Failed
+      // Finalize any pending trip_payments rows so the UI doesn't get stuck.
+      // ========================================
+      case "checkout.session.expired":
+      case "checkout.session.async_payment_failed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const newStatus = event.type === "checkout.session.expired" ? 'cancelled' : 'failed';
+        const { data: rows, error } = await supabaseAdmin
+          .from("trip_payments")
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq('stripe_checkout_session_id', session.id)
+          .in('status', ['pending', 'processing'])
+          .select('id');
+        if (error) logError("Failed to finalize trip_payments on session expiry/failure", { error: error.message, sessionId: session.id });
+        else log("Finalized trip_payments rows", { count: rows?.length || 0, sessionId: session.id, newStatus });
+        break;
+      }
+
       // ========================================
       case "charge.refunded": {
         const charge = event.data.object as Stripe.Charge;
