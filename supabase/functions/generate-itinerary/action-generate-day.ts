@@ -1212,6 +1212,30 @@ export async function handleGenerateDay(
         generatedDay.activities = repairedDay.activities;
         normalizedActivities = generatedDay.activities;
 
+        // Auto-fill any remaining ≥3h afternoon dead gaps
+        try {
+          const { fillAfternoonDeadGaps } = await import('./pipeline/fill-dead-gaps.ts');
+          const lockedIdSet = new Set<string>((lockedActivities as any[]).map((l: any) => l.id));
+          const filled = await fillAfternoonDeadGaps(normalizedActivities, {
+            destination: resolvedDestination || destination || '',
+            isFirstDay,
+            isLastDay,
+            isLastDayInCity: resolvedIsLastDayInCity,
+            archetype: undefined,
+            dietaryRestrictions: (preferences?.dietaryRestrictions as string[] | undefined) || [],
+            budgetTier: budgetTier || 'standard',
+            tripCurrency: 'USD',
+            lockedIds: lockedIdSet,
+          });
+          if (filled.inserted.length > 0) {
+            console.log(`[pipeline] Day ${dayNumber}: auto-filled ${filled.inserted.length} afternoon dead gap(s)`);
+            normalizedActivities = filled.activities;
+            generatedDay.activities = normalizedActivities;
+          }
+        } catch (gapErr) {
+          console.warn('[pipeline] Dead-gap auto-fill failed (non-blocking):', gapErr);
+        }
+
       } catch (pipelineErr) {
         console.warn('[pipeline] Validate/repair failed (non-blocking):', pipelineErr);
       }
