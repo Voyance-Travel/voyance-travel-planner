@@ -35,7 +35,12 @@ export function sanitizeText(text: string | undefined | null): string {
     .replace(
       /\b(in|to|of|over|for|about|around|across|throughout|from|into|toward|towards|through|within|near)\s+the([.!?,;])/gi,
       '$1 the city$2'
-    );
+    )
+    // Repair "see/in/of the from the <noun>" gaps caused by legacy
+    // aggressive schema-leak stripping that ate the word "city".
+    .replace(/\b(see|view|explore|experience|enjoy|admire|photograph) the from the\b/gi, '$1 the city from the')
+    .replace(/\b(in|of|across|over|through|around|from) the from the\b/gi, '$1 the city from the')
+    .replace(/\bthe from the (water|street|streets|river|canal|canals|sea|sky|air|ground|inside|outside|rooftop|rooftops|hilltop|hilltops|harbor|harbour|lagoon|coast)\b/gi, 'the city from the $1');
 }
 
 /**
