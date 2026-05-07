@@ -345,13 +345,46 @@ export function PaymentsTab({
   const isOverpaid = overpaidAmount > 0 && estimatedTotal > 0;
   const progressPercent = estimatedTotal > 0 ? (paidAmount / estimatedTotal) * 100 : 0;
 
-  // Surface the misc / spending-money reserve as a real essential row so the
-  // bucket sums add up to the headline Trip Total instead of silently lagging it.
+  // Travel Essentials = flights + hotels only. The misc/spending-money reserve
+  // is surfaced as its own bucket below so users can see exactly where the
+  // headline total comes from (it used to be silently folded into Essentials,
+  // which made bucket sums lag the header on trips with manual non-logistics
+  // expenses or a non-zero reserve).
   const reserveCents = financialSnapshot.miscReserveCents || 0;
-  const essentialItemsWithReserve = useMemo(() => {
-    if (reserveCents <= 0) return essentialItems;
+  const essentialItemsWithReserve = essentialItems;
+
+  // ─── Split EVERY non-essential payable item by its Budget by Category bucket
+  //     so the Payments tab matches the Budget tab one-to-one. We key off
+  //     `budgetCategory` (set by usePayableItems) instead of `type === 'activity'`
+  //     so manual dining/transport/shopping/other expenses surface in the right
+  //     card instead of disappearing from the visible totals. ───
+  const nonEssentialItems = useMemo(
+    () => payableItems.filter(i => i.type !== 'flight' && i.type !== 'hotel'),
+    [payableItems]
+  );
+  const foodItems = useMemo(
+    () => nonEssentialItems.filter(i => i.budgetCategory === 'food'),
+    [nonEssentialItems]
+  );
+  const activitiesOnlyItems = useMemo(
+    () => nonEssentialItems.filter(i => !i.budgetCategory || i.budgetCategory === 'activities'),
+    [nonEssentialItems]
+  );
+  const transitItems = useMemo(
+    () => nonEssentialItems.filter(i => i.budgetCategory === 'transit' || i.groupKind === 'transit'),
+    [nonEssentialItems]
+  );
+  // Misc bucket = manual misc/shopping/nightlife rows + the unspent reserve.
+  // Reserve is appended as a synthetic row so it shows up exactly where the
+  // Budget tab puts it, and the bucket total includes it for reconciliation.
+  const miscRowItems = useMemo(
+    () => nonEssentialItems.filter(i => i.budgetCategory === 'misc'),
+    [nonEssentialItems]
+  );
+  const miscItems = useMemo(() => {
+    if (reserveCents <= 0) return miscRowItems;
     return [
-      ...essentialItems,
+      ...miscRowItems,
       {
         id: 'misc-reserve',
         type: 'other' as const,
@@ -359,29 +392,18 @@ export function PaymentsTab({
         amountCents: reserveCents,
         allPayments: [],
         assignedMemberIds: [],
+        budgetCategory: 'misc' as const,
       },
     ];
-  }, [essentialItems, reserveCents]);
+  }, [miscRowItems, reserveCents]);
 
-  // ─── Split activity items into Budget by Category buckets so the Payments
-  //     tab and Budget tab use identical groupings (food/activities/transit). ───
-  const foodItems = useMemo(
-    () => activityItems.filter(i => i.budgetCategory === 'food'),
-    [activityItems]
-  );
-  const activitiesOnlyItems = useMemo(
-    () => activityItems.filter(i => !i.budgetCategory || i.budgetCategory === 'activities' || i.budgetCategory === 'misc'),
-    [activityItems]
-  );
-  const transitItems = useMemo(
-    () => activityItems.filter(i => i.budgetCategory === 'transit' || i.groupKind === 'transit'),
-    [activityItems]
-  );
-
-  // Invariant: bucket sum must match the headline within $1.
+  // Invariant: visible bucket sum must match the headline within $1.
   const bucketSumCents =
     essentialItemsWithReserve.reduce((s, i) => s + i.amountCents, 0) +
-    activityItems.reduce((s, i) => s + i.amountCents, 0);
+    foodItems.reduce((s, i) => s + i.amountCents, 0) +
+    activitiesOnlyItems.reduce((s, i) => s + i.amountCents, 0) +
+    transitItems.reduce((s, i) => s + i.amountCents, 0) +
+    miscItems.reduce((s, i) => s + i.amountCents, 0);
   const reconciliationDriftCents = bucketSumCents - estimatedTotal;
   const reconciles = Math.abs(reconciliationDriftCents) <= 100;
 
@@ -1243,6 +1265,7 @@ export function PaymentsTab({
             { key: 'food', items: foodItems, label: 'Food & Dining', icon: <Utensils className="h-5 w-5 text-accent" /> },
             { key: 'activities', items: activitiesOnlyItems, label: 'Activities & Experiences', icon: <Camera className="h-5 w-5 text-accent" /> },
             { key: 'transit', items: transitItems, label: 'Local Transit', icon: <Car className="h-5 w-5 text-accent" /> },
+            { key: 'misc', items: miscItems, label: 'Spending Money & Tips', icon: <Wallet className="h-5 w-5 text-accent" /> },
           ] as const).map(({ key, items, label, icon }) => items.length > 0 && (
             <Card key={key} className="overflow-hidden">
               <button
