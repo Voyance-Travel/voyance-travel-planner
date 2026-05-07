@@ -300,7 +300,14 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
       const missing = policy.requiredMeals.filter((m: RequiredMeal) => !detected.includes(m));
 
       if (missing.length > 0) {
-        const destination = day.city || day.destination || 'the destination';
+        const destination =
+          day.city ||
+          day.destination ||
+          (trip as any)?.destination ||
+          'the destination';
+        if (destination === 'the destination') {
+          console.warn(`[save-itinerary] ⚠️ Day ${dayNumber}: meal guard running with no resolved destination — fallbacks will be global emergency stubs`);
+        }
         // Compute timing window
         const arrMinsLoop = isFirstDay && savedArrivalTime24 ? (() => { const m = savedArrivalTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : undefined; })() : undefined;
         const depMinsLoop = isLastDay && savedDepartureTime24 ? (() => { const m = savedDepartureTime24.match(/(\d{1,2}):(\d{2})/); return m ? parseInt(m[1]) * 60 + parseInt(m[2]) - 180 : undefined; })() : undefined;
