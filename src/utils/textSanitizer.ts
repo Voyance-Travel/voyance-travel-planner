@@ -24,6 +24,12 @@ export function sanitizeText(text: string | undefined | null): string {
   return text
     .replace(/—/g, ' - ')
     .replace(/–/g, '-')
+    // Strip leaked AI prompt scaffolding ("This satisfies your 'Deep Context' requirement",
+    // "(AESTHETIC slot)", "(slot)") for already-saved trips that bypassed the server cleaner.
+    .replace(/(?:^|\.\s*)This\s+(?:addresses|fulfills|satisfies|aligns with|caters to|speaks to|reflects)\s+(?:the|your|their)\s+['"\u2018\u2019\u201C\u201D][^'"\u2018\u2019\u201C\u201D]{2,40}['"\u2018\u2019\u201C\u201D]\s+(?:interest|preference|request|need|requirement|slot|moment|stop|block)\b[^.]*\.?\s*/gi, '')
+    .replace(/\s*\(\s*(?:[A-Z][A-Z\s/&-]{1,30}\s+)?slot\s*\)\s*/gi, ' ')
+    .replace(/\s*\(\s*(?:AESTHETIC|NARRATIVE|MOOD|TONE|VIBE|THEME|ARCHETYPE|PERSONA|CONTEXT|FULFILLS?|SLOT)(?:\s+[A-Z][A-Z\s/&-]{0,30})?\s*\)\s*/g, ' ')
+    .replace(/\s{2,}/g, ' ')
     // Fix orphaned possessive artifact: "the's" / "the' s" → "the city's"
     .replace(/\bthe'\s?s\b/gi, "the city's")
     // Repair orphaned "City" before a proper noun:
@@ -40,7 +46,8 @@ export function sanitizeText(text: string | undefined | null): string {
     // aggressive schema-leak stripping that ate the word "city".
     .replace(/\b(see|view|explore|experience|enjoy|admire|photograph) the from the\b/gi, '$1 the city from the')
     .replace(/\b(in|of|across|over|through|around|from) the from the\b/gi, '$1 the city from the')
-    .replace(/\bthe from the (water|street|streets|river|canal|canals|sea|sky|air|ground|inside|outside|rooftop|rooftops|hilltop|hilltops|harbor|harbour|lagoon|coast)\b/gi, 'the city from the $1');
+    .replace(/\bthe from the (water|street|streets|river|canal|canals|sea|sky|air|ground|inside|outside|rooftop|rooftops|hilltop|hilltops|harbor|harbour|lagoon|coast)\b/gi, 'the city from the $1')
+    .trim();
 }
 
 /**
