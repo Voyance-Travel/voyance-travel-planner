@@ -59,7 +59,7 @@ describe('preSaveMealStubSweep', () => {
     expect(act.location.address).toBeTruthy();
   });
 
-  it('falls back to a real global venue when the destination has no city/regional coverage', () => {
+  it('emits an unverified $0 sentinel (no foreign venue) when destination has no city pool', () => {
     const days = [
       {
         dayNumber: 2,
@@ -79,11 +79,12 @@ describe('preSaveMealStubSweep', () => {
 
     preSaveMealStubSweep(days as any);
     const act = days[0].activities[0] as any;
-    // Must NEVER leave a "pick a restaurant" sentinel — always a real, named venue.
-    expect(act.needsVenuePick).toBeFalsy();
-    expect(act.title).not.toMatch(/pick a (restaurant|caf[eé])/i);
-    expect(act.location.name).toBeTruthy();
-    expect(act.location.address).toBeTruthy();
+    // Must NEVER ship a foreign real venue (Tartine SF, Le Comptoir Paris, etc.)
+    expect(act.location.name).toBe('');
+    expect(act.location.address).toBe('');
+    expect(act.cost.amount).toBe(0);
+    expect(act.needsVenuePick).toBe(true);
+    expect(act.title).toMatch(/find a local spot/i);
   });
 
   it('does not mutate already-real venues', () => {
@@ -110,18 +111,29 @@ describe('preSaveMealStubSweep', () => {
   });
 });
 
-describe('resolveAnyMealFallback', () => {
-  it('returns a real Paris breakfast', () => {
+describe('resolveAnyMealFallback cross-city integrity', () => {
+  it('returns a real Paris breakfast for Paris', () => {
     const v = resolveAnyMealFallback('Paris', 'breakfast', new Set());
-    expect(v).toBeTruthy();
-    expect(v!.name).toBeTruthy();
-    expect(v!.address).toBeTruthy();
-    expect(v!.price).toBeGreaterThan(0);
+    expect(v.address.toLowerCase()).toContain('paris');
+    expect(v.needsVenuePick).toBeFalsy();
   });
 
-  it('falls back to country pool for an Italian city not in the city pool', () => {
+  it('returns Venice-only venues for Venice (never Florence/Paris/SF)', () => {
+    for (let i = 0; i < 20; i++) {
+      for (const meal of ['breakfast', 'lunch', 'dinner'] as const) {
+        const v = resolveAnyMealFallback('Venice, Italy', meal, new Set());
+        expect(v.needsVenuePick).toBeFalsy();
+        const blob = `${v.name} ${v.address}`.toLowerCase();
+        expect(blob).not.toMatch(/florence|firenze|paris|san francisco|tartine|antico vinaio|comptoir du relais/);
+        expect(blob).toMatch(/vene(zia|ce)/);
+      }
+    }
+  });
+
+  it('returns an unverified sentinel for Italian cities not in the pool (no Florence/Rome leak)', () => {
     const v = resolveAnyMealFallback('Bologna', 'lunch', new Set());
-    expect(v).toBeTruthy();
-    expect(v!.address.toLowerCase()).toMatch(/italy|rome|florence/);
+    expect(v.needsVenuePick).toBe(true);
+    expect(v.price).toBe(0);
+    expect(`${v.name} ${v.address}`.toLowerCase()).not.toMatch(/florence|firenze|rome|roma/);
   });
 });
