@@ -1029,6 +1029,19 @@ export function sanitizeAITextField(text: string | undefined | null, destination
     .replace(/\s*\(\s*(?:[A-Z][A-Z\s/&-]{1,30}\s+)?slot\s*\)\s*/gi, ' ')
     // ALL-CAPS label tags like "(AESTHETIC)", "(NARRATIVE MOOD)", "(ARCHETYPE FIT)"
     .replace(/\s*\(\s*(?:AESTHETIC|NARRATIVE|MOOD|TONE|VIBE|THEME|ARCHETYPE|PERSONA|CONTEXT|FULFILLS?|SLOT)(?:\s+[A-Z][A-Z\s/&-]{0,30})?\s*\)\s*/g, ' ')
+    // Quoted-archetype clauses anywhere: "...providing the 'Deep Context' required for this traveler profile."
+    .replace(/\b(?:providing|satisfying|fulfilling|matching|delivering|offering|reflecting|catering to|aligning with|aligns with|tailored to|in line with|required for)\s+(?:the\s+)?['"\u2018\u201C][^'"\u2019\u201D]{2,40}['"\u2019\u201D]\s+(?:interest|preference|requirement|required|slot|need|moment|context|arche\w*|profile|trait|fit)[^.]*\.?/gi, '')
+    // Bare Fulfills/Satisfies/Addresses sentences (no leading "This")
+    .replace(/(?:^|[.!?]\s+)(?:Fulfills?|Satisfies|Addresses|Specifically\s+(?:fulfills?|satisfies|addresses))\b[^.]*\b(?:requirement|interest|slot|block|moment|need|preference|profile|arche\w*)\b[^.]*\.?/gi, ' ')
+    // "As a 'Label' arche..." framing
+    .replace(/\bAs\s+a\s+['"\u2018\u201C][^'"\u2019\u201D]{2,40}['"\u2019\u201D]\s+arche\w*[^.]*\.?/gi, '')
+    // "provides/offers/delivers [the] deep|rich|essential [historical] context..."
+    .replace(/\b(?:provid(?:es|ing)|offer(?:s|ing)|deliver(?:s|ing))\s+(?:the\s+)?(?:deep|rich|essential)\s+(?:historical\s+)?context[^.]*\.?/gi, '')
+    .replace(/\bfor\s+this\s+traveler\s+profile\b\.?/gi, '')
+    // Orphan fragments from prior strippers
+    .replace(/\bThis\s+is\s*[;,.]\s*/gi, '')
+    .replace(/\bis\s*;\s*/gi, '')
+    .replace(/[.,;:]{2,}/g, '.')
     // "Since the traveler/user/guest loves/prefers..." reasoning sentences
     .replace(/(?:^|\.\s*)Since\s+(?:the|this|your)\s+(?:traveler|user|guest|visitor|group)\s+[^.]*\./gi, '')
     // Parenthetical notes containing AI-indicator language (broad catch-all)

@@ -36,4 +36,53 @@ describe('parseItineraryDays – AI prompt artifact stripping', () => {
     ]));
     expect(days[0].activities[0].description).toMatch(/time slot/);
   });
+
+  it("strips quoted-archetype 'Deep Context' clauses regardless of leading verb", () => {
+    const days = parseItineraryDays(dayWith([
+      { id: 'b1', title: 'Colosseum', description: "Essential Roman landmark providing the 'Deep Context' required for this traveler profile." },
+    ]));
+    const desc = days[0].activities[0].description || '';
+    expect(desc).not.toMatch(/Deep Context/);
+    expect(desc).not.toMatch(/traveler profile/);
+    expect(desc).toMatch(/Essential Roman landmark/);
+  });
+
+  it('strips bare Fulfills/Satisfies/Specifically sentences', () => {
+    const days = parseItineraryDays(dayWith([
+      { id: 'b2', title: 'Spa', description: "Relaxing afternoon. Fulfills the 'Authentic Encounter' wellness interest with a high-end relaxation experience." },
+      { id: 'b3', title: 'Wellness', description: "Specifically satisfies the Interest for wellness in a high-end Roman setting." },
+    ]));
+    expect(days[0].activities[0].description || '').not.toMatch(/Fulfills/i);
+    expect(days[0].activities[1].description || '').not.toMatch(/Specifically satisfies/i);
+  });
+
+  it("strips \"As a 'X' arche...\" framing", () => {
+    const days = parseItineraryDays(dayWith([
+      { id: 'b4', title: 'Museum', description: "As a 'Transformer' arche, this deep-driven history aligns with your desire for meaningful travel encounters." },
+    ]));
+    expect(days[0].activities[0].description || '').not.toMatch(/Transformer/);
+    expect(days[0].activities[0].description || '').not.toMatch(/arche/i);
+  });
+
+  it('strips "provides deep historical context" filler', () => {
+    const days = parseItineraryDays(dayWith([
+      { id: 'b5', title: 'Palace', description: "A landmark. Provides the deep historical context you value while maintaining quality." },
+    ]));
+    expect(days[0].activities[0].description || '').not.toMatch(/deep historical context/i);
+    expect(days[0].activities[0].description || '').toMatch(/landmark/);
+  });
+
+  it('drops standalone "Deep context stop" placeholder titles', () => {
+    const days = parseItineraryDays(dayWith([
+      { id: 'b6', title: 'Deep context stop', description: 'Visit somewhere notable.' },
+    ]));
+    expect(days[0].activities[0].title).not.toMatch(/^deep\s+context/i);
+  });
+
+  it('preserves legitimate "historical context" prose', () => {
+    const days = parseItineraryDays(dayWith([
+      { id: 'b7', title: 'Tour', description: "Essential historical context for the city's founding." },
+    ]));
+    expect(days[0].activities[0].description || '').toMatch(/historical context/);
+  });
 });
