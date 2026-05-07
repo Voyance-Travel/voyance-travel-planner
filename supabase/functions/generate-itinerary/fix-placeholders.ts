@@ -4,6 +4,7 @@
  */
 
 import { type DiningConfig } from './dining-config.ts';
+import { detectCrossCityMention, isCrossCityAddress } from './cross-city-filter.ts';
 
 // =============================================================================
 // FALLBACK RESTAURANT DATABASE — Rich city-aware venue pool for placeholder replacement
@@ -198,96 +199,142 @@ export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, Fallback
 };
 
 // =============================================================================
-// REGIONAL EMERGENCY FALLBACK — country-level real venues used when the
+// REGIONAL EMERGENCY FALLBACK — city-keyed real venues used when the
 // city-specific INLINE_FALLBACK_RESTAURANTS pool is missing or exhausted.
-// Goal: NEVER ship a "find a local spot" stub mid-itinerary. Every chain
-// terminates in a real, named venue rather than a template.
+//
+// CRITICAL: Each entry is keyed by its actual city. We NEVER serve a venue
+// from a different city than the destination — doing so generated months of
+// "Tartine Bakery (San Francisco) in Venice" / "All'Antico Vinaio (Florence)
+// in Venice" wrong-city bugs.
+//
+// If the destination city has no city-specific entry here AND no entry in
+// INLINE_FALLBACK_RESTAURANTS, we ship an unverified `needsVenuePick`
+// sentinel ($0, "find a local spot") — never a famous-but-foreign venue.
 // =============================================================================
 const REGIONAL_EMERGENCY_FALLBACK: Record<string, Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant>> = {
-  italy: {
+  // Italy — city-specific. Venice deliberately omitted to force the per-city
+  // INLINE pool (which has many vetted Venezia spots) and prevent Florentine /
+  // Roman venue leaks into Venice itineraries.
+  rome: {
     breakfast: { name: "Sant'Eustachio Il Caffè", address: "Piazza di S. Eustachio 82, Rome, Italy", price: 10, description: "Italy's most iconic espresso bar. Order the Gran Caffè at the counter — Roman ritual perfected." },
-    lunch: { name: "All'Antico Vinaio", address: "Via dei Neri 65, Florence, Italy", price: 12, description: "Italy's most-loved schiacciata sandwich shop. Cured meats, pecorino, and creamy spreads on warm bread." },
+    lunch: { name: "Roscioli Salumeria", address: "Via dei Giubbonari 21, 00186 Rome, Italy", price: 45, description: "Legendary Roman deli-restaurant. Outstanding cacio e pepe and a curated wine list." },
+    dinner: { name: "Armando al Pantheon", address: "Salita dei Crescenzi 31, 00186 Rome, Italy", price: 50, description: "Family-run trattoria steps from the Pantheon. Classic Roman cuisine perfected over decades." },
+  },
+  florence: {
+    breakfast: { name: "Ditta Artigianale", address: "Via dello Sprone 5, 50125 Florence, Italy", price: 12, description: "Florence's third-wave coffee benchmark. Excellent cornetti and flat whites in Oltrarno." },
+    lunch: { name: "All'Antico Vinaio", address: "Via dei Neri 65, Florence, Italy", price: 12, description: "Florence's most-loved schiacciata sandwich shop. Cured meats, pecorino, and creamy spreads on warm bread." },
     dinner: { name: "Trattoria Sostanza", address: "Via del Porcellana 25, Florence, Italy", price: 50, description: "Florentine institution since 1869. Bistecca alla fiorentina, butter chicken, artichoke tortino — a Tuscan benchmark." },
   },
-  france: {
+  paris: {
     breakfast: { name: "Du Pain et des Idées", address: "34 Rue Yves Toudic, 75010 Paris, France", price: 12, description: "Christophe Vasseur's cult bakery. Pain des amis and escargot pistache-chocolat — the city's best morning queue." },
     lunch: { name: "Bouillon Pigalle", address: "22 Bd de Clichy, 75018 Paris, France", price: 25, description: "Stunning Belle Époque brasserie. Classic French comfort food at honest prices — no reservations." },
     dinner: { name: "Le Comptoir du Relais", address: "9 Carrefour de l'Odéon, 75006 Paris, France", price: 65, description: "Yves Camdeborde's iconic bistro. The bistronomy template — refined French cooking in a buzzing room." },
   },
-  spain: {
+  barcelona: {
     breakfast: { name: "Granja M. Viader", address: "Carrer d'en Xuclà 4, Barcelona, Spain", price: 10, description: "Historic dairy bar (1870). Birthplace of Cacaolat — order thick hot chocolate with melindros." },
     lunch: { name: "Bar Pinotxo", address: "La Boqueria, La Rambla 91, Barcelona, Spain", price: 25, description: "Juanito Bayén's market counter. Chickpeas with morcilla, cuttlefish with beans — quintessential Catalan." },
+    dinner: { name: "Cal Pep", address: "Plaça de les Olles 8, 08003 Barcelona, Spain", price: 55, description: "Standing-room tapas counter near El Born. Pristine seafood plates served in real time." },
+  },
+  madrid: {
+    breakfast: { name: "Chocolatería San Ginés", address: "Pasadizo de San Ginés 5, 28013 Madrid, Spain", price: 8, description: "1894 chocolate-and-churros institution open day and night. The canonical Madrid breakfast." },
+    lunch: { name: "Mercado de San Miguel", address: "Plaza de San Miguel, 28005 Madrid, Spain", price: 25, description: "Iron-and-glass gourmet market. Iberian ham, croquetas, oysters — the city's best one-stop tasting lunch." },
     dinner: { name: "Casa Lucio", address: "Calle Cava Baja 35, Madrid, Spain", price: 60, description: "Madrid institution famous for huevos rotos. The Spanish power-dinner spot since 1974." },
   },
-  germany: {
+  berlin: {
     breakfast: { name: "Café Einstein Stammhaus", address: "Kurfürstenstraße 58, 10785 Berlin, Germany", price: 20, description: "Grand Viennese-style café in a historic villa. The Frühstück platter is a Berlin classic." },
     lunch: { name: "Curry 36", address: "Mehringdamm 36, 10961 Berlin, Germany", price: 8, description: "Iconic Berlin currywurst stand since 1980." },
     dinner: { name: "Zur Letzten Instanz", address: "Waisenstraße 14-16, 10179 Berlin, Germany", price: 35, description: "Berlin's oldest restaurant (1621). Classic Berliner pork knuckle in wood-paneled rooms." },
   },
-  uk: {
+  london: {
     breakfast: { name: "Dishoom", address: "12 Upper St Martin's Ln, WC2H 9FB London, UK", price: 20, description: "Bombay café reimagined. The bacon naan roll is a London breakfast institution." },
     lunch: { name: "Padella", address: "6 Southwark St, SE1 1TQ London, UK", price: 18, description: "Borough Market hand-rolled pasta. Pici cacio e pepe is essential — no reservations, worth the queue." },
     dinner: { name: "St. JOHN", address: "26 St John St, EC1M 4AY London, UK", price: 60, description: "Fergus Henderson's nose-to-tail manifesto. Roast bone marrow with parsley salad — definitively British." },
   },
-  portugal: {
+  lisbon: {
     breakfast: { name: "Manteigaria", address: "R. do Loreto 2, 1200-242 Lisbon, Portugal", price: 4, description: "Pastéis de nata baked all day at the counter. Warm, perfect, dusted with cinnamon." },
     lunch: { name: "Cervejaria Ramiro", address: "Av. Almirante Reis 1H, 1150-007 Lisbon, Portugal", price: 45, description: "Legendary seafood beer hall. Tiger prawns, percebes, finished with a prego steak sandwich." },
     dinner: { name: "Solar dos Presuntos", address: "R. das Portas de Santo Antão 150, Lisbon, Portugal", price: 55, description: "Minho-style cooking. Legendary presunto and seafood rice in a lively, family-run dining room." },
   },
-  usa: {
+  'new york': {
     breakfast: { name: "Russ & Daughters Cafe", address: "127 Orchard St, New York, NY 10002, USA", price: 25, description: "Lower East Side bagel-and-lox temple. Smoked fish boards, latkes, egg creams — pure NYC." },
     lunch: { name: "Katz's Delicatessen", address: "205 E Houston St, New York, NY 10002, USA", price: 25, description: "1888 deli landmark. Hand-carved pastrami on rye is the canonical American sandwich." },
     dinner: { name: "Gramercy Tavern", address: "42 E 20th St, New York, NY 10003, USA", price: 90, description: "Danny Meyer's seasonal American flagship. Warm, polished, a benchmark dinner since 1994." },
   },
-  japan: {
+  'san francisco': {
+    breakfast: { name: "Tartine Bakery", address: "600 Guerrero St, San Francisco, CA 94110, USA", price: 18, description: "World-renowned bakery — morning pastries, country bread, and great coffee." },
+    lunch: { name: "Zuni Café", address: "1658 Market St, San Francisco, CA 94102, USA", price: 35, description: "Wood-fired chicken-for-two and the Caesar salad that defined modern California cooking." },
+    dinner: { name: "State Bird Provisions", address: "1529 Fillmore St, San Francisco, CA 94115, USA", price: 75, description: "Dim-sum-cart-style modern American — playful, ingredient-driven, perennially booked." },
+  },
+  tokyo: {
     breakfast: { name: "Tsukiji Sushi Sei", address: "4-13-9 Tsukiji, Chuo City, Tokyo, Japan", price: 30, description: "Edomae sushi for breakfast at Tsukiji outer market. Counter-only, traditional, transcendent." },
     lunch: { name: "Tsuta", address: "1-14-1 Sugamo, Toshima City, Tokyo, Japan", price: 20, description: "First Michelin-starred ramen. Truffle-oil shoyu broth and house-made noodles." },
     dinner: { name: "Kagari", address: "6-4-12 Ginza, Chuo City, Tokyo, Japan", price: 25, description: "Ginza tori-paitan ramen. Silky chicken broth and perfect noodles — quietly the city's best bowl." },
   },
-  mexico: {
+  'mexico city': {
     breakfast: { name: "Lalo!", address: "Zacatecas 173, Roma Norte, Mexico City, Mexico", price: 18, description: "Eduardo García's all-day spot. Chilaquiles, smoked salmon tortas, excellent espresso." },
     lunch: { name: "El Turix", address: "Emilio Castelar 212, Polanco, Mexico City, Mexico", price: 12, description: "Cult Yucatecan cochinita pibil counter. Order the panucho and the torta." },
     dinner: { name: "Contramar", address: "Calle de Durango 200, Roma Norte, Mexico City, Mexico", price: 50, description: "Gabriela Cámara's seafood lunch-room. The tuna tostada and pescado a la talla are essential." },
   },
 };
 
-const CITY_COUNTRY_MAP: Record<string, keyof typeof REGIONAL_EMERGENCY_FALLBACK> = {
-  rome: 'italy', milan: 'italy', florence: 'italy', venice: 'italy', naples: 'italy', bologna: 'italy', turin: 'italy',
-  paris: 'france', nice: 'france', lyon: 'france', marseille: 'france', bordeaux: 'france', strasbourg: 'france',
-  barcelona: 'spain', madrid: 'spain', seville: 'spain', valencia: 'spain', granada: 'spain', bilbao: 'spain', malaga: 'spain',
-  berlin: 'germany', munich: 'germany', hamburg: 'germany', frankfurt: 'germany', cologne: 'germany',
-  london: 'uk', manchester: 'uk', edinburgh: 'uk', glasgow: 'uk', dublin: 'uk', liverpool: 'uk', oxford: 'uk',
-  lisbon: 'portugal', porto: 'portugal',
-  'new york': 'usa', 'los angeles': 'usa', chicago: 'usa', 'san francisco': 'usa', miami: 'usa', boston: 'usa', 'new orleans': 'usa', seattle: 'usa', austin: 'usa', washington: 'usa',
-  tokyo: 'japan', kyoto: 'japan', osaka: 'japan', sapporo: 'japan', fukuoka: 'japan',
-  'mexico city': 'mexico', cdmx: 'mexico', oaxaca: 'mexico', guadalajara: 'mexico',
+const CITY_KEY_ALIASES: Record<string, string> = {
+  cdmx: 'mexico city',
+  nyc: 'new york',
+  'new york city': 'new york',
+  sf: 'san francisco',
 };
 
-// Global last-resort venues. These are real, internationally renowned spots used
-// only when both the city pool and regional country pool miss. They MUST be real,
-// named venues — never "pick a restaurant" sentinels — so we never ship a
-// placeholder meal slot to the user. (The hotel concierge / live search can
-// still surface a more local option after generation.)
-const GLOBAL_EMERGENCY_FALLBACK: Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant> = {
-  breakfast: { name: "Tartine Bakery", address: "600 Guerrero St, San Francisco, CA 94110, USA", price: 18, description: "World-renowned bakery — morning pastries, country bread, and great coffee. A globally recognized breakfast benchmark." },
-  lunch: { name: "All'Antico Vinaio", address: "Via dei Neri 65, Florence, Italy", price: 14, description: "World-famous schiacciata sandwich shop with international outposts — cured meats, pecorino, and creamy spreads on warm Tuscan bread." },
-  dinner: { name: "Le Comptoir du Relais", address: "9 Carrefour de l'Odéon, 75006 Paris, France", price: 65, description: "Yves Camdeborde's iconic Saint-Germain bistro — the bistronomy template that defined modern French dinner cooking." },
-};
+function normalizeCityKey(city: string): string {
+  const key = (city || '').toLowerCase().trim().split(',')[0].trim();
+  return CITY_KEY_ALIASES[key] || key;
+}
 
+/**
+ * Build an unverified `needsVenuePick` sentinel — used when no city-matched
+ * fallback exists. Forces $0 cost and a "find a local spot" label.
+ */
+function unverifiedMealSentinel(
+  city: string,
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
+): FallbackRestaurant {
+  const m = mealType === 'drinks' ? 'dinner' : mealType;
+  const label = m === 'breakfast' ? 'Breakfast' : m === 'lunch' ? 'Lunch' : 'Dinner';
+  return {
+    name: `${label} — find a local spot in ${city || 'the city'}`,
+    address: city || '',
+    price: 0,
+    description: `No vetted ${m} venue available — ask the concierge or pick a local favourite on arrival.`,
+    needsVenuePick: true,
+  };
+}
+
+/**
+ * Returns a city-matched fallback or, if none exists, an unverified
+ * `needsVenuePick` sentinel. NEVER returns a venue from a different city.
+ */
 function regionalEmergencyFallback(city: string, mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks'): FallbackRestaurant {
   const m = mealType === 'drinks' ? 'dinner' : mealType;
-  const cityKey = (city || '').toLowerCase().trim().split(',')[0].trim();
-  for (const [needle, country] of Object.entries(CITY_COUNTRY_MAP)) {
-    if (cityKey.includes(needle) || needle.includes(cityKey)) {
-      const region = REGIONAL_EMERGENCY_FALLBACK[country];
-      if (region && region[m]) {
-        console.warn(`[PLACEHOLDER_GAP] city="${city}" meal=${mealType} → regional ${country} fallback`);
-        return region[m];
+  const cityKey = normalizeCityKey(city);
+
+  // Exact city match first
+  if (REGIONAL_EMERGENCY_FALLBACK[cityKey]?.[m]) {
+    console.log(`[PLACEHOLDER_GAP] city="${city}" meal=${mealType} → city-matched regional fallback`);
+    return REGIONAL_EMERGENCY_FALLBACK[cityKey][m];
+  }
+
+  // Substring match (handles "rome metropolitan area", "greater london", etc.)
+  for (const [needle, entry] of Object.entries(REGIONAL_EMERGENCY_FALLBACK)) {
+    if (cityKey && (cityKey.includes(needle) || needle.includes(cityKey))) {
+      if (entry[m]) {
+        console.log(`[PLACEHOLDER_GAP] city="${city}" meal=${mealType} → city-matched (alias) regional fallback`);
+        return entry[m];
       }
     }
   }
-  console.warn(`[PLACEHOLDER_GAP] city="${city}" meal=${mealType} → global fallback`);
-  return GLOBAL_EMERGENCY_FALLBACK[m];
+
+  // No city match → unverified sentinel. Refusing to ship a wrong-city venue.
+  console.warn(`[PLACEHOLDER_GAP] city="${city}" meal=${mealType} → NO city-matched fallback, emitting needsVenuePick sentinel`);
+  return unverifiedMealSentinel(city, mealType);
 }
 
 // =============================================================================
@@ -327,20 +374,46 @@ export function getRandomFallbackRestaurant(
 }
 
 /**
- * GUARANTEED resolver — ALWAYS returns a real, named venue. Walks
- *   city pool → city pool (recycled) → regional country pool → global emergency.
- * Use this anywhere we would otherwise emit a "find a local spot" stub.
+ * Returns true if the fallback's address mentions a different city than the
+ * destination's country-mate. Prevents wrong-city venues like Tartine (SF)
+ * landing in a Venice itinerary.
+ */
+function fallbackIsCrossCity(fallback: FallbackRestaurant, destination: string): boolean {
+  if (!fallback?.address) return false;
+  const hit = detectCrossCityMention(fallback.address, destination)
+    || detectCrossCityMention(fallback.name || '', destination);
+  if (hit) {
+    console.warn(`[CROSS-CITY FALLBACK BLOCKED] "${fallback.name}" → ${hit}, destination="${destination}"`);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * GUARANTEED resolver — returns a real, named venue OR an unverified
+ * `needsVenuePick` sentinel. Walks city pool → city pool (recycled) →
+ * regional pool. NEVER returns a venue from a different city than the
+ * destination. If no city-matched real venue is available, downgrades to
+ * an unverified sentinel ($0).
  */
 export function resolveAnyMealFallback(
   city: string,
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
   usedNames: Set<string>,
 ): FallbackRestaurant {
-  return (
-    getRandomFallbackRestaurant(city, mealType, usedNames, false) ||
-    getRandomFallbackRestaurant(city, mealType, new Set<string>(), true) ||
-    regionalEmergencyFallback(city, mealType)
-  );
+  const candidates: Array<FallbackRestaurant | null> = [
+    getRandomFallbackRestaurant(city, mealType, usedNames, false),
+    getRandomFallbackRestaurant(city, mealType, new Set<string>(), true),
+    regionalEmergencyFallback(city, mealType),
+  ];
+  for (const c of candidates) {
+    if (!c) continue;
+    if (c.needsVenuePick) return c;
+    if (fallbackIsCrossCity(c, city)) continue;
+    return c;
+  }
+  // Last resort: unverified sentinel — never a wrong-city real venue.
+  return unverifiedMealSentinel(city, mealType);
 }
 
 // =============================================================================
@@ -352,7 +425,15 @@ export function applyFallbackToActivity(
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks',
   usedVenueNamesInDay: Set<string>,
   diningConfig?: DiningConfig,
+  destinationCity?: string,
 ): void {
+  // Cross-city safety net — if a real venue from the wrong city slipped past
+  // the resolver, downgrade to an unverified sentinel rather than ship a
+  // foreign address.
+  if (destinationCity && fallback && !fallback.needsVenuePick && fallbackIsCrossCity(fallback, destinationCity)) {
+    fallback = unverifiedMealSentinel(destinationCity, mealType);
+  }
+
   const mealLabel = mealType === 'breakfast' ? 'Breakfast' : mealType === 'lunch' ? 'Lunch' : mealType === 'drinks' ? 'Drinks' : 'Dinner';
   const isUnverified = fallback.needsVenuePick === true;
 
@@ -749,7 +830,7 @@ export function nuclearPlaceholderSweep(
 
     // GUARANTEED resolver: city pool → recycled → regional → global. Never null.
     const fallback = resolveAnyMealFallback(city, mealType, usedNames);
-    applyFallbackToActivity(activity, fallback, mealType, usedNames, diningConfig);
+    applyFallbackToActivity(activity, fallback, mealType, usedNames, diningConfig, city);
     // Force category=DINING so downstream pricing/UI handle it correctly.
     activity.category = 'dining';
 
@@ -763,6 +844,61 @@ export function nuclearPlaceholderSweep(
   }
 
   return replaced;
+}
+
+// =============================================================================
+// CROSS-CITY VENUE SWEEP — last-line defense run from terminalCleanup
+// Catches any wrong-city venue (real famous venue from a different city)
+// that survived enrichment + meal injection. Downgrades to unverified
+// `needsVenuePick` ($0) sentinel rather than ship a foreign address.
+// =============================================================================
+export function nuclearCrossCitySweep(activities: any[], destination: string): number {
+  if (!activities?.length || !destination) return 0;
+  const SWEEPABLE_CATS = new Set([
+    'dining', 'restaurant', 'food',
+    'sightseeing', 'attraction', 'museum', 'culture', 'shopping',
+    'wellness', 'spa', 'activity', 'entertainment', 'relaxation',
+  ]);
+  let mutated = 0;
+  for (const a of activities) {
+    if (!a || a.locked || a.isLocked) continue;
+    const cat = String(a.category || '').toLowerCase();
+    if (!SWEEPABLE_CATS.has(cat)) continue;
+    const wrongCity = isCrossCityAddress(a, destination);
+    if (!wrongCity) continue;
+
+    // Convert to unverified sentinel — preserve start time / category / duration.
+    const startTimeStr = a.startTime || a.start_time || '12:00';
+    const mealType = parseMealType(startTimeStr);
+    const sentinel = unverifiedMealSentinel(destination, mealType);
+    const isMeal = cat === 'dining' || cat === 'restaurant' || cat === 'food'
+      || /^(breakfast|brunch|lunch|dinner|drinks)\b/i.test(a.title || '');
+
+    if (isMeal) {
+      applyFallbackToActivity(a, sentinel, mealType, new Set<string>(), undefined, destination);
+    } else {
+      // Non-meal (museum/spa/etc.) — strip the wrong-city venue, mark unverified.
+      const beforeTitle = a.title;
+      a.title = `${a.title || 'Activity'} — find a local option in ${destination}`;
+      a.name = a.title;
+      if (a.location) {
+        a.location.address = '';
+        a.location.name = '';
+      }
+      a.venue_name = '';
+      a.metadata = a.metadata || {};
+      a.metadata.unverified_venue = true;
+      a.metadata.needsVenuePick = true;
+      if (a.cost) { a.cost.amount = 0; a.cost.perPerson = 0; }
+      a.cost_per_person = 0;
+      console.warn(`[NUCLEAR CROSS-CITY] Stripped wrong-city venue from "${beforeTitle}" (was in ${wrongCity}, dest ${destination})`);
+    }
+    mutated++;
+  }
+  if (mutated > 0) {
+    console.warn(`[NUCLEAR CROSS-CITY] Downgraded ${mutated} wrong-city activit(y/ies) in ${destination}`);
+  }
+  return mutated;
 }
 
 interface PlaceholderSlot {
@@ -966,7 +1102,7 @@ export async function fillPlaceholderSlot(
   // Fast path: hardcoded fallback (free, instant)
   const fallback = getRandomFallbackRestaurant(city, mealType, usedVenueNames);
   if (fallback) {
-    applyFallbackToActivity(activity, fallback, mealType, usedVenueNames, diningConfig);
+    applyFallbackToActivity(activity, fallback, mealType, usedVenueNames, diningConfig, city);
     return true;
   }
 
@@ -987,7 +1123,7 @@ export async function fillPlaceholderSlot(
       diningConfig,
     );
     if (aiRestaurant) {
-      applyFallbackToActivity(activity, aiRestaurant, mealType, usedVenueNames, diningConfig);
+      applyFallbackToActivity(activity, aiRestaurant, mealType, usedVenueNames, diningConfig, city);
       return true;
     }
   } catch (err) {

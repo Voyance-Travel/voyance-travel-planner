@@ -16,7 +16,7 @@
  */
 
 import { enforceArrivalTiming, enforceDepartureTiming } from './flight-hotel-context.ts';
-import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep } from './fix-placeholders.ts';
+import { fixPlaceholdersForDay, nuclearPlaceholderSweep, nuclearWellnessSweep, nuclearCrossCitySweep } from './fix-placeholders.ts';
 import {
   checkAndApplyFreeVenue,
   enforceMarketDiningCap,
@@ -414,6 +414,20 @@ export function terminalCleanup(
     }
   } catch (e) {
     console.warn(`[${label}] Terminal wellness sweep failed (non-blocking):`, e);
+  }
+
+  // ── 1d. Nuclear CROSS-CITY sweep — block wrong-city famous venues ──
+  // Catches Tartine (SF) / All'Antico Vinaio (Florence) / Le Comptoir (Paris)
+  // -style leaks where a real venue from another city slipped through the
+  // enrichment guard (most often via meal-guard fallback DB or AI hallucination
+  // on an un-enriched activity). Downgrades to unverified $0 sentinel.
+  try {
+    const ccCount = nuclearCrossCitySweep(activities, city || '');
+    if (ccCount > 0) {
+      console.warn(`[${label}] Terminal cross-city sweep downgraded ${ccCount} wrong-city activit(y/ies)`);
+    }
+  } catch (e) {
+    console.warn(`[${label}] Terminal cross-city sweep failed (non-blocking):`, e);
   }
 
   // ── 1b. Deduplicate "Return to Hotel" entries — keep only the LAST one ──
