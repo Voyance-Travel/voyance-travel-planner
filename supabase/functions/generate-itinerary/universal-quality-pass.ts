@@ -509,6 +509,12 @@ export function terminalCleanup(
     }
   }
 
+  // ── 4. Final pre-dawn hotel-return strip ──
+  // After dedup + arrival/departure filters, if any hotel-return entry still
+  // sits in 00:00–04:59, drop it. This is the last gate before persistence.
+  const predawnRemoved = stripPreDawnHotelReturns(activities, { dayNumber, label });
+  removed += predawnRemoved;
+
   if (removed > 0) {
     console.log(`[${label}] Terminal cleanup removed ${removed} timing-violating activities`);
   }
