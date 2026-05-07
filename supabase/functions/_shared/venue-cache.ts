@@ -10,6 +10,7 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { detectCrossCityMention } from "../generate-itinerary/cross-city-filter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -70,6 +71,15 @@ export async function checkVenueCache(
     if (!data?.[0]) return null;
 
     const row = data[0];
+
+    // Defense-in-depth: refuse to return a cached venue from a different city.
+    const crossHit =
+      detectCrossCityMention(row.name || '', destination) ||
+      detectCrossCityMention(row.address || '', destination);
+    if (crossHit) {
+      console.warn(`[VenueCache] Refusing cross-city cache hit "${row.name}" — mentions "${crossHit}", destination "${destination}"`);
+      return null;
+    }
 
     // Bump usage count (fire-and-forget)
     supabase

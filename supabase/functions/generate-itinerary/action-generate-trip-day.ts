@@ -18,6 +18,7 @@ import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { applyAnchorsWin } from './anchor-guard.ts';
 import { matchesAIStubVenue } from './fix-placeholders.ts';
 import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
+import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 
 const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
@@ -1810,7 +1811,11 @@ async function _handleGenerateTripDayInner(
           }
         }
         if (venues && venues.length > 0) {
-          for (const v of venues) {
+          const safeVenues = filterVenuesByDestination(venues, destQuery, 'generate-trip-day');
+          if (safeVenues.length === 0) {
+            console.warn(`[generate-trip-day] All ${venues.length} verified_venues candidates dropped as cross-city for "${destQuery}" — meal guard will use unverified sentinel`);
+          }
+          for (const v of safeVenues) {
             const nameLower = (v.name || '').toLowerCase();
             let mealType = 'any';
             if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery') || nameLower.includes('coffee')) mealType = 'breakfast';
@@ -1818,7 +1823,7 @@ async function _handleGenerateTripDayInner(
             else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro') || nameLower.includes('trattoria')) mealType = 'dinner';
             fallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
           }
-          console.log(`[generate-trip-day] Supplemented with ${venues.length} verified_venues candidates`);
+          console.log(`[generate-trip-day] Supplemented with ${safeVenues.length} verified_venues candidates (${venues.length - safeVenues.length} cross-city dropped)`);
         }
       }
     } catch (e) {

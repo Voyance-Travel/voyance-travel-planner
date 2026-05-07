@@ -137,3 +137,33 @@ describe('resolveAnyMealFallback cross-city integrity', () => {
     expect(`${v.name} ${v.address}`.toLowerCase()).not.toMatch(/florence|firenze|rome|roma/);
   });
 });
+
+describe('resolveAnyMealFallback system-wide cross-city integrity', () => {
+  const FOREIGN = /tartine bakery|antico vinaio/i;
+  const cityChecks: Array<{ dest: string; mustMatch: RegExp; mustNot: RegExp }> = [
+    { dest: 'Venice, Italy', mustMatch: /vene(zia|ce)/i, mustNot: /(florence|firenze|rome|roma|milan|paris|san francisco)/i },
+    { dest: 'Paris, France', mustMatch: /paris/i, mustNot: /(lyon|marseille|venice|venezia|florence|san francisco)/i },
+    { dest: 'Rome, Italy', mustMatch: /rom[ae]/i, mustNot: /(venice|venezia|florence|firenze|milan|paris)/i },
+    { dest: 'Lisbon, Portugal', mustMatch: /lisbon|lisboa/i, mustNot: /(porto|paris|venice)/i },
+    { dest: 'London, UK', mustMatch: /london/i, mustNot: /(edinburgh|paris|venice|new york)/i },
+    { dest: 'Barcelona, Spain', mustMatch: /barcelona/i, mustNot: /(madrid|seville|paris|venice)/i },
+    { dest: 'Berlin, Germany', mustMatch: /berlin/i, mustNot: /(munich|hamburg|paris|venice)/i },
+  ];
+
+  for (const { dest, mustMatch, mustNot } of cityChecks) {
+    it(`returns only ${dest}-local venues across breakfast/lunch/dinner trials`, () => {
+      for (let i = 0; i < 10; i++) {
+        for (const meal of ['breakfast', 'lunch', 'dinner'] as const) {
+          const v = resolveAnyMealFallback(dest, meal, new Set());
+          const blob = `${v.name} ${v.address}`;
+          expect(blob).not.toMatch(FOREIGN);
+          expect(blob).not.toMatch(mustNot);
+          if (!v.needsVenuePick) {
+            expect(blob).toMatch(mustMatch);
+          }
+        }
+      }
+    });
+  }
+});
+

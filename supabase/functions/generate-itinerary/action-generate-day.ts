@@ -78,6 +78,7 @@ import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { persistDay } from './pipeline/persist-day.ts';
 import { callAI, AICallError } from './pipeline/ai-call.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
+import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 
 // =============================================================================
 // FALLBACK RESTAURANT DATABASE — Rich city-aware venue pool for placeholder replacement
@@ -1463,7 +1464,11 @@ export async function handleGenerateDay(
               }
             }
             if (venues && venues.length > 0) {
-              for (const v of venues) {
+              const safeVenues = filterVenuesByDestination(venues, destQuery, 'generate-day');
+              if (safeVenues.length === 0) {
+                console.warn(`[generate-day] All ${venues.length} verified_venues candidates dropped as cross-city for "${destQuery}" — meal guard will use unverified sentinel`);
+              }
+              for (const v of safeVenues) {
                 const nameLower = (v.name || '').toLowerCase();
                 let mealType = 'any';
                 if (nameLower.includes('breakfast') || nameLower.includes('brunch') || nameLower.includes('café') || nameLower.includes('cafe') || nameLower.includes('bakery')) mealType = 'breakfast';
@@ -1471,7 +1476,7 @@ export async function handleGenerateDay(
                 else if (nameLower.includes('dinner') || nameLower.includes('izakaya') || nameLower.includes('steakhouse') || nameLower.includes('bistro')) mealType = 'dinner';
                 mealFallbackVenues.push({ name: v.name, address: v.address || destQuery, mealType });
               }
-              console.log(`[generate-day] Supplemented with ${venues.length} verified_venues candidates`);
+              console.log(`[generate-day] Supplemented with ${safeVenues.length} verified_venues candidates (${venues.length - safeVenues.length} cross-city dropped)`);
             }
           }
         } catch (e) {
