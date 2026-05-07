@@ -91,8 +91,15 @@ export function enforcePersistDayContract<T = any>(
 
   for (const a of activities || []) {
     if (!a) continue;
-    const title = String((a as any).title || (a as any).name || '');
-    const cat = String((a as any).category || (a as any).type || '').toLowerCase();
+    const aa = a as any;
+    const title = String(aa.title || aa.name || '');
+    // Combined text used for placeholder detection so leaks in name / venue /
+    // description fields don't slip past the contract when the title is clean.
+    const placeholderBlob = [
+      aa.title, aa.name, aa.venue_name, aa.description,
+      aa.venue?.name, aa.restaurant?.name, aa.location?.name,
+    ].filter(Boolean).join(' | ');
+    const cat = String(aa.category || aa.type || '').toLowerCase();
     const locked = isLockedRow(a);
 
     // Locked rows pass through untouched (universal locking).
