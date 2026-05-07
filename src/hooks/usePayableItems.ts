@@ -560,6 +560,8 @@ export function usePayableItems({
           description: (a as any).description,
           bookingRequired: (a as any).bookingRequired,
         })) continue;
+
+        const explicitRaw = typeof a.cost === 'number' ? a.cost
           : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
           : (typeof a.explicitCost === 'number' ? a.explicitCost : undefined);
         // Treat explicit 0 as "no cost recorded — please estimate". A value of
