@@ -755,7 +755,9 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   // Locked / user / manual / extracted / pinned activities pass through.
   try {
     const { enforceContractOnDays } = await import('../_shared/persist-day-contract.ts');
-    enforceContractOnDays(itineraryDays);
+    await enforceContractOnDays(itineraryDays, {
+      destination: (currentTrip as any)?.destination ?? null,
+    });
     (itinerary as any).days = itineraryDays;
   } catch (contractErr) {
     console.warn('[save-itinerary] persist-day contract failed (non-blocking):', contractErr);
