@@ -1047,7 +1047,7 @@ export async function fillPlaceholderSlot(
   // Fast path: hardcoded fallback (free, instant)
   const fallback = getRandomFallbackRestaurant(city, mealType, usedVenueNames);
   if (fallback) {
-    applyFallbackToActivity(activity, fallback, mealType, usedVenueNames, diningConfig);
+    applyFallbackToActivity(activity, fallback, mealType, usedVenueNames, diningConfig, city);
     return true;
   }
 
