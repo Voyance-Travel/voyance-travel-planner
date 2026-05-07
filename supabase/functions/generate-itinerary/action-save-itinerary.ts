@@ -747,6 +747,20 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
     console.warn('[save-itinerary] duration normalization failed (non-blocking):', durErr);
   }
 
+  // ── STEP 2.99: PERSIST-DAY CONTRACT ─────────────────────────────
+  // Single boundary that filters dirty rows BEFORE they hit the DB:
+  //   - ghost rows (00:00-04:59 hotel/wellness/logistics, non-locked)
+  //   - placeholder names ("find a venue", "find a local spot", etc.)
+  //   - prompt artifacts ("(slot)", "(aesthetic slot)")
+  // Locked / user / manual / extracted / pinned activities pass through.
+  try {
+    const { enforceContractOnDays } = await import('../_shared/persist-day-contract.ts');
+    enforceContractOnDays(itineraryDays);
+    (itinerary as any).days = itineraryDays;
+  } catch (contractErr) {
+    console.warn('[save-itinerary] persist-day contract failed (non-blocking):', contractErr);
+  }
+
   const updatePayload: Record<string, any> = {
     itinerary_data: itinerary,
     itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
