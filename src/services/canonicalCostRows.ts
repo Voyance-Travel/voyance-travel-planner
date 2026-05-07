@@ -13,6 +13,7 @@
  */
 
 import { shouldCountRow } from './tripBudgetService';
+import { isWalkingLeg } from '@/lib/cost-estimation';
 
 export interface CanonicalCostInputRow {
   cost_per_person_usd: number | null;
@@ -147,6 +148,10 @@ export function resolveCanonicalCostRows({
         continue;
       }
     }
+
+    // Walking legs are always free, regardless of stored category. Skip
+    // entirely so the header total agrees with Payments.
+    if (lookup && isWalkingLeg({ title: lookup.name })) continue;
 
     let cents = rowCentsFor(row);
 

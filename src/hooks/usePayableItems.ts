@@ -12,7 +12,7 @@
 
 import { useMemo } from 'react';
 import type { TripPayment } from '@/services/tripPaymentsAPI';
-import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle, isUnconfirmedIntraCityTaxi } from '@/lib/cost-estimation';
+import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle, isUnconfirmedIntraCityTaxi, isWalkingLeg } from '@/lib/cost-estimation';
 import { computeHotelCostUsd } from '@/lib/hotel-cost';
 import { toBudgetCategory, type BudgetCategoryKey } from '@/services/budgetCategoryMap';
 
@@ -402,6 +402,13 @@ export function usePayableItems({
           }
         }
 
+        // Walking legs are always free, regardless of stored category. Skip
+        // entirely — don't add to transit bucket either; walks shouldn't show
+        // as $0 noise under "Local transit".
+        if (isWalkingLeg({ title: lookup.name, description: undefined })) {
+          continue;
+        }
+
         let cents = rowTotalCents(row);
 
         // Rescue: if the DB row is $0 but the itinerary JSON has an explicit
@@ -545,6 +552,13 @@ export function usePayableItems({
           category: cat,
           bookingRequired: (a as any).bookingRequired,
           cost: a.cost,
+        })) continue;
+
+        // Skip walking legs entirely — walks are always free.
+        if (isWalkingLeg({
+          title: a.title || a.name,
+          description: (a as any).description,
+          bookingRequired: (a as any).bookingRequired,
         })) continue;
 
         const explicitRaw = typeof a.cost === 'number' ? a.cost

@@ -6,6 +6,7 @@
  */
 
 import { trackCost } from "../_shared/cost-tracker.ts";
+import { isWalkingLeg } from "../_shared/walking-leg.ts";
 
 import type {
   MultiCityDayInfo,
@@ -3191,10 +3192,12 @@ export async function finalSaveItinerary(
           const mappedCategory = categoryMap[cat] || 'activity';
           const titleLower = ((act as any).title || '').toLowerCase();
 
-          // Skip walks — they're always free
-          const isWalk = ['walk', 'walking', 'stroll'].includes(cat) ||
-            ['walk to', 'walk through', 'stroll', 'evening walk', 'neighborhood walk'].some(kw => titleLower.includes(kw));
-          if (isWalk) {
+          // Skip walks — they're always free, regardless of stored category.
+          if (isWalkingLeg({
+            title: (act as any).title || (act as any).name,
+            description: (act as any).description,
+            bookingRequired: (act as any).booking_required,
+          })) {
             costRows.push({
               trip_id: tripId,
               activity_id: act.id,
@@ -3202,8 +3205,9 @@ export async function finalSaveItinerary(
               cost_per_person_usd: 0,
               num_travelers: context.travelers || 1,
               category: mappedCategory,
-              source: 'reference',
+              source: 'walking_free',
               confidence: 'high',
+              notes: '[Walking — free]',
             });
             continue;
           }

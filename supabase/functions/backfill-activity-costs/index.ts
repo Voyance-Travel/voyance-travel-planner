@@ -10,6 +10,7 @@
  */
 
 import { createClient } from "npm:@supabase/supabase-js@2.90.1";
+import { isWalkingLeg } from "../_shared/walking-leg.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -235,6 +236,28 @@ Deno.serve(async (req) => {
             if (category === "accommodation") continue; // skip hotel blocks
 
             const title = activity.title || activity.name || "";
+
+            // Walking legs are always free, regardless of stored category.
+            if (isWalkingLeg({
+              title,
+              description: (activity as any).description,
+              bookingRequired: (activity as any).booking_required,
+            })) {
+              rows.push({
+                trip_id: trip.id,
+                activity_id: activity.id,
+                day_number: dayNum,
+                cost_per_person_usd: 0,
+                num_travelers: numTravelers,
+                category: category || 'transport',
+                source: 'walking_free',
+                confidence: 'high',
+                cost_reference_id: null,
+                notes: '[Walking — free]',
+              });
+              continue;
+            }
+
             const subcategory = inferSubcategory(title, category);
             let costPerPerson = extractCost(activity);
 
