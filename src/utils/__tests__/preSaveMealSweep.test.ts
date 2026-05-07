@@ -59,7 +59,7 @@ describe('preSaveMealStubSweep', () => {
     expect(act.location.address).toBeTruthy();
   });
 
-  it('flags needsVenuePick when no city coverage exists and leaves no fake venue', () => {
+  it('falls back to a real global venue when the destination has no city/regional coverage', () => {
     const days = [
       {
         dayNumber: 2,
@@ -79,12 +79,11 @@ describe('preSaveMealStubSweep', () => {
 
     preSaveMealStubSweep(days as any);
     const act = days[0].activities[0] as any;
-    // Either replaced from regional fallback, or flagged for the user to pick.
-    if (act.needsVenuePick) {
-      expect(act.title).toMatch(/at a neighborhood restaurant|pick a restaurant/i);
-    } else {
-      expect(act.location.name).toBeTruthy();
-    }
+    // Must NEVER leave a "pick a restaurant" sentinel — always a real, named venue.
+    expect(act.needsVenuePick).toBeFalsy();
+    expect(act.title).not.toMatch(/pick a (restaurant|caf[eé])/i);
+    expect(act.location.name).toBeTruthy();
+    expect(act.location.address).toBeTruthy();
   });
 
   it('does not mutate already-real venues', () => {

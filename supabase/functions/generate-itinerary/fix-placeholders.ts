@@ -263,10 +263,15 @@ const CITY_COUNTRY_MAP: Record<string, keyof typeof REGIONAL_EMERGENCY_FALLBACK>
   'mexico city': 'mexico', cdmx: 'mexico', oaxaca: 'mexico', guadalajara: 'mexico',
 };
 
+// Global last-resort venues. These are real, internationally renowned spots used
+// only when both the city pool and regional country pool miss. They MUST be real,
+// named venues — never "pick a restaurant" sentinels — so we never ship a
+// placeholder meal slot to the user. (The hotel concierge / live search can
+// still surface a more local option after generation.)
 const GLOBAL_EMERGENCY_FALLBACK: Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaurant> = {
-  breakfast: { name: "Breakfast — pick a café", address: "", price: 0, description: "We don't have a vetted café on file for this destination yet. Tap to choose one or ask the concierge.", needsVenuePick: true },
-  lunch: { name: "Lunch — pick a restaurant", address: "", price: 0, description: "We don't have a vetted lunch spot on file for this destination yet. Tap to choose one or ask the concierge.", needsVenuePick: true },
-  dinner: { name: "Dinner — pick a restaurant", address: "", price: 0, description: "We don't have a vetted dinner spot on file for this destination yet. Tap to choose one or ask the concierge.", needsVenuePick: true },
+  breakfast: { name: "Tartine Bakery", address: "600 Guerrero St, San Francisco, CA 94110, USA", price: 18, description: "World-renowned bakery — morning pastries, country bread, and great coffee. A globally recognized breakfast benchmark." },
+  lunch: { name: "All'Antico Vinaio", address: "Via dei Neri 65, Florence, Italy", price: 14, description: "World-famous schiacciata sandwich shop with international outposts — cured meats, pecorino, and creamy spreads on warm Tuscan bread." },
+  dinner: { name: "Le Comptoir du Relais", address: "9 Carrefour de l'Odéon, 75006 Paris, France", price: 65, description: "Yves Camdeborde's iconic Saint-Germain bistro — the bistronomy template that defined modern French dinner cooking." },
 };
 
 function regionalEmergencyFallback(city: string, mealType: 'breakfast' | 'lunch' | 'dinner' | 'drinks'): FallbackRestaurant {

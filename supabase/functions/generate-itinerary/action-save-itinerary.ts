@@ -348,24 +348,28 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
         }
       }
 
-      // Terminal cleanup ALWAYS runs on first/last days so the post-departure
-      // barrier (no strolls/lunches after heading to airport) is enforced even
-      // when no meal injection was needed.
-      if (isFirstDay || isLastDay) {
-        try {
-          const { terminalCleanup } = await import('./universal-quality-pass.ts');
-          const cityForCleanup = day.city || day.destination || 'the destination';
-          terminalCleanup(itineraryDays[i].activities, {
-            arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
-            departureTime24: isLastDay ? savedDepartureTime24 : undefined,
-            city: cityForCleanup,
-            dayNumber,
-            isFirstDay,
-            isLastDay,
-          });
-          itineraryDays[i] = { ...itineraryDays[i], activities: itineraryDays[i].activities };
-        } catch (_e) { /* non-blocking */ }
-      }
+      // Terminal cleanup ALWAYS runs for EVERY day so any surviving
+      // "Lunch — pick a restaurant" / "Dinner — pick a café" placeholder is
+      // force-replaced by a real named venue before persistence. Previously
+      // this was first/last-only, which let middle-day sentinels leak through.
+      try {
+        const { terminalCleanup } = await import('./universal-quality-pass.ts');
+        const cityForCleanup =
+          day.city ||
+          day.destination ||
+          (trip as any)?.destination ||
+          ((trip as any)?.metadata?.destination as string | undefined) ||
+          'the destination';
+        terminalCleanup(itineraryDays[i].activities, {
+          arrivalTime24: isFirstDay ? savedArrivalTime24 : undefined,
+          departureTime24: isLastDay ? savedDepartureTime24 : undefined,
+          city: cityForCleanup,
+          dayNumber,
+          isFirstDay,
+          isLastDay,
+        });
+        itineraryDays[i] = { ...itineraryDays[i], activities: itineraryDays[i].activities };
+      } catch (_e) { /* non-blocking */ }
 
       // Always update trip-wide blocked set after this day so later days
       // never reuse a venue that was just kept or injected.
