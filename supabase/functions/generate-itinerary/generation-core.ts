@@ -2649,14 +2649,14 @@ export async function earlySaveItinerary(supabase: any, tripId: string, days: St
       }
     };
 
-    const { error } = await supabase
-      .from('trips')
-      .update({
-        itinerary_data: itineraryData,
+    const { persistTripItinerary } = await import('../_shared/persist-itinerary.ts');
+    const { error } = await persistTripItinerary(supabase, tripId, itineraryData, {
+      label: 'early-save',
+      extraUpdate: {
         itinerary_status: 'generating',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', tripId);
+        updated_at: new Date().toISOString(),
+      },
+    });
 
     if (error) {
       console.error('[Stage 3] Early save failed:', error);
