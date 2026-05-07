@@ -27,6 +27,8 @@
 export const PLACEHOLDER_NAME_RE = new RegExp(
   [
     'find\\s+(?:a\\s+)?(?:venue|local\\s+spot|restaurant|cafe|café|bar|spot)',
+    'find\\s+a\\s+local\\s+spot\\s+in\\s+(?:the\\s+)?(?:destination|city|area|[a-z][a-z\\s]{1,40})',
+    'pick\\s+(?:a\\s+)?(?:venue|local\\s+spot|restaurant|cafe|café|bar|spot)',
     '\\bplaceholder\\b',
     '\\bneeds\\s*venue\\b',
     'needsvenuepick',
@@ -43,7 +45,11 @@ const GHOST_CATEGORIES = new Set([
   'logistics', 'transport', 'transportation', 'transfer', 'transit',
 ]);
 
-const HOTEL_RETURN_RE = /return\s+to\s+(?:your\s+)?[^,]*hotel|back\s+to\s+(?:the\s+)?hotel/i;
+// Broadened: matches "Return to Hotel", "Return to the hotel",
+// "Return to Four Seasons Hotel", "Back at hotel", "Back to your hotel",
+// "Hotel check-in / settle in", and the "12:15 AM hotel bleed" wraparound
+// where the row has no real venue beyond the word "hotel".
+const HOTEL_RETURN_RE = /(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|head\s+to|wind\s+down\s+at)\s+(?:your\s+|the\s+|our\s+)?[^,.\n]{0,60}hotel|hotel\s+(?:check[-\s]?in|settle\s+in|wind[-\s]?down|nightcap)/i;
 const WELLNESS_PLACEHOLDER_RE = /find\s+a\s+venue\s*$/i;
 const PRE_DAWN_MAX_MINS = 5 * 60;
 
