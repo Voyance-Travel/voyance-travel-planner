@@ -1351,9 +1351,67 @@ async function fetchImageTiered(
 
   // TIER 1: Check cache first (unless skipCache is true)
   if (!skipCache) {
+    // 1a — exact cleanName lookup
     const cached = await checkCuratedCache(supabase, entityType, cleanName, destination, effectiveCategory);
     if (cached) {
       return cached;
+    }
+
+    // 1b — RAW venueName lookup (legacy rows were keyed on the raw AI title)
+    if (cleanName !== venueName) {
+      const cachedRaw = await checkCuratedCache(supabase, entityType, venueName, destination, effectiveCategory);
+      if (cachedRaw) {
+        console.log(`[Images] ✅ Legacy raw-key cache hit for "${venueName}"`);
+        return cachedRaw;
+      }
+    }
+
+    // 1c — 6-month destination reuse: any prior row in this destination whose
+    // entity_key or alt_text fuzzy-matches cleanName. This catches AI title
+    // variants ("Breakfast at Caffè Florian" vs "Morning coffee at Florian")
+    // without exact normalization. Zero Google cost.
+    try {
+      const sinceIso = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+      const fuzzyTerm = (cleanName.split(/\s+/).filter((w) => w.length >= 4)[0] || cleanName).toLowerCase();
+      if (fuzzyTerm && fuzzyTerm.length >= 4) {
+        const escaped = fuzzyTerm.replace(/[%_,]/g, ' ');
+        const { data: reuseRows } = await supabase
+          .from('curated_images')
+          .select('id,entity_key,alt_text,image_url,attribution,place_id,photo_reference,quality_score')
+          .eq('entity_type', entityType)
+          .eq('is_blacklisted', false)
+          .ilike('destination', `%${destination}%`)
+          .neq('source', 'no_result')
+          .gt('updated_at', sinceIso)
+          .or(`entity_key.ilike.%${escaped}%,alt_text.ilike.%${escaped}%`)
+          .order('quality_score', { ascending: false, nullsFirst: false })
+          .limit(5);
+
+        if (reuseRows && reuseRows.length > 0) {
+          const venueTokens = new Set(tokenize(cleanName));
+          const reusable = reuseRows.find((row: any) => {
+            const candidate = String(row.alt_text || row.entity_key || '');
+            const score = calculateMatchScore(venueTokens, candidate);
+            return score >= 0.4 && row.image_url && !row.image_url.startsWith('data:');
+          });
+          if (reusable) {
+            console.log(`[Images] 💰 6mo-reuse hit for "${cleanName}" → reusing row "${reusable.entity_key}"`);
+            return {
+              id: `reuse-${reusable.id}`,
+              url: reusable.image_url,
+              alt: reusable.alt_text || `${cleanName} photo`,
+              type: entityType === 'destination' ? 'hero' : 'activity',
+              source: 'curated',
+              attribution: reusable.attribution,
+              placeId: reusable.place_id,
+              photoReference: reusable.photo_reference,
+              cacheHit: true,
+            };
+          }
+        }
+      }
+    } catch (reuseErr) {
+      console.warn('[Images] 6mo-reuse lookup failed:', reuseErr);
     }
   }
 
