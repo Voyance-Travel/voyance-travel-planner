@@ -75,12 +75,18 @@ export function isClientPlaceholderWellness(activity: WellnessActivityShape | nu
   // Hotel logistics & transport short-circuit — these cards are never wellness,
   // even if the hotel name happens to contain "Spa" (e.g. "JW Marriott Venice
   // Resort & Spa", "Gritti Palace Spa", "Six Senses Spa").
+  // Also short-circuit when the venue clearly looks like a hotel/resort, so a
+  // missing/dropped category from the caller doesn't trigger a false positive
+  // mask of "Return to JW Marriott Venice Resort & Spa".
+  const HOTEL_VENUE_RE = /\b(hotel|resort|inn|lodge|guesthouse|hostel|palazzo|palace|hyatt|marriott|hilton|ritz|sheraton|westin|four\s+seasons|aman|six\s+senses|st\.?\s+regis|park\s+hyatt|grand\s+hyatt|jw\s+marriott)\b/i;
   if (
     category === 'accommodation' ||
+    category === 'stay' ||
     category === 'transport' ||
     category === 'transportation' ||
     category === 'transit' ||
-    HOTEL_LOGISTICS_TITLE_RE.test(title)
+    HOTEL_LOGISTICS_TITLE_RE.test(title) ||
+    HOTEL_VENUE_RE.test(venue)
   ) {
     return false;
   }

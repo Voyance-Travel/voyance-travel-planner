@@ -30,6 +30,7 @@ import {
 import { normalizeVenueName, venueNamesMatch } from './generation-utils.ts';
 import { getDiningConfig } from './dining-config.ts';
 import { normalizeActivityDuration } from './_shared/duration-format.ts';
+import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 
 // =============================================================================
 // OPTIONS INTERFACE
@@ -254,22 +255,39 @@ export async function universalQualityPass(
   if (dayIndex < totalDays - 1 && result.length > 0) {
     const lastActivity = result[result.length - 1];
     const lastCat = (lastActivity?.category || '').toUpperCase();
-    if (lastCat !== 'STAY' && !/return.*hotel|back.*hotel/i.test(lastActivity?.title || '')) {
+    const lastTitle = String(lastActivity?.title || '');
+    const alreadyReturn =
+      lastCat === 'STAY' ||
+      lastCat === 'ACCOMMODATION' ||
+      /return.*hotel|back.*hotel|return\s+to/i.test(lastTitle);
+    if (!alreadyReturn) {
+      // Resolve a sane start time. Reject pre-dawn (00:00–04:59) inheritance —
+      // that's the wraparound that hoists the entry to the top of the day.
+      const candidate = lastActivity?.end_time || lastActivity?.endTime || '';
+      const m = String(candidate).match(/(\d{1,2}):(\d{2})/);
+      let startTime24 = '22:30';
+      if (m) {
+        const h = parseInt(m[1], 10);
+        if (h >= 5 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+      }
       result.push({
         title: 'Return to Your Hotel',
         venue_name: 'Your Hotel',
         category: 'STAY',
-        start_time: lastActivity?.end_time || lastActivity?.endTime || '10:30 PM',
-        startTime: lastActivity?.end_time || lastActivity?.endTime || '22:30',
+        start_time: startTime24,
+        startTime: startTime24,
         cost_per_person: 0,
         cost: { amount: 0, currency: 'USD' },
         description: 'Return to your hotel for a restful night.',
         is_free: true,
         price_per_person: 0,
       });
-      console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1}`);
+      console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
     }
   }
+
+  // ── Step 8b: Strip any pre-dawn hotel-return entries that survived earlier passes ──
+  stripPreDawnHotelReturns(result, { dayNumber: dayIndex + 1, label: 'QUALITY' });
 
   // ── Step 9: Update used venues for next day ──
   for (const a of result) {
@@ -490,6 +508,12 @@ export function terminalCleanup(
       }
     }
   }
+
+  // ── 4. Final pre-dawn hotel-return strip ──
+  // After dedup + arrival/departure filters, if any hotel-return entry still
+  // sits in 00:00–04:59, drop it. This is the last gate before persistence.
+  const predawnRemoved = stripPreDawnHotelReturns(activities, { dayNumber, label });
+  removed += predawnRemoved;
 
   if (removed > 0) {
     console.log(`[${label}] Terminal cleanup removed ${removed} timing-violating activities`);

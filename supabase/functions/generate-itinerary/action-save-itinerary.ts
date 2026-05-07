@@ -10,6 +10,7 @@ import { applyAnchorsWin as sharedApplyAnchorsWin } from './anchor-guard.ts';
 import { buildDayLedger, type DayLedger } from './day-ledger.ts';
 import { ledgerCheck } from './ledger-check.ts';
 import { preserveLedgerCosts } from './_shared/preserve-ledger-costs.ts';
+import { stripPreDawnHotelReturns } from '../_shared/predawn-hotel-strip.ts';
 
 // Re-export for backwards compatibility (tests + other modules import from this file)
 export { applyAnchorsWin } from './anchor-guard.ts';
@@ -129,6 +130,10 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
       const tb = parseTimeToMinutes(b.startTime || b.start_time || b.time);
       return ta - tb;
     });
+    // Final belt-and-braces: drop any pre-dawn hotel-return entries that the
+    // sort just hoisted to the top of the day. These are spillover/wraparound
+    // bugs, not real plans.
+    stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     return { ...day, dayNumber, date, activities };
   });
 }
