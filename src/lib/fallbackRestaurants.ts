@@ -198,14 +198,15 @@ const GLOBAL_EMERGENCY: Record<'breakfast' | 'lunch' | 'dinner', FallbackRestaur
   dinner: { name: "Le Comptoir du Relais", address: "9 Carrefour de l'Odéon, 75006 Paris, France", price: 65, description: "Yves Camdeborde's iconic bistro. The bistronomy template — refined French cooking in a buzzing room." },
 };
 
-function regionalEmergencyFallback(city: string, mealType: MealSlot): FallbackRestaurant | null {
+function regionalEmergencyFallback(city: string, mealType: MealSlot): FallbackRestaurant {
   const m = mealType === 'drinks' ? 'dinner' : mealType;
   const cityKey = (city || '').toLowerCase().trim().split(',')[0].trim();
-  if (!cityKey) return null;
-  for (const [needle, country] of Object.entries(CITY_COUNTRY_MAP)) {
-    if (cityKey.includes(needle) || needle.includes(cityKey)) {
-      const region = REGIONAL_EMERGENCY[country];
-      if (region && region[m]) return region[m];
+  if (cityKey) {
+    for (const [needle, country] of Object.entries(CITY_COUNTRY_MAP)) {
+      if (cityKey.includes(needle) || needle.includes(cityKey)) {
+        const region = REGIONAL_EMERGENCY[country];
+        if (region && region[m]) return region[m];
+      }
     }
   }
   return GLOBAL_EMERGENCY[m];
@@ -242,15 +243,15 @@ function pickFromCity(
 }
 
 /**
- * GUARANTEED resolver — returns a real, named venue when one is known
- * for the given city or its country. Returns null only when the city is
- * outside our coverage (caller should mark the slot `needsVenuePick`).
+ * GUARANTEED resolver — ALWAYS returns a real, named venue. Walks
+ *   city pool → city pool (recycled) → regional country pool → global emergency.
+ * NEVER returns null and NEVER returns a "pick a restaurant" sentinel.
  */
 export function resolveAnyMealFallback(
   city: string,
   mealType: MealSlot,
   usedNames: Set<string> = new Set(),
-): FallbackRestaurant | null {
+): FallbackRestaurant {
   return (
     pickFromCity(city, mealType, usedNames, false) ||
     pickFromCity(city, mealType, new Set(), true) ||
