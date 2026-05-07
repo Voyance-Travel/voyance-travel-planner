@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveAnyMealFallback } from '@/lib/fallbackRestaurants';
+import { detectCrossCityMention } from '@/lib/crossCityFilter';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner';
 
@@ -199,23 +200,28 @@ function buildFallbackActivity(
   description: string,
   isGeneric: boolean,
   cost: number,
+  needsVenuePick = false,
 ): ActivityMinimal {
   const slot = FALLBACK_MEALS[mealType];
+  const safeCost = needsVenuePick ? 0 : cost;
   return {
     id: crypto.randomUUID(),
     title: venueName,
     startTime: slot.start,
     endTime: slot.end,
     category: 'dining',
-    location: { name: venueName, address: venueAddress },
-    cost: { amount: cost, currency: 'USD', source: isGeneric ? 'meal_guard_client' : 'meal_guard_venue' },
+    location: { name: needsVenuePick ? '' : venueName, address: needsVenuePick ? '' : venueAddress },
+    cost: { amount: safeCost, currency: 'USD', source: needsVenuePick ? 'meal_guard_unverified' : (isGeneric ? 'meal_guard_client' : 'meal_guard_venue') },
     description,
-    tags: ['dining', mealType, 'meal-guard', ...(isGeneric ? ['needs-refinement'] : [])],
+    tags: ['dining', mealType, 'meal-guard', ...(isGeneric || needsVenuePick ? ['needs-refinement'] : [])],
     bookingRequired: false,
-    tips: isGeneric
+    needsVenuePick: needsVenuePick || undefined,
+    tips: needsVenuePick
+      ? `No vetted local venue available — ask your accommodation for a recommendation.`
+      : isGeneric
       ? `Explore local options — check recent reviews or ask your accommodation for recommendations.`
       : `Added from verified venues — feel free to swap if you prefer somewhere else.`,
-    needsRefinement: isGeneric,
+    needsRefinement: isGeneric || needsVenuePick,
   };
 }
 
