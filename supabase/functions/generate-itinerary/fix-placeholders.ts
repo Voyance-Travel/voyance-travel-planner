@@ -14,6 +14,7 @@ export interface FallbackRestaurant {
   address: string;
   price: number;
   description: string;
+  needsVenuePick?: boolean;
 }
 
 export const INLINE_FALLBACK_RESTAURANTS: Record<string, Record<string, FallbackRestaurant[]>> = {
