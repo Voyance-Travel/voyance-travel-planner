@@ -264,7 +264,7 @@ function TimelineActivityCard({
                   'font-serif text-base font-semibold text-foreground leading-snug',
                   isSkipped && 'line-through text-muted-foreground'
                 )}>
-                  {sanitizeActivityName(activity.name)}
+                  {sanitizeActivityName(activity.name, { category: (activity as any).category, startTime: (activity as any).startTime, activity: activity as any })}
                 </h4>
 
                 {activity.location?.name && (
@@ -678,7 +678,7 @@ export function LiveItineraryView({
 
                     <div className="flex-1 min-w-0">
                       <h3 className="text-xl sm:text-2xl font-serif font-bold text-foreground leading-tight">
-                        {sanitizeActivityName(currentActivity.name)}
+                        {sanitizeActivityName(currentActivity.name, { category: (currentActivity as any).category, startTime: (currentActivity as any).startTime, activity: currentActivity as any })}
                       </h3>
 
                       {(currentActivity.startTime || currentActivity.endTime) && (
@@ -742,7 +742,7 @@ export function LiveItineraryView({
                   <p className="text-sm font-serif font-medium text-foreground">Free time</p>
                   {nextActivity && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Next up{nextActivity.startTime ? ` at ${nextActivity.startTime}` : ''}: {sanitizeActivityName(nextActivity.name)}
+                      Next up{nextActivity.startTime ? ` at ${nextActivity.startTime}` : ''}: {sanitizeActivityName(nextActivity.name, { category: (nextActivity as any).category, startTime: (nextActivity as any).startTime, activity: nextActivity as any })}
                     </p>
                   )}
                 </motion.div>
@@ -768,7 +768,7 @@ export function LiveItineraryView({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-0.5">Up Next</p>
-                <p className="text-sm font-serif font-medium text-foreground truncate">{sanitizeActivityName(nextActivity.name)}</p>
+                <p className="text-sm font-serif font-medium text-foreground truncate">{sanitizeActivityName(nextActivity.name, { category: (nextActivity as any).category, startTime: (nextActivity as any).startTime, activity: nextActivity as any })}</p>
                 {nextActivity.startTime && (
                   <p className="text-xs text-muted-foreground">{nextActivity.startTime}</p>
                 )}
