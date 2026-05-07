@@ -249,8 +249,27 @@ export async function verifyVenueWithGooglePlaces(
         place.location.longitude
       );
       if (distKm > 50) {
+        const enrichedDisplayName = place.displayName?.text || '';
+        const overlap = computeNameOverlap(venueName, enrichedDisplayName);
+        const { extractCityFromFormattedAddress } = await import('./cross-city-filter.ts');
+        const resolvedCity = extractCityFromFormattedAddress(place.formattedAddress) || undefined;
+        // High name overlap + far away = AI hallucinated a real venue from another city.
+        if (overlap >= 0.6) {
+          console.log(
+            `[Stage 4] 🚨 [CROSS-CITY HALLUCINATION] "${venueName}" → "${enrichedDisplayName}" is ${distKm.toFixed(0)}km from ${destination} (resolved city: ${resolvedCity || 'unknown'})`
+          );
+          return {
+            isValid: false,
+            confidence: 0,
+            crossCityHallucination: true,
+            resolvedCity,
+            intendedCity: destination,
+            distanceFromDestKm: distKm,
+            sourceProvider: 'google_places',
+          };
+        }
         console.log(
-          `[Stage 4] ❌ REJECTED venue "${venueName}" → "${place.displayName?.text}" is ${distKm.toFixed(0)}km from ${destination} (max 50km)`
+          `[Stage 4] ❌ REJECTED venue "${venueName}" → "${enrichedDisplayName}" is ${distKm.toFixed(0)}km from ${destination} (max 50km)`
         );
         return null;
       }
