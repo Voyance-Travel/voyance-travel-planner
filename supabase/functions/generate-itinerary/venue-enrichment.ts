@@ -597,8 +597,15 @@ export async function enrichActivity(
 ): Promise<StrictActivity> {
   const enriched = { ...activity };
 
-  const skipCategories = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation'];
-  if (skipCategories.includes(activity.category?.toLowerCase() || '')) {
+  const skipCategories = ['transport', 'transportation', 'downtime', 'free_time', 'accommodation', 'stay', 'hotel'];
+  const titleLower = String((activity as any)?.title || '').toLowerCase();
+  const venueLower = String((activity as any)?.venue_name || (activity as any)?.location?.name || '').toLowerCase();
+  const isHotelLogistics =
+    (activity as any)?.skipEnrichment === true ||
+    /\b(return\s+to|check.?in|check.?out|freshen\s+up|back\s+to)\b/.test(titleLower) ||
+    venueLower === 'your hotel' ||
+    /^your hotel\b/.test(venueLower);
+  if (skipCategories.includes(activity.category?.toLowerCase() || '') || isHotelLogistics) {
     enriched.verified = { isValid: true, confidence: 0.75 };
     return enriched;
   }
