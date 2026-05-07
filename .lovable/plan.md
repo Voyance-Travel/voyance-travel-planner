@@ -1,34 +1,49 @@
-Root cause found: this keeps recurring because the system still has intentional fallback code paths that emit `Lunch — pick a restaurant` when city context or local fallback coverage is missing.
+## Root cause
 
-Specifically:
-- The backend fallback resolver in `supabase/functions/generate-itinerary/fix-placeholders.ts` ends in `GLOBAL_EMERGENCY_FALLBACK`, whose lunch value is literally `Lunch — pick a restaurant`.
-- The client fallback resolver in `src/lib/fallbackRestaurants.ts` returns `null` for unknown cities, and `src/utils/mealGuard.ts` then emits `Lunch — pick a restaurant`.
-- The current saved Venice example confirms the failure mode: Day 3 has no `city`/`destination` on the day object, so later save/cleanup passes can run with weak destination context and fall through to the global sentinel.
-- `action-save-itinerary.ts` only runs `terminalCleanup` for first/last days. On a 3-day trip Day 3 is last, but for middle-day placeholders this means cleanup can be skipped if the meal detector thinks lunch already exists. More importantly, a sentinel can satisfy meal detection because `detectMealSlots` counts title keywords without rejecting placeholder/unverified slots.
+The issue keeps coming back because the app is not using one canonical contract for Payments totals.
 
-Plan:
-1. Remove the placeholder as a valid backend fallback
-   - Replace `GLOBAL_EMERGENCY_FALLBACK` in `fix-placeholders.ts` with real named global emergency venues for breakfast/lunch/dinner, not `needsVenuePick` sentinels.
-   - Keep costs conservative and sourced as fallback, but never emit `pick a restaurant` from server-side generation/cleanup.
+There are three competing interpretations of the same money:
 
-2. Make meal detection ignore placeholder/unverified slots
-   - Update backend `detectMealSlots` so `Lunch — pick a restaurant`, `metadata.needsVenuePick`, `metadata.unverified_venue`, empty-address sentinels, and AI stub venue names do not count as lunch/dinner/breakfast compliance.
-   - Mirror this in the client meal guard so placeholders cannot satisfy compliance before save.
+1. **Header total** comes from `useTripFinancialSnapshot` via `resolveCanonicalCostRows`.
+2. **Visible Payments bucket total** comes from `usePayableItems` plus local bucket grouping in `PaymentsTab`.
+3. **Paid/pending rows** come from `trip_payments`, where some code still assumes only `flight | hotel | activity`, while newer UI writes `dining | transport | shopping | other` too.
 
-3. Run terminal placeholder cleanup for every day before save
-   - In `action-save-itinerary.ts`, run `terminalCleanup` on all days, not only first/last days.
-   - Preserve arrival/departure constraints only for first/last days as today.
-   - Use robust destination resolution: `day.city || day.destination || trip.destination || metadata destination`, not `the destination`.
+The likely repeated failure path is not just “transit has no Payments category”; it is more specific:
 
-4. Harden client pre-save fallback
-   - Change `src/lib/fallbackRestaurants.ts` so unknown destinations also resolve to real named global emergency venues instead of `null`.
-   - Update `preSaveMealStubSweep` so if fallback resolution somehow fails, it uses that real global emergency path rather than setting `needsVenuePick`.
+- `resolveCanonicalCostRows` treats any `source='logistics-sync'` row as a logistics row and `usePayableItems` skips logistics rows in the per-row loop because it assumes logistics rows are only day-0 hotel/flight.
+- If a costed transit/transfer row is written with `source='logistics-sync'`, it can be counted in the headline total but not emitted as a visible Payments bucket item.
+- Transit rows are also displayed as grouped `Local transit — Day N` rows with `type: 'activity'`, while manual transport rows use `type: 'transport'`. This means splits/payments/orphan detection do not consistently classify the same transit cost the same way.
+- `tripPaymentsAPI` still types payments as only `flight | hotel | activity`, even though the DB now allows more categories, so older assumptions keep leaking back into reconciliation code.
 
-5. Add regression tests
-   - Backend test: a day containing `Lunch — pick a restaurant` must be treated as missing lunch and replaced by a real named venue.
-   - Backend test: `nuclearPlaceholderSweep` with empty/unknown destination never outputs `pick a restaurant`.
-   - Client test: `preSaveMealStubSweep` replaces `Lunch — pick a restaurant` and never leaves `needsVenuePick`.
+That is why prior fixes changed the message from **“Reconciling…”** to **“Totals differ by $283”** without fixing the underlying mismatch: the UI got better at naming the drift, but the sources still disagree.
 
-6. One-time data cleanup migration
-   - Repair existing saved itineraries where activity titles or venue names match `pick a restaurant` / `pick a café`, replacing them with destination-aware or real global fallback venues.
-   - Do not touch locked/user-added/pinned activities.
+## Plan
+
+1. **Make canonical row classification explicit**
+   - Update `resolveCanonicalCostRows` so `isLogisticsRow` means only actual non-itinerary logistics rows, not every `source='logistics-sync'` row.
+   - Day-0 hotel/flight rows stay logistics.
+   - Day-level transport/transit rows with real costs remain normal payable rows so they can render in Payments.
+
+2. **Unify transit item identity and category**
+   - Keep grouped transit rows in Payments, but classify them consistently as `transport`/`transit` instead of sometimes pretending they are generic `activity` rows.
+   - Ensure `budgetCategory: 'transit'` is always present for transit groups and recovered transit payments.
+   - Normalize payment lookup so existing rows saved as either `activity + transit-dN` or `transport + transit-dN` are read together instead of becoming invisible/orphaned.
+
+3. **Fix payment type definitions and write paths**
+   - Update the frontend `TripPayment` and booking/payment request types to include the DB-supported item types: `dining`, `transport`, `shopping`, and `other`.
+   - Update split/assign/manual-payment code to write the canonical item type for each row, so transport stays transport and does not drift between categories.
+
+4. **Align orphan detection with normalized categories**
+   - Update `useTripFinancialSnapshot` orphan-payment logic so non-manual `transport` rows are not incorrectly handled as generic activity rows.
+   - Preserve paid rows, but do not let stale transit rows count against the total if the underlying grouped transit item no longer exists.
+
+5. **Add regression coverage**
+   - Add/extend tests around `canonicalCostRows` and `usePayableItems` for:
+     - costed day-level transport row with `source='logistics-sync'` appears in Payments and in the headline total exactly once;
+     - grouped transit amount reconciles with header total;
+     - old `activity/transit-dN` payment rows and new `transport/transit-dN` rows both attach to the same visible transit group;
+     - manual transport expenses land in the transit bucket and do not trigger drift.
+
+6. **Optional data cleanup, only if needed after code fix**
+   - If existing trips have stuck payment rows with old transit item types, run a targeted data update to normalize only non-paid/non-archived transit group rows.
+   - Do not touch paid records unless they are proven orphaned and already covered by the existing archival policy.
