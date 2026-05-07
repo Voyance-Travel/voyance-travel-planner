@@ -15,6 +15,7 @@ import type { TripPayment } from '@/services/tripPaymentsAPI';
 import { estimateCostSync, isLikelyFreePublicVenue, isPlaceholderDepartureTransfer, isPlaceholderDepartureTransferTitle, isUnconfirmedIntraCityTaxi, isWalkingLeg } from '@/lib/cost-estimation';
 import { computeHotelCostUsd } from '@/lib/hotel-cost';
 import { toBudgetCategory, type BudgetCategoryKey } from '@/services/budgetCategoryMap';
+import { resolveCanonicalCostRows, type CanonicalLiveActivity } from '@/services/canonicalCostRows';
 
 export interface PayableSubItem {
   id: string;
@@ -337,123 +338,69 @@ export function usePayableItems({
     addManualGroups('shopping');
     addManualGroups('other');
 
-    // ─── DB-driven activity rows: ONE per non-transit row, grouped per day for transit ───
-    // Two-pass resolution:
-    //   Pass 1 — direct id matches (live JSON activity for this exact row).
-    //            These claim their JSON id so orphan-rescue can't reuse it.
-    //   Pass 2 — orphan rows (no direct match) try to rescue an unclaimed JSON
-    //            activity in the same (day, normalized-category) bucket.
-    // This prevents stale activity_costs rows from duplicating a live activity
-    // already surfaced by its legitimate row (e.g. two "Lunch at Mordi e Vai").
-    const claimedJsonIds = new Set<string>();
-    const rescueConsumed = new Set<string>();
-    const rescueCursors = new Map<string, number>();
-    const popRescue = (dayNum: number, mappedCat: string): RescueEntry | null => {
-      const k = `${dayNum}|${mappedCat}`;
-      const queue = orphanRescueByDayCat.get(k);
-      if (!queue || !queue.length) return null;
-      let cursor = rescueCursors.get(k) ?? 0;
-      while (cursor < queue.length) {
-        const entry = queue[cursor++];
-        if (!rescueConsumed.has(entry.id) && !claimedJsonIds.has(entry.id)) {
-          rescueCursors.set(k, cursor);
-          return entry;
+    // ─── DB-driven activity rows via the CANONICAL resolver ───
+    // Single source of truth shared with useTripFinancialSnapshot so the
+    // Payments bucket sum equals the headline Trip Total exactly.
+    if (activityCosts?.length) {
+      const liveActivities: CanonicalLiveActivity[] = [];
+      for (const day of days) {
+        for (const a of day.activities) {
+          if (!a?.id) continue;
+          const explicit = typeof a.cost === 'number' ? a.cost
+            : (a.cost && typeof a.cost === 'object' && typeof (a.cost as any).amount === 'number') ? (a.cost as any).amount
+            : (typeof a.explicitCost === 'number' ? a.explicitCost : 0);
+          liveActivities.push({
+            id: String(a.id),
+            dayNumber: day.dayNumber,
+            name: String(a.title || a.name || ''),
+            category: String(a.category || a.type || '').toLowerCase(),
+            jsonCost: Number(explicit) || 0,
+          });
         }
       }
-      rescueCursors.set(k, cursor);
-      return null;
-    };
 
-    if (activityCosts?.length) {
+      const canonical = resolveCanonicalCostRows({
+        costs: activityCosts as any,
+        liveActivities,
+        // Day-0 hotel/flight rows are surfaced as hotel-selection / flight-selection
+        // above; we still let the resolver include them so totals match the
+        // snapshot, then skip them in the per-row loop below to avoid duplicates.
+        includeHotel,
+        includeFlight,
+      });
+
       const transitByDay = new Map<number, { totalCents: number; subItems: PayableSubItem[] }>();
 
-      // Partition rows: direct matches first, orphans second.
-      const directRows: typeof activityCosts = [];
-      const orphanRows: typeof activityCosts = [];
-      for (const row of activityCosts) {
-        if (row.day_number === 0) continue; // hotel/flight handled above
-        if (activityNameById.has(row.activity_id)) {
-          directRows.push(row);
-          claimedJsonIds.add(row.activity_id);
-        } else {
-          orphanRows.push(row);
-        }
-      }
+      for (const row of canonical.rows) {
+        // Skip day-0 logistics rows here — already represented as hotel-selection
+        // / flight-selection rows. Their cents are still counted in the canonical
+        // total so the headline matches.
+        if (row.isLogisticsRow) continue;
 
-      const orderedRows = [...directRows, ...orphanRows];
-
-      for (const row of orderedRows) {
-        const cat = (row.category || '').toLowerCase();
-
-        let lookup = activityNameById.get(row.activity_id);
-        let effectiveActivityId = row.activity_id;
-        if (!lookup) {
-          const mappedCat = normalizeCat(cat, '');
-          const rescued = mappedCat ? popRescue(row.day_number, mappedCat) : null;
-          if (rescued) {
-            rescueConsumed.add(rescued.id);
-            effectiveActivityId = rescued.id;
-            lookup = { name: rescued.name, dayNumber: row.day_number, jsonCost: rescued.jsonCost, category: rescued.category };
-            if (typeof console !== 'undefined') {
-              console.warn('[usePayableItems] orphan-rescue', { dayNumber: row.day_number, category: cat, rescuedName: rescued.name });
-            }
-          } else {
-            continue; // no live activity for this slot — drop the orphan row
-          }
-        }
-
-        // Walking legs are always free, regardless of stored category. Skip
-        // entirely — don't add to transit bucket either; walks shouldn't show
-        // as $0 noise under "Local transit".
-        if (isWalkingLeg({ title: lookup.name, description: undefined })) {
-          continue;
-        }
-
-        let cents = rowTotalCents(row);
-
-        // Rescue: if the DB row is $0 but the itinerary JSON has an explicit
-        // positive cost, trust the JSON. This catches restaurants that the
-        // cost-repair pipeline misclassified as "Free venue - Tier 1".
-        if (cents <= 0) {
-          const PAID_CATS = new Set(['dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'bar', 'nightlife', 'spa', 'wellness']);
-          const isPaidCat = PAID_CATS.has(cat) || (lookup && PAID_CATS.has(lookup.category));
-          if (isPaidCat && lookup && lookup.jsonCost > 0) {
-            cents = Math.round(lookup.jsonCost * (row.num_travelers || 1) * 100);
-          }
-        }
-        if (cents <= 0) continue; // genuinely free venues: don't surface
+        const cat = row.category;
+        const name = row.name;
 
         // Group transit rows
         if (TRANSIT_CATEGORIES.has(cat)) {
-          // Skip placeholder departure transfers — no mode chosen, no committed price.
-          if (lookup && isPlaceholderDepartureTransferTitle(lookup.name)) {
-            continue;
-          }
-          // Skip unconfirmed intra-city taxi/rideshare legs (auto-titled "Taxi to X").
-          if (lookup && isUnconfirmedIntraCityTaxi({ title: lookup.name, category: cat })) {
-            continue;
-          }
-          const bucket = transitByDay.get(row.day_number) || { totalCents: 0, subItems: [] };
-          const subName = lookup?.name || 'Local transit';
+          if (name && isPlaceholderDepartureTransferTitle(name)) continue;
+          if (name && isUnconfirmedIntraCityTaxi({ title: name, category: cat })) continue;
+          const bucket = transitByDay.get(row.dayNumber) || { totalCents: 0, subItems: [] };
           bucket.subItems.push({
-            id: effectiveActivityId,
-            name: subName,
-            amountCents: cents,
+            id: row.effectiveActivityId || row.rowKey,
+            name: name || 'Local transit',
+            amountCents: row.cents,
           });
-          bucket.totalCents += cents;
-          transitByDay.set(row.day_number, bucket);
+          bucket.totalCents += row.cents;
+          transitByDay.set(row.dayNumber, bucket);
           continue;
         }
 
-        // Non-transit: one payable item per row, name from JSON itinerary
-        const compositeId = `${effectiveActivityId}_d${row.day_number}`;
+        const compositeId = `${row.effectiveActivityId || row.rowKey}_d${row.dayNumber}`;
         const activityPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === compositeId);
         const assignedIds = activityPayments
           .map(p => (p as any)?.assigned_member_id)
           .filter(Boolean) as string[];
 
-        // If we don't have a JSON name, fall back to a category-derived label.
-        // This avoids leaking an opaque UUID into the UI.
         const fallbackLabel =
           cat === 'dining' ? 'Meal' :
           cat === 'activity' ? 'Activity' :
@@ -462,14 +409,14 @@ export function usePayableItems({
         result.push({
           id: compositeId,
           type: 'activity',
-          name: lookup?.name || fallbackLabel,
-          amountCents: cents,
-          dayNumber: row.day_number,
+          name: name || fallbackLabel,
+          amountCents: row.cents,
+          dayNumber: row.dayNumber,
           payment: activityPayments[0],
           allPayments: activityPayments,
           assignedMemberId: assignedIds[0],
           assignedMemberIds: [...new Set(assignedIds)],
-          budgetCategory: toBudgetCategory(row.category),
+          budgetCategory: toBudgetCategory(cat),
         });
       }
 

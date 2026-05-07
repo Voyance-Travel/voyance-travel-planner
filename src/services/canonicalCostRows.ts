@@ -39,10 +39,20 @@ export interface ResolvedRow {
   rowKey: string;                         // stable key for the source row
   effectiveActivityId: string | null;     // post-rescue
   dayNumber: number;
-  category: string;                       // raw
-  cents: number;                          // post-rescue
+  category: string;                       // raw category from activity_costs
+  cents: number;                          // post-rescue, post-toggle
   rescueTag?: 'orphan-id' | 'json-zero';
   isLogisticsRow: boolean;
+  /** Display name (live JSON title) when known. */
+  name: string | null;
+  /** num_travelers from the source row (defaults to 1). */
+  numTravelers: number;
+  /** is_paid mirror from activity_costs (best-effort). */
+  isPaid: boolean;
+  /** paid_amount_usd from activity_costs (null when row never paid). */
+  paidAmountUsd: number | null;
+  /** source field from activity_costs ('logistics-sync', 'manual', etc.). */
+  source: string | null;
 }
 
 export interface ResolveResult {
@@ -123,7 +133,27 @@ export function resolveCanonicalCostRows({
   let flightCents = 0;
   let loggedMiscCents = 0;
 
+  // Two-pass partitioning: rows that directly match a live activity claim
+  // their JSON id first, so orphan rescue cannot reassign that same activity
+  // to a stale row in the same (day, category) bucket.
+  const directRows: CanonicalCostInputRow[] = [];
+  const orphanRows: CanonicalCostInputRow[] = [];
   for (const row of costs) {
+    const isLogisticsRow =
+      row.source === 'logistics-sync' || row.day_number == null || row.day_number === 0;
+    if (isLogisticsRow) {
+      directRows.push(row);
+      continue;
+    }
+    if (row.activity_id && liveById.has(row.activity_id)) {
+      directRows.push(row);
+      consumed.add(row.activity_id);
+    } else {
+      orphanRows.push(row);
+    }
+  }
+
+  for (const row of [...directRows, ...orphanRows]) {
     const cat = (row.category || '').toLowerCase();
     const dayNumber = row.day_number ?? 0;
     const isLogisticsRow =
@@ -181,6 +211,11 @@ export function resolveCanonicalCostRows({
       cents,
       rescueTag,
       isLogisticsRow,
+      name: lookup?.name ?? null,
+      numTravelers: row.num_travelers || 1,
+      isPaid: row.is_paid === true,
+      paidAmountUsd: row.paid_amount_usd ?? null,
+      source: row.source ?? null,
     });
   }
 
