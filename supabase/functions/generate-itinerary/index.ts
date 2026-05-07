@@ -101,19 +101,46 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // ── Service-role auth bypass for server-to-server self-chaining ──
+    // We accept either an exact match of the current SERVICE_ROLE_KEY env var
+    // OR a JWT whose `role` claim is `service_role` (handles signing-key rotation
+    // where the deployed key string and the runtime env var briefly diverge).
     const bearerToken = req.headers.get('Authorization')?.replace('Bearer ', '') || '';
-    const isServiceRoleCall = bearerToken === supabaseKey;
+
+    function decodeJwtRole(token: string): string | null {
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const payload = JSON.parse(
+          atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+        );
+        return typeof payload?.role === 'string' ? payload.role : null;
+      } catch {
+        return null;
+      }
+    }
+
+    const isServiceRoleCall =
+      !!bearerToken &&
+      (bearerToken === supabaseKey || decodeJwtRole(bearerToken) === 'service_role');
 
     let authResult: { userId: string } | null = null;
 
     if (isServiceRoleCall) {
       const clonedReq = req.clone();
       const peekBody = await clonedReq.json();
-      
-      const allowedServiceRoleActions = ['generate-trip', 'generate-trip-day', 'generate-day', 'regenerate-day'];
+
+      const allowedServiceRoleActions = ['generate-trip', 'generate-trip-day', 'generate-day', 'regenerate-day', 'save-itinerary'];
       if (allowedServiceRoleActions.includes(peekBody.action) && peekBody.userId) {
         authResult = { userId: peekBody.userId };
         console.log(`[generate-itinerary] Service-role bypass for ${peekBody.action}, userId: ${authResult.userId}`);
+      } else if (allowedServiceRoleActions.includes(peekBody.action) && !peekBody.userId) {
+        // Self-chain payloads should always include userId; log and reject so we
+        // notice rather than silently downgrading to unauthenticated.
+        console.error(`[generate-itinerary] Service-role call missing userId for action: ${peekBody.action}`);
+        return new Response(
+          JSON.stringify({ error: "Service-role call missing userId" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       } else {
         console.error(`[generate-itinerary] Service-role call for non-whitelisted action: ${peekBody.action}`);
         return new Response(

@@ -727,6 +727,9 @@ Return ONLY valid JSON array, no markdown:
 
   // Retry loop with exponential backoff for intermittent 403 errors
   const maxRetries = 3;
+  let chainOk = false;
+  let lastChainStatus: number | null = null;
+  let lastChainBody = '';
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(generateUrl, {
@@ -734,12 +737,14 @@ Return ONLY valid JSON array, no markdown:
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${serviceKey}`,
+          'apikey': Deno.env.get("SUPABASE_ANON_KEY") || '',
         },
         body: initialChainBody,
       });
-      if (response.ok) break;
-      const respText = await response.text().catch(() => '(no body)');
-      console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} returned ${response.status}: ${respText.slice(0, 200)}`);
+      if (response.ok) { chainOk = true; break; }
+      lastChainStatus = response.status;
+      lastChainBody = await response.text().catch(() => '(no body)');
+      console.error(`[generate-trip] Initial chain attempt ${attempt}/${maxRetries} returned ${response.status}: ${lastChainBody.slice(0, 200)}`);
       if (response.status >= 400 && response.status < 500) {
         console.error(`[generate-trip] Client error ${response.status} — not retrying`);
         break;
@@ -750,6 +755,36 @@ Return ONLY valid JSON array, no markdown:
     if (attempt < maxRetries) {
       await new Promise(r => setTimeout(r, 2000 * attempt));
     }
+  }
+
+  if (!chainOk) {
+    // Don't leave the trip stuck in `generating`. Surface the failure so the
+    // UI can show an actionable error and the user can retry.
+    try {
+      const { data: failTrip } = await supabase.from('trips').select('metadata').eq('id', tripId).single();
+      const failMeta = (failTrip?.metadata as Record<string, unknown>) || {};
+      await supabase.from('trips').update({
+        itinerary_status: 'failed',
+        metadata: {
+          ...failMeta,
+          generation_error: `Initial chain failed (status=${lastChainStatus ?? 'network'})`,
+          chain_error: lastChainBody.slice(0, 500),
+          chain_error_at: new Date().toISOString(),
+        },
+      }).eq('id', tripId);
+    } catch (markErr) {
+      console.error('[generate-trip] Failed to mark trip as failed after chain error:', markErr);
+    }
+    return new Response(
+      JSON.stringify({
+        success: false,
+        status: 'failed',
+        error: 'Itinerary generation could not be started. Please try again.',
+        code: 'CHAIN_LAUNCH_FAILED',
+        details: { status: lastChainStatus },
+      }),
+      { status: 502, headers: jsonHeaders }
+    );
   }
 
   // Return immediately — generation continues server-side via self-chaining
