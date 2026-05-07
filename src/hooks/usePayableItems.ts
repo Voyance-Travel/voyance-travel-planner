@@ -554,7 +554,12 @@ export function usePayableItems({
           cost: a.cost,
         })) continue;
 
-        const explicitRaw = typeof a.cost === 'number' ? a.cost
+        // Skip walking legs entirely — walks are always free.
+        if (isWalkingLeg({
+          title: a.title || a.name,
+          description: (a as any).description,
+          bookingRequired: (a as any).bookingRequired,
+        })) continue;
           : (a.cost && typeof a.cost === 'object' && typeof a.cost.amount === 'number') ? a.cost.amount
           : (typeof a.explicitCost === 'number' ? a.explicitCost : undefined);
         // Treat explicit 0 as "no cost recorded — please estimate". A value of
