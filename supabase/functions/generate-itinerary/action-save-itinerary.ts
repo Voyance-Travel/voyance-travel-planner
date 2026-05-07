@@ -133,13 +133,7 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
     // Final belt-and-braces: drop any pre-dawn hotel-return entries that the
     // sort just hoisted to the top of the day. These are spillover/wraparound
     // bugs, not real plans.
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { stripPreDawnHotelReturns } = require('../_shared/predawn-hotel-strip.ts');
-      stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
-    } catch {
-      // dynamic import fallback (deno)
-    }
+    stripPreDawnHotelReturns(activities, { dayNumber, label: 'SAVE' });
     return { ...day, dayNumber, date, activities };
   });
 }
