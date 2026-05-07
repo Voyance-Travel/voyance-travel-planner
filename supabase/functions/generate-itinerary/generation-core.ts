@@ -2031,10 +2031,10 @@ Generate activities for this day following ALL constraints above.`;
               return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : 0;
             };
             const gap = parseMin(nextStart) - parseMin(currentEnd);
-            if (gap > 180) {
+            if (gap > 150) {
               console.warn(`[Stage 2] Day ${dayNumber} has a ${Math.round(gap / 60)}h gap between "${sorted[i].title}" (ends ${currentEnd}) and "${sorted[i + 1].title}" (starts ${nextStart}) — triggering retry`);
               validation.errors.push(
-                `There is a ${Math.round(gap / 60)}-hour gap between "${sorted[i].title}" (ends ${currentEnd}) and "${sorted[i + 1].title}" (starts ${nextStart}). Fill this gap with activities, meals, or experiences. A full day should have no gaps longer than 2 hours unless it's intentional free time.`
+                `There is a ${Math.round(gap / 60)}-hour gap between "${sorted[i].title}" (ends ${currentEnd}) and "${sorted[i + 1].title}" (starts ${nextStart}). ADD a real named afternoon activity (museum, gallery, neighborhood walk, café, experience) to fill this window — extending lunch or starting dinner earlier is NOT acceptable. Every full day needs structured afternoon content between lunch and dinner.`
               );
               validation.isValid = false;
               break;
