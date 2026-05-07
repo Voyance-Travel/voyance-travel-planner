@@ -5,11 +5,25 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * Canonical set of trip-payment item types. Mirrors the DB CHECK constraint
+ * (`trip_payments_item_type_check`) so writes don't fail and reads classify
+ * consistently across Payments, Budget, and snapshot reconciliation.
+ */
+export type TripPaymentItemType =
+  | 'flight'
+  | 'hotel'
+  | 'activity'
+  | 'dining'
+  | 'transport'
+  | 'shopping'
+  | 'other';
+
 export interface TripPayment {
   id: string;
   trip_id: string;
   user_id: string;
-  item_type: 'flight' | 'hotel' | 'activity';
+  item_type: TripPaymentItemType;
   item_id: string;
   item_name: string;
   external_provider?: string;
@@ -34,7 +48,7 @@ export interface PaymentTotals {
 
 export interface BookingRequest {
   tripId: string;
-  itemType: 'flight' | 'hotel' | 'activity';
+  itemType: TripPaymentItemType;
   itemId: string;
   itemName: string;
   amountCents: number;
@@ -160,7 +174,7 @@ export function formatCurrency(amountCents: number, currency: string = 'USD'): s
 /**
  * Get payment status for a specific item
  */
-export async function getItemPaymentStatus(tripId: string, itemType: 'flight' | 'hotel' | 'activity', itemId: string): Promise<TripPayment | null> {
+export async function getItemPaymentStatus(tripId: string, itemType: TripPaymentItemType, itemId: string): Promise<TripPayment | null> {
   const result = await getTripPayments(tripId);
   if (!result.success || !result.payments) return null;
   

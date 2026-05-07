@@ -420,17 +420,22 @@ export function usePayableItems({
         });
       }
 
-      // Emit one grouped transit row per day
+      // Emit one grouped transit row per day. Type is 'transport' so manual
+      // transport, costed transfers, and grouped transit all live in the same
+      // bucket. Look up payments by either ('transport'|'activity') so legacy
+      // rows saved before this unification still attach to the same group.
       const sortedTransitDays = Array.from(transitByDay.entries()).sort((a, b) => a[0] - b[0]);
       for (const [dayNumber, { totalCents, subItems }] of sortedTransitDays) {
         const groupId = `transit-d${dayNumber}`;
-        const groupPayments = payments.filter(p => p.item_type === 'activity' && p.item_id === groupId);
+        const groupPayments = payments.filter(p =>
+          (p.item_type === 'transport' || p.item_type === 'activity') && p.item_id === groupId
+        );
         const assignedIds = groupPayments
           .map(p => (p as any)?.assigned_member_id)
           .filter(Boolean) as string[];
         result.push({
           id: groupId,
-          type: 'activity',
+          type: 'transport',
           name: `Local transit — Day ${dayNumber}`,
           amountCents: totalCents,
           dayNumber,
@@ -603,14 +608,20 @@ export function usePayableItems({
     const presentItemIds = new Set(result.map(r => r.id));
     const orphanGroups = new Map<string, TripPayment[]>();
     for (const p of payments) {
-      if (p.item_type !== 'activity') continue;
+      // Cover both classic activity payments and the new grouped-transit
+      // payments (item_type='transport', item_id='transit-dN'). Without
+      // including 'transport' here, paid transit splits saved before the
+      // unification would silently disappear from the live list.
+      if (p.item_type !== 'activity' && p.item_type !== 'transport') continue;
       if (!p.item_id || isManualId(p.item_id)) continue;
       if (presentItemIds.has(p.item_id)) continue;
       // Strip optional composite suffix (_dN) to get the raw activity id.
       const itemIdStr = String(p.item_id);
       const rawActivityId = itemIdStr.replace(/_d\d+$/, '');
-      // Only recover if the activity still exists in the live itinerary.
-      if (!activityNameById.has(rawActivityId)) continue;
+      // Only recover if the activity still exists in the live itinerary, OR
+      // it's a transit group id whose day still has costed transit.
+      const isTransitGroupId = /^transit-d\d+$/.test(itemIdStr);
+      if (!isTransitGroupId && !activityNameById.has(rawActivityId)) continue;
       const group = orphanGroups.get(p.item_id) || [];
       group.push(p);
       orphanGroups.set(p.item_id, group);
@@ -618,19 +629,23 @@ export function usePayableItems({
     orphanGroups.forEach((group, itemId) => {
       const primary = group[0];
       const assignedIds = group.map(pp => (pp as any)?.assigned_member_id).filter(Boolean) as string[];
+      const isTransitGroupId = /^transit-d(\d+)$/.test(itemId);
+      const transitDayMatch = itemId.match(/^transit-d(\d+)$/);
       const dayMatch = itemId.match(/_d(\d+)$/);
-      const dayNumber = dayMatch ? Number(dayMatch[1]) : undefined;
+      const dayNumber = transitDayMatch
+        ? Number(transitDayMatch[1])
+        : (dayMatch ? Number(dayMatch[1]) : undefined);
       result.push({
         id: itemId,
-        type: 'activity',
-        name: primary.item_name || 'Activity',
+        type: isTransitGroupId ? 'transport' : 'activity',
+        name: primary.item_name || (isTransitGroupId ? `Local transit — Day ${dayNumber}` : 'Activity'),
         amountCents: primary.amount_cents * (primary.quantity || 1),
         dayNumber,
         payment: primary,
         allPayments: group,
         assignedMemberId: assignedIds[0],
         assignedMemberIds: [...new Set(assignedIds)],
-        budgetCategory: 'activities',
+        budgetCategory: isTransitGroupId ? 'transit' : 'activities',
       });
     });
 

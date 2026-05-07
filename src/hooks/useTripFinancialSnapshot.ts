@@ -178,14 +178,36 @@ export function useTripFinancialSnapshot(tripId: string): FinancialSnapshot {
     // longer exist in the live itinerary (e.g. survived a regeneration).
     // Excludes hotel/flight (governed by include toggles, not the activity
     // list) and manual-* rows (free-form, not tied to an activity_id).
+    // Build the set of live "transit group" ids (`transit-dN`) per day so
+    // grouped transit payments aren't mis-flagged as orphans. A grouped row
+    // exists for a given day whenever that day has at least one live activity
+    // categorized as transport/transit/transfer/taxi/etc.
+    const liveTransitGroupIds = new Set<string>();
+    for (const day of days) {
+      const dayNum = Number(day?.dayNumber) || 0;
+      const hasTransit = (day?.activities || []).some((a: any) => {
+        const cat = String(a?.category || a?.type || '').toLowerCase();
+        return cat === 'transport' || cat === 'transportation' || cat === 'transit'
+            || cat === 'transfer' || cat === 'taxi' || cat === 'rideshare';
+      });
+      if (hasTransit) liveTransitGroupIds.add(`transit-d${dayNum}`);
+    }
+
+    const isLivePaymentItem = (rawItemId: string): boolean => {
+      const stripped = stripDaySuffix(rawItemId);
+      if (liveActivityIds.has(stripped)) return true;
+      // Grouped transit row id is itself the canonical id (no _dN suffix to strip)
+      if (liveTransitGroupIds.has(rawItemId)) return true;
+      return false;
+    };
+
     const orphanPaymentItemIds = new Set<string>();
     for (const p of allPayments || []) {
       if (typeof p.item_id !== 'string') continue;
       if (/^manual-/i.test(p.item_id)) continue;
       const cat = (p.item_type || '').toLowerCase();
       if (cat === 'hotel' || cat === 'flight' || cat === 'flights') continue;
-      const stripped = stripDaySuffix(p.item_id);
-      if (!liveActivityIds.has(stripped)) {
+      if (!isLivePaymentItem(p.item_id)) {
         orphanPaymentItemIds.add(p.item_id);
       }
     }

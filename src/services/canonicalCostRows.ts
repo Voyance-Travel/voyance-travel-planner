@@ -136,12 +136,21 @@ export function resolveCanonicalCostRows({
   // Two-pass partitioning: rows that directly match a live activity claim
   // their JSON id first, so orphan rescue cannot reassign that same activity
   // to a stale row in the same (day, category) bucket.
+  //
+  // "Logistics row" means a non-itinerary row that's surfaced separately as
+  // hotel-selection / flight-selection (day-0 or null day_number). The
+  // `source='logistics-sync'` tag alone is NOT enough — logistics-sync rows
+  // can also appear on real itinerary days (e.g. costed transfer legs), and
+  // when that happens they must render as normal payable rows in Payments.
+  // Treating them as logistics-only was the source of the persistent
+  // "Totals differ by $X" drift on transit-heavy itineraries.
+  const isLogistics = (row: CanonicalCostInputRow): boolean =>
+    row.day_number == null || row.day_number === 0;
+
   const directRows: CanonicalCostInputRow[] = [];
   const orphanRows: CanonicalCostInputRow[] = [];
   for (const row of costs) {
-    const isLogisticsRow =
-      row.source === 'logistics-sync' || row.day_number == null || row.day_number === 0;
-    if (isLogisticsRow) {
+    if (isLogistics(row)) {
       directRows.push(row);
       continue;
     }
@@ -156,8 +165,7 @@ export function resolveCanonicalCostRows({
   for (const row of [...directRows, ...orphanRows]) {
     const cat = (row.category || '').toLowerCase();
     const dayNumber = row.day_number ?? 0;
-    const isLogisticsRow =
-      row.source === 'logistics-sync' || row.day_number == null || row.day_number === 0;
+    const isLogisticsRow = isLogistics(row);
 
     let effectiveActivityId: string | null = row.activity_id || null;
     let rescueTag: ResolvedRow['rescueTag'];
