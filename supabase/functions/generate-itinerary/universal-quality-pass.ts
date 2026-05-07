@@ -263,32 +263,44 @@ export async function universalQualityPass(
     if (!alreadyReturn) {
       // Resolve a sane start time. Reject pre-dawn (00:00–04:59) inheritance —
       // that's the wraparound that hoists the entry to the top of the day.
+      // Also reject before-17:00 — a hotel return at lunchtime is nonsense
+      // and means the day truly has no late activity to return from.
       const candidate = lastActivity?.end_time || lastActivity?.endTime || '';
       const m = String(candidate).match(/(\d{1,2}):(\d{2})/);
-      let startTime24 = '22:30';
+      let startTime24: string | null = null;
       if (m) {
         const h = parseInt(m[1], 10);
-        if (h >= 5 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
+        if (h >= 17 && h <= 23) startTime24 = `${String(h).padStart(2, '0')}:${m[2]}`;
       }
-      // Use the resolved hotel name when available so the card never resolves
-      // to an unrelated venue (e.g. "Your Hotel" → wrong Google Places match).
-      const resolvedHotel = (hotelName && hotelName.trim()) || '';
-      result.push({
-        title: resolvedHotel ? `Return to ${resolvedHotel}` : 'Return to Your Hotel',
-        venue_name: resolvedHotel || 'Your Hotel',
-        category: 'accommodation',
-        start_time: startTime24,
-        startTime: startTime24,
-        cost_per_person: 0,
-        cost: { amount: 0, currency: 'USD' },
-        description: 'Return to your hotel for a restful night.',
-        is_free: true,
-        price_per_person: 0,
-        // Mark so enrichment skips Google Places lookup (would otherwise
-        // pick the first matching "hotel" in the city — bug source).
-        skipEnrichment: true,
-      });
-      console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
+      // Skip injection if no late-evening anchor exists. Better to leave the
+      // day open than to plant a phantom hotel return at 09:00 or 00:30.
+      if (startTime24) {
+        // Clamp endTime to 23:59 — never wrap past midnight.
+        const [sh, sm] = startTime24.split(':').map((n) => parseInt(n, 10));
+        const endMins = Math.min(sh * 60 + sm + 30, 23 * 60 + 59);
+        const endTime24 = `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
+        const resolvedHotel = (hotelName && hotelName.trim()) || '';
+        result.push({
+          title: resolvedHotel ? `Return to ${resolvedHotel}` : 'Return to Your Hotel',
+          venue_name: resolvedHotel || 'Your Hotel',
+          category: 'accommodation',
+          start_time: startTime24,
+          startTime: startTime24,
+          end_time: endTime24,
+          endTime: endTime24,
+          cost_per_person: 0,
+          cost: { amount: 0, currency: 'USD' },
+          description: 'Return to your hotel for a restful night.',
+          is_free: true,
+          price_per_person: 0,
+          // Mark so enrichment skips Google Places lookup (would otherwise
+          // pick the first matching "hotel" in the city — bug source).
+          skipEnrichment: true,
+        });
+        console.log(`[QUALITY] Added hotel return at end of Day ${dayIndex + 1} at ${startTime24}`);
+      } else {
+        console.warn(`[QUALITY] Skipped hotel return injection on Day ${dayIndex + 1}: last activity ends at "${candidate}" (need 17:00–23:59)`);
+      }
     }
   }
 
