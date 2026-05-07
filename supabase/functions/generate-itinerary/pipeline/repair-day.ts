@@ -3411,7 +3411,11 @@ function repairBookends(
     const p = ts.split(':');
     if (p.length < 2) return ts;
     const tot = parseInt(p[0], 10) * 60 + parseInt(p[1], 10) + min;
-    return `${String(Math.floor(tot / 60) % 24).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+    // Cap at 23:45 — never wrap into the next calendar day. Bookend injectors
+    // must not produce 00:xx cards that masquerade as the next day's morning.
+    const DAY_CAP = 23 * 60 + 45;
+    const capped = Math.min(tot, DAY_CAP);
+    return `${String(Math.floor(capped / 60)).padStart(2, '0')}:${String(capped % 60).padStart(2, '0')}`;
   };
 
   const makeAccomCard = (label: string, st: string, dur: number) => ({
@@ -3484,14 +3488,20 @@ function repairBookends(
       const firstRealIdx = activities.findIndex(a => !isTransport(a));
       if (firstRealIdx >= 0) {
         const first = activities[firstRealIdx];
-        if (isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first) &&
-            // On Day 1, only strip phantoms that appear before check-in
-            (!isFirstDay || (day1CheckInIdx >= 0 && firstRealIdx < day1CheckInIdx))) {
-          // On hotel-change days, only strip pre-dawn phantoms (before 06:00)
+        const firstStartMins = parseTimeToMinutes(first.startTime || '08:00');
+        // Pre-dawn (before 05:00) hotel-return phantoms are always nonsensical —
+        // strip regardless of Day 1 / check-in state. Catches midnight-wrap leaks
+        // and ghost entries from previous sessions.
+        const isPreDawnPhantom = isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first)
+          && firstStartMins !== null && firstStartMins < 300;
+        const isStandardPhantom = isAccom(first) && isHotelRelated(first) && !isCheckinOrCheckout(first) &&
+            (!isFirstDay || (day1CheckInIdx >= 0 && firstRealIdx < day1CheckInIdx));
+        if (isPreDawnPhantom || isStandardPhantom) {
+          // On hotel-change days (non-pre-dawn case), only strip pre-dawn phantoms (before 06:00)
           // to preserve legitimate mid-day check-in/checkout activities
-          if (isHotelChange) {
+          if (!isPreDawnPhantom && isHotelChange) {
             const startMins = parseTimeToMinutes(first.startTime || '08:00');
-            if (startMins !== null && startMins >= 360) break; // 06:00+ — likely legitimate, stop stripping
+            if (startMins !== null && startMins >= 360) break;
           }
           // Also remove any transport card immediately before it that goes TO the hotel
           if (firstRealIdx > 0 && isTransport(activities[firstRealIdx - 1])) {
@@ -3506,8 +3516,8 @@ function repairBookends(
           } else {
             activities.splice(firstRealIdx, 1);
           }
-          repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: 'stripped_morning_hotel_phantom' });
-          stripped = true; // Check again in case there are consecutive phantoms
+          repairs.push({ code: FAILURE_CODES.MISSING_SLOT, action: isPreDawnPhantom ? 'stripped_predawn_hotel_phantom' : 'stripped_morning_hotel_phantom' });
+          stripped = true;
         }
       }
     }
