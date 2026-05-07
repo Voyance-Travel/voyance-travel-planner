@@ -39,10 +39,20 @@ export interface ResolvedRow {
   rowKey: string;                         // stable key for the source row
   effectiveActivityId: string | null;     // post-rescue
   dayNumber: number;
-  category: string;                       // raw
-  cents: number;                          // post-rescue
+  category: string;                       // raw category from activity_costs
+  cents: number;                          // post-rescue, post-toggle
   rescueTag?: 'orphan-id' | 'json-zero';
   isLogisticsRow: boolean;
+  /** Display name (live JSON title) when known. */
+  name: string | null;
+  /** num_travelers from the source row (defaults to 1). */
+  numTravelers: number;
+  /** is_paid mirror from activity_costs (best-effort). */
+  isPaid: boolean;
+  /** paid_amount_usd from activity_costs (null when row never paid). */
+  paidAmountUsd: number | null;
+  /** source field from activity_costs ('logistics-sync', 'manual', etc.). */
+  source: string | null;
 }
 
 export interface ResolveResult {
