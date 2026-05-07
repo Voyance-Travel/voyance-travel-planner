@@ -51,6 +51,9 @@ Deno.test('PLACEHOLDER_NAME_RE matches all known leak patterns', () => {
   const cases = [
     'Spa Time — find a venue',
     'Lunch — find a local spot',
+    'Lunch — find a local spot in the destination',
+    'Dinner — find a local spot in Venice',
+    'Pick a local spot for lunch',
     'Dinner (slot)',
     'Activity (AESTHETIC slot)',
     'Restaurant TBD',
@@ -60,4 +63,28 @@ Deno.test('PLACEHOLDER_NAME_RE matches all known leak patterns', () => {
   for (const c of cases) {
     if (!PLACEHOLDER_NAME_RE.test(c)) throw new Error(`Did not match: ${c}`);
   }
+});
+
+Deno.test('drops Day 2 12:15 AM hotel bleed variants', () => {
+  const variants = [
+    'Return to the hotel',
+    'Return to Four Seasons Hotel',
+    'Return to your hotel',
+    'Back to the hotel',
+    'Head back to your hotel',
+  ];
+  for (const title of variants) {
+    const acts = [{ title, startTime: '00:15', category: 'accommodation' }];
+    const { activities } = enforcePersistDayContract(acts);
+    if (activities.length !== 0) throw new Error(`Did not drop: ${title}`);
+  }
+});
+
+Deno.test('drops placeholder leaked into venue_name field (not title)', () => {
+  const acts = [
+    { title: 'Lunch at trattoria', venue_name: 'find a local spot in the destination', startTime: '12:30', category: 'dining' },
+  ];
+  const { activities, drops } = enforcePersistDayContract(acts);
+  assertEquals(activities.length, 0);
+  assertEquals(drops[0].reason, 'placeholder-name');
 });
