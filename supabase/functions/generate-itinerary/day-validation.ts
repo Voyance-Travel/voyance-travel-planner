@@ -133,12 +133,32 @@ const MEAL_KEYWORDS: Record<RequiredMeal, string[]> = {
 
 const DINING_CATEGORIES = ['dining', 'restaurant', 'food', 'cafe', 'meal'];
 
+// Sentinel patterns that mean "we don't have a real venue here yet". Any
+// activity matching these is NOT counted as a real meal — the guard must
+// replace it with a named venue. This is the load-bearing fix that keeps
+// "Lunch — pick a restaurant" from satisfying compliance and surviving save.
+const PLACEHOLDER_MEAL_TITLE_RE = /[—\-:]\s*pick a (restaurant|caf[eé])\b|^pick a (restaurant|caf[eé])\b|—\s*find a (venue|restaurant|spot)\b/i;
+
+function isPlaceholderMealActivity(activity: any): boolean {
+  const meta = (activity?.metadata || {}) as Record<string, unknown>;
+  if (meta.needsVenuePick === true || meta.unverified_venue === true) return true;
+  if (activity?.needsVenuePick === true) return true;
+  const title = (activity?.title || '').toString();
+  const venue = (activity?.location?.name || activity?.venue_name || '').toString();
+  if (PLACEHOLDER_MEAL_TITLE_RE.test(title)) return true;
+  if (PLACEHOLDER_MEAL_TITLE_RE.test(venue)) return true;
+  return false;
+}
+
 export function detectMealSlots(
   activities: Array<Pick<StrictActivityMinimal, 'title' | 'category'> & { startTime?: string }>
 ): RequiredMeal[] {
   const detected = new Set<RequiredMeal>();
 
   for (const activity of activities) {
+    // Skip placeholder/unverified slots — they must NEVER satisfy meal compliance.
+    if (isPlaceholderMealActivity(activity)) continue;
+
     const title = (activity.title || '').toLowerCase();
     const category = (activity.category || '').toLowerCase();
     const isDining = DINING_CATEGORIES.some(c => category.includes(c));
@@ -177,6 +197,7 @@ export function detectMealSlots(
 
   return (['breakfast', 'lunch', 'dinner'] as RequiredMeal[]).filter(meal => detected.has(meal));
 }
+
 
 function resolveRequiredMealsForValidation(
   isFirstDay: boolean,
