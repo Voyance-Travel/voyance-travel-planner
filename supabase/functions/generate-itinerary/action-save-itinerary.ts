@@ -746,6 +746,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   const extraUpdate: Record<string, any> = {
     itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
     updated_at: new Date().toISOString(),
+    ...(callerExtraUpdate && typeof callerExtraUpdate === 'object' ? callerExtraUpdate : {}),
     ...(emptyItineraryDetected && {
       metadata: {
         ...existingMetadataForEmpty,
