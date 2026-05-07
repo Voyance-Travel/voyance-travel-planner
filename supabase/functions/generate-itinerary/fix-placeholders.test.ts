@@ -270,3 +270,91 @@ Deno.test("applyFallbackWellnessToActivity rewrites title, venue, cost", () => {
   assertEquals(act.cost.amount, 200);
   assertEquals(act.cost_per_person, 200);
 });
+
+// ---------- CROSS-CITY FALLBACK INTEGRITY ----------
+// Regression: months of "Tartine (SF) in Venice" / "All'Antico Vinaio (Florence) in Venice"
+// bugs caused by a global emergency fallback DB. The resolver MUST never
+// return a real venue from a different city than the destination.
+import { resolveAnyMealFallback, nuclearCrossCitySweep } from "./fix-placeholders.ts";
+
+Deno.test("resolveAnyMealFallback: Venice never returns Florence/Rome/SF venues", () => {
+  for (let i = 0; i < 30; i++) {
+    const used = new Set<string>();
+    // exhaust pools in this iteration
+    for (let j = 0; j < 30; j++) {
+      const r = resolveAnyMealFallback("Venice, Italy", "lunch", used);
+      const addr = (r.address || '').toLowerCase();
+      const name = (r.name || '').toLowerCase();
+      // Must NOT be a famous venue from another city
+      if (!r.needsVenuePick) {
+        if (addr.includes('florence') || addr.includes('firenze')) {
+          throw new Error(`Florence venue leaked into Venice: ${r.name} @ ${r.address}`);
+        }
+        if (addr.includes('rome') || addr.includes('roma')) {
+          throw new Error(`Rome venue leaked into Venice: ${r.name} @ ${r.address}`);
+        }
+        if (addr.includes('san francisco') || addr.includes('paris')) {
+          throw new Error(`Foreign venue leaked into Venice: ${r.name} @ ${r.address}`);
+        }
+        if (name.includes("antico vinaio") || name.includes("tartine") || name.includes("comptoir du relais") || name.includes("sant'eustachio")) {
+          throw new Error(`Famous wrong-city venue leaked into Venice: ${r.name}`);
+        }
+      }
+      used.add(r.name.toLowerCase());
+    }
+  }
+});
+
+Deno.test("resolveAnyMealFallback: unknown city downgrades to needsVenuePick sentinel", () => {
+  const r = resolveAnyMealFallback("Atlantis, Nowhere", "dinner", new Set());
+  assertEquals(r.needsVenuePick, true);
+  assertEquals(r.price, 0);
+});
+
+Deno.test("applyFallbackToActivity: rejects wrong-city fallback when destination passed", () => {
+  const act: any = { title: "Lunch", category: "dining", startTime: "13:00" };
+  const wrongCityFallback = {
+    name: "All'Antico Vinaio",
+    address: "Via dei Neri 65, Florence, Italy",
+    price: 14,
+    description: "Florence sandwich shop.",
+  };
+  applyFallbackToActivity(act, wrongCityFallback, "lunch", new Set(), undefined, "Venice, Italy");
+  // Should have been downgraded to a sentinel
+  assertEquals(act.metadata?.needsVenuePick, true);
+  assertEquals(act.cost_per_person, 0);
+  if ((act.location?.address || '').toLowerCase().includes('florence')) {
+    throw new Error(`Wrong-city address leaked through guard: ${act.location.address}`);
+  }
+});
+
+Deno.test("nuclearCrossCitySweep: downgrades wrong-city dining row", () => {
+  const activities: any[] = [
+    {
+      title: "Lunch at All'Antico Vinaio",
+      category: "dining",
+      startTime: "13:00",
+      location: { name: "All'Antico Vinaio", address: "Via dei Neri 65, Florence, Italy" },
+      cost_per_person: 14,
+      cost: { amount: 14 },
+    },
+  ];
+  const n = nuclearCrossCitySweep(activities, "Venice, Italy");
+  assertEquals(n, 1);
+  assertEquals(activities[0].metadata?.needsVenuePick, true);
+  assertEquals(activities[0].cost_per_person, 0);
+});
+
+Deno.test("nuclearCrossCitySweep: leaves correct-city venues alone", () => {
+  const activities: any[] = [
+    {
+      title: "Lunch at All'Arco",
+      category: "dining",
+      startTime: "13:00",
+      location: { name: "All'Arco", address: "Calle dell'Occhialer 436, 30125 Venezia VE, Italy" },
+    },
+  ];
+  const n = nuclearCrossCitySweep(activities, "Venice, Italy");
+  assertEquals(n, 0);
+  assertEquals(activities[0].metadata?.needsVenuePick, undefined);
+});
