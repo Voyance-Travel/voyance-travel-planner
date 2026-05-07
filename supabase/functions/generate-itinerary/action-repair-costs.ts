@@ -112,6 +112,30 @@ export async function handleRepairTripCosts(ctx: ActionContext): Promise<Respons
       const category = normCat(activity.category || activity.type);
       if (category === "accommodation") continue;
 
+      // Walking legs are always free, regardless of stored category. AI/repair
+      // sometimes mis-stores "Walk to Lunch in San Polo" as `dining`, which
+      // bypassed the old transport-only walk guard further down. Snapshot $0
+      // up-front so the dining estimator can never charge for a walk.
+      if (isWalkingLeg({
+        title: activity.title || activity.name,
+        description: activity.description,
+        bookingRequired: activity.booking_required,
+      })) {
+        rows.push({
+          trip_id: tripId,
+          activity_id: activity.id,
+          day_number: dayNum,
+          cost_per_person_usd: 0,
+          num_travelers: numTravelers,
+          category: category || 'transport',
+          source: 'walking_free',
+          confidence: 'high',
+          cost_reference_id: null,
+          notes: '[Walking — free]',
+        });
+        continue;
+      }
+
       // Placeholder departure transfer (no mode chosen): write $0, do not estimate.
       const _titleForPlaceholder = (activity.title || activity.name || "");
       const _descForPlaceholder = (activity.description || "");
