@@ -122,4 +122,30 @@ describe('sanitizeActivityName + wellness mask', () => {
       }),
     ).toBe('Spa Time — find a venue');
   });
+
+  it('rescues legacy "Spa Time — find a venue" when a real venue is attached (Kami Spa)', () => {
+    expect(
+      sanitizeActivityName('Spa Time — find a venue', {
+        category: 'wellness',
+        activity: {
+          title: 'Spa Time — find a venue',
+          category: 'wellness',
+          location: { name: 'Kami Spa', address: 'Jl. Petitenget 123, Bali' },
+        },
+      }),
+    ).toBe('Spa Session at Kami Spa');
+  });
+
+  it('keeps placeholder when literal string has no real venue', () => {
+    expect(
+      sanitizeActivityName('Spa Time — find a venue', {
+        category: 'wellness',
+        activity: {
+          title: 'Spa Time — find a venue',
+          category: 'wellness',
+          location: { name: '', address: '' },
+        },
+      }),
+    ).toBe('Spa Time — find a venue');
+  });
 });
