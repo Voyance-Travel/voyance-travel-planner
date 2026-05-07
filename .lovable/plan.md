@@ -1,74 +1,63 @@
-# Fix: "Highly-rated neighborhood restaurant" placeholder bleeding into the budget
+## The bug
 
-## Root cause (two-layer)
+Payments tab and Budget by Category disagree because they group activity costs differently:
 
-1. **Source of the string.** `supabase/functions/generate-itinerary/fix-placeholders.ts` defines a `GLOBAL_EMERGENCY_FALLBACK` for lunch/dinner with `name: "Highly-rated neighborhood restaurant"` and a real-looking `price` ($25 / $45). It is the last resort inside `resolveAnyMealFallback()` (city pool → city pool recycled → regional country pool → global). Venice IS mapped to Italy in `CITY_COUNTRY_MAP`, so the regional path *should* win — when this stub leaks through it means either the destination string handed to the resolver was empty / malformed, or the resolver was bypassed entirely (e.g. AI emitted that exact title and no guard caught it).
+- **`activity_costs` DB (truth):** dining = $216 (6 rows; one is the now-zeroed "Highly-rated neighborhood restaurant" stub → 5 paid rows × 2 travelers = **$180**), activity = $0, transport = $0.
+- **Budget by Category (`getCategoryAllocations`)** maps `dining → food` and `activity → activities`. So Food shows $216, Activities shows **$0/$360**. Correct mapping, but users don't see it that way.
+- **Payments tab (`usePayableItems`)** lumps every non-flight/non-hotel row into a single bucket called "**Activities & Experiences**" because every row is emitted with `type: 'activity'` (lines 451–462 in `src/hooks/usePayableItems.ts`). So 5 dining rows totalling $180 surface under "Activities" in Payments, while the Activities allocation in Budget reads $0.
 
-2. **Why the placeholder guards miss it.** `PLACEHOLDER_TITLE_PATTERNS` looks for `"... at a/the ..."` and `"... at a (bistro|brasserie|café ...)"`. `PLACEHOLDER_VENUE_PATTERNS` has `/^neighborhood\s+(restaurant|...)/i` but the venue is `"Highly-rated neighborhood restaurant"` — it starts with `Highly-rated`, not `neighborhood`, so every regex misses it. `isPlaceholderMeal()` returns `false`, `nuclearPlaceholderSweep()` does nothing, and the cost-snapshot pass at `generation-core.ts:3260` happily writes the $25/$45 price into `activity_costs` as a `reference`-source row that the budget treats as real.
+Result: the user sees "5 items, $180" labeled Activities in one place and "$0/$360" labeled Activities in the other. Two systems, one label, two truths.
 
-So the bug is one bug with two failure modes: the stub itself shouldn't carry a paid venue name, and the placeholder detector should catch any "highly/top/well-rated …" name even if it does.
+## Root cause
 
-## Changes
+`usePayableItems` collapses dining/activity/shopping/etc. into the single `type: 'activity'` enum because Payments tab originally only had Flight / Hotel / Activities groups. The Budget engine has the correct category granularity (food/activities/transit/misc); Payments doesn't, and the **"Activities & Experiences"** card in Payments is the mislabel.
 
-### 1. Kill the paid global stub — emit an explicit "pick a restaurant" slot
+## Plan
 
-In `supabase/functions/generate-itinerary/fix-placeholders.ts`:
+Single fix: make Payments tab categorize the same way Budget does, so the two surfaces use the same buckets and a dining row is never displayed under "Activities".
 
-- Remove `"Highly-rated neighborhood restaurant"` from `GLOBAL_EMERGENCY_FALLBACK`. Replace lunch/dinner/breakfast with sentinel objects flagged `needsVenuePick: true`, `price: 0`, `name: "Lunch — pick a restaurant"` / `"Dinner — pick a restaurant"` / `"Breakfast — pick a café"`.
-- Update `FallbackRestaurant` type to carry an optional `needsVenuePick?: boolean`.
-- `applyFallbackToActivity()` already writes `activity.title = "${mealLabel} at ${fallback.name}"`. When the fallback carries `needsVenuePick`, write `activity.title = fallback.name` (no `at`), set `activity.cost = { amount: 0, currency: 'USD' }`, set `activity.metadata.needsVenuePick = true`, set `activity.metadata.unverified_venue = true`. Mirrors the client behavior in `src/utils/mealGuard.ts`.
+### 1. Carry the source category through `usePayableItems`
 
-### 2. Harden the placeholder detector (defense in depth)
+In `src/hooks/usePayableItems.ts`:
 
-Same file, `PLACEHOLDER_VENUE_PATTERNS` and `PLACEHOLDER_TITLE_PATTERNS`:
+- Add an optional `budgetCategory: 'food' | 'activities' | 'transit' | 'misc'` field on `PayableItem`.
+- When emitting a row from an `activity_costs` DB row, set `budgetCategory` from `toBudgetCategory(row.category)` (extract the same mapping `tripBudgetService.ts` uses, share it via a small helper in `src/services/budgetCategoryMap.ts`).
+- Keep `type: 'activity'` for back-compat (other call sites depend on it).
 
-- Add `/(highly|top|well)[-\s]rated\s+(neighborhood\s+)?(restaurant|café|cafe|bistro|trattoria|spot|eatery|venue|place)/i` to both arrays.
-- Add `/^pick a (restaurant|café|cafe)$/i` to venue patterns so any "pick a restaurant" stub is recognized as not-a-real-venue (so cost layer can suppress it).
-- Add a unit-test row in `fix-placeholders.test.ts` for `"Lunch at Highly-rated neighborhood restaurant"` and the new `"… — pick a restaurant"` shape.
+### 2. Group Payments tab by `budgetCategory`, not by `type`
 
-### 3. Suppress cost for unverified meal slots
+In `src/components/itinerary/PaymentsTab.tsx`:
 
-In `supabase/functions/generate-itinerary/generation-core.ts` (Stage 6 cost-snapshot pass, near line 3260):
+- Replace the single `activityItems` bucket with three derived lists: `foodItems`, `activitiesItems`, `transitItems` (filter `payableItems` by `budgetCategory`).
+- Render three category cards mirroring Budget by Category labels and icons:
+  - "Food & Dining" (Utensils icon, fork/knife)
+  - "Activities & Experiences" (Camera icon — existing)
+  - "Local Transit" (existing transit grouping already exists; surface as its own card instead of nested under activities)
+- Keep "Essentials" (flight + hotel) card unchanged.
 
-- Before writing each row, if the activity is `category === 'dining'` AND (`metadata.needsVenuePick === true` OR `metadata.unverified_venue === true` OR the title/venue matches `isPlaceholderMeal()` OR matches the new "highly/top-rated …" regex), force `cost_per_person_usd = 0`, `source = 'unverified_meal'`, `confidence = 'low'`. Mirrors the existing wellness-unverified rule from the core memory ("unverified wellness slots always snapshot $0").
-- Same activity is excluded from the post-gen budget-validation scaling (it's already $0).
+### 3. Remove the misleading subtotal label
 
-### 4. Mirror the client guard
+The current "Activities & Experiences" subtitle reads `{N} bookable items` using all non-essentials. After step 2 it will count only true activity rows, so the visible total there will match Budget's Activities row exactly ($0 / "0 bookable items" hidden if empty).
 
-`src/lib/fallbackRestaurants.ts` already returns `null` from `GLOBAL_EMERGENCY` (no string leak), so the client side is fine. Add the same hardened regex to `src/utils/wellnessPlaceholderDetection.ts`-style meal detector if one exists, OR if the meal coach has its own copy, so editor UI and budget UI both flag this venue as "Pick a restaurant" instead of rendering the stub as a real line item.
+### 4. Hide empty category cards
 
-### 5. One-shot data repair (optional, safe)
+If a category has zero items, don't render its card (consistent with how the existing Activities card already hides when `activityItems.length === 0`).
 
-For trips already saved with this stub, add a small idempotent SQL migration:
+### 5. Tests
 
-```sql
-UPDATE public.activity_costs ac
-SET cost_per_person_usd = 0,
-    source = 'unverified_meal',
-    notes = COALESCE(ac.notes, '') || ' [auto-zero: highly-rated stub]'
-FROM public.trips t
-WHERE ac.trip_id = t.id
-  AND EXISTS (
-    SELECT 1
-    FROM jsonb_array_elements(COALESCE(t.itinerary_data->'days', '[]'::jsonb)) AS d(day),
-         jsonb_array_elements(COALESCE(d.day->'activities', '[]'::jsonb)) AS a(act)
-    WHERE a.act->>'id' = ac.activity_id
-      AND (
-        a.act->>'title' ILIKE '%highly-rated%'
-        OR a.act->'location'->>'name' ILIKE '%highly-rated neighborhood%'
-      )
-  );
-```
+- Update `src/hooks/__tests__/usePayableItems.test.ts` to assert `budgetCategory` is set from the DB row category (`dining → food`, `activity → activities`, `transport|transit|transfer|taxi → transit`, etc.).
+- Add a snapshot of the Venice trip fixture asserting that 5 dining rows land in `foodItems` and `activityItems` is empty.
 
-This corrects the user's current Venice budget without forcing a regeneration.
+### Out of scope
 
-## Verification
+- No changes to `getCategoryAllocations`, `getBudgetSummary`, or the activity_costs schema — Budget engine is already correct.
+- No changes to manual expense entry flows; manual `dining`/`transport`/etc. payments already carry their own `item_type` and will map cleanly through the same helper.
+- No fix needed for the "Highly-rated neighborhood restaurant" row — that's already $0 from the prior fix and will simply not appear.
 
-1. Unit test: `nuclearPlaceholderSweep` must replace `{title: "Lunch at Highly-rated neighborhood restaurant"}` (currently passes through untouched).
-2. Unit test: `resolveAnyMealFallback("Atlantis", "lunch", ...)` returns a `needsVenuePick: true` sentinel (no paid venue).
-3. Manual: regenerate Venice trip; budget shows the lunch slot at $0 with a "Pick a restaurant" CTA, not "$25 at Highly-rated neighborhood restaurant". The user's existing trip is repaired by the migration in step 5.
+## Files touched
 
-## Out of scope
-
-- Changing the AI prompt — already says "no generic names". Defense in depth is the goal here.
-- Reworking `mealGuard.ts` client logic, which already emits `needsVenuePick` correctly.
+- `src/services/budgetCategoryMap.ts` (new — shared `toBudgetCategory` helper)
+- `src/services/tripBudgetService.ts` (import shared helper, drop local copy)
+- `src/hooks/usePayableItems.ts` (add `budgetCategory` field + populate)
+- `src/components/itinerary/PaymentsTab.tsx` (split into three category cards)
+- `src/hooks/__tests__/usePayableItems.test.ts` (assertions for new field)
