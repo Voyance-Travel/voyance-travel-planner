@@ -69,7 +69,8 @@ serve(async (req) => {
       log("Verifying session", { sessionId });
 
       const session = await stripe.checkout.sessions.retrieve(sessionId);
-      log("Session status", { status: session.payment_status, paymentIntent: session.payment_intent });
+      const sessStatus = (session as any).status; // 'open' | 'complete' | 'expired'
+      log("Session status", { status: session.payment_status, sessStatus, paymentIntent: session.payment_intent });
 
       if (session.payment_status === 'paid') {
         const { error: updateError } = await serviceSupabase
@@ -91,7 +92,20 @@ serve(async (req) => {
         return okResponse({ status: 'paid', session });
       }
 
-      return okResponse({ status: session.payment_status });
+      // Terminal unpaid states: finalize matching trip_payments rows so the UI
+      // stops treating them as in-flight. 'open' = user hasn't submitted yet, leave it alone.
+      if (sessStatus && sessStatus !== 'open') {
+        const newStatus = sessStatus === 'expired' ? 'cancelled' : 'failed';
+        const { error: updErr } = await serviceSupabase
+          .from("trip_payments")
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq('stripe_checkout_session_id', sessionId)
+          .in('status', ['pending', 'processing']);
+        if (updErr) log("Error finalizing unpaid payment", updErr);
+        else log("Payment finalized", { newStatus });
+      }
+
+      return okResponse({ status: session.payment_status, sessStatus });
     }
 
     // If tripId provided, get all payments for the trip
