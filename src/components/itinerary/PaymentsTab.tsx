@@ -3,7 +3,7 @@
  * Tracks all trip payments with group splitting and member assignment support
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { getAppUrl } from '@/utils/getAppUrl';
 
@@ -253,7 +253,7 @@ export function PaymentsTab({
   }, [fetchPayments]);
 
   // Fetch activity_costs from DB for category reconciliation
-  const { data: activityCosts } = useQuery({
+  const { data: activityCosts, isFetching: activityCostsFetching } = useQuery({
     queryKey: ['activity-costs-payable', tripId],
     queryFn: async () => {
       const { data } = await supabase
@@ -267,18 +267,25 @@ export function PaymentsTab({
   });
 
   // Keep the Payments-side caches in lockstep with useTripFinancialSnapshot.
-  // Without this, the headline Trip Total refetches on `booking-changed` while
-  // the bucket sum (built from this cached query) stays frozen on stale rows,
-  // producing a permanent "Reconciling…" badge after Fix Timing / autosave.
+  // Debounced like the snapshot's own handler — Fix Timing / autosave fire
+  // many `booking-changed` events back-to-back; without coalescing, Payments
+  // and the snapshot land at different times and produce transient drift > 1.5s
+  // that latches the "Totals differ" badge on indefinitely.
   useEffect(() => {
     if (!tripId) return;
+    let pendingTimer: ReturnType<typeof setTimeout> | null = null;
     const handler = () => {
       queryClient.invalidateQueries({ queryKey: ['activity-costs-payable', tripId] });
       queryClient.invalidateQueries({ queryKey: ['trip-inclusion-toggles', tripId] });
       fetchPayments();
+      if (pendingTimer) clearTimeout(pendingTimer);
+      pendingTimer = setTimeout(() => { fetchPayments(); }, 600);
     };
     window.addEventListener('booking-changed', handler);
-    return () => window.removeEventListener('booking-changed', handler);
+    return () => {
+      window.removeEventListener('booking-changed', handler);
+      if (pendingTimer) clearTimeout(pendingTimer);
+    };
   }, [tripId, queryClient, fetchPayments]);
 
   // Fetch trip-level inclusion toggles so the Payments list and the Trip Total
@@ -357,7 +364,12 @@ export function PaymentsTab({
   // headline total comes from (it used to be silently folded into Essentials,
   // which made bucket sums lag the header on trips with manual non-logistics
   // expenses or a non-zero reserve).
-  const reserveCents = financialSnapshot.miscReserveCents || 0;
+  // Reserve only counts once the snapshot has actually returned a non-zero
+  // total — otherwise mid-fetch (snapshot total = 0, stale reserve > 0) the
+  // bucket leads the headline and we surface a phantom drift badge.
+  const reserveCents = financialSnapshot.tripTotalCents > 0
+    ? (financialSnapshot.miscReserveCents || 0)
+    : 0;
   const essentialItemsWithReserve = essentialItems;
 
   // ─── Split EVERY non-essential payable item by its Budget by Category bucket
@@ -416,27 +428,73 @@ export function PaymentsTab({
   // and largest-remainder ledger adjustments dominates and isn't user-meaningful.
   const reconciles = Math.abs(reconciliationDriftCents) <= 200;
 
-  // Show a finite "Totals differ by $X" diagnostic only after drift persists
-  // ≥1.5s (brief drift during refetch is normal). The previous "Reconciling…"
-  // wording implied a running async job that would clear itself — it never
-  // did, leaving the badge stuck. The new wording is honest: it's a static
-  // mismatch the user can act on (or ignore).
+  // Drift badge gating
+  // ─────────────────────────────────────────────────────────────────────
+  // Three independent fetches feed this view (snapshot, activity_costs query,
+  // payments). They invalidate together but complete at different times. The
+  // old 1.5s timer was shorter than typical refetch windows and would latch
+  // the badge on whenever fetches landed in an unexpected order — that's the
+  // "stuck Reconciling…" / "Totals differ by $X" reports.
+  //
+  // New behavior:
+  //   1. Suppress the badge entirely while ANY source is still loading/fetching.
+  //   2. When drift is detected and all sources are quiet, kick a single
+  //      coordinated refetch ("auto-reconcile"), capped at 2 attempts per mount.
+  //   3. Only show the badge when the SAME drift fingerprint persists across
+  //      that auto-reconcile cycle — i.e. it's a real, actionable mismatch.
+  const snapshotReady =
+    !financialSnapshot.loading && !loading && !activityCostsFetching;
+
   const [showDriftBadge, setShowDriftBadge] = useState(false);
+  const driftFingerprintRef = useRef<string | null>(null);
+  const reconcileAttemptsRef = useRef(0);
+
+  // Reset attempt counter when trip changes
   useEffect(() => {
-    if (reconciles || financialSnapshot.loading || estimatedTotal <= 0) {
+    reconcileAttemptsRef.current = 0;
+    driftFingerprintRef.current = null;
+    setShowDriftBadge(false);
+  }, [tripId]);
+
+  useEffect(() => {
+    if (reconciles || !snapshotReady || estimatedTotal <= 0) {
       setShowDriftBadge(false);
+      driftFingerprintRef.current = null;
       return;
     }
-    const t = setTimeout(() => setShowDriftBadge(true), 1500);
-    return () => clearTimeout(t);
-  }, [reconciles, financialSnapshot.loading, estimatedTotal, bucketSumCents]);
+    const fingerprint = `${bucketSumCents}|${estimatedTotal}`;
+    const previous = driftFingerprintRef.current;
+    driftFingerprintRef.current = fingerprint;
 
-  if (!reconciles && !financialSnapshot.loading && estimatedTotal > 0) {
+    // Same drift survived across two render cycles — show the badge after a
+    // brief debounce so a single transient frame doesn't flash it.
+    if (previous === fingerprint) {
+      const t = setTimeout(() => setShowDriftBadge(true), 1500);
+      return () => clearTimeout(t);
+    }
+
+    // First time we're seeing this drift fingerprint — try a coordinated
+    // auto-reconcile rather than blaming the user.
+    setShowDriftBadge(false);
+    if (reconcileAttemptsRef.current < 2) {
+      reconcileAttemptsRef.current += 1;
+      const t = setTimeout(() => {
+        try { financialSnapshot.refetch(); } catch {}
+        queryClient.invalidateQueries({ queryKey: ['activity-costs-payable', tripId] });
+        queryClient.invalidateQueries({ queryKey: ['trip-inclusion-toggles', tripId] });
+        fetchPayments();
+      }, 400);
+      return () => clearTimeout(t);
+    }
+  }, [reconciles, snapshotReady, estimatedTotal, bucketSumCents, tripId, queryClient, fetchPayments, financialSnapshot]);
+
+  if (!reconciles && snapshotReady && estimatedTotal > 0) {
     // Single warn per render burst (browser dedupes by line)
     console.warn('[PaymentsTab] reconciliation drift', {
       bucketSumCents,
       estimatedTotalCents: estimatedTotal,
       driftCents: reconciliationDriftCents,
+      attempts: reconcileAttemptsRef.current,
     });
   }
 
