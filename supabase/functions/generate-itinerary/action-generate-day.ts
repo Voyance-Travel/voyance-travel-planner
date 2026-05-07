@@ -78,6 +78,7 @@ import { enforceDayTitleCoherence } from './pipeline/coherence-day-title.ts';
 import { persistDay } from './pipeline/persist-day.ts';
 import { callAI, AICallError } from './pipeline/ai-call.ts';
 import { enrichAndValidateHours } from './pipeline/enrich-day.ts';
+import { filterVenuesByDestination } from '../_shared/verified-venues-filter.ts';
 
 // =============================================================================
 // FALLBACK RESTAURANT DATABASE — Rich city-aware venue pool for placeholder replacement
