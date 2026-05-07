@@ -973,18 +973,25 @@ function getActivityCostInfo(
   const ledgerOverride = getLedgerOverride((activity as any).id);
   if (ledgerOverride) {
     const jsonbAmt = costAmount ?? 0;
-    if (ledgerOverride.perPersonUsd >= jsonbAmt * 2 || jsonbAmt === 0) {
-      warnOnceLedgerOverride(String((activity as any).id), {
-        jsonbAmount: jsonbAmt,
-        ledgerAmount: ledgerOverride.perPersonUsd,
-        source: ledgerOverride.source,
-        title,
-      });
+    // Prefer the ledger when (a) it's a protected server floor materially above
+    // the JSONB value, OR (b) the JSONB has no usable cost — this aligns the
+    // card with the day badge / Budget tab, which both read activity_costs.
+    const floorOverride = ledgerOverride.isProtectedFloor && ledgerOverride.perPersonUsd >= jsonbAmt * 2;
+    const jsonbMissing = jsonbAmt === 0;
+    if (floorOverride || jsonbMissing) {
+      if (floorOverride) {
+        warnOnceLedgerOverride(String((activity as any).id), {
+          jsonbAmount: jsonbAmt,
+          ledgerAmount: ledgerOverride.perPersonUsd,
+          source: ledgerOverride.source,
+          title,
+        });
+      }
       return {
         amount: ledgerOverride.perPersonUsd,
         isEstimated: false,
         confidence: 'high' as const,
-        basis,
+        basis: 'per_person' as CostBasis,
       };
     }
   }
@@ -1058,23 +1065,25 @@ function getActivityCostInfo(
   const amount = (result.amount === 0 && shouldNeverBeFree) ? Math.max(10, travelers * 5) : result.amount;
 
   // estimateCostSync already multiplies per-person dining categories by travelers
-  // (see src/lib/cost-estimation.ts line 285). Returning that group total with
-  // basis 'per_person' would cause the card to (a) append a misleading "/pp"
-  // suffix and (b) show a phantom "Group total: amount × travelers" tooltip.
-  // Tag these as 'flat' so the UI treats the number as the final group total.
+  // (see src/lib/cost-estimation.ts line 285). To keep cards in the same unit
+  // as the day badge (which is per-person when travelers > 1), divide back to
+  // per-person and tag basis as 'per_person' so the "/pp" suffix and the
+  // "Group total: …" tooltip render correctly.
   const PER_PERSON_ENGINE_CATS = new Set([
     'dining', 'restaurant', 'breakfast', 'brunch', 'lunch', 'dinner', 'cafe', 'coffee'
   ]);
-  const engineBasis: CostBasis = PER_PERSON_ENGINE_CATS.has((category || '').toLowerCase())
-    ? 'flat'
-    : basis;
+  const isPerPersonDining = PER_PERSON_ENGINE_CATS.has((category || '').toLowerCase());
+  const finalAmount = isPerPersonDining
+    ? Math.round(amount / Math.max(travelers, 1))
+    : amount;
+  const finalBasis: CostBasis = isPerPersonDining ? 'per_person' : basis;
 
-  return { 
-    amount, 
+  return {
+    amount: finalAmount,
     isEstimated: result.isEstimated,
     estimateReason: result.reason || `Estimated for ${category} in ${destinationCity || 'this area'}`,
     confidence: result.confidence,
-    basis: engineBasis,
+    basis: finalBasis,
   };
 }
 
@@ -9930,6 +9939,20 @@ function DayCard({
   }, 0);
   const otherTransitSubtotal = Math.max(0, transitSubtotal - airportTransferSubtotal);
   const visibleActivitiesSubtotal = Math.max(0, totalCost - transitSubtotal);
+
+  // Dev-only sanity check: warn loudly if cards sum diverges from badge >5%.
+  if (process.env.NODE_ENV !== 'production' && !dayIsPreview && totalCost > 0) {
+    const cardSum = day.activities.reduce((s, a) => {
+      const i = getActivityCostInfo(a, travelers, budgetTier, destination, destinationCountry, isManualMode);
+      if (i.isEstimated && !isManualMode) return s;
+      const perPp = i.basis === 'per_person' ? i.amount : i.amount / Math.max(travelers, 1);
+      return s + perPp;
+    }, 0);
+    if (cardSum > 0 && Math.abs(cardSum - totalCost) / totalCost > 0.05) {
+      // eslint-disable-next-line no-console
+      console.warn(`[DayCard] Day ${day.dayNumber} badge $${totalCost.toFixed(2)} vs cards sum $${cardSum.toFixed(2)} (>5% drift)`);
+    }
+  }
   
   // Transport details toggle - collapsed by default to reduce visual noise
   const [showTransportDetails, setShowTransportDetails] = useState(false);

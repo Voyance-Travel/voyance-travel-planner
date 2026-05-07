@@ -16,6 +16,7 @@ export interface LedgerOverride {
   perPersonUsd: number;
   source: string;
   tripId: string;
+  isProtectedFloor: boolean;
 }
 
 const PROTECTED_FLOOR_SOURCES = new Set([
@@ -24,6 +25,10 @@ const PROTECTED_FLOOR_SOURCES = new Set([
   'auto_corrected',
   'reference_fallback',
 ]);
+
+export function isProtectedFloorSource(source: string): boolean {
+  return PROTECTED_FLOOR_SOURCES.has(source);
+}
 
 const overrides = new Map<string, LedgerOverride>();
 const warnedFor = new Set<string>();
@@ -60,13 +65,13 @@ export function useLedgerCostOverrideMap(tripId: string | undefined): void {
       }
       for (const row of data as any[]) {
         const src = String(row.source || '');
-        if (!PROTECTED_FLOOR_SOURCES.has(src)) continue;
         const perPerson = Number(row.cost_per_person_usd) || 0;
         if (perPerson <= 0 || !row.activity_id) continue;
         overrides.set(String(row.activity_id), {
           perPersonUsd: perPerson,
           source: src,
           tripId,
+          isProtectedFloor: PROTECTED_FLOOR_SOURCES.has(src),
         });
       }
     };
