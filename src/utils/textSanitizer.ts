@@ -9,9 +9,11 @@ const NON_LATIN_SCRIPT = /[\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u309F\u30A0-\u30FF\
 // Regex to detect garbled/corrupted text patterns (nonsensical fragments)
 const GARBLED_PATTERN = /(?:[bcdfghjklmnpqrstvwxz]{5,}|[A-Z][a-z]{0,2}[A-Z][a-z]{0,2}[A-Z])/g;
 
-// Regex to detect leaked JSON schema field names in text values
-// e.g. "宣,duration:4,practicalTips;|" or ",theme:" or ",title: -" artifacts
-const SCHEMA_LEAK_RE = /[,;|]*\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
+// Regex to detect leaked JSON schema field names in text values.
+// Requires BOTH a leading separator and a key:value form so plain English
+// words (city, country, name, location, cost, type, ...) inside prose are
+// preserved. Only true JSON fragments like ",duration:4,city:Paris;|" match.
+const SCHEMA_LEAK_RE = /[,;|]+\s*(?:title|name|duration|practicalTips|accommodationNotes|tripVibe|tripPriorities|theme|dayNumber|activities|unparsed|dates|travelers|tripType|startTime|endTime|category|description|location|tags|bookingRequired|transportation|cost|estimatedCost|metadata|narrative|highlights|city|country|isTransitionDay)\s*[:;|]\s*[^,;|]*/gi;
 
 /**
  * Replace em dashes (—) with standard dashes ( - ) in any text.
