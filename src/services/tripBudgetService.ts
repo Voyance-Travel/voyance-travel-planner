@@ -256,15 +256,11 @@ export function isValidAllocations(a: unknown): a is BudgetAllocations {
 
 /**
  * Map an activity_costs category to a BudgetCategory.
+ * Delegates to the shared helper so Budget and Payments tabs use identical mapping.
  */
+import { toBudgetCategory as toBudgetCategoryShared } from './budgetCategoryMap';
 function toBudgetCategory(raw: string): BudgetCategory {
-  const cat = (raw || '').toLowerCase();
-  if (cat === 'hotel' || cat === 'accommodation') return 'hotel';
-  if (cat === 'flight') return 'flight';
-  if (['food', 'dining', 'restaurant', 'meal', 'breakfast', 'lunch', 'dinner', 'cafe', 'coffee'].includes(cat)) return 'food';
-  if (['transport', 'transit', 'transfer', 'taxi'].includes(cat)) return 'transit';
-  if (['nightlife', 'bar', 'club', 'shopping', 'misc'].includes(cat)) return 'misc';
-  return 'activities';
+  return toBudgetCategoryShared(raw) as BudgetCategory;
 }
 
 // =============================================================================
