@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parseItineraryDays } from '../itineraryParser';
 
 function dayWith(activities: any[]) {
-  return [{ dayNumber: 1, date: '2026-05-10', activities }];
+  return { days: [{ dayNumber: 1, date: '2026-05-10', activities }] };
 }
 
 describe('parseItineraryDays – AI prompt artifact stripping', () => {
