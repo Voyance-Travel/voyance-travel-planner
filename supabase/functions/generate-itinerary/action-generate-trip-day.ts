@@ -2625,6 +2625,13 @@ async function _handleGenerateTripDayInner(
     }
   }
 
+  // Final pre-dawn hotel-return strip across ALL days before persisting JSON snapshot.
+  for (const d of (partialItinerary?.days || [])) {
+    if (Array.isArray((d as any)?.activities)) {
+      stripPreDawnHotelReturns((d as any).activities, { dayNumber: (d as any).dayNumber, label: 'TRIP_SAVE' });
+    }
+  }
+
   if (dayNumber >= totalDays) {
     // All days complete — but only mark ready if all days have real activities
     const finalStatus = isComplete ? 'ready' : 'partial';
@@ -2634,6 +2641,8 @@ async function _handleGenerateTripDayInner(
 
     await supabase.from('trips').update({
       itinerary_data: partialItinerary,
+      itinerary_status: finalStatus,
+      unlocked_day_count: newUnlocked,
       itinerary_status: finalStatus,
       unlocked_day_count: newUnlocked,
       metadata: {
