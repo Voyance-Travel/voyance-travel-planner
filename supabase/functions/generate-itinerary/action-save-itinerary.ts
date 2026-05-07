@@ -144,7 +144,7 @@ function normalizeDays(days: any[], tripStartDate: string | null): any[] {
 
 export async function handleSaveItinerary(ctx: ActionContext): Promise<Response> {
   const { supabase, userId, params } = ctx;
-  const { tripId, itinerary } = params;
+  const { tripId, itinerary, extraUpdate: callerExtraUpdate } = params;
 
   // Verify trip access
   const { data: trip, error: tripError } = await supabase
@@ -746,6 +746,7 @@ export async function handleSaveItinerary(ctx: ActionContext): Promise<Response>
   const extraUpdate: Record<string, any> = {
     itinerary_status: emptyItineraryDetected ? 'failed' : 'ready',
     updated_at: new Date().toISOString(),
+    ...(callerExtraUpdate && typeof callerExtraUpdate === 'object' ? callerExtraUpdate : {}),
     ...(emptyItineraryDetected && {
       metadata: {
         ...existingMetadataForEmpty,

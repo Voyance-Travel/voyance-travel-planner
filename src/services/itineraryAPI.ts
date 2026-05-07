@@ -463,16 +463,17 @@ export async function generateItinerary(
     preferences: input?.preferences as Record<string, unknown> | undefined,
   };
   
-  // Save to database
-  const { error: saveError } = await supabase
-    .from('trips')
-    .update({
-      itinerary_data: JSON.parse(JSON.stringify(itinerary)),
-      itinerary_status: 'ready',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', tripId);
-  
+  // Save via the backend `save-itinerary` action so persist-day contract,
+  // prompt-artifact strip, and cross-city sweep run on every write path.
+  const { error: saveError } = await supabase.functions.invoke('generate-itinerary', {
+    body: {
+      action: 'save-itinerary',
+      tripId,
+      itinerary: JSON.parse(JSON.stringify(itinerary)),
+      extraUpdate: { itinerary_status: 'ready' },
+    },
+  });
+
   if (saveError) {
     console.error('[ItineraryAPI] Failed to save itinerary:', saveError);
     throw new Error('Failed to save itinerary');
@@ -530,14 +531,14 @@ export async function saveItinerary(
     lastModified: new Date().toISOString(),
   };
   
-  const { error } = await supabase
-    .from('trips')
-    .update({
-      itinerary_data: JSON.parse(JSON.stringify(mergedItinerary)),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', tripId);
-  
+  const { error } = await supabase.functions.invoke('generate-itinerary', {
+    body: {
+      action: 'save-itinerary',
+      tripId,
+      itinerary: JSON.parse(JSON.stringify(mergedItinerary)),
+    },
+  });
+
   if (error) {
     throw new Error('Failed to save itinerary');
   }
@@ -647,13 +648,13 @@ export async function regenerateDay(
   }
 
   const updatedItinerary = { ...existingItinerary, days: updatedDays };
-  await supabase
-    .from('trips')
-    .update({
-      itinerary_data: JSON.parse(JSON.stringify(updatedItinerary)),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', tripId);
+  await supabase.functions.invoke('generate-itinerary', {
+    body: {
+      action: 'save-itinerary',
+      tripId,
+      itinerary: JSON.parse(JSON.stringify(updatedItinerary)),
+    },
+  });
   
   return { success: true, day: data.day };
 }

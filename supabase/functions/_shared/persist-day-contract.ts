@@ -27,6 +27,8 @@
 export const PLACEHOLDER_NAME_RE = new RegExp(
   [
     'find\\s+(?:a\\s+)?(?:venue|local\\s+spot|restaurant|cafe|café|bar|spot)',
+    'find\\s+a\\s+local\\s+spot\\s+in\\s+(?:the\\s+)?(?:destination|city|area|[a-z][a-z\\s]{1,40})',
+    'pick\\s+(?:a\\s+)?(?:venue|local\\s+spot|restaurant|cafe|café|bar|spot)',
     '\\bplaceholder\\b',
     '\\bneeds\\s*venue\\b',
     'needsvenuepick',
@@ -43,7 +45,11 @@ const GHOST_CATEGORIES = new Set([
   'logistics', 'transport', 'transportation', 'transfer', 'transit',
 ]);
 
-const HOTEL_RETURN_RE = /return\s+to\s+(?:your\s+)?[^,]*hotel|back\s+to\s+(?:the\s+)?hotel/i;
+// Broadened: matches "Return to Hotel", "Return to the hotel",
+// "Return to Four Seasons Hotel", "Back at hotel", "Back to your hotel",
+// "Hotel check-in / settle in", and the "12:15 AM hotel bleed" wraparound
+// where the row has no real venue beyond the word "hotel".
+const HOTEL_RETURN_RE = /(?:return\s+to|back\s+(?:to|at)|head\s+back\s+to|head\s+to|wind\s+down\s+at)\s+(?:your\s+|the\s+|our\s+)?[^,.\n]{0,60}hotel|hotel\s+(?:check[-\s]?in|settle\s+in|wind[-\s]?down|nightcap)/i;
 const WELLNESS_PLACEHOLDER_RE = /find\s+a\s+venue\s*$/i;
 const PRE_DAWN_MAX_MINS = 5 * 60;
 
@@ -91,8 +97,15 @@ export function enforcePersistDayContract<T = any>(
 
   for (const a of activities || []) {
     if (!a) continue;
-    const title = String((a as any).title || (a as any).name || '');
-    const cat = String((a as any).category || (a as any).type || '').toLowerCase();
+    const aa = a as any;
+    const title = String(aa.title || aa.name || '');
+    // Combined text used for placeholder detection so leaks in name / venue /
+    // description fields don't slip past the contract when the title is clean.
+    const placeholderBlob = [
+      aa.title, aa.name, aa.venue_name, aa.description,
+      aa.venue?.name, aa.restaurant?.name, aa.location?.name,
+    ].filter(Boolean).join(' | ');
+    const cat = String(aa.category || aa.type || '').toLowerCase();
     const locked = isLockedRow(a);
 
     // Locked rows pass through untouched (universal locking).
@@ -112,10 +125,11 @@ export function enforcePersistDayContract<T = any>(
       continue;
     }
 
-    // 2. Placeholder names (covers wellness + meal + generic + prompt artifacts)
-    if (PLACEHOLDER_NAME_RE.test(title)) {
-      // Prompt-artifact subclass for clearer logs
-      const reason: ContractViolation = /\(\s*(?:slot|aesthetic\s+slot|placeholder|name|venue)\s*\)/i.test(title)
+    // 2. Placeholder names (covers wellness + meal + generic + prompt artifacts).
+    //    Check ALL venue-bearing fields, not just title — leaks have shown up
+    //    in name / venue_name / location.name on fresh generations.
+    if (PLACEHOLDER_NAME_RE.test(placeholderBlob)) {
+      const reason: ContractViolation = /\(\s*(?:slot|aesthetic\s+slot|placeholder|name|venue)\s*\)/i.test(placeholderBlob)
         ? 'prompt-artifact'
         : 'placeholder-name';
       drops.push({ dayNumber: ctx.dayNumber, title, reason });
