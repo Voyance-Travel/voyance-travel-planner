@@ -3208,6 +3208,37 @@ export async function finalSaveItinerary(
             continue;
           }
 
+          // Unverified meal slot: "— pick a restaurant" sentinels OR stub names
+          // like "Highly-rated neighborhood restaurant" must NEVER carry cost.
+          // Mirrors the wellness-unverified rule from core memory.
+          const titleStr = ((act as any).title || '').trim();
+          const venueStr = ((act as any).location?.name || (act as any).venue_name || '').trim();
+          const meta = (act as any).metadata || {};
+          const isUnverifiedMeal =
+            mappedCategory === 'dining' && (
+              meta.needsVenuePick === true ||
+              meta.unverified_venue === true ||
+              /(highly|top|well)[-\s]rated\s+(neighborhood\s+)?(restaurant|caf[eé]|bistro|trattoria|spot|eatery|venue|place)/i.test(titleStr) ||
+              /(highly|top|well)[-\s]rated\s+(neighborhood\s+)?(restaurant|caf[eé]|bistro|trattoria|spot|eatery|venue|place)/i.test(venueStr) ||
+              /[—\-:]\s*pick a (restaurant|caf[eé])\b/i.test(titleStr) ||
+              /^pick a (restaurant|caf[eé])$/i.test(venueStr) ||
+              /^local\s+specialty\s+caf[eé]$/i.test(venueStr)
+            );
+          if (isUnverifiedMeal) {
+            console.warn(`[Phase 4] Unverified meal slot — zeroing cost: "${titleStr}"`);
+            costRows.push({
+              trip_id: tripId,
+              activity_id: act.id,
+              day_number: day.dayNumber || 1,
+              cost_per_person_usd: 0,
+              num_travelers: context.travelers || 1,
+              category: mappedCategory,
+              source: 'unverified_meal',
+              confidence: 'low',
+            });
+            continue;
+          }
+
           // Check Tier 1 free venues — uses shared ALWAYS_FREE_VENUE_PATTERNS
           const allActivityText = [
             (act as any).title || '',
